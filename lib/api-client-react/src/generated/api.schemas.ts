@@ -8,3 +8,80 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface ApiError {
+  error: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email?: string | null;
+  credits: number;
+  appsGenerated: number;
+  createdAt: string;
+}
+
+export interface GeneratedApp {
+  id: number;
+  userId: string;
+  title: string;
+  prompt: string;
+  description: string;
+  techStack: string[];
+  frontendCode: string;
+  backendCode: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface DashboardStats {
+  credits: number;
+  appsGenerated: number;
+  appsThisWeek: number;
+  creditsSpentTotal: number;
+  recentApps: GeneratedApp[];
+}
+
+export interface GenerateAppBody {
+  /** @minLength 5 */
+  prompt: string;
+}
+
+export interface CreditPackage {
+  id: string;
+  name: string;
+  description: string;
+  credits: number;
+  priceCents: number;
+  currency: string;
+  priceId: string;
+  popular: boolean;
+}
+
+export interface CreateCheckoutBody {
+  priceId: string;
+}
+
+export interface CheckoutSession {
+  url: string;
+  sessionId: string;
+}
+
+export interface ConfirmCheckoutBody {
+  sessionId: string;
+}
+
+export interface ConfirmCheckoutResult {
+  creditsAdded: number;
+  newBalance: number;
+  alreadyProcessed: boolean;
+}
+
+export interface CreditTransaction {
+  id: number;
+  userId: string;
+  amount: number;
+  kind: string;
+  description: string;
+  createdAt: string;
+}

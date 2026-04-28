@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AppForge - AI App Generator"
+version = "1.0.0"
+id = "artifacts/appforge"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18363
+
+[services.development]
+run = "pnpm --filter @workspace/appforge run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/appforge", "run", "build" ]
+publicDir = "artifacts/appforge/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18363"
+BASE_PATH = "/"

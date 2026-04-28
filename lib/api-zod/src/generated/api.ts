@@ -8,9 +8,164 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+});
+
+/**
+ * @summary Get current user profile and credits
+ */
+export const GetMeResponse = zod.object({
+  id: zod.string(),
+  email: zod.string().nullish(),
+  credits: zod.number(),
+  appsGenerated: zod.number(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Get dashboard summary stats for current user
+ */
+export const GetMyStatsResponse = zod.object({
+  credits: zod.number(),
+  appsGenerated: zod.number(),
+  appsThisWeek: zod.number(),
+  creditsSpentTotal: zod.number(),
+  recentApps: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.string(),
+      title: zod.string(),
+      prompt: zod.string(),
+      description: zod.string(),
+      techStack: zod.array(zod.string()),
+      frontendCode: zod.string(),
+      backendCode: zod.string(),
+      status: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary List the current user's generated apps
+ */
+export const ListAppsResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  frontendCode: zod.string(),
+  backendCode: zod.string(),
+  status: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAppsResponse = zod.array(ListAppsResponseItem);
+
+/**
+ * @summary Get a specific generated app
+ */
+export const GetAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAppResponse = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  frontendCode: zod.string(),
+  backendCode: zod.string(),
+  status: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a generated app
+ */
+export const DeleteAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Generate a new app from a prompt (costs 1 credit)
+ */
+export const generateAppBodyPromptMin = 5;
+
+export const GenerateAppBody = zod.object({
+  prompt: zod.string().min(generateAppBodyPromptMin),
+});
+
+export const GenerateAppResponse = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  frontendCode: zod.string(),
+  backendCode: zod.string(),
+  status: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary List available credit packages
+ */
+export const ListCreditPackagesResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  description: zod.string(),
+  credits: zod.number(),
+  priceCents: zod.number(),
+  currency: zod.string(),
+  priceId: zod.string(),
+  popular: zod.boolean(),
+});
+export const ListCreditPackagesResponse = zod.array(
+  ListCreditPackagesResponseItem,
+);
+
+/**
+ * @summary Create a Stripe checkout session for a credit package
+ */
+export const CreateCheckoutSessionBody = zod.object({
+  priceId: zod.string(),
+});
+
+export const CreateCheckoutSessionResponse = zod.object({
+  url: zod.string(),
+  sessionId: zod.string(),
+});
+
+/**
+ * @summary List the current user's recent credit transactions
+ */
+export const ListTransactionsResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  amount: zod.number(),
+  kind: zod.string(),
+  description: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListTransactionsResponse = zod.array(ListTransactionsResponseItem);
+
+/**
+ * @summary Confirm a Stripe checkout session and credit the user (called after redirect)
+ */
+export const ConfirmCheckoutBody = zod.object({
+  sessionId: zod.string(),
+});
+
+export const ConfirmCheckoutResponse = zod.object({
+  creditsAdded: zod.number(),
+  newBalance: zod.number(),
+  alreadyProcessed: zod.boolean(),
 });
