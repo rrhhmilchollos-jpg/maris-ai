@@ -55,10 +55,13 @@ type TabKey = "preview" | "frontend" | "backend";
 
 const PHASE_LABELS: Record<string, string> = {
   queued: "En cola…",
-  starting: "Inicializando…",
-  researching: "Investigando referencias…",
-  generating: "Aplicando cambios…",
-  parsing: "Procesando archivos…",
+  starting: "Inicializando equipo…",
+  researching: "🔎 Investigando referencias…",
+  architecting: "🧠 Arquitecto planificando…",
+  designing: "🎨 Diseñador trabajando…",
+  generating: "⚡ Aplicando cambios al código…",
+  reviewing: "✅ Revisión de calidad…",
+  parsing: "📦 Empaquetando archivos…",
   ready: "Listo",
   failed: "Error",
 };

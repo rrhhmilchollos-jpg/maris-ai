@@ -70,11 +70,26 @@ Run `pnpm --filter @workspace/db run push` after schema changes.
 
 Clerk is Replit-managed. The frontend reads `VITE_CLERK_PUBLISHABLE_KEY`, which `vite.config.ts` falls back to from `CLERK_PUBLISHABLE_KEY`. The backend uses `clerkMiddleware` plus a `requireAuth` helper (`artifacts/api-server/src/lib/auth.ts`) that lazily provisions a `users` row from Clerk on first authenticated request and grants 3 starter credits.
 
-## AI generation
+## AI generation — multi-agent pipeline
 
-`artifacts/api-server/src/lib/generate.ts` calls `claude-sonnet-4-6` (with `claude-haiku-4-5` for the optional clone-research step) using a strict JSON-only system prompt that returns `{ title, description, techStack[], frontendCode, backendCode }`. Both code fields are single strings using `// === FILE: <path> ===` delimiters so the frontend can render and split as needed. Credits are reserved up front in the same transaction as the job row (and the chat message, if applicable), and refunded if generation fails.
+`artifacts/api-server/src/lib/generate.ts` orchestrates a team of specialized AI agents using **both Anthropic and OpenAI** (the OpenAI client is lazily initialized via `lib/openai.ts`, accessed through the Replit AI Integrations proxy — no API key needed):
 
-`generateApp` accepts an optional `previous: PreviousApp` parameter. When present, the system prompt switches to **edit mode**: the model receives the previous title/description/techStack and full frontend+backend bundles and is asked to produce a complete, updated bundle that applies the requested change. The clone-research step is skipped in edit mode.
+| Agent | Model | Job |
+|---|---|---|
+| 🔎 Researcher | `claude-haiku-4-5` + `web_search` | Hard 7s cap. Optional, only fires for clone/reference prompts (`CLONE_KEYWORDS`). |
+| 🧠 Architect | `claude-sonnet-4-6` | Produces a JSON project plan: pages, components, hooks, utils, data models, file list, `backendNeeded` flag. Receives the research brief when available. |
+| 🎨 Designer | `gpt-5-mini` | Produces a design system JSON (palette, typography, radius, `tailwindExtend`, `globalCSS`). Falls back to a built-in default if the call flakes. |
+| ⚡ Frontend Engineer | `claude-sonnet-4-6` (streaming) | Generates the full frontend bundle, must implement every file from the plan. |
+| 🔧 Backend Engineer | `gpt-5-mini` | Generates the backend bundle in **parallel** with frontend, only when `plan.backendNeeded === true`. Failures degrade to a visible note rather than silently dropping the backend. |
+| ✅ QA Reviewer | `claude-haiku-4-5` | 5s best-effort sanity check on the bundle. |
+
+Each agent has a hard timeout (research 7s, architect 60s, designer 45s, frontend 180s, backend 90s, QA 5s) so a hung provider can never leave a job stuck.
+
+Both `frontendCode` and `backendCode` are single strings using `// === FILE: <path> ===` delimiters so the workspace can split them for the live preview. Credits are reserved up front in the same transaction as the job row (and the chat message, if applicable), and refunded if generation fails.
+
+### Edit mode
+
+`generateApp` accepts an optional `previous: PreviousApp` parameter. When present, the multi-agent pipeline is bypassed and a single Claude Sonnet 4.6 streaming pass receives the full previous bundles + the user's change request. The clone-research step is skipped — we already know what the app is.
 
 ## Workspace (chat + live preview)
 
