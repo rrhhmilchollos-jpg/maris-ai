@@ -20,8 +20,10 @@ export const HealthCheckResponse = zod.object({
 export const GetMeResponse = zod.object({
   id: zod.string(),
   email: zod.string().nullish(),
+  fullName: zod.string().nullish(),
   credits: zod.number(),
   appsGenerated: zod.number(),
+  isAdmin: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 
@@ -169,3 +171,69 @@ export const ConfirmCheckoutResponse = zod.object({
   newBalance: zod.number(),
   alreadyProcessed: zod.boolean(),
 });
+
+/**
+ * @summary Global stats and recent activity for the admin panel
+ */
+export const GetAdminOverviewResponse = zod.object({
+  totalUsers: zod.number(),
+  totalApps: zod.number(),
+  appsLast7Days: zod.number(),
+  creditsOutstanding: zod.number(),
+  creditsSpentTotal: zod.number(),
+  creditsPurchasedTotal: zod.number(),
+  revenueCentsTotal: zod.number(),
+});
+
+/**
+ * @summary List all users with their stats
+ */
+export const ListAdminUsersResponseItem = zod.object({
+  id: zod.string(),
+  email: zod.string(),
+  fullName: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  credits: zod.number(),
+  appsGenerated: zod.number(),
+  isAdmin: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem);
+
+/**
+ * @summary Add or remove credits from a user (admin)
+ */
+export const AdjustUserCreditsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AdjustUserCreditsBody = zod.object({
+  delta: zod.number().describe("Positive to add credits, negative to remove"),
+  reason: zod.string().optional(),
+});
+
+export const AdjustUserCreditsResponse = zod.object({
+  id: zod.string(),
+  email: zod.string(),
+  fullName: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  credits: zod.number(),
+  appsGenerated: zod.number(),
+  isAdmin: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary List all generated apps across all users
+ */
+export const ListAdminAppsResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  userEmail: zod.string().nullish(),
+  title: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  status: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAdminAppsResponse = zod.array(ListAdminAppsResponseItem);
