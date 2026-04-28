@@ -79,6 +79,10 @@ const SKIP_PATHS = new Set([
   "tsconfig.node.json",
   "vite.config.ts",
   "vite.config.js",
+  "vitest.config.ts",
+  "vitest.config.js",
+  "playwright.config.ts",
+  "playwright.config.js",
   "tailwind.config.ts",
   "tailwind.config.js",
   "tailwind.config.cjs",
@@ -86,11 +90,20 @@ const SKIP_PATHS = new Set([
   "postcss.config.cjs",
   ".gitignore",
   "README.md",
+  "SETUP.md",
   "index.html",
 ]);
 
+// Folders whose files must not be shipped to Sandpack: tests, e2e, docs.
+const SKIP_PREFIXES = ["tests/", "e2e/", "__tests__/", "test/"];
+
 function normalizeForSandpack(path: string): string | null {
   if (SKIP_PATHS.has(path)) return null;
+  if (SKIP_PREFIXES.some((p) => path.startsWith(p))) return null;
+  // Skip *.test.* and *.spec.* files anywhere in the tree.
+  if (/\.(test|spec)\.[tj]sx?$/.test(path)) return null;
+  // Skip markdown docs anywhere.
+  if (/\.md$/.test(path)) return null;
   let p = path;
   if (p.startsWith("./")) p = p.slice(2);
   if (p.startsWith("src/")) p = p.slice(4);
