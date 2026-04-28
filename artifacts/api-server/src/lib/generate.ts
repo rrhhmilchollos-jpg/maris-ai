@@ -29,65 +29,100 @@ export interface GeneratedAppPayload {
   backendCode: string;
 }
 
+export type GeneratePhase = "researching" | "generating" | "parsing";
+
+export interface GenerateProgress {
+  phase: GeneratePhase;
+  progress: number;
+  note?: string;
+}
+
 interface AnyContentBlock {
   type: string;
   text?: string;
 }
 
+const CLONE_KEYWORDS = [
+  "clon", "clone", "copia", "copy", "como ", "like ", "similar a", "similar to",
+  "réplica", "replica", "imita", "estilo de", "version de", "versión de",
+  "wallapop", "vinted", "airbnb", "twitter", "instagram", "tiktok", "uber",
+  "amazon", "ebay", "spotify", "netflix", "youtube", "linkedin", "facebook",
+  "whatsapp", "telegram", "discord", "slack", "notion", "trello", "asana",
+  "stripe", "shopify", "github", "reddit", "pinterest", "snapchat", "twitch",
+];
+
+function shouldResearch(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  return CLONE_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
 async function researchTopic(prompt: string): Promise<string> {
   try {
-    const research = await (anthropic.messages.create as any)({
-      model: "claude-sonnet-4-5",
-      max_tokens: 3000,
-      tools: [
-        {
-          type: "web_search_20250305",
-          name: "web_search",
-          max_uses: 4,
-        },
-      ],
-      messages: [
-        {
-          role: "user",
-          content: `You are a research assistant for an app builder. Investigate the web and produce a concise brief (max ~1200 words) for this app idea:
+    const research = await Promise.race([
+      (anthropic.messages.create as any)({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2000,
+        tools: [
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 2,
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: `Brief research for an app builder. Investigate the web (max 2 quick searches) and produce a concise brief (max ~600 words) for this app idea:
 
 "${prompt}"
 
-If it mentions cloning, copying, or rebuilding an existing product or website (e.g. Wallapop, Vinted, Airbnb, Twitter, Instagram), search for:
-- Core sections / pages / navigation
-- Key features and user flows
-- Brand colors, typography, logo style, taglines
-- Sample listings or content patterns
-- Anything visually distinctive
+Focus on: core sections/pages, key features, brand colors & typography, signature visual elements, sample content patterns. Return ONLY the brief in plain text — no preamble, no markdown headers.`,
+          },
+        ],
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("research timeout")), 30000),
+      ),
+    ]);
 
-If it's an original idea, search for the closest reference products and best UX patterns.
-
-Return ONLY the brief in plain text, no preamble, no markdown headers, just useful facts the builder can use directly.`,
-        },
-      ],
-    });
-
-    const blocks: AnyContentBlock[] = research.content || [];
+    const blocks: AnyContentBlock[] = (research as any).content || [];
     const text = blocks
       .filter((b) => b.type === "text" && typeof b.text === "string")
       .map((b) => b.text as string)
       .join("\n\n")
       .trim();
-    return text.slice(0, 8000);
+    return text.slice(0, 6000);
   } catch (_err) {
     return "";
   }
 }
 
-export async function generateApp(prompt: string): Promise<GeneratedAppPayload> {
-  // Step 1: Web research (best-effort, never blocks generation)
-  const research = await researchTopic(prompt);
+export async function generateApp(
+  prompt: string,
+  onProgress?: (p: GenerateProgress) => void,
+): Promise<GeneratedAppPayload> {
+  let research = "";
+  if (shouldResearch(prompt)) {
+    onProgress?.({
+      phase: "researching",
+      progress: 10,
+      note: "Buscando referencias en la web…",
+    });
+    research = await researchTopic(prompt);
+  }
+
+  onProgress?.({
+    phase: "generating",
+    progress: 35,
+    note: research
+      ? "Generando código con contexto de la web…"
+      : "Generando código de la aplicación…",
+  });
 
   const userContent = research
     ? `Generate an app for this request:\n\n${prompt}\n\n---\nResearch context (from web search, treat as ground truth for branding & features):\n${research}`
     : `Generate an app for this request:\n\n${prompt}`;
 
-  // Step 2: Generation
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 16000,
@@ -98,6 +133,12 @@ export async function generateApp(prompt: string): Promise<GeneratedAppPayload> 
         content: userContent,
       },
     ],
+  });
+
+  onProgress?.({
+    phase: "parsing",
+    progress: 85,
+    note: "Procesando archivos generados…",
   });
 
   const textBlock = response.content.find((b) => b.type === "text");

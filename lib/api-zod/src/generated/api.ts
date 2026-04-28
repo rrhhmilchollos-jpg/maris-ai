@@ -96,7 +96,7 @@ export const DeleteAppParams = zod.object({
 });
 
 /**
- * @summary Generate a new app from a prompt (costs 1 credit)
+ * @summary Enqueue an app generation job (costs 1 credit on success, free for admins)
  */
 export const generateAppBodyPromptMin = 5;
 
@@ -104,17 +104,32 @@ export const GenerateAppBody = zod.object({
   prompt: zod.string().min(generateAppBodyPromptMin),
 });
 
-export const GenerateAppResponse = zod.object({
+/**
+ * @summary Poll the status of a generation job
+ */
+export const GetGenerationJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const getGenerationJobResponseProgressMin = 0;
+export const getGenerationJobResponseProgressMax = 100;
+
+export const GetGenerationJobResponse = zod.object({
   id: zod.number(),
-  userId: zod.string(),
-  title: zod.string(),
-  prompt: zod.string(),
-  description: zod.string(),
-  techStack: zod.array(zod.string()),
-  frontendCode: zod.string(),
-  backendCode: zod.string(),
-  status: zod.string(),
+  status: zod.string().describe("queued | running | succeeded | failed"),
+  phase: zod
+    .string()
+    .describe(
+      "queued | starting | researching | generating | parsing | ready | failed",
+    ),
+  progress: zod
+    .number()
+    .min(getGenerationJobResponseProgressMin)
+    .max(getGenerationJobResponseProgressMax),
+  appId: zod.number().nullish(),
+  errorMessage: zod.string().nullish(),
   createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**

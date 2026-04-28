@@ -41,9 +41,17 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
 
 ### Generation pipeline
 
-`lib/generate.ts` runs two Anthropic calls per request:
-1. **Web research** (`researchTopic`) — best-effort, uses the `web_search_20250305` tool with up to 4 web lookups. Produces a free-form brief about the requested app, including branding/features when the user asks to clone an existing product (Wallapop, Vinted, etc.). Wrapped in try/catch — if web search isn't available the brief is empty and generation proceeds without it.
-2. **Generation** — Claude Sonnet 4.5 with `max_tokens: 16000`, system prompt that demands strict JSON output, and the research brief appended as ground truth. Errors bubble up with the underlying message in Spanish so the dashboard toast is actionable instead of a generic "AI failed".
+`POST /generate` is **asynchronous**. It enqueues a row in `generation_jobs`, kicks off `runJob` via `setImmediate`, and returns the job descriptor with `202 Accepted`. The dashboard then polls `GET /generate/jobs/:id` every 1.5 s to render a live progress bar and phase label until `status` becomes `succeeded` (with `appId`) or `failed` (with `errorMessage`).
+
+`lib/generate.ts` runs up to two Anthropic calls per request and emits progress callbacks at each stage:
+1. **Web research** (`researchTopic`) — only triggered when the prompt contains a clone keyword (e.g. "clon", "como wallapop", or any of the brand names listed in `CLONE_KEYWORDS`). Best-effort with a 30 s timeout, uses the `web_search_20250305` tool with `max_uses: 2`. If the proxy doesn't support tools or the call fails, the brief is empty and generation continues.
+2. **Generation** — Claude Sonnet 4.5 with `max_tokens: 16000`, strict-JSON system prompt, and the research brief appended as ground truth. Errors bubble up with the underlying message in Spanish.
+
+Phases reported back to the client: `queued → starting → researching (only for clones) → generating → parsing → ready` (or `failed` at any point).
+
+### Admin credit bypass
+
+Admin email checks happen at job-creation time (the credit gate) **and** after generation completes (the deduction). When `isAdminEmail(user.email)` is true, neither the user balance nor the credit ledger is touched.
 
 ## Database
 

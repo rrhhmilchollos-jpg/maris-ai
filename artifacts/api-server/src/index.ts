@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { reclaimOrphanedJobs } from "./routes/apps";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  reclaimOrphanedJobs().catch((reclaimErr) => {
+    logger.error({ err: reclaimErr }, "Orphan job reclaim failed");
+  });
 });
