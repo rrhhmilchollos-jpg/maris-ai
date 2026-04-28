@@ -140,7 +140,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/GenerateAppBody"
+              $ref: "#/components/schemas/GenerateAppRequest"
       responses:
         "200":
           description: Generated app
@@ -184,7 +184,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateCheckoutBody"
+              $ref: "#/components/schemas/CreateCheckoutRequest"
       responses:
         "200":
           description: Checkout session created
@@ -228,7 +228,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ConfirmCheckoutBody"
+              $ref: "#/components/schemas/ConfirmCheckoutRequest"
       responses:
         "200":
           description: Confirmation result
@@ -336,7 +336,7 @@ components:
         - backendCode
         - status
         - createdAt
-    GenerateAppBody:
+    GenerateAppRequest:
       type: object
       properties:
         prompt:
@@ -372,7 +372,7 @@ components:
         - currency
         - priceId
         - popular
-    CreateCheckoutBody:
+    CreateCheckoutRequest:
       type: object
       properties:
         priceId:
@@ -389,7 +389,7 @@ components:
       required:
         - url
         - sessionId
-    ConfirmCheckoutBody:
+    ConfirmCheckoutRequest:
       type: object
       properties:
         sessionId:

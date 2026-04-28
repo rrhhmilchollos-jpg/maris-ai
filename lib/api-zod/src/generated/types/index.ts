@@ -8,13 +8,13 @@
 
 export * from "./apiError";
 export * from "./checkoutSession";
-export * from "./confirmCheckoutBody";
+export * from "./confirmCheckoutRequest";
 export * from "./confirmCheckoutResult";
-export * from "./createCheckoutBody";
+export * from "./createCheckoutRequest";
 export * from "./creditPackage";
 export * from "./creditTransaction";
 export * from "./dashboardStats";
-export * from "./generateAppBody";
+export * from "./generateAppRequest";
 export * from "./generatedApp";
 export * from "./healthStatus";
 export * from "./userProfile";
