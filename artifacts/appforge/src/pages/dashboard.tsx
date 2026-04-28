@@ -22,16 +22,18 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench } from "lucide-react";
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   queued: { label: "En cola…", icon: Loader2 },
   starting: { label: "Iniciando equipo de agentes…", icon: Loader2 },
   researching: { label: "🔎 Investigador buscando referencias…", icon: Search },
   architecting: { label: "🧠 Arquitecto diseñando la estructura…", icon: Compass },
+  integrating: { label: "🔌 Definiendo integraciones (auth, pagos, IA)…", icon: Plug },
   designing: { label: "🎨 Diseñador definiendo el sistema visual…", icon: Palette },
   generating: { label: "⚡ Ingenieros escribiendo el código…", icon: Wand2 },
   reviewing: { label: "✅ QA revisando el bundle…", icon: ShieldCheck },
+  fixing: { label: "🔧 Auto-reparando errores detectados…", icon: Wrench },
   parsing: { label: "📦 Empaquetando archivos…", icon: FileCheck2 },
   ready: { label: "¡Listo!", icon: FileCheck2 },
   failed: { label: "Falló", icon: Loader2 },
