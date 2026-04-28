@@ -52,9 +52,9 @@ export default function DashboardPage() {
       enabled: activeJobId !== null,
       refetchInterval: (query) => {
         const data = query.state.data as { status?: string } | undefined;
-        if (!data) return 1500;
+        if (!data) return 800;
         if (data.status === "succeeded" || data.status === "failed") return false;
-        return 1500;
+        return 800;
       },
     },
   });

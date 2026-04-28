@@ -1,26 +1,20 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
-const SYSTEM_PROMPT = `You are AppForge, an expert AI app generator. Given a user's plain-English request, you generate a complete, production-quality web application as a single self-contained code bundle.
+const SYSTEM_PROMPT = `You are AppForge. Generate a complete production-quality web app as STRICT JSON only.
 
-Output STRICT JSON only — no markdown fences, no commentary outside the JSON. Schema:
+Schema:
+{"title":"2-4 words","description":"1-2 sentence pitch","techStack":["React","TS","Tailwind",...],"frontendCode":"all frontend files as one string","backendCode":"all backend files OR 'No backend required for this app.'"}
 
-{
-  "title": "Short product name (2-4 words)",
-  "description": "1-2 sentence pitch for what the app does and who it's for",
-  "techStack": ["React", "TypeScript", "TailwindCSS", "Vite", ...],
-  "frontendCode": "Full frontend implementation as a single string. Include: index.html, src/main.tsx, src/App.tsx, src/index.css, package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.js. Separate each file with a clear delimiter line: '// === FILE: <path> ===' followed by the file content. Use modern React 18 + TS + TailwindCSS v3.",
-  "backendCode": "Full backend implementation as a single string OR the literal string 'No backend required for this app.' if the app is purely frontend (e.g. uses localStorage). If a backend is needed, use Node.js + Express + TypeScript and include all files with the same '// === FILE: <path> ===' delimiter pattern."
-}
+Use '// === FILE: <path> ===' to separate files inside frontendCode/backendCode. Include index.html, src/main.tsx, src/App.tsx, src/index.css, package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.js. Use React 18 + TS + Tailwind v3.
 
 Rules:
-- Generate REAL working code. No stubs, no TODOs, no "// implement this".
-- For pure frontend apps (calculators, todo lists, games, dashboards with seed data, etc.), set backendCode to "No backend required for this app." and put everything in frontendCode.
-- For apps that need persistence beyond the browser, include a real Express + SQLite or in-memory backend.
-- Make it visually polished — real layout, real colors, real hierarchy, real copy. No "lorem ipsum".
-- If a "Research context" section is provided in the user message, USE IT to faithfully recreate the look, branding, sections, and core flows of the referenced product/site.
-- HARD LIMIT: keep total combined output (frontendCode + backendCode) **strictly under 70 KB**. You MUST finish the JSON. If running long, reduce: fewer seed items, shorter copy, condense Tailwind classes, drop secondary screens. Never leave a string unterminated.
-- Always close every quote, brace, and bracket. The JSON MUST be syntactically valid.
-- Output ONLY the JSON object. Nothing else. No \`\`\`json fence. No prose.`;
+- Real working code, no TODOs, no stubs.
+- Pure frontend? backendCode = "No backend required for this app.".
+- Polished layout, real copy, no lorem ipsum.
+- If Research context is provided, recreate that product's look/sections/branding faithfully.
+- HARD LIMIT: combined output strictly under 70 KB. If running long, reduce: fewer seed items, shorter copy, condense Tailwind, drop secondary screens. Never leave strings unterminated.
+- Close every quote, brace and bracket. JSON MUST be valid.
+- Output ONLY the JSON object. No fences, no prose.`;
 
 export interface GeneratedAppPayload {
   title: string;
@@ -61,8 +55,8 @@ async function researchTopic(prompt: string): Promise<string> {
   try {
     const research = await Promise.race([
       (anthropic.messages.create as any)({
-        model: "claude-sonnet-4-5",
-        max_tokens: 2000,
+        model: "claude-haiku-4-5",
+        max_tokens: 1500,
         tools: [
           {
             type: "web_search_20250305",
@@ -73,16 +67,14 @@ async function researchTopic(prompt: string): Promise<string> {
         messages: [
           {
             role: "user",
-            content: `Brief research for an app builder. Investigate the web (max 2 quick searches) and produce a concise brief (max ~600 words) for this app idea:
+            content: `Quick web research for an app builder (max 2 searches). Produce a concise brief (~400 words max) for: "${prompt}"
 
-"${prompt}"
-
-Focus on: core sections/pages, key features, brand colors & typography, signature visual elements, sample content patterns. Return ONLY the brief in plain text — no preamble, no markdown headers.`,
+Focus on: core sections/pages, key features, brand colors & typography, signature visual elements, sample content. Plain text only, no preamble.`,
           },
         ],
       }),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("research timeout")), 30000),
+        setTimeout(() => reject(new Error("research timeout")), 20000),
       ),
     ]);
 
@@ -107,20 +99,42 @@ interface GenerateAttemptResult {
 async function singleGenerate(
   userContent: string,
   maxTokens: number,
+  onChars?: (charsSoFar: number) => void,
 ): Promise<GenerateAttemptResult> {
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+  // Streaming for lower TTFB and live progress.
+  const stream = anthropic.messages.stream({
+    model: "claude-sonnet-4-6",
     max_tokens: maxTokens,
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
   });
 
-  const truncated = response.stop_reason === "max_tokens";
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    return { truncated, error: "El modelo no devolvió contenido de texto." };
+  let accumulated = "";
+  let lastReport = 0;
+  for await (const event of stream) {
+    if (
+      event.type === "content_block_delta" &&
+      event.delta.type === "text_delta"
+    ) {
+      accumulated += event.delta.text;
+      // Throttle progress callbacks to once every ~1500 chars (~5%).
+      if (onChars && accumulated.length - lastReport >= 1500) {
+        lastReport = accumulated.length;
+        onChars(accumulated.length);
+      }
+    }
   }
-  let raw = textBlock.text.trim();
+  const response = await stream.finalMessage();
+
+  const truncated = response.stop_reason === "max_tokens";
+  let raw = accumulated.trim();
+  if (!raw) {
+    const textBlock = response.content.find((b) => b.type === "text");
+    if (!textBlock || textBlock.type !== "text") {
+      return { truncated, error: "El modelo no devolvió contenido de texto." };
+    }
+    raw = textBlock.text.trim();
+  }
   if (raw.startsWith("```")) {
     raw = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
   }
@@ -190,8 +204,20 @@ export async function generateApp(
     ? `Generate an app for this request:\n\n${prompt}\n\n---\nResearch context (from web search, treat as ground truth for branding & features):\n${research}`
     : `Generate an app for this request:\n\n${prompt}`;
 
+  // Live progress: stream chars and map them to a 35→85% progress range.
+  const TARGET_CHARS = 50_000;
+  const onChars = (chars: number) => {
+    const ratio = Math.min(1, chars / TARGET_CHARS);
+    const pct = 35 + Math.round(ratio * 50);
+    onProgress?.({
+      phase: "generating",
+      progress: pct,
+      note: `Generando código… (${Math.round(chars / 1000)} KB)`,
+    });
+  };
+
   // First attempt: 32k tokens, full creative leeway.
-  let attempt = await singleGenerate(baseUserContent, 32000);
+  let attempt = await singleGenerate(baseUserContent, 32000, onChars);
 
   // If truncated or JSON invalid, retry once with a stricter "be concise" prompt.
   if (!attempt.payload) {
@@ -205,12 +231,12 @@ export async function generateApp(
 ---
 PREVIOUS ATTEMPT FAILED: the JSON was ${attempt.truncated ? "TRUNCATED (ran out of tokens)" : "INVALID"}.
 You MUST now produce a more compact version:
-- Target combined output around 45 KB.
-- One single page only (no router, no multi-screen). Showcase the core experience.
+- Target combined output around 40 KB.
+- One single page only (no router, no multi-screen).
 - ~5 seed items max in any list.
 - Concise Tailwind classes, no verbose comments.
 - Finish the JSON properly. Close every brace and quote.`;
-    attempt = await singleGenerate(compactContent, 32000);
+    attempt = await singleGenerate(compactContent, 24000, onChars);
   }
 
   onProgress?.({
