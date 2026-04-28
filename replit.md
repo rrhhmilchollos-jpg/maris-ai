@@ -82,12 +82,15 @@ Clerk is Replit-managed. The frontend reads `VITE_CLERK_PUBLISHABLE_KEY`, which 
 | 🎨 Designer | `gpt-5-mini` | Produces a design system JSON (palette, typography, radius, `tailwindExtend`, `globalCSS`). Falls back to a built-in default if the call flakes. |
 | ⚡ Frontend Engineer | `claude-sonnet-4-6` (streaming) | Generates the full frontend bundle, must implement every file from the plan. |
 | 🔧 Backend Engineer | `gpt-5-mini` | Generates the backend bundle in **parallel** with frontend, only when `plan.backendNeeded === true`. Failures degrade to a visible note rather than silently dropping the backend. |
-| ✅ QA Reviewer | `claude-haiku-4-5` | Returns structured JSON `{ok, issues[]}`. Each issue has `{file, problem, fix}` so the next agent can act on it. |
+| ✅ QA Reviewer | `claude-haiku-4-5` | Returns structured JSON `{ok, issues[]}`. Each issue has `{file, problem, fix}` so the next agent can act on it. Runs **in parallel** with the Test Engineer. |
+| 🧪 Test Engineer | `claude-haiku-4-5` | Generates real Vitest unit tests (per component & util), Playwright E2E for `/`, plus `vitest.config.ts` and `playwright.config.ts`. Files land in `tests/` and `e2e/` and are appended to the bundle. Skipped silently if it flakes. |
 | 🛠️ Patcher | `claude-sonnet-4-6` | **Only runs if QA reports issues.** Receives the issue list + the current bundle, returns a fully patched bundle. This is the real self-healing loop — not just commentary. Includes a sanity check: if the patched bundle is <50% of the original size, the patch is rejected. |
 
-Each agent has a hard timeout (research 7s, architect 60s, integrations 8s, designer 45s, frontend 180s, backend 90s, QA 8s, patcher 60s) so a hung provider can never leave a job stuck.
+Each agent has a hard timeout (research 7s, architect 60s, integrations 8s, designer 45s, frontend 180s, backend 90s, QA 8s, tests 30s, patcher 60s) so a hung provider can never leave a job stuck.
 
-Both `frontendCode` and `backendCode` are single strings using `// === FILE: <path> ===` delimiters so the workspace can split them for the live preview. When the Integration Architect returns at least one service, a `SETUP.md` file is appended to `frontendCode` with the env vars and steps the user needs to deploy. Credits are reserved up front in the same transaction as the job row (and the chat message, if applicable), and refunded if generation fails.
+Both `frontendCode` and `backendCode` are single strings using `// === FILE: <path> ===` delimiters so the workspace can split them for the live preview. The final `frontendCode` includes (in order): the engineer's bundle (possibly patched) → the test files → `SETUP.md` if there are external services. The Sandpack preview parser (`artifacts/appforge/src/lib/parseBundle.ts`) explicitly skips `tests/`, `e2e/`, `*.test.*`, `*.spec.*`, `*.md`, and the test config files so tests are visible in the "Frontend" tab without breaking the live preview.
+
+Credits are reserved up front in the same transaction as the job row (and the chat message, if applicable), and refunded if generation fails.
 
 ### Edit mode
 

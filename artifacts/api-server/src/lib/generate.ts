@@ -107,6 +107,23 @@ Rules:
 - If the app is a simple landing page, calculator, or self-contained demo, return {"services":[]}.
 - Output ONLY the JSON object.`;
 
+const TEST_SYSTEM_PROMPT = `You are AppForge's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
+
+Output STRICT JSON only:
+{"testCode":"all test files as one string"}
+
+Use '// === FILE: <path> ===' separators. ALWAYS produce:
+- tests/setup.ts (vitest + @testing-library/jest-dom setup)
+- vitest.config.ts (jsdom environment, points to tests/setup.ts)
+- tests/<ComponentName>.test.tsx — 1 smoke test per listed component (max 3): render it, assert visible text.
+- tests/<utilName>.test.ts — 1 unit test per listed util (max 2): import and call with a sample input.
+- e2e/home.spec.ts — 1 Playwright test that loads "/" and checks the main heading.
+- playwright.config.ts (basic chromium config)
+
+Rules:
+- Real working tests. No TODOs, no placeholders. Every test imports a real symbol and asserts something concrete.
+- Combined output under 6 KB. Close every brace. Output ONLY the JSON object.`;
+
 const PATCHER_SYSTEM_PROMPT = `You are AppForge's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
 
 Output STRICT JSON only:
@@ -572,6 +589,52 @@ Max 5 issues. Output ONLY the JSON object.`,
   );
 }
 
+async function generateTests(
+  plan: ProjectPlan,
+  frontendCode: string,
+): Promise<string> {
+  // Best-effort, capped at 30s. If it flakes, we just skip the tests.
+  return withTimeout(
+    (async () => {
+      try {
+        const sample = frontendCode.slice(0, 6000);
+        const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
+        const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 3000,
+          system: TEST_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: `Generate tests for "${plan.title}".
+Main components to test: ${componentNames}
+Main utils to test: ${utilNames}
+Pages: ${plan.pages.map((p) => `${p.name} (${p.route})`).join(", ")}
+
+First 6KB of the frontend bundle (so you know real symbol names and import paths):
+${sample}
+
+Return the JSON object with testCode.`,
+            },
+          ],
+        });
+        const t = response.content.find((b) => b.type === "text");
+        const raw = t && t.type === "text" ? t.text : "";
+        const parsed = extractJsonObject<{ testCode?: string }>(raw);
+        if (!parsed || typeof parsed.testCode !== "string") return "";
+        // Sanity: must contain our file separator and at least one test file.
+        if (!parsed.testCode.includes("// === FILE:")) return "";
+        return parsed.testCode;
+      } catch {
+        return "";
+      }
+    })(),
+    30_000,
+    "",
+  );
+}
+
 async function patchBundle(
   frontendCode: string,
   issues: QAIssue[],
@@ -822,13 +885,16 @@ export async function generateApp(
     );
   }
 
-  /* === Phase 4: structured QA review ====================================== */
+  /* === Phase 4 (parallel): QA review + Test Engineer ====================== */
   onProgress?.({
     phase: "reviewing",
     progress: 80,
-    note: "✅ Revisor de calidad comprobando el bundle…",
+    note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…",
   });
-  const report = await reviewBundle(frontendResult.code, plan);
+  const [report, testCode] = await Promise.all([
+    reviewBundle(frontendResult.code, plan),
+    generateTests(plan, frontendResult.code),
+  ]);
 
   /* === Phase 5: self-healing — patch only if QA found real issues ========= */
   let finalFrontend = frontendResult.code;
@@ -844,22 +910,24 @@ export async function generateApp(
     }
   }
 
+  const testNote = testCode ? "✅ Tests generados. " : "";
   onProgress?.({
     phase: "parsing",
     progress: 94,
     note: report.ok
-      ? "Revisión OK. 📦 Empaquetando archivos…"
-      : `Aplicado parcheo de QA. 📦 Empaquetando…`,
+      ? `Revisión OK. ${testNote}📦 Empaquetando archivos…`
+      : `Aplicado parcheo de QA. ${testNote}📦 Empaquetando…`,
   });
 
-  /* === Final assembly: append SETUP.md when there are integrations ======== */
+  /* === Final assembly: tests + SETUP.md =================================== */
   const setupNotes = buildSetupNotes(integrationSpec);
+  const testsAppendix = testCode ? `\n\n${testCode}` : "";
 
   return {
     title: plan.title.slice(0, 200),
     description: plan.description.slice(0, 1000),
     techStack: plan.techStack,
-    frontendCode: finalFrontend + setupNotes,
+    frontendCode: finalFrontend + testsAppendix + setupNotes,
     backendCode: backendResult.code || "No backend required for this app.",
   };
 }
