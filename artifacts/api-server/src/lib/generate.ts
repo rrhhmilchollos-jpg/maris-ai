@@ -1,5 +1,6 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { getOpenAI } from "./openai";
+import { validateBundle, type BuildIssue } from "./validate";
 
 /* ============================================================================
  * AppForge multi-agent generation pipeline.
@@ -150,6 +151,7 @@ export type GeneratePhase =
   | "designing"
   | "generating"
   | "reviewing"
+  | "validating"
   | "fixing"
   | "parsing";
 
@@ -888,7 +890,7 @@ export async function generateApp(
   /* === Phase 4 (parallel): QA review + Test Engineer ====================== */
   onProgress?.({
     phase: "reviewing",
-    progress: 80,
+    progress: 78,
     note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…",
   });
   const [report, testCode] = await Promise.all([
@@ -896,27 +898,95 @@ export async function generateApp(
     generateTests(plan, frontendResult.code),
   ]);
 
-  /* === Phase 5: self-healing — patch only if QA found real issues ========= */
+  /* === Phase 5: AUTONOMOUS LOOP (validate → patch → re-validate) ========== */
+  // Real build via esbuild ("ejecutar el código"). If it fails, feed the build
+  // errors back to the patcher and try again. Bounded to MAX_ITERATIONS so the
+  // pipeline can never spiral.
+  const MAX_ITERATIONS = 4;
   let finalFrontend = frontendResult.code;
-  if (!report.ok && report.issues.length > 0) {
+
+  // Seed the loop with the QA-suggested issues so they're addressed even if
+  // the bundle technically builds.
+  let pendingIssues: BuildIssue[] = report.ok
+    ? []
+    : report.issues.map((i) => ({ file: i.file, message: `${i.problem} → ${i.fix}` }));
+
+  for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
+    const baseProgress = 80 + iter * 3;
+    onProgress?.({
+      phase: "validating",
+      progress: Math.min(baseProgress, 92),
+      note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
+    });
+    const validation = await validateBundle(finalFrontend);
+
+    // Combine real build errors with any unresolved QA suggestions on the first
+    // pass. After the first pass, only build errors drive the loop.
+    const combined: BuildIssue[] = iter === 1
+      ? [...validation.issues, ...pendingIssues].slice(0, 6)
+      : validation.issues.slice(0, 6);
+    pendingIssues = [];
+
+    if (validation.ok && combined.length === 0) {
+      onProgress?.({
+        phase: "validating",
+        progress: Math.min(baseProgress + 1, 93),
+        note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
+      });
+      break;
+    }
+
+    if (iter === MAX_ITERATIONS) {
+      // Out of iterations — keep the best bundle we have and surface a note.
+      onProgress?.({
+        phase: "validating",
+        progress: 92,
+        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
+      });
+      break;
+    }
+
     onProgress?.({
       phase: "fixing",
-      progress: 86,
-      note: `🔧 Auto-reparación: corrigiendo ${report.issues.length} problema(s)…`,
+      progress: Math.min(baseProgress + 2, 92),
+      note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
     });
-    const patched = await patchBundle(frontendResult.code, report.issues);
-    if (patched) {
-      finalFrontend = patched;
+    const patched = await patchBundle(
+      finalFrontend,
+      combined.map((i) => ({
+        file: i.file,
+        problem: `Build error${i.line ? ` at line ${i.line}` : ""}: ${i.message}`,
+        fix: "Fix the import / symbol / syntax so the file compiles.",
+      })),
+    );
+    if (!patched) {
+      // Patcher failed to produce a usable bundle; bail out gracefully.
+      onProgress?.({
+        phase: "fixing",
+        progress: Math.min(baseProgress + 2, 92),
+        note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
+      });
+      break;
     }
+    // Stagnation guard: if the patcher returned an unchanged bundle, the next
+    // iteration would be identical — break early instead of burning the
+    // remaining budget on the same input.
+    if (patched === finalFrontend) {
+      onProgress?.({
+        phase: "fixing",
+        progress: Math.min(baseProgress + 2, 92),
+        note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
+      });
+      break;
+    }
+    finalFrontend = patched;
   }
 
   const testNote = testCode ? "✅ Tests generados. " : "";
   onProgress?.({
     phase: "parsing",
     progress: 94,
-    note: report.ok
-      ? `Revisión OK. ${testNote}📦 Empaquetando archivos…`
-      : `Aplicado parcheo de QA. ${testNote}📦 Empaquetando…`,
+    note: `${testNote}📦 Empaquetando archivos…`,
   });
 
   /* === Final assembly: tests + SETUP.md =================================== */

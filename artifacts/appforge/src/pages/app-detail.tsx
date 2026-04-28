@@ -62,6 +62,7 @@ const PHASE_LABELS: Record<string, string> = {
   designing: "🎨 Diseñador trabajando…",
   generating: "⚡ Aplicando cambios al código…",
   reviewing: "✅ Revisión de calidad…",
+  validating: "🔍 Compilando en memoria…",
   fixing: "🔧 Auto-reparación…",
   parsing: "📦 Empaquetando archivos…",
   ready: "Listo",
