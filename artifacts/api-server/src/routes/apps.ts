@@ -8,10 +8,12 @@ import {
   users,
   creditTransactions,
   generationJobs,
+  appMessages,
 } from "@workspace/db/schema";
 
 type GeneratedAppRow = typeof generatedApps.$inferSelect;
 type GenerationJobRow = typeof generationJobs.$inferSelect;
+type AppMessageRow = typeof appMessages.$inferSelect;
 import { generateApp } from "../lib/generate";
 
 const router: IRouter = Router();
@@ -27,6 +29,16 @@ function serializeApp(row: GeneratedAppRow) {
     frontendCode: row.frontendCode,
     backendCode: row.backendCode,
     status: row.status,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function serializeMessage(row: AppMessageRow) {
+  return {
+    id: row.id,
+    appId: row.appId,
+    role: row.role,
+    content: row.content,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -113,7 +125,13 @@ async function refundCredit(userId: string, jobId: number) {
   }
 }
 
-async function runJob(jobId: number, userId: string, prompt: string, isAdmin: boolean) {
+async function runJob(
+  jobId: number,
+  userId: string,
+  prompt: string,
+  isAdmin: boolean,
+  editAppId?: number,
+) {
   try {
     await db
       .update(generationJobs)
@@ -125,36 +143,96 @@ async function runJob(jobId: number, userId: string, prompt: string, isAdmin: bo
       })
       .where(eq(generationJobs.id, jobId));
 
-    const payload = await generateApp(prompt, async (p) => {
-      try {
-        await db
-          .update(generationJobs)
-          .set({
-            phase: p.phase,
-            progress: p.progress,
-            updatedAt: new Date(),
-          })
-          .where(eq(generationJobs.id, jobId));
-      } catch (err) {
-        logger.warn({ err, jobId }, "Failed to update job progress");
+    let previous: import("../lib/generate").PreviousApp | undefined;
+    if (editAppId) {
+      const [row] = await db
+        .select()
+        .from(generatedApps)
+        .where(and(eq(generatedApps.id, editAppId), eq(generatedApps.userId, userId)))
+        .limit(1);
+      if (row) {
+        previous = {
+          title: row.title,
+          description: row.description,
+          techStack: row.techStack ?? [],
+          frontendCode: row.frontendCode,
+          backendCode: row.backendCode,
+        };
       }
-    });
+    }
 
-    // Atomic finalisation: insert app + mark job succeeded in one tx.
+    const payload = await generateApp(
+      prompt,
+      async (p) => {
+        try {
+          await db
+            .update(generationJobs)
+            .set({
+              phase: p.phase,
+              progress: p.progress,
+              updatedAt: new Date(),
+            })
+            .where(eq(generationJobs.id, jobId));
+        } catch (err) {
+          logger.warn({ err, jobId }, "Failed to update job progress");
+        }
+      },
+      previous,
+    );
+
+    // Atomic finalisation: insert/update app + mark job succeeded in one tx.
     await db.transaction(async (tx) => {
-      const [inserted] = await tx
-        .insert(generatedApps)
-        .values({
-          userId,
-          title: payload.title,
-          description: payload.description,
-          prompt,
-          techStack: payload.techStack,
-          frontendCode: payload.frontendCode,
-          backendCode: payload.backendCode,
-          status: "ready",
-        })
-        .returning();
+      let resultAppId: number;
+      if (editAppId) {
+        const updatedRows = await tx
+          .update(generatedApps)
+          .set({
+            title: payload.title,
+            description: payload.description,
+            techStack: payload.techStack,
+            frontendCode: payload.frontendCode,
+            backendCode: payload.backendCode,
+            status: "ready",
+          })
+          .where(and(eq(generatedApps.id, editAppId), eq(generatedApps.userId, userId)))
+          .returning();
+        if (updatedRows.length === 0) {
+          // App was deleted (or ownership changed) between enqueue and finalize.
+          throw new Error("APP_NO_LONGER_AVAILABLE");
+        }
+        const updated = updatedRows[0];
+        resultAppId = updated.id;
+        // Append assistant message acknowledging the change.
+        await tx.insert(appMessages).values({
+          appId: resultAppId,
+          role: "assistant",
+          content: `Aplicado: ${payload.description}`,
+        });
+      } else {
+        const [inserted] = await tx
+          .insert(generatedApps)
+          .values({
+            userId,
+            title: payload.title,
+            description: payload.description,
+            prompt,
+            techStack: payload.techStack,
+            frontendCode: payload.frontendCode,
+            backendCode: payload.backendCode,
+            status: "ready",
+          })
+          .returning();
+        resultAppId = inserted.id;
+        // Seed initial assistant message for the chat history.
+        await tx.insert(appMessages).values([
+          { appId: resultAppId, role: "user", content: prompt },
+          {
+            appId: resultAppId,
+            role: "assistant",
+            content: `He generado "${payload.title}". ${payload.description}`,
+          },
+        ]);
+      }
 
       await tx
         .update(generationJobs)
@@ -162,7 +240,7 @@ async function runJob(jobId: number, userId: string, prompt: string, isAdmin: bo
           status: "succeeded",
           phase: "ready",
           progress: 100,
-          appId: inserted.id,
+          appId: resultAppId,
           updatedAt: new Date(),
         })
         .where(eq(generationJobs.id, jobId));
@@ -171,7 +249,11 @@ async function runJob(jobId: number, userId: string, prompt: string, isAdmin: bo
       if (!isAdmin) {
         await tx
           .update(creditTransactions)
-          .set({ description: `App generada: ${payload.title}` })
+          .set({
+            description: editAppId
+              ? `Edición de app: ${payload.title}`
+              : `App generada: ${payload.title}`,
+          })
           .where(
             and(
               eq(creditTransactions.userId, userId),
@@ -253,16 +335,22 @@ export async function reclaimOrphanedJobs() {
   }
 }
 
-router.post("/generate", requireAuth, async (req: Request, res: Response) => {
-  const prompt: unknown = req.body?.prompt;
-  if (typeof prompt !== "string" || prompt.trim().length < 5) {
-    res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
-    return;
-  }
+interface EnqueueExtras {
+  // Optional: a chat user message to persist atomically with the job. If the
+  // enqueue (credit reservation, etc.) fails, the message is rolled back too.
+  chatMessage?: { appId: number; content: string };
+}
+
+async function enqueueGeneration(
+  req: Request,
+  res: Response,
+  cleanedPrompt: string,
+  editAppId: number | undefined,
+  extras?: EnqueueExtras,
+) {
   const userId = req.userId!;
   const user = req.dbUser!;
   const isAdmin = isAdminEmail(user.email);
-  const cleanedPrompt = prompt.trim();
 
   if (!isAdmin && user.credits < 1) {
     res.status(402).json({
@@ -271,9 +359,28 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     return;
   }
 
-  // For non-admins: atomically reserve 1 credit BEFORE enqueuing. This prevents
-  // a user from racing N concurrent /generate calls with only 1 credit. If the
-  // job later fails or is interrupted, refundCredit() restores it.
+  // For edits, refuse if there's already an in-flight job on this app to avoid
+  // last-writer-wins races. The UI also blocks the chat input but a second
+  // tab / API client could try otherwise.
+  if (editAppId) {
+    const inFlight = await db
+      .select({ id: generationJobs.id })
+      .from(generationJobs)
+      .where(
+        and(
+          eq(generationJobs.appId, editAppId),
+          sql`${generationJobs.status} IN ('queued', 'running')`,
+        ),
+      )
+      .limit(1);
+    if (inFlight.length > 0) {
+      res.status(409).json({
+        error: "Ya hay un cambio en curso para esta app. Espera a que termine.",
+      });
+      return;
+    }
+  }
+
   let job;
   try {
     job = await db.transaction(async (tx) => {
@@ -298,6 +405,7 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
           status: "queued",
           phase: "queued",
           progress: 0,
+          appId: editAppId ?? null,
         })
         .returning();
       if (!isAdmin) {
@@ -306,6 +414,14 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
           kind: "usage",
           amount: -1,
           description: `Reserva de crédito para job #${created.id}`,
+        });
+      }
+      // Persist the chat message in the same tx so it never lingers without a job.
+      if (extras?.chatMessage) {
+        await tx.insert(appMessages).values({
+          appId: extras.chatMessage.appId,
+          role: "user",
+          content: extras.chatMessage.content,
         });
       }
       return created;
@@ -323,12 +439,88 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   }
 
   setImmediate(() => {
-    runJob(job.id, userId, cleanedPrompt, isAdmin).catch((err) => {
+    runJob(job.id, userId, cleanedPrompt, isAdmin, editAppId).catch((err) => {
       logger.error({ err, jobId: job.id }, "runJob threw unexpectedly");
     });
   });
 
   res.status(202).json(serializeJob(job));
+}
+
+router.post("/generate", requireAuth, async (req: Request, res: Response) => {
+  const prompt: unknown = req.body?.prompt;
+  const appIdRaw: unknown = req.body?.appId;
+  if (typeof prompt !== "string" || prompt.trim().length < 5) {
+    res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
+    return;
+  }
+  const userId = req.userId!;
+  const cleanedPrompt = prompt.trim();
+  let editAppId: number | undefined;
+  if (typeof appIdRaw === "number" && Number.isInteger(appIdRaw)) {
+    const [owned] = await db
+      .select({ id: generatedApps.id })
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, appIdRaw), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!owned) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    editAppId = appIdRaw;
+  }
+  await enqueueGeneration(req, res, cleanedPrompt, editAppId);
+});
+
+router.get("/apps/:id/messages", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [owned] = await db
+    .select({ id: generatedApps.id })
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!owned) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  const rows = await db
+    .select()
+    .from(appMessages)
+    .where(eq(appMessages.appId, id))
+    .orderBy(appMessages.id);
+  res.json(rows.map(serializeMessage));
+});
+
+router.post("/apps/:id/messages", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const message: unknown = req.body?.message;
+  if (typeof message !== "string" || message.trim().length < 2) {
+    res.status(400).json({ error: "El mensaje debe tener al menos 2 caracteres." });
+    return;
+  }
+  const userId = req.userId!;
+  const [owned] = await db
+    .select({ id: generatedApps.id })
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!owned) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  const cleanedMessage = message.trim();
+  await enqueueGeneration(req, res, cleanedMessage, id, {
+    chatMessage: { appId: id, content: cleanedMessage },
+  });
 });
 
 router.get(

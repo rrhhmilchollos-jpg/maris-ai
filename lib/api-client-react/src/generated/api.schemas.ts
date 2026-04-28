@@ -47,6 +47,22 @@ export interface DashboardStats {
 export interface GenerateAppRequest {
   /** @minLength 5 */
   prompt: string;
+  /** When provided, edits the existing app iteratively instead of creating a new one */
+  appId?: number | null;
+}
+
+export interface SendAppMessageRequest {
+  /** @minLength 2 */
+  message: string;
+}
+
+export interface AppMessage {
+  id: number;
+  appId: number;
+  /** user | assistant | system */
+  role: string;
+  content: string;
+  createdAt: string;
 }
 
 export interface GenerationJob {

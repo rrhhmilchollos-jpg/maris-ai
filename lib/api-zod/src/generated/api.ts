@@ -96,12 +96,47 @@ export const DeleteAppParams = zod.object({
 });
 
 /**
- * @summary Enqueue an app generation job (costs 1 credit on success, free for admins)
+ * @summary Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
  */
 export const generateAppBodyPromptMin = 5;
 
 export const GenerateAppBody = zod.object({
   prompt: zod.string().min(generateAppBodyPromptMin),
+  appId: zod
+    .number()
+    .nullish()
+    .describe(
+      "When provided, edits the existing app iteratively instead of creating a new one",
+    ),
+});
+
+/**
+ * @summary List chat messages for an app (oldest first)
+ */
+export const ListAppMessagesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListAppMessagesResponseItem = zod.object({
+  id: zod.number(),
+  appId: zod.number(),
+  role: zod.string().describe("user | assistant | system"),
+  content: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListAppMessagesResponse = zod.array(ListAppMessagesResponseItem);
+
+/**
+ * @summary Send a chat message that triggers an iterative regeneration of the app
+ */
+export const SendAppMessageParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const sendAppMessageBodyMessageMin = 2;
+
+export const SendAppMessageBody = zod.object({
+  message: zod.string().min(sendAppMessageBodyMessageMin),
 });
 
 /**
