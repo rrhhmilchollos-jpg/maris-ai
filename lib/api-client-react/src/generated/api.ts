@@ -5,18 +5,34 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ApiError,
+  CheckoutSession,
+  ConfirmCheckoutBody,
+  ConfirmCheckoutResult,
+  CreateCheckoutBody,
+  CreditPackage,
+  CreditTransaction,
+  DashboardStats,
+  GenerateAppBody,
+  GeneratedApp,
+  HealthStatus,
+  UserProfile,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -25,7 +41,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -99,3 +114,775 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get current user profile and credits
+ */
+export const getGetMeUrl = () => {
+  return `/api/me`;
+};
+
+export const getMe = async (options?: RequestInit): Promise<UserProfile> => {
+  return customFetch<UserProfile>(getGetMeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMeQueryKey = () => {
+  return [`/api/me`] as const;
+};
+
+export const getGetMeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMe>>> = ({
+    signal,
+  }) => getMe({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMe>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>;
+export type GetMeQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Get current user profile and credits
+ */
+
+export function useGetMe<
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get dashboard summary stats for current user
+ */
+export const getGetMyStatsUrl = () => {
+  return `/api/me/stats`;
+};
+
+export const getMyStats = async (
+  options?: RequestInit,
+): Promise<DashboardStats> => {
+  return customFetch<DashboardStats>(getGetMyStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyStatsQueryKey = () => {
+  return [`/api/me/stats`] as const;
+};
+
+export const getGetMyStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyStats>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyStatsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyStats>>> = ({
+    signal,
+  }) => getMyStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyStats>>
+>;
+export type GetMyStatsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Get dashboard summary stats for current user
+ */
+
+export function useGetMyStats<
+  TData = Awaited<ReturnType<typeof getMyStats>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List the current user's generated apps
+ */
+export const getListAppsUrl = () => {
+  return `/api/apps`;
+};
+
+export const listApps = async (
+  options?: RequestInit,
+): Promise<GeneratedApp[]> => {
+  return customFetch<GeneratedApp[]>(getListAppsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAppsQueryKey = () => {
+  return [`/api/apps`] as const;
+};
+
+export const getListAppsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listApps>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listApps>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAppsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listApps>>> = ({
+    signal,
+  }) => listApps({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listApps>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAppsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listApps>>
+>;
+export type ListAppsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List the current user's generated apps
+ */
+
+export function useListApps<
+  TData = Awaited<ReturnType<typeof listApps>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listApps>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAppsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a specific generated app
+ */
+export const getGetAppUrl = (id: number) => {
+  return `/api/apps/${id}`;
+};
+
+export const getApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GeneratedApp> => {
+  return customFetch<GeneratedApp>(getGetAppUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAppQueryKey = (id: number) => {
+  return [`/api/apps/${id}`] as const;
+};
+
+export const getGetAppQueryOptions = <
+  TData = Awaited<ReturnType<typeof getApp>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getApp>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAppQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getApp>>> = ({
+    signal,
+  }) => getApp(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getApp>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetAppQueryResult = NonNullable<Awaited<ReturnType<typeof getApp>>>;
+export type GetAppQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Get a specific generated app
+ */
+
+export function useGetApp<
+  TData = Awaited<ReturnType<typeof getApp>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getApp>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAppQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete a generated app
+ */
+export const getDeleteAppUrl = (id: number) => {
+  return `/api/apps/${id}`;
+};
+
+export const deleteApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteAppUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteAppMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteApp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteApp>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteApp(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteAppMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteApp>>
+>;
+
+export type DeleteAppMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Delete a generated app
+ */
+export const useDeleteApp = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteAppMutationOptions(options));
+};
+
+/**
+ * @summary Generate a new app from a prompt (costs 1 credit)
+ */
+export const getGenerateAppUrl = () => {
+  return `/api/generate`;
+};
+
+export const generateApp = async (
+  generateAppBody: GenerateAppBody,
+  options?: RequestInit,
+): Promise<GeneratedApp> => {
+  return customFetch<GeneratedApp>(getGenerateAppUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(generateAppBody),
+  });
+};
+
+export const getGenerateAppMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateApp>>,
+    TError,
+    { data: BodyType<GenerateAppBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateApp>>,
+  TError,
+  { data: BodyType<GenerateAppBody> },
+  TContext
+> => {
+  const mutationKey = ["generateApp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateApp>>,
+    { data: BodyType<GenerateAppBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateApp(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateAppMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateApp>>
+>;
+export type GenerateAppMutationBody = BodyType<GenerateAppBody>;
+export type GenerateAppMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Generate a new app from a prompt (costs 1 credit)
+ */
+export const useGenerateApp = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateApp>>,
+    TError,
+    { data: BodyType<GenerateAppBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateApp>>,
+  TError,
+  { data: BodyType<GenerateAppBody> },
+  TContext
+> => {
+  return useMutation(getGenerateAppMutationOptions(options));
+};
+
+/**
+ * @summary List available credit packages
+ */
+export const getListCreditPackagesUrl = () => {
+  return `/api/billing/packages`;
+};
+
+export const listCreditPackages = async (
+  options?: RequestInit,
+): Promise<CreditPackage[]> => {
+  return customFetch<CreditPackage[]>(getListCreditPackagesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCreditPackagesQueryKey = () => {
+  return [`/api/billing/packages`] as const;
+};
+
+export const getListCreditPackagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCreditPackages>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCreditPackages>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListCreditPackagesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCreditPackages>>
+  > = ({ signal }) => listCreditPackages({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCreditPackages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCreditPackagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCreditPackages>>
+>;
+export type ListCreditPackagesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List available credit packages
+ */
+
+export function useListCreditPackages<
+  TData = Awaited<ReturnType<typeof listCreditPackages>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listCreditPackages>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCreditPackagesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a Stripe checkout session for a credit package
+ */
+export const getCreateCheckoutSessionUrl = () => {
+  return `/api/billing/checkout`;
+};
+
+export const createCheckoutSession = async (
+  createCheckoutBody: CreateCheckoutBody,
+  options?: RequestInit,
+): Promise<CheckoutSession> => {
+  return customFetch<CheckoutSession>(getCreateCheckoutSessionUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createCheckoutBody),
+  });
+};
+
+export const getCreateCheckoutSessionMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCheckoutSession>>,
+    TError,
+    { data: BodyType<CreateCheckoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCheckoutSession>>,
+  TError,
+  { data: BodyType<CreateCheckoutBody> },
+  TContext
+> => {
+  const mutationKey = ["createCheckoutSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCheckoutSession>>,
+    { data: BodyType<CreateCheckoutBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCheckoutSession(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCheckoutSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCheckoutSession>>
+>;
+export type CreateCheckoutSessionMutationBody = BodyType<CreateCheckoutBody>;
+export type CreateCheckoutSessionMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Create a Stripe checkout session for a credit package
+ */
+export const useCreateCheckoutSession = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCheckoutSession>>,
+    TError,
+    { data: BodyType<CreateCheckoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCheckoutSession>>,
+  TError,
+  { data: BodyType<CreateCheckoutBody> },
+  TContext
+> => {
+  return useMutation(getCreateCheckoutSessionMutationOptions(options));
+};
+
+/**
+ * @summary List the current user's recent credit transactions
+ */
+export const getListTransactionsUrl = () => {
+  return `/api/billing/transactions`;
+};
+
+export const listTransactions = async (
+  options?: RequestInit,
+): Promise<CreditTransaction[]> => {
+  return customFetch<CreditTransaction[]>(getListTransactionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTransactionsQueryKey = () => {
+  return [`/api/billing/transactions`] as const;
+};
+
+export const getListTransactionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTransactions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTransactionsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listTransactions>>
+  > = ({ signal }) => listTransactions({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTransactions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTransactionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTransactions>>
+>;
+export type ListTransactionsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List the current user's recent credit transactions
+ */
+
+export function useListTransactions<
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTransactions>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTransactionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Confirm a Stripe checkout session and credit the user (called after redirect)
+ */
+export const getConfirmCheckoutUrl = () => {
+  return `/api/billing/confirm`;
+};
+
+export const confirmCheckout = async (
+  confirmCheckoutBody: ConfirmCheckoutBody,
+  options?: RequestInit,
+): Promise<ConfirmCheckoutResult> => {
+  return customFetch<ConfirmCheckoutResult>(getConfirmCheckoutUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(confirmCheckoutBody),
+  });
+};
+
+export const getConfirmCheckoutMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmCheckout>>,
+    TError,
+    { data: BodyType<ConfirmCheckoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmCheckout>>,
+  TError,
+  { data: BodyType<ConfirmCheckoutBody> },
+  TContext
+> => {
+  const mutationKey = ["confirmCheckout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmCheckout>>,
+    { data: BodyType<ConfirmCheckoutBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return confirmCheckout(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfirmCheckoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof confirmCheckout>>
+>;
+export type ConfirmCheckoutMutationBody = BodyType<ConfirmCheckoutBody>;
+export type ConfirmCheckoutMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Confirm a Stripe checkout session and credit the user (called after redirect)
+ */
+export const useConfirmCheckout = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmCheckout>>,
+    TError,
+    { data: BodyType<ConfirmCheckoutBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof confirmCheckout>>,
+  TError,
+  { data: BodyType<ConfirmCheckoutBody> },
+  TContext
+> => {
+  return useMutation(getConfirmCheckoutMutationOptions(options));
+};

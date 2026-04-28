@@ -10,13 +10,20 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: me
+    description: Current user / credits
+  - name: apps
+    description: Generated apps
+  - name: generation
+    description: AI app generation
+  - name: billing
+    description: Credit purchase / Stripe
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +31,217 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /me:
+    get:
+      operationId: getMe
+      tags: [me]
+      summary: Get current user profile and credits
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /me/stats:
+    get:
+      operationId: getMyStats
+      tags: [me]
+      summary: Get dashboard summary stats for current user
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps:
+    get:
+      operationId: listApps
+      tags: [apps]
+      summary: List the current user's generated apps
+      responses:
+        "200":
+          description: List of apps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GeneratedApp"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}:
+    get:
+      operationId: getApp
+      tags: [apps]
+      summary: Get a specific generated app
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Generated app
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedApp"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteApp
+      tags: [apps]
+      summary: Delete a generated app
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /generate:
+    post:
+      operationId: generateApp
+      tags: [generation]
+      summary: Generate a new app from a prompt (costs 1 credit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateAppBody"
+      responses:
+        "200":
+          description: Generated app
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedApp"
+        "402":
+          description: Insufficient credits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /billing/packages:
+    get:
+      operationId: listCreditPackages
+      tags: [billing]
+      summary: List available credit packages
+      responses:
+        "200":
+          description: Available packages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CreditPackage"
+  /billing/checkout:
+    post:
+      operationId: createCheckoutSession
+      tags: [billing]
+      summary: Create a Stripe checkout session for a credit package
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCheckoutBody"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSession"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /billing/transactions:
+    get:
+      operationId: listTransactions
+      tags: [billing]
+      summary: List the current user's recent credit transactions
+      responses:
+        "200":
+          description: Transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CreditTransaction"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /billing/confirm:
+    post:
+      operationId: confirmCheckout
+      tags: [billing]
+      summary: Confirm a Stripe checkout session and credit the user (called after redirect)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmCheckoutBody"
+      responses:
+        "200":
+          description: Confirmation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmCheckoutResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +251,184 @@ components:
           type: string
       required:
         - status
-
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          nullable: true
+        credits:
+          type: integer
+        appsGenerated:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - credits
+        - appsGenerated
+        - createdAt
+    DashboardStats:
+      type: object
+      properties:
+        credits:
+          type: integer
+        appsGenerated:
+          type: integer
+        appsThisWeek:
+          type: integer
+        creditsSpentTotal:
+          type: integer
+        recentApps:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeneratedApp"
+      required:
+        - credits
+        - appsGenerated
+        - appsThisWeek
+        - creditsSpentTotal
+        - recentApps
+    GeneratedApp:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        title:
+          type: string
+        prompt:
+          type: string
+        description:
+          type: string
+        techStack:
+          type: array
+          items:
+            type: string
+        frontendCode:
+          type: string
+        backendCode:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - title
+        - prompt
+        - description
+        - techStack
+        - frontendCode
+        - backendCode
+        - status
+        - createdAt
+    GenerateAppBody:
+      type: object
+      properties:
+        prompt:
+          type: string
+          minLength: 5
+      required:
+        - prompt
+    CreditPackage:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        credits:
+          type: integer
+        priceCents:
+          type: integer
+        currency:
+          type: string
+        priceId:
+          type: string
+        popular:
+          type: boolean
+      required:
+        - id
+        - name
+        - description
+        - credits
+        - priceCents
+        - currency
+        - priceId
+        - popular
+    CreateCheckoutBody:
+      type: object
+      properties:
+        priceId:
+          type: string
+      required:
+        - priceId
+    CheckoutSession:
+      type: object
+      properties:
+        url:
+          type: string
+        sessionId:
+          type: string
+      required:
+        - url
+        - sessionId
+    ConfirmCheckoutBody:
+      type: object
+      properties:
+        sessionId:
+          type: string
+      required:
+        - sessionId
+    ConfirmCheckoutResult:
+      type: object
+      properties:
+        creditsAdded:
+          type: integer
+        newBalance:
+          type: integer
+        alreadyProcessed:
+          type: boolean
+      required:
+        - creditsAdded
+        - newBalance
+        - alreadyProcessed
+    CreditTransaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        amount:
+          type: integer
+        kind:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - amount
+        - kind
+        - description
+        - createdAt
