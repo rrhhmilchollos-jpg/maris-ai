@@ -32,6 +32,8 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
 | GET | `/api/admin/users` | Admin: list users with credits and app counts |
 | POST | `/api/admin/users/:id/credits` | Admin: adjust credits (±delta) and write a ledger row |
 | GET | `/api/admin/apps` | Admin: list all generated apps with owner email |
+| GET | `/api/apps/:id/messages` | Chat history for an app (only the owner) |
+| POST | `/api/apps/:id/messages` | Send a refinement message; persists user msg + enqueues edit job atomically |
 
 ### Admin access
 
@@ -55,11 +57,12 @@ Admin email checks happen at job-creation time (the credit gate) **and** after g
 
 ## Database
 
-Three tables (`lib/db/src/schema/`):
+Tables (`lib/db/src/schema/`):
 
 - `users` — id is the Clerk user ID; tracks email, fullName, imageUrl, credits (default 3), stripeCustomerId.
 - `generated_apps` — id, userId (FK), title, prompt, description, techStack (jsonb string[]), frontendCode, backendCode, status, createdAt.
 - `credit_transactions` — id, userId (FK), kind (`usage` / `purchase` / `bonus`), amount (negative for usage), description, stripeSessionId (nullable, used for idempotency), createdAt.
+- `app_messages` — id, appId (FK → generated_apps, cascade), role (`user` / `assistant`), content, createdAt. Backs the chat-driven iterative editor in the workspace.
 
 Run `pnpm --filter @workspace/db run push` after schema changes.
 
@@ -69,7 +72,18 @@ Clerk is Replit-managed. The frontend reads `VITE_CLERK_PUBLISHABLE_KEY`, which 
 
 ## AI generation
 
-`artifacts/api-server/src/lib/generate.ts` calls `claude-sonnet-4-5` with a strict JSON-only system prompt that returns `{ title, description, techStack[], frontendCode, backendCode }`. Both code fields are single strings using `// === FILE: <path> ===` delimiters so the frontend can render and split as needed. Credits are deducted atomically (`UPDATE ... WHERE credits >= 1`) only after a successful generation.
+`artifacts/api-server/src/lib/generate.ts` calls `claude-sonnet-4-6` (with `claude-haiku-4-5` for the optional clone-research step) using a strict JSON-only system prompt that returns `{ title, description, techStack[], frontendCode, backendCode }`. Both code fields are single strings using `// === FILE: <path> ===` delimiters so the frontend can render and split as needed. Credits are reserved up front in the same transaction as the job row (and the chat message, if applicable), and refunded if generation fails.
+
+`generateApp` accepts an optional `previous: PreviousApp` parameter. When present, the system prompt switches to **edit mode**: the model receives the previous title/description/techStack and full frontend+backend bundles and is asked to produce a complete, updated bundle that applies the requested change. The clone-research step is skipped in edit mode.
+
+## Workspace (chat + live preview)
+
+The app detail page (`artifacts/appforge/src/pages/app-detail.tsx`) is a split workspace:
+
+- **Left panel** — chat history loaded via `useListAppMessages`, plus a textarea wired to `useSendAppMessage`. While a job is in flight the input is disabled and a phase/progress indicator is shown.
+- **Right panel** — tabs for `Preview en vivo`, `Frontend`, and `Backend`. The preview embeds `@codesandbox/sandpack-react` (`react-ts` template, light theme, 500 ms recompile delay). `lib/parseBundle.ts` splits the `// === FILE: ... ===` bundle, normalizes `src/*` → `/*`, drops build configs, promotes a generated `main.tsx` to `/index.tsx` (or installs a fallback wrapper), preserves the generated `index.css`, and always overrides `/public/index.html` to inject Tailwind via CDN (Sandpack cannot run a real postcss build).
+
+`POST /apps/:id/messages` is concurrency-safe: it rejects with `409` if there is already a `queued`/`running` job for that app, and the chat message + credit reservation + job creation happen in a single DB transaction so a failure rolls everything back. The edit-finalization transaction throws `APP_NO_LONGER_AVAILABLE` (handled by the existing failure/refund path) if the app was deleted between enqueue and completion.
 
 ## Stripe
 
@@ -85,3 +99,4 @@ Stripe is **optional**. Without `STRIPE_SECRET_KEY`, `/billing/checkout` and `/b
 
 - OpenAPI is the source of truth; frontend uses generated React Query hooks from `@workspace/api-client-react`. Backend returns plain JSON shaped to match the OpenAPI schemas (no zod parsing on the server side to avoid orval's operation-derived schema name confusion).
 - The `priceId` field in `CreditPackage` is intentionally the internal package id, so the frontend can request checkout without knowing real Stripe price IDs.
+- The live preview uses Sandpack instead of a real container/sandbox: it's instant, has no per-app cost, and runs entirely client-side. Tradeoff: only the frontend executes; backend code is shown read-only. A real execution sandbox is a future phase.

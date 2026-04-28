@@ -136,7 +136,7 @@ paths:
     post:
       operationId: generateApp
       tags: [generation]
-      summary: Enqueue an app generation job (costs 1 credit on success, free for admins)
+      summary: Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
       requestBody:
         required: true
         content:
@@ -158,6 +158,67 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/messages:
+    get:
+      operationId: listAppMessages
+      tags: [apps]
+      summary: List chat messages for an app (oldest first)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AppMessage"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: sendAppMessage
+      tags: [apps]
+      summary: Send a chat message that triggers an iterative regeneration of the app
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendAppMessageRequest"
+      responses:
+        "202":
+          description: Edit job enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "402":
+          description: Insufficient credits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
           content:
             application/json:
               schema:
@@ -468,8 +529,41 @@ components:
         prompt:
           type: string
           minLength: 5
+        appId:
+          type: integer
+          nullable: true
+          description: When provided, edits the existing app iteratively instead of creating a new one
       required:
         - prompt
+    SendAppMessageRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 2
+      required:
+        - message
+    AppMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        appId:
+          type: integer
+        role:
+          type: string
+          description: user | assistant | system
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - appId
+        - role
+        - content
+        - createdAt
     GenerationJob:
       type: object
       properties:

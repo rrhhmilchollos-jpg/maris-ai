@@ -9,4 +9,6 @@
 export interface GenerateAppRequest {
   /** @minLength 5 */
   prompt: string;
+  /** When provided, edits the existing app iteratively instead of creating a new one */
+  appId?: number | null;
 }

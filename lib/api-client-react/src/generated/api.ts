@@ -22,6 +22,7 @@ import type {
   AdminOverview,
   AdminUser,
   ApiError,
+  AppMessage,
   CheckoutSession,
   ConfirmCheckoutRequest,
   ConfirmCheckoutResult,
@@ -33,6 +34,7 @@ import type {
   GeneratedApp,
   GenerationJob,
   HealthStatus,
+  SendAppMessageRequest,
   UserProfile,
 } from "./api.schemas";
 
@@ -485,7 +487,7 @@ export const useDeleteApp = <
 };
 
 /**
- * @summary Enqueue an app generation job (costs 1 credit on success, free for admins)
+ * @summary Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
  */
 export const getGenerateAppUrl = () => {
   return `/api/generate`;
@@ -548,7 +550,7 @@ export type GenerateAppMutationBody = BodyType<GenerateAppRequest>;
 export type GenerateAppMutationError = ErrorType<ApiError>;
 
 /**
- * @summary Enqueue an app generation job (costs 1 credit on success, free for admins)
+ * @summary Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
  */
 export const useGenerateApp = <
   TError = ErrorType<ApiError>,
@@ -568,6 +570,180 @@ export const useGenerateApp = <
   TContext
 > => {
   return useMutation(getGenerateAppMutationOptions(options));
+};
+
+/**
+ * @summary List chat messages for an app (oldest first)
+ */
+export const getListAppMessagesUrl = (id: number) => {
+  return `/api/apps/${id}/messages`;
+};
+
+export const listAppMessages = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AppMessage[]> => {
+  return customFetch<AppMessage[]>(getListAppMessagesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAppMessagesQueryKey = (id: number) => {
+  return [`/api/apps/${id}/messages`] as const;
+};
+
+export const getListAppMessagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAppMessages>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAppMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAppMessagesQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAppMessages>>> = ({
+    signal,
+  }) => listAppMessages(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAppMessages>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAppMessagesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAppMessages>>
+>;
+export type ListAppMessagesQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List chat messages for an app (oldest first)
+ */
+
+export function useListAppMessages<
+  TData = Awaited<ReturnType<typeof listAppMessages>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAppMessages>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAppMessagesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Send a chat message that triggers an iterative regeneration of the app
+ */
+export const getSendAppMessageUrl = (id: number) => {
+  return `/api/apps/${id}/messages`;
+};
+
+export const sendAppMessage = async (
+  id: number,
+  sendAppMessageRequest: SendAppMessageRequest,
+  options?: RequestInit,
+): Promise<GenerationJob> => {
+  return customFetch<GenerationJob>(getSendAppMessageUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(sendAppMessageRequest),
+  });
+};
+
+export const getSendAppMessageMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendAppMessage>>,
+    TError,
+    { id: number; data: BodyType<SendAppMessageRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendAppMessage>>,
+  TError,
+  { id: number; data: BodyType<SendAppMessageRequest> },
+  TContext
+> => {
+  const mutationKey = ["sendAppMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendAppMessage>>,
+    { id: number; data: BodyType<SendAppMessageRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return sendAppMessage(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendAppMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendAppMessage>>
+>;
+export type SendAppMessageMutationBody = BodyType<SendAppMessageRequest>;
+export type SendAppMessageMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Send a chat message that triggers an iterative regeneration of the app
+ */
+export const useSendAppMessage = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendAppMessage>>,
+    TError,
+    { id: number; data: BodyType<SendAppMessageRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendAppMessage>>,
+  TError,
+  { id: number; data: BodyType<SendAppMessageRequest> },
+  TContext
+> => {
+  return useMutation(getSendAppMessageMutationOptions(options));
 };
 
 /**

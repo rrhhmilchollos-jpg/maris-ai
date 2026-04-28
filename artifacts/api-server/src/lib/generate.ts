@@ -178,12 +178,23 @@ async function singleGenerate(
   }
 }
 
+export interface PreviousApp {
+  title: string;
+  description: string;
+  techStack: string[];
+  frontendCode: string;
+  backendCode: string;
+}
+
 export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
+  previous?: PreviousApp,
 ): Promise<GeneratedAppPayload> {
+  const isEdit = !!previous;
   let research = "";
-  if (shouldResearch(prompt)) {
+  // Skip research entirely in edit mode — we already have the app, the user is just refining.
+  if (!isEdit && shouldResearch(prompt)) {
     onProgress?.({
       phase: "researching",
       progress: 10,
@@ -195,14 +206,37 @@ export async function generateApp(
   onProgress?.({
     phase: "generating",
     progress: 35,
-    note: research
+    note: isEdit
+      ? "Aplicando cambios a la aplicación…"
+      : research
       ? "Generando código con contexto de la web…"
       : "Generando código de la aplicación…",
   });
 
-  const baseUserContent = research
-    ? `Generate an app for this request:\n\n${prompt}\n\n---\nResearch context (from web search, treat as ground truth for branding & features):\n${research}`
-    : `Generate an app for this request:\n\n${prompt}`;
+  let baseUserContent: string;
+  if (isEdit && previous) {
+    baseUserContent = `You are editing an existing web app. Apply the user's requested change while preserving everything else that works.
+
+CURRENT APP:
+- Title: ${previous.title}
+- Description: ${previous.description}
+- Tech stack: ${previous.techStack.join(", ")}
+
+CURRENT FRONTEND CODE:
+${previous.frontendCode}
+
+CURRENT BACKEND CODE:
+${previous.backendCode}
+
+USER'S CHANGE REQUEST:
+${prompt}
+
+Return the FULL updated app as the same JSON schema (title, description, techStack, frontendCode, backendCode). Keep the title and overall structure unless the user explicitly asks to change them. Only modify what the user asked for. Do NOT regress existing features.`;
+  } else {
+    baseUserContent = research
+      ? `Generate an app for this request:\n\n${prompt}\n\n---\nResearch context (from web search, treat as ground truth for branding & features):\n${research}`
+      : `Generate an app for this request:\n\n${prompt}`;
+  }
 
   // Live progress: stream chars and map them to a 35→85% progress range.
   const TARGET_CHARS = 50_000;
