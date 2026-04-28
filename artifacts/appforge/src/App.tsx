@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { shadcn } from "@clerk/themes";
 import { publishableKeyFromHost } from "@clerk/react/internal";
+import { esES } from "@clerk/localizations";
 
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -171,29 +172,23 @@ function ClerkProviderWithRoutes() {
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       localization={{
-        locale: "es-ES",
+        ...esES,
         signIn: {
+          ...esES.signIn,
           start: {
+            ...esES.signIn?.start,
             title: "Bienvenido de nuevo",
             subtitle: "Inicia sesión para entrar a tu espacio de AppForge",
-            actionText: "¿No tienes cuenta?",
-            actionLink: "Regístrate",
           },
         },
         signUp: {
+          ...esES.signUp,
           start: {
+            ...esES.signUp?.start,
             title: "Crea tu cuenta",
             subtitle: "Empieza a construir aplicaciones con IA hoy mismo",
-            actionText: "¿Ya tienes una cuenta?",
-            actionLink: "Inicia sesión",
           },
         },
-        formFieldLabel__emailAddress: "Correo electrónico",
-        formFieldLabel__password: "Contraseña",
-        formFieldLabel__firstName: "Nombre",
-        formFieldLabel__lastName: "Apellido",
-        formButtonPrimary: "Continuar",
-        dividerText: "o",
       }}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
