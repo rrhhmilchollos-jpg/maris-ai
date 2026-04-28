@@ -95,6 +95,29 @@ Rules:
 - Keep tailwindExtend small and valid JSON.
 - Output ONLY the JSON object.`;
 
+const INTEGRATION_SYSTEM_PROMPT = `You are AppForge's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics).
+
+Output STRICT JSON only:
+{"services":[{"name":"Clerk","why":"User auth","envVars":["CLERK_PUBLISHABLE_KEY"],"setupSteps":["Create Clerk app","Copy publishable key into env"]}]}
+
+Rules:
+- Max 4 services. Only include what's truly needed for the requested app.
+- Prefer well-known services: Clerk (auth), Stripe (payments), OpenAI/Anthropic (AI), Replit Object Storage / S3 (file uploads), Resend (email), Google Maps (maps), PostHog (analytics).
+- Each service: 1-2 envVars, 2-3 short setupSteps in Spanish.
+- If the app is a simple landing page, calculator, or self-contained demo, return {"services":[]}.
+- Output ONLY the JSON object.`;
+
+const PATCHER_SYSTEM_PROMPT = `You are AppForge's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
+
+Output STRICT JSON only:
+{"frontendCode":"all frontend files as one string"}
+
+Rules:
+- Use '// === FILE: <path> ===' separators.
+- Return the FULL bundle (every file, not just patched ones).
+- Don't introduce new bugs. Don't remove existing files unless the fix explicitly says so.
+- Combined output under 70 KB. Close every brace and quote. Output ONLY the JSON object.`;
+
 export interface GeneratedAppPayload {
   title: string;
   description: string;
@@ -106,9 +129,11 @@ export interface GeneratedAppPayload {
 export type GeneratePhase =
   | "researching"
   | "architecting"
+  | "integrating"
   | "designing"
   | "generating"
   | "reviewing"
+  | "fixing"
   | "parsing";
 
 export interface GenerateProgress {
@@ -139,6 +164,28 @@ interface DesignSystem {
   vibe: string;
   tailwindExtend: string;
   globalCSS: string;
+}
+
+interface IntegrationService {
+  name: string;
+  why: string;
+  envVars: string[];
+  setupSteps: string[];
+}
+
+interface IntegrationSpec {
+  services: IntegrationService[];
+}
+
+interface QAIssue {
+  file: string;
+  problem: string;
+  fix: string;
+}
+
+interface QAReport {
+  ok: boolean;
+  issues: QAIssue[];
 }
 
 interface AnyContentBlock {
@@ -423,42 +470,179 @@ Now produce the JSON object with backendCode.`;
   }
 }
 
-async function reviewBundle(
-  frontendCode: string,
+async function specifyIntegrations(
   plan: ProjectPlan,
-): Promise<string> {
-  // Quick QA pass: ask Haiku to spot obvious problems. Best-effort, never blocks.
+  prompt: string,
+): Promise<IntegrationSpec> {
+  // Best-effort, capped at 8s. If it flakes, we just skip the SETUP.md.
   return withTimeout(
     (async () => {
       try {
-        const expected = plan.frontendFiles.join(", ");
-        const sample = frontendCode.slice(0, 6000);
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
-          max_tokens: 300,
+          max_tokens: 800,
+          system: INTEGRATION_SYSTEM_PROMPT,
           messages: [
             {
               role: "user",
-              content: `You are a QA reviewer. Quickly spot any OBVIOUS problems in this React+TS bundle.
-
-Expected files (per the plan): ${expected}
-
-First 6KB of generated bundle:
-${sample}
-
-Reply with ONE short paragraph (max 60 words). If everything looks fine, just reply "OK".`,
+              content: `App: ${plan.title}
+Description: ${plan.description}
+User prompt: ${prompt}
+Pages: ${plan.pages.map((p) => p.name).join(", ")}
+Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
+Backend needed: ${plan.backendNeeded}`,
             },
           ],
         });
         const t = response.content.find((b) => b.type === "text");
-        return t && t.type === "text" ? t.text.trim().slice(0, 400) : "OK";
+        const raw = t && t.type === "text" ? t.text : "";
+        const parsed = extractJsonObject<IntegrationSpec>(raw);
+        if (!parsed || !Array.isArray(parsed.services)) return { services: [] };
+        return {
+          services: parsed.services
+            .filter((s): s is IntegrationService => !!s && typeof s.name === "string")
+            .slice(0, 4)
+            .map((s) => ({
+              name: String(s.name).slice(0, 40),
+              why: String(s.why ?? "").slice(0, 200),
+              envVars: Array.isArray(s.envVars) ? s.envVars.slice(0, 3).map(String) : [],
+              setupSteps: Array.isArray(s.setupSteps)
+                ? s.setupSteps.slice(0, 4).map((x) => String(x).slice(0, 200))
+                : [],
+            })),
+        };
       } catch {
-        return "OK";
+        return { services: [] };
       }
     })(),
-    5000,
-    "OK",
+    8000,
+    { services: [] },
   );
+}
+
+async function reviewBundle(
+  frontendCode: string,
+  plan: ProjectPlan,
+): Promise<QAReport> {
+  // Structured QA pass: ask Haiku for actionable issues. Best-effort, never blocks.
+  return withTimeout(
+    (async () => {
+      try {
+        const expected = plan.frontendFiles.join(", ");
+        const sample = frontendCode.slice(0, 12000);
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 700,
+          messages: [
+            {
+              role: "user",
+              content: `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.
+
+Expected files: ${expected}
+
+First 12KB of generated bundle:
+${sample}
+
+Return STRICT JSON ONLY:
+{"ok":true} when everything looks fine,
+OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}
+
+Max 5 issues. Output ONLY the JSON object.`,
+            },
+          ],
+        });
+        const t = response.content.find((b) => b.type === "text");
+        const raw = t && t.type === "text" ? t.text : "";
+        const parsed = extractJsonObject<QAReport>(raw);
+        if (!parsed) return { ok: true, issues: [] };
+        return {
+          ok: parsed.ok !== false,
+          issues: Array.isArray(parsed.issues)
+            ? parsed.issues
+                .filter((i): i is QAIssue => !!i && typeof i.file === "string")
+                .slice(0, 5)
+            : [],
+        };
+      } catch {
+        return { ok: true, issues: [] };
+      }
+    })(),
+    8000,
+    { ok: true, issues: [] },
+  );
+}
+
+async function patchBundle(
+  frontendCode: string,
+  issues: QAIssue[],
+): Promise<string | null> {
+  if (issues.length === 0) return null;
+  const issueList = issues
+    .map((i, idx) => `${idx + 1}. [${i.file}] Problem: ${i.problem}\n   Fix: ${i.fix}`)
+    .join("\n");
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 24000,
+          system: PATCHER_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: `ISSUES TO FIX:
+${issueList}
+
+CURRENT FRONTEND BUNDLE:
+${frontendCode}
+
+Return the FULL patched bundle as JSON.`,
+            },
+          ],
+        });
+        const t = response.content.find((b) => b.type === "text");
+        const raw = t && t.type === "text" ? t.text : "";
+        const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
+        if (!parsed || typeof parsed.frontendCode !== "string") return null;
+        if (parsed.frontendCode.length < frontendCode.length / 2) {
+          // Sanity check: patcher returned something suspiciously short. Reject.
+          return null;
+        }
+        return parsed.frontendCode;
+      } catch {
+        return null;
+      }
+    })(),
+    60_000,
+    null,
+  );
+}
+
+function buildSetupNotes(spec: IntegrationSpec): string {
+  if (spec.services.length === 0) return "";
+  const lines: string[] = [
+    "# Setup",
+    "",
+    "Esta app usa los siguientes servicios externos. Configúralos antes de desplegar.",
+    "",
+  ];
+  for (const svc of spec.services) {
+    lines.push(`## ${svc.name}`);
+    lines.push("");
+    if (svc.why) lines.push(`**Para qué**: ${svc.why}`);
+    if (svc.envVars.length > 0) {
+      lines.push("");
+      lines.push("**Variables de entorno:**");
+      for (const v of svc.envVars) lines.push(`- \`${v}\``);
+    }
+    if (svc.setupSteps.length > 0) {
+      lines.push("");
+      lines.push("**Pasos:**");
+      svc.setupSteps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    }
+    lines.push("");
+  }
+  return `\n\n// === FILE: SETUP.md ===\n${lines.join("\n")}`;
 }
 
 /* ----------------------------- edit mode ---------------------------------- */
@@ -591,19 +775,25 @@ export async function generateApp(
   }
 
   onProgress?.({
-    phase: "designing",
-    progress: 22,
-    note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). Diseñador trabajando…`,
+    phase: "integrating",
+    progress: 20,
+    note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…`,
   });
 
-  /* === Phase 2: design system ============================================== */
-  const design = await designSystem(plan, research);
-  void design;
+  /* === Phase 2 (parallel): integrations + design system =================== */
+  const [integrationSpec, design] = await Promise.all([
+    specifyIntegrations(plan, prompt),
+    designSystem(plan, research),
+  ]);
+
+  const integrationsNote = integrationSpec.services.length > 0
+    ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
+    : "Sin servicios externos requeridos.";
 
   onProgress?.({
     phase: "generating",
     progress: 32,
-    note: `Diseño "${design.vibe}" listo. Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…`,
+    note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…`,
   });
 
   /* === Phase 3 (parallel): frontend + backend ============================= */
@@ -632,27 +822,44 @@ export async function generateApp(
     );
   }
 
-  /* === Phase 4: QA review (best-effort, never blocks) ====================== */
+  /* === Phase 4: structured QA review ====================================== */
   onProgress?.({
     phase: "reviewing",
-    progress: 82,
-    note: "Revisor de calidad comprobando el bundle…",
+    progress: 80,
+    note: "✅ Revisor de calidad comprobando el bundle…",
   });
-  const review = await reviewBundle(frontendResult.code, plan);
+  const report = await reviewBundle(frontendResult.code, plan);
+
+  /* === Phase 5: self-healing — patch only if QA found real issues ========= */
+  let finalFrontend = frontendResult.code;
+  if (!report.ok && report.issues.length > 0) {
+    onProgress?.({
+      phase: "fixing",
+      progress: 86,
+      note: `🔧 Auto-reparación: corrigiendo ${report.issues.length} problema(s)…`,
+    });
+    const patched = await patchBundle(frontendResult.code, report.issues);
+    if (patched) {
+      finalFrontend = patched;
+    }
+  }
 
   onProgress?.({
     phase: "parsing",
-    progress: 92,
-    note: review === "OK" || review.toUpperCase().startsWith("OK")
-      ? "Revisión OK. Empaquetando archivos…"
-      : `Revisión: ${review.slice(0, 80)}…`,
+    progress: 94,
+    note: report.ok
+      ? "Revisión OK. 📦 Empaquetando archivos…"
+      : `Aplicado parcheo de QA. 📦 Empaquetando…`,
   });
+
+  /* === Final assembly: append SETUP.md when there are integrations ======== */
+  const setupNotes = buildSetupNotes(integrationSpec);
 
   return {
     title: plan.title.slice(0, 200),
     description: plan.description.slice(0, 1000),
     techStack: plan.techStack,
-    frontendCode: frontendResult.code,
+    frontendCode: finalFrontend + setupNotes,
     backendCode: backendResult.code || "No backend required for this app.",
   };
 }
