@@ -16,6 +16,21 @@ declare global {
   }
 }
 
+function adminEmailSet(): Set<string> {
+  const raw = process.env.ADMIN_EMAILS ?? "";
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return adminEmailSet().has(email.toLowerCase());
+}
+
 export async function ensureUser(clerkUserId: string): Promise<DbUser> {
   const existing = await db
     .select()
@@ -79,4 +94,16 @@ export const requireAuth = async (
     req.log.error({ err }, "ensureUser failed");
     res.status(500).json({ error: "Failed to load user" });
   }
+};
+
+export const requireAdmin = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  if (!req.dbUser || !isAdminEmail(req.dbUser.email)) {
+    res.status(403).json({ error: "Acceso solo para administradores" });
+    return;
+  }
+  next();
 };

@@ -17,6 +17,10 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdjustCreditsRequest,
+  AdminApp,
+  AdminOverview,
+  AdminUser,
   ApiError,
   CheckoutSession,
   ConfirmCheckoutRequest,
@@ -886,3 +890,315 @@ export const useConfirmCheckout = <
 > => {
   return useMutation(getConfirmCheckoutMutationOptions(options));
 };
+
+/**
+ * @summary Global stats and recent activity for the admin panel
+ */
+export const getGetAdminOverviewUrl = () => {
+  return `/api/admin/overview`;
+};
+
+export const getAdminOverview = async (
+  options?: RequestInit,
+): Promise<AdminOverview> => {
+  return customFetch<AdminOverview>(getGetAdminOverviewUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAdminOverviewQueryKey = () => {
+  return [`/api/admin/overview`] as const;
+};
+
+export const getGetAdminOverviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAdminOverview>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAdminOverviewQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAdminOverview>>
+  > = ({ signal }) => getAdminOverview({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminOverview>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAdminOverviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAdminOverview>>
+>;
+export type GetAdminOverviewQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Global stats and recent activity for the admin panel
+ */
+
+export function useGetAdminOverview<
+  TData = Awaited<ReturnType<typeof getAdminOverview>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAdminOverview>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAdminOverviewQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all users with their stats
+ */
+export const getListAdminUsersUrl = () => {
+  return `/api/admin/users`;
+};
+
+export const listAdminUsers = async (
+  options?: RequestInit,
+): Promise<AdminUser[]> => {
+  return customFetch<AdminUser[]>(getListAdminUsersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminUsersQueryKey = () => {
+  return [`/api/admin/users`] as const;
+};
+
+export const getListAdminUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminUsersQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminUsers>>> = ({
+    signal,
+  }) => listAdminUsers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminUsers>>
+>;
+export type ListAdminUsersQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List all users with their stats
+ */
+
+export function useListAdminUsers<
+  TData = Awaited<ReturnType<typeof listAdminUsers>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminUsers>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminUsersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add or remove credits from a user (admin)
+ */
+export const getAdjustUserCreditsUrl = (id: string) => {
+  return `/api/admin/users/${id}/credits`;
+};
+
+export const adjustUserCredits = async (
+  id: string,
+  adjustCreditsRequest: AdjustCreditsRequest,
+  options?: RequestInit,
+): Promise<AdminUser> => {
+  return customFetch<AdminUser>(getAdjustUserCreditsUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adjustCreditsRequest),
+  });
+};
+
+export const getAdjustUserCreditsMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustUserCredits>>,
+    TError,
+    { id: string; data: BodyType<AdjustCreditsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adjustUserCredits>>,
+  TError,
+  { id: string; data: BodyType<AdjustCreditsRequest> },
+  TContext
+> => {
+  const mutationKey = ["adjustUserCredits"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adjustUserCredits>>,
+    { id: string; data: BodyType<AdjustCreditsRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return adjustUserCredits(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdjustUserCreditsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adjustUserCredits>>
+>;
+export type AdjustUserCreditsMutationBody = BodyType<AdjustCreditsRequest>;
+export type AdjustUserCreditsMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Add or remove credits from a user (admin)
+ */
+export const useAdjustUserCredits = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustUserCredits>>,
+    TError,
+    { id: string; data: BodyType<AdjustCreditsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adjustUserCredits>>,
+  TError,
+  { id: string; data: BodyType<AdjustCreditsRequest> },
+  TContext
+> => {
+  return useMutation(getAdjustUserCreditsMutationOptions(options));
+};
+
+/**
+ * @summary List all generated apps across all users
+ */
+export const getListAdminAppsUrl = () => {
+  return `/api/admin/apps`;
+};
+
+export const listAdminApps = async (
+  options?: RequestInit,
+): Promise<AdminApp[]> => {
+  return customFetch<AdminApp[]>(getListAdminAppsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminAppsQueryKey = () => {
+  return [`/api/admin/apps`] as const;
+};
+
+export const getListAdminAppsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminApps>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminApps>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminAppsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminApps>>> = ({
+    signal,
+  }) => listAdminApps({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminApps>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminAppsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminApps>>
+>;
+export type ListAdminAppsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List all generated apps across all users
+ */
+
+export function useListAdminApps<
+  TData = Awaited<ReturnType<typeof listAdminApps>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminApps>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminAppsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

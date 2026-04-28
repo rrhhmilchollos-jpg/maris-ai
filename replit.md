@@ -28,6 +28,14 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
 | GET | `/api/billing/transactions` | User's recent ledger entries |
 | POST | `/api/billing/confirm` | Verifies a session after redirect; idempotent |
 | POST | `/api/billing/webhook` | Stripe webhook (raw body, mounted before json parser) |
+| GET | `/api/admin/overview` | Admin: global counters and revenue |
+| GET | `/api/admin/users` | Admin: list users with credits and app counts |
+| POST | `/api/admin/users/:id/credits` | Admin: adjust credits (±delta) and write a ledger row |
+| GET | `/api/admin/apps` | Admin: list all generated apps with owner email |
+
+### Admin access
+
+`ADMIN_EMAILS` (env var, comma-separated, case-insensitive) lists addresses recognized as administrators. The `/me` response exposes `isAdmin`, the layout shows an Admin link when true, and `requireAdmin` middleware (in `lib/auth.ts`) gates the `/admin/*` routes returning 403 for everyone else. Auth is fully delegated to Clerk — there is no password storage in this app.
 
 ## Database
 

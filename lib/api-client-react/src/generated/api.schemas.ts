@@ -16,8 +16,10 @@ export interface ApiError {
 export interface UserProfile {
   id: string;
   email?: string | null;
+  fullName?: string | null;
   credits: number;
   appsGenerated: number;
+  isAdmin: boolean;
   createdAt: string;
 }
 
@@ -84,4 +86,42 @@ export interface CreditTransaction {
   kind: string;
   description: string;
   createdAt: string;
+}
+
+export interface AdminOverview {
+  totalUsers: number;
+  totalApps: number;
+  appsLast7Days: number;
+  creditsOutstanding: number;
+  creditsSpentTotal: number;
+  creditsPurchasedTotal: number;
+  revenueCentsTotal: number;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName?: string | null;
+  imageUrl?: string | null;
+  credits: number;
+  appsGenerated: number;
+  isAdmin: boolean;
+  createdAt: string;
+}
+
+export interface AdminApp {
+  id: number;
+  userId: string;
+  userEmail?: string | null;
+  title: string;
+  description: string;
+  techStack: string[];
+  status: string;
+  createdAt: string;
+}
+
+export interface AdjustCreditsRequest {
+  /** Positive to add credits, negative to remove */
+  delta: number;
+  reason?: string;
 }

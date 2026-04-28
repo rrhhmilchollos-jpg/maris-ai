@@ -6,10 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface UserProfile {
+export interface AdminUser {
   id: string;
-  email?: string | null;
+  email: string;
   fullName?: string | null;
+  imageUrl?: string | null;
   credits: number;
   appsGenerated: number;
   isAdmin: boolean;

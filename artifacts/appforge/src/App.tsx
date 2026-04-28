@@ -15,6 +15,7 @@ import DashboardPage from "@/pages/dashboard";
 import AppDetailPage from "@/pages/app-detail";
 import BillingPage from "@/pages/billing";
 import BillingSuccessPage from "@/pages/billing-success";
+import AdminPage from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -214,6 +215,10 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/billing/success">
             <Gated><BillingSuccessPage /></Gated>
+          </Route>
+
+          <Route path="/admin">
+            <Gated><AdminPage /></Gated>
           </Route>
 
           <Route component={NotFound} />

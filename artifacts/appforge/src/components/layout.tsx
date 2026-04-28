@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LogOut, CreditCard, LayoutDashboard, Settings } from "lucide-react";
+import { LogOut, CreditCard, LayoutDashboard, Shield } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
@@ -41,6 +41,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link href="/billing" className="transition-colors hover:text-foreground/80 text-foreground/60">
                     Facturación
                   </Link>
+                  {me?.isAdmin && (
+                    <Link href="/admin" className="transition-colors hover:text-primary text-primary/80 font-semibold flex items-center gap-1">
+                      <Shield className="h-3.5 w-3.5" /> Admin
+                    </Link>
+                  )}
                 </nav>
                 
                 {me && (
@@ -77,6 +82,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <CreditCard className="mr-2 h-4 w-4 text-muted-foreground" />
                       <span>Facturación</span>
                     </DropdownMenuItem>
+                    {me?.isAdmin && (
+                      <DropdownMenuItem onClick={() => setLocation("/admin")}>
+                        <Shield className="mr-2 h-4 w-4 text-primary" />
+                        <span>Panel admin</span>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))}>
                       <LogOut className="mr-2 h-4 w-4 text-muted-foreground" />

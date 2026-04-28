@@ -18,6 +18,8 @@ tags:
     description: AI app generation
   - name: billing
     description: Credit purchase / Stripe
+  - name: admin
+    description: Admin-only operations
 paths:
   /healthz:
     get:
@@ -242,6 +244,100 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Global stats and recent activity for the admin panel
+      responses:
+        "200":
+          description: Overview data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List all users with their stats
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/users/{id}/credits:
+    post:
+      operationId: adjustUserCredits
+      tags: [admin]
+      summary: Add or remove credits from a user (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustCreditsRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/apps:
+    get:
+      operationId: listAdminApps
+      tags: [admin]
+      summary: List all generated apps across all users
+      responses:
+        "200":
+          description: List of apps with owner info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminApp"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -266,10 +362,15 @@ components:
         email:
           type: string
           nullable: true
+        fullName:
+          type: string
+          nullable: true
         credits:
           type: integer
         appsGenerated:
           type: integer
+        isAdmin:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -277,6 +378,7 @@ components:
         - id
         - credits
         - appsGenerated
+        - isAdmin
         - createdAt
     DashboardStats:
       type: object
@@ -432,3 +534,98 @@ components:
         - kind
         - description
         - createdAt
+    AdminOverview:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        totalApps:
+          type: integer
+        appsLast7Days:
+          type: integer
+        creditsOutstanding:
+          type: integer
+        creditsSpentTotal:
+          type: integer
+        creditsPurchasedTotal:
+          type: integer
+        revenueCentsTotal:
+          type: integer
+      required:
+        - totalUsers
+        - totalApps
+        - appsLast7Days
+        - creditsOutstanding
+        - creditsSpentTotal
+        - creditsPurchasedTotal
+        - revenueCentsTotal
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        fullName:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        credits:
+          type: integer
+        appsGenerated:
+          type: integer
+        isAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - credits
+        - appsGenerated
+        - isAdmin
+        - createdAt
+    AdminApp:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userEmail:
+          type: string
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        techStack:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - title
+        - description
+        - techStack
+        - status
+        - createdAt
+    AdjustCreditsRequest:
+      type: object
+      properties:
+        delta:
+          type: integer
+          description: Positive to add credits, negative to remove
+        reason:
+          type: string
+      required:
+        - delta

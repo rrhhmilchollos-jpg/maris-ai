@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, count, gte, desc, and } from "drizzle-orm";
 import { db } from "../lib/db";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, isAdminEmail } from "../lib/auth";
 import {
   generatedApps,
   creditTransactions,
@@ -20,8 +20,10 @@ router.get("/me", requireAuth, async (req, res) => {
   res.json({
     id: u.id,
     email: u.email,
+    fullName: u.fullName,
     credits: u.credits,
     appsGenerated: appsCount?.total ?? 0,
+    isAdmin: isAdminEmail(u.email),
     createdAt: u.createdAt.toISOString(),
   });
 });
