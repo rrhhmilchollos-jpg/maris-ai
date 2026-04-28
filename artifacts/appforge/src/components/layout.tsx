@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Show, useClerk, useUser } from "@clerk/react";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -18,7 +18,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const { signOut } = useClerk();
   const { user } = useUser();
-  const { data: me } = useGetMe({ query: { enabled: !!user } });
+  const { data: me } = useGetMe({ query: { enabled: !!user, queryKey: getGetMeQueryKey() } });
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -36,17 +36,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Show when="signed-in">
                 <nav className="flex items-center space-x-4 text-sm font-medium">
                   <Link href="/dashboard" className="transition-colors hover:text-foreground/80 text-foreground/60">
-                    Dashboard
+                    Panel
                   </Link>
                   <Link href="/billing" className="transition-colors hover:text-foreground/80 text-foreground/60">
-                    Billing
+                    Facturación
                   </Link>
                 </nav>
                 
                 {me && (
                   <Badge variant="secondary" className="px-3 py-1 font-mono hidden sm:flex">
                     <CreditCard className="h-3 w-3 mr-2 text-primary" />
-                    {me.credits} credits
+                    {me.credits} créditos
                   </Badge>
                 )}
 
@@ -71,16 +71,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLocation("/dashboard")}>
                       <LayoutDashboard className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span>Dashboard</span>
+                      <span>Panel</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setLocation("/billing")}>
                       <CreditCard className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span>Billing</span>
+                      <span>Facturación</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))}>
                       <LogOut className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span>Log out</span>
+                      <span>Cerrar sesión</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -88,10 +88,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
               <Show when="signed-out">
                 <Link href="/sign-in" className="text-sm font-medium transition-colors hover:text-foreground/80 text-foreground/60">
-                  Sign In
+                  Iniciar Sesión
                 </Link>
                 <Link href="/sign-up">
-                  <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">Get Started</Button>
+                  <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">Comenzar</Button>
                 </Link>
               </Show>
             </div>

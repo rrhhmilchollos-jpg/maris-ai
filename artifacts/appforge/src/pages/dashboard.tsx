@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useGetMyStats, useListApps, useGenerateApp, getGetMyStatsQueryKey, getListAppsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
 import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu } from "lucide-react";
 
 export default function DashboardPage() {
@@ -27,20 +28,19 @@ export default function DashboardPage() {
         queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         setPrompt("");
-        toast({ title: "App Generated!", description: "Your app is ready to view." });
+        toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
         setLocation(`/app/${data.id}`);
       },
       onError: (error: any) => {
         toast({ 
-          title: "Generation Failed", 
-          description: error.message || "Failed to generate app.", 
+          title: "Falló la generación", 
+          description: error.message || "No pudimos generar la app.", 
           variant: "destructive" 
         });
       }
     }
   });
 
-  // Pre-fill prompt from local storage if coming from landing page
   useEffect(() => {
     const saved = localStorage.getItem("appforge_pending_prompt");
     if (saved) {
@@ -55,8 +55,8 @@ export default function DashboardPage() {
     
     if (stats && stats.credits <= 0) {
       toast({
-        title: "Out of credits",
-        description: "Please purchase more credits to generate apps.",
+        title: "Sin créditos",
+        description: "Compra más créditos para seguir generando apps.",
         variant: "destructive",
       });
       setLocation("/billing");
@@ -70,11 +70,11 @@ export default function DashboardPage() {
     <Layout>
       <div className="container max-w-6xl mx-auto px-4 py-8 space-y-8">
         
-        {/* Stats Row */}
+        {/* Estadísticas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Credits Remaining</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Créditos disponibles</CardTitle>
               <Cpu className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
@@ -85,7 +85,7 @@ export default function DashboardPage() {
           </Card>
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Apps Generated</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Apps generadas</CardTitle>
               <Code2 className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
@@ -96,7 +96,7 @@ export default function DashboardPage() {
           </Card>
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Spent</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total gastado</CardTitle>
               <Sparkles className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -107,31 +107,31 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Generator Box */}
+        {/* Generador */}
         <Card className="border-primary/20 bg-card/60 backdrop-blur shadow-lg overflow-hidden relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
           <CardHeader>
             <CardTitle className="text-xl flex items-center">
               <Sparkles className="h-5 w-5 text-primary mr-2" />
-              Generate New Application
+              Generar nueva aplicación
             </CardTitle>
-            <CardDescription>Describe what you want to build in detail. Be specific about features, layout, and styling.</CardDescription>
+            <CardDescription>Describe con detalle lo que quieres construir. Sé específico con las funciones, el diseño y el estilo.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
               <Textarea 
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. A sleek habit tracker with daily checkboxes, a progress chart, and dark mode support..." 
+                placeholder="ej. Un rastreador elegante de hábitos con casillas diarias, gráfica de progreso y modo oscuro..." 
                 className="min-h-[120px] bg-background/50 border-border/50 font-sans text-base focus-visible:ring-primary/50"
                 disabled={generateMutation.isPending}
                 data-testid="input-prompt"
               />
               <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">Cost: 1 Credit</p>
+                <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">Costo: 1 crédito</p>
                 {stats && stats.credits <= 0 ? (
                   <Button type="button" onClick={() => setLocation("/billing")} variant="destructive" data-testid="button-out-of-credits">
-                    Out of Credits <ArrowRight className="ml-2 h-4 w-4" />
+                    Sin créditos <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : (
                   <Button 
@@ -143,11 +143,11 @@ export default function DashboardPage() {
                     {generateMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Generating...
+                        Generando...
                       </>
                     ) : (
                       <>
-                        Generate App <Plus className="ml-2 h-4 w-4" />
+                        Generar App <Plus className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
@@ -157,11 +157,11 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent Apps */}
+        {/* Apps recientes */}
         <div>
           <h3 className="text-xl font-semibold mb-4 flex items-center">
             <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />
-            Recent Apps
+            Apps recientes
           </h3>
           
           {appsLoading ? (
@@ -191,8 +191,8 @@ export default function DashboardPage() {
                     </div>
                   </CardContent>
                   <CardFooter className="pt-0 text-xs text-muted-foreground flex justify-between items-center border-t border-white/5 mt-auto bg-black/10 py-3">
-                    <span>{formatDistanceToNow(new Date(app.createdAt), { addSuffix: true })}</span>
-                    <span className="text-primary/70 group-hover:text-primary transition-colors font-medium">View Code →</span>
+                    <span>{formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}</span>
+                    <span className="text-primary/70 group-hover:text-primary transition-colors font-medium">Ver código →</span>
                   </CardFooter>
                 </Card>
               ))}
@@ -200,9 +200,9 @@ export default function DashboardPage() {
           ) : (
             <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-xl bg-card/20">
               <Code2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <h4 className="text-lg font-medium text-foreground mb-1">No apps generated yet</h4>
+              <h4 className="text-lg font-medium text-foreground mb-1">Aún no has generado apps</h4>
               <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                Use the prompt box above to command the neural engine and build your first application.
+                Usa el cuadro de arriba para darle instrucciones al motor neuronal y crear tu primera aplicación.
               </p>
             </div>
           )}
