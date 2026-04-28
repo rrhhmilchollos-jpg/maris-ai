@@ -24,6 +24,7 @@ const KIND_LABELS: Record<string, string> = {
 
 export default function BillingPage() {
   const { data: me, isLoading: meLoading } = useGetMe();
+  const isAdmin = !!me?.isAdmin;
   const { data: packages, isLoading: packagesLoading } = useListCreditPackages();
   const { data: transactions, isLoading: txLoading } = useListTransactions();
   
@@ -71,13 +72,23 @@ export default function BillingPage() {
                   <Skeleton className="h-8 w-24" />
                 ) : (
                   <div className="text-3xl font-mono font-bold text-white">
-                    {me?.credits} <span className="text-lg font-sans font-normal text-muted-foreground">créditos</span>
+                    {isAdmin ? "∞" : me?.credits} <span className="text-lg font-sans font-normal text-muted-foreground">créditos</span>
                   </div>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {isAdmin && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Zap className="h-4 w-4 text-primary" />
+            <AlertTitle>Modo propietario activo</AlertTitle>
+            <AlertDescription>
+              Tu cuenta tiene créditos ilimitados. Puedes generar todas las aplicaciones que quieras sin coste. Esta sección sigue disponible si quieres comprar paquetes o revisar el historial.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {checkoutError && (
           <Alert variant="default" className="bg-amber-500/10 border-amber-500/20 text-amber-200">

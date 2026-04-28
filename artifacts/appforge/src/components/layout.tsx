@@ -49,9 +49,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </nav>
                 
                 {me && (
-                  <Badge variant="secondary" className="px-3 py-1 font-mono hidden sm:flex">
+                  <Badge
+                    variant="secondary"
+                    className={`px-3 py-1 font-mono hidden sm:flex ${me.isAdmin ? "border border-primary/40 bg-primary/10" : ""}`}
+                  >
                     <CreditCard className="h-3 w-3 mr-2 text-primary" />
-                    {me.credits} créditos
+                    {me.isAdmin ? "∞ créditos" : `${me.credits} créditos`}
                   </Badge>
                 )}
 

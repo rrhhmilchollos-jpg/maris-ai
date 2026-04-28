@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { db } from "../lib/db";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, isAdminEmail } from "../lib/auth";
 import {
   generatedApps,
   users,
@@ -78,15 +78,16 @@ router.delete("/apps/:id", requireAuth, async (req: Request, res: Response) => {
 router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   const prompt: unknown = req.body?.prompt;
   if (typeof prompt !== "string" || prompt.trim().length < 5) {
-    res.status(400).json({ error: "Prompt must be at least 5 characters." });
+    res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
     return;
   }
   const userId = req.userId!;
   const user = req.dbUser!;
+  const isAdmin = isAdminEmail(user.email);
 
-  if (user.credits < 1) {
+  if (!isAdmin && user.credits < 1) {
     res.status(402).json({
-      error: "Out of credits. Purchase more to keep generating.",
+      error: "Te has quedado sin créditos. Compra más para seguir generando.",
     });
     return;
   }
@@ -96,26 +97,35 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     payload = await generateApp(prompt.trim());
   } catch (err) {
     req.log.error({ err }, "App generation failed");
+    const detail = err instanceof Error ? err.message : "Error desconocido";
     res.status(502).json({
-      error:
-        "AI generation failed. Please try again with a different prompt.",
+      error: `Falló la generación con IA: ${detail}. Vuelve a intentarlo o sé más específico en el prompt.`,
     });
     return;
   }
 
-  // Atomically deduct one credit only if balance still sufficient
-  const updated = await db
-    .update(users)
-    .set({
-      credits: sql`${users.credits} - 1`,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(users.id, userId), sql`${users.credits} >= 1`))
-    .returning({ credits: users.credits });
+  // Admins have unlimited credits — skip deduction & ledger entry entirely.
+  if (!isAdmin) {
+    const updated = await db
+      .update(users)
+      .set({
+        credits: sql`${users.credits} - 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(users.id, userId), sql`${users.credits} >= 1`))
+      .returning({ credits: users.credits });
 
-  if (updated.length === 0) {
-    res.status(402).json({ error: "Out of credits." });
-    return;
+    if (updated.length === 0) {
+      res.status(402).json({ error: "Te has quedado sin créditos." });
+      return;
+    }
+
+    await db.insert(creditTransactions).values({
+      userId,
+      kind: "usage",
+      amount: -1,
+      description: `App generada: ${payload.title}`,
+    });
   }
 
   const [inserted] = await db
@@ -131,13 +141,6 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
       status: "ready",
     })
     .returning();
-
-  await db.insert(creditTransactions).values({
-    userId,
-    kind: "usage",
-    amount: -1,
-    description: `Generated app: ${payload.title}`,
-  });
 
   res.json(serializeApp(inserted));
 });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useGetMyStats, useListApps, useGenerateApp, getGetMyStatsQueryKey, getListAppsQueryKey } from "@workspace/api-client-react";
+import { useGetMyStats, useListApps, useGenerateApp, useGetMe, getGetMyStatsQueryKey, getListAppsQueryKey, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -19,23 +19,26 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   
+  const { data: me } = useGetMe();
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
-  
+  const isAdmin = !!me?.isAdmin;
+
   const generateMutation = useGenerateApp({
     mutation: {
       onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         setPrompt("");
         toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
         setLocation(`/app/${data.id}`);
       },
       onError: (error: any) => {
-        toast({ 
-          title: "Falló la generación", 
-          description: error.message || "No pudimos generar la app.", 
-          variant: "destructive" 
+        toast({
+          title: "Falló la generación",
+          description: error?.message || error?.error || "No pudimos generar la app. Inténtalo otra vez.",
+          variant: "destructive",
         });
       }
     }
@@ -52,8 +55,8 @@ export default function DashboardPage() {
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-    
-    if (stats && stats.credits <= 0) {
+
+    if (!isAdmin && stats && stats.credits <= 0) {
       toast({
         title: "Sin créditos",
         description: "Compra más créditos para seguir generando apps.",
@@ -79,7 +82,12 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               {statsLoading ? <Skeleton className="h-8 w-16" /> : (
-                <div className="text-3xl font-bold font-mono text-primary">{stats?.credits}</div>
+                <div className="text-3xl font-bold font-mono text-primary">
+                  {isAdmin ? "∞" : stats?.credits}
+                </div>
+              )}
+              {isAdmin && (
+                <p className="text-xs text-primary/70 font-mono mt-1">Modo propietario</p>
               )}
             </CardContent>
           </Card>
@@ -128,22 +136,24 @@ export default function DashboardPage() {
                 data-testid="input-prompt"
               />
               <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">Costo: 1 crédito</p>
-                {stats && stats.credits <= 0 ? (
+                <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">
+                  {isAdmin ? "Costo: gratis (admin)" : "Costo: 1 crédito"}
+                </p>
+                {!isAdmin && stats && stats.credits <= 0 ? (
                   <Button type="button" onClick={() => setLocation("/billing")} variant="destructive" data-testid="button-out-of-credits">
                     Sin créditos <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button 
-                    type="submit" 
-                    disabled={generateMutation.isPending || !prompt.trim()} 
+                  <Button
+                    type="submit"
+                    disabled={generateMutation.isPending || !prompt.trim()}
                     className="min-w-[140px] bg-primary text-white hover:bg-primary/90"
                     data-testid="button-generate"
                   >
                     {generateMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Generando...
+                        Investigando + generando...
                       </>
                     ) : (
                       <>
@@ -153,6 +163,9 @@ export default function DashboardPage() {
                   </Button>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground/70">
+                Tip: si pides clonar una app existente (Wallapop, Vinted, Twitter…), nuestro investigador buscará en la web su diseño y funciones antes de generar.
+              </p>
             </form>
           </CardContent>
         </Card>
