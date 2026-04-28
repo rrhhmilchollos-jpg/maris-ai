@@ -19,13 +19,13 @@ import type {
 import type {
   ApiError,
   CheckoutSession,
-  ConfirmCheckoutBody,
+  ConfirmCheckoutRequest,
   ConfirmCheckoutResult,
-  CreateCheckoutBody,
+  CreateCheckoutRequest,
   CreditPackage,
   CreditTransaction,
   DashboardStats,
-  GenerateAppBody,
+  GenerateAppRequest,
   GeneratedApp,
   HealthStatus,
   UserProfile,
@@ -487,14 +487,14 @@ export const getGenerateAppUrl = () => {
 };
 
 export const generateApp = async (
-  generateAppBody: GenerateAppBody,
+  generateAppRequest: GenerateAppRequest,
   options?: RequestInit,
 ): Promise<GeneratedApp> => {
   return customFetch<GeneratedApp>(getGenerateAppUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(generateAppBody),
+    body: JSON.stringify(generateAppRequest),
   });
 };
 
@@ -505,14 +505,14 @@ export const getGenerateAppMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof generateApp>>,
     TError,
-    { data: BodyType<GenerateAppBody> },
+    { data: BodyType<GenerateAppRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof generateApp>>,
   TError,
-  { data: BodyType<GenerateAppBody> },
+  { data: BodyType<GenerateAppRequest> },
   TContext
 > => {
   const mutationKey = ["generateApp"];
@@ -526,7 +526,7 @@ export const getGenerateAppMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof generateApp>>,
-    { data: BodyType<GenerateAppBody> }
+    { data: BodyType<GenerateAppRequest> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -539,7 +539,7 @@ export const getGenerateAppMutationOptions = <
 export type GenerateAppMutationResult = NonNullable<
   Awaited<ReturnType<typeof generateApp>>
 >;
-export type GenerateAppMutationBody = BodyType<GenerateAppBody>;
+export type GenerateAppMutationBody = BodyType<GenerateAppRequest>;
 export type GenerateAppMutationError = ErrorType<ApiError>;
 
 /**
@@ -552,14 +552,14 @@ export const useGenerateApp = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof generateApp>>,
     TError,
-    { data: BodyType<GenerateAppBody> },
+    { data: BodyType<GenerateAppRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof generateApp>>,
   TError,
-  { data: BodyType<GenerateAppBody> },
+  { data: BodyType<GenerateAppRequest> },
   TContext
 > => {
   return useMutation(getGenerateAppMutationOptions(options));
@@ -648,14 +648,14 @@ export const getCreateCheckoutSessionUrl = () => {
 };
 
 export const createCheckoutSession = async (
-  createCheckoutBody: CreateCheckoutBody,
+  createCheckoutRequest: CreateCheckoutRequest,
   options?: RequestInit,
 ): Promise<CheckoutSession> => {
   return customFetch<CheckoutSession>(getCreateCheckoutSessionUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createCheckoutBody),
+    body: JSON.stringify(createCheckoutRequest),
   });
 };
 
@@ -666,14 +666,14 @@ export const getCreateCheckoutSessionMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createCheckoutSession>>,
     TError,
-    { data: BodyType<CreateCheckoutBody> },
+    { data: BodyType<CreateCheckoutRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof createCheckoutSession>>,
   TError,
-  { data: BodyType<CreateCheckoutBody> },
+  { data: BodyType<CreateCheckoutRequest> },
   TContext
 > => {
   const mutationKey = ["createCheckoutSession"];
@@ -687,7 +687,7 @@ export const getCreateCheckoutSessionMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof createCheckoutSession>>,
-    { data: BodyType<CreateCheckoutBody> }
+    { data: BodyType<CreateCheckoutRequest> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -700,7 +700,7 @@ export const getCreateCheckoutSessionMutationOptions = <
 export type CreateCheckoutSessionMutationResult = NonNullable<
   Awaited<ReturnType<typeof createCheckoutSession>>
 >;
-export type CreateCheckoutSessionMutationBody = BodyType<CreateCheckoutBody>;
+export type CreateCheckoutSessionMutationBody = BodyType<CreateCheckoutRequest>;
 export type CreateCheckoutSessionMutationError = ErrorType<ApiError>;
 
 /**
@@ -713,14 +713,14 @@ export const useCreateCheckoutSession = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createCheckoutSession>>,
     TError,
-    { data: BodyType<CreateCheckoutBody> },
+    { data: BodyType<CreateCheckoutRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof createCheckoutSession>>,
   TError,
-  { data: BodyType<CreateCheckoutBody> },
+  { data: BodyType<CreateCheckoutRequest> },
   TContext
 > => {
   return useMutation(getCreateCheckoutSessionMutationOptions(options));
@@ -809,14 +809,14 @@ export const getConfirmCheckoutUrl = () => {
 };
 
 export const confirmCheckout = async (
-  confirmCheckoutBody: ConfirmCheckoutBody,
+  confirmCheckoutRequest: ConfirmCheckoutRequest,
   options?: RequestInit,
 ): Promise<ConfirmCheckoutResult> => {
   return customFetch<ConfirmCheckoutResult>(getConfirmCheckoutUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(confirmCheckoutBody),
+    body: JSON.stringify(confirmCheckoutRequest),
   });
 };
 
@@ -827,14 +827,14 @@ export const getConfirmCheckoutMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof confirmCheckout>>,
     TError,
-    { data: BodyType<ConfirmCheckoutBody> },
+    { data: BodyType<ConfirmCheckoutRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof confirmCheckout>>,
   TError,
-  { data: BodyType<ConfirmCheckoutBody> },
+  { data: BodyType<ConfirmCheckoutRequest> },
   TContext
 > => {
   const mutationKey = ["confirmCheckout"];
@@ -848,7 +848,7 @@ export const getConfirmCheckoutMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof confirmCheckout>>,
-    { data: BodyType<ConfirmCheckoutBody> }
+    { data: BodyType<ConfirmCheckoutRequest> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -861,7 +861,7 @@ export const getConfirmCheckoutMutationOptions = <
 export type ConfirmCheckoutMutationResult = NonNullable<
   Awaited<ReturnType<typeof confirmCheckout>>
 >;
-export type ConfirmCheckoutMutationBody = BodyType<ConfirmCheckoutBody>;
+export type ConfirmCheckoutMutationBody = BodyType<ConfirmCheckoutRequest>;
 export type ConfirmCheckoutMutationError = ErrorType<ApiError>;
 
 /**
@@ -874,14 +874,14 @@ export const useConfirmCheckout = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof confirmCheckout>>,
     TError,
-    { data: BodyType<ConfirmCheckoutBody> },
+    { data: BodyType<ConfirmCheckoutRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof confirmCheckout>>,
   TError,
-  { data: BodyType<ConfirmCheckoutBody> },
+  { data: BodyType<ConfirmCheckoutRequest> },
   TContext
 > => {
   return useMutation(getConfirmCheckoutMutationOptions(options));

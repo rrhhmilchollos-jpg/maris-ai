@@ -6,6 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateCheckoutBody {
+export interface CreateCheckoutRequest {
   priceId: string;
 }

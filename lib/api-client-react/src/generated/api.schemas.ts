@@ -42,7 +42,7 @@ export interface DashboardStats {
   recentApps: GeneratedApp[];
 }
 
-export interface GenerateAppBody {
+export interface GenerateAppRequest {
   /** @minLength 5 */
   prompt: string;
 }
@@ -58,7 +58,7 @@ export interface CreditPackage {
   popular: boolean;
 }
 
-export interface CreateCheckoutBody {
+export interface CreateCheckoutRequest {
   priceId: string;
 }
 
@@ -67,7 +67,7 @@ export interface CheckoutSession {
   sessionId: string;
 }
 
-export interface ConfirmCheckoutBody {
+export interface ConfirmCheckoutRequest {
   sessionId: string;
 }
 

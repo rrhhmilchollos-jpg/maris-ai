@@ -1,0 +1,20 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "LjFCDKk-fMLQsLO-iJK13"
+uri = "file://artifacts/appforge/public/images/hero-illustration.png"
+type = "image"
+title = "hero_ai_code"
+
+[[generated]]
+id = "jHwVM4OXM2qDnXkbFvpW_"
+uri = "file://artifacts/appforge/public/images/feature-instant.png"
+type = "image"
+title = "feature_instant"
+
+[[generated]]
+id = "ywDUx1vxFjWrj4rpYuGeH"
+uri = "file://artifacts/appforge/public/images/feature-code.png"
+type = "image"
+title = "feature_code"
