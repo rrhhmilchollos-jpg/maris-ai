@@ -37,6 +37,14 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
 
 `ADMIN_EMAILS` (env var, comma-separated, case-insensitive) lists addresses recognized as administrators. The `/me` response exposes `isAdmin`, the layout shows an Admin link when true, and `requireAdmin` middleware (in `lib/auth.ts`) gates the `/admin/*` routes returning 403 for everyone else. Auth is fully delegated to Clerk — there is no password storage in this app.
 
+**Admins have unlimited credits.** `POST /generate` skips the credit check, the deduction, and the ledger entry when `isAdminEmail(user.email)` is true. The dashboard, layout badge, and billing page all render `∞` instead of a numeric balance for admins.
+
+### Generation pipeline
+
+`lib/generate.ts` runs two Anthropic calls per request:
+1. **Web research** (`researchTopic`) — best-effort, uses the `web_search_20250305` tool with up to 4 web lookups. Produces a free-form brief about the requested app, including branding/features when the user asks to clone an existing product (Wallapop, Vinted, etc.). Wrapped in try/catch — if web search isn't available the brief is empty and generation proceeds without it.
+2. **Generation** — Claude Sonnet 4.5 with `max_tokens: 16000`, system prompt that demands strict JSON output, and the research brief appended as ground truth. Errors bubble up with the underlying message in Spanish so the dashboard toast is actionable instead of a generic "AI failed".
+
 ## Database
 
 Three tables (`lib/db/src/schema/`):
