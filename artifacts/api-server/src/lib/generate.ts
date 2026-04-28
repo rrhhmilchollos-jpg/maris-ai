@@ -18,7 +18,8 @@ Rules:
 - For apps that need persistence beyond the browser, include a real Express + SQLite or in-memory backend.
 - Make it visually polished — real layout, real colors, real hierarchy, real copy. No "lorem ipsum".
 - If a "Research context" section is provided in the user message, USE IT to faithfully recreate the look, branding, sections, and core flows of the referenced product/site.
-- Keep total combined output under 90 KB. Prioritize a complete, working core over many half-baked features.
+- HARD LIMIT: keep total combined output (frontendCode + backendCode) **strictly under 70 KB**. You MUST finish the JSON. If running long, reduce: fewer seed items, shorter copy, condense Tailwind classes, drop secondary screens. Never leave a string unterminated.
+- Always close every quote, brace, and bracket. The JSON MUST be syntactically valid.
 - Output ONLY the JSON object. Nothing else. No \`\`\`json fence. No prose.`;
 
 export interface GeneratedAppPayload {
@@ -97,6 +98,72 @@ Focus on: core sections/pages, key features, brand colors & typography, signatur
   }
 }
 
+interface GenerateAttemptResult {
+  payload?: GeneratedAppPayload;
+  truncated: boolean;
+  error?: string;
+}
+
+async function singleGenerate(
+  userContent: string,
+  maxTokens: number,
+): Promise<GenerateAttemptResult> {
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: maxTokens,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userContent }],
+  });
+
+  const truncated = response.stop_reason === "max_tokens";
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") {
+    return { truncated, error: "El modelo no devolvió contenido de texto." };
+  }
+  let raw = textBlock.text.trim();
+  if (raw.startsWith("```")) {
+    raw = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  }
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first === -1 || last === -1) {
+    return {
+      truncated,
+      error: "La respuesta del modelo no contenía un objeto JSON válido.",
+    };
+  }
+  const jsonStr = raw.slice(first, last + 1);
+  try {
+    const parsed = JSON.parse(jsonStr) as GeneratedAppPayload;
+    if (
+      !parsed ||
+      typeof parsed.title !== "string" ||
+      typeof parsed.description !== "string" ||
+      typeof parsed.frontendCode !== "string"
+    ) {
+      return {
+        truncated,
+        error: "La respuesta del modelo no tiene los campos requeridos.",
+      };
+    }
+    return {
+      payload: {
+        title: parsed.title.slice(0, 200),
+        description: parsed.description.slice(0, 1000),
+        techStack: Array.isArray(parsed.techStack) ? parsed.techStack : [],
+        frontendCode: parsed.frontendCode,
+        backendCode: parsed.backendCode || "No backend required for this app.",
+      },
+      truncated: false,
+    };
+  } catch (e) {
+    return {
+      truncated,
+      error: `JSON inválido (${(e as Error).message})`,
+    };
+  }
+}
+
 export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
@@ -119,21 +186,32 @@ export async function generateApp(
       : "Generando código de la aplicación…",
   });
 
-  const userContent = research
+  const baseUserContent = research
     ? `Generate an app for this request:\n\n${prompt}\n\n---\nResearch context (from web search, treat as ground truth for branding & features):\n${research}`
     : `Generate an app for this request:\n\n${prompt}`;
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 16000,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: userContent,
-      },
-    ],
-  });
+  // First attempt: 32k tokens, full creative leeway.
+  let attempt = await singleGenerate(baseUserContent, 32000);
+
+  // If truncated or JSON invalid, retry once with a stricter "be concise" prompt.
+  if (!attempt.payload) {
+    onProgress?.({
+      phase: "generating",
+      progress: 60,
+      note: "El primer intento se truncó. Reintentando con versión más compacta…",
+    });
+    const compactContent = `${baseUserContent}
+
+---
+PREVIOUS ATTEMPT FAILED: the JSON was ${attempt.truncated ? "TRUNCATED (ran out of tokens)" : "INVALID"}.
+You MUST now produce a more compact version:
+- Target combined output around 45 KB.
+- One single page only (no router, no multi-screen). Showcase the core experience.
+- ~5 seed items max in any list.
+- Concise Tailwind classes, no verbose comments.
+- Finish the JSON properly. Close every brace and quote.`;
+    attempt = await singleGenerate(compactContent, 32000);
+  }
 
   onProgress?.({
     phase: "parsing",
@@ -141,42 +219,13 @@ export async function generateApp(
     note: "Procesando archivos generados…",
   });
 
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Model returned no text content");
-  }
-  let raw = textBlock.text.trim();
-  if (raw.startsWith("```")) {
-    raw = raw.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
-  const first = raw.indexOf("{");
-  const last = raw.lastIndexOf("}");
-  if (first === -1 || last === -1) {
-    throw new Error("La respuesta del modelo no contenía un objeto JSON válido");
-  }
-  const jsonStr = raw.slice(first, last + 1);
-  let parsed: GeneratedAppPayload;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
+  if (!attempt.payload) {
     throw new Error(
-      `No pudimos analizar la respuesta del modelo (probablemente truncada). ` +
-        `Detalle: ${(e as Error).message}`,
+      attempt.truncated
+        ? "El modelo se quedó sin tokens incluso en el reintento compacto. Pide una app más pequeña o sé más específico (una sola pantalla, sin clones masivos)."
+        : `No pudimos analizar la respuesta del modelo. Detalle: ${attempt.error ?? "desconocido"}`,
     );
   }
-  if (
-    !parsed ||
-    typeof parsed.title !== "string" ||
-    typeof parsed.description !== "string" ||
-    typeof parsed.frontendCode !== "string"
-  ) {
-    throw new Error("La respuesta del modelo no tiene los campos requeridos");
-  }
-  return {
-    title: parsed.title.slice(0, 200),
-    description: parsed.description.slice(0, 1000),
-    techStack: Array.isArray(parsed.techStack) ? parsed.techStack : [],
-    frontendCode: parsed.frontendCode,
-    backendCode: parsed.backendCode || "No backend required for this app.",
-  };
+
+  return attempt.payload;
 }
