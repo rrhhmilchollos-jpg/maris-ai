@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useConfirmCheckout, getGetMeQueryKey, getGetMyStatsQueryKey, getListTransactionsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
@@ -18,7 +18,6 @@ export default function BillingSuccessPage() {
   const confirmMutation = useConfirmCheckout({
     mutation: {
       onSuccess: () => {
-        // Invalidate balances and transactions
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
@@ -37,21 +36,20 @@ export default function BillingSuccessPage() {
       <div className="container max-w-md mx-auto px-4 py-20 flex justify-center items-center min-h-[60vh]">
         <Card className="w-full bg-card/60 backdrop-blur border-white/10 shadow-2xl relative overflow-hidden">
           
-          {/* Status Indicator */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
 
           {confirmMutation.isPending || (!sessionId) ? (
             <CardContent className="pt-12 pb-8 flex flex-col items-center text-center">
               <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
-              <CardTitle className="text-2xl mb-2">Confirming Payment</CardTitle>
-              <CardDescription>Please wait while we verify your transaction and add credits to your account.</CardDescription>
+              <CardTitle className="text-2xl mb-2">Confirmando pago</CardTitle>
+              <CardDescription>Estamos verificando tu transacción y agregando los créditos a tu cuenta.</CardDescription>
             </CardContent>
           ) : confirmMutation.isError ? (
             <CardContent className="pt-12 pb-8 flex flex-col items-center text-center">
               <XCircle className="h-16 w-16 text-destructive mb-6" />
-              <CardTitle className="text-2xl mb-2 text-foreground">Verification Failed</CardTitle>
-              <CardDescription className="mb-6">{confirmMutation.error?.message || "There was an error verifying your payment."}</CardDescription>
-              <Button onClick={() => setLocation("/billing")} variant="outline">Return to Billing</Button>
+              <CardTitle className="text-2xl mb-2 text-foreground">No pudimos verificar el pago</CardTitle>
+              <CardDescription className="mb-6">{confirmMutation.error?.message || "Ocurrió un error al verificar tu pago."}</CardDescription>
+              <Button onClick={() => setLocation("/billing")} variant="outline">Volver a facturación</Button>
             </CardContent>
           ) : (
             <motion.div
@@ -63,22 +61,22 @@ export default function BillingSuccessPage() {
                 <div className="mx-auto bg-green-500/10 h-20 w-20 rounded-full flex items-center justify-center mb-6">
                   <CheckCircle2 className="h-10 w-10 text-green-400" />
                 </div>
-                <CardTitle className="text-3xl text-white mb-2">Payment Successful!</CardTitle>
+                <CardTitle className="text-3xl text-white mb-2">¡Pago exitoso!</CardTitle>
                 <CardDescription className="text-base">
-                  Your credits have been added to your account.
+                  Tus créditos ya están disponibles en tu cuenta.
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center pb-2">
                 <div className="bg-background/50 rounded-lg p-4 font-mono text-primary border border-primary/20 inline-block mx-auto mb-4">
-                  +{confirmMutation.data?.creditsAdded} Credits
+                  +{confirmMutation.data?.creditsAdded} créditos
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  New Balance: <strong className="text-foreground">{confirmMutation.data?.newBalance}</strong>
+                  Nuevo saldo: <strong className="text-foreground">{confirmMutation.data?.newBalance}</strong>
                 </p>
               </CardContent>
               <CardFooter className="flex justify-center pb-10 pt-6">
                 <Button onClick={() => setLocation("/dashboard")} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20">
-                  Return to Dashboard
+                  Volver al panel
                 </Button>
               </CardFooter>
             </motion.div>

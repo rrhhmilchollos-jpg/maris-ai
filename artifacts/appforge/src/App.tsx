@@ -171,18 +171,29 @@ function ClerkProviderWithRoutes() {
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       localization={{
+        locale: "es-ES",
         signIn: {
           start: {
-            title: "Welcome back",
-            subtitle: "Sign in to access your AppForge workspace",
+            title: "Bienvenido de nuevo",
+            subtitle: "Inicia sesión para entrar a tu espacio de AppForge",
+            actionText: "¿No tienes cuenta?",
+            actionLink: "Regístrate",
           },
         },
         signUp: {
           start: {
-            title: "Create your account",
-            subtitle: "Start building AI applications today",
+            title: "Crea tu cuenta",
+            subtitle: "Empieza a construir aplicaciones con IA hoy mismo",
+            actionText: "¿Ya tienes una cuenta?",
+            actionLink: "Inicia sesión",
           },
         },
+        formFieldLabel__emailAddress: "Correo electrónico",
+        formFieldLabel__password: "Contraseña",
+        formFieldLabel__firstName: "Nombre",
+        formFieldLabel__lastName: "Apellido",
+        formButtonPrimary: "Continuar",
+        dividerText: "o",
       }}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
