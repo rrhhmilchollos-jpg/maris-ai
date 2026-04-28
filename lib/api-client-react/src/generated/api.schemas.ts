@@ -49,6 +49,23 @@ export interface GenerateAppRequest {
   prompt: string;
 }
 
+export interface GenerationJob {
+  id: number;
+  /** queued | running | succeeded | failed */
+  status: string;
+  /** queued | starting | researching | generating | parsing | ready | failed */
+  phase: string;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  progress: number;
+  appId?: number | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CreditPackage {
   id: string;
   name: string;

@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useGetMyStats, useListApps, useGenerateApp, useGetMe, getGetMyStatsQueryKey, getListAppsQueryKey, getGetMeQueryKey } from "@workspace/api-client-react";
+import {
+  useGetMyStats,
+  useListApps,
+  useGenerateApp,
+  useGetMe,
+  useGetGenerationJob,
+  getGetGenerationJobQueryKey,
+  getGetMyStatsQueryKey,
+  getListAppsQueryKey,
+  getGetMeQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -8,41 +18,84 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2 } from "lucide-react";
+
+const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
+  queued: { label: "En cola…", icon: Loader2 },
+  starting: { label: "Iniciando motor…", icon: Loader2 },
+  researching: { label: "Investigando en la web…", icon: Search },
+  generating: { label: "Generando código de la app…", icon: Wand2 },
+  parsing: { label: "Procesando archivos generados…", icon: FileCheck2 },
+  ready: { label: "¡Listo!", icon: FileCheck2 },
+  failed: { label: "Falló", icon: Loader2 },
+};
 
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
-  
+  const [activeJobId, setActiveJobId] = useState<number | null>(null);
+
   const { data: me } = useGetMe();
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
 
+  const { data: job } = useGetGenerationJob(activeJobId ?? 0, {
+    query: {
+      queryKey: getGetGenerationJobQueryKey(activeJobId ?? 0),
+      enabled: activeJobId !== null,
+      refetchInterval: (query) => {
+        const data = query.state.data as { status?: string } | undefined;
+        if (!data) return 1500;
+        if (data.status === "succeeded" || data.status === "failed") return false;
+        return 1500;
+      },
+    },
+  });
+
   const generateMutation = useGenerateApp({
     mutation: {
       onSuccess: (data) => {
-        queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-        setPrompt("");
-        toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
-        setLocation(`/app/${data.id}`);
+        setActiveJobId(data.id);
       },
       onError: (error: any) => {
         toast({
-          title: "Falló la generación",
-          description: error?.message || error?.error || "No pudimos generar la app. Inténtalo otra vez.",
+          title: "No pudimos encolar la generación",
+          description: error?.message || error?.error || "Inténtalo otra vez en un momento.",
           variant: "destructive",
         });
-      }
-    }
+      },
+    },
   });
+
+  useEffect(() => {
+    if (!job) return;
+    if (job.status === "succeeded" && job.appId) {
+      queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      const appId = job.appId;
+      const id = activeJobId;
+      setActiveJobId(null);
+      setPrompt("");
+      toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
+      setLocation(`/app/${appId}`);
+      void id;
+    } else if (job.status === "failed") {
+      toast({
+        title: "Falló la generación",
+        description: job.errorMessage || "Inténtalo otra vez o ajusta el prompt.",
+        variant: "destructive",
+      });
+      setActiveJobId(null);
+    }
+  }, [job, queryClient, setLocation, toast, activeJobId]);
 
   useEffect(() => {
     const saved = localStorage.getItem("appforge_pending_prompt");
@@ -68,6 +121,11 @@ export default function DashboardPage() {
 
     generateMutation.mutate({ data: { prompt } });
   };
+
+  const isWorking = generateMutation.isPending || activeJobId !== null;
+  const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
+  const PhaseIcon = phaseInfo.icon;
+  const progressValue = job?.progress ?? (generateMutation.isPending ? 5 : 0);
 
   return (
     <Layout>
@@ -132,9 +190,28 @@ export default function DashboardPage() {
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="ej. Un rastreador elegante de hábitos con casillas diarias, gráfica de progreso y modo oscuro..." 
                 className="min-h-[120px] bg-background/50 border-border/50 font-sans text-base focus-visible:ring-primary/50"
-                disabled={generateMutation.isPending}
+                disabled={isWorking}
                 data-testid="input-prompt"
               />
+
+              {isWorking && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3" data-testid="generation-progress">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <PhaseIcon className={`h-5 w-5 text-primary flex-shrink-0 ${phaseInfo.icon === Loader2 ? "animate-spin" : ""}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{phaseInfo.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          La generación puede tardar entre 30 segundos y 2 minutos según la complejidad.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-sm font-mono text-primary tabular-nums">{progressValue}%</div>
+                  </div>
+                  <Progress value={progressValue} className="h-2" />
+                </div>
+              )}
+
               <div className="flex justify-between items-center">
                 <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">
                   {isAdmin ? "Costo: gratis (admin)" : "Costo: 1 crédito"}
@@ -146,14 +223,14 @@ export default function DashboardPage() {
                 ) : (
                   <Button
                     type="submit"
-                    disabled={generateMutation.isPending || !prompt.trim()}
+                    disabled={isWorking || !prompt.trim()}
                     className="min-w-[140px] bg-primary text-white hover:bg-primary/90"
                     data-testid="button-generate"
                   >
-                    {generateMutation.isPending ? (
+                    {isWorking ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Investigando + generando...
+                        Generando…
                       </>
                     ) : (
                       <>

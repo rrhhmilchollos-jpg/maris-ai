@@ -136,7 +136,7 @@ paths:
     post:
       operationId: generateApp
       tags: [generation]
-      summary: Generate a new app from a prompt (costs 1 credit)
+      summary: Enqueue an app generation job (costs 1 credit on success, free for admins)
       requestBody:
         required: true
         content:
@@ -144,12 +144,12 @@ paths:
             schema:
               $ref: "#/components/schemas/GenerateAppRequest"
       responses:
-        "200":
-          description: Generated app
+        "202":
+          description: Generation job enqueued
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GeneratedApp"
+                $ref: "#/components/schemas/GenerationJob"
         "402":
           description: Insufficient credits
           content:
@@ -158,6 +158,30 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /generate/jobs/{id}:
+    get:
+      operationId: getGenerationJob
+      tags: [generation]
+      summary: Poll the status of a generation job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "404":
+          description: Job not found
           content:
             application/json:
               schema:
@@ -446,6 +470,40 @@ components:
           minLength: 5
       required:
         - prompt
+    GenerationJob:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          description: queued | running | succeeded | failed
+        phase:
+          type: string
+          description: queued | starting | researching | generating | parsing | ready | failed
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        appId:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - phase
+        - progress
+        - createdAt
+        - updatedAt
     CreditPackage:
       type: object
       properties:

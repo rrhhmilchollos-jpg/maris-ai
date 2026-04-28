@@ -20,5 +20,6 @@ export * from "./creditTransaction";
 export * from "./dashboardStats";
 export * from "./generateAppRequest";
 export * from "./generatedApp";
+export * from "./generationJob";
 export * from "./healthStatus";
 export * from "./userProfile";

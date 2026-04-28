@@ -31,6 +31,7 @@ import type {
   DashboardStats,
   GenerateAppRequest,
   GeneratedApp,
+  GenerationJob,
   HealthStatus,
   UserProfile,
 } from "./api.schemas";
@@ -484,7 +485,7 @@ export const useDeleteApp = <
 };
 
 /**
- * @summary Generate a new app from a prompt (costs 1 credit)
+ * @summary Enqueue an app generation job (costs 1 credit on success, free for admins)
  */
 export const getGenerateAppUrl = () => {
   return `/api/generate`;
@@ -493,8 +494,8 @@ export const getGenerateAppUrl = () => {
 export const generateApp = async (
   generateAppRequest: GenerateAppRequest,
   options?: RequestInit,
-): Promise<GeneratedApp> => {
-  return customFetch<GeneratedApp>(getGenerateAppUrl(), {
+): Promise<GenerationJob> => {
+  return customFetch<GenerationJob>(getGenerateAppUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
@@ -547,7 +548,7 @@ export type GenerateAppMutationBody = BodyType<GenerateAppRequest>;
 export type GenerateAppMutationError = ErrorType<ApiError>;
 
 /**
- * @summary Generate a new app from a prompt (costs 1 credit)
+ * @summary Enqueue an app generation job (costs 1 credit on success, free for admins)
  */
 export const useGenerateApp = <
   TError = ErrorType<ApiError>,
@@ -568,6 +569,93 @@ export const useGenerateApp = <
 > => {
   return useMutation(getGenerateAppMutationOptions(options));
 };
+
+/**
+ * @summary Poll the status of a generation job
+ */
+export const getGetGenerationJobUrl = (id: number) => {
+  return `/api/generate/jobs/${id}`;
+};
+
+export const getGenerationJob = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GenerationJob> => {
+  return customFetch<GenerationJob>(getGetGenerationJobUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGenerationJobQueryKey = (id: number) => {
+  return [`/api/generate/jobs/${id}`] as const;
+};
+
+export const getGetGenerationJobQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGenerationJob>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGenerationJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetGenerationJobQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGenerationJob>>
+  > = ({ signal }) => getGenerationJob(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGenerationJob>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGenerationJobQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGenerationJob>>
+>;
+export type GetGenerationJobQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Poll the status of a generation job
+ */
+
+export function useGetGenerationJob<
+  TData = Awaited<ReturnType<typeof getGenerationJob>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGenerationJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGenerationJobQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary List available credit packages
