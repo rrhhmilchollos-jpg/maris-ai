@@ -18,6 +18,13 @@ import { bundleToFiles } from "./exportZip";
 export async function buildDeployHtml(opts: {
   bundle: string;
   title: string;
+  /**
+   * Public slug of the deployed app. Used by the in-page error reporter to
+   * POST captured runtime errors to `/p/<slug>/_error` so the owner can see
+   * them in the panel. Optional — when absent (e.g. the validate/visualTester
+   * pipelines that build a throwaway HTML), the reporter is a no-op.
+   */
+  slug?: string;
 }): Promise<string> {
   const vfs = bundleToFiles(opts.bundle);
   const entry = pickEntry(vfs);
@@ -126,7 +133,82 @@ export async function buildDeployHtml(opts: {
   // still work) and emit a `popstate` so router subscribers re-render.
   // `location.search` and `location.hash` remain pass-through — only
   // `pathname` is virtualized.
+  // The slug is templated into the shim so the in-page error reporter can
+  // POST to the correct sink. We also derive the report endpoint defensively
+  // at runtime from `location.pathname` (`/p/<slug>/_inner`) in case the
+  // slug isn't passed (older codepaths) or doesn't match. Both are stripped
+  // of any HTML-relevant chars below before being baked into the script tag.
+  const safeSlug = JSON.stringify((opts.slug || "").replace(/[^a-z0-9]/gi, ""));
   const routerShim = `(function(){
+  // Friendly fallback overlay shown to visitors when the bundle throws
+  // during initial render. Without this, a runtime error would leave the
+  // iframe stuck on a fully blank page with no clue what happened — exactly
+  // the symptom we were trying to surface to users. We only inject it once
+  // (ten seconds after load if #root never gained children, or immediately
+  // when an error fires before the first paint).
+  function showFatalOverlay(detail){
+    try {
+      if (document.getElementById("__appforge_fatal__")) return;
+      var root = document.getElementById("root");
+      // If the app already mounted real DOM, leave it alone — a non-fatal
+      // error after first paint shouldn't replace a working UI.
+      if (root && root.firstElementChild && root.children.length > 0) return;
+      var box = document.createElement("div");
+      box.id = "__appforge_fatal__";
+      box.style.cssText = "position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#0b0d12;color:#e6e8ee;z-index:2147483647;";
+      var card = document.createElement("div");
+      card.style.cssText = "max-width:520px;text-align:center;background:#11141b;border:1px solid #1f2430;border-radius:16px;padding:28px 28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.4);";
+      var title = document.createElement("div");
+      title.textContent = "Esta app no se cargó correctamente";
+      title.style.cssText = "font-size:18px;font-weight:600;margin-bottom:8px;";
+      var msg = document.createElement("div");
+      msg.textContent = "Hubo un error al ejecutarse en tu navegador. El propietario ya recibió el aviso y puede regenerarla desde su panel.";
+      msg.style.cssText = "font-size:14px;line-height:1.5;color:#a4abbb;margin-bottom:18px;";
+      var detailEl = document.createElement("div");
+      detailEl.textContent = detail || "";
+      detailEl.style.cssText = "font-size:11px;color:#6b7185;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word;background:#0b0d12;border:1px solid #1f2430;border-radius:8px;padding:10px;text-align:left;max-height:160px;overflow:auto;display:" + (detail ? "block" : "none") + ";";
+      card.appendChild(title);
+      card.appendChild(msg);
+      if (detail) card.appendChild(detailEl);
+      box.appendChild(card);
+      document.body.appendChild(box);
+    } catch (e) { /* ignore — we tried */ }
+  }
+
+  // POST a captured error back to /p/<slug>/_error. Uses sendBeacon when
+  // available so reports survive a page navigation, falls back to fetch with
+  // keepalive. Both flows use a CORS-safe content type (text/plain) so no
+  // preflight is needed from the opaque-origin sandbox.
+  var SLUG = ${safeSlug};
+  if (!SLUG) {
+    try {
+      var m = (window.location.pathname || "").match(/^\\/p\\/([a-z0-9]{10})(?:\\/|$)/);
+      if (m) SLUG = m[1];
+    } catch (e) {}
+  }
+  var reportedCount = 0;
+  var REPORT_CAP = 10; // hard cap per page-load to avoid loops.
+  function reportError(payload) {
+    if (!SLUG || reportedCount >= REPORT_CAP) return;
+    reportedCount++;
+    try {
+      var body = JSON.stringify(payload);
+      var url = "/p/" + SLUG + "/_error";
+      if (navigator.sendBeacon) {
+        var blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+        if (navigator.sendBeacon(url, blob)) return;
+      }
+      fetch(url, {
+        method: "POST",
+        body: body,
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        keepalive: true,
+        mode: "cors",
+        credentials: "omit",
+      }).catch(function(){});
+    } catch (e) {}
+  }
+
   try {
     var virtualPath = "/";
     var origPush = window.history.pushState.bind(window.history);
@@ -193,12 +275,84 @@ export async function buildDeployHtml(opts: {
       } catch (e) {}
     }
   } catch (e) {}
+  // ---- Runtime error capture ----
+  // We listen to both 'error' (synchronous JS errors + resource load errors
+  // like a missing module) and 'unhandledrejection' (async/await failures,
+  // unhandled Promise rejections). For each, we surface a friendly overlay
+  // when the page would otherwise be blank, and POST a small report so the
+  // app's owner can see in the panel that this happened.
+  function describeError(err) {
+    if (!err) return "";
+    if (typeof err === "string") return err;
+    try {
+      if (err.message) return String(err.message);
+      return String(err);
+    } catch (e) { return ""; }
+  }
+  function getStack(err) {
+    if (err && typeof err === "object" && typeof err.stack === "string") {
+      return err.stack.slice(0, 4000);
+    }
+    return null;
+  }
   window.addEventListener("error", function(e){
     try { console.error("[appforge] runtime error:", e.error || e.message); } catch(_){}
-  });
+    var err = e && e.error;
+    var msg = describeError(err) || (e && e.message) || "Error";
+    var stack = getStack(err);
+    var src = (e && e.filename) || null;
+    var lineno = (e && typeof e.lineno === "number") ? e.lineno : null;
+    var colno = (e && typeof e.colno === "number") ? e.colno : null;
+    showFatalOverlay(msg + (stack ? "\\n\\n" + stack.split("\\n").slice(0,4).join("\\n") : ""));
+    reportError({
+      kind: "error",
+      message: msg,
+      stack: stack,
+      source: src,
+      lineno: lineno,
+      colno: colno,
+      pathname: virtualPath || "/",
+    });
+  }, true);
   window.addEventListener("unhandledrejection", function(e){
     try { console.error("[appforge] unhandled rejection:", e.reason); } catch(_){}
+    var reason = e && e.reason;
+    var msg = describeError(reason) || "Unhandled rejection";
+    var stack = getStack(reason);
+    showFatalOverlay(msg + (stack ? "\\n\\n" + stack.split("\\n").slice(0,4).join("\\n") : ""));
+    reportError({
+      kind: "unhandledrejection",
+      message: msg,
+      stack: stack,
+      source: null,
+      lineno: null,
+      colno: null,
+      pathname: virtualPath || "/",
+    });
   });
+  // Watchdog: even when no JS error fires (e.g. an import map miss that
+  // never resolves, or the bundle silently mounted nothing), the visitor
+  // ends up staring at a blank page. After 12 seconds with an empty #root
+  // we show a softer "loading slow" message that links to a refresh.
+  // This is intentionally generous so a slow CDN cold-start isn't mistaken
+  // for a failure.
+  setTimeout(function(){
+    try {
+      var root = document.getElementById("root");
+      if (!root || (!root.firstElementChild && !root.textContent.trim())) {
+        showFatalOverlay("La página tardó demasiado en aparecer.");
+        reportError({
+          kind: "error",
+          message: "Blank page after 12s — root never mounted",
+          stack: null,
+          source: null,
+          lineno: null,
+          colno: null,
+          pathname: (typeof virtualPath === "string" ? virtualPath : "/"),
+        });
+      }
+    } catch (e) {}
+  }, 12000);
 })();`;
 
   return `<!DOCTYPE html>

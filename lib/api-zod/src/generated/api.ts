@@ -544,6 +544,56 @@ export const VisualTestAppResponse = zod.object({
 });
 
 /**
+ * Owner-only. Returns up to the last 50 runtime errors captured by the
+published app sandbox (`window.error` and `window.unhandledrejection`).
+Used by the panel to show the user when a real visitor hit a blank
+page, so they can regenerate the app.
+
+ * @summary List recent JavaScript errors reported from the published app's iframe
+ */
+export const ListAppRuntimeErrorsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListAppRuntimeErrorsResponse = zod.object({
+  errors: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        kind: zod
+          .string()
+          .describe(
+            "error | unhandledrejection (matches the browser event name).",
+          ),
+        message: zod.string(),
+        source: zod.string().nullish(),
+        lineno: zod.number().nullish(),
+        colno: zod.number().nullish(),
+        stack: zod.string().nullish(),
+        userAgent: zod.string().nullish(),
+        pathname: zod
+          .string()
+          .nullish()
+          .describe("SPA route the visitor was on when the error fired."),
+        createdAt: zod.coerce.date(),
+      })
+      .describe(
+        "A single JS error captured by the published app's iframe sandbox.",
+      ),
+  ),
+});
+
+/**
+ * Owner-only. Used after the user regenerates or fixes the app and
+wants to dismiss the error notice in the panel.
+
+ * @summary Discard all stored runtime errors for this app
+ */
+export const ClearAppRuntimeErrorsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Create a new GitHub repo and push the app source
  */
 export const PushAppToGitHubParams = zod.object({

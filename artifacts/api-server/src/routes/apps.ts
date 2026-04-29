@@ -11,6 +11,7 @@ import {
   appMessages,
   jobLogs,
   chatAttachments,
+  appRuntimeErrors,
 } from "@workspace/db/schema";
 
 type GeneratedAppRow = typeof generatedApps.$inferSelect;
@@ -2061,6 +2062,82 @@ router.get(
         createdAt: r.createdAt.toISOString(),
       })),
     });
+  },
+);
+
+/**
+ * List the most recent runtime errors reported from the published app's
+ * iframe sandbox. Owner-only — we never return another user's error
+ * payloads, even though the writer endpoint (`POST /p/:slug/_error`) is
+ * unauthenticated by design (the iframe runs in an opaque origin).
+ */
+router.get(
+  "/apps/:id/runtime-errors",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const [app] = await db
+      .select({ id: generatedApps.id })
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!app) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    const rows = await db
+      .select()
+      .from(appRuntimeErrors)
+      .where(eq(appRuntimeErrors.appId, id))
+      .orderBy(desc(appRuntimeErrors.id))
+      .limit(50);
+    res.json({
+      errors: rows.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        message: r.message,
+        source: r.source,
+        lineno: r.lineno,
+        colno: r.colno,
+        stack: r.stack,
+        userAgent: r.userAgent,
+        pathname: r.pathname,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
+  },
+);
+
+/**
+ * Discard all stored runtime errors for an app. Used by the panel after
+ * the user regenerates or fixes the app and wants the error notice gone.
+ */
+router.delete(
+  "/apps/:id/runtime-errors",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const [app] = await db
+      .select({ id: generatedApps.id })
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!app) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    await db.delete(appRuntimeErrors).where(eq(appRuntimeErrors.appId, id));
+    res.status(204).end();
   },
 );
 

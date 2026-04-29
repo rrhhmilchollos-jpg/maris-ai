@@ -25,6 +25,7 @@ import type {
   AdminUser,
   ApiError,
   AppMessage,
+  AppRuntimeErrorList,
   CheckoutSession,
   ConfirmCheckoutRequest,
   ConfirmCheckoutResult,
@@ -1519,6 +1520,186 @@ export const useVisualTestApp = <
   TContext
 > => {
   return useMutation(getVisualTestAppMutationOptions(options));
+};
+
+/**
+ * Owner-only. Returns up to the last 50 runtime errors captured by the
+published app sandbox (`window.error` and `window.unhandledrejection`).
+Used by the panel to show the user when a real visitor hit a blank
+page, so they can regenerate the app.
+
+ * @summary List recent JavaScript errors reported from the published app's iframe
+ */
+export const getListAppRuntimeErrorsUrl = (id: number) => {
+  return `/api/apps/${id}/runtime-errors`;
+};
+
+export const listAppRuntimeErrors = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AppRuntimeErrorList> => {
+  return customFetch<AppRuntimeErrorList>(getListAppRuntimeErrorsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAppRuntimeErrorsQueryKey = (id: number) => {
+  return [`/api/apps/${id}/runtime-errors`] as const;
+};
+
+export const getListAppRuntimeErrorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAppRuntimeErrors>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAppRuntimeErrors>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAppRuntimeErrorsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAppRuntimeErrors>>
+  > = ({ signal }) => listAppRuntimeErrors(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAppRuntimeErrors>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAppRuntimeErrorsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAppRuntimeErrors>>
+>;
+export type ListAppRuntimeErrorsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List recent JavaScript errors reported from the published app's iframe
+ */
+
+export function useListAppRuntimeErrors<
+  TData = Awaited<ReturnType<typeof listAppRuntimeErrors>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAppRuntimeErrors>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAppRuntimeErrorsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Owner-only. Used after the user regenerates or fixes the app and
+wants to dismiss the error notice in the panel.
+
+ * @summary Discard all stored runtime errors for this app
+ */
+export const getClearAppRuntimeErrorsUrl = (id: number) => {
+  return `/api/apps/${id}/runtime-errors`;
+};
+
+export const clearAppRuntimeErrors = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getClearAppRuntimeErrorsUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getClearAppRuntimeErrorsMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearAppRuntimeErrors>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof clearAppRuntimeErrors>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["clearAppRuntimeErrors"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof clearAppRuntimeErrors>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return clearAppRuntimeErrors(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ClearAppRuntimeErrorsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof clearAppRuntimeErrors>>
+>;
+
+export type ClearAppRuntimeErrorsMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Discard all stored runtime errors for this app
+ */
+export const useClearAppRuntimeErrors = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearAppRuntimeErrors>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof clearAppRuntimeErrors>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getClearAppRuntimeErrorsMutationOptions(options));
 };
 
 /**

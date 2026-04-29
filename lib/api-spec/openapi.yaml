@@ -500,6 +500,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/runtime-errors:
+    get:
+      operationId: listAppRuntimeErrors
+      tags: [apps]
+      summary: List recent JavaScript errors reported from the published app's iframe
+      description: |
+        Owner-only. Returns up to the last 50 runtime errors captured by the
+        published app sandbox (`window.error` and `window.unhandledrejection`).
+        Used by the panel to show the user when a real visitor hit a blank
+        page, so they can regenerate the app.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recent runtime errors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppRuntimeErrorList"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: clearAppRuntimeErrors
+      tags: [apps]
+      summary: Discard all stored runtime errors for this app
+      description: |
+        Owner-only. Used after the user regenerates or fixes the app and
+        wants to dismiss the error notice in the panel.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Cleared
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/github:
     post:
       operationId: pushAppToGitHub
@@ -1206,6 +1257,53 @@ components:
             $ref: "#/components/schemas/JobLogEntry"
       required:
         - logs
+    AppRuntimeError:
+      type: object
+      description: A single JS error captured by the published app's iframe sandbox.
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          description: "error | unhandledrejection (matches the browser event name)."
+        message:
+          type: string
+        source:
+          type: string
+          nullable: true
+        lineno:
+          type: integer
+          nullable: true
+        colno:
+          type: integer
+          nullable: true
+        stack:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        pathname:
+          type: string
+          nullable: true
+          description: "SPA route the visitor was on when the error fired."
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - kind
+        - message
+        - createdAt
+    AppRuntimeErrorList:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppRuntimeError"
+      required:
+        - errors
     CreditPackage:
       type: object
       properties:
