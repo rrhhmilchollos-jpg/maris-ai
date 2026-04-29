@@ -47,6 +47,7 @@ AppForge features a React frontend, a Node.js/Express backend, and shared librar
 
 **Deployment and Actions**:
 - Generated apps can be publicly deployed with unique slugs (isolated via iframes), exported as ZIP files, pushed to GitHub, and forked.
+- Public deploy architecture (`/p/:slug`): a tiny outer wrapper page renders a `sandbox="allow-scripts"` iframe whose `src="/p/:slug/_inner"` serves the bundled user app. Sandbox without `allow-same-origin` keeps the iframe at an opaque origin, so untrusted user code cannot read AppForge cookies/sessions. The inner endpoint sends a defense-in-depth CSP. A routing shim injected before the user bundle runs `history.replaceState('/')` so SPA routers (wouter/react-router) match the home route — using `srcdoc` previously caused `location.pathname` to return `"srcdoc"`, leaving the page blank between header and footer.
 - `backendCode` is explicitly included in the edit prompt context for AI to modify backend aspects.
 
 ## External Dependencies
