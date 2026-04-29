@@ -14,7 +14,8 @@ import {
 type GeneratedAppRow = typeof generatedApps.$inferSelect;
 type GenerationJobRow = typeof generationJobs.$inferSelect;
 type AppMessageRow = typeof appMessages.$inferSelect;
-import { generateApp, patchBundle } from "../lib/generate";
+import { generateApp, patchBundle, type GenLanguage } from "../lib/generate";
+import { generateAppImages } from "../lib/imageAgent";
 import { streamAppZip } from "../lib/exportZip";
 import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
 import { pushAppToGitHub } from "../lib/githubPush";
@@ -24,6 +25,8 @@ const router: IRouter = Router();
 
 /** Coder models the user is allowed to choose from in the dashboard. */
 const ALLOWED_CODER_MODELS = new Set(["auto", "gemini-2.5-flash", "claude-sonnet-4-6"]);
+/** Source-language choices the user can pick at generation time. */
+const ALLOWED_LANGUAGES = new Set<GenLanguage>(["typescript", "javascript"]);
 
 function serializeApp(row: GeneratedAppRow) {
   return {
@@ -37,6 +40,7 @@ function serializeApp(row: GeneratedAppRow) {
     backendCode: row.backendCode,
     status: row.status,
     coderModel: row.coderModel,
+    language: row.language,
     publicSlug: row.publicSlug,
     githubRepoUrl: row.githubRepoUrl,
     createdAt: row.createdAt.toISOString(),
@@ -156,6 +160,7 @@ async function runJob(
   isAdmin: boolean,
   editAppId: number | undefined,
   coderModel: string,
+  language: GenLanguage,
 ) {
   try {
     await db
@@ -204,6 +209,7 @@ async function runJob(
       },
       previous,
       coderModel,
+      language,
     );
 
     // Atomic finalisation: insert/update app + mark job succeeded in one tx.
@@ -250,6 +256,9 @@ async function runJob(
             // edits on this app reuse it. Defaults to "auto" when the user
             // doesn't override.
             coderModel,
+            // Same idea for the source language — locked at creation, all
+            // edits reuse the same JS/TS choice.
+            language,
           })
           .returning();
         resultAppId = inserted.id;
@@ -378,24 +387,37 @@ async function enqueueGeneration(
   editAppId: number | undefined,
   extras?: EnqueueExtras,
   coderModelOverride?: string,
+  languageOverride?: GenLanguage,
 ) {
   const userId = req.userId!;
   const user = req.dbUser!;
   const isAdmin = isAdminEmail(user.email);
-  // Resolve which Coder model this run should use:
-  //   - For an edit, prefer the app's own stored preference.
+  // Resolve which Coder model + source language this run should use:
+  //   - For an edit, prefer the app's own stored preferences (model + language).
   //   - For a new generation, take whatever the client passed (validated below).
-  //   - Default to "auto".
+  //   - Default to "auto" / "typescript".
   let coderModel = "auto";
+  let language: GenLanguage = "typescript";
   if (editAppId) {
     const [editing] = await db
-      .select({ coderModel: generatedApps.coderModel })
+      .select({
+        coderModel: generatedApps.coderModel,
+        language: generatedApps.language,
+      })
       .from(generatedApps)
       .where(eq(generatedApps.id, editAppId))
       .limit(1);
     if (editing?.coderModel) coderModel = editing.coderModel;
-  } else if (coderModelOverride && ALLOWED_CODER_MODELS.has(coderModelOverride)) {
-    coderModel = coderModelOverride;
+    if (editing?.language && ALLOWED_LANGUAGES.has(editing.language as GenLanguage)) {
+      language = editing.language as GenLanguage;
+    }
+  } else {
+    if (coderModelOverride && ALLOWED_CODER_MODELS.has(coderModelOverride)) {
+      coderModel = coderModelOverride;
+    }
+    if (languageOverride && ALLOWED_LANGUAGES.has(languageOverride)) {
+      language = languageOverride;
+    }
   }
 
   if (!isAdmin && user.credits < 1) {
@@ -485,7 +507,7 @@ async function enqueueGeneration(
   }
 
   setImmediate(() => {
-    runJob(job.id, userId, cleanedPrompt, isAdmin, editAppId, coderModel).catch((err) => {
+    runJob(job.id, userId, cleanedPrompt, isAdmin, editAppId, coderModel, language).catch((err) => {
       logger.error({ err, jobId: job.id }, "runJob threw unexpectedly");
     });
   });
@@ -497,6 +519,7 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   const prompt: unknown = req.body?.prompt;
   const appIdRaw: unknown = req.body?.appId;
   const coderModelRaw: unknown = req.body?.coderModel;
+  const languageRaw: unknown = req.body?.language;
   if (typeof prompt !== "string" || prompt.trim().length < 5) {
     res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
     return;
@@ -516,13 +539,64 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     }
     editAppId = appIdRaw;
   }
-  // Only honor coderModel for *new* generations; edits inherit the app's pref.
+  // Only honor coderModel + language for *new* generations; edits inherit the
+  // app's stored preferences.
   const coderModelOverride =
     typeof coderModelRaw === "string" && ALLOWED_CODER_MODELS.has(coderModelRaw)
       ? coderModelRaw
       : undefined;
-  await enqueueGeneration(req, res, cleanedPrompt, editAppId, undefined, coderModelOverride);
+  const languageOverride =
+    typeof languageRaw === "string" && ALLOWED_LANGUAGES.has(languageRaw as GenLanguage)
+      ? (languageRaw as GenLanguage)
+      : undefined;
+  await enqueueGeneration(
+    req,
+    res,
+    cleanedPrompt,
+    editAppId,
+    undefined,
+    coderModelOverride,
+    languageOverride,
+  );
 });
+
+/**
+ * Replace placeholder image URLs (Unsplash/picsum) in the app's frontend bundle
+ * with real images generated by the Nano Banana Pro image agent. Synchronous —
+ * the front end shows a spinner while we wait. Capped at 4 images per call.
+ */
+router.post(
+  "/apps/:id/generate-images",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const [owned] = await db
+      .select({ id: generatedApps.id })
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!owned) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    try {
+      const result = await generateAppImages(id);
+      res.json(result);
+    } catch (err) {
+      req.log.error({ err, appId: id }, "Image generation failed");
+      res.status(500).json({
+        error:
+          "No pudimos generar imágenes: " +
+          (err instanceof Error ? err.message : "error desconocido"),
+      });
+    }
+  },
+);
 
 /**
  * Update the per-app Coder model preference. Subsequent edits will use it.
@@ -636,7 +710,11 @@ router.post("/apps/:id/healthcheck", requireAuth, async (req: Request, res: Resp
       problem: i.line ? `${i.message} (line ${i.line})` : i.message,
       fix: "Resuelve el error del build sin romper otras partes del archivo.",
     }));
-    const patched = await patchBundle(row.frontendCode, qaIssues);
+    const patched = await patchBundle(
+      row.frontendCode,
+      qaIssues,
+      (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage,
+    );
     if (!patched) {
       // Patcher refused or timed out — return the original before-state so the
       // user knows nothing was changed.

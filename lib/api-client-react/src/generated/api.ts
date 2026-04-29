@@ -37,6 +37,7 @@ import type {
   GitHubPushResult,
   HealthCheckResult,
   HealthStatus,
+  ImageGenerationResult,
   SendAppMessageRequest,
   UpdateCoderModelRequest,
   UserProfile,
@@ -921,6 +922,90 @@ export function useExportApp<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Replace placeholder image URLs in the app bundle with real Nano Banana Pro images
+ */
+export const getGenerateAppImagesUrl = (id: number) => {
+  return `/api/apps/${id}/generate-images`;
+};
+
+export const generateAppImages = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ImageGenerationResult> => {
+  return customFetch<ImageGenerationResult>(getGenerateAppImagesUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getGenerateAppImagesMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateAppImages>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateAppImages>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["generateAppImages"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateAppImages>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return generateAppImages(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateAppImagesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateAppImages>>
+>;
+
+export type GenerateAppImagesMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Replace placeholder image URLs in the app bundle with real Nano Banana Pro images
+ */
+export const useGenerateAppImages = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateAppImages>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateAppImages>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getGenerateAppImagesMutationOptions(options));
+};
 
 /**
  * @summary Validate the app bundle and auto-patch any detected issues

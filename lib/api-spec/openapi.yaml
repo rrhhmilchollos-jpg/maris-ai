@@ -284,6 +284,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/generate-images:
+    post:
+      operationId: generateAppImages
+      tags: [apps]
+      summary: Replace placeholder image URLs in the app bundle with real Nano Banana Pro images
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Image generation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationResult"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Image generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/healthcheck:
     post:
       operationId: healthCheckApp
@@ -657,6 +687,9 @@ components:
         coderModel:
           type: string
           description: "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6"
+        language:
+          type: string
+          description: "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation."
         publicSlug:
           type: string
           nullable: true
@@ -679,6 +712,7 @@ components:
         - backendCode
         - status
         - coderModel
+        - language
         - createdAt
     GenerateAppRequest:
       type: object
@@ -694,6 +728,10 @@ components:
           type: string
           nullable: true
           description: "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits."
+        language:
+          type: string
+          nullable: true
+          description: "Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins)."
       required:
         - prompt
     UpdateCoderModelRequest:
@@ -704,6 +742,19 @@ components:
           description: "auto | gemini-2.5-flash | claude-sonnet-4-6"
       required:
         - coderModel
+    ImageGenerationResult:
+      type: object
+      properties:
+        found:
+          type: integer
+          description: Number of placeholder URLs detected in the bundle (capped per call).
+        generated:
+          type: integer
+          description: Number of real images successfully generated and stored.
+        bundleUpdated:
+          type: boolean
+          description: True if the frontend bundle was rewritten to point at the new images.
+      required: [found, generated, bundleUpdated]
     HealthCheckResult:
       type: object
       properties:

@@ -18,6 +18,8 @@ export interface GeneratedApp {
   status: string;
   /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
   coderModel: string;
+  /** Source language: typescript (.tsx) or javascript (.jsx). Locked at creation. */
+  language: string;
   /** When set, the app is publicly viewable at /p/{publicSlug}. */
   publicSlug?: string | null;
   /** HTML URL of the repo this app was last pushed to. */

@@ -35,6 +35,8 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
 | GET | `/api/admin/apps` | Admin: list all generated apps with owner email |
 | GET | `/api/apps/:id/messages` | Chat history for an app (only the owner) |
 | POST | `/api/apps/:id/messages` | Send a refinement message; persists user msg + enqueues edit job atomically |
+| POST | `/api/apps/:id/generate-images` | Auth + ownership; replaces Unsplash/picsum placeholders in the bundle with real Nano Banana Pro (`gemini-3-pro-image-preview`) images, persisted in `app_images` |
+| GET | `/api/apps/:appId/images/:imageId` | **Public** — serves binary image from `app_images` with `Cache-Control: immutable`; mounted before the auth-gated apps router so Sandpack and `/p/<slug>` deploys both work |
 
 ### Admin access
 
@@ -45,6 +47,18 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
 ### Generation pipeline
 
 `POST /generate` is **asynchronous**. It enqueues a row in `generation_jobs`, kicks off `runJob` via `setImmediate`, and returns the job descriptor with `202 Accepted`. The dashboard then polls `GET /generate/jobs/:id` every 1.5 s to render a live progress bar and phase label until `status` becomes `succeeded` (with `appId`) or `failed` (with `errorMessage`).
+
+**Source language.** Each app is locked at creation to either TypeScript (`.tsx`/`.ts`) or JavaScript (`.jsx`/`.js`) via `generated_apps.language` (default `"typescript"`). The dashboard exposes a dropdown next to the model picker; subsequent edits and healthchecks read the stored value, so the user can't accidentally mix languages mid-app. The coder + patcher + edit prompts in `generate.ts` are builder functions that take the language and emit the corresponding filename/syntax rules.
+
+**Custom CSS.** The frontend system prompt explicitly invites the coder to add `src/styles/<name>.css` files for animations or component-scoped styles when Tailwind isn't enough. The bundle parser already passes `*.css` through to Sandpack (and esbuild treats it as an empty loader during validation), so no infra change was needed.
+
+**Real images (Nano Banana Pro).** Generated apps include placeholder Unsplash URLs by default. The user can hit "Imágenes IA" on the app detail page to call `imageAgent.ts`, which:
+1. Scans the frontend bundle for unique `images.unsplash.com` / `picsum.photos` URLs (capped at 4 per call, concurrency 2).
+2. For each placeholder, builds a Spanish prompt from nearby `alt=""` text and calls `gemini-3-pro-image-preview` with `responseModalities: [TEXT, IMAGE]`.
+3. Stores the b64 payload as a row in `app_images`, then rewrites the bundle so every occurrence of the original URL points at `/api/apps/<appId>/images/<imageId>`.
+4. Persists the patched bundle on `generated_apps.frontendCode`.
+
+The serving route is intentionally public (no auth) so embedded `<img>` tags work both inside Sandpack iframes and on the static `/p/<slug>` deploys. Cache headers are immutable since the URL is content-addressed by serial id.
 
 `lib/generate.ts` runs up to two Anthropic calls per request and emits progress callbacks at each stage:
 1. **Web research** (`researchTopic`) — only triggered when the prompt contains a clone keyword (e.g. "clon", "como wallapop", or any of the brand names listed in `CLONE_KEYWORDS`). Best-effort with a 30 s timeout, uses the `web_search_20250305` tool with `max_uses: 2`. If the proxy doesn't support tools or the call fails, the brief is empty and generation continues.
