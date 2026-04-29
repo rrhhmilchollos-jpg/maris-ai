@@ -1,6 +1,7 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { validateBundle, type BuildIssue } from "./validate";
+import { logger } from "./logger";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -52,17 +53,17 @@ Use '// === FILE: <path> ===' to separate files inside frontendCode. ALWAYS incl
 ${isTS ? "- src/types/index.ts when types are shared\n" : ""}
 ${stackLine} Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
 
-QUALITY BAR — this is what separates a demo from a real product:
-- Visual hierarchy. Headings are ACTUALLY large (text-3xl/4xl/5xl), with tight tracking on display text. Body text uses a comfortable scale (text-sm to text-base). Generous whitespace (px-6 to px-8 inside cards, py-12 to py-24 for hero sections, gap-6 to gap-8 in grids).
-- Layout. Use container max-widths (max-w-7xl mx-auto px-4 sm:px-6 lg:px-8) on every page. Mobile-first: classes go base → sm: → md: → lg:. Hero sections never just "left-align text under a navbar" — they have proportions (eyebrow + headline + sub + CTAs + visual).
-- Color and depth. Cards use subtle borders (border border-slate-200) PLUS soft shadows (shadow-sm hover:shadow-md). Backgrounds avoid pure white where possible — use bg-slate-50/bg-zinc-50 for sections that contrast with white cards. Use ONE distinctive accent color for primary CTAs and key highlights; neutrals everywhere else.
-- Interactivity. EVERY interactive element gets a hover state, a focus ring (focus-visible:ring-2 focus-visible:ring-offset-2) and an active state (active:scale-[0.98] for buttons). Add transition-all duration-200 to interactive elements. Cards lift subtly on hover (hover:-translate-y-0.5 hover:shadow-lg).
-- Real interactivity, not static mocks. Forms validate. Filters actually filter. Search actually searches (client-side useMemo over local data). Tabs switch panels. Modals open/close with backdrop click + Esc. Toggles toggle. Lists are sorted and filtered with useState. Use useState/useReducer/useMemo to manage state — never just a static array of cards.
-- States that exist: loading skeletons (animate-pulse), empty states (centered icon + headline + sub + CTA in Spanish), error states, hover, focus, active, disabled. NEVER ship a list/table without an empty state.
-- Icons everywhere they help: lucide-react before/after labels, in empty states, in headers. Pair an icon with a heading for visual interest.
-- Animation. Define a few keyframes in src/styles/animations.css (fadeIn, slideUp, scaleIn) and use them on hero content, modals, and on-mount of cards. Subtle is better than flashy.
-- Accessibility. Semantic HTML (<header>, <nav>, <main>, <section>, <article>, <footer>, <button> for buttons, <a> for links, <label htmlFor>). Every form input has a visible label. Decorative icons get aria-hidden. Every <img> has Spanish alt text.
-- Mobile. Test mentally at 375px. Navigation collapses to a hamburger or bottom bar. Grids reflow (grid-cols-1 sm:grid-cols-2 lg:grid-cols-3). Hero text stays readable. Padding shrinks responsively.
+QUALITY BAR — what separates a demo from a real product. Bake these into the bundle but stay CONCISE in code (no over-commenting, no padding):
+- Visual hierarchy: large display headings (text-3xl/4xl/5xl) with tight tracking; body text-sm/base; generous whitespace (py-12+ heroes, gap-6+ grids).
+- Layout: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 on every page. Mobile-first responsive classes.
+- Depth: cards use border + shadow-sm hover:shadow-md. Off-white section bgs (bg-slate-50) under white cards. ONE accent color for CTAs.
+- Interactivity: every interactive element has hover, focus-visible ring, active state, transition-all duration-200. Cards lift on hover (hover:-translate-y-0.5).
+- Real interactivity (not static): useState/useMemo for filters, search, tabs, modals (with Esc + backdrop close), toggles. NEVER just static arrays.
+- States: loading skeletons (animate-pulse), empty states (icon + headline + sub + CTA in Spanish), errors, disabled. EVERY list/table has an empty state.
+- Icons: lucide-react in headers, buttons, empty states.
+- Animation: define keyframes (fadeIn, slideUp) in src/styles/animations.css, apply on heroes/modals/on-mount.
+- Accessibility: semantic HTML, labels for every input, aria-hidden on decorative icons, descriptive Spanish alt on every <img>.
+- Mobile: works at 375px, hamburger nav if needed, grids reflow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3.
 
 CSS — encouraged beyond Tailwind:
 - src/index.css holds the @tailwind directives PLUS the design system globals (CSS variables, body styles, smooth scroll, font smoothing antialiased).
@@ -109,9 +110,9 @@ TAILWIND — the preview uses the Tailwind Play CDN (no postcss). This means:
 
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
-- Use the file list from the plan as the MINIMUM — split UI into the listed files, do not collapse them into App.${ext}.
+- Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}, do not invent extra files beyond the plan.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
-- Combined output must stay under 70 KB. Trim seed data before truncating files.
+- HARD BUDGET: total \`frontendCode\` ≤ 90 KB of source. If you're nearing that, finish the file you're in and STOP. Better to ship fewer beautifully-finished files than truncate mid-component. Aim for ~6-8 KB per page file, ~3-5 KB per component, ~1-2 KB per util/hook.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
@@ -174,7 +175,7 @@ DATA MODELS — make them realistic:
 - 2-5 models is healthy for most apps.
 
 Rules:
-- Aim for 10-18 frontend files total (pages + components + hooks + utils). NEVER collapse into one file. A real product has structure.
+- Aim for 6-9 frontend files total (pages + components + hooks + utils). Quality over quantity — better one polished page than three rushed ones. NEVER collapse everything into one file.
 - Set backendNeeded=true ONLY if the app genuinely needs persistence/auth/payments/AI/server-side logic. Pure marketing sites, calculators, single-user tools = false.
 - techStack: 4-7 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
 - Output ONLY the JSON object.`;
@@ -270,7 +271,7 @@ Rules:
 - Use '// === FILE: <path> ===' separators.
 - Return the FULL bundle (every file, not just patched ones).
 - Don't introduce new bugs. Don't remove existing files unless the fix explicitly says so.
-- Combined output under 70 KB. Close every brace and quote. Output ONLY the JSON object.`;
+- Combined output under 110 KB. Close every brace and quote. Output ONLY the JSON object.`;
 }
 
 export interface GeneratedAppPayload {
@@ -438,7 +439,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 1500,
+    max_tokens: 4000,
     system: ARCHITECT_SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
   });
@@ -446,6 +447,14 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   if (!text || text.type !== "text") throw new Error("Architect returned no text.");
   const plan = extractJsonObject<ProjectPlan>(text.text);
   if (!plan || !plan.title || !Array.isArray(plan.frontendFiles)) {
+    logger.error(
+      {
+        stopReason: (response as { stop_reason?: string }).stop_reason,
+        rawPreview: text.text.slice(0, 600),
+        rawTail: text.text.slice(-300),
+      },
+      "Architect returned invalid plan JSON",
+    );
     throw new Error("El arquitecto no devolvió un plan válido.");
   }
   // Sane defaults for missing arrays.
@@ -596,19 +605,30 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
     truncated = finishReason === "MAX_TOKENS";
   } else {
-    // Claude Sonnet — non-streaming for simplicity. We can't show progressive
-    // chars but we still emit one final "done writing" tick.
-    const response = await anthropic.messages.create({
+    // Claude Sonnet — streaming required when max_tokens is large enough that
+    // the call could take >10min. We get progressive char counts for the UI
+    // bonus too.
+    const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-6",
-      max_tokens: 16384,
+      max_tokens: 64000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
-    accumulated = response.content
-      .filter((b: { type: string }) => b.type === "text")
-      .map((b) => (b as { text: string }).text)
-      .join("");
-    truncated = response.stop_reason === "max_tokens";
+    let lastReport = 0;
+    for await (const event of stream) {
+      if (
+        event.type === "content_block_delta" &&
+        event.delta.type === "text_delta"
+      ) {
+        accumulated += event.delta.text;
+        if (accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onChars(accumulated.length);
+        }
+      }
+    }
+    const final = await stream.finalMessage();
+    truncated = final.stop_reason === "max_tokens";
     onChars(accumulated.length);
   }
   const raw = accumulated.trim();
@@ -1056,7 +1076,7 @@ Rules:
 - Use '// === FILE: <path> ===' separators inside frontendCode/backendCode.
 - Return the FULL updated bundles (every file, not just the changed ones).
 - Do NOT regress existing features. No TODOs. No "I'll skip this for now" — if you can't satisfy a sub-part of the request, do the part you can and leave the rest exactly as it was.
-- Combined output under 70 KB. Close every brace and quote. Output ONLY the JSON object.`;
+- Combined output under 110 KB. Close every brace and quote. Output ONLY the JSON object.`;
 }
 
 async function singleEditPass(
@@ -1247,7 +1267,7 @@ export async function generateApp(
   });
   const plan = await withTimeoutOrThrow(
     architectPlan(prompt, research),
-    30_000,
+    60_000,
     "architect",
   );
 
@@ -1290,7 +1310,7 @@ export async function generateApp(
         note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…`,
       });
     }, coderModel, language),
-    110_000,
+    600_000,
     "frontend-engineer",
   );
   const backendPromise = generateBackendCode(plan, prompt);
