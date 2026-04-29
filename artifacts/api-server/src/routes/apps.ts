@@ -10,12 +10,18 @@ import {
   generationJobs,
   appMessages,
   jobLogs,
+  chatAttachments,
 } from "@workspace/db/schema";
 
 type GeneratedAppRow = typeof generatedApps.$inferSelect;
 type GenerationJobRow = typeof generationJobs.$inferSelect;
 type AppMessageRow = typeof appMessages.$inferSelect;
-import { generateApp, patchBundle, type GenLanguage } from "../lib/generate";
+import {
+  generateApp,
+  patchBundle,
+  type GenLanguage,
+  type AttachmentContext,
+} from "../lib/generate";
 import { generateAppImages } from "../lib/imageAgent";
 import { streamAppZip } from "../lib/exportZip";
 import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
@@ -273,11 +279,23 @@ function publicUrlFor(slug: string): string {
 }
 
 function serializeMessage(row: AppMessageRow) {
+  // attachment_ids is a JSON-encoded array of integers — defensively parse so a
+  // bad row never takes down the whole /messages response.
+  let attachmentIds: number[] = [];
+  try {
+    const parsed = JSON.parse(row.attachmentIds || "[]");
+    if (Array.isArray(parsed)) {
+      attachmentIds = parsed.filter((n) => Number.isInteger(n)) as number[];
+    }
+  } catch {
+    /* ignore — leave empty */
+  }
   return {
     id: row.id,
     appId: row.appId,
     role: row.role,
     content: row.content,
+    attachmentIds,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -373,6 +391,7 @@ async function runJob(
   editAppId: number | undefined,
   coderModel: string,
   language: GenLanguage,
+  attachmentIds: number[] = [],
 ) {
   try {
     await db
@@ -419,6 +438,62 @@ async function runJob(
     };
     recordLog("system", "Iniciando pipeline multiagente…");
 
+    // Resolve any user-uploaded attachments into a typed context for the AI.
+    // We always re-check ownership here even though the upload route enforced
+    // it — defense in depth, and clients could in theory POST a foreign id.
+    let resolvedAttachments: AttachmentContext[] | undefined;
+    if (attachmentIds.length > 0) {
+      try {
+        const ids = attachmentIds.filter((n) => Number.isInteger(n) && n > 0);
+        if (ids.length > 0) {
+          const rows = await db
+            .select()
+            .from(chatAttachments)
+            .where(
+              and(
+                eq(chatAttachments.userId, userId),
+                sql`${chatAttachments.id} = ANY(${ids})`,
+              ),
+            );
+          resolvedAttachments = rows.map((r) => {
+            const isText =
+              r.mimeType.startsWith("text/") ||
+              r.mimeType === "application/json" ||
+              r.mimeType === "application/xml";
+            let textContent: string | undefined;
+            if (isText) {
+              try {
+                // Cap at 10 KB per file before the prompt builder applies its
+                // own 25 KB total cap. Anything bigger is almost certainly
+                // noise the user didn't read either.
+                const buf = Buffer.from(r.dataBase64, "base64");
+                textContent = buf.toString("utf8").slice(0, 10_000);
+              } catch {
+                textContent = undefined;
+              }
+            }
+            return {
+              id: r.id,
+              filename: r.filename,
+              mimeType: r.mimeType,
+              sizeBytes: r.sizeBytes,
+              textContent,
+            } satisfies AttachmentContext;
+          });
+          recordLog(
+            "system",
+            `Adjuntos cargados: ${resolvedAttachments.length} archivo(s) (${resolvedAttachments
+              .map((a) => a.filename)
+              .slice(0, 3)
+              .join(", ")}${resolvedAttachments.length > 3 ? "…" : ""}).`,
+          );
+        }
+      } catch (attErr) {
+        logger.warn({ attErr, jobId }, "Failed to resolve attachments — continuing without them");
+        recordLog("system", "No pude cargar los adjuntos; sigo sin ellos.", "warn");
+      }
+    }
+
     const payload = await generateApp(
       prompt,
       async (p) => {
@@ -439,6 +514,7 @@ async function runJob(
       coderModel,
       language,
       recordLog,
+      resolvedAttachments,
     );
     recordLog("system", `Generación completada: ${Math.round(payload.frontendCode.length / 1000)} KB de frontend listos.`);
 
@@ -823,6 +899,10 @@ interface EnqueueExtras {
   // Optional: a chat user message to persist atomically with the job. If the
   // enqueue (credit reservation, etc.) fails, the message is rolled back too.
   chatMessage?: { appId: number; content: string };
+  // Optional: ids of chat_attachments rows that the user attached to this
+  // prompt. They get (a) persisted on the message row so the chat bubble can
+  // render thumbnails, and (b) loaded by runJob and fed to the AI.
+  attachmentIds?: number[];
 }
 
 async function enqueueGeneration(
@@ -943,6 +1023,7 @@ async function enqueueGeneration(
           appId: extras.chatMessage.appId,
           role: "user",
           content: extras.chatMessage.content,
+          attachmentIds: JSON.stringify(extras?.attachmentIds ?? []),
         });
       }
       return created;
@@ -959,8 +1040,18 @@ async function enqueueGeneration(
     return;
   }
 
+  const attachmentIdsForJob = extras?.attachmentIds ?? [];
   setImmediate(() => {
-    runJob(job.id, userId, cleanedPrompt, isAdmin, editAppId, coderModel, language).catch((err) => {
+    runJob(
+      job.id,
+      userId,
+      cleanedPrompt,
+      isAdmin,
+      editAppId,
+      coderModel,
+      language,
+      attachmentIdsForJob,
+    ).catch((err) => {
       logger.error({ err, jobId: job.id }, "runJob threw unexpectedly");
     });
   });
@@ -997,6 +1088,14 @@ router.post(
   const coderModelRaw: unknown = req.body?.coderModel;
   const languageRaw: unknown = req.body?.language;
   const kindRaw: unknown = req.body?.kind;
+  const attachmentIdsRaw: unknown = req.body?.attachmentIds;
+  // Sanitise: only keep positive integers, hard-cap at 10 attachments per
+  // request so a malicious client can't DoS us by sending 10 000 ids.
+  const attachmentIds: number[] = Array.isArray(attachmentIdsRaw)
+    ? attachmentIdsRaw
+        .filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0)
+        .slice(0, 10)
+    : [];
   if (typeof prompt !== "string" || prompt.trim().length < 5) {
     res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
     return;
@@ -1059,12 +1158,18 @@ router.post(
   // generations. Edits skip it because they reuse the existing app context.
   const intent = !editAppId ? KIND_INTENTS[kind] : null;
   const finalPrompt = intent ? `${intent}\n\n${cleanedPrompt}` : cleanedPrompt;
+  // For initial generations, we don't persist a chat message here (apps.ts
+  // seeds the conversation transactionally inside runJob's success path), but
+  // attachments still need to flow through so the AI sees them. Pass them via
+  // the same `extras` channel.
   await enqueueGeneration(
     req,
     res,
     finalPrompt,
     editAppId,
-    undefined,
+    editAppId
+      ? { chatMessage: { appId: editAppId, content: cleanedPrompt }, attachmentIds }
+      : { attachmentIds },
     coderModelOverride,
     languageOverride,
     kind,
@@ -1598,8 +1703,15 @@ router.post("/apps/:id/messages", requireAuth, async (req: Request, res: Respons
     return;
   }
   const cleanedMessage = message.trim();
+  const attachmentIdsRaw: unknown = req.body?.attachmentIds;
+  const attachmentIds: number[] = Array.isArray(attachmentIdsRaw)
+    ? attachmentIdsRaw
+        .filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0)
+        .slice(0, 10)
+    : [];
   await enqueueGeneration(req, res, cleanedMessage, id, {
     chatMessage: { appId: id, content: cleanedMessage },
+    attachmentIds,
   });
 });
 

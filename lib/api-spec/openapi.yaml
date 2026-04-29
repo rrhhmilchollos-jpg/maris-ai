@@ -845,6 +845,13 @@ components:
           nullable: true
           enum: [fullstack, mobile, landing, "game-2d", "game-3d", "hybrid-pwa"]
           description: "Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics."
+        attachmentIds:
+          type: array
+          nullable: true
+          maxItems: 10
+          items:
+            type: integer
+          description: "Optional ids of files previously uploaded via POST /uploads. They get included as context for the AI (text content for text/json/csv files, a one-line reference note for images/PDFs)."
       required:
         - prompt
     UpdateCoderModelRequest:
@@ -967,6 +974,13 @@ components:
         message:
           type: string
           minLength: 2
+        attachmentIds:
+          type: array
+          nullable: true
+          maxItems: 10
+          items:
+            type: integer
+          description: "Optional ids of files previously uploaded via POST /uploads. They become AI context for this edit."
       required:
         - message
     AppMessage:
@@ -981,6 +995,11 @@ components:
           description: user | assistant | system
         content:
           type: string
+        attachmentIds:
+          type: array
+          items:
+            type: integer
+          description: "Ids of chat_attachments rows referenced by this message. Empty for messages sent without uploads. Use GET /uploads/:id to fetch the bytes."
         createdAt:
           type: string
           format: date-time
@@ -989,6 +1008,7 @@ components:
         - appId
         - role
         - content
+        - attachmentIds
         - createdAt
     GenerationJob:
       type: object

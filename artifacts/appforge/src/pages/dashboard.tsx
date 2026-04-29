@@ -14,6 +14,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
+import {
+  AttachmentPicker,
+  AttachmentChips,
+  type UploadedAttachment,
+} from "@/components/attachment-picker";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -62,6 +67,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   // Default to GPT-5 Codex when the user is premium/admin (it's the highest-quality
   // option). Non-premium accounts can't pick gpt-5 from the dropdown — falling back
   // to "auto" keeps the form valid for them. We initialize to "auto" to avoid a
@@ -178,6 +184,10 @@ export default function DashboardPage() {
       const id = activeJobId;
       setActiveJobId(null);
       setPrompt("");
+      // Clear attachment chips and revoke their preview URLs once the
+      // generation has succeeded — they belong to the previous prompt.
+      attachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+      setAttachments([]);
       toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
       setLocation(`/app/${appId}`);
       void id;
@@ -221,7 +231,15 @@ export default function DashboardPage() {
     // safe defaults if anything is unknown, and prepends the kind's
     // [INTENT: …] directive itself so the architect can't be tricked by
     // a hand-crafted client. The cost is also enforced server-side.
-    generateMutation.mutate({ data: { prompt, coderModel, language, kind } });
+    generateMutation.mutate({
+      data: {
+        prompt,
+        coderModel,
+        language,
+        kind,
+        attachmentIds: attachments.map((a) => a.id),
+      },
+    });
   };
 
   // Annual modal trigger — show once per 7 days for non-admins after the
@@ -376,13 +394,32 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={KIND_META[kind].placeholder}
-                className="min-h-[120px] bg-background/50 border-border/50 font-sans text-base focus-visible:ring-primary/50"
-                disabled={isWorking}
-                data-testid="input-prompt"
+              <div className="relative">
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={KIND_META[kind].placeholder}
+                  className="min-h-[120px] bg-background/50 border-border/50 font-sans text-base focus-visible:ring-primary/50 pl-12"
+                  disabled={isWorking}
+                  data-testid="input-prompt"
+                />
+                <div className="absolute left-2 bottom-2">
+                  <AttachmentPicker
+                    attachments={attachments}
+                    onChange={setAttachments}
+                    disabled={isWorking}
+                    testIdPrefix="dashboard-attachment"
+                  />
+                </div>
+              </div>
+              <AttachmentChips
+                attachments={attachments}
+                onRemove={(id) => {
+                  const removed = attachments.find((a) => a.id === id);
+                  if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+                  setAttachments((prev) => prev.filter((a) => a.id !== id));
+                }}
+                testIdPrefix="dashboard-attachment"
               />
 
               {isWorking && (

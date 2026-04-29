@@ -30,6 +30,11 @@ import {
 } from "@codesandbox/sandpack-react";
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
+import {
+  AttachmentPicker,
+  AttachmentChips,
+  type UploadedAttachment,
+} from "@/components/attachment-picker";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,6 +127,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // real time, and on job success.
   const [previewOpen, setPreviewOpen] = useState(true);
   const [draft, setDraft] = useState("");
+  const [chatAttachments, setChatAttachments] = useState<UploadedAttachment[]>([]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -189,6 +195,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         // the user can watch the changes happen instead of staring at chat.
         setPreviewOpen(true);
         setDraft("");
+        // Drop the chat attachments now that they've been handed off to the
+        // server — keep them around longer and the user might re-send them by
+        // accident on the next message. Revoke object URLs to free memory.
+        chatAttachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+        setChatAttachments([]);
         queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
       },
       onError: (err: any) => {
@@ -394,7 +405,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const handleSend = () => {
     const trimmed = draft.trim();
     if (trimmed.length < 2 || sendMutation.isPending || activeJobId !== null) return;
-    sendMutation.mutate({ id, data: { message: trimmed } });
+    sendMutation.mutate({
+      id,
+      data: {
+        message: trimmed,
+        attachmentIds: chatAttachments.map((a) => a.id),
+      },
+    });
   };
 
   const codeForTab =
@@ -755,6 +772,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   </Button>
                 </div>
               )}
+              <AttachmentChips
+                attachments={chatAttachments}
+                onRemove={(aid) => {
+                  const removed = chatAttachments.find((a) => a.id === aid);
+                  if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+                  setChatAttachments((prev) => prev.filter((a) => a.id !== aid));
+                }}
+                testIdPrefix="chat-attachment"
+              />
               <div className="relative">
                 <Textarea
                   value={draft}
@@ -767,8 +793,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   }}
                   placeholder={isWorking ? "Espera a que termine el cambio actual…" : outOfCredits ? "Compra créditos para volver a editar…" : "Pide un cambio… (Enter envía, Shift+Enter salto de línea)"}
                   disabled={isWorking || outOfCredits}
-                  className="resize-none min-h-[60px] max-h-[140px] bg-white/5 border-white/10 text-foreground pr-12"
+                  className="resize-none min-h-[60px] max-h-[140px] bg-white/5 border-white/10 text-foreground pl-12 pr-12"
                 />
+                <div className="absolute left-2 bottom-2">
+                  <AttachmentPicker
+                    attachments={chatAttachments}
+                    onChange={setChatAttachments}
+                    disabled={isWorking || outOfCredits}
+                    testIdPrefix="chat-attachment"
+                  />
+                </div>
                 <Button
                   size="icon"
                   disabled={isWorking || outOfCredits || draft.trim().length < 2 || sendMutation.isPending}

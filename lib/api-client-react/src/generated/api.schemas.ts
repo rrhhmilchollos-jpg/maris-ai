@@ -81,6 +81,11 @@ export interface GenerateAppRequest {
   language?: string | null;
   /** Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics. */
   kind?: GenerateAppRequestKind;
+  /**
+   * Optional ids of files previously uploaded via POST /uploads. They get included as context for the AI (text content for text/json/csv files, a one-line reference note for images/PDFs).
+   * @maxItems 10
+   */
+  attachmentIds?: number[] | null;
 }
 
 export interface UpdateCoderModelRequest {
@@ -170,6 +175,11 @@ export interface GitHubPushResult {
 export interface SendAppMessageRequest {
   /** @minLength 2 */
   message: string;
+  /**
+   * Optional ids of files previously uploaded via POST /uploads. They become AI context for this edit.
+   * @maxItems 10
+   */
+  attachmentIds?: number[] | null;
 }
 
 export interface AppMessage {
@@ -178,6 +188,8 @@ export interface AppMessage {
   /** user | assistant | system */
   role: string;
   content: string;
+  /** Ids of chat_attachments rows referenced by this message. Empty for messages sent without uploads. Use GET /uploads/:id to fetch the bytes. */
+  attachmentIds: number[];
   createdAt: string;
 }
 
