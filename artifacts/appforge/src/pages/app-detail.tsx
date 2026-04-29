@@ -12,6 +12,8 @@ import {
   usePushAppToGitHub,
   useGenerateAppImages,
   useVisualTestApp,
+  useForkApp,
+  useGetMyStats,
   getGetAppQueryKey,
   getListAppsQueryKey,
   getGetMyStatsQueryKey,
@@ -56,6 +58,8 @@ import {
   ScanEye,
   X,
   PanelRightOpen,
+  GitFork,
+  AlertCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -126,6 +130,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const { data: me } = useGetMe();
   const isAdmin = !!me?.isAdmin;
   const isPremium = !!me?.isPremium;
+  // Pull live credit balance so we can show an inline "out of credits" banner
+  // above the chat input — currently a non-admin user who runs out mid-edit
+  // only gets a backend error after pressing send. Mirrors emergent.sh's
+  // "you ran out of credits" callout (screenshot from the user).
+  const { data: stats } = useGetMyStats();
+  const outOfCredits = !isAdmin && !!stats && stats.credits <= 0;
 
   const { data: messages } = useListAppMessages(id, {
     query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id) },
@@ -235,6 +245,22 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
       onError: (err: any) => {
         toast({ title: "El chequeo falló", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const forkMutation = useForkApp({
+    mutation: {
+      onSuccess: (newApp) => {
+        queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+        toast({
+          title: "App clonada",
+          description: `Te llevamos a tu copia "${newApp.title}".`,
+        });
+        setLocation(`/app/${newApp.id}`);
+      },
+      onError: (err: any) => {
+        toast({ title: "No se pudo clonar", description: err?.message ?? "Error", variant: "destructive" });
       },
     },
   });
@@ -516,6 +542,29 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               Análisis Visual
             </Button>
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => forkMutation.mutate({ id: app.id })}
+              disabled={forkMutation.isPending || isWorking || app.status !== "ready"}
+              className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              title={
+                isWorking
+                  ? "Espera a que termine el cambio actual para clonar"
+                  : app.status !== "ready"
+                  ? "Solo se pueden clonar apps en estado listo"
+                  : "Clonar esta app a una copia tuya nueva (gratis)"
+              }
+              data-testid="button-fork"
+            >
+              {forkMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <GitFork className="h-4 w-4 mr-1.5" />
+              )}
+              Fork
+            </Button>
+
             {app.publicSlug ? (
               <Button
                 variant="outline"
@@ -673,7 +722,30 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-3 border-t border-white/5 bg-[#0a0a0f]">
+            <div className="p-3 border-t border-white/5 bg-[#0a0a0f] space-y-2">
+              {/* Out-of-credits banner — soft warning + CTA so users discover
+                  they need to top up BEFORE pressing send and getting a hard
+                  error from the API. Inspired by emergent.sh's inline notice. */}
+              {outOfCredits && (
+                <div
+                  className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2"
+                  data-testid="banner-no-credits"
+                >
+                  <div className="flex items-center gap-2 text-sm text-destructive-foreground min-w-0">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 text-destructive" />
+                    <span className="truncate">Te quedaste sin créditos. Recarga para seguir editando.</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setLocation("/billing")}
+                    className="h-8 flex-shrink-0"
+                    data-testid="button-buy-credits-banner"
+                  >
+                    Comprar créditos
+                  </Button>
+                </div>
+              )}
               <div className="relative">
                 <Textarea
                   value={draft}
@@ -684,13 +756,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                       handleSend();
                     }
                   }}
-                  placeholder={isWorking ? "Espera a que termine el cambio actual…" : "Pide un cambio… (Enter envía, Shift+Enter salto de línea)"}
-                  disabled={isWorking}
+                  placeholder={isWorking ? "Espera a que termine el cambio actual…" : outOfCredits ? "Compra créditos para volver a editar…" : "Pide un cambio… (Enter envía, Shift+Enter salto de línea)"}
+                  disabled={isWorking || outOfCredits}
                   className="resize-none min-h-[60px] max-h-[140px] bg-white/5 border-white/10 text-foreground pr-12"
                 />
                 <Button
                   size="icon"
-                  disabled={isWorking || draft.trim().length < 2 || sendMutation.isPending}
+                  disabled={isWorking || outOfCredits || draft.trim().length < 2 || sendMutation.isPending}
                   onClick={handleSend}
                   className="absolute right-2 bottom-2 h-8 w-8"
                 >
@@ -701,7 +773,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mt-1.5 px-1">
+              <p className="text-xs text-muted-foreground px-1">
                 Cada cambio cuesta 1 crédito (gratis para admin).
               </p>
             </div>

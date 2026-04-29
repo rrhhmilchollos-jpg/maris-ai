@@ -60,6 +60,8 @@ export default function DashboardPage() {
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  // Recent-apps filter — "all" or only those with a public deploy URL.
+  const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
 
   const { data: me } = useGetMe();
   // Promote default to GPT-5 once we know the user is premium AND the user hasn't
@@ -73,6 +75,10 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
+
+  const visibleApps = (apps ?? []).filter((a) =>
+    appsFilter === "deployed" ? !!a.publicSlug : true,
+  );
 
   const { data: job } = useGetGenerationJob(activeJobId ?? 0, {
     query: {
@@ -308,20 +314,59 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Apps recientes */}
+        {/* Apps recientes — with a Todas / Desplegadas chip filter, mirroring
+            emergent.sh's "Recent Tasks / Deployed Apps" tabs. Pure client-side
+            filter on `publicSlug`; the apps list query already returns the
+            field. */}
         <div>
-          <h3 className="text-xl font-semibold mb-4 flex items-center">
-            <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />
-            Apps recientes
-          </h3>
-          
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <h3 className="text-xl font-semibold flex items-center">
+              <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />
+              Apps recientes
+            </h3>
+            <div
+              className="flex items-center gap-1 rounded-lg border border-white/10 bg-card/40 p-1"
+              role="group"
+              aria-label="Filtrar apps recientes"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAppsFilter("all")}
+                aria-pressed={appsFilter === "all"}
+                className={`h-7 px-3 text-xs rounded-md ${appsFilter === "all" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
+                data-testid="filter-apps-all"
+              >
+                Todas
+                {apps && (
+                  <span className="ml-1.5 text-[10px] opacity-70 font-mono">{apps.length}</span>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAppsFilter("deployed")}
+                aria-pressed={appsFilter === "deployed"}
+                className={`h-7 px-3 text-xs rounded-md ${appsFilter === "deployed" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
+                data-testid="filter-apps-deployed"
+              >
+                Desplegadas
+                {apps && (
+                  <span className="ml-1.5 text-[10px] opacity-70 font-mono">
+                    {apps.filter((a) => !!a.publicSlug).length}
+                  </span>
+                )}
+              </Button>
+            </div>
+          </div>
+
           {appsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}
             </div>
-          ) : apps && apps.length > 0 ? (
+          ) : visibleApps.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {apps.map(app => (
+              {visibleApps.map(app => (
                 <Card 
                   key={app.id} 
                   className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group hover:bg-card/60 flex flex-col"
@@ -347,6 +392,16 @@ export default function DashboardPage() {
                   </CardFooter>
                 </Card>
               ))}
+            </div>
+          ) : appsFilter === "deployed" && apps && apps.length > 0 ? (
+            // The user has apps but none are deployed yet — be specific so they
+            // don't think their apps disappeared.
+            <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-xl bg-card/20">
+              <Code2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+              <h4 className="text-lg font-medium text-foreground mb-1">No tienes apps desplegadas todavía</h4>
+              <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                Abre cualquier app y pulsa "Publicar" para conseguirle una URL pública. Cambia a "Todas" para ver el resto.
+              </p>
             </div>
           ) : (
             <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-xl bg-card/20">

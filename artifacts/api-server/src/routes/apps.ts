@@ -1157,6 +1157,74 @@ router.post("/apps/:id/deploy", requireAuth, async (req: Request, res: Response)
 });
 
 /**
+ * POST /apps/:id/fork — clone an existing app into a new one owned by the
+ * current user. The fork copies the working bundle (frontend + backend), the
+ * coder model preference, and the language choice, but resets the public slug
+ * and any GitHub repo link — those are deploy-target specific. Title gets a
+ * "(copia)" suffix so the user can tell the two apart in the dashboard.
+ *
+ * Free of charge: forking is a UX convenience, not a generation. The new app
+ * starts with a single seed assistant message explaining where it came from.
+ */
+router.post("/apps/:id/fork", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [source] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!source) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  // Refuse to fork an app that's mid-generation/edit — we'd snapshot a stale
+  // pre-edit bundle and the user would think the fork "lost" their changes.
+  // Also refuse failed apps (the bundle may not even compile).
+  if (source.status !== "ready") {
+    res.status(409).json({
+      error:
+        source.status === "failed"
+          ? "No se puede clonar una app que falló al generarse."
+          : "Espera a que termine el cambio actual antes de clonar.",
+    });
+    return;
+  }
+  const forkedTitle = source.title.endsWith("(copia)")
+    ? source.title
+    : `${source.title} (copia)`;
+  const [inserted] = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(generatedApps)
+      .values({
+        userId,
+        title: forkedTitle,
+        prompt: source.prompt,
+        description: source.description,
+        techStack: source.techStack,
+        frontendCode: source.frontendCode,
+        backendCode: source.backendCode,
+        status: "ready",
+        coderModel: source.coderModel,
+        language: source.language,
+      })
+      .returning();
+    await tx.insert(appMessages).values({
+      appId: row.id,
+      role: "assistant",
+      content: `Esta app es una copia de "${source.title}". Pídeme cambios sin miedo a romper la versión original.`,
+    });
+    return [row];
+  });
+  req.log.info({ srcAppId: id, newAppId: inserted.id, userId }, "App forked");
+  res.json(inserted);
+});
+
+/**
  * POST /apps/:id/visual-test — Visual Testing Agent.
  *
  * Captures screenshots of the app's public deploy URL at three viewports,

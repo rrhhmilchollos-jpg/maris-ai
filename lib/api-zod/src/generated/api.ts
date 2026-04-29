@@ -318,6 +318,44 @@ export const DeployAppResponse = zod.object({
 });
 
 /**
+ * @summary Clone the app (frontend + backend code, model, language) into a brand-new app owned by the current user. Free — no credits charged.
+ */
+export const ForkAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ForkAppResponse = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  frontendCode: zod.string(),
+  backendCode: zod.string(),
+  status: zod.string(),
+  coderModel: zod
+    .string()
+    .describe(
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  language: zod
+    .string()
+    .describe(
+      "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation.",
+    ),
+  publicSlug: zod
+    .string()
+    .nullish()
+    .describe("When set, the app is publicly viewable at \/p\/{publicSlug}."),
+  githubRepoUrl: zod
+    .string()
+    .nullish()
+    .describe("HTML URL of the repo this app was last pushed to."),
+  createdAt: zod.coerce.date(),
+});
+
+/**
  * @summary Run the Visual Testing Agent (screenshots + Claude Vision + auto-fix). Costs 30 credits.
  */
 export const VisualTestAppParams = zod.object({

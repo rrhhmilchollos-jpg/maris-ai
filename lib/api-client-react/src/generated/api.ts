@@ -1177,6 +1177,90 @@ export const useDeployApp = <
 };
 
 /**
+ * @summary Clone the app (frontend + backend code, model, language) into a brand-new app owned by the current user. Free — no credits charged.
+ */
+export const getForkAppUrl = (id: number) => {
+  return `/api/apps/${id}/fork`;
+};
+
+export const forkApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GeneratedApp> => {
+  return customFetch<GeneratedApp>(getForkAppUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getForkAppMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forkApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof forkApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["forkApp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof forkApp>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return forkApp(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ForkAppMutationResult = NonNullable<
+  Awaited<ReturnType<typeof forkApp>>
+>;
+
+export type ForkAppMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Clone the app (frontend + backend code, model, language) into a brand-new app owned by the current user. Free — no credits charged.
+ */
+export const useForkApp = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forkApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof forkApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getForkAppMutationOptions(options));
+};
+
+/**
  * @summary Run the Visual Testing Agent (screenshots + Claude Vision + auto-fix). Costs 30 credits.
  */
 export const getVisualTestAppUrl = (id: number) => {

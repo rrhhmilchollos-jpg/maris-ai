@@ -368,6 +368,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/fork:
+    post:
+      operationId: forkApp
+      tags: [apps]
+      summary: Clone the app (frontend + backend code, model, language) into a brand-new app owned by the current user. Free — no credits charged.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The newly-created copy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedApp"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/visual-test:
     post:
       operationId: visualTestApp

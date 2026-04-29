@@ -60,8 +60,15 @@ The AppForge system is composed of a React-based frontend, a Node.js/Express bac
 - Admin access is controlled via an `ADMIN_EMAILS` environment variable, granting unlimited credits and access to administrative routes.
 
 **Deployment and Actions**:
-- Each app provides actions like model selection for edits, ZIP export, health checks, public deployment with a unique slug, and GitHub repository creation.
+- Each app provides actions like model selection for edits, ZIP export, health checks, public deployment with a unique slug, GitHub repository creation, and **forking** (free clone of an app to a new copy owned by the same user, blocked while a generation/edit job is in flight or when the source is not in `ready` status — `POST /apps/:id/fork`).
 - Public deployments (`/p/:slug`) are isolated within an iframe with strict security policies to prevent cross-origin attacks.
+- The Backend code tab is visible to **owners** of an app (not just admins) — `GET /apps/:id` already gates by ownership, so any user reaching the page is allowed to see their own server code.
+- The chat input on the app detail page shows an inline **out-of-credits banner** with a CTA to /billing when `stats.credits <= 0`, so users discover the need to top up before pressing send.
+- The dashboard "Apps recientes" list has a **Todas / Desplegadas** chip filter (pure client-side, filters on `publicSlug`).
+
+**Edit Prompt — Backend Awareness**:
+- `buildEditSystemPrompt` (in `lib/generate.ts`) explicitly instructs the model that `backendCode` is in scope: any user request mentioning backend, API, endpoint, auth, payments, db, etc. must rewrite `backendCode`. The "1-4 files surgical edit" guidance is scoped to tweaks; full-feature/full-backend requests may touch many files.
+- **Known debt — secret leakage in edit prompt**: every edit pass sends the *current* `frontendCode` AND `backendCode` to the LLM. AppForge bundles read secrets from environment variables (not hard-coded), but if a user pastes a literal secret into their generated backend code via chat, it would be transmitted on the next edit. Mitigation (not yet implemented): redact common secret-shaped literals before sending, or only inject `backendCode` for explicit backend-edit intents.
 
 ## External Dependencies
 
