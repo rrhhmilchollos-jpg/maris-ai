@@ -5,37 +5,16 @@ import {
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@workspace/api-client-react";
-import {
-  Search,
-  Compass,
-  Palette,
-  Plug,
-  Code2,
-  ShieldCheck,
-  Wrench,
-  Bug,
-  Cpu,
-  type LucideIcon,
-} from "lucide-react";
+import { Bot } from "lucide-react";
 
-const AGENT_META: Record<
-  string,
-  { icon: LucideIcon; label: string; color: string }
-> = {
-  researcher: { icon: Search, label: "Investigador", color: "text-sky-300" },
-  architect: { icon: Compass, label: "Arquitecto", color: "text-violet-300" },
-  designer: { icon: Palette, label: "Diseñador", color: "text-pink-300" },
-  integration: { icon: Plug, label: "Integración", color: "text-amber-300" },
-  coder: { icon: Code2, label: "Ingeniero", color: "text-emerald-300" },
-  qa: { icon: ShieldCheck, label: "QA", color: "text-cyan-300" },
-  validator: { icon: Bug, label: "Validador", color: "text-orange-300" },
-  patcher: { icon: Wrench, label: "Reparador", color: "text-yellow-300" },
-  system: { icon: Cpu, label: "Sistema", color: "text-muted-foreground" },
-};
-
-function getMeta(agent: string) {
-  return AGENT_META[agent] ?? AGENT_META.system;
-}
+// We deliberately collapse every internal agent role (researcher, architect,
+// designer, integration, coder, qa, validator, patcher, system) into a single
+// user-facing "Robot" persona. The end user doesn't care which sub-agent is
+// running — they want a single friendly assistant. The original `agent` field
+// is still preserved on the data row (for analytics / debugging) but is not
+// surfaced in the UI label.
+const ROBOT_LABEL = "Robot";
+const ROBOT_COLOR = "text-emerald-300";
 
 function timeOf(iso: string): string {
   try {
@@ -184,15 +163,19 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
             Esperando primer paso del pipeline…
           </div>
         ) : (
-          lines.map((line) => {
-            const meta = getMeta(line.agent);
-            const Icon = meta.icon;
+          lines.map((line, idx) => {
             const levelClass =
               line.level === "error"
                 ? "text-red-300"
                 : line.level === "warn"
                 ? "text-amber-200"
                 : "text-foreground/90";
+            // Vibrate ONLY the icon on the most recent line and ONLY while
+            // the job is still active, so the user's eye is naturally drawn
+            // to "what the robot is doing right now" without a wall of
+            // moving icons.
+            const isLatest = idx === lines.length - 1;
+            const vibrate = isActive && isLatest ? "robot-vibrate" : "";
             return (
               <div
                 key={line.id}
@@ -204,8 +187,10 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
                 <span className="text-muted-foreground/60 tabular-nums shrink-0">
                   {timeOf(line.createdAt)}
                 </span>
-                <Icon className={`h-3 w-3 mt-0.5 shrink-0 ${meta.color}`} />
-                <span className={`shrink-0 ${meta.color}`}>{meta.label}</span>
+                <Bot
+                  className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${ROBOT_COLOR} ${vibrate}`}
+                />
+                <span className={`shrink-0 ${ROBOT_COLOR}`}>{ROBOT_LABEL}</span>
                 <span className="text-muted-foreground/40">›</span>
                 <span className={`min-w-0 break-words ${levelClass}`}>
                   {line.message}
