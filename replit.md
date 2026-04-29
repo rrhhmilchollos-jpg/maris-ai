@@ -56,7 +56,7 @@ AppForge features a React frontend, a Node.js/Express backend, and shared librar
 - **Anthropic Claude**: AI models (`claude-sonnet-4-6`, `claude-haiku-4-5`).
 - **Google Gemini**: AI models (`gemini-2.5-flash`, `gemini-3-pro-image-preview`).
 - **GPT-5 Codex**: Advanced AI model.
-- **Stripe**: Payment processing.
+- **Stripe**: Payment processing. Credentials are pulled from the Replit Stripe connector (no manual `STRIPE_SECRET_KEY`); the dev/prod connection is selected by `REPLIT_DEPLOYMENT`. Webhook secret remains as the env var `STRIPE_WEBHOOK_SECRET`. Credit packages (Starter/Pro/Studio) are priced in EUR with Spanish copy; Stripe Checkout is opened with `locale: "es"`. The dashboard's Annual upsell remains in USD per scope. Cancel URL `/billing?canceled=1` shows a Spanish "Pago cancelado" banner.
 - **PostgreSQL**: Primary database.
 - **@codesandbox/sandpack-react**: Frontend live preview.
 - **Replit AI Integrations Proxy**: Access to AI models.

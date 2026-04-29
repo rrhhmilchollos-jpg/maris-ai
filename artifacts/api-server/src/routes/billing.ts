@@ -7,7 +7,6 @@ import {
   CREDIT_PACKAGES,
   findPackageByPriceId,
   getStripe,
-  stripeConfigured,
 } from "../lib/stripe";
 
 const router: IRouter = Router();
@@ -52,14 +51,6 @@ router.post(
   "/billing/checkout",
   requireAuth,
   async (req: Request, res: Response) => {
-    if (!stripeConfigured()) {
-      res.status(503).json({
-        error:
-          "Payments are not configured yet. Add STRIPE_SECRET_KEY to enable purchases.",
-      });
-      return;
-    }
-
     const priceId = req.body?.priceId;
     if (typeof priceId !== "string") {
       res.status(400).json({ error: "Missing priceId" });
@@ -71,11 +62,18 @@ router.post(
       return;
     }
 
-    const stripe = getStripe()!;
+    const stripe = await getStripe();
+    if (!stripe) {
+      res.status(503).json({
+        error:
+          "Los pagos aún no están conectados. Conecta tu cuenta de Stripe desde la pestaña de Integraciones para habilitar las compras.",
+      });
+      return;
+    }
     const origin = originFromReq(req);
     const basePath = process.env.FRONTEND_BASE_PATH ?? "";
     const successUrl = `${origin}${basePath}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${origin}${basePath}/billing`;
+    const cancelUrl = `${origin}${basePath}/billing?canceled=1`;
 
     let customerId = req.dbUser!.stripeCustomerId ?? undefined;
     if (!customerId) {
@@ -94,6 +92,7 @@ router.post(
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer: customerId,
+      locale: "es",
       success_url: successUrl,
       cancel_url: cancelUrl,
       line_items: [
@@ -102,7 +101,7 @@ router.post(
             currency: pkg.currency,
             unit_amount: pkg.priceCents,
             product_data: {
-              name: `${pkg.name} — ${pkg.credits} AppForge credits`,
+              name: `Pack ${pkg.name} — ${pkg.credits} créditos AppForge`,
               description: pkg.description,
             },
           },
@@ -129,16 +128,18 @@ router.post(
   "/billing/confirm",
   requireAuth,
   async (req: Request, res: Response) => {
-    if (!stripeConfigured()) {
-      res.status(503).json({ error: "Payments not configured" });
-      return;
-    }
     const sessionId = req.body?.sessionId;
     if (typeof sessionId !== "string") {
       res.status(400).json({ error: "Missing sessionId" });
       return;
     }
-    const stripe = getStripe()!;
+    const stripe = await getStripe();
+    if (!stripe) {
+      res.status(503).json({
+        error: "Los pagos aún no están conectados.",
+      });
+      return;
+    }
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (
       session.metadata?.clerkUserId !== req.userId ||
