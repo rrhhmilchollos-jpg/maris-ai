@@ -133,90 +133,47 @@ async function testPlanner(): Promise<void> {
   expect("planSummaryEs includes planner emoji", planSummaryEs(cosmetic).includes("🧭"));
 }
 
-// Behavioral test: simulate the "same error twice" scenario the planner is
-// designed to accelerate. Run #1 has no memory and the patcher would receive
-// an empty FAILED-FIXES block; run #2 must find the saved patch and the
-// patcher would receive a non-empty memory block. This proves the convergence
-// path: a recurring error gets a known fix injected on the second occurrence.
 async function testSameErrorTwiceConvergence(): Promise<void> {
-  console.log("\n[5] Convergence on repeated error (the core acceptance test)");
+  console.log("\n[5] Repeat-error recall delivers the saved fix on second occurrence");
 
   const error1 = `__test__convergence__ Module not found: '@/components/ui/widget' (line 42, src/App.tsx)`;
   const fix1 = `import { Widget } from "./components/ui/widget"; export const App = () => <Widget />;`;
 
-  // RUN #1: cold cache. recall must return nothing → memory block is empty →
-  // patcher would get no historical context.
   const beforeMatches = await recallSimilar(error1, { limit: 3, threshold: 0.7, language: "typescript" });
   const beforeBlock = buildRecallExamplesBlock(beforeMatches);
-  expect("run #1 (cold): no past matches found", beforeMatches.length === 0);
-  expect("run #1 (cold): memory block is empty", beforeBlock === "");
+  expect("cold: zero matches", beforeMatches.length === 0);
+  expect("cold: empty memory block", beforeBlock === "");
 
-  // The patcher succeeds on run #1 → we save the fix.
   const saved = await rememberPatch({
     errorMessage: error1,
     errorContext: "first occurrence",
     patch: fix1,
     language: "typescript",
   });
-  expect("run #1 saved a memory entry", saved !== null);
+  expect("rememberPatch returned an entry", saved !== null);
   if (saved) insertedIds.push(saved.id);
 
-  // RUN #2: same error reappears (with a slight variation to prove semantic
-  // matching, not exact). Recall MUST find the saved patch and the resulting
-  // block must contain the past fix.
   const error2 = `__test__convergence__ Module not found: '@/components/ui/widget' (line 87, src/Dashboard.tsx)`;
   const afterMatches = await recallSimilar(error2, { limit: 3, threshold: 0.7, language: "typescript" });
   const afterBlock = buildRecallExamplesBlock(afterMatches);
-  expect("run #2 (warm): recall finds the saved patch", afterMatches.some((m) => m.patch === fix1));
-  expect("run #2 (warm): memory block is non-empty", afterBlock.length > 0);
+  expect("warm: recall returns saved patch", afterMatches.some((m) => m.patch === fix1));
+  expect("warm: memory block contains FAILED-FIXES header", afterBlock.includes("FAILED-FIXES MEMORY"));
+  expect("warm: memory block contains verbatim past fix", afterBlock.includes(fix1.slice(0, 60)));
   expect(
-    "run #2 (warm): block contains the past fix",
-    afterBlock.includes("Widget") && afterBlock.includes("FAILED-FIXES MEMORY"),
-  );
-  expect(
-    "run #2 (warm): top match has high similarity (≥ 0.85)",
+    "warm: top similarity ≥ 0.85",
     afterMatches.length > 0 && Number(afterMatches[0].similarity) >= 0.85,
     `sim=${afterMatches[0]?.similarity}`,
   );
-
-  // === Direct iteration-savings assertion =================================
-  // The patcher's iteration count is determined by how much useful context it
-  // gets in the FAILED-FIXES MEMORY block. Cold runs get zero context (block
-  // is the empty string) and the patcher must trial-and-error from scratch.
-  // Warm runs get the proven fix injected directly, which lets the patcher
-  // converge in iteration #1 instead of needing the second iteration. Asserting
-  // the byte-size growth of the prompt context is a concrete proxy for "fewer
-  // iterations on second occurrence" required by the acceptance criteria.
-  const promptContextSavings = afterBlock.length - beforeBlock.length;
-  expect(
-    "warm prompt context contains the proven fix (≥ 100 chars more than cold)",
-    promptContextSavings >= 100,
-    `cold=${beforeBlock.length}B warm=${afterBlock.length}B Δ=+${promptContextSavings}B`,
-  );
-  // Without memory, the patcher would have to re-derive `fix1`. With memory,
-  // the block literally hands `fix1` to the patcher → iteration count drops
-  // from worst-case MAX_ITERATIONS=2 to 1 (or zero if the recall is used by
-  // fastPatchEdit). The presence of the verbatim fix string in the warm block
-  // is the strongest direct evidence of iteration savings we can assert
-  // without spinning up a real LLM in the test.
-  expect(
-    "warm block contains the verbatim past fix → patcher converges in 1 iteration",
-    afterBlock.includes(fix1.slice(0, 60)),
-  );
 }
 
-// Sanity check that the planner exposes a phases array the dispatcher can
-// gate on. The dispatcher in generate.ts does
-// `const runResearch = execPlan.phases.includes("research")` etc., so any
-// regression that removes phases from a constant breaks the entire pipeline.
 function testPhasesAreConsumable(): void {
-  console.log("\n[6] ExecutionPlan.phases is consumable by the dispatcher");
+  console.log("\n[6] Planner constants expose phases the dispatcher can gate on");
   expect(
-    "fast-patch only runs the patcher",
+    "fast-patch phases = [patch]",
     PLAN_FAST_PATCH.phases.length === 1 && PLAN_FAST_PATCH.phases[0] === "patch",
   );
   expect(
-    "feature runs architect+frontend+validate+patch",
+    "feature phases include architect+frontend+validate+patch and exclude research+design",
     PLAN_FEATURE.phases.includes("architect") &&
       PLAN_FEATURE.phases.includes("frontend") &&
       PLAN_FEATURE.phases.includes("validate") &&
@@ -225,7 +182,7 @@ function testPhasesAreConsumable(): void {
       !PLAN_FEATURE.phases.includes("design"),
   );
   expect(
-    "full-build runs every phase",
+    "full-build phases include every pipeline stage",
     ["research", "architect", "design", "integration", "frontend", "backend", "qa", "tests", "validate", "patch"]
       .every((p) => PLAN_FULL.phases.includes(p as (typeof PLAN_FULL.phases)[number])),
   );
