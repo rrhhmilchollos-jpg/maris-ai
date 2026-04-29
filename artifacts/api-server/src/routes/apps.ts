@@ -291,6 +291,23 @@ async function runJob(
         })
         .where(eq(generationJobs.id, jobId));
 
+      // Schedule automatic AI image generation in the background after the
+      // transaction commits. The Unsplash placeholder URLs the coder emits
+      // often 404 (rate-limited / removed photos) so the bundle ships with
+      // broken <img> tags showing alt text overlays. Nano Banana replaces
+      // them with real generated images stored in app_images. We do this
+      // *after* the job is marked succeeded so the user sees their app
+      // immediately, then the images swap in on the next refetch.
+      const finalAppId = resultAppId;
+      setImmediate(() => {
+        generateAppImages(finalAppId).catch((imgErr) => {
+          logger.warn(
+            { err: imgErr, appId: finalAppId, jobId },
+            "Auto image generation failed (non-fatal)",
+          );
+        });
+      });
+
       // Replace the placeholder "reservation" ledger row with the final one.
       if (!isAdmin) {
         await tx
