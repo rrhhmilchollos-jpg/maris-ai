@@ -197,7 +197,7 @@ async function judgeWithVision(
 
   content.push({
     type: "text",
-    text: `Eres el EVALUADOR AUTÓNOMO de AppForge. Tu trabajo es decidir si esta
+    text: `Eres el EVALUADOR AUTÓNOMO de Maris AI. Tu trabajo es decidir si esta
 app generada cumple lo que la usuaria pidió, comparando los screenshots con
 la intención original y el plan declarado por el Arquitecto.
 

@@ -114,7 +114,7 @@ export async function pushAppToGitHub(opts: {
   }
   files["README.md"] =
     `# ${opts.title}\n\n${opts.description}\n\n` +
-    `Generado con AppForge. Estructura: \`frontend/\` (React + Vite + Tailwind)` +
+    `Generado con Maris AI. Estructura: \`frontend/\` (React + Vite + Tailwind)` +
     `${hasBackend ? `, \`backend/\` (Node + Express).` : "."}\n`;
 
   if (Object.keys(files).length === 0) {
@@ -178,7 +178,7 @@ export async function pushAppToGitHub(opts: {
     {
       method: "POST",
       body: {
-        message: `Initial AppForge export: ${opts.title}`,
+        message: `Initial Maris AI export: ${opts.title}`,
         tree: newTree.sha,
         parents: [ref.object.sha],
       },

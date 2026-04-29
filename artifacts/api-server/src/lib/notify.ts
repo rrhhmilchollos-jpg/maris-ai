@@ -1,7 +1,7 @@
 /**
  * Outbound notifications (Task #11).
  *
- * AppForge does not currently have an email provider wired up — Resend is
+ * Maris AI does not currently have an email provider wired up — Resend is
  * mentioned in the architect prompt as the preferred service but no
  * credentials are configured. Rather than block auto-publish on that
  * integration, we expose a thin facade here that LOGS the email contents in
@@ -60,7 +60,7 @@ export async function sendAutoPublishEmail(opts: EmailRecipient & {
     `Comparte el enlace con quien quieras. Si necesitas seguir editando, ` +
     `entra al panel y la próxima vez que termines un cambio se volverá a ` +
     `desplegar sola.\n\n` +
-    `— AppForge`;
+    `— Maris AI`;
   emit(log, {
     channel: "email",
     template: "auto_publish_ready",
@@ -87,7 +87,7 @@ export async function sendNeedsReviewEmail(opts: EmailRecipient & {
     `Tu app "${appTitle}" no pasó la evaluación visual automática y no la he ` +
     `publicado.\n\nResumen del evaluador:\n${summary}\n\n` +
     `Entra al panel y pulsa "Reintentar generación" cuando quieras volver a ` +
-    `intentarlo.\n\n— AppForge`;
+    `intentarlo.\n\n— Maris AI`;
   emit(log, {
     channel: "email",
     template: "needs_review",

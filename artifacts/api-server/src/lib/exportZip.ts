@@ -88,7 +88,7 @@ export function streamAppZip(
   }
 
   const readme = `# ${opts.title}\n\n${opts.description}\n\n` +
-    `Generado con AppForge.\n\n` +
+    `Generado con Maris AI.\n\n` +
     `## Estructura\n\n` +
     `- \`frontend/\` — proyecto React + Vite + Tailwind. ` +
     `Entra y ejecuta \`pnpm install\` y \`pnpm dev\`.\n` +

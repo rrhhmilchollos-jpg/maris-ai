@@ -636,7 +636,7 @@ export default function DashboardPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <DialogTitle className="text-2xl">Plan Anual de AppForge</DialogTitle>
+            <DialogTitle className="text-2xl">Plan Anual de Maris AI</DialogTitle>
             <DialogDescription className="text-base text-muted-foreground pt-2">
               600 créditos por <span className="font-bold text-white">$399</span> en lugar de $960. Suficiente combustible para 12 meses de generación intensiva al mejor precio por crédito.
             </DialogDescription>

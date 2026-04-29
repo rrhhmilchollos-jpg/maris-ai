@@ -70,7 +70,7 @@ function consumeErrorToken(slug: string): boolean {
  * over `text/plain` (CORS-safe content type so no preflight is needed) and
  * parse the JSON ourselves.
  *
- * The sandbox cannot read AppForge cookies/sessions, so this endpoint is
+ * The sandbox cannot read Maris AI cookies/sessions, so this endpoint is
  * unauthenticated by design. The slug is the app's public identity. We
  * rate-limit per slug to defend against runaway error loops.
  */
@@ -177,7 +177,7 @@ router.post(
 // URL (instead of `srcdoc`) lets the routing shim call
 // `history.replaceState('/')` so SPA routers see the home pathname. Sandbox
 // without `allow-same-origin` keeps the iframe at an opaque origin so it
-// cannot read AppForge cookies even though it's served from the same domain.
+// cannot read Maris AI cookies even though it's served from the same domain.
 router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
   const rawSlug = req.params.slug;
   const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug;
@@ -264,14 +264,14 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
     // Mitigation: serve a tiny wrapper at /p/:slug whose only content is a
     // top-level sandboxed iframe pointed at /p/:slug/_inner. Without
     // `allow-same-origin`, the iframe runs in an opaque origin: no access to
-    // AppForge cookies/localStorage, and same-origin fetches are not
+    // Maris AI cookies/localStorage, and same-origin fetches are not
     // credentialed. We use `src=` (not `srcdoc=`) so the iframe has a real
     // document URL that the routing shim can `history.replaceState` to "/" —
     // routers like wouter/react-router then match the home route. With
     // `srcdoc`, location.pathname returns "srcdoc" and the prototype getter
     // is bypassed by the browser's host-object internal slots, leaving the
     // app rendering only its layout chrome (blank middle).
-    const safeTitle = (row.title || "AppForge App").replace(/[<&>]/g, "");
+    const safeTitle = (row.title || "Maris AI App").replace(/[<&>]/g, "");
     const innerUrl = `/p/${encodeURIComponent(slug)}/_inner`;
     const wrapper = `<!DOCTYPE html>
 <html lang="es">
@@ -298,7 +298,7 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
     //     traffic those modules trigger.
     //   * Loosening these directives is safe because the iframe runs sandboxed
     //     WITHOUT `allow-same-origin`, so it has an opaque origin and cannot
-    //     read AppForge cookies, localStorage, or make credentialed requests
+    //     read Maris AI cookies, localStorage, or make credentialed requests
     //     against /api. The hard isolation boundary is sandboxing, not CSP.
     res.setHeader(
       "Content-Security-Policy",

@@ -1,8 +1,8 @@
-# AppForge
+# Maris AI
 
 ## Overview
 
-AppForge is a full-stack SaaS platform that converts natural language prompts into functional web applications using AI. It aims to democratize web development by providing intuitive AI-powered tools for rapid prototyping and deployment, serving individual developers and small businesses. The platform operates on a credit-based system, offering free trials and paid credit packages for app generation. Its business vision is to make web development accessible to a broader audience, reducing the need for specialized coding skills and accelerating the development lifecycle.
+Maris AI is a full-stack SaaS platform that converts natural language prompts into functional web applications using AI. It aims to democratize web development by providing intuitive AI-powered tools for rapid prototyping and deployment, serving individual developers and small businesses. The platform operates on a credit-based system, offering free trials and paid credit packages for app generation. Its business vision is to make web development accessible to a broader audience, reducing the need for specialized coding skills and accelerating the development lifecycle.
 
 ## User Preferences
 
@@ -15,7 +15,7 @@ AppForge is a full-stack SaaS platform that converts natural language prompts in
 
 ## System Architecture
 
-AppForge features a React frontend, a Node.js/Express backend, and shared libraries, designed for asynchronous, multi-agent AI-driven application generation. The system emphasizes a modular, scalable architecture with a focus on real-time feedback and autonomous error correction.
+Maris AI features a React frontend, a Node.js/Express backend, and shared libraries, designed for asynchronous, multi-agent AI-driven application generation. The system emphasizes a modular, scalable architecture with a focus on real-time feedback and autonomous error correction.
 
 **Frontend**:
 - Built with React, Vite, and TailwindCSS, utilizing `shadcn/ui` and `wouter` for routing.

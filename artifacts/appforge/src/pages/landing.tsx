@@ -46,8 +46,8 @@ export default function LandingPage() {
       <header className="absolute top-0 z-50 w-full border-b border-border/10 bg-transparent">
         <div className="container flex h-14 max-w-screen-2xl items-center px-4 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
-            <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="AppForge" className="h-6 w-6" />
-            <span className="font-bold sm:inline-block tracking-tight text-lg text-white">AppForge</span>
+            <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
+            <span className="font-bold sm:inline-block tracking-tight text-lg text-white">Maris AI</span>
           </div>
           <div className="flex items-center space-x-4">
             {isSignedIn ? (
@@ -77,7 +77,7 @@ export default function LandingPage() {
           <motion.div initial="initial" animate="animate" variants={stagger}>
             <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-medium text-primary-foreground backdrop-blur-sm mb-8">
               <Zap className="mr-2 h-4 w-4 text-primary" />
-              <span>AppForge Core v2.0 ya disponible</span>
+              <span>Maris AI Core v2.0 ya disponible</span>
             </motion.div>
             
             <motion.h1 variants={fadeIn} className="text-5xl md:text-7xl font-bold tracking-tighter text-white mb-6 leading-tight">
@@ -117,7 +117,7 @@ export default function LandingPage() {
       <section className="py-24 bg-card/30 border-y border-white/5 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white mb-4">Hecho con AppForge</h2>
+            <h2 className="text-3xl font-bold text-white mb-4">Hecho con Maris AI</h2>
             <p className="text-muted-foreground">Lo que nuestra comunidad está creando a velocidad récord.</p>
           </div>
           
@@ -146,7 +146,7 @@ export default function LandingPage() {
             <div>
               <h2 className="text-4xl font-bold text-white mb-6">Velocidad sin precedentes. <br/>Calidad sin compromisos.</h2>
               <p className="text-xl text-muted-foreground mb-8">
-                AppForge no genera código de relleno. Escribe aplicaciones React completas y funcionales con manejo de estado, estilos y arquitectura sólida.
+                Maris AI no genera código de relleno. Escribe aplicaciones React completas y funcionales con manejo de estado, estilos y arquitectura sólida.
               </p>
               
               <div className="space-y-6">
@@ -172,7 +172,7 @@ export default function LandingPage() {
               <div className="glass-card rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
                 <img 
                   src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/hero-illustration.png`} 
-                  alt="Generación neuronal de AppForge" 
+                  alt="Generación neuronal de Maris AI" 
                   className="w-full h-auto object-cover opacity-90 hover:opacity-100 transition-opacity"
                 />
               </div>
@@ -200,11 +200,11 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-white/5 bg-background">
         <div className="container px-4 md:px-8 mx-auto flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center space-x-2 mb-4 md:mb-0">
-            <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="AppForge" className="h-5 w-5 grayscale opacity-50" />
-            <span className="font-semibold text-muted-foreground">AppForge</span>
+            <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="Maris AI" className="h-5 w-5 grayscale opacity-50" />
+            <span className="font-semibold text-muted-foreground">Maris AI</span>
           </div>
           <p className="text-sm text-muted-foreground/60">
-            © {new Date().getFullYear()} AppForge Inc. Todos los derechos reservados.
+            © {new Date().getFullYear()} Maris AI Inc. Todos los derechos reservados.
           </p>
         </div>
       </footer>

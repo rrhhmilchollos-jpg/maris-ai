@@ -76,7 +76,7 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   return PLAN_FEATURE;
 }
 
-const PLANNER_SYSTEM = `Eres el "Planner" de AppForge. Recibes una petición de usuario y decides qué fases del pipeline ejecutar.
+const PLANNER_SYSTEM = `Eres el "Planner" de Maris AI. Recibes una petición de usuario y decides qué fases del pipeline ejecutar.
 
 Devuelve SOLO un JSON con la forma:
 { "scope": "fast-patch" | "feature" | "full-build", "reason": "explicación breve en castellano (1 frase)" }

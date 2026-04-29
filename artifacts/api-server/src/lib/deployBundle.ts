@@ -107,7 +107,7 @@ export async function buildDeployHtml(opts: {
     imports[pkg] = `https://esm.sh/${target}?external=react,react-dom`;
   }
 
-  const safeTitle = (opts.title || "AppForge App").replace(/[<&>]/g, "");
+  const safeTitle = (opts.title || "Maris AI App").replace(/[<&>]/g, "");
 
   // Inline the user-authored CSS captured during bundling. We escape any
   // `</style>` sequences inside the CSS so they can't terminate the parent

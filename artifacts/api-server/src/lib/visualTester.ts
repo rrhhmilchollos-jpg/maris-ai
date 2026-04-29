@@ -365,7 +365,7 @@ async function applyVisualFixes(opts: {
     )
     .join("\n");
 
-  const prompt = `Eres el agente de diseño de AppForge. Te paso el bundle completo
+  const prompt = `Eres el agente de diseño de Maris AI. Te paso el bundle completo
 de una app generada (formato: archivos separados por '// === FILE: <path> ===')
 y una lista de problemas visuales detectados. Tu trabajo: arreglar SOLO esos
 problemas, sin cambiar funcionalidad ni romper la app.

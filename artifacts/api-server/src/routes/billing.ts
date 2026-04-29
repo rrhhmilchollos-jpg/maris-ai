@@ -101,7 +101,7 @@ router.post(
             currency: pkg.currency,
             unit_amount: pkg.priceCents,
             product_data: {
-              name: `Pack ${pkg.name} — ${pkg.credits} créditos AppForge`,
+              name: `Pack ${pkg.name} — ${pkg.credits} créditos Maris AI`,
               description: pkg.description,
             },
           },

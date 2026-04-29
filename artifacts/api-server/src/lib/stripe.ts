@@ -57,7 +57,7 @@ export const CREDIT_PACKAGES = [
     priceId: "starter",
     name: "Starter",
     description:
-      "Perfecto para probar AppForge en un par de proyectos de fin de semana.",
+      "Perfecto para probar Maris AI en un par de proyectos de fin de semana.",
     credits: 10,
     priceCents: 2000,
     currency: "eur",

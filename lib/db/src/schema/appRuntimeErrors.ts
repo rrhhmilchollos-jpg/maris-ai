@@ -24,8 +24,8 @@ import { generatedApps } from "./generatedApps";
  *   available (often null for cross-origin scripts).
  * - `stack` is the parsed stack trace, trimmed.
  * - `userAgent` and `pathname` (the visitor's virtual SPA route) are kept
- *   for debugging context — none of this contains AppForge user data, since
- *   the iframe is opaque-origin and cannot read AppForge cookies.
+ *   for debugging context — none of this contains Maris AI user data, since
+ *   the iframe is opaque-origin and cannot read Maris AI cookies.
  */
 export const appRuntimeErrors = pgTable(
   "app_runtime_errors",
