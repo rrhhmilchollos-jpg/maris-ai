@@ -128,10 +128,21 @@ function embedInputText(errorMessage: string, errorContext?: string): string {
 
 export async function recallSimilar(
   errorMessage: string,
-  options: { limit?: number; threshold?: number; language?: string; errorContext?: string } = {},
+  options: {
+    limit?: number;
+    threshold?: number;
+    language?: string;
+    errorContext?: string;
+    minSuccessCount?: number;
+  } = {},
 ): Promise<MemoryRecallResult[]> {
   const limit = Math.max(1, Math.min(10, options.limit ?? 3));
   const threshold = options.threshold ?? 0.7;
+  // Quality guardrail: only reuse fixes that have been confirmed to converge
+  // at least once. successCount is incremented whenever a near-duplicate fix
+  // succeeds again, so this floor keeps unproven entries (or future
+  // failure-tracked entries with successCount=0) out of the patcher prompt.
+  const minSuccessCount = Math.max(1, options.minSuccessCount ?? 1);
   const queryVec = await embedText(embedInputText(errorMessage, options.errorContext));
   const lit = toVectorLiteral(queryVec);
   try {
@@ -144,7 +155,8 @@ export async function recallSimilar(
         success_count AS "successCount",
         1 - (embedding <=> ${lit}::vector) AS similarity
       FROM agent_memory
-      ${options.language ? sql`WHERE language = ${options.language}` : sql``}
+      WHERE success_count >= ${minSuccessCount}
+      ${options.language ? sql`AND language = ${options.language}` : sql``}
       ORDER BY embedding <=> ${lit}::vector
       LIMIT ${limit}
     `);
