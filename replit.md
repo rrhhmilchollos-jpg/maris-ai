@@ -11,6 +11,7 @@ A full-stack SaaS that turns plain-English prompts into ready-to-run web apps us
   - `lib/api-spec` — OpenAPI 3.1 spec (single source of truth for the contract)
   - `lib/api-zod`, `lib/api-client-react` — generated clients via `pnpm --filter @workspace/api-spec run codegen`
   - `lib/integrations-anthropic-ai` — Anthropic singleton via Replit's AI proxy
+  - `lib/integrations-gemini-ai` — Google Gemini singleton via Replit's AI proxy
 
 ## Routes
 
@@ -72,24 +73,24 @@ Clerk is Replit-managed. The frontend reads `VITE_CLERK_PUBLISHABLE_KEY`, which 
 
 ## AI generation — multi-agent pipeline
 
-`artifacts/api-server/src/lib/generate.ts` orchestrates a team of specialized AI agents using **both Anthropic and OpenAI** (the OpenAI client is lazily initialized via `lib/openai.ts`, accessed through the Replit AI Integrations proxy — no API key needed):
+`artifacts/api-server/src/lib/generate.ts` orchestrates a team of specialized AI agents. Models are routed by **role intent** — Anthropic Sonnet for reasoning-heavy planning, Anthropic Haiku for fast structured review/patch passes, and Google Gemini 2.5 Flash for bulk code generation (Gemini Flash benchmarks at ~3× the throughput of Sonnet on long code outputs). Both providers are reached through Replit's AI Integrations proxy — no API key needed.
 
 | Agent | Model | Job |
 |---|---|---|
 | 🔎 Researcher | `claude-haiku-4-5` + `web_search` | Hard 7s cap. Optional, only fires for clone/reference prompts (`CLONE_KEYWORDS`). |
-| 🧠 Architect | `claude-sonnet-4-6` | Produces a JSON project plan: pages, components, hooks, utils, data models, file list, `backendNeeded` flag. Receives the research brief when available. |
+| 🧠 Architect (Planner) | `claude-sonnet-4-6` | Produces a JSON project plan: pages, components, hooks, utils, data models, file list, `backendNeeded` flag. Receives the research brief when available. **Note**: kept on Sonnet on purpose — Opus is ~2× slower for the same task and the plan is short enough that Sonnet's reasoning is sufficient. |
 | 🔌 Integration Architect | `claude-haiku-4-5` | Decides which third-party services the app realistically needs (Clerk, Stripe, OpenAI, S3, Resend, etc.) — returns env vars + setup steps that get appended as `SETUP.md`. Runs **in parallel** with the Designer. |
-| 🎨 Designer | `claude-haiku-4-5` | Produces a design system JSON (palette, typography, radius, `tailwindExtend`, `globalCSS`). Falls back to a built-in default if the call flakes. (Was `gpt-5-mini` — switched for ~3-4× faster JSON emit.) |
-| ⚡ Frontend Engineer | `claude-sonnet-4-6` (streaming) | Generates the full frontend bundle, must implement every file from the plan. |
-| 🔧 Backend Engineer | `claude-sonnet-4-6` | Generates the backend bundle in **parallel** with frontend, only when `plan.backendNeeded === true`. Failures degrade to a visible note rather than silently dropping the backend. (Was `gpt-5-mini` — switched because Sonnet 4.6 is faster through the Anthropic proxy and produces cleaner Express code.) |
+| 🎨 Designer | `gemini-2.5-flash` | Produces a design system JSON (palette, typography, radius, `tailwindExtend`, `globalCSS`). Falls back to a built-in default if the call flakes. (Was Haiku → Gemini Flash for the fastest JSON emit available.) |
+| ⚡ Frontend Engineer (Coder) | `gemini-2.5-flash` (streaming) | Generates the full frontend bundle, must implement every file from the plan. (Was Sonnet 4.6 → Gemini Flash for ~3× higher tokens/second on bulk code; the autonomous validate-then-patch loop is the safety net for any quality slips.) |
+| 🔧 Backend Engineer | `claude-sonnet-4-6` | Generates the backend bundle in **parallel** with frontend, only when `plan.backendNeeded === true`. Kept on Sonnet because backend code is short and demands stricter correctness (Express + auth glue). |
 | ✅ QA Reviewer | `claude-haiku-4-5` | Returns structured JSON `{ok, issues[]}`. Each issue has `{file, problem, fix}` so the next agent can act on it. Runs **in parallel** with the Test Engineer. |
 | 🧪 Test Engineer | `claude-haiku-4-5` | Generates real Vitest unit tests (per component & util), Playwright E2E for `/`, plus `vitest.config.ts` and `playwright.config.ts`. Files land in `tests/` and `e2e/` and are appended to the bundle. Skipped silently if it flakes. |
-| 🛠️ Patcher | `claude-sonnet-4-6` | Receives an issue list + the current bundle, returns a fully patched bundle. Sanity-rejects patches whose size collapses to <50% of the original. |
+| 🛠️ Patcher (Debugger) | `claude-haiku-4-5` | Receives an issue list + the current bundle, returns a fully patched bundle. Sanity-rejects patches whose size collapses to <50% of the original. (Was Sonnet → Haiku because the patcher only applies small described diffs to a known bundle, and Haiku is ~3× faster.) |
 | 🔍 Validator (in-process, not an LLM) | `esbuild` (`lib/validate.ts`) | Real in-memory build of the bundle, treating npm packages as external. Drives the autonomous loop with **actual** build errors (unresolved imports, syntax, missing files) instead of LLM commentary. |
 
 **Autonomous self-healing loop** (`generate.ts`, Phase 5): after QA + Tests, the pipeline enters a bounded loop of up to **`MAX_ITERATIONS = 4`** cycles of *validate → patch → re-validate*. The Validator runs `esbuild` in-memory against the bundle parsed into a virtual filesystem; any build errors are forwarded to the Patcher as concrete `BuildIssue`s. The loop stops as soon as the build is clean, or when iterations run out (the best bundle so far is shipped with a visible note). On the very first iteration QA's suggestions are merged in alongside build errors so QA-detected problems don't get silently dropped.
 
-Each agent has a hard timeout — tuned for **speed first** since user-perceived latency is the #1 churn driver. Current budget: research 7s, architect 30s, integrations 8s, designer 18s (Haiku, was gpt-5-mini/45s), frontend 110s (max_tokens 18k, was 30k), backend 45s (max_tokens 5k, was 8k), QA 8s, tests 12s, patcher 35s (max_tokens 16k). MAX_ITERATIONS in the autonomous loop dropped 4 → 2 (one validate+patch+revalidate). Worst-case end-to-end now ~3 minutes vs ~7 minutes before. The validator is local and typically runs in <1s per iteration.
+Each agent has a hard timeout — tuned for **speed first** since user-perceived latency is the #1 churn driver. Current budget: research 7s, architect 30s, integrations 8s, designer 15s (Gemini Flash JSON), frontend streamed (no hard cap, Gemini Flash with maxOutputTokens 32k), backend 45s, QA 8s, tests 12s, patcher 35s (Haiku 16k tokens). MAX_ITERATIONS in the autonomous loop = 2 (one validate+patch+revalidate). With the Gemini swap on Coder + Designer the worst case dropped further — frontend pass typically completes in ~30-45s vs ~90s on Sonnet. The validator is local and typically runs in <1s per iteration.
 
 Both `frontendCode` and `backendCode` are single strings using `// === FILE: <path> ===` delimiters so the workspace can split them for the live preview. The final `frontendCode` includes (in order): the engineer's bundle (possibly patched across multiple iterations) → the test files → `SETUP.md` if there are external services. The Sandpack preview parser (`artifacts/appforge/src/lib/parseBundle.ts`) explicitly skips `tests/`, `e2e/`, `*.test.*`, `*.spec.*`, `*.md`, and the test config files so tests are visible in the "Frontend" tab without breaking the live preview. The Validator's VFS parser uses the **same skip rules** so it doesn't trip over test/config files either.
 
@@ -97,7 +98,7 @@ Credits are reserved up front in the same transaction as the job row (and the ch
 
 ### Edit mode
 
-`generateApp` accepts an optional `previous: PreviousApp` parameter. When present, the multi-agent pipeline is bypassed and a single Claude Sonnet 4.6 streaming pass receives the full previous bundles + the user's change request. The clone-research step is skipped — we already know what the app is.
+`generateApp` accepts an optional `previous: PreviousApp` parameter. When present, the multi-agent pipeline is bypassed and a single `gemini-2.5-flash` streaming pass receives the full previous bundles + the user's change request. The clone-research step is skipped — we already know what the app is.
 
 ## Workspace (chat + live preview)
 
