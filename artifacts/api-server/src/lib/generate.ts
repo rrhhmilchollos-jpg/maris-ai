@@ -1088,7 +1088,7 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress, 92),
       note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
     });
-    emit("validator", iter === 1 ? "Probando que todo compila…" : `Volviendo a probar (intento ${iter})…`);
+    emit("validator", iter === 1 ? "🔍 build" : `🔍 build · intento ${iter}`);
     const validation = await validateBundle(finalFrontend);
 
     // Combine real build errors with any unresolved QA suggestions on the first
@@ -1104,7 +1104,7 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 1, 93),
         note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
       });
-      emit("validator", `Todo cuadra ✓ (${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"} OK).`);
+      emit("validator", `✓ build OK · ${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"}`);
       break;
     }
 
@@ -1115,7 +1115,7 @@ async function runValidatePatchLoop(
         progress: 92,
         note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
       });
-      emit("validator", `Quedan ${combined.length} detalle${combined.length === 1 ? "" : "s"} por pulir.`, "warn");
+      emit("validator", `△ ${combined.length} detalle${combined.length === 1 ? "" : "s"} pendiente${combined.length === 1 ? "" : "s"}`, "warn");
       break;
     }
 
@@ -1124,7 +1124,7 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress + 2, 92),
       note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
     });
-    emit("patcher", `Puliendo ${combined.length} detalle${combined.length === 1 ? "" : "s"}…`);
+    emit("patcher", `🔧 patch · ${combined.length}`);
     const patched = await patchBundle(
       finalFrontend,
       combined.map((i) => ({
@@ -1140,7 +1140,7 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 2, 92),
         note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
       });
-      emit("patcher", "No pude pulir esto, lo dejo como estaba.", "warn");
+      emit("patcher", "△ patch sin cambios", "warn");
       break;
     }
     if (patched === finalFrontend) {
@@ -1149,10 +1149,10 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 2, 92),
         note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
       });
-      emit("patcher", "Sin cambios que aplicar, sigo.", "warn");
+      emit("patcher", "△ patch idempotente", "warn");
       break;
     }
-    emit("patcher", "Pulido aplicado, sigo comprobando…");
+    emit("patcher", "✓ patch aplicado");
     finalFrontend = patched;
   }
 
@@ -1231,72 +1231,33 @@ Rules:
  * fallbacks, then a generic "tocando archivos" catch-all.
  */
 function friendlyFileLabel(rawPath: string, isBackend: boolean): string {
-  const path = rawPath.replace(/^[./\\]+/, "").trim();
-  // ---- exact filenames ----
-  if (/^package\.json$/i.test(path)) return "Ajustando dependencias";
-  if (/^tsconfig(\..*)?\.json$/i.test(path)) return "Configurando TypeScript";
-  if (/^vite\.config/i.test(path)) return "Preparando el empaquetador";
-  if (/^tailwind\.config/i.test(path)) return "Configurando los estilos";
-  if (/^postcss\.config/i.test(path)) return "Configurando los estilos";
-  if (/^index\.html$/i.test(path)) return "Preparando la página principal";
-  if (/^setup\.md$/i.test(path)) return "Escribiendo la guía de configuración";
-  if (/^readme\.md$/i.test(path)) return "Escribiendo la documentación";
-  if (/^\.env(\.|$)/i.test(path)) return "Preparando las variables de entorno";
-  if (/\.(css|scss)$/i.test(path)) return "Ajustando los estilos";
+  // emergent.sh-style terse log: "📂 folder/file" — no verbs like
+  // "Construyendo" or "Trabajando en…", just a quick visual flash of the
+  // file the agent is touching, half-truncated for vibes. The previous
+  // verbose Spanish phrasing made the stream feel slow ("the agent must
+  // be doing a lot of thinking") even though it was actually fast — terse
+  // file tokens make the same speed feel snappy and competent.
+  const cleaned = rawPath.replace(/^[./\\]+/, "").trim();
 
-  // ---- entry points ----
-  if (/(^|\/)(src\/)?(index|main|server|app)\.(t|j)sx?$/i.test(path)) {
-    return isBackend ? "Montando el servidor" : "Armando la app principal";
-  }
+  // Strip any leading "src/" so "src/pages/Anuncios.tsx" becomes
+  // "pages/Anuncios" — same info, less noise. We keep nested folders
+  // beyond the first because they're often meaningful (routes/api/foo).
+  const noSrc = cleaned.replace(/^src\//i, "");
 
-  // ---- folder-based heuristics ----
-  // Capture: folder + filename (no extension), e.g. pages/Anuncios
-  const m = path.match(
-    /(^|\/)(pages|components|hooks|routes|middleware|controllers|services|lib|utils|helpers|db|schemas?|store|stores|context|contexts|providers)\/([^/]+?)(\.[a-z]+)?$/i,
-  );
-  if (m) {
-    const folder = m[2].toLowerCase();
-    const rawName = m[3];
-    const pretty = rawName
-      .replace(/^use([A-Z])/, "$1") // useFoo → Foo
-      .replace(/[-_]/g, " ")
-      .replace(/([a-z])([A-Z])/g, "$1 $2"); // FooBar → Foo Bar
-    switch (folder) {
-      case "pages":
-        return `Trabajando en la página de ${pretty}`;
-      case "components":
-        return `Creando el componente ${pretty}`;
-      case "hooks":
-        return `Creando el hook de ${pretty}`;
-      case "routes":
-        return `Creando rutas de ${pretty}`;
-      case "middleware":
-        return `Configurando middlewares`;
-      case "controllers":
-        return `Creando el controlador de ${pretty}`;
-      case "services":
-        return `Creando el servicio de ${pretty}`;
-      case "lib":
-      case "utils":
-      case "helpers":
-        return `Preparando utilidades`;
-      case "db":
-      case "schema":
-      case "schemas":
-        if (/seed/i.test(rawName)) return "Sembrando datos de ejemplo";
-        if (/schema/i.test(rawName)) return "Diseñando la base de datos";
-        return "Trabajando en la base de datos";
-      case "store":
-      case "stores":
-        return `Configurando el estado global`;
-      case "context":
-      case "contexts":
-      case "providers":
-        return `Configurando ${pretty}`;
-    }
-  }
+  // Drop the file extension. emergent.sh shows the bare path; the
+  // extension just adds visual noise that all looks the same (.tsx, .ts).
+  const noExt = noSrc.replace(/\.[a-z0-9]+$/i, "");
 
-  return "Tocando archivos del proyecto";
+  // Cap to 36 chars with an ellipsis so very deep paths still fit on one
+  // line in the narrow log column ("se vea como medio cortado").
+  const MAX = 36;
+  const truncated =
+    noExt.length > MAX ? noExt.slice(0, MAX - 1) + "…" : noExt;
+
+  // Backend files get a different glyph so the user can SEE the agent
+  // crossing from frontend to backend.
+  const glyph = isBackend ? "🔧" : "📂";
+  return `${glyph} ${truncated}`;
 }
 
 async function singleEditPass(
@@ -1361,12 +1322,12 @@ Return the FULL updated app as JSON.`;
         const tail = buffer.slice(Math.max(0, scanFrom - 64));
         if (!sawFrontendKey && /"frontendCode"\s*:\s*"/.test(tail)) {
           sawFrontendKey = true;
-          emit("coder", "Empezando a tocar la interfaz…");
+          emit("coder", "📁 frontend/");
         }
         if (!sawBackendKey && /"backendCode"\s*:\s*"/.test(tail)) {
           sawBackendKey = true;
           inBackend = true;
-          emit("coder", "Empezando a tocar el servidor…");
+          emit("coder", "📁 backend/");
         }
         FILE_MARKER.lastIndex = 0;
         let m: RegExpExecArray | null;
@@ -1508,7 +1469,7 @@ Return the FULL updated app as JSON.`;
   if (finishReason === "MAX_TOKENS") {
     emit(
       "coder",
-      "El cambio era demasiado grande para una sola pasada del modelo, no me ha dado tiempo a terminarlo.",
+      "△ respuesta cortada por límite de tokens",
       "warn",
     );
     throw new Error(
@@ -1521,7 +1482,7 @@ Return the FULL updated app as JSON.`;
 
   let parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
   if (!parsed || typeof parsed.frontendCode !== "string") {
-    emit("coder", "Reintento: pido al modelo que devuelva el JSON limpio…");
+    emit("coder", "↻ reintento estricto");
     const retry = await callModel(
       "RECORDATORIO ESTRICTO: tu respuesta DEBE ser exclusivamente un objeto JSON válido " +
       "(sin texto antes ni después, sin ```json ni comentarios) con las claves " +
