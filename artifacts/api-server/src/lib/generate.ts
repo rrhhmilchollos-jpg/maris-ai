@@ -1627,6 +1627,18 @@ async function fastPatchEdit(
   if (!validation.ok && validation.issues.length > 0) {
     // Give it ONE auto-repair attempt before bailing to the full pipeline.
     const repaired = await runValidatePatchLoop(patched, { ok: true, issues: [] }, onProgress, 70, language, log);
+    // CRITICAL: re-validate the repaired bundle. If it's STILL broken we must
+    // fall back to the full edit pipeline rather than ship something the user
+    // has to debug. Returning null tells the caller in generateApp to retry.
+    const finalValidation = await validateBundle(repaired);
+    if (!finalValidation.ok && finalValidation.issues.length > 0) {
+      log(
+        "patcher",
+        `Parche directo no convergió tras auto-reparación (${finalValidation.issues.length} error(es)). Cayendo al flujo completo.`,
+        "warn",
+      );
+      return null;
+    }
     onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
     return {
       title: previous.title,
