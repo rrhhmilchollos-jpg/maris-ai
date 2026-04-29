@@ -1412,7 +1412,12 @@ Return the FULL updated app as JSON.`;
         contents: [{ role: "user", parts: [{ text: finalUserContent }] }],
         config: {
           systemInstruction: systemPrompt,
-          maxOutputTokens: 32768,
+          // 65536 ≈ 200 KB of JSON-escaped text, enough for a full
+          // frontend (~80 KB) + a full backend bundle (~50 KB) in one
+          // edit pass. The previous 32768 cap silently truncated the
+          // model's output mid-string for any "crea un backend completo"
+          // request and crashed the JSON parser downstream.
+          maxOutputTokens: 65536,
           responseMimeType: "application/json",
         },
       });
@@ -1435,7 +1440,9 @@ Return the FULL updated app as JSON.`;
       // Streaming so we surface progress and avoid the 10-min non-stream cap.
       const stream = await openai.chat.completions.create({
         model: "gpt-5.4",
-        max_completion_tokens: 32000,
+        // Match Sonnet's 64k headroom — see the matching note on the
+        // Gemini branch above. 32k was clipping bigger edits in half.
+        max_completion_tokens: 64000,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: finalUserContent },
@@ -1491,8 +1498,30 @@ Return the FULL updated app as JSON.`;
   // extractJsonObject. The retry adds an unambiguous reminder that the entire
   // response must be a JSON object with the documented keys.
   let { text: accumulated, finishReason } = await callModel("");
+
+  // Truncation short-circuit: if the first attempt already hit the token
+  // ceiling, retrying with the SAME prompt (and the same ceiling) will
+  // burn another 30-90s of model time and end up with the same broken
+  // JSON. Surface a clear, actionable error immediately instead of
+  // running the wasteful retry. The user gets a refund + a clear next
+  // step from the catch block in apps.ts.
+  if (finishReason === "MAX_TOKENS") {
+    emit(
+      "coder",
+      "El cambio era demasiado grande para una sola pasada del modelo, no me ha dado tiempo a terminarlo.",
+      "warn",
+    );
+    throw new Error(
+      "El cambio era demasiado grande para una sola pasada. " +
+      "Pídelo en partes más pequeñas (por ejemplo: primero el backend, " +
+      "y luego conectar el frontend) o cámbialo al modelo de calidad " +
+      "(Claude Sonnet) desde el menú \"Modelo\".",
+    );
+  }
+
   let parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
   if (!parsed || typeof parsed.frontendCode !== "string") {
+    emit("coder", "Reintento: pido al modelo que devuelva el JSON limpio…");
     const retry = await callModel(
       "RECORDATORIO ESTRICTO: tu respuesta DEBE ser exclusivamente un objeto JSON válido " +
       "(sin texto antes ni después, sin ```json ni comentarios) con las claves " +
@@ -1502,6 +1531,15 @@ Return the FULL updated app as JSON.`;
     );
     accumulated = retry.text;
     finishReason = retry.finishReason;
+    // Same short-circuit on the retry — don't waste time parsing if we
+    // already know the response is truncated.
+    if (finishReason === "MAX_TOKENS") {
+      throw new Error(
+        "El cambio era demasiado grande para una sola pasada. " +
+        "Pídelo en partes más pequeñas o cambia al modelo de calidad " +
+        "(Claude Sonnet) desde el menú \"Modelo\".",
+      );
+    }
     parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
   }
   if (!parsed || typeof parsed.frontendCode !== "string") {
@@ -1510,12 +1548,6 @@ Return the FULL updated app as JSON.`;
       `No pudimos analizar la respuesta del modelo en modo edición. ` +
       `Inicio de la respuesta: "${preview}…". Vuelve a intentarlo o cambia de modelo en el menú "Modelo".`,
     );
-  }
-  // Refuse a bundle that was clearly cut off mid-output. Even if the JSON
-  // parses, the contents are partial — better to surface the failure so the
-  // user retries than to ship a half-edit silently.
-  if (finishReason === "MAX_TOKENS") {
-    throw new Error("La respuesta del modelo se cortó por límite de tokens. Vuelve a intentarlo con un cambio más pequeño.");
   }
   return {
     title: (parsed.title ?? previous.title).slice(0, 200),
