@@ -48,6 +48,8 @@ import {
   Github,
   ExternalLink,
   ImagePlus,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import {
   Select,
@@ -95,6 +97,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const [activeTab, setActiveTab] = useState<TabKey>("preview");
   const [copied, setCopied] = useState(false);
+  const [previewMaximized, setPreviewMaximized] = useState(false);
   const [draft, setDraft] = useState("");
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -528,9 +531,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-160px)] min-h-[600px]">
+        <div
+          className={`grid grid-cols-1 ${previewMaximized ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}
+        >
           {/* Chat panel */}
-          <div className="lg:col-span-4 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
+          <div
+            className={`${previewMaximized ? "hidden" : "lg:col-span-4"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
+          >
             <div className="px-4 py-3 border-b border-white/5 bg-[#111118] flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               <span className="text-sm font-medium text-white">Chat con el agente</span>
@@ -639,17 +646,36 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <Server className="h-4 w-4 mr-2" /> Backend
                 </Button>
               </div>
-              {activeTab !== "preview" && (
+              <div className="flex items-center gap-2">
+                {activeTab !== "preview" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(codeForTab ?? "")}
+                    className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  >
+                    {copied ? <Check className="h-4 w-4 mr-2 text-green-400" /> : <Copy className="h-4 w-4 mr-2" />}
+                    {copied ? "Copiado" : "Copiar"}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => copyToClipboard(codeForTab ?? "")}
+                  onClick={() => setPreviewMaximized((v) => !v)}
                   className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  title={previewMaximized ? "Restaurar (mostrar chat)" : "Maximizar a pantalla completa"}
                 >
-                  {copied ? <Check className="h-4 w-4 mr-2 text-green-400" /> : <Copy className="h-4 w-4 mr-2" />}
-                  {copied ? "Copiado" : "Copiar"}
+                  {previewMaximized ? (
+                    <>
+                      <Minimize2 className="h-4 w-4 mr-2" /> Restaurar
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="h-4 w-4 mr-2" /> Maximizar
+                    </>
+                  )}
                 </Button>
-              )}
+              </div>
             </div>
 
             <div className="flex-1 overflow-hidden bg-white">
