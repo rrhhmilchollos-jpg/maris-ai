@@ -198,6 +198,32 @@ export interface GenerationJob {
   updatedAt: string;
 }
 
+export type JobLogEntryLevel =
+  (typeof JobLogEntryLevel)[keyof typeof JobLogEntryLevel];
+
+export const JobLogEntryLevel = {
+  info: "info",
+  warn: "warn",
+  error: "error",
+} as const;
+
+/**
+ * A single live log line emitted by an agent during generation.
+ */
+export interface JobLogEntry {
+  /** Monotonic id; pass the highest seen value as `afterId` on the next poll. */
+  id: number;
+  /** Originating agent (researcher | architect | designer | integration | coder | qa | validator | patcher | system). */
+  agent: string;
+  level: JobLogEntryLevel;
+  message: string;
+  createdAt: string;
+}
+
+export interface JobLogList {
+  logs: JobLogEntry[];
+}
+
 export interface CreditPackage {
   id: string;
   name: string;
@@ -274,3 +300,10 @@ export interface AdjustCreditsRequest {
   delta: number;
   reason?: string;
 }
+
+export type GetGenerationJobLogsParams = {
+  /**
+   * @minimum 0
+   */
+  afterId?: number;
+};

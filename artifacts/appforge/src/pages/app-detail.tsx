@@ -29,6 +29,7 @@ import {
   SandpackLayout,
 } from "@codesandbox/sandpack-react";
 import { Layout } from "@/components/layout";
+import { AgentLogStream } from "@/components/agent-log-stream";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -709,14 +710,22 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 </div>
               ))}
               {isWorking && (
-                <div className="flex justify-start">
-                  <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {PHASE_LABELS[job?.phase ?? "queued"] ?? "Trabajando…"}
-                    {typeof job?.progress === "number" && job.progress > 0 && (
-                      <span className="text-xs opacity-70">{job.progress}%</span>
-                    )}
+                <div className="flex flex-col gap-2 items-stretch">
+                  <div className="flex justify-start">
+                    <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {PHASE_LABELS[job?.phase ?? "queued"] ?? "Trabajando…"}
+                      {typeof job?.progress === "number" && job.progress > 0 && (
+                        <span className="text-xs opacity-70">{job.progress}%</span>
+                      )}
+                    </div>
                   </div>
+                  <AgentLogStream
+                    jobId={activeJobId}
+                    isActive={
+                      job?.status !== "succeeded" && job?.status !== "failed"
+                    }
+                  />
                 </div>
               )}
               <div ref={messagesEndRef} />

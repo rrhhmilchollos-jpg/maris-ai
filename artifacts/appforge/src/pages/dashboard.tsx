@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { AgentLogStream } from "@/components/agent-log-stream";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -399,6 +400,12 @@ export default function DashboardPage() {
                     <div className="text-sm font-mono text-primary tabular-nums">{progressValue}%</div>
                   </div>
                   <Progress value={progressValue} className="h-2" />
+                  <AgentLogStream
+                    jobId={activeJobId}
+                    isActive={
+                      job?.status !== "succeeded" && job?.status !== "failed"
+                    }
+                  />
                 </div>
               )}
 
