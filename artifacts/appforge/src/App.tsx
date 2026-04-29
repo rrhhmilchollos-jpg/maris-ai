@@ -9,6 +9,10 @@ import { esES } from "@clerk/localizations";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useUser } from "@clerk/react";
+import { Loader2, ShieldAlert } from "lucide-react";
+
 // Pages
 import { setSentryUser } from "@/lib/sentry";
 import LandingPage from "@/pages/landing";
@@ -173,6 +177,53 @@ function Gated({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Inner guard executed only when the user is signed-in. Reads /api/me to check
+// the isAdmin flag. Renders a loader while the request is in flight, and a
+// localized "no autorizado" message instead of the underlying admin page if
+// the user is not an admin. Backend authorization is the source of truth (the
+// admin endpoints reject non-admins regardless), this guard just gives a
+// clean UX instead of letting a non-admin land on a page that immediately
+// flashes errors.
+function AdminGuardInner({ children }: { children: React.ReactNode }) {
+  const { user, isLoaded } = useUser();
+  const { data: me, isLoading, isError } = useGetMe({
+    query: { enabled: isLoaded && !!user, queryKey: getGetMeQueryKey() },
+  });
+
+  if (!isLoaded || isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isError || !me?.isAdmin) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
+        <ShieldAlert className="h-10 w-10 text-destructive mb-4" />
+        <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
+          Acceso restringido
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Esta sección es solo para administradores. Si crees que es un error,
+          contacta con el equipo de AppForge.
+        </p>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function AdminGated({ children }: { children: React.ReactNode }) {
+  return (
+    <Gated>
+      <AdminGuardInner>{children}</AdminGuardInner>
+    </Gated>
+  );
+}
+
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
 
@@ -229,19 +280,19 @@ function ClerkProviderWithRoutes() {
           </Route>
 
           <Route path="/admin">
-            <Gated><AdminPage /></Gated>
+            <AdminGated><AdminPage /></AdminGated>
           </Route>
 
           <Route path="/admin/jobs">
-            <Gated><AdminPage initialTab="queue" /></Gated>
+            <AdminGated><AdminPage initialTab="queue" /></AdminGated>
           </Route>
 
           <Route path="/admin/memory">
-            <Gated><AdminPage initialTab="memory" /></Gated>
+            <AdminGated><AdminPage initialTab="memory" /></AdminGated>
           </Route>
 
           <Route path="/admin/dashboard">
-            <Gated><AdminDashboardPage /></Gated>
+            <AdminGated><AdminDashboardPage /></AdminGated>
           </Route>
 
           <Route path="/__debug-preview/:id">
