@@ -292,6 +292,37 @@ function serializeApp(row: GeneratedAppRow) {
  * REPLIT_DOMAINS entry. Falls back to a relative `/p/<slug>` if the env var
  * isn't set so callers always get a usable string in dev.
  */
+/**
+ * Internal deploy helper shared between `POST /apps/:id/deploy` (manual button)
+ * and the autonomous evaluator's auto-publish path. Runs the same sanity build
+ * the manual deploy does, assigns a slug if missing, and returns the canonical
+ * URL. Throws on failure (caller decides how to surface the error: HTTP 400
+ * for the route, log + email_pending for the evaluator).
+ */
+export async function runDeployForApp(opts: {
+  appId: number;
+  userId: string;
+  log: { warn: (...args: unknown[]) => void };
+}): Promise<{ url: string; slug: string }> {
+  const { appId, userId, log } = opts;
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    throw new Error("App not found");
+  }
+  // Sanity-build once now to surface bundle errors immediately rather than at
+  // first visit. We discard the output; /p/:slug will rebuild on demand.
+  await buildDeployHtml({ bundle: row.frontendCode, title: row.title });
+  const slug = await ensurePublicSlug(appId, userId, log, row.publicSlug);
+  if (!slug) {
+    throw new Error("Could not assign public slug");
+  }
+  return { url: publicUrlFor(slug), slug };
+}
+
 function publicUrlFor(slug: string): string {
   const domains = (process.env.REPLIT_DOMAINS ?? "")
     .split(",")
@@ -560,6 +591,10 @@ async function runJob(
             frontendCode: payload.frontendCode,
             backendCode: payload.backendCode,
             status: "ready",
+            // Refresh the persisted plan so the evaluator and any future
+            // re-runs ground themselves against the most recent architect
+            // plan, not the original one from app creation.
+            plannedPages: payload.plannedPages,
           })
           .where(and(eq(generatedApps.id, editAppId), eq(generatedApps.userId, userId)))
           .returning();
@@ -594,6 +629,9 @@ async function runJob(
             // Same idea for the source language — locked at creation, all
             // edits reuse the same JS/TS choice.
             language,
+            // Architect's planned page list — fed to the autonomous evaluator
+            // so vision can verify "the app actually has these screens".
+            plannedPages: payload.plannedPages,
           })
           .returning();
         resultAppId = inserted.id;
@@ -667,6 +705,10 @@ async function runJob(
               appId: finalAppId,
               userId: finalUserId,
               userIntent: finalPrompt,
+              // The architect's planned page list (persisted on the row by
+              // the transaction above) is fed to the vision model as ground
+              // truth so it can complain when planned screens are missing.
+              plannedPages: payload.plannedPages,
               jobId,
               baseUrl: VISUAL_TEST_BASE_URL,
               log: logger,
@@ -1698,34 +1740,25 @@ router.post("/apps/:id/deploy", requireAuth, async (req: Request, res: Response)
     return;
   }
   const userId = req.userId!;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  // Sanity-build once now to surface bundle errors immediately rather than at
-  // first visit. We discard the output; /p/:slug will rebuild on demand.
   try {
-    await buildDeployHtml({ bundle: row.frontendCode, title: row.title });
+    const result = await runDeployForApp({ appId: id, userId, log: req.log });
+    res.json(result);
   } catch (err) {
+    if (err instanceof Error && err.message === "App not found") {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    if (err instanceof Error && err.message === "Could not assign public slug") {
+      res.status(500).json({ error: "No pudimos asignar una URL pública." });
+      return;
+    }
     req.log.warn({ err, appId: id }, "Deploy pre-build failed");
     res.status(400).json({
-      error: "No pudimos empaquetar la app: " + (err instanceof Error ? err.message : "error desconocido"),
+      error:
+        "No pudimos empaquetar la app: " +
+        (err instanceof Error ? err.message : "error desconocido"),
     });
-    return;
   }
-  // Assign a slug if there isn't one yet. Slugs are stable so the URL the user
-  // shared keeps working through later edits and re-deploys.
-  const slug = await ensurePublicSlug(id, userId, req.log, row.publicSlug);
-  if (!slug) {
-    res.status(500).json({ error: "No pudimos asignar una URL pública." });
-    return;
-  }
-  res.json({ url: publicUrlFor(slug), slug });
 });
 
 /**

@@ -380,6 +380,11 @@ export async function runAutoEvaluator(opts: {
   appId: number;
   userId: string;
   userIntent: string;
+  /**
+   * Architect-declared screens. Optional at the call-site: when omitted, the
+   * evaluator falls back to whatever is persisted on `generated_apps.plannedPages`
+   * (set by the worker after a successful generation).
+   */
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
   jobId: number;
   baseUrl: string;
@@ -390,11 +395,28 @@ export async function runAutoEvaluator(opts: {
   __patcher?: typeof patchBundle;
   /** Test-only override: skip the email side-effect entirely. */
   __notifier?: typeof sendAutoPublishEmail;
+  /**
+   * Test-only override: inject a fake deploy helper. Production wires this to
+   * `runDeployForApp` from routes/apps.ts (lazy require to avoid a cycle).
+   */
+  __deploy?: (args: {
+    appId: number;
+    userId: string;
+    log: Logger;
+  }) => Promise<{ url: string; slug: string }>;
 }): Promise<AutoEvaluatorResult> {
-  const { appId, userId, userIntent, plannedPages, jobId, baseUrl, log } = opts;
+  const { appId, userId, userIntent, jobId, baseUrl, log } = opts;
   const evalFn = opts.__evaluator ?? evaluateApp;
   const patchFn = opts.__patcher ?? patchBundle;
   const notifyFn = opts.__notifier ?? sendAutoPublishEmail;
+  // Lazy require so the route module doesn't pull the evaluator at import
+  // time (would create an import cycle: routes -> evaluator -> routes).
+  const deployFn =
+    opts.__deploy ??
+    (async (args) => {
+      const mod = await import("../routes/apps");
+      return mod.runDeployForApp(args);
+    });
 
   // Bail early if Chromium isn't installed — the evaluator is best-effort.
   // We DO NOT mark the app as needs_review in that case; the user shouldn't
@@ -448,7 +470,22 @@ export async function runAutoEvaluator(opts: {
     };
   }
 
-  log.info({ appId, jobId, slug }, "👁 Evaluating visually…");
+  // Resolve planned pages: caller override wins, otherwise fall back to the
+  // value persisted on the row by the worker. This ensures the evaluator
+  // ALWAYS feeds the architect's screen list to the vision model when one is
+  // available — even when called from contexts that don't have it in scope
+  // (e.g., a future "re-evaluate" admin button).
+  const effectivePlannedPages = opts.plannedPages ?? row.plannedPages ?? undefined;
+
+  log.info(
+    {
+      appId,
+      jobId,
+      slug,
+      planScreens: effectivePlannedPages?.length ?? 0,
+    },
+    "👁 Evaluating visually…",
+  );
 
   let currentBundle = row.frontendCode;
   let lastReport: EvaluatorReport | null = null;
@@ -469,7 +506,7 @@ export async function runAutoEvaluator(opts: {
         },
         baseUrl,
         userIntent,
-        plannedPages,
+        plannedPages: effectivePlannedPages,
         log,
       });
     } catch (err) {
@@ -590,9 +627,47 @@ export async function runAutoEvaluator(opts: {
       .limit(1);
     const shouldAutoPublish = fresh?.autoPublish === true;
     if (shouldAutoPublish) {
+      // Run the SAME deploy path the manual "Publicar" button uses. This
+      // guarantees the auto-publish flow gets the bundle sanity-build, slug
+      // assignment, and any future deploy-time hooks (CDN purge, etc.) for
+      // free instead of diverging from the manual path.
+      let deployResult: { url: string; slug: string };
+      try {
+        deployResult = await deployFn({ appId, userId, log });
+      } catch (err) {
+        log.warn(
+          { err, appId, jobId },
+          "🚀 Auto-deploy failed — leaving app un-published despite passing evaluation",
+        );
+        // Persist a chat note so the user knows the evaluator passed but the
+        // deploy itself blew up (e.g., bundle stopped compiling between
+        // evaluation and deploy). They can hit "Publicar" manually to retry.
+        try {
+          await db.insert(appMessages).values({
+            appId,
+            role: "assistant",
+            content:
+              `👁 Evaluación visual: aprobada. Pero no pude publicar la app automáticamente: ${
+                err instanceof Error ? err.message : "error desconocido"
+              }. Pulsa "Publicar" para reintentar.`,
+          });
+        } catch {
+          // Best-effort.
+        }
+        return {
+          ranEvaluator: true,
+          finalVerdict: "pass",
+          rounds: round,
+          fixesApplied,
+          autoPublished: false,
+          publicUrl: null,
+          summary: finalSummary,
+        };
+      }
+      const finalUrl = deployResult.url;
       log.info(
-        { appId, jobId, publicUrl },
-        `🚀 Publicado automáticamente en ${publicUrl}`,
+        { appId, jobId, publicUrl: finalUrl },
+        `🚀 Publicado automáticamente en ${finalUrl}`,
       );
       // Email + chat hint.
       try {
@@ -605,7 +680,7 @@ export async function runAutoEvaluator(opts: {
           to: user?.email ?? null,
           recipientName: user?.fullName ?? null,
           appTitle: row.title,
-          url: publicUrl,
+          url: finalUrl,
           log,
         });
       } catch (err) {
@@ -615,7 +690,7 @@ export async function runAutoEvaluator(opts: {
         await db.insert(appMessages).values({
           appId,
           role: "assistant",
-          content: `🚀 He publicado tu app automáticamente: ${publicUrl}\n\nLa evaluación visual dio el visto bueno.`,
+          content: `🚀 He publicado tu app automáticamente: ${finalUrl}\n\nLa evaluación visual dio el visto bueno.`,
         });
       } catch (err) {
         log.warn({ err, appId, jobId }, "Failed to insert auto-publish chat message");
@@ -626,7 +701,7 @@ export async function runAutoEvaluator(opts: {
         rounds: round,
         fixesApplied,
         autoPublished: true,
-        publicUrl,
+        publicUrl: finalUrl,
         summary: finalSummary,
       };
     }

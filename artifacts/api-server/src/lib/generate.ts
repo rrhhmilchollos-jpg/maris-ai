@@ -307,6 +307,14 @@ export interface GeneratedAppPayload {
   techStack: string[];
   frontendCode: string;
   backendCode: string;
+  /**
+   * Architect's planned page list, persisted on `generated_apps.plannedPages`
+   * so the autonomous evaluator can ground its vision pass in "the screens
+   * we promised" instead of just the user's free-text intent. Only set on
+   * the public assembly path (`generateApp`); auto-fix patches that don't
+   * re-run the architect leave this undefined.
+   */
+  plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
 }
 
 export type GeneratePhase =
@@ -2035,5 +2043,14 @@ export async function generateApp(
     techStack: plan.techStack,
     frontendCode: finalFrontend + testsAppendix + setupNotes,
     backendCode: backendResult?.code || "No backend required for this app.",
+    // Expose the architect's planned page list so the route layer can persist
+    // it on `generated_apps.plannedPages`. The autonomous visual evaluator
+    // reads that column and feeds the page names + routes to the vision model
+    // as ground truth ("did the rendered app actually contain these screens?").
+    plannedPages: plan.pages.map((p) => ({
+      name: p.name,
+      route: p.route,
+      purpose: p.purpose,
+    })),
   };
 }
