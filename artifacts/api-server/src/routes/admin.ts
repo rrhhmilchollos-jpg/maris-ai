@@ -284,10 +284,7 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
     return;
   }
 
-  // Snapshot the prior state so we can roll back atomically if the queue
-  // send fails — without this, the row would be left as "queued" forever
-  // (no worker would ever pick it up), recreating the very stuck-state
-  // problem this whole feature is meant to eliminate.
+  // Snapshot prior state for compensating rollback if queue send fails.
   const priorStatus = job.status;
   const priorPhase = job.phase;
   const priorProgress = job.progress;
@@ -295,17 +292,8 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
   const priorRetryCount = job.retryCount ?? 0;
   const priorUpdatedAt = job.updatedAt;
 
-  // Concurrency-safe transition: WHERE-clause guard pins the update to the
-  // exact status we just read. Two concurrent retry requests racing for the
-  // same job will both see the same SELECT, but only ONE UPDATE matches —
-  // because the first UPDATE flips status to "queued", the second's
-  // `status = priorStatus` predicate evaluates false on the now-locked row
-  // and returns zero rows (rejected with 409). This closes the TOCTOU
-  // window between the SELECT above and the UPDATE here without needing
-  // an explicit transaction or row lock. We deliberately do NOT guard on
-  // `updatedAt` because Postgres timestamps have microsecond precision but
-  // node-postgres returns Date objects truncated to milliseconds, which
-  // would cause both updates to miss in rare microsecond-misaligned rows.
+  // Concurrency-safe via status guard: two concurrent retries can't both win
+  // because the first UPDATE flips status, invalidating the second's WHERE.
   const updatedRows = await db
     .update(generationJobs)
     .set({
