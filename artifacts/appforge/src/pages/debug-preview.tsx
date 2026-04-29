@@ -96,7 +96,7 @@ export default function App() {
     }
     if (built && new URLSearchParams(window.location.search).has("wouter")) {
       built["/App.tsx"] = `import * as React from "react";
-import { Link, Switch, Route, useLocation } from "/wouter.js";
+import { Link, Switch, Route, useLocation } from "wouter";
 function Home() { const [loc] = useLocation(); return React.createElement("div", { style: { padding: 24 } }, "WOUTER OK. loc=" + loc + ". ", React.createElement(Link, { href: "/about" }, "go about")); }
 function About() { return React.createElement("div", { style: { padding: 24 } }, "ABOUT PAGE"); }
 export default function App() {
