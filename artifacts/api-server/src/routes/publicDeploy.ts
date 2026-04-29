@@ -74,11 +74,31 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
 </html>`;
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    // Block any inline/external script on the wrapper itself; only the
-    // iframe's sandboxed inner doc may execute code.
+    // CSP notes:
+    //   * The wrapper document itself has no scripts — only the sandboxed
+    //     iframe loaded via `srcdoc`. The wrapper's <style> is inline so we
+    //     allow `'unsafe-inline'` for styles.
+    //   * `srcdoc` iframes inherit CSP from the parent in modern browsers, so
+    //     this CSP must also permit everything the user's bundle needs to
+    //     run: an inline `<script type="module">` (the bundle), Tailwind from
+    //     cdn.tailwindcss.com, modules from esm.sh, and any image/font/XHR
+    //     traffic those modules trigger.
+    //   * Loosening these directives is safe because the iframe runs sandboxed
+    //     WITHOUT `allow-same-origin`, so it has an opaque origin and cannot
+    //     read AppForge cookies, localStorage, or make credentialed requests
+    //     against /api. The hard isolation boundary is sandboxing, not CSP.
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'none'; frame-src data: blob: 'self'; style-src 'unsafe-inline'; img-src data:; child-src 'self'",
+      [
+        "default-src 'self' https: data: blob:",
+        "script-src 'unsafe-inline' 'unsafe-eval' https:",
+        "style-src 'unsafe-inline' https:",
+        "font-src https: data:",
+        "img-src 'self' https: data: blob:",
+        "connect-src https:",
+        "frame-src 'self' data: blob:",
+        "child-src 'self' data: blob:",
+      ].join("; "),
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");

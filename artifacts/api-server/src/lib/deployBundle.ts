@@ -65,17 +65,36 @@ export async function buildDeployHtml(opts: {
     "react-dom/": `https://esm.sh/react-dom@${REACT_VERSION}/`,
     "react-dom/client": `https://esm.sh/react-dom@${REACT_VERSION}/client`,
   };
+  // Pinned package versions for libs whose latest release on esm.sh ships
+  // breaking changes that the AI-generated apps rely on. Without this, an
+  // upstream rename/removal (e.g. lucide-react v0.488 dropped the `Facebook`
+  // icon export) makes the entire bundle fail to evaluate at runtime and the
+  // user sees a blank iframe. Add to this map as new incompatibilities appear.
+  const PINNED: Record<string, string> = {
+    "lucide-react": "0.475.0",
+  };
   for (const pkg of externals) {
     if (pkg === "react" || pkg.startsWith("react/")) continue;
     if (pkg === "react-dom" || pkg.startsWith("react-dom/")) continue;
     if (!imports[pkg]) {
-      // Pinned to avoid surprise breakages, ?external=react so esm.sh resolves
-      // peer deps against our import-map react instead of bundling its own.
-      imports[pkg] = `https://esm.sh/${pkg}?external=react,react-dom`;
+      // ?external=react so esm.sh resolves peer deps against our import-map
+      // react instead of bundling its own copy (which would break hooks).
+      const version = PINNED[pkg] ? `@${PINNED[pkg]}` : "";
+      imports[pkg] = `https://esm.sh/${pkg}${version}?external=react,react-dom`;
     }
   }
 
   const safeTitle = (opts.title || "AppForge App").replace(/[<&>]/g, "");
+
+  // Inline the user-authored CSS captured during bundling. We escape any
+  // `</style>` sequences inside the CSS so they can't terminate the parent
+  // `<style>` tag and inject markup into the page.
+  const userCss = collectedCss
+    .join("\n")
+    .replace(/<\/(style)/gi, "<\\/$1");
+  const userStyleTag = userCss.trim()
+    ? `\n  <style data-appforge-user-css>${userCss}</style>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -83,8 +102,8 @@ export async function buildDeployHtml(opts: {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${safeTitle}</title>
+  <style>html,body,#root{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}</style>${userStyleTag}
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>html,body,#root{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}</style>
   <script type="importmap">${JSON.stringify({ imports })}</script>
 </head>
 <body>
@@ -112,6 +131,7 @@ function pickEntry(vfs: Record<string, string>): string | null {
 function virtualFsPlugin(
   vfs: Record<string, string>,
   externals: Set<string>,
+  collectedCss: string[],
 ): esbuild.Plugin {
   return {
     name: "appforge-vfs",
@@ -145,11 +165,20 @@ function virtualFsPlugin(
         const contents = vfs[args.path];
         if (contents === undefined) return undefined;
         const ext = args.path.split(".").pop() || "";
+        // CSS handling: esbuild can't emit a CSS sibling output when running
+        // with `write: false` and no `outdir`. Instead of letting the build
+        // fail with "Cannot import ... CSS file without an output path
+        // configured", capture the raw CSS contents and replace the import
+        // with an empty JS module. The collected CSS is later concatenated
+        // into a `<style>` tag in the deployed HTML head.
+        if (ext === "css") {
+          collectedCss.push(contents);
+          return { contents: "", loader: "js" };
+        }
         const loader: esbuild.Loader =
           ext === "tsx" ? "tsx"
           : ext === "ts" ? "ts"
           : ext === "jsx" ? "jsx"
-          : ext === "css" ? "css"
           : ext === "json" ? "json"
           : "js";
         return { contents, loader };
