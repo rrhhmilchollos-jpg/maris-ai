@@ -541,11 +541,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         </div>
 
         <div
-          className={`grid grid-cols-1 ${previewMaximized ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}
+          className={`grid grid-cols-1 ${previewMaximized ? "" : "lg:grid-cols-12"} gap-3 h-[calc(100vh-130px)] min-h-[520px]`}
         >
-          {/* Chat panel */}
+          {/* Chat panel — narrows on xl+ so the preview gets ~83% of the row.
+              Hidden entirely when previewMaximized is on. */}
           <div
-            className={`${previewMaximized ? "hidden" : "lg:col-span-3"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
+            className={`${previewMaximized ? "hidden" : "lg:col-span-3 xl:col-span-2"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
           >
             <div className="px-4 py-3 border-b border-white/5 bg-[#111118] flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -627,7 +628,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Preview / code panel */}
-          <div className="lg:col-span-9 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
+          <div className="lg:col-span-9 xl:col-span-10 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-[#111118] border-b border-white/5">
               <div className="flex space-x-1">
                 <Button
