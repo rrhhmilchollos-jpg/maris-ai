@@ -43,6 +43,7 @@ import type {
   ImageGenerationResult,
   JobLogList,
   SendAppMessageRequest,
+  UpdateAutoPublishRequest,
   UpdateCoderModelRequest,
   UserProfile,
   VisualTestReport,
@@ -841,6 +842,178 @@ export const useUpdateAppModel = <
   TContext
 > => {
   return useMutation(getUpdateAppModelMutationOptions(options));
+};
+
+/**
+ * @summary Toggle the auto-publish flag for an app
+ */
+export const getUpdateAppAutoPublishUrl = (id: number) => {
+  return `/api/apps/${id}/auto-publish`;
+};
+
+export const updateAppAutoPublish = async (
+  id: number,
+  updateAutoPublishRequest: UpdateAutoPublishRequest,
+  options?: RequestInit,
+): Promise<GeneratedApp> => {
+  return customFetch<GeneratedApp>(getUpdateAppAutoPublishUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateAutoPublishRequest),
+  });
+};
+
+export const getUpdateAppAutoPublishMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppAutoPublish>>,
+    TError,
+    { id: number; data: BodyType<UpdateAutoPublishRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAppAutoPublish>>,
+  TError,
+  { id: number; data: BodyType<UpdateAutoPublishRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateAppAutoPublish"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAppAutoPublish>>,
+    { id: number; data: BodyType<UpdateAutoPublishRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAppAutoPublish(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAppAutoPublishMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAppAutoPublish>>
+>;
+export type UpdateAppAutoPublishMutationBody =
+  BodyType<UpdateAutoPublishRequest>;
+export type UpdateAppAutoPublishMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Toggle the auto-publish flag for an app
+ */
+export const useUpdateAppAutoPublish = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppAutoPublish>>,
+    TError,
+    { id: number; data: BodyType<UpdateAutoPublishRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAppAutoPublish>>,
+  TError,
+  { id: number; data: BodyType<UpdateAutoPublishRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateAppAutoPublishMutationOptions(options));
+};
+
+/**
+ * @summary Re-trigger generation for an app stuck in needs_review
+ */
+export const getRetryAppGenerationUrl = (id: number) => {
+  return `/api/apps/${id}/retry-generation`;
+};
+
+export const retryAppGeneration = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GenerationJob> => {
+  return customFetch<GenerationJob>(getRetryAppGenerationUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRetryAppGenerationMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryAppGeneration>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryAppGeneration>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["retryAppGeneration"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryAppGeneration>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return retryAppGeneration(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RetryAppGenerationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryAppGeneration>>
+>;
+
+export type RetryAppGenerationMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Re-trigger generation for an app stuck in needs_review
+ */
+export const useRetryAppGeneration = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryAppGeneration>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryAppGeneration>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRetryAppGenerationMutationOptions(options));
 };
 
 /**

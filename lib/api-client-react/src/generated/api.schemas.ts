@@ -43,6 +43,10 @@ export interface GeneratedApp {
   publicSlug?: string | null;
   /** HTML URL of the repo this app was last pushed to. */
   githubRepoUrl?: string | null;
+  /** When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically. */
+  autoPublish: boolean;
+  /** Spanish summary written by the evaluator when an app is in needs_review state. */
+  evaluatorSummary?: string | null;
   createdAt: string;
 }
 
@@ -91,6 +95,10 @@ export interface GenerateAppRequest {
 export interface UpdateCoderModelRequest {
   /** auto | gemini-2.5-flash | claude-sonnet-4-6 */
   coderModel: string;
+}
+
+export interface UpdateAutoPublishRequest {
+  autoPublish: boolean;
 }
 
 export interface ImageGenerationResult {

@@ -7,6 +7,8 @@ import {
   useSendAppMessage,
   useGetGenerationJob,
   useUpdateAppModel,
+  useUpdateAppAutoPublish,
+  useRetryAppGeneration,
   useHealthCheckApp,
   useDeployApp,
   usePushAppToGitHub,
@@ -312,6 +314,55 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
       onError: (err: any) => {
         toast({ title: "No se pudo publicar", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  // Auto-publish toggle: when ON, the autonomous evaluator deploys the app
+  // for the user as soon as it gives it the visto bueno. We invalidate the
+  // app query immediately so the toggle reflects the new state without
+  // waiting for the next poll.
+  const autoPublishMutation = useUpdateAppAutoPublish({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        toast({
+          title: result.autoPublish ? "Auto-publicar activado" : "Auto-publicar desactivado",
+          description: result.autoPublish
+            ? "Publicaremos automáticamente cuando la evaluación visual lo apruebe."
+            : "Tendrás que pulsar Publicar manualmente.",
+        });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "No pudimos cambiar el ajuste",
+          description: err?.message ?? "Error",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  // Re-trigger generation for an app stuck in needs_review. The dashboard
+  // shows a red panel with this button when the evaluator rejected the app
+  // after exhausting its retry budget.
+  const retryGenerationMutation = useRetryAppGeneration({
+    mutation: {
+      onSuccess: (job) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
+        setActiveJobId(job.id);
+        toast({
+          title: "Reintentando generación",
+          description: "Te avisaré cuando termine.",
+        });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "No pudimos reintentar",
+          description: err?.message ?? "Error",
+          variant: "destructive",
+        });
       },
     },
   });
@@ -642,6 +693,36 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </Button>
             )}
 
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                autoPublishMutation.mutate({
+                  id: app.id,
+                  data: { autoPublish: !app.autoPublish },
+                })
+              }
+              disabled={autoPublishMutation.isPending}
+              className={
+                app.autoPublish
+                  ? "h-8 border-cyan-400/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200"
+                  : "h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              }
+              title={
+                app.autoPublish
+                  ? "Auto-publicar activado: la próxima generación que pase la evaluación visual se publicará automáticamente"
+                  : "Activa para publicar automáticamente cuando la evaluación visual lo apruebe"
+              }
+              data-testid="button-auto-publish-toggle"
+            >
+              {autoPublishMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-1.5" />
+              )}
+              Auto-publicar: {app.autoPublish ? "ON" : "OFF"}
+            </Button>
+
             {app.githubRepoUrl ? (
               <Button
                 variant="outline"
@@ -698,6 +779,45 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </AlertDialog>
           </div>
         </div>
+
+        {app.status === "needs_review" && (
+          <div
+            className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-100"
+            data-testid="panel-needs-review"
+          >
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-400 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-red-200">
+                  La evaluación visual rechazó esta app
+                </div>
+                <div className="mt-1 text-sm text-red-100/90 whitespace-pre-wrap break-words">
+                  {app.evaluatorSummary ??
+                    "El evaluador no pudo aprobar la app después de varios intentos."}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => retryGenerationMutation.mutate({ id: app.id })}
+                    disabled={retryGenerationMutation.isPending || isWorking}
+                    className="h-8 bg-red-500 hover:bg-red-600 text-white"
+                    data-testid="button-retry-generation"
+                  >
+                    {retryGenerationMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-1.5" />
+                    )}
+                    Reintentar generación
+                  </Button>
+                  <span className="text-xs text-red-200/70">
+                    Reusará el prompt original más el resumen del evaluador.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div
           className={`grid grid-cols-1 ${previewMaximized || !previewOpen ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}

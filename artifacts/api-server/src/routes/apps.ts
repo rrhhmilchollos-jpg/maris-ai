@@ -28,6 +28,7 @@ import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
 import { pushAppToGitHub } from "../lib/githubPush";
 import { validateBundle, type BuildIssue } from "../lib/validate";
 import { runVisualTester, VisualTesterError } from "../lib/visualTester";
+import { runAutoEvaluator } from "../lib/evaluator";
 import { chargeCredits, refundCredits } from "../lib/credits";
 import { enqueueGenerateJob, reenqueueGenerateJob } from "../lib/jobQueue";
 
@@ -261,6 +262,8 @@ function serializeApp(row: GeneratedAppRow) {
     language: row.language,
     publicSlug: row.publicSlug,
     githubRepoUrl: row.githubRepoUrl,
+    autoPublish: row.autoPublish,
+    evaluatorSummary: row.evaluatorSummary,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -628,12 +631,33 @@ async function runJob(
           isAdmin: finalIsAdmin,
           prompt: finalPrompt,
           jobId,
-        }).catch((vtErr) => {
-          logger.warn(
-            { err: vtErr, appId: finalAppId, jobId },
-            "Auto visual tester failed (non-fatal)",
-          );
-        });
+        })
+          .catch((vtErr) => {
+            logger.warn(
+              { err: vtErr, appId: finalAppId, jobId },
+              "Auto visual tester failed (non-fatal)",
+            );
+          })
+          .finally(() => {
+            // Chain the autonomous Visual Evaluator AFTER the visual tester
+            // so they run in series. The tester is generic auto-fix; the
+            // evaluator is a strict pass/fail judgment that can auto-publish
+            // the app if the user opted in. Errors here MUST NOT take down
+            // the generation — the user already has their app.
+            runAutoEvaluator({
+              appId: finalAppId,
+              userId: finalUserId,
+              userIntent: finalPrompt,
+              jobId,
+              baseUrl: VISUAL_TEST_BASE_URL,
+              log: logger,
+            }).catch((evErr) => {
+              logger.warn(
+                { err: evErr, appId: finalAppId, jobId },
+                "Auto evaluator failed (non-fatal)",
+              );
+            });
+          });
       });
 
       // Replace the placeholder "reservation" ledger row with the final one.
@@ -1402,6 +1426,95 @@ router.patch("/apps/:id/model", requireAuth, async (req: Request, res: Response)
   }
   res.json(serializeApp(result[0]));
 });
+
+/**
+ * Toggle the per-app auto-publish flag. When ON, the autonomous evaluator
+ * will deploy the app to /p/<slug> automatically as soon as it gives it the
+ * visto bueno (and email the owner). When OFF, the evaluator still runs but
+ * leaves publishing to the user.
+ */
+router.patch(
+  "/apps/:id/auto-publish",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const value: unknown = req.body?.autoPublish;
+    if (typeof value !== "boolean") {
+      res.status(400).json({ error: "autoPublish debe ser boolean." });
+      return;
+    }
+    const userId = req.userId!;
+    const result = await db
+      .update(generatedApps)
+      .set({ autoPublish: value })
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .returning();
+    if (result.length === 0) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    res.json(serializeApp(result[0]));
+  },
+);
+
+/**
+ * Re-trigger the generation pipeline for an app stuck in `needs_review`.
+ * Resets the status to `ready`, clears the evaluator summary, and enqueues a
+ * fresh edit-mode job using the original prompt. The dashboard wires this
+ * to the red "Reintentar generación" button.
+ */
+router.post(
+  "/apps/:id/retry-generation",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const [row] = await db
+      .select()
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    if (row.status !== "needs_review") {
+      res.status(409).json({
+        error: "Esta app no está marcada para revisión; usa el chat normal para editarla.",
+      });
+      return;
+    }
+    // Build a self-explanatory retry prompt using the evaluator summary as
+    // context. The patcher will see the original intent + what the evaluator
+    // didn't like, so the next pass has a real shot at converging.
+    const retryPrompt =
+      `Reintenta esta app. La evaluación visual rechazó la versión anterior.\n\n` +
+      `INTENCIÓN ORIGINAL:\n${row.prompt}\n\n` +
+      `RAZONES DEL RECHAZO:\n${row.evaluatorSummary ?? "(sin detalle)"}\n\n` +
+      `Aplica los cambios necesarios para que pase la evaluación.`;
+    // Clear the needs_review state up front so the dashboard reflects the
+    // retry immediately (the worker will set status back to ready on success).
+    await db
+      .update(generatedApps)
+      .set({ status: "ready", evaluatorSummary: null })
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    // Reuse the same enqueue path the chat /messages endpoint takes — that
+    // way credit accounting, in-flight protection, and chat-message
+    // persistence behave identically to a normal user-initiated edit.
+    await enqueueGeneration(req, res, retryPrompt, id, {
+      chatMessage: { appId: id, content: retryPrompt },
+      attachmentIds: [],
+    });
+  },
+);
 
 /**
  * Stream a ZIP of the generated app (frontend/, optional backend/, README.md).
