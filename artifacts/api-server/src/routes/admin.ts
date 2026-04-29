@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, count, gte, desc } from "drizzle-orm";
+import { eq, sql, count, gte, desc, and } from "drizzle-orm";
 import { db } from "../lib/db";
 import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
 import {
@@ -295,7 +295,18 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
   const priorRetryCount = job.retryCount ?? 0;
   const priorUpdatedAt = job.updatedAt;
 
-  const [updated] = await db
+  // Concurrency-safe transition: WHERE-clause guard pins the update to the
+  // exact status we just read. Two concurrent retry requests racing for the
+  // same job will both see the same SELECT, but only ONE UPDATE matches —
+  // because the first UPDATE flips status to "queued", the second's
+  // `status = priorStatus` predicate evaluates false on the now-locked row
+  // and returns zero rows (rejected with 409). This closes the TOCTOU
+  // window between the SELECT above and the UPDATE here without needing
+  // an explicit transaction or row lock. We deliberately do NOT guard on
+  // `updatedAt` because Postgres timestamps have microsecond precision but
+  // node-postgres returns Date objects truncated to milliseconds, which
+  // would cause both updates to miss in rare microsecond-misaligned rows.
+  const updatedRows = await db
     .update(generationJobs)
     .set({
       status: "queued",
@@ -305,8 +316,22 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
       retryCount: priorRetryCount + 1,
       updatedAt: new Date(),
     })
-    .where(eq(generationJobs.id, id))
+    .where(
+      and(
+        eq(generationJobs.id, id),
+        eq(generationJobs.status, priorStatus),
+      ),
+    )
     .returning();
+
+  if (updatedRows.length === 0) {
+    res.status(409).json({
+      error:
+        "El job cambió de estado mientras se procesaba el reintento. Recarga e inténtalo de nuevo.",
+    });
+    return;
+  }
+  const [updated] = updatedRows;
 
   try {
     await reenqueueGenerateJob(id);

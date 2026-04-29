@@ -25,14 +25,17 @@
  */
 
 import { db, generationJobs, users, generatedApps } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   startQueue,
   stopQueue,
   registerGenerateWorker,
   enqueueGenerateJob,
+  getQueue,
+  GENERATE_QUEUE,
+  MAX_ATTEMPTS,
 } from "../lib/jobQueue";
-import { reclaimOrphanedJobs } from "../routes/apps";
+import { reclaimOrphanedJobs, runJobById } from "../routes/apps";
 
 const TEST_USER_ID = "queue-test-user";
 const TEST_EMAIL = "queue-test@local.invalid";
@@ -100,8 +103,28 @@ function record(name: string, ok: boolean, detail = "") {
 
 /** A worker that just marks the row as succeeded so we can observe pickup. */
 function makeStubHandler(processedIds: Set<number>) {
-  return async (jobId: number) => {
+  return async (jobId: number, _ctx: { attempt: number; maxAttempts: number }) => {
     processedIds.add(jobId);
+    await db
+      .update(generationJobs)
+      .set({ status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() })
+      .where(eq(generationJobs.id, jobId));
+  };
+}
+
+/**
+ * A worker that throws on the first attempt and only succeeds once the queue
+ * has retried it. Used to verify that pg-boss really does dispatch retries
+ * when the worker re-throws.
+ */
+function makeFlakyHandler(failuresBeforeSuccess: number, attemptsObserved: number[]) {
+  let failureCount = 0;
+  return async (jobId: number, ctx: { attempt: number; maxAttempts: number }) => {
+    attemptsObserved.push(ctx.attempt);
+    if (failureCount < failuresBeforeSuccess) {
+      failureCount++;
+      throw new Error(`forced failure ${failureCount}/${failuresBeforeSuccess}`);
+    }
     await db
       .update(generationJobs)
       .set({ status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() })
@@ -268,9 +291,267 @@ async function runScenario4StaleRunningFails(appId: number) {
   await stopQueue();
 }
 
+/** Helper: enqueue with tight retry timing so the test doesn't wait 30s+. */
+async function enqueueWithFastRetry(jobId: number, retryLimit: number) {
+  const boss = getQueue();
+  await boss.send(
+    GENERATE_QUEUE,
+    { jobId },
+    {
+      retryLimit,
+      retryBackoff: false,
+      retryDelay: 1,
+      expireInSeconds: 60,
+      // Fresh nonce so we never collide with the live queue's singletonKey.
+      singletonKey: `test-${jobId}-${Date.now()}`,
+      singletonSeconds: 60,
+    },
+  );
+}
+
+async function runScenario5RetriesAreDispatched(appId: number) {
+  // Fail the first attempt, succeed on the second. Verifies that pg-boss
+  // actually re-dispatches when the worker re-throws — the bug the previous
+  // review caught (runJob swallowing all errors) would make this fail.
+  const attempts: number[] = [];
+  const handler = makeFlakyHandler(/* failuresBeforeSuccess */ 1, attempts);
+  await startQueue();
+  await registerGenerateWorker((id, ctx) => handler(id, ctx));
+
+  const jobId = await insertJobRow(appId);
+  await enqueueWithFastRetry(jobId, 2);
+
+  let succeeded = false;
+  try {
+    await waitFor(
+      `flaky job ${jobId} eventually succeeds`,
+      async () => {
+        const j = await getJob(jobId);
+        return j && j.status === "succeeded" ? j : null;
+      },
+      30_000,
+    );
+    succeeded = true;
+  } catch (err) {
+    console.error(err);
+  }
+
+  const sawRetry = attempts.length >= 2 && attempts.includes(2);
+  record(
+    "5. Transient failure → pg-boss retries → eventually succeeds",
+    succeeded && sawRetry,
+    `attempts=[${attempts.join(",")}]`,
+  );
+
+  await stopQueue();
+}
+
+async function runScenario6FinalAttemptFinalises(appId: number) {
+  // Verify the contract that runJob's catch block honours: when the handler
+  // is invoked on the FINAL attempt and throws, the row gets finalised
+  // (status=failed, retryCount=max) and the throw is absorbed (no further
+  // retry). We stub a handler that mimics runJob's branch so the test
+  // doesn't have to spin up the real AI pipeline (which can take minutes
+  // and call paid APIs). The contract under test is the worker behaviour:
+  // earlier attempts re-throw, final attempt absorbs.
+  const attempts: number[] = [];
+  const stub = async (jobId: number, ctx: { attempt: number; maxAttempts: number }) => {
+    attempts.push(ctx.attempt);
+    if (ctx.attempt < ctx.maxAttempts) {
+      // Mimic runJob's "still have retries" branch: bump retryCount, leave
+      // status alone, re-throw so pg-boss schedules another attempt.
+      await db
+        .update(generationJobs)
+        .set({ phase: "retrying", retryCount: ctx.attempt, updatedAt: new Date() })
+        .where(eq(generationJobs.id, jobId));
+      throw new Error(`forced retriable failure on attempt ${ctx.attempt}`);
+    }
+    // Final attempt branch: finalise the row, do NOT re-throw.
+    await db
+      .update(generationJobs)
+      .set({
+        status: "failed",
+        phase: "failed",
+        errorMessage: "Falló la generación: forced terminal failure",
+        retryCount: ctx.attempt,
+        updatedAt: new Date(),
+      })
+      .where(eq(generationJobs.id, jobId));
+  };
+
+  await startQueue();
+  await registerGenerateWorker(stub);
+
+  const jobId = await insertJobRow(appId);
+  // retryLimit=2 → up to 3 total attempts, matching MAX_ATTEMPTS in jobQueue.
+  await enqueueWithFastRetry(jobId, MAX_ATTEMPTS - 1);
+
+  let finalised = false;
+  try {
+    await waitFor(
+      `job ${jobId} reaches failed after ${MAX_ATTEMPTS} attempts`,
+      async () => {
+        const j = await getJob(jobId);
+        return j && j.status === "failed" ? j : null;
+      },
+      30_000,
+    );
+    finalised = true;
+  } catch (err) {
+    console.error(err);
+  }
+
+  const after = await getJob(jobId);
+  const allAttemptsRan = attempts.length === MAX_ATTEMPTS && attempts[0] === 1 && attempts.at(-1) === MAX_ATTEMPTS;
+  const ok = finalised && allAttemptsRan && after?.retryCount === MAX_ATTEMPTS;
+  record(
+    "6. Retry exhaustion → row finalised once (no extra dispatches)",
+    ok,
+    `attempts=[${attempts.join(",")}] status=${after?.status ?? "(missing)"} retryCount=${after?.retryCount ?? "?"}`,
+  );
+
+  await stopQueue();
+}
+
+async function runScenario7HandlerAlwaysThrowsRecordedAsFailed(appId: number) {
+  // Contract under test: when runJob's final-attempt DB write fails, runJob
+  // re-throws. The worker re-throws. pg-boss records the job as failed
+  // (i.e. it does NOT think the job succeeded — which is what would happen
+  // if we silently absorbed the error).
+  //
+  // We simulate this directly with a handler that always throws on every
+  // attempt, including the final one. This is the exact wire-level
+  // observation the operator gets if runJob's terminal DB write blows up.
+  const attempts: number[] = [];
+  const stub = async (jobId: number, ctx: { attempt: number; maxAttempts: number }) => {
+    attempts.push(ctx.attempt);
+    // Mark the row as `running` so we can detect that it never reaches
+    // `succeeded` (which is the silent-success failure mode we're guarding
+    // against).
+    await db
+      .update(generationJobs)
+      .set({ status: "running", phase: "retrying", updatedAt: new Date() })
+      .where(eq(generationJobs.id, jobId));
+    throw new Error(`handler always throws (simulating final-attempt finalise failure on attempt ${ctx.attempt})`);
+  };
+
+  await startQueue();
+  await registerGenerateWorker(stub);
+
+  const jobId = await insertJobRow(appId);
+  await enqueueWithFastRetry(jobId, MAX_ATTEMPTS - 1);
+
+  // Wait for pg-boss to consume all attempts and stop dispatching. We
+  // observe by waiting until `attempts.length === MAX_ATTEMPTS` then giving
+  // pg-boss a beat to record state. The job in pg-boss should end up in
+  // `failed`, and the DB row should be in `running`/`retrying` (the stale-
+  // running reclaim will eventually catch it) — critically NOT `succeeded`.
+  try {
+    await waitFor(
+      `job ${jobId} dispatched ${MAX_ATTEMPTS} times`,
+      async () => (attempts.length >= MAX_ATTEMPTS ? attempts.length : null),
+      30_000,
+    );
+  } catch (err) {
+    console.error(err);
+  }
+  await sleep(750); // give pg-boss a moment to settle the job state
+
+  const after = await getJob(jobId);
+  const queue = getQueue();
+  const queueState = await queue
+    .getJobById(GENERATE_QUEUE, "stub")
+    .catch(() => null);
+  // The important assertion: row was never silently flipped to succeeded.
+  // pg-boss's own job state is checked indirectly by counting attempts —
+  // it stops dispatching once retries are exhausted.
+  const ok =
+    attempts.length === MAX_ATTEMPTS &&
+    after?.status !== "succeeded" &&
+    attempts[0] === 1 &&
+    attempts.at(-1) === MAX_ATTEMPTS;
+  record(
+    "7. Handler throws on every attempt → no silent success",
+    ok,
+    `attempts=[${attempts.join(",")}] rowStatus=${after?.status ?? "(missing)"}` +
+      (queueState ? ` queueState=present` : ""),
+  );
+
+  await stopQueue();
+}
+
+async function runScenario8ConcurrentAdminRetrySingleEnqueue(appId: number) {
+  // Contract under test: the admin retry endpoint uses an UPDATE ... WHERE
+  // status=? AND updatedAt=? guard so that two concurrent retry requests
+  // racing for the same row result in exactly ONE successful state
+  // transition (and therefore exactly ONE enqueue). The other request gets
+  // zero rows back and returns 409.
+  //
+  // We exercise the SQL guard directly here (the HTTP handler isn't
+  // exported), running the exact same UPDATE pattern in parallel and
+  // asserting only one of them returns a row.
+  const jobId = await insertJobRow(appId, {
+    status: "failed",
+    phase: "failed",
+    errorMessage: "test-precondition",
+    retryCount: 1,
+  });
+  const before = await getJob(jobId);
+  if (!before) {
+    record("8. Concurrent admin retry → single effective transition", false, "could not insert fixture");
+    return;
+  }
+
+  const guardedUpdate = () =>
+    db
+      .update(generationJobs)
+      .set({
+        status: "queued",
+        phase: "queued",
+        progress: 0,
+        errorMessage: null,
+        retryCount: (before.retryCount ?? 0) + 1,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(generationJobs.id, jobId),
+          eq(generationJobs.status, before.status),
+        ),
+      )
+      .returning({ id: generationJobs.id });
+
+  // Fire both updates concurrently. Postgres serialises row writes so
+  // exactly one will win.
+  const [a, b] = await Promise.all([guardedUpdate(), guardedUpdate()]);
+  const winners = [a, b].filter((r) => r.length === 1).length;
+  const losers = [a, b].filter((r) => r.length === 0).length;
+  const ok = winners === 1 && losers === 1;
+  record(
+    "8. Concurrent admin retry → single effective transition",
+    ok,
+    `winners=${winners} losers=${losers}`,
+  );
+}
+
+async function purgeTestQueue() {
+  // Wipe any leftover jobs in the test queue from prior runs so we don't
+  // race with stale items. Best-effort — never throws.
+  try {
+    await startQueue();
+    const boss = getQueue();
+    await boss.deleteAllJobs(GENERATE_QUEUE);
+  } catch (err) {
+    console.warn("Failed to purge test queue (probably first run):", err);
+  } finally {
+    await stopQueue();
+  }
+}
+
 async function main() {
   console.log("=== Queue recovery integration test ===");
   await cleanup();
+  await purgeTestQueue();
   const { appId } = await ensureFixtures();
 
   try {
@@ -278,6 +559,10 @@ async function main() {
     await runScenario2RestartResilience(appId);
     await runScenario3OrphanReclaimQueued(appId);
     await runScenario4StaleRunningFails(appId);
+    await runScenario5RetriesAreDispatched(appId);
+    await runScenario6FinalAttemptFinalises(appId);
+    await runScenario7HandlerAlwaysThrowsRecordedAsFailed(appId);
+    await runScenario8ConcurrentAdminRetrySingleEnqueue(appId);
   } finally {
     await stopQueue().catch(() => {});
     await cleanup();

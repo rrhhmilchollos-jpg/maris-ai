@@ -150,16 +150,23 @@ export interface JobPayload {
 }
 
 /**
- * Register the worker that processes the generation queue. Called once on
- * boot. Concurrency is bounded by JOB_CONCURRENCY (default 3) so a flurry of
- * heavy jobs doesn't OOM the api-server.
+ * Per-attempt context handed to the worker so the handler can distinguish
+ * a first attempt from the final retry. `attempt` is 1-indexed (first try is
+ * attempt 1); `maxAttempts` = initial + DEFAULT_MAX_RETRIES.
  *
- * `handler` is the function that knows how to actually run a generation
- * given the jobId — passed in to keep this module decoupled from the apps
- * route's internals.
+ * The handler MUST throw on transient errors so pg-boss applies its retry +
+ * backoff. Only on the final attempt should the handler swallow the error
+ * and finalise the row (mark failed, refund, post chat message).
  */
+export interface AttemptContext {
+  attempt: number;
+  maxAttempts: number;
+}
+
+export const MAX_ATTEMPTS = DEFAULT_MAX_RETRIES + 1;
+
 export async function registerGenerateWorker(
-  handler: (jobId: number) => Promise<void>,
+  handler: (jobId: number, ctx: AttemptContext) => Promise<void>,
 ): Promise<void> {
   if (workerStarted) {
     logger.warn("registerGenerateWorker called twice — ignoring");
@@ -180,8 +187,13 @@ export async function registerGenerateWorker(
     {
       // pg-boss v10+: `batchSize` controls how many jobs are fetched per
       // poll, `pollingIntervalSeconds` controls poll cadence.
+      // `includeMetadata: true` is REQUIRED so each job carries `retryCount`
+      // (and other metadata fields) — without it we cannot tell a first
+      // attempt apart from the third and the handler can't decide whether
+      // to re-throw or finalise.
       batchSize: concurrency,
       pollingIntervalSeconds: 1,
+      includeMetadata: true,
     },
     async (jobs) => {
       // Run all jobs in the batch concurrently. pg-boss won't hand us more
@@ -193,11 +205,32 @@ export async function registerGenerateWorker(
             logger.error({ jobData: job.data }, "Worker received malformed job payload");
             return;
           }
+          // pg-boss v12's JobWithMetadata exposes `retryCount` (camelCase).
+          // Older versions / lower-level rows surface it as `retrycount`
+          // (lowercase, mapping the raw Postgres column). We accept either
+          // to stay forward-compatible. attempt 1 = first run; attempt N =
+          // (N-1)th retry. The handler uses this to decide whether a thrown
+          // error should be re-thrown (more retries left) or absorbed +
+          // finalised.
+          const raw = job as QueueWorkJob<JobPayload> & {
+            retrycount?: number;
+            retryCount?: number;
+          };
+          const priorRetries =
+            typeof raw.retryCount === "number"
+              ? raw.retryCount
+              : typeof raw.retrycount === "number"
+                ? raw.retrycount
+                : 0;
+          const attempt = priorRetries + 1;
           try {
-            await handler(jobId);
+            await handler(jobId, { attempt, maxAttempts: MAX_ATTEMPTS });
           } catch (err) {
             // Re-throw so pg-boss records the failure and triggers retry/backoff.
-            logger.error({ err, jobId, queueJobId: job.id }, "Generation job worker threw");
+            logger.error(
+              { err, jobId, queueJobId: job.id, attempt, maxAttempts: MAX_ATTEMPTS },
+              "Generation job worker threw — pg-boss will retry if attempts remain",
+            );
             throw err;
           }
         }),

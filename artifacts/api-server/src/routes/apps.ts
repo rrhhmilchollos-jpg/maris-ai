@@ -384,6 +384,11 @@ async function refundCredit(userId: string, jobId: number, amount = 1) {
   }
 }
 
+interface RunAttemptContext {
+  attempt: number;
+  maxAttempts: number;
+}
+
 async function runJob(
   jobId: number,
   userId: string,
@@ -393,6 +398,7 @@ async function runJob(
   coderModel: string,
   language: GenLanguage,
   attachmentIds: number[] = [],
+  attemptCtx: RunAttemptContext = { attempt: 1, maxAttempts: 1 },
 ) {
   try {
     await db
@@ -651,8 +657,38 @@ async function runJob(
       }
     });
   } catch (err) {
-    logger.error({ err, jobId }, "Generation job failed");
     const detail = err instanceof Error ? err.message : "Error desconocido";
+    const hasMoreAttempts = attemptCtx.attempt < attemptCtx.maxAttempts;
+    if (hasMoreAttempts) {
+      // Transient failure path — pg-boss will retry. Do NOT finalise the
+      // row, do NOT refund credits, do NOT post a chat message yet. We just
+      // bump retryCount and re-throw so the queue applies its backoff.
+      logger.warn(
+        { err, jobId, attempt: attemptCtx.attempt, maxAttempts: attemptCtx.maxAttempts },
+        "Generation job attempt failed — pg-boss will retry",
+      );
+      try {
+        await db
+          .update(generationJobs)
+          .set({
+            phase: "retrying",
+            errorMessage: `Reintento ${attemptCtx.attempt}/${attemptCtx.maxAttempts}: ${detail}`,
+            retryCount: attemptCtx.attempt,
+            updatedAt: new Date(),
+          })
+          .where(eq(generationJobs.id, jobId));
+      } catch (updateErr) {
+        logger.error({ updateErr, jobId }, "Failed to mark job as retrying");
+      }
+      throw err;
+    }
+
+    // Final attempt failed — finalise: mark failed, refund credits, post
+    // chat message. This is the path the user actually sees.
+    logger.error(
+      { err, jobId, attempt: attemptCtx.attempt, maxAttempts: attemptCtx.maxAttempts },
+      "Generation job failed after all retries",
+    );
     try {
       await db
         .update(generationJobs)
@@ -660,11 +696,23 @@ async function runJob(
           status: "failed",
           phase: "failed",
           errorMessage: `Falló la generación: ${detail}`,
+          retryCount: attemptCtx.attempt,
           updatedAt: new Date(),
         })
         .where(eq(generationJobs.id, jobId));
     } catch (updateErr) {
-      logger.error({ updateErr, jobId }, "Failed to mark job as failed");
+      // CRITICAL: if we cannot mark the row as terminally failed, we MUST
+      // re-throw. Otherwise pg-boss thinks the job succeeded and will not
+      // dispatch it again, leaving the row stuck in `running`/`retrying`
+      // forever (until the >15min stale-running reclaim eventually picks it
+      // up). Re-throwing on the final attempt does NOT cause another retry
+      // (we're at maxAttempts), but it does ensure pg-boss records the
+      // failure and operators can see the row needs manual attention.
+      logger.error(
+        { err: updateErr, jobId },
+        "Failed to mark job as failed — rethrowing so pg-boss records terminal failure",
+      );
+      throw updateErr;
     }
     // CRITICAL UX: when an *edit* fails, the user has just sent a message and
     // is sitting waiting in the chat. Without an assistant reply they see
@@ -939,7 +987,10 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}) {
  * dispatch the same job twice in normal operation; the only way we'd see this
  * is a crash mid-run or a manual retry.
  */
-export async function runJobById(jobId: number): Promise<void> {
+export async function runJobById(
+  jobId: number,
+  attemptCtx: { attempt: number; maxAttempts: number } = { attempt: 1, maxAttempts: 1 },
+): Promise<void> {
   const [job] = await db
     .select()
     .from(generationJobs)
@@ -963,6 +1014,7 @@ export async function runJobById(jobId: number): Promise<void> {
     job.coderModel,
     job.language as GenLanguage,
     Array.isArray(job.attachmentIds) ? job.attachmentIds : [],
+    attemptCtx,
   );
 }
 
