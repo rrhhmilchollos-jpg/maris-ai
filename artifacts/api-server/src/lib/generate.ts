@@ -1070,11 +1070,26 @@ async function runValidatePatchLoop(
   baseProgressStart: number,
   language: GenLanguage,
   log?: AgentLog,
+  /**
+   * Optional phase gates — when the planner explicitly excludes "validate" or
+   * "patch" the loop is short-circuited and the initial bundle is returned
+   * untouched. Defaults to `{ validate: true, patch: true }` so all existing
+   * call sites keep their current behaviour.
+   */
+  phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
 ): Promise<string> {
   const MAX_ITERATIONS = 2;
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
+
+  // If validation is disabled by the planner there's nothing to verify or
+  // patch — ship the bundle as-is. This is intentional: only the most trivial
+  // scopes (e.g. fast-patch) should ever skip validation.
+  if (!phaseGates.validate) {
+    emit("validator", "Plan dice saltar validación (alcance reducido). Bundle entregado sin verificar.", "warn");
+    return finalFrontend;
+  }
 
   // Seed the loop with the QA-suggested issues so they're addressed even if
   // the bundle technically builds.
@@ -1157,6 +1172,13 @@ async function runValidatePatchLoop(
       /* recall is best-effort */
     }
     lastErrorMessage = primaryError;
+    // Honour the planner's `patch` gate. When disabled we still surface the
+    // validation findings via the log so the issue isn't silent, but we don't
+    // attempt a fix.
+    if (!phaseGates.patch) {
+      emit("patcher", "Plan dice saltar parcheo. Errores reportados pero no corregidos.", "warn");
+      break;
+    }
     const patched = await patchBundle(
       finalFrontend,
       combined.map((i) => ({
@@ -1862,8 +1884,23 @@ export async function generateApp(
     600_000,
     "frontend-engineer",
   );
-  const backendPromise = generateBackendCode(plan, prompt);
+  // Backend is gated by BOTH the planner phase AND the architect's
+  // backendNeeded flag. If the planner explicitly excludes "backend" we skip
+  // the call regardless of what the architect thought.
+  const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
+  const backendPromise = runBackend
+    ? generateBackendCode(plan, prompt)
+    : Promise.resolve(null);
 
+  // Frontend is the one mandatory phase: every non-fast-patch flow must
+  // produce a bundle. If a future planner scope drops "frontend" we'd have
+  // nothing to ship — fail loudly instead of silently producing junk.
+  if (!execPlan.phases.includes("frontend")) {
+    throw new Error(
+      `El planificador devolvió un alcance sin fase 'frontend' (${execPlan.scope}). ` +
+        "No es posible generar una app sin código de frontend.",
+    );
+  }
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
   if (!frontendResult.code) {
@@ -1918,6 +1955,10 @@ export async function generateApp(
     /* baseProgressStart */ 80,
     language,
     log,
+    {
+      validate: execPlan.phases.includes("validate"),
+      patch: execPlan.phases.includes("patch"),
+    },
   );
 
   const testNote = testCode ? "✅ Tests generados. " : "";
@@ -1938,6 +1979,6 @@ export async function generateApp(
     description: plan.description.slice(0, 1000),
     techStack: plan.techStack,
     frontendCode: finalFrontend + testsAppendix + setupNotes,
-    backendCode: backendResult.code || "No backend required for this app.",
+    backendCode: backendResult?.code || "No backend required for this app.",
   };
 }
