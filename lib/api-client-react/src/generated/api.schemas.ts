@@ -244,6 +244,28 @@ export interface JobLogList {
   logs: JobLogEntry[];
 }
 
+/**
+ * A single JS error captured by the published app's iframe sandbox.
+ */
+export interface AppRuntimeError {
+  id: number;
+  /** error | unhandledrejection (matches the browser event name). */
+  kind: string;
+  message: string;
+  source?: string | null;
+  lineno?: number | null;
+  colno?: number | null;
+  stack?: string | null;
+  userAgent?: string | null;
+  /** SPA route the visitor was on when the error fired. */
+  pathname?: string | null;
+  createdAt: string;
+}
+
+export interface AppRuntimeErrorList {
+  errors: AppRuntimeError[];
+}
+
 export interface CreditPackage {
   id: string;
   name: string;

@@ -16,13 +16,17 @@ import {
   useVisualTestApp,
   useForkApp,
   useGetMyStats,
+  useListAppRuntimeErrors,
+  useClearAppRuntimeErrors,
   getGetAppQueryKey,
   getListAppsQueryKey,
   getGetMyStatsQueryKey,
   getListAppMessagesQueryKey,
   getGetGenerationJobQueryKey,
+  getListAppRuntimeErrorsQueryKey,
   useGetMe,
   type VisualTestReport,
+  type AppRuntimeError,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -233,6 +237,40 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         toast({
           title: "No se pudo enviar",
           description: err?.message ?? "Error desconocido",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  // Surface runtime errors captured by the published iframe sandbox so the
+  // owner is alerted when a real visitor hit a broken page. Polled at a slow
+  // cadence (10s) — these arrive from real traffic, not a UI action, so we
+  // don't need sub-second freshness, and most apps will report nothing.
+  // The query is enabled only once the app has actually been published
+  // (publicSlug present) — there's nothing to fetch otherwise.
+  const { data: runtimeErrors } = useListAppRuntimeErrors(id, {
+    query: {
+      enabled: !!id && !!app?.publicSlug,
+      queryKey: getListAppRuntimeErrorsQueryKey(id),
+      refetchInterval: 10_000,
+    },
+  });
+  const errorCount = runtimeErrors?.errors?.length ?? 0;
+  const [errorsOpen, setErrorsOpen] = useState(false);
+  const clearErrorsMutation = useClearAppRuntimeErrors({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: getListAppRuntimeErrorsQueryKey(id),
+        });
+        setErrorsOpen(false);
+        toast({ title: "Errores descartados" });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "No pudimos limpiar los errores",
+          description: err?.message ?? "Inténtalo otra vez.",
           variant: "destructive",
         });
       },
@@ -660,21 +698,37 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </Button>
 
             {app.publicSlug ? (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="h-8 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300"
-                title="Abrir la URL pública"
-              >
-                <a
-                  href={`/p/${app.publicSlug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="h-8 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300"
+                  title="Abrir la URL pública"
                 >
-                  <ExternalLink className="h-4 w-4 mr-1.5" /> Pública
-                </a>
-              </Button>
+                  <a
+                    href={`/p/${app.publicSlug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-1.5" /> Pública
+                  </a>
+                </Button>
+                {errorCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setErrorsOpen(true)}
+                    className="h-8 border-red-400/40 bg-red-500/10 hover:bg-red-500/20 text-red-300"
+                    title="Tu app publicada falló al cargarse en el navegador de algún visitante. Haz click para ver los detalles."
+                    data-testid="button-runtime-errors"
+                  >
+                    <AlertCircle className="h-4 w-4 mr-1.5" />
+                    {errorCount >= 50 ? "50+" : errorCount} error
+                    {errorCount === 1 ? "" : "es"}
+                  </Button>
+                )}
+              </>
             ) : (
               <Button
                 variant="outline"
@@ -1285,6 +1339,103 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   ✨ Sin problemas visuales detectados.
                 </div>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        Runtime errors dialog. Surfaces the JS errors captured by the
+        published iframe sandbox so the owner sees what their visitors are
+        hitting and can decide whether to regenerate the app. The endpoint
+        always returns a bounded list (max 50 most recent) so we render
+        them inline without virtualization.
+      */}
+      <Dialog open={errorsOpen} onOpenChange={setErrorsOpen}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-slate-950 border-red-400/30">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-300">
+              <AlertCircle className="h-5 w-5" />
+              Errores en tu app publicada
+            </DialogTitle>
+            <DialogDescription className="text-slate-300">
+              Estos son los errores de JavaScript que captamos cuando alguien
+              abrió tu app pública. Si ves algo recurrente, intenta describirlo
+              en el chat para que la IA lo corrija o vuelve a regenerarla.
+            </DialogDescription>
+          </DialogHeader>
+          {runtimeErrors?.errors?.length ? (
+            <div className="space-y-3">
+              {runtimeErrors.errors.map((err: AppRuntimeError) => (
+                <div
+                  key={err.id}
+                  className="rounded-lg border border-red-400/20 bg-red-500/5 p-3 text-sm"
+                  data-testid={`runtime-error-${err.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <Badge
+                      variant="secondary"
+                      className="bg-red-500/15 text-red-200 border-red-400/30 font-mono text-[10px]"
+                    >
+                      {err.kind}
+                    </Badge>
+                    <span className="text-xs text-slate-400">
+                      {format(new Date(err.createdAt), "d MMM yyyy HH:mm", {
+                        locale: es,
+                      })}
+                    </span>
+                  </div>
+                  <div className="font-mono text-xs text-red-100 break-words whitespace-pre-wrap">
+                    {err.message}
+                  </div>
+                  {(err.source || err.lineno) && (
+                    <div className="mt-1.5 text-[11px] text-slate-400 font-mono break-all">
+                      {err.source ?? "(sin archivo)"}
+                      {err.lineno ? `:${err.lineno}` : ""}
+                      {err.colno ? `:${err.colno}` : ""}
+                    </div>
+                  )}
+                  {err.pathname && err.pathname !== "/" && (
+                    <div className="mt-1 text-[11px] text-slate-400">
+                      Ruta:{" "}
+                      <span className="font-mono text-slate-300">
+                        {err.pathname}
+                      </span>
+                    </div>
+                  )}
+                  {err.stack && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-[11px] text-slate-400 hover:text-slate-200">
+                        Stack trace
+                      </summary>
+                      <pre className="mt-1.5 overflow-x-auto rounded bg-black/40 p-2 text-[10px] text-slate-300 leading-tight">
+                        {err.stack}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center justify-end gap-2 pt-2 sticky bottom-0 bg-slate-950">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => clearErrorsMutation.mutate({ id: app.id })}
+                  disabled={clearErrorsMutation.isPending}
+                  className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  data-testid="button-clear-runtime-errors"
+                >
+                  {clearErrorsMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4 mr-1.5" />
+                  )}
+                  Descartar todos
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-200 text-center">
+              ✨ No hay errores reportados.
             </div>
           )}
         </DialogContent>
