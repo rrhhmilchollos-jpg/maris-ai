@@ -31,6 +31,12 @@ export async function buildDeployHtml(opts: {
   // is provided via CDN so it's filtered out below; everything else gets a
   // pinned esm.sh URL.
   const externals = new Set<string>();
+  // Collect CSS contents from any `import './foo.css'` statements. esbuild
+  // can't emit CSS in `write: false` mode without an outdir, so we intercept
+  // CSS files in the loader, return a JS no-op for the import, and inject the
+  // raw CSS into the deployed HTML head as a `<style>` tag. This preserves
+  // styles in the deployed page without needing a separate CSS bundle.
+  const collectedCss: string[] = [];
 
   const result = await esbuild.build({
     entryPoints: [entry],
@@ -41,7 +47,7 @@ export async function buildDeployHtml(opts: {
     jsx: "automatic",
     jsxImportSource: "react",
     logLevel: "silent",
-    plugins: [virtualFsPlugin(vfs, externals)],
+    plugins: [virtualFsPlugin(vfs, externals, collectedCss)],
   });
 
   const code = result.outputFiles[0]?.text ?? "";
