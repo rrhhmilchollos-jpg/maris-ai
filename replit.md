@@ -66,6 +66,26 @@ The AppForge system is composed of a React-based frontend, a Node.js/Express bac
 - The chat input on the app detail page shows an inline **out-of-credits banner** with a CTA to /billing when `stats.credits <= 0`, so users discover the need to top up before pressing send.
 - The dashboard "Apps recientes" list has a **Todas / Desplegadas** chip filter (pure client-side, filters on `publicSlug`).
 
+**Visual Testing Agent — Full Loop**:
+- Auto-runs after BOTH initial generation and edits via `autoRunVisualTester` (background `setImmediate` after the finalisation transaction commits in `runJob`).
+- Costs 30 credits per run, charged silently (refunded if the run errors out). Skipped when the user has 0 credits available.
+- Up to `MAX_FIX_CYCLES=3` patch cycles per run; each patched bundle is validated via in-memory esbuild before persisting (optimistic concurrency to avoid clobbering chat edits).
+- After completion, posts an assistant message to the app's chat history summarising the outcome (score, cycles, fixes applied, top issues, summary). This makes the agent's work visible to the user — without it, the 30-credit charge looks invisible.
+- The architect prompt (`PLAN_SYSTEM_PROMPT`) understands `[INTENT: …]` hints prefixed by the dashboard's project-type tabs (mobile-first PWA / landing page / fullstack) and biases the plan accordingly.
+
+**Project Type Tabs (Dashboard)**:
+- 3 chips above the prompt textarea on `/dashboard`: **App completa**, **App móvil**, **Landing page**. Default is App completa.
+- Each chip changes the placeholder text and, on submit, prepends an `[INTENT: …]` directive to the prompt sent to the architect.
+- The hint is *only* applied to new-app generation from the dashboard. Edit chat messages on `/app/:id` go through unchanged unless the user types the prefix manually.
+- Implemented as `role="group"` with `aria-pressed` toggle buttons (matching the existing Todas/Desplegadas filter pattern); not WAI-ARIA tabs to avoid needing roving-tabindex/arrow-key navigation.
+
+**Annual Upgrade Modal**:
+- A 4th credit package "Annual" (id: `annual`, 600 credits / $399 — ~58% off Pro per credit) is exposed via `CREDIT_PACKAGES`. Reuses the existing checkout/webhook flow (no separate Stripe subscription product yet).
+- The dashboard auto-pops a modal 1.2s after the user object loads, *only* for non-admins. Dismissed (X / overlay click / "Tal vez después") snoozes 7 days via `localStorage` (`appforge_annual_modal_until`). Buying calls the existing `/api/billing/checkout` with `priceId="annual"`; a Stripe-not-configured error redirects to `/billing` so the user sees the explanatory copy.
+
+**Social Login (Clerk)**:
+- AppForge uses Clerk's pre-built `<SignIn>` and `<SignUp>` components. Social providers (Google, GitHub, Apple, Facebook, etc.) are rendered automatically by Clerk **as soon as you enable them in the Clerk Dashboard** — there is no code change required in this repo. To enable: Clerk Dashboard → User & Authentication → Social Connections → toggle the providers and add their client credentials.
+
 **Edit Prompt — Backend Awareness**:
 - `buildEditSystemPrompt` (in `lib/generate.ts`) explicitly instructs the model that `backendCode` is in scope: any user request mentioning backend, API, endpoint, auth, payments, db, etc. must rewrite `backendCode`. The "1-4 files surgical edit" guidance is scoped to tweaks; full-feature/full-backend requests may touch many files.
 - **Known debt — secret leakage in edit prompt**: every edit pass sends the *current* `frontendCode` AND `backendCode` to the LLM. AppForge bundles read secrets from environment variables (not hard-coded), but if a user pastes a literal secret into their generated backend code via chat, it would be transmitted on the next edit. Mitigation (not yet implemented): redact common secret-shaped literals before sending, or only inject `backendCode` for explicit backend-edit intents.

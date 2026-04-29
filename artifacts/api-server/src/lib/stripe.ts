@@ -47,6 +47,20 @@ export const CREDIT_PACKAGES = [
     currency: "usd",
     popular: false,
   },
+  // Annual mega-pack — best per-credit price (≈58% savings vs Pro per credit).
+  // Pro:    50 credits / $80   = $1.60 per credit
+  // Annual: 600 credits / $399 = $0.665 per credit  ⇒ 58.4% off Pro
+  // Used as the headline "Plan Anual" upgrade modal on the dashboard.
+  {
+    id: "annual",
+    priceId: "annual",
+    name: "Annual",
+    description: "12 meses de combustible al mejor precio. Ideal para creadores que envían apps cada semana.",
+    credits: 600,
+    priceCents: 39900,
+    currency: "usd",
+    popular: false,
+  },
 ] as const;
 
 export type CreditPackageDef = (typeof CREDIT_PACKAGES)[number];

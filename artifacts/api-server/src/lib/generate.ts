@@ -182,6 +182,11 @@ DATA MODELS — make them realistic:
 - Include the fields you'd actually use in a real schema (id, timestamps, relations, status enums).
 - 2-5 models is healthy for most apps.
 
+INTENT HINTS — when the user prompt starts with a bracketed hint like "[INTENT: …]", that's a top-priority directive from the dashboard's project-type tabs. Honor it strictly:
+- "[INTENT: mobile-first PWA …]": all pages must be mobile-first, single-column, large tap targets (≥44px), bottom navigation bar component, design verified at 390px width. Add a mobile-style bottom nav component to components[].
+- "[INTENT: landing page …]": output exactly 1 page (Home/Landing), backendNeeded MUST be false, focus everything on hero + features + social-proof + pricing + CTA + footer sections. Skip dashboards, auth, etc.
+- "[INTENT: …fullstack…]" or no intent prefix: behave as the rest of the rules describe.
+
 FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X" (clone of an existing product).
 - Keywords that imply full-stack: "marketplace", "ecommerce", "tienda", "shop", "comprar", "vender", "carrito", "subasta", "red social", "comunidad", "foro", "chat", "mensajes", "publicar", "perfil", "cuenta", "login", "auth", "panel", "dashboard", "admin", "saas", "suscripción", "pago", "stripe", "blog", "cms", "reservas", "booking", "agenda", "calendar", "votar", "valorar", "reseña", "review", "API", "backend", "base de datos", "db", "clone", "clon".

@@ -22,7 +22,16 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useCreateCheckoutSession } from "@workspace/api-client-react";
 import {
   Select,
   SelectContent,
@@ -62,6 +71,37 @@ export default function DashboardPage() {
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   // Recent-apps filter — "all" or only those with a public deploy URL.
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
+  // Generation kind preset — biases the architect toward fullstack apps,
+  // mobile-first PWAs, or single-page landing pages by prepending an
+  // [INTENT: …] hint to the prompt. The hint is only added at submit time
+  // so the user's textarea content stays readable.
+  const [kind, setKind] = useState<"fullstack" | "mobile" | "landing">("fullstack");
+  const KIND_META: Record<typeof kind, { label: string; icon: typeof Layers; placeholder: string; intent: string | null }> = {
+    fullstack: {
+      label: "App completa",
+      icon: Layers,
+      placeholder: "ej. Un marketplace estilo Wallapop con publicaciones, búsqueda, mensajes y perfil de usuario...",
+      intent: null,
+    },
+    mobile: {
+      label: "App móvil",
+      icon: Smartphone,
+      placeholder: "ej. Un diario de hábitos para móvil con racha diaria, notificaciones de recordatorio y vista de calendario...",
+      intent:
+        "[INTENT: mobile-first PWA — diseño en columna única optimizado para pantallas de teléfono, tipografía grande, áreas de toque generosas (mínimo 44px), barra de navegación inferior fija, todas las páginas deben verse perfectas a 390px de ancho]",
+    },
+    landing: {
+      label: "Landing page",
+      icon: Rocket,
+      placeholder: "ej. Una landing page para una herramienta SaaS de productividad con hero, features, testimonios, pricing y CTA final...",
+      intent:
+        "[INTENT: landing page — sitio de marketing de una sola página con hero impactante, sección de features, prueba social/testimonios, pricing y CTA final + footer. No requiere backend ni dashboard, backendNeeded debe ser false]",
+    },
+  };
+  // Annual upgrade modal — pops up once per 7 days for non-admin users on
+  // the dashboard. Dismissed-state lives in localStorage so it doesn't
+  // nag on every navigation.
+  const [annualOpen, setAnnualOpen] = useState(false);
 
   const { data: me } = useGetMe();
   // Promote default to GPT-5 once we know the user is premium AND the user hasn't
@@ -155,8 +195,54 @@ export default function DashboardPage() {
 
     // Pass the user-selected coder model + source language. The server
     // validates both against allow-lists and falls back to defaults if
-    // anything is unknown.
-    generateMutation.mutate({ data: { prompt, coderModel, language } });
+    // anything is unknown. Prepend the kind-intent hint so the architect
+    // biases the plan accordingly (mobile-first / landing-only / fullstack).
+    const intent = KIND_META[kind].intent;
+    const finalPrompt = intent ? `${intent}\n\n${prompt}` : prompt;
+    generateMutation.mutate({ data: { prompt: finalPrompt, coderModel, language } });
+  };
+
+  // Annual modal trigger — show once per 7 days for non-admins after the
+  // first time they land on the dashboard. Stored as a unix-ms expiry so
+  // we don't pop the modal again until that time passes.
+  useEffect(() => {
+    if (!me || isAdmin) return undefined;
+    let cleanup: (() => void) | undefined;
+    try {
+      const raw = localStorage.getItem("appforge_annual_modal_until");
+      const until = raw ? Number(raw) : 0;
+      if (Date.now() > until) {
+        // Stagger so it doesn't appear during the page enter animation.
+        const t = setTimeout(() => setAnnualOpen(true), 1200);
+        cleanup = () => clearTimeout(t);
+      }
+    } catch {
+      // localStorage blocked — just skip the modal silently.
+    }
+    return cleanup;
+  }, [me, isAdmin]);
+
+  const checkoutForAnnual = useCreateCheckoutSession({
+    mutation: {
+      onSuccess: (data) => {
+        window.location.href = data.url;
+      },
+      onError: () => {
+        // If checkout isn't configured yet, send the user to /billing where
+        // we already explain that Stripe is being set up.
+        setLocation("/billing");
+      },
+    },
+  });
+
+  const dismissAnnual = (snoozeDays: number) => {
+    try {
+      const until = Date.now() + snoozeDays * 24 * 60 * 60 * 1000;
+      localStorage.setItem("appforge_annual_modal_until", String(until));
+    } catch {
+      /* ignore */
+    }
+    setAnnualOpen(false);
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
@@ -222,10 +308,43 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
-              <Textarea 
+              {/* Tipo de proyecto — chips arriba del Textarea. Cada chip
+                  cambia el placeholder y prepende un hint [INTENT: …] al
+                  prompt al enviar para guiar al arquitecto. */}
+              <div
+                className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-background/50 p-1"
+                role="group"
+                aria-label="Tipo de proyecto"
+                data-testid="kind-tabs"
+              >
+                {(Object.keys(KIND_META) as Array<keyof typeof KIND_META>).map((k) => {
+                  const meta = KIND_META[k];
+                  const Icon = meta.icon;
+                  const active = kind === k;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setKind(k)}
+                      disabled={isWorking}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                        active
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:text-white hover:bg-white/5"
+                      }`}
+                      data-testid={`kind-tab-${k}`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="ej. Un rastreador elegante de hábitos con casillas diarias, gráfica de progreso y modo oscuro..." 
+                placeholder={KIND_META[kind].placeholder}
                 className="min-h-[120px] bg-background/50 border-border/50 font-sans text-base focus-visible:ring-primary/50"
                 disabled={isWorking}
                 data-testid="input-prompt"
@@ -414,6 +533,72 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Modal anual al 58% — único cada 7 días para no-admins. Reaprovecha
+          el flujo de checkout existente con priceId="annual". */}
+      <Dialog open={annualOpen} onOpenChange={(open) => { if (!open) dismissAnnual(7); }}>
+        <DialogContent className="max-w-md border-primary/30 bg-card" data-testid="modal-annual">
+          <DialogHeader>
+            <div className="flex items-center justify-between mb-2">
+              <Badge className="bg-primary text-primary-foreground font-semibold tracking-wide">
+                AHORRA 58%
+              </Badge>
+              <button
+                type="button"
+                onClick={() => dismissAnnual(7)}
+                className="text-muted-foreground hover:text-white transition-colors"
+                aria-label="Cerrar"
+                data-testid="button-annual-close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <DialogTitle className="text-2xl">Plan Anual de AppForge</DialogTitle>
+            <DialogDescription className="text-base text-muted-foreground pt-2">
+              600 créditos por <span className="font-bold text-white">$399</span> en lugar de $960. Suficiente combustible para 12 meses de generación intensiva al mejor precio por crédito.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-white/10 bg-background/50 p-4 my-2 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Créditos incluidos</span>
+              <span className="font-mono text-white">600</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Precio por crédito</span>
+              <span className="font-mono text-primary">$0.67</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Vs. plan Pro</span>
+              <span className="font-mono text-green-400">−58%</span>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => dismissAnnual(7)}
+              className="text-muted-foreground"
+              data-testid="button-annual-later"
+            >
+              Tal vez después
+            </Button>
+            <Button
+              onClick={() => checkoutForAnnual.mutate({ data: { priceId: "annual" } })}
+              disabled={checkoutForAnnual.isPending}
+              className="bg-primary text-white hover:bg-primary/90"
+              data-testid="button-annual-buy"
+            >
+              {checkoutForAnnual.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Comprar plan anual
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
