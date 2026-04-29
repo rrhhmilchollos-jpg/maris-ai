@@ -43,6 +43,10 @@ export async function startQueue(): Promise<PgBoss> {
   return boss;
 }
 
+export function isQueueReady(): boolean {
+  return bossInstance !== null;
+}
+
 export function getQueue(): PgBoss {
   if (!bossInstance) {
     throw new Error("Job queue not started — call startQueue() first");
@@ -63,7 +67,7 @@ export async function enqueueGenerateJob(jobId: number): Promise<void> {
       retryDelay: 30,
       expireInSeconds: DEFAULT_EXPIRE_SECONDS,
       singletonKey: `gen-${jobId}`,
-      singletonSeconds: 60 * 60,
+      singletonSeconds: 24 * 60 * 60,
     },
   );
 }
@@ -80,7 +84,7 @@ export async function reenqueueGenerateJob(jobId: number): Promise<void> {
       retryDelay: 30,
       expireInSeconds: DEFAULT_EXPIRE_SECONDS,
       singletonKey: `gen-${jobId}-${Date.now()}`,
-      singletonSeconds: 60 * 60,
+      singletonSeconds: 24 * 60 * 60,
     },
   );
 }
