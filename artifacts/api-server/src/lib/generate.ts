@@ -1229,7 +1229,11 @@ async function singleEditPass(
   onChars: (chars: number) => void,
   coderModel: string | undefined,
   language: GenLanguage,
+  log?: AgentLog,
 ): Promise<GeneratedAppPayload> {
+  // Best-effort logger so call sites stay one-liners. Edit-mode logs are
+  // pure UX — losing one must never cascade into a generation failure.
+  const emit: AgentLog = log ?? (() => {});
   const userContent = `CURRENT APP:
 - Title: ${previous.title}
 - Description: ${previous.description}
@@ -1253,6 +1257,62 @@ Return the FULL updated app as JSON.`;
   const systemPrompt = buildEditSystemPrompt(language);
 
   /**
+   * Stateful "stream observer" that watches the JSON text as it pours out of
+   * the model and surfaces meaningful events to the live log:
+   *
+   *  - When the stream first crosses the `"frontendCode": "` key we log
+   *    "Reescribiendo el frontend…" so the user sees something instead of
+   *    a 90-second silence.
+   *  - Each `// === FILE: <path> ===` marker spotted inside frontendCode or
+   *    backendCode emits a coder log line — exactly what emergent.sh does to
+   *    convey "the agent is writing src/pages/Anuncios.tsx right now".
+   *  - When the stream hits `"backendCode": "` we log "Generando backend…"
+   *    so users asking for a full backend can SEE the backend phase begin.
+   *
+   * The observer only ever scans the *new* tail of the buffer (not the whole
+   * accumulated text) so it stays cheap even on 100KB+ responses. It is
+   * deliberately defensive: malformed streams must never crash the pipeline.
+   */
+  function makeStreamObserver() {
+    let scanFrom = 0;
+    let sawFrontendKey = false;
+    let sawBackendKey = false;
+    let inBackend = false;
+    const seenFiles = new Set<string>();
+    const FILE_MARKER = /\/\/\s*===\s*FILE:\s*([^=\n]+?)\s*===/g;
+    return (buffer: string) => {
+      try {
+        const tail = buffer.slice(Math.max(0, scanFrom - 64));
+        if (!sawFrontendKey && /"frontendCode"\s*:\s*"/.test(tail)) {
+          sawFrontendKey = true;
+          emit("coder", "Reescribiendo el frontend…");
+        }
+        if (!sawBackendKey && /"backendCode"\s*:\s*"/.test(tail)) {
+          sawBackendKey = true;
+          inBackend = true;
+          emit("coder", "Generando el backend (Express + Drizzle)…");
+        }
+        FILE_MARKER.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = FILE_MARKER.exec(tail)) !== null) {
+          // Inside JSON the model often emits forward slashes as `\/` — strip
+          // those so the user sees `src/App.tsx`, not `src\/App.tsx`.
+          const file = m[1].replace(/\\\//g, "/").trim().slice(0, 80);
+          if (file && !seenFiles.has(file)) {
+            seenFiles.add(file);
+            // Files seen *after* the backendCode key are server-side files.
+            const where = inBackend ? "backend" : "frontend";
+            emit("coder", `Escribiendo ${where}: ${file}`);
+          }
+        }
+        scanFrom = buffer.length;
+      } catch {
+        /* observer is best-effort — ignore */
+      }
+    };
+  }
+
+  /**
    * Run the chosen provider with an optional reminder appended to the user
    * content. Returns the raw accumulated text plus the finish reason so the
    * caller can inspect & retry.
@@ -1263,6 +1323,12 @@ Return the FULL updated app as JSON.`;
       : userContent;
     let accumulated = "";
     let finishReason: string | undefined;
+    const observe = makeStreamObserver();
+    // Fire char-progress every 500 chars instead of every 1500. The cost is
+    // a few extra `onProgress` callbacks per generation — cheap — and the UI
+    // gets a much smoother "X KB so far" counter (3× more updates) so the
+    // user perceives the agent as actively working instead of stalled.
+    const PROGRESS_EVERY = 500;
     if (provider === "gemini-flash") {
       const stream = await gemini.models.generateContentStream({
         model: "gemini-2.5-flash",
@@ -1278,7 +1344,8 @@ Return the FULL updated app as JSON.`;
         const text = chunk.text;
         if (text) {
           accumulated += text;
-          if (accumulated.length - lastReport >= 1500) {
+          observe(accumulated);
+          if (accumulated.length - lastReport >= PROGRESS_EVERY) {
             lastReport = accumulated.length;
             onChars(accumulated.length);
           }
@@ -1303,7 +1370,8 @@ Return the FULL updated app as JSON.`;
         const delta = chunk.choices[0]?.delta?.content;
         if (delta) {
           accumulated += delta;
-          if (accumulated.length - lastReport >= 1500) {
+          observe(accumulated);
+          if (accumulated.length - lastReport >= PROGRESS_EVERY) {
             lastReport = accumulated.length;
             onChars(accumulated.length);
           }
@@ -1327,7 +1395,8 @@ Return the FULL updated app as JSON.`;
           event.delta.type === "text_delta"
         ) {
           accumulated += event.delta.text;
-          if (accumulated.length - lastReport >= 1500) {
+          observe(accumulated);
+          if (accumulated.length - lastReport >= PROGRESS_EVERY) {
             lastReport = accumulated.length;
             onChars(accumulated.length);
           }
@@ -1421,7 +1490,18 @@ export async function generateApp(
   if (previous) {
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
     log("system", `Modo edición: aplicando cambios sobre la app existente (${Math.round(previous.frontendCode.length / 1000)} KB).`);
+    // Surface which model is actually doing the work so the user knows
+    // whether they're on the fast (Gemini Flash) or quality (Sonnet) path.
+    const provider = resolveCoderProvider(coderModel);
+    const providerLabel =
+      provider === "gemini-flash" ? "Gemini 2.5 Flash (rápido)"
+      : provider === "claude-sonnet" ? "Claude Sonnet 4.6 (calidad)"
+      : "GPT-5 Codex";
+    log("coder", `Modelo seleccionado: ${providerLabel}.`);
     const TARGET = 50_000;
+    // Heartbeat every ~2.5s so the log feels alive even when the model is
+    // chewing through a long backend bundle without crossing a file marker.
+    let lastHeartbeatAt = Date.now();
     const onChars = (chars: number) => {
       const ratio = Math.min(1, chars / TARGET);
       onProgress?.({
@@ -1429,8 +1509,18 @@ export async function generateApp(
         progress: 20 + Math.round(ratio * 50),
         note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)`,
       });
+      const now = Date.now();
+      if (now - lastHeartbeatAt > 2500) {
+        lastHeartbeatAt = now;
+        log("coder", `Recibiendo respuesta… ${Math.round(chars / 1000)} KB hasta ahora.`);
+      }
     };
-    const result = await singleEditPass(prompt, previous, onChars, coderModel, language);
+    log("coder", "Esperando primer token del modelo…");
+    const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+    log(
+      "coder",
+      `Bundle nuevo listo: frontend ${Math.round(result.frontendCode.length / 1000)} KB, backend ${Math.round((result.backendCode || "").length / 1000)} KB.`,
+    );
 
     // Edit mode used to skip validation entirely, so a single bad token from
     // the coder (trailing comma, garbage identifier like "née", invented
@@ -1448,6 +1538,7 @@ export async function generateApp(
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
+    log("system", "Empaquetando archivos finales…");
     return { ...result, frontendCode: fixedFrontend };
   }
 
