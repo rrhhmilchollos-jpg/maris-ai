@@ -301,7 +301,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2000,
+    max_tokens: 1500,
     system: ARCHITECT_SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
   });
@@ -329,19 +329,20 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
     : summary;
   let raw = "";
   try {
+    // Switched from gpt-5-mini → claude-haiku-4-5 because Haiku is consistently
+    // ~3-4x faster on JSON-emit tasks like this design system spec.
     const response = await withTimeoutOrThrow(
-      getOpenAI().chat.completions.create({
-        model: "gpt-5-mini",
-        max_completion_tokens: 1500,
-        messages: [
-          { role: "system", content: DESIGNER_SYSTEM_PROMPT },
-          { role: "user", content: userContent },
-        ],
+      anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 1200,
+        system: DESIGNER_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userContent }],
       }),
-      45_000,
+      18_000,
       "designer",
     );
-    raw = response.choices[0]?.message?.content ?? "";
+    const t = response.content.find((b) => b.type === "text");
+    raw = t && t.type === "text" ? t.text : "";
   } catch (_err) {
     // Fall through to default design below.
   }
@@ -403,9 +404,12 @@ ${research ? `\nResearch context (visual reference, treat as ground truth):\n${r
 
 Now produce the JSON object with frontendCode containing every listed file.`;
 
+  // 30000 → 18000 tokens. The frontend bundle stays under ~70KB anyway and
+  // every extra token is ~70-90ms of streaming. This was the single biggest
+  // cost in the pipeline.
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 30000,
+    max_tokens: 18000,
     system: FRONTEND_SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
   });
@@ -459,13 +463,13 @@ Now produce the JSON object with backendCode.`;
     const response = await withTimeoutOrThrow(
       getOpenAI().chat.completions.create({
         model: "gpt-5-mini",
-        max_completion_tokens: 8000,
+        max_completion_tokens: 5000,
         messages: [
           { role: "system", content: BACKEND_SYSTEM_PROMPT },
           { role: "user", content: userContent },
         ],
       }),
-      90_000,
+      45_000,
       "backend-engineer",
     );
     const raw = response.choices[0]?.message?.content ?? "";
@@ -632,7 +636,7 @@ Return the JSON object with testCode.`,
         return "";
       }
     })(),
-    30_000,
+    12_000,
     "",
   );
 }
@@ -650,7 +654,7 @@ async function patchBundle(
       try {
         const response = await anthropic.messages.create({
           model: "claude-sonnet-4-6",
-          max_tokens: 24000,
+          max_tokens: 16000,
           system: PATCHER_SYSTEM_PROMPT,
           messages: [
             {
@@ -678,7 +682,7 @@ Return the FULL patched bundle as JSON.`,
         return null;
       }
     })(),
-    60_000,
+    35_000,
     null,
   );
 }
@@ -745,9 +749,11 @@ ${prompt}
 
 Return the FULL updated app as JSON.`;
 
+  // 32000 → 20000: edit mode rewrites the full bundle, but bundles are usually
+  // well under 70KB so this header room is unnecessary and cost ~30s of latency.
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 32000,
+    max_tokens: 20000,
     system: EDIT_SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
   });
@@ -829,7 +835,7 @@ export async function generateApp(
   });
   const plan = await withTimeoutOrThrow(
     architectPlan(prompt, research),
-    60_000,
+    30_000,
     "architect",
   );
 
@@ -872,7 +878,7 @@ export async function generateApp(
         note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…`,
       });
     }),
-    180_000,
+    110_000,
     "frontend-engineer",
   );
   const backendPromise = generateBackendCode(plan, prompt);
@@ -902,7 +908,9 @@ export async function generateApp(
   // Real build via esbuild ("ejecutar el código"). If it fails, feed the build
   // errors back to the patcher and try again. Bounded to MAX_ITERATIONS so the
   // pipeline can never spiral.
-  const MAX_ITERATIONS = 4;
+  // 4 → 2: at most one validate+patch+revalidate cycle. Each patch is up to
+  // 35s, so this caps the loop at ~70s in the worst case (was ~240s).
+  const MAX_ITERATIONS = 2;
   let finalFrontend = frontendResult.code;
 
   // Seed the loop with the QA-suggested issues so they're addressed even if
