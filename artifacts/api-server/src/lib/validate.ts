@@ -199,6 +199,13 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
       entryPoints: [entry],
       bundle: true,
       write: false,
+      // outdir is required as soon as the bundle imports any non-JS asset
+      // (.css, .svg, …) — even with `write: false` and an "empty" loader,
+      // esbuild needs an output path to compute relative URLs for the asset
+      // chunks. We never write to it because of `write: false`, but without
+      // it esbuild fails with "Cannot import X into a JavaScript file without
+      // an output path configured" the moment the user adds `import "./x.css"`.
+      outdir: "/tmp/appforge-validate-out",
       format: "esm",
       target: "es2020",
       jsx: "automatic",
