@@ -8,7 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:queue": "tsx ./src/__tests__/queue-recovery.test.ts"
+    "test:queue": "tsx ./src/__tests__/queue-recovery.test.ts",
+    "test:agent-memory": "tsx ./src/__tests__/agent-memory.test.ts",
+    "test": "pnpm run test:agent-memory && pnpm run test:queue"
   },
   "dependencies": {
     "@clerk/express": "^2.1.9",
