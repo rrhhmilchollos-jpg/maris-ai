@@ -100,7 +100,10 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     // Poll fast while running; stop once the job terminates. Tail-loss (lines
     // committed by the unawaited fire-and-forget INSERT after the job is
     // marked succeeded) is mitigated by the explicit final fetch effect below.
-    refetchInterval: isActive ? 1200 : false,
+    // 600 ms feels close-to-realtime in the UI without putting noticeable
+    // load on the API server (the response is tiny — only NEW lines after
+    // the cursor — and the route is a single indexed SELECT).
+    refetchInterval: isActive ? 600 : false,
     refetchOnWindowFocus: false,
     // Don't dedupe — we always want the freshest cursor.
     staleTime: 0,
