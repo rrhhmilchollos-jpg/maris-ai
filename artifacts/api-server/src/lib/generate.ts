@@ -1744,7 +1744,24 @@ export async function generateApp(
         log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
     };
-    log("coder", "Pensando…");
+    // Authoritative phase dispatch for edit-mode based on the planner's
+    // ExecutionPlan. For "feature" scope the planner returns
+    // architect+frontend+validate+patch — we log each phase explicitly so the
+    // user sees the dispatcher driving them, then route through singleEditPass
+    // (which internally is a fused architect+frontend pass — the model
+    // re-plans the change AND emits the new code in a single call) followed
+    // by the gated validate+patch loop.
+    if (execPlan.scope === "feature") {
+      log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
+      if (execPlan.phases.includes("architect")) {
+        log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
+      }
+      if (execPlan.phases.includes("frontend")) {
+        log("coder", "Frontend: aplicando la nueva funcionalidad…");
+      }
+    } else {
+      log("coder", "Pensando…");
+    }
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
     log("coder", "Código listo, comprobando que todo encaje…");
 
@@ -1752,7 +1769,8 @@ export async function generateApp(
     // the coder (trailing comma, garbage identifier like "née", invented
     // package import) would ship straight to the user's preview as a parse
     // error. Run the same validate→patch loop the initial pipeline uses so
-    // edits get the same safety net.
+    // edits get the same safety net — gated on the planner's phases array so
+    // a future "ultra-fast" scope could disable them.
     const fixedFrontend = await runValidatePatchLoop(
       result.frontendCode,
       { ok: true, issues: [] },
@@ -1760,6 +1778,10 @@ export async function generateApp(
       /* baseProgressStart */ 70,
       language,
       log,
+      {
+        validate: execPlan.phases.includes("validate"),
+        patch: execPlan.phases.includes("patch"),
+      },
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
