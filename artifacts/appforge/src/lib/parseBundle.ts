@@ -26,6 +26,12 @@ export function parseBundle(bundle: string): Record<string, string> {
   return out;
 }
 
+// IMPORTANT: Sandpack's `react-ts` template is Vite-based and reads /index.html
+// from the project root (NOT /public/index.html, that's the CRA convention).
+// The script tag must point at /index.tsx as a module so the React entry runs.
+// Without injecting Tailwind via CDN here, every utility class (flex, grid,
+// w-full, p-4, …) silently no-ops and the preview looks like raw browser
+// defaults — links underlined in purple, blocks stacked, no layout.
 const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -34,11 +40,13 @@ const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
     <title>Preview</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      html, body, #root { margin: 0; min-height: 100%; width: 100%; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>`;
 
@@ -172,7 +180,11 @@ export function buildSandpackFiles(parsed: Record<string, string>): SandpackFile
   }
 
   // Always inject the tailwind CDN via our preview index.html (Sandpack cannot
-  // run a real postcss/tailwind build pipeline).
+  // run a real postcss/tailwind build pipeline). The Vite-based react-ts
+  // template uses /index.html at the root — writing /public/index.html is a
+  // no-op there. We write both paths defensively in case Sandpack ever
+  // switches templates.
+  files["/index.html"] = PREVIEW_INDEX_HTML;
   files["/public/index.html"] = PREVIEW_INDEX_HTML;
   return files;
 }
