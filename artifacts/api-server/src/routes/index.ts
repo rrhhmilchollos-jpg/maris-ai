@@ -5,11 +5,13 @@ import appsRouter from "./apps";
 import imagesRouter from "./images";
 import billingRouter from "./billing";
 import adminRouter from "./admin";
+import debugBundleRouter from "./debugBundle";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(meRouter);
+router.use(debugBundleRouter);
 // Mount images BEFORE apps so the public GET /apps/:appId/images/:imageId
 // route is matched without `requireAuth` middleware kicking in from apps.ts.
 router.use(imagesRouter);

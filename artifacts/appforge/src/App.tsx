@@ -17,6 +17,7 @@ import BillingPage from "@/pages/billing";
 import BillingSuccessPage from "@/pages/billing-success";
 import AdminPage from "@/pages/admin";
 import NotFound from "@/pages/not-found";
+import DebugPreviewPage from "@/pages/debug-preview";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -221,6 +222,9 @@ function ClerkProviderWithRoutes() {
             <Gated><AdminPage /></Gated>
           </Route>
 
+          <Route path="/__debug-preview/:id">
+            {(params) => <DebugPreviewPage params={params as { id: string }} />}
+          </Route>
           <Route component={NotFound} />
         </Switch>
       </QueryClientProvider>
