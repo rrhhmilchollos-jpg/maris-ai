@@ -17,13 +17,30 @@ router.get("/me", requireAuth, async (req, res) => {
     .from(generatedApps)
     .where(eq(generatedApps.userId, userId));
 
+  // Lifetime spend → unlocks "Ultra Rápidos" (premium models). Sum of all
+  // purchase txns. Stripe stores amounts as positive integers in our table.
+  const txns = await db
+    .select()
+    .from(creditTransactions)
+    .where(eq(creditTransactions.userId, userId));
+  let lifetimeCreditsPurchased = 0;
+  for (const t of txns) {
+    if (t.kind === "purchase") lifetimeCreditsPurchased += Math.abs(t.amount);
+  }
+  // Premium tier kicks in at >= 200 lifetime credits purchased. Admins always
+  // count as premium.
+  const isAdmin = isAdminEmail(u.email);
+  const isPremium = isAdmin || lifetimeCreditsPurchased >= 200;
+
   res.json({
     id: u.id,
     email: u.email,
     fullName: u.fullName,
     credits: u.credits,
     appsGenerated: appsCount?.total ?? 0,
-    isAdmin: isAdminEmail(u.email),
+    isAdmin,
+    isPremium,
+    lifetimeCreditsPurchased,
     createdAt: u.createdAt.toISOString(),
   });
 });

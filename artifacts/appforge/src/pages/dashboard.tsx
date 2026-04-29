@@ -236,13 +236,18 @@ export default function DashboardPage() {
                     {isAdmin ? "Costo: gratis (admin)" : "Costo: 1 crédito"}
                   </p>
                   <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
-                    <SelectTrigger className="h-9 w-[210px] text-xs bg-background/50 border-border/50">
+                    <SelectTrigger className="h-9 w-[230px] text-xs bg-background/50 border-border/50">
                       <SelectValue placeholder="Modelo del coder" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="auto">Auto (Gemini Flash, rápido)</SelectItem>
                       <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
-                      <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (calidad)</SelectItem>
+                      <SelectItem value="gpt-5" disabled={!me?.isPremium}>
+                        ⚡ GPT-5 Codex {me?.isPremium ? "(Ultra Rápido)" : "(Premium)"}
+                      </SelectItem>
+                      <SelectItem value="claude-sonnet-4-6" disabled={!me?.isPremium}>
+                        Claude Sonnet 4.6 {me?.isPremium ? "(calidad)" : "(Premium)"}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <Select

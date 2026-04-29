@@ -631,6 +631,10 @@ components:
           type: integer
         isAdmin:
           type: boolean
+        isPremium:
+          type: boolean
+        lifetimeCreditsPurchased:
+          type: integer
         createdAt:
           type: string
           format: date-time

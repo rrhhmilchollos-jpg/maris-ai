@@ -24,7 +24,14 @@ import { validateBundle, type BuildIssue } from "../lib/validate";
 const router: IRouter = Router();
 
 /** Coder models the user is allowed to choose from in the dashboard. */
-const ALLOWED_CODER_MODELS = new Set(["auto", "gemini-2.5-flash", "claude-sonnet-4-6"]);
+const ALLOWED_CODER_MODELS = new Set([
+  "auto",
+  "gemini-2.5-flash",
+  "claude-sonnet-4-6",
+  "gpt-5",
+]);
+/** Premium-tier models — only users with isPremium === true may use them. */
+const PREMIUM_CODER_MODELS = new Set(["claude-sonnet-4-6", "gpt-5"]);
 /** Source-language choices the user can pick at generation time. */
 const ALLOWED_LANGUAGES = new Set<GenLanguage>(["typescript", "javascript"]);
 
@@ -320,6 +327,25 @@ async function runJob(
     } catch (updateErr) {
       logger.error({ updateErr, jobId }, "Failed to mark job as failed");
     }
+    // CRITICAL UX: when an *edit* fails, the user has just sent a message and
+    // is sitting waiting in the chat. Without an assistant reply they see
+    // nothing happen and assume the agent is broken. Drop a clear assistant
+    // message into the conversation so the chat history reflects the
+    // failure.
+    if (editAppId) {
+      try {
+        await db.insert(appMessages).values({
+          appId: editAppId,
+          role: "assistant",
+          content:
+            `❌ No pude aplicar el cambio: ${detail}\n\n` +
+            `He devuelto el crédito. Vuelve a intentarlo o reformula la petición. ` +
+            `Si el problema persiste, prueba con otro modelo desde el botón "Modelo".`,
+        });
+      } catch (msgErr) {
+        logger.error({ msgErr, jobId, editAppId }, "Failed to insert error chat message");
+      }
+    }
     if (!isAdmin) {
       await refundCredit(userId, jobId);
     }
@@ -564,10 +590,28 @@ router.post(
   }
   // Only honor coderModel + language for *new* generations; edits inherit the
   // app's stored preferences.
-  const coderModelOverride =
+  // Premium models (GPT-5, Claude Sonnet) are gated by lifetime spend — admins
+  // and paying users only. Sneaky callers that send the value over the API
+  // get downgraded to "auto" silently rather than a 403.
+  const user = req.dbUser!;
+  const isAdmin = isAdminEmail(user.email);
+  const txns = await db
+    .select()
+    .from(creditTransactions)
+    .where(eq(creditTransactions.userId, userId));
+  const lifetimePurchased = txns.reduce(
+    (sum, t) => sum + (t.kind === "purchase" ? Math.abs(t.amount) : 0),
+    0,
+  );
+  const isPremium = isAdmin || lifetimePurchased >= 200;
+  const requestedModel =
     typeof coderModelRaw === "string" && ALLOWED_CODER_MODELS.has(coderModelRaw)
       ? coderModelRaw
       : undefined;
+  const coderModelOverride =
+    requestedModel && PREMIUM_CODER_MODELS.has(requestedModel) && !isPremium
+      ? "auto"
+      : requestedModel;
   const languageOverride =
     typeof languageRaw === "string" && ALLOWED_LANGUAGES.has(languageRaw as GenLanguage)
       ? (languageRaw as GenLanguage)
