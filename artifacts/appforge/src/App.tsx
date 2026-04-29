@@ -207,7 +207,7 @@ function AdminGuardInner({ children }: { children: React.ReactNode }) {
         </h1>
         <p className="text-sm text-muted-foreground max-w-md">
           Esta sección es solo para administradores. Si crees que es un error,
-          contacta con el equipo de AppForge.
+          contacta con el equipo de Maris AI.
         </p>
       </div>
     );
@@ -241,7 +241,7 @@ function ClerkProviderWithRoutes() {
           start: {
             ...esES.signIn?.start,
             title: "Bienvenido de nuevo",
-            subtitle: "Inicia sesión para entrar a tu espacio de AppForge",
+            subtitle: "Inicia sesión para entrar a tu espacio de Maris AI",
           },
         },
         signUp: {

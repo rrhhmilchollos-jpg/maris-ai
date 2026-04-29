@@ -5,7 +5,7 @@ import { appImages, generatedApps } from "@workspace/db/schema";
 import { logger } from "./logger";
 
 /* ============================================================================
- * AppForge Image Agent — Nano Banana Pro
+ * Maris AI Image Agent — Nano Banana Pro
  *
  * After the Coder finishes a bundle (or on demand from the UI), this scans
  * for placeholder image URLs (Unsplash / picsum / source.unsplash) and

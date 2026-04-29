@@ -26,9 +26,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="container flex h-14 max-w-screen-2xl items-center">
           <div className="flex px-4 md:px-8 w-full items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">
-              <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="AppForge" className="h-6 w-6" />
+              <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
               <span className="font-bold sm:inline-block tracking-tight text-lg bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
-                AppForge
+                Maris AI
               </span>
             </Link>
 

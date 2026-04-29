@@ -80,7 +80,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use("/api", router);
 
-// Public unauthenticated route for deployed AppForge apps. Mounted on the root
+// Public unauthenticated route for deployed Maris AI apps. Mounted on the root
 // (outside /api) so /p/<slug> resolves on the published domain directly.
 app.use(publicDeployRouter);
 

@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "AppForge - AI App Generator"
+title = "Maris AI - AI App Generator"
 version = "1.0.0"
 id = "artifacts/appforge"
 router = "path"

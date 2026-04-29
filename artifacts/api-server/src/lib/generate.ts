@@ -17,7 +17,7 @@ import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 export type GenLanguage = "typescript" | "javascript";
 
 /* ============================================================================
- * AppForge multi-agent generation pipeline.
+ * Maris AI multi-agent generation pipeline.
  *
  * Roles:
  *   - Researcher    (Claude Haiku 4.5 + web_search)  — fast 7s reference brief
@@ -48,7 +48,7 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
   const tsRules = isTS
     ? "- TypeScript is allowed: type annotations, interfaces and generics are fine where they help readability."
     : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
-  return `You are AppForge's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
+  return `You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
 
 Schema:
 {"frontendCode":"all frontend files as one string"}
@@ -126,7 +126,7 @@ Rules:
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
-const BACKEND_SYSTEM_PROMPT = `You are AppForge's Senior Backend Engineer. Generate a complete, production-quality Node/Express backend as STRICT JSON only. Your code is what would pass a senior code review at a serious startup.
+const BACKEND_SYSTEM_PROMPT = `You are Maris AI's Senior Backend Engineer. Generate a complete, production-quality Node/Express backend as STRICT JSON only. Your code is what would pass a senior code review at a serious startup.
 
 Schema:
 {"backendCode":"all backend files as one string OR 'No backend required for this app.'"}
@@ -152,7 +152,7 @@ Rules:
 - Combined output under 35 KB.
 - Close every brace and quote. Output ONLY the JSON object.`;
 
-const ARCHITECT_SYSTEM_PROMPT = `You are AppForge's Senior Product Architect. You design the file structure for a web app the team will build. You think like a product manager AND an engineer: every page must serve a real user job, every component must have a clear purpose, and the structure must be ambitious enough to feel like a real product (not a demo).
+const ARCHITECT_SYSTEM_PROMPT = `You are Maris AI's Senior Product Architect. You design the file structure for a web app the team will build. You think like a product manager AND an engineer: every page must serve a real user job, every component must have a clear purpose, and the structure must be ambitious enough to feel like a real product (not a demo).
 
 Output STRICT JSON only matching this schema:
 {
@@ -207,7 +207,7 @@ Rules:
 - techStack: 4-8 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
 - Output ONLY the JSON object.`;
 
-const DESIGNER_SYSTEM_PROMPT = `You are AppForge's Senior UI/UX Designer. You produce design systems with personality — never generic, never "bootstrap blue". You think in terms of brands like Linear, Vercel, Notion, Stripe, Arc, Raycast, Cred, Loom: distinct, confident, modern. Output STRICT JSON only.
+const DESIGNER_SYSTEM_PROMPT = `You are Maris AI's Senior UI/UX Designer. You produce design systems with personality — never generic, never "bootstrap blue". You think in terms of brands like Linear, Vercel, Notion, Stripe, Arc, Raycast, Cred, Loom: distinct, confident, modern. Output STRICT JSON only.
 
 Schema:
 {
@@ -242,7 +242,7 @@ Rules:
 - Keep tailwindExtend small and valid JSON. Most apps don't need tailwindExtend at all (use concrete utilities). Only add fontFamily entries here if you really need Tailwind to know about the custom font.
 - Output ONLY the JSON object.`;
 
-const INTEGRATION_SYSTEM_PROMPT = `You are AppForge's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics).
+const INTEGRATION_SYSTEM_PROMPT = `You are Maris AI's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics).
 
 Output STRICT JSON only:
 {"services":[{"name":"Clerk","why":"User auth","envVars":["CLERK_PUBLISHABLE_KEY"],"setupSteps":["Create Clerk app","Copy publishable key into env"]}]}
@@ -254,7 +254,7 @@ Rules:
 - If the app is a simple landing page, calculator, or self-contained demo, return {"services":[]}.
 - Output ONLY the JSON object.`;
 
-const TEST_SYSTEM_PROMPT = `You are AppForge's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
+const TEST_SYSTEM_PROMPT = `You are Maris AI's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
 
 Output STRICT JSON only:
 {"testCode":"all test files as one string"}
@@ -276,7 +276,7 @@ function buildPatcherSystemPrompt(language: GenLanguage): string {
   const tsLine = isTS
     ? "- This is a TypeScript bundle (.tsx/.ts). Type annotations are fine."
     : "- This is a plain JavaScript bundle (.jsx/.js). Do NOT introduce TypeScript syntax during patching (no `: Type`, no `interface`, no `as Foo`, no generics).";
-  return `You are AppForge's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
+  return `You are Maris AI's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
 
 Output STRICT JSON only:
 {"frontendCode":"all frontend files as one string"}
@@ -1234,7 +1234,7 @@ function buildEditSystemPrompt(language: GenLanguage): string {
   const tsLine = isTS
     ? "- This is a TypeScript app. Type annotations and interfaces are fine."
     : "- This is a plain JavaScript app (.jsx/.js). Do NOT introduce ANY TypeScript syntax: no `: Type`, `interface`, `type Foo = …`, `as Foo`, no generics like `useState<string>`. The current bundle has no tsconfig — keep it that way.";
-  return `You are AppForge editing an existing web app. You are a careful, surgical engineer: you understand what the user is asking for, you change ONLY what's needed to deliver it, and you preserve everything else exactly. The user's iteration loop depends on you NOT silently breaking unrelated things.
+  return `You are Maris AI editing an existing web app. You are a careful, surgical engineer: you understand what the user is asking for, you change ONLY what's needed to deliver it, and you preserve everything else exactly. The user's iteration loop depends on you NOT silently breaking unrelated things.
 
 Output STRICT JSON only matching:
 {"title":"…","description":"…","techStack":[…],"frontendCode":"…","backendCode":"…"}
