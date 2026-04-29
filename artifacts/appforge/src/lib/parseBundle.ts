@@ -50,10 +50,47 @@ const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
   </body>
 </html>`;
 
+// Sandpack's react-ts template ships a minimal index.html that we cannot
+// reliably override (different versions look at /index.html vs
+// /public/index.html, and the classic bundler regenerates parts of it). The
+// only place we fully control is the React entry — so inject the Tailwind
+// Play CDN script at runtime, before mounting the app, and reset the body so
+// the app actually fills the viewport. Without this every utility class is a
+// no-op and the preview renders with default browser styles (links underlined
+// in purple, blocks stacked, no layout).
 const PREVIEW_INDEX_TSX = `import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+
+if (typeof document !== "undefined") {
+  const html = document.documentElement;
+  const body = document.body;
+  if (html) { html.style.margin = "0"; html.style.height = "100%"; html.style.width = "100%"; }
+  if (body) {
+    body.style.margin = "0";
+    body.style.minHeight = "100%";
+    body.style.width = "100%";
+    body.style.fontFamily = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  }
+  if (!document.querySelector('script[data-tw-cdn]')) {
+    const s = document.createElement("script");
+    s.src = "https://cdn.tailwindcss.com";
+    s.setAttribute("data-tw-cdn", "1");
+    document.head.appendChild(s);
+  }
+  let root = document.getElementById("root");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "root";
+    root.style.minHeight = "100vh";
+    root.style.width = "100%";
+    document.body.appendChild(root);
+  } else {
+    root.style.minHeight = "100vh";
+    root.style.width = "100%";
+  }
+}
 
 const container = document.getElementById("root");
 if (container) {
@@ -157,20 +194,16 @@ export function buildSandpackFiles(parsed: Record<string, string>): SandpackFile
     files["/App.tsx"] = FALLBACK_APP;
   }
 
-  // Sandpack's react-ts template entry is /index.tsx. If the model produced
-  // /main.tsx (vite convention), promote it. Otherwise, install our default
-  // wrapper so the App component still mounts.
-  if (!files["/index.tsx"] && !files["/index.jsx"]) {
-    if (files["/main.tsx"]) {
-      files["/index.tsx"] = files["/main.tsx"];
-      delete files["/main.tsx"];
-    } else if (files["/main.jsx"]) {
-      files["/index.jsx"] = files["/main.jsx"];
-      delete files["/main.jsx"];
-    } else {
-      files["/index.tsx"] = PREVIEW_INDEX_TSX;
-    }
-  }
+  // Sandpack's react-ts template entry is /index.tsx. We ALWAYS install our
+  // own wrapper so we can guarantee Tailwind CDN injection + body reset. If
+  // the model also produced its own /main.tsx or /index.tsx, we drop them and
+  // import App.tsx (which is what the model actually wrote).  Tested: this
+  // plays nicely with both the JS and TS variants since App.tsx/.jsx are
+  // resolved without an extension.
+  delete files["/main.tsx"];
+  delete files["/main.jsx"];
+  delete files["/index.jsx"];
+  files["/index.tsx"] = PREVIEW_INDEX_TSX;
 
   // Preserve generated CSS (often includes @tailwind directives + custom rules).
   // Tailwind directives are no-ops at runtime in Sandpack; the CDN script in
