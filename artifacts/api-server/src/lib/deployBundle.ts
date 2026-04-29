@@ -55,33 +55,48 @@ export async function buildDeployHtml(opts: {
     throw new Error("El bundler no produjo código.");
   }
 
-  // Build the import map. We always include react/react-dom because the
-  // automatic JSX runtime emits those imports even if the user didn't.
-  const REACT_VERSION = "18.3.1";
+  // Resolve which version to load from esm.sh for every external dependency.
+  //
+  // The AI-generated bundle ships its own `package.json` listing the libs the
+  // app imports. We trust that file as the source of truth for versions: a
+  // user who deploys today gets the exact versions the AI picked today, and
+  // future upstream releases (compatible or breaking) cannot change the
+  // deployed page after the fact. This is what protects published apps from
+  // silently breaking when, e.g., `lucide-react@0.488` drops the `Facebook`
+  // icon a week after deploy.
+  //
+  // For packages absent from the user's `package.json` (older bundles that
+  // never listed deps, or AI hallucinations) we fall back to a curated map of
+  // known-good versions for the libs the system prompt tells the model to use.
+  // As a last resort we let esm.sh resolve "latest" — risky, but better than
+  // failing the deploy outright on an obscure import.
+  const userVersions = extractPackageVersions(vfs);
+  const reactVersion = resolveVersion("react", userVersions) ?? DEFAULT_VERSIONS.react;
+  const reactDomVersion =
+    resolveVersion("react-dom", userVersions) ?? DEFAULT_VERSIONS["react-dom"];
   const imports: Record<string, string> = {
-    react: `https://esm.sh/react@${REACT_VERSION}`,
-    "react/": `https://esm.sh/react@${REACT_VERSION}/`,
-    "react-dom": `https://esm.sh/react-dom@${REACT_VERSION}`,
-    "react-dom/": `https://esm.sh/react-dom@${REACT_VERSION}/`,
-    "react-dom/client": `https://esm.sh/react-dom@${REACT_VERSION}/client`,
-  };
-  // Pinned package versions for libs whose latest release on esm.sh ships
-  // breaking changes that the AI-generated apps rely on. Without this, an
-  // upstream rename/removal (e.g. lucide-react v0.488 dropped the `Facebook`
-  // icon export) makes the entire bundle fail to evaluate at runtime and the
-  // user sees a blank iframe. Add to this map as new incompatibilities appear.
-  const PINNED: Record<string, string> = {
-    "lucide-react": "0.475.0",
+    react: `https://esm.sh/react@${reactVersion}`,
+    "react/": `https://esm.sh/react@${reactVersion}/`,
+    "react-dom": `https://esm.sh/react-dom@${reactDomVersion}`,
+    "react-dom/": `https://esm.sh/react-dom@${reactDomVersion}/`,
+    "react-dom/client": `https://esm.sh/react-dom@${reactDomVersion}/client`,
   };
   for (const pkg of externals) {
     if (pkg === "react" || pkg.startsWith("react/")) continue;
     if (pkg === "react-dom" || pkg.startsWith("react-dom/")) continue;
-    if (!imports[pkg]) {
-      // ?external=react so esm.sh resolves peer deps against our import-map
-      // react instead of bundling its own copy (which would break hooks).
-      const version = PINNED[pkg] ? `@${PINNED[pkg]}` : "";
-      imports[pkg] = `https://esm.sh/${pkg}${version}?external=react,react-dom`;
-    }
+    if (imports[pkg]) continue;
+    // Look up the version under the *package* name (e.g. `@react-three/fiber`),
+    // not the full specifier which may include a subpath (`lucide-react/icons`).
+    const name = packageName(pkg);
+    const subpath = pkg.slice(name.length); // "" or "/sub/path"
+    const version = resolveVersion(name, userVersions) ?? DEFAULT_VERSIONS[name];
+    // The version goes between the package name and the subpath, never after
+    // the subpath: esm.sh URLs are `name@version/subpath`, not
+    // `name/subpath@version` (which 404s).
+    const target = version ? `${name}@${version}${subpath}` : pkg;
+    // ?external=react so esm.sh resolves peer deps against our import-map
+    // react instead of bundling its own copy (which would break hooks).
+    imports[pkg] = `https://esm.sh/${target}?external=react,react-dom`;
   }
 
   const safeTitle = (opts.title || "AppForge App").replace(/[<&>]/g, "");
@@ -212,6 +227,101 @@ function pickEntry(vfs: Record<string, string>): string | null {
     if (vfs[c]) return c;
   }
   return null;
+}
+
+/**
+ * Known-good versions for the libs the AI is told to use in the system prompt.
+ * Used as a fallback for bundles whose `package.json` doesn't list a given
+ * dep — e.g. older bundles generated before the model started emitting full
+ * dependency lists, or imports the AI added without updating its package.json.
+ *
+ * If you bump a version here, prefer one that has been smoke-tested against a
+ * representative AI-generated app. Do NOT use floating ranges (`^`, `~`) —
+ * the whole point of this map is to pin to a specific known-working release.
+ */
+const DEFAULT_VERSIONS: Record<string, string> = {
+  react: "18.3.1",
+  "react-dom": "18.3.1",
+  wouter: "3.3.5",
+  "lucide-react": "0.475.0",
+  clsx: "2.1.1",
+  "tailwind-merge": "2.5.5",
+  "date-fns": "3.6.0",
+  zod: "3.23.8",
+};
+
+/**
+ * Extract `name → versionSpec` from the `package.json` shipped inside the
+ * AI-generated bundle. Looks at root-level `package.json` first (typical
+ * frontend-only bundle layout), then `frontend/package.json` (older nested
+ * layout). Merges `dependencies`, `devDependencies` and `peerDependencies`
+ * with `dependencies` winning, since runtime deps are what we care about.
+ *
+ * Returns an empty map (never throws) on missing file or malformed JSON —
+ * the caller will simply fall back to `DEFAULT_VERSIONS`.
+ */
+function extractPackageVersions(vfs: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const path of ["package.json", "frontend/package.json"]) {
+    const raw = vfs[path];
+    if (!raw) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object") continue;
+    const pkg = parsed as {
+      dependencies?: unknown;
+      devDependencies?: unknown;
+      peerDependencies?: unknown;
+    };
+    for (const key of ["peerDependencies", "devDependencies", "dependencies"] as const) {
+      const block = pkg[key];
+      if (!block || typeof block !== "object") continue;
+      for (const [name, ver] of Object.entries(block as Record<string, unknown>)) {
+        if (typeof ver === "string" && ver.trim()) out[name] = ver.trim();
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Pick the package name out of an import specifier. Handles scoped packages
+ * (`@scope/name/subpath` → `@scope/name`) and plain packages
+ * (`pkg/sub` → `pkg`). Used to look up versions, since `package.json` is
+ * keyed by package name not full specifier.
+ */
+function packageName(spec: string): string {
+  if (spec.startsWith("@")) {
+    const parts = spec.split("/");
+    return parts.slice(0, 2).join("/");
+  }
+  return spec.split("/")[0];
+}
+
+/**
+ * Convert a `package.json` version range into an exact version we can pin to
+ * in the esm.sh URL. We extract the first semver-shaped substring, which
+ * covers exact versions (`1.2.3`), caret/tilde ranges (`^1.2.3`, `~1.2.3`)
+ * and bounded ranges (`>=1.2.3 <2`).
+ *
+ * Returning an exact version (rather than passing the range to esm.sh) is the
+ * whole point: even a semver-respecting patch release can ship a regression
+ * an already-deployed app would suddenly hit, and a non-respecting release
+ * (the lucide-react v0.488 case) would silently break the bundle. Pinning to
+ * what was current at deploy time freezes the behavior forever.
+ *
+ * Returns null when the spec has no semver core (e.g. `latest`, `*`, a git
+ * URL, a file path) so the caller can fall through to defaults.
+ */
+function resolveVersion(name: string, versions: Record<string, string>): string | null {
+  const spec = versions[name];
+  if (!spec) return null;
+  const m = /(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/.exec(spec);
+  return m ? m[1] : null;
 }
 
 /**
