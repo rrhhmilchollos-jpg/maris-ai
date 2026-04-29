@@ -1,4 +1,5 @@
 import * as esbuild from "esbuild";
+import { randomInt } from "node:crypto";
 import { bundleToFiles } from "./exportZip";
 
 /**
@@ -598,10 +599,6 @@ function normalize(p: string): string {
  */
 export function makeSlug(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  // Lazy import to avoid a top-level node:crypto dependency in case this file
-  // is ever consumed in a non-Node bundle target.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { randomInt } = require("node:crypto") as typeof import("node:crypto");
   let out = "";
   for (let i = 0; i < 10; i++) {
     out += alphabet[randomInt(0, alphabet.length)];

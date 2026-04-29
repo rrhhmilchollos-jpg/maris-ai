@@ -43,6 +43,15 @@ export const generatedApps = pgTable("generated_apps", {
   // evaluator rejected the app after its retry budget was spent. Null when
   // the evaluator hasn't run or last passed.
   evaluatorSummary: text("evaluator_summary"),
+  // The architect's planned page list captured at generation time. Fed back
+  // into the autonomous visual evaluator so the vision model can verify the
+  // app actually contains the screens the architect promised (e.g., "did the
+  // dashboard render the 'Pricing' page from the plan?"). Null for legacy
+  // rows generated before this column existed — evaluator falls back to
+  // user-intent-only grounding in that case.
+  plannedPages: jsonb("planned_pages").$type<
+    Array<{ name: string; route?: string; purpose?: string }>
+  >(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
