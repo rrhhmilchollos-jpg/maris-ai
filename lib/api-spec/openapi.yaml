@@ -368,6 +368,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/visual-test:
+    post:
+      operationId: visualTestApp
+      tags: [apps]
+      summary: Run the Visual Testing Agent (screenshots + Claude Vision + auto-fix). Costs 30 credits.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Visual analysis report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VisualTestReport"
+        "400":
+          description: Bundle could not be packaged for screenshotting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "402":
+          description: Insufficient credits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Visual testing failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/github:
     post:
       operationId: pushAppToGitHub
@@ -788,6 +830,62 @@ components:
         slug:
           type: string
       required: [url, slug]
+    VisualIssue:
+      type: object
+      properties:
+        severity:
+          type: string
+          enum: [critical, major, minor]
+        type:
+          type: string
+        viewport:
+          type: string
+        description:
+          type: string
+        suggestion:
+          type: string
+      required: [severity, type, viewport, description, suggestion]
+    VisualAnalysis:
+      type: object
+      properties:
+        visuallyCorrect:
+          type: boolean
+        overallScore:
+          type: number
+        issues:
+          type: array
+          items: { $ref: "#/components/schemas/VisualIssue" }
+        positives:
+          type: array
+          items: { type: string }
+        summary:
+          type: string
+      required: [visuallyCorrect, overallScore, issues, positives, summary]
+    VisualScreenshot:
+      type: object
+      properties:
+        viewport: { type: string }
+        mimeType: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        imageBase64:
+          type: string
+          description: "Raw base64 PNG (no data: prefix)"
+        consoleErrors:
+          type: array
+          items: { type: string }
+      required: [viewport, mimeType, width, height, imageBase64, consoleErrors]
+    VisualTestReport:
+      type: object
+      properties:
+        cycles: { type: integer }
+        fixesApplied: { type: integer }
+        analysis:
+          $ref: "#/components/schemas/VisualAnalysis"
+        screenshots:
+          type: array
+          items: { $ref: "#/components/schemas/VisualScreenshot" }
+      required: [cycles, fixesApplied, analysis, screenshots]
     GitHubPushResult:
       type: object
       properties:

@@ -32,3 +32,8 @@ export * from "./imageGenerationResult";
 export * from "./sendAppMessageRequest";
 export * from "./updateCoderModelRequest";
 export * from "./userProfile";
+export * from "./visualAnalysis";
+export * from "./visualIssue";
+export * from "./visualIssueSeverity";
+export * from "./visualScreenshot";
+export * from "./visualTestReport";

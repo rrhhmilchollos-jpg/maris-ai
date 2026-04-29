@@ -41,6 +41,7 @@ import type {
   SendAppMessageRequest,
   UpdateCoderModelRequest,
   UserProfile,
+  VisualTestReport,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -1173,6 +1174,90 @@ export const useDeployApp = <
   TContext
 > => {
   return useMutation(getDeployAppMutationOptions(options));
+};
+
+/**
+ * @summary Run the Visual Testing Agent (screenshots + Claude Vision + auto-fix). Costs 30 credits.
+ */
+export const getVisualTestAppUrl = (id: number) => {
+  return `/api/apps/${id}/visual-test`;
+};
+
+export const visualTestApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<VisualTestReport> => {
+  return customFetch<VisualTestReport>(getVisualTestAppUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getVisualTestAppMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof visualTestApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof visualTestApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["visualTestApp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof visualTestApp>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return visualTestApp(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VisualTestAppMutationResult = NonNullable<
+  Awaited<ReturnType<typeof visualTestApp>>
+>;
+
+export type VisualTestAppMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Run the Visual Testing Agent (screenshots + Claude Vision + auto-fix). Costs 30 credits.
+ */
+export const useVisualTestApp = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof visualTestApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof visualTestApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getVisualTestAppMutationOptions(options));
 };
 
 /**

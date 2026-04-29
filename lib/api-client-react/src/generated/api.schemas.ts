@@ -102,6 +102,48 @@ export interface DeployResult {
   slug: string;
 }
 
+export type VisualIssueSeverity =
+  (typeof VisualIssueSeverity)[keyof typeof VisualIssueSeverity];
+
+export const VisualIssueSeverity = {
+  critical: "critical",
+  major: "major",
+  minor: "minor",
+} as const;
+
+export interface VisualIssue {
+  severity: VisualIssueSeverity;
+  type: string;
+  viewport: string;
+  description: string;
+  suggestion: string;
+}
+
+export interface VisualAnalysis {
+  visuallyCorrect: boolean;
+  overallScore: number;
+  issues: VisualIssue[];
+  positives: string[];
+  summary: string;
+}
+
+export interface VisualScreenshot {
+  viewport: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  /** Raw base64 PNG (no data: prefix) */
+  imageBase64: string;
+  consoleErrors: string[];
+}
+
+export interface VisualTestReport {
+  cycles: number;
+  fixesApplied: number;
+  analysis: VisualAnalysis;
+  screenshots: VisualScreenshot[];
+}
+
 export interface GitHubPushResult {
   url: string;
   repoFullName: string;
