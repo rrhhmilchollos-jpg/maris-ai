@@ -191,12 +191,9 @@ function normalizeForSandpack(path: string): string | null {
  * crashes with "Could not find dependency". We pin compatible versions that
  * match what the coder prompt instructs the model to use.
  *
- * NOTE: `wouter` is intentionally NOT in this list. wouter@3.x is pure ESM with
- * `"main": null` and `"module": null`, which Sandpack v2's bundler cannot
- * resolve — it hangs forever in `installing-dependencies` (downloads 11/12 and
- * never finishes the 12th). Instead we ship a tiny v3-compatible shim as a
- * virtual file at `/lib/wouter.tsx` (see WOUTER_SHIM below) and rewrite every
- * `from "wouter"` import in the generated bundle to `from "/lib/wouter"`.
+ * NOTE on wouter: we pin v2.x because Sandpack v2's in-browser bundler cannot
+ * resolve wouter@3.x (it's pure ESM with `main: null` and `module: null`,
+ * which leaves Sandpack stuck at `installing-dependencies`).
  *
  * Exported so app-detail.tsx can pass it as `customSetup.dependencies` to
  * SandpackProvider.
@@ -207,141 +204,12 @@ export const SANDPACK_DEPENDENCIES: Record<string, string> = {
   "tailwind-merge": "^2.5.4",
   "date-fns": "^4.1.0",
   zod: "^3.23.8",
+  // wouter@2.x is pinned because it ships CommonJS (`main: "cjs/index.js"`).
+  // wouter@3.x is pure ESM (`main: null, module: null`) which Sandpack v2's
+  // bundler hangs on indefinitely. v2 has the SAME public API for what the
+  // generator emits: useLocation/useRoute/Route/Switch/Link/Redirect.
+  wouter: "^2.12.1",
 };
-
-// Hand-rolled wouter v3-compatible shim. Covers everything the generator emits:
-// useLocation, useParams, useRoute, Route (component / children / fn-children),
-// Switch (first match), Link (renders as <a>, intercepts left-click for SPA
-// navigation), Redirect, Router. Intentionally tiny — wouter v3 itself is
-// ~1.5KB minified, this shim is ~120 lines and avoids the Sandpack ESM
-// resolution hang entirely. Tested against Wallaclone (app id 6) which uses
-// every API listed.
-const WOUTER_SHIM = `import * as React from "react";
-
-// Internal in-app location, completely independent of window.location.
-// Critical: inside Sandpack's iframe the real pathname is something like
-// "/csb_invalidate/<hash>" which would never match user routes ("/", "/comprar"
-// etc.) and Switch would render null → blank preview. We start at "/" and
-// only mutate it when Link / setLocation is called. We DO sync history so
-// the back/forward buttons inside the iframe still work.
-let currentPath = "/";
-const subscribers = new Set();
-const notify = () => subscribers.forEach((fn) => fn());
-
-if (typeof window !== "undefined") {
-  window.addEventListener("popstate", (e) => {
-    const next = (e.state && e.state.__wouter) || "/";
-    currentPath = next;
-    notify();
-  });
-}
-
-export function useLocation() {
-  const [, setTick] = React.useState(0);
-  React.useEffect(() => {
-    const update = () => setTick((t) => t + 1);
-    subscribers.add(update);
-    return () => { subscribers.delete(update); };
-  }, []);
-  const setLocation = React.useCallback((to) => {
-    currentPath = to;
-    try { window.history.pushState({ __wouter: to }, "", to); } catch {}
-    notify();
-  }, []);
-  return [currentPath, setLocation];
-}
-
-const cache = new Map();
-function compile(pattern) {
-  const keys = [];
-  const regex = new RegExp(
-    "^" +
-      pattern
-        .replace(/\\/$/, "")
-        .replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, (_, k) => {
-          keys.push(k);
-          return "([^/]+)";
-        }) +
-      "/?$"
-  );
-  return { regex, keys };
-}
-function match(pattern, path) {
-  if (!cache.has(pattern)) cache.set(pattern, compile(pattern));
-  const { regex, keys } = cache.get(pattern);
-  const m = regex.exec(path);
-  if (!m) return [false, null];
-  const params = {};
-  keys.forEach((k, i) => { try { params[k] = decodeURIComponent(m[i + 1] || ""); } catch { params[k] = m[i + 1] || ""; } });
-  return [true, params];
-}
-
-export function useRoute(pattern) {
-  const [location] = useLocation();
-  const [matched, params] = match(pattern, location);
-  return [matched, params];
-}
-
-const ParamsContext = React.createContext({});
-export function useParams() {
-  return React.useContext(ParamsContext);
-}
-
-export function Route({ path, component: Comp, children }) {
-  const [location] = useLocation();
-  if (!path) {
-    if (Comp) return React.createElement(Comp);
-    if (typeof children === "function") return children({});
-    return React.createElement(React.Fragment, null, children);
-  }
-  const [matched, params] = match(path, location);
-  if (!matched) return null;
-  const inner = Comp
-    ? React.createElement(Comp, params)
-    : typeof children === "function"
-    ? children(params)
-    : React.createElement(React.Fragment, null, children);
-  return React.createElement(ParamsContext.Provider, { value: params }, inner);
-}
-
-export function Switch({ children }) {
-  const [location] = useLocation();
-  const arr = React.Children.toArray(children);
-  for (const child of arr) {
-    if (!React.isValidElement(child)) continue;
-    const path = child.props.path;
-    if (!path) return child;
-    const [matched] = match(path, location);
-    if (matched) return child;
-  }
-  return null;
-}
-
-export const Link = React.forwardRef(function Link({ href, to, onClick, children, ...rest }, ref) {
-  const target = to != null ? to : href;
-  const [, setLocation] = useLocation();
-  const handle = (e) => {
-    if (onClick) onClick(e);
-    if (e.defaultPrevented) return;
-    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    if (rest.target && rest.target !== "_self") return;
-    e.preventDefault();
-    setLocation(target);
-  };
-  return React.createElement("a", { ref, href: target, onClick: handle, ...rest }, children);
-});
-
-export function Redirect({ to, href }) {
-  const [, setLocation] = useLocation();
-  const target = to != null ? to : href != null ? href : "/";
-  React.useEffect(() => { setLocation(target); }, [target]);
-  return null;
-}
-
-export function Router({ children }) {
-  return React.createElement(React.Fragment, null, children);
-}
-`;
 
 /**
  * Build a Sandpack files map from a parsed bundle. Strategy: drop build configs,
@@ -354,46 +222,11 @@ export function buildSandpackFiles(parsed: Record<string, string>): SandpackFile
   for (const [path, content] of Object.entries(parsed)) {
     const norm = normalizeForSandpack(path);
     if (!norm) continue;
-    // Rewrite every `from "wouter"` import to point at our virtual shim file.
-    // wouter@3.x is pure ESM (`main: null`, `module: null`) which Sandpack v2's
-    // bundler hangs on indefinitely (we measured: 11/12 deps download, the
-    // 12th — wouter — never resolves and the iframe stays at "Starting"
-    // forever, blank). Routing the bare specifier to a local shim sidesteps
-    // npm resolution entirely. Only touches text-y source files.
-    if (/\.(tsx?|jsx?|mjs|cjs)$/.test(norm)) {
-      // Rewrite to extension-explicit absolute path so Sandpack's resolver
-      // doesn't have to guess. Empirically, omitting the extension caused
-      // resolution to silently hang in deep projects (Wallaclone, 40 files).
-      files[norm] = content.replace(
-        /from\s+(["'])wouter\1/g,
-        'from "/wouter.js"',
-      );
-    } else {
-      files[norm] = content;
-    }
+    files[norm] = content;
   }
   if (!files["/App.tsx"] && !files["/App.jsx"]) {
     files["/App.tsx"] = FALLBACK_APP;
   }
-
-  // Inject the wouter shim at the virtual root with `.js` extension. We
-  // intentionally avoid `.tsx` (Sandpack's resolver in some templates fails
-  // to dual-resolve `.tsx` for absolute paths) and avoid nested directories
-  // (which were observed to never resolve in 40-file deep trees). The shim
-  // is written in plain JS — no JSX, only React.createElement — so it loads
-  // without needing the TS/JSX transform pipeline.
-  files["/wouter.js"] = WOUTER_SHIM;
-  // DIAG: also expose under alt names to test resolver behavior
-  files["/wouter-min.js"] = `import * as React from "react";
-export function useLocation(){ const [p,setP]=React.useState("/"); return [p,setP]; }
-export function useRoute(){ return [false,{}]; }
-export function useParams(){ return {}; }
-export function Route({component:C,children}){ return C?React.createElement(C):React.createElement(React.Fragment,null,children); }
-export function Switch({children}){ const a=React.Children.toArray(children); return a[0]||null; }
-export const Link=React.forwardRef(function L({href,to,children,...rest},ref){ return React.createElement("a",{ref,href:to||href,...rest},children); });
-export function Redirect(){ return null; }
-export function Router({children}){ return React.createElement(React.Fragment,null,children); }
-`;
 
   // Sandpack's react-ts template entry is /index.tsx. We ALWAYS install our
   // own wrapper so we can guarantee Tailwind CDN injection + body reset. If
