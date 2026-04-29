@@ -506,6 +506,136 @@ async function runJob(
     if (!isAdmin) {
       await refundCredit(userId, jobId);
     }
+    // Diagnostic agent: when any agent errors out, kick off a free diagnosis
+    // so the user gets actionable info in the chat instead of just a generic
+    // failure. If there's a deployed app, we run the Visual Testing Agent on
+    // the live URL; otherwise we run the static health-check (esbuild) on the
+    // last good bundle.
+    if (editAppId) {
+      diagnoseFailedAgent({
+        appId: editAppId,
+        userId,
+        jobId,
+        failureDetail: detail,
+      }).catch((diagErr) => {
+        logger.warn(
+          { diagErr, jobId, editAppId },
+          "Post-failure diagnostic agent crashed",
+        );
+      });
+    }
+  }
+}
+
+/**
+ * Free post-failure diagnostic. Tries the Visual Testing Agent against the
+ * live deploy if the app already has a public slug (auto-fix disabled — we
+ * only want to surface what's wrong, not patch it without consent), otherwise
+ * falls back to the static esbuild health check. Posts a single assistant
+ * message into the chat with the findings so the user has actionable info.
+ *
+ * Never charges credits — this is a courtesy diagnostic that fires after we've
+ * already refunded the failed job.
+ */
+async function diagnoseFailedAgent(opts: {
+  appId: number;
+  userId: string;
+  jobId: number;
+  failureDetail: string;
+}): Promise<void> {
+  const { appId, userId, jobId } = opts;
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) return;
+
+  // Path 1: deployed app → Visual Testing Agent (read-only, no auto-fix).
+  if (row.publicSlug && row.frontendCode) {
+    try {
+      const report = await runVisualTester({
+        app: {
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          frontendCode: row.frontendCode,
+          publicSlug: row.publicSlug,
+        },
+        baseUrl: VISUAL_TEST_BASE_URL,
+        prompt: row.title + (row.description ? `: ${row.description}` : ""),
+        autoFix: false,
+        log: logger,
+      });
+      const top = report.finalAnalysis.issues
+        .slice(0, 3)
+        .map(
+          (i, idx) =>
+            `${idx + 1}. [${i.severity}/${i.viewport}] ${i.description}`,
+        )
+        .join("\n");
+      await db.insert(appMessages).values({
+        appId,
+        role: "assistant",
+        content:
+          `🔎 **Diagnóstico automático tras el error**\n` +
+          `Mi compañero de pruebas visuales analizó la versión actual desplegada (sin tocarla).\n\n` +
+          `Puntuación visual: **${Math.round(report.finalAnalysis.overallScore)}/100**\n` +
+          (top
+            ? `Problemas detectados:\n${top}\n\n`
+            : `No detectó problemas visuales serios — el error parece ser de lógica/agente, no del UI.\n\n`) +
+          `Si quieres, vuelve a intentar la edición, prueba con otro modelo, o pulsa "Análisis Visual" para un reporte completo (gratis esta vez no, normalmente cuesta 30 créditos).`,
+      });
+      logger.info(
+        { appId, jobId, score: report.finalAnalysis.overallScore },
+        "Post-failure diagnostic completed via Visual Testing Agent",
+      );
+      return;
+    } catch (err) {
+      logger.warn(
+        { err, appId, jobId },
+        "Post-failure Visual Testing Agent failed, falling back to esbuild",
+      );
+      // Fall through to static check.
+    }
+  }
+
+  // Path 2: no deploy (or visual tester crashed) → static esbuild health check.
+  if (row.frontendCode) {
+    try {
+      const report = await validateBundle(row.frontendCode);
+      const lines: string[] = [];
+      if (report.ok) {
+        lines.push(
+          "El bundle actual compila sin errores — el fallo parece ser específico de la nueva edición que pediste.",
+        );
+      } else {
+        const top: string = report.issues
+          .slice(0, 3)
+          .map((i: BuildIssue, idx: number) => `${idx + 1}. ${i.message}`)
+          .join("\n");
+        lines.push(
+          `El bundle actual tiene ${report.issues.length} error(es) de compilación:\n${top}`,
+        );
+      }
+      await db.insert(appMessages).values({
+        appId,
+        role: "assistant",
+        content:
+          `🔎 **Diagnóstico automático tras el error**\n` +
+          `Hice un chequeo de salud del código actual:\n\n${lines.join("\n")}\n\n` +
+          `Vuelve a intentar la edición o reformula la petición.`,
+      });
+      logger.info(
+        { appId, jobId, ok: report.ok },
+        "Post-failure diagnostic completed via static health check",
+      );
+    } catch (err) {
+      logger.warn(
+        { err, appId, jobId },
+        "Post-failure static health check also failed",
+      );
+    }
   }
 }
 
