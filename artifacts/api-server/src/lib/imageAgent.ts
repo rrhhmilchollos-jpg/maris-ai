@@ -25,8 +25,21 @@ import { logger } from "./logger";
  * preview AND the public `/p/:slug` deploy.
  * ========================================================================== */
 
-const MAX_IMAGES = 4;
-const CONCURRENCY = 2;
+const MAX_IMAGES = 16;
+const CONCURRENCY = 3;
+
+/**
+ * Build the public absolute base URL of the API server. We need ABSOLUTE URLs
+ * for the generated image paths because the Sandpack live preview executes
+ * the bundle inside an iframe served from a Sandpack-controlled domain
+ * (`*.csb.app`), so a relative `/api/apps/3/images/1` would resolve against
+ * the Sandpack origin and 404. The same absolute URL also works fine in the
+ * public `/p/<slug>` deploy (same origin).
+ */
+function appBaseUrl(): string {
+  const host = (process.env.REPLIT_DOMAINS ?? "").split(",")[0].trim();
+  return host ? `https://${host}` : "";
+}
 
 // Use the dedicated client so we can pass the Pro model explicitly. The
 // shared `ai` client at @workspace/integrations-gemini-ai uses the same env
@@ -194,7 +207,7 @@ export async function generateAppImages(
         originalUrl: item.placeholder.url,
       })
       .returning({ id: appImages.id });
-    const newUrl = `/api/apps/${appId}/images/${inserted.id}`;
+    const newUrl = `${appBaseUrl()}/api/apps/${appId}/images/${inserted.id}`;
     // Replace ALL occurrences of the placeholder URL — same image often shows
     // up multiple times across the bundle (different components reference it).
     const escaped = item.placeholder.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
