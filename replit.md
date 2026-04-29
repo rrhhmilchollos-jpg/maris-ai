@@ -80,3 +80,8 @@ AppForge features a React frontend, a Node.js/Express backend, and shared librar
   - `apps`: publicadas hoy / total (con `publicSlug` no nulo).
 - **Frontend**: ruta `/admin/dashboard` (`pages/admin-dashboard.tsx`) con `useQuery` y `refetchInterval: 30_000`. Acceso desde `/admin` mediante el botón "Panel de métricas" sobre las pestañas.
 - **Sentry**: `initSentry()` se llama al inicio de `app.ts` (servidor) y `main.tsx` (cliente); ambos hacen no-op si falta el DSN. El middleware de captura de errores está montado después de las rutas en `app.ts`.
+- **Captura por fase del pipeline**: `lib/generate.ts` expone `generateApp(... , onPhaseError?)`. Internamente envuelve cada fase (`planner`, `researcher`, `architect`, `integrations`, `design`, `frontend`, `backend`, `qa`, `tests`, `validate-patch-loop`) con un helper `runPhase()` que llama a `onPhaseError(phase, err)` y vuelve a lanzar el error. `routes/apps.ts` conecta ese callback a `captureAgentError` con `phase + jobId + userId + appId`, así cada fallo aparece en Sentry etiquetado con la fase exacta donde explotó (no como genérico "runJob").
+- **Breadcrumbs (timeline antes del error)**:
+  - Servidor (`app.ts`): middleware por petición que registra `method`, `path`, `status` y `durationMs` cuando `res` finaliza.
+  - Servidor (`apps.ts`): breadcrumb `job:start` y un breadcrumb por cada cambio de fase (`phase:<nombre>`) con `jobId`, progreso y nota.
+  - Cliente (`appforge/src/lib/sentry.ts`): `breadcrumbsIntegration` activado explícitamente para `fetch`, `xhr`, `console`, `dom` e `history`, así Sentry capta automáticamente todas las llamadas de React Query, navegaciones y clics relevantes.
