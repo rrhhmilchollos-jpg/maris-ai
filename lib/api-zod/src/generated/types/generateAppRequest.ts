@@ -13,4 +13,6 @@ export interface GenerateAppRequest {
   appId?: number | null;
   /** Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits. */
   coderModel?: string | null;
+  /** Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins). */
+  language?: string | null;
 }

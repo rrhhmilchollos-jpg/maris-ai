@@ -53,6 +53,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
   const [coderModel, setCoderModel] = useState<string>("auto");
+  const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
 
   const { data: me } = useGetMe();
@@ -133,9 +134,10 @@ export default function DashboardPage() {
       return;
     }
 
-    // Pass the user-selected coder model. The server validates it against an
-    // allow-list and falls back to "auto" if the value is unknown.
-    generateMutation.mutate({ data: { prompt, coderModel } });
+    // Pass the user-selected coder model + source language. The server
+    // validates both against allow-lists and falls back to defaults if
+    // anything is unknown.
+    generateMutation.mutate({ data: { prompt, coderModel, language } });
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
@@ -241,6 +243,19 @@ export default function DashboardPage() {
                       <SelectItem value="auto">Auto (Gemini Flash, rápido)</SelectItem>
                       <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
                       <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (calidad)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={language}
+                    onValueChange={(v) => setLanguage(v as "typescript" | "javascript")}
+                    disabled={isWorking}
+                  >
+                    <SelectTrigger className="h-9 w-[160px] text-xs bg-background/50 border-border/50">
+                      <SelectValue placeholder="Lenguaje" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="typescript">TypeScript (.tsx)</SelectItem>
+                      <SelectItem value="javascript">JavaScript (.jsx)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

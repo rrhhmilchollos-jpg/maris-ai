@@ -28,6 +28,7 @@ export * from "./healthCheckResult";
 export * from "./healthCheckResultAfter";
 export * from "./healthCheckResultBefore";
 export * from "./healthStatus";
+export * from "./imageGenerationResult";
 export * from "./sendAppMessageRequest";
 export * from "./updateCoderModelRequest";
 export * from "./userProfile";

@@ -51,6 +51,11 @@ export const GetMyStatsResponse = zod.object({
         .describe(
           "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
         ),
+      language: zod
+        .string()
+        .describe(
+          "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation.",
+        ),
       publicSlug: zod
         .string()
         .nullish()
@@ -83,6 +88,11 @@ export const ListAppsResponseItem = zod.object({
     .string()
     .describe(
       "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  language: zod
+    .string()
+    .describe(
+      "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation.",
     ),
   publicSlug: zod
     .string()
@@ -117,6 +127,11 @@ export const GetAppResponse = zod.object({
     .string()
     .describe(
       "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  language: zod
+    .string()
+    .describe(
+      "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation.",
     ),
   publicSlug: zod
     .string()
@@ -154,6 +169,12 @@ export const GenerateAppBody = zod.object({
     .nullish()
     .describe(
       "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits.",
+    ),
+  language: zod
+    .string()
+    .nullish()
+    .describe(
+      "Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins).",
     ),
 });
 
@@ -214,6 +235,11 @@ export const UpdateAppModelResponse = zod.object({
     .describe(
       "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
     ),
+  language: zod
+    .string()
+    .describe(
+      "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation.",
+    ),
   publicSlug: zod
     .string()
     .nullish()
@@ -230,6 +256,29 @@ export const UpdateAppModelResponse = zod.object({
  */
 export const ExportAppParams = zod.object({
   id: zod.coerce.number(),
+});
+
+/**
+ * @summary Replace placeholder image URLs in the app bundle with real Nano Banana Pro images
+ */
+export const GenerateAppImagesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GenerateAppImagesResponse = zod.object({
+  found: zod
+    .number()
+    .describe(
+      "Number of placeholder URLs detected in the bundle (capped per call).",
+    ),
+  generated: zod
+    .number()
+    .describe("Number of real images successfully generated and stored."),
+  bundleUpdated: zod
+    .boolean()
+    .describe(
+      "True if the frontend bundle was rewritten to point at the new images.",
+    ),
 });
 
 /**

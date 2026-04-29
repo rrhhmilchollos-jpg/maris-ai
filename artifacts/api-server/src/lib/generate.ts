@@ -2,6 +2,9 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { validateBundle, type BuildIssue } from "./validate";
 
+/** Source language the generated app uses. Affects file extensions + prompt rules. */
+export type GenLanguage = "typescript" | "javascript";
+
 /* ============================================================================
  * AppForge multi-agent generation pipeline.
  *
@@ -16,21 +19,42 @@ import { validateBundle, type BuildIssue } from "./validate";
  * Edits use a single Sonnet pass — the existing app already has plan + design.
  * ========================================================================== */
 
-const FRONTEND_SYSTEM_PROMPT = `You are AppForge's Frontend Engineer. Generate a complete, production-quality React frontend as STRICT JSON only.
+/**
+ * Build the Frontend Engineer system prompt for the chosen source language.
+ *
+ * `typescript` → .tsx files, types allowed/encouraged (default).
+ * `javascript` → .jsx files, NO TypeScript syntax (no `: Type`, `interface`,
+ * `as Foo`, generics on functions/components). Used when the user opted into
+ * vanilla JS for the generated app.
+ */
+function buildFrontendSystemPrompt(language: GenLanguage): string {
+  const isTS = language === "typescript";
+  const ext = isTS ? "tsx" : "jsx";
+  const utilExt = isTS ? "ts" : "js";
+  const stackLine = isTS
+    ? "Stack: React 18 + TypeScript + Tailwind v3 + wouter (if multi-page) + lucide-react icons."
+    : "Stack: React 18 + plain JavaScript (NO TypeScript) + Tailwind v3 + wouter (if multi-page) + lucide-react icons.";
+  const tsRules = isTS
+    ? "- TypeScript is allowed: type annotations, interfaces and generics are fine where they help readability."
+    : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
+  return `You are AppForge's Frontend Engineer. Generate a complete, production-quality React frontend as STRICT JSON only.
 
 Schema:
 {"frontendCode":"all frontend files as one string"}
 
 Use '// === FILE: <path> ===' to separate files inside frontendCode. ALWAYS include:
-- index.html, package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.js
-- src/main.tsx, src/App.tsx, src/index.css
-- src/pages/<Name>.tsx for every page in the plan
-- src/components/<Name>.tsx for every component in the plan
-- src/lib/<name>.ts for every util in the plan (cn helper, formatters, etc.)
-- src/hooks/<name>.ts for every hook in the plan
-- src/types/index.ts when types are shared
+- index.html, package.json, vite.config.${utilExt}${isTS ? ", tsconfig.json" : ""}, tailwind.config.${utilExt}, postcss.config.js
+- src/main.${ext}, src/App.${ext}, src/index.css
+- src/pages/<Name>.${ext} for every page in the plan
+- src/components/<Name>.${ext} for every component in the plan
+- src/lib/<name>.${utilExt} for every util in the plan (cn helper, formatters, etc.)
+- src/hooks/<name>.${utilExt} for every hook in the plan
+${isTS ? "- src/types/index.ts when types are shared\n" : ""}
+${stackLine} Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
 
-Stack: React 18 + TypeScript + Tailwind v3 + wouter (if multi-page) + lucide-react icons. Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
+CSS — encouraged beyond Tailwind:
+- src/index.css holds the @tailwind directives PLUS the design system globals (CSS variables, body styles).
+- For animations, keyframes, scrollbar styling, complex hover states or component-scoped polish that's awkward in Tailwind utilities, ADD dedicated files like src/styles/animations.css, src/styles/scrollbar.css, src/styles/<component>.css and import them from src/main.${ext} (or from the component that uses them). Real CSS rules — no @apply outside index.css.
 
 LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES):
 - Every label, button, heading, placeholder, alt text, error message, empty state, tooltip → Spanish.
@@ -38,19 +62,24 @@ LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES):
 - Identifiers, variable names, file names, type names → English (standard code).
 - HTML lang attribute → "es".
 
-SYNTAX — code must parse with a strict TypeScript parser (Babel/SWC/esbuild):
+SYNTAX — code must parse with a strict ${isTS ? "TypeScript" : "JavaScript"} parser (Babel/SWC/esbuild):
+${tsRules}
 - NO trailing commas after the last element of an object literal, array literal or call argument list when followed immediately by a closing token. Specifically NEVER write \`,,\` (double comma) or \`,)\` or \`,]\` or \`,}\` patterns where the second comma was a typo.
 - NO non-ASCII characters inside identifiers, keywords or punctuation. Non-ASCII is allowed ONLY inside string literals and JSX text. Examples of FORBIDDEN garbage tokens: \`née\`, \`café\` as a property name, smart quotes \`"…"\` instead of plain \`"\`, em-dashes inside code.
 - Every string must be properly terminated with the SAME quote it started with. Long URLs and descriptions are common offenders — re-check them.
 - Every \`{\`, \`(\`, \`[\` must have a matching \`}\`, \`)\`, \`]\`. Every JSX tag must close.
 - All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. Stick to: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod. Do not invent package names.
 
+IMAGES — placeholders are encouraged:
+- Use \`https://images.unsplash.com/photo-…\` URLs (or \`https://picsum.photos/…\`) for hero/product/avatar images and ALWAYS write a meaningful Spanish \`alt="…"\`. A separate AI agent will replace these with real generated images later, using the alt text as the prompt.
+
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content.
-- Use the file list from the plan as the MINIMUM — split UI into the listed files, do not collapse them into App.tsx.
+- Use the file list from the plan as the MINIMUM — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML.
 - Combined output must stay under 70 KB. Trim seed data before truncating files.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
+}
 
 const BACKEND_SYSTEM_PROMPT = `You are AppForge's Backend Engineer. Generate a complete, production-quality Node/Express backend as STRICT JSON only.
 
@@ -138,7 +167,12 @@ Rules:
 - Real working tests. No TODOs, no placeholders. Every test imports a real symbol and asserts something concrete.
 - Combined output under 6 KB. Close every brace. Output ONLY the JSON object.`;
 
-const PATCHER_SYSTEM_PROMPT = `You are AppForge's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
+function buildPatcherSystemPrompt(language: GenLanguage): string {
+  const isTS = language === "typescript";
+  const tsLine = isTS
+    ? "- This is a TypeScript bundle (.tsx/.ts). Type annotations are fine."
+    : "- This is a plain JavaScript bundle (.jsx/.js). Do NOT introduce TypeScript syntax during patching (no `: Type`, no `interface`, no `as Foo`, no generics).";
+  return `You are AppForge's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
 
 Output STRICT JSON only:
 {"frontendCode":"all frontend files as one string"}
@@ -146,6 +180,7 @@ Output STRICT JSON only:
 LANGUAGE — preserve Spanish copy. If new copy is added, write it in Spanish too.
 
 SYNTAX — the patched bundle must parse cleanly:
+${tsLine}
 - Remove every \`,,\` (double comma), \`,)\`, \`,]\` and \`,}\` pattern you find while patching.
 - Strip any non-ASCII garbage characters from identifiers/keywords (e.g. \`née\`, smart quotes in code, zero-width spaces). Non-ASCII is fine inside strings and JSX text only.
 - Re-balance every brace, bracket, paren and JSX tag.
@@ -156,6 +191,7 @@ Rules:
 - Return the FULL bundle (every file, not just patched ones).
 - Don't introduce new bugs. Don't remove existing files unless the fix explicitly says so.
 - Combined output under 70 KB. Close every brace and quote. Output ONLY the JSON object.`;
+}
 
 export interface GeneratedAppPayload {
   title: string;
@@ -418,7 +454,8 @@ async function generateFrontendCode(
   research: string,
   prompt: string,
   onChars: (chars: number) => void,
-  coderModel?: string,
+  coderModel: string | undefined,
+  language: GenLanguage,
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -450,6 +487,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   // sometimes higher quality. The autonomous validate-then-patch loop below
   // is our safety net for any quality slips either way.
   const provider = resolveCoderProvider(coderModel);
+  const systemPrompt = buildFrontendSystemPrompt(language);
   let accumulated = "";
   let truncated = false;
   if (provider === "gemini-flash") {
@@ -457,7 +495,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: userContent }] }],
       config: {
-        systemInstruction: FRONTEND_SYSTEM_PROMPT,
+        systemInstruction: systemPrompt,
         maxOutputTokens: 32768,
         responseMimeType: "application/json",
       },
@@ -483,12 +521,12 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 16384,
-      system: FRONTEND_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
     accumulated = response.content
-      .filter((b): b is { type: "text"; text: string } => b.type === "text")
-      .map((b) => b.text)
+      .filter((b: { type: string }) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
       .join("");
     truncated = response.stop_reason === "max_tokens";
     onChars(accumulated.length);
@@ -713,6 +751,7 @@ Return the JSON object with testCode.`,
 export async function patchBundle(
   frontendCode: string,
   issues: QAIssue[],
+  language: GenLanguage = "typescript",
 ): Promise<string | null> {
   if (issues.length === 0) return null;
   const issueList = issues
@@ -727,7 +766,7 @@ export async function patchBundle(
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 16000,
-          system: PATCHER_SYSTEM_PROMPT,
+          system: buildPatcherSystemPrompt(language),
           messages: [
             {
               role: "user",
@@ -804,6 +843,7 @@ async function runValidatePatchLoop(
   qaReport: QAReport,
   onProgress: ((p: GenerateProgress) => void) | undefined,
   baseProgressStart: number,
+  language: GenLanguage,
 ): Promise<string> {
   const MAX_ITERATIONS = 2;
   let finalFrontend = initialBundle;
@@ -861,6 +901,7 @@ async function runValidatePatchLoop(
         problem: `Build error${i.line ? ` at line ${i.line}` : ""}: ${i.message}`,
         fix: "Fix the import / symbol / syntax so the file compiles.",
       })),
+      language,
     );
     if (!patched) {
       onProgress?.({
@@ -886,14 +927,20 @@ async function runValidatePatchLoop(
 
 /* ----------------------------- edit mode ---------------------------------- */
 
-const EDIT_SYSTEM_PROMPT = `You are AppForge editing an existing web app. Apply the user's requested change while preserving everything else that works.
+function buildEditSystemPrompt(language: GenLanguage): string {
+  const isTS = language === "typescript";
+  const tsLine = isTS
+    ? "- This is a TypeScript app. Type annotations and interfaces are fine."
+    : "- This is a plain JavaScript app (.jsx/.js). Do NOT introduce ANY TypeScript syntax: no `: Type`, `interface`, `type Foo = …`, `as Foo`, no generics like `useState<string>`. The current bundle has no tsconfig — keep it that way.";
+  return `You are AppForge editing an existing web app. Apply the user's requested change while preserving everything else that works.
 
 Output STRICT JSON only matching:
 {"title":"…","description":"…","techStack":[…],"frontendCode":"…","backendCode":"…"}
 
 LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES). Identifiers stay in English.
 
-SYNTAX — code MUST parse with a strict TypeScript parser:
+SYNTAX — code MUST parse with a strict ${isTS ? "TypeScript" : "JavaScript"} parser:
+${tsLine}
 - NEVER produce \`,,\` (double comma), \`,)\`, \`,]\` or \`,}\` patterns. No trailing commas immediately before a close token.
 - NO non-ASCII characters inside identifiers/keywords/punctuation. Non-ASCII allowed ONLY in string literals and JSX text.
 - Every string must be terminated with the same quote it started with (watch out for long URLs and Spanish descriptions with apostrophes).
@@ -904,14 +951,17 @@ Rules:
 - Use '// === FILE: <path> ===' separators inside frontendCode/backendCode.
 - Return the FULL updated bundles (every file, not just the changed ones).
 - Keep the title and overall structure unless the user explicitly asks to change them.
+- Preserve any \`/api/apps/<n>/images/<n>\` URLs verbatim — those are real generated images, NOT placeholders.
 - Do NOT regress existing features. No TODOs.
 - Combined output under 70 KB. Close every brace and quote. Output ONLY the JSON object.`;
+}
 
 async function singleEditPass(
   prompt: string,
   previous: PreviousApp,
   onChars: (chars: number) => void,
-  coderModel?: string,
+  coderModel: string | undefined,
+  language: GenLanguage,
 ): Promise<GeneratedAppPayload> {
   const userContent = `CURRENT APP:
 - Title: ${previous.title}
@@ -933,6 +983,7 @@ Return the FULL updated app as JSON.`;
   // override as the initial generation. Default Gemini Flash streaming, with
   // Anthropic Sonnet as the only opt-in alternative.
   const provider = resolveCoderProvider(coderModel);
+  const systemPrompt = buildEditSystemPrompt(language);
   let accumulated = "";
   let finishReason: string | undefined;
   if (provider === "gemini-flash") {
@@ -940,7 +991,7 @@ Return the FULL updated app as JSON.`;
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: userContent }] }],
       config: {
-        systemInstruction: EDIT_SYSTEM_PROMPT,
+        systemInstruction: systemPrompt,
         maxOutputTokens: 32768,
         responseMimeType: "application/json",
       },
@@ -962,12 +1013,12 @@ Return the FULL updated app as JSON.`;
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 16384,
-      system: EDIT_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
     accumulated = response.content
-      .filter((b): b is { type: "text"; text: string } => b.type === "text")
-      .map((b) => b.text)
+      .filter((b: { type: string }) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
       .join("");
     if (response.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
     onChars(accumulated.length);
@@ -1006,6 +1057,7 @@ export async function generateApp(
   onProgress?: (p: GenerateProgress) => void,
   previous?: PreviousApp,
   coderModel?: string,
+  language: GenLanguage = "typescript",
 ): Promise<GeneratedAppPayload> {
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
@@ -1019,7 +1071,7 @@ export async function generateApp(
         note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)`,
       });
     };
-    const result = await singleEditPass(prompt, previous, onChars, coderModel);
+    const result = await singleEditPass(prompt, previous, onChars, coderModel, language);
 
     // Edit mode used to skip validation entirely, so a single bad token from
     // the coder (trailing comma, garbage identifier like "née", invented
@@ -1031,6 +1083,7 @@ export async function generateApp(
       { ok: true, issues: [] },
       onProgress,
       /* baseProgressStart */ 70,
+      language,
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
@@ -1099,7 +1152,7 @@ export async function generateApp(
         progress: 32 + Math.round(ratio * 45),
         note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…`,
       });
-    }, coderModel),
+    }, coderModel, language),
     110_000,
     "frontend-engineer",
   );
@@ -1133,6 +1186,7 @@ export async function generateApp(
     report,
     onProgress,
     /* baseProgressStart */ 80,
+    language,
   );
 
   const testNote = testCode ? "✅ Tests generados. " : "";

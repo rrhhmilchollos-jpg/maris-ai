@@ -10,6 +10,7 @@ import {
   useHealthCheckApp,
   useDeployApp,
   usePushAppToGitHub,
+  useGenerateAppImages,
   getGetAppQueryKey,
   getListAppsQueryKey,
   getGetMyStatsQueryKey,
@@ -46,6 +47,7 @@ import {
   Globe,
   Github,
   ExternalLink,
+  ImagePlus,
 } from "lucide-react";
 import {
   Select,
@@ -222,6 +224,38 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     },
   });
 
+  const imagesMutation = useGenerateAppImages({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        if (result.found === 0) {
+          toast({
+            title: "Sin imágenes que reemplazar",
+            description: "No encontramos placeholders de Unsplash o picsum en tu app.",
+          });
+        } else if (result.generated === 0) {
+          toast({
+            title: "No pudimos generar imágenes",
+            description: "Inténtalo de nuevo en unos segundos.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Imágenes generadas",
+            description: `Reemplazamos ${result.generated}/${result.found} placeholder(s) con imágenes reales.`,
+          });
+        }
+      },
+      onError: (err: any) => {
+        toast({
+          title: "No pudimos generar imágenes",
+          description: err?.message ?? "Error",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
   const githubMutation = usePushAppToGitHub({
     mutation: {
       onSuccess: (result) => {
@@ -335,6 +369,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             <span className="text-xs text-muted-foreground hidden md:inline">
               {format(new Date(app.createdAt), "d MMM yyyy", { locale: es })}
             </span>
+            <Badge
+              variant="secondary"
+              className="font-mono text-xs bg-secondary/50 hidden md:inline-flex"
+              title="Lenguaje del código generado (fijado al crear la app)"
+            >
+              {app.language === "javascript" ? "JS" : "TS"}
+            </Badge>
 
             {/* Coder model selector — affects subsequent edits on this app. */}
             <Select
@@ -378,6 +419,22 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <HeartPulse className="h-4 w-4 mr-1.5" />
               )}
               Chequeo
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => imagesMutation.mutate({ id: app.id })}
+              disabled={imagesMutation.isPending || isWorking}
+              className="h-8 border-fuchsia-400/30 bg-fuchsia-400/10 hover:bg-fuchsia-400/20 text-fuchsia-300"
+              title="Reemplaza placeholders de Unsplash con imágenes reales generadas por Nano Banana Pro"
+            >
+              {imagesMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <ImagePlus className="h-4 w-4 mr-1.5" />
+              )}
+              Imágenes IA
             </Button>
 
             {app.publicSlug ? (

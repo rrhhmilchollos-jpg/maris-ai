@@ -35,6 +35,8 @@ export interface GeneratedApp {
   status: string;
   /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
   coderModel: string;
+  /** Source language: typescript (.tsx) or javascript (.jsx). Locked at creation. */
+  language: string;
   /** When set, the app is publicly viewable at /p/{publicSlug}. */
   publicSlug?: string | null;
   /** HTML URL of the repo this app was last pushed to. */
@@ -57,11 +59,22 @@ export interface GenerateAppRequest {
   appId?: number | null;
   /** Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits. */
   coderModel?: string | null;
+  /** Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins). */
+  language?: string | null;
 }
 
 export interface UpdateCoderModelRequest {
   /** auto | gemini-2.5-flash | claude-sonnet-4-6 */
   coderModel: string;
+}
+
+export interface ImageGenerationResult {
+  /** Number of placeholder URLs detected in the bundle (capped per call). */
+  found: number;
+  /** Number of real images successfully generated and stored. */
+  generated: number;
+  /** True if the frontend bundle was rewritten to point at the new images. */
+  bundleUpdated: boolean;
 }
 
 export type HealthCheckResultBefore = {

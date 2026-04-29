@@ -22,6 +22,9 @@ export const generatedApps = pgTable("generated_apps", {
   // Coder model preference: "auto" (default routing), "gemini-2.5-flash", or "claude-sonnet-4-6".
   // Architect/Backend always stay on Sonnet; only the Coder/Edit role obeys this.
   coderModel: text("coder_model").notNull().default("auto"),
+  // Source language preference: "typescript" (default, .tsx files) or "javascript" (.jsx files).
+  // Affects file extensions and TS-only syntax in prompts. Edits inherit this.
+  language: text("language").notNull().default("typescript"),
   // Public deploy URL slug. Null until the user clicks "Publicar". Globally unique.
   publicSlug: text("public_slug").unique(),
   // Last GitHub repo URL pushed to. Null until the user clicks "Subir a GitHub".
