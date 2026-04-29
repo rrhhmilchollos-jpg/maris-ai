@@ -20,6 +20,9 @@ import {
   rememberPatch,
   recallSimilar,
   buildRecallExamplesBlock,
+  extractFixHint,
+  redactSecrets,
+  MAX_STORED_PATCH_CHARS,
 } from "../lib/agentMemory";
 import { planExecution, planSummaryEs, PLAN_FAST_PATCH, PLAN_FEATURE, PLAN_FULL } from "../lib/planner";
 
@@ -170,6 +173,35 @@ async function testSameErrorTwiceConvergence(): Promise<void> {
   );
 }
 
+// Security regression: stored patches must be tiny and free of obvious
+// secrets, otherwise shared memory becomes a cross-tenant leak channel.
+function testPatchSanitization(): void {
+  console.log("\n[8] Stored patches are bounded and redacted");
+
+  const giantBundle = "const a = 1;\n".repeat(2000);
+  const hint = extractFixHint(giantBundle, "no line ref here");
+  expect(
+    `extractFixHint caps output at MAX_STORED_PATCH_CHARS (${MAX_STORED_PATCH_CHARS})`,
+    hint.length <= MAX_STORED_PATCH_CHARS,
+    `len=${hint.length}`,
+  );
+
+  const linedBundle = Array.from({ length: 200 }, (_, i) => `line ${i + 1};`).join("\n");
+  const localised = extractFixHint(linedBundle, "TypeError at line 42 in src/App.tsx");
+  expect(
+    "extractFixHint extracts only the region around the error line",
+    localised.includes("line 42") && localised.length < 300,
+    `len=${localised.length}`,
+  );
+
+  const dirty = `const key = "sk-AAAAAAAAAAAAAAAAAAAA";\nconst gh = "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";\nconst hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";`;
+  const clean = redactSecrets(dirty);
+  expect("redactSecrets removes OpenAI-style sk- keys", !clean.includes("sk-AAAAAAAAAAAAAAAAAAAA"));
+  expect("redactSecrets removes GitHub PAT-style strings", !clean.includes("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+  expect("redactSecrets removes long hex strings", !clean.includes("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"));
+  expect("redactSecrets leaves the rest of the code intact", clean.includes("const key") && clean.includes("[REDACTED]"));
+}
+
 // Regression: when fastPatchEdit() returns null in edit mode, the dispatcher
 // MUST promote the plan so the validate+patch loop is no longer gated off.
 // Without this, the original PLAN_FAST_PATCH gates (`phases = ["patch"]`)
@@ -240,6 +272,7 @@ async function main(): Promise<void> {
     await testSameErrorTwiceConvergence();
     testPhasesAreConsumable();
     testFastPatchFallbackPromotesPlan();
+    testPatchSanitization();
   } catch (err) {
     console.error("Test crashed:", err);
     failures++;

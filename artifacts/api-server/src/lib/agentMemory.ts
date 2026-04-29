@@ -22,6 +22,52 @@ const openai = new OpenAI({
 const EMBED_DIMS = 1536;
 const EMBED_MODEL = "text-embedding-3-small";
 const MAX_INPUT_CHARS = 8_000;
+// Hard cap on stored patches. Memory is shared across apps/users, so storing
+// large bundles would risk leaking proprietary code or secrets to unrelated
+// jobs via recall. We instead store only a tiny snippet of the corrected
+// region (extracted near the error line) — enough for the next patcher to
+// recognise the pattern, not enough to be useful as a code dump.
+export const MAX_STORED_PATCH_CHARS = 800;
+
+// Patterns that look like secrets we never want to persist into shared
+// memory. Conservative and additive — false positives are fine, missed
+// secrets are not.
+const SECRET_PATTERNS: RegExp[] = [
+  /sk-[A-Za-z0-9_-]{16,}/g, // OpenAI / Replit AI Integrations style keys
+  /\b[A-Za-z0-9_-]{0,8}(?:secret|token|api[_-]?key|password|passwd|bearer)[A-Za-z0-9_-]{0,8}\s*[:=]\s*['"][^'"\n]{4,}['"]/gi,
+  /\bgh[ps]_[A-Za-z0-9]{20,}\b/g, // GitHub PAT
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g, // Slack
+  /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, // JWT
+  /\b[A-Fa-f0-9]{40,}\b/g, // long hex strings (private keys, hashes)
+];
+
+export function redactSecrets(text: string): string {
+  let out = text;
+  for (const re of SECRET_PATTERNS) {
+    out = out.replace(re, "[REDACTED]");
+  }
+  return out;
+}
+
+// Pull the smallest possible "fix hint" out of the corrected bundle. We try
+// to find a line number reference inside the error message, then return ~12
+// lines of context around it. If we cannot parse a location, we fall back to
+// the first MAX_STORED_PATCH_CHARS of the bundle (which is much smaller than
+// the previous 8000-char dump).
+export function extractFixHint(bundle: string, errorMessage: string): string {
+  const lineMatch = errorMessage.match(/(?:line|línea)\s*[:#]?\s*(\d+)/i);
+  if (lineMatch) {
+    const targetLine = Number(lineMatch[1]);
+    const lines = bundle.split("\n");
+    if (targetLine >= 1 && targetLine <= lines.length) {
+      const start = Math.max(0, targetLine - 6);
+      const end = Math.min(lines.length, targetLine + 6);
+      const snippet = lines.slice(start, end).join("\n");
+      return redactSecrets(snippet).slice(0, MAX_STORED_PATCH_CHARS);
+    }
+  }
+  return redactSecrets(bundle).slice(0, MAX_STORED_PATCH_CHARS);
+}
 
 const inMemoryCache = new Map<string, number[]>();
 const MAX_CACHE_ENTRIES = 500;
