@@ -24,7 +24,7 @@
  * Reuses `takeScreenshots`, `chromiumExecutablePath`, and the visual tester's
  * Puppeteer infrastructure to avoid double-launching Chromium.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { db } from "./db";
 import { generatedApps, users, appMessages } from "@workspace/db/schema";
@@ -328,11 +328,27 @@ async function ensurePublicSlug(
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = makeSlug();
     try {
-      await db
+      // Idempotent + race-safe: only assign when no slug exists yet. If the
+      // route's manual publish already set one between our SELECT and this
+      // UPDATE, we lose the race and re-read the winner instead of clobbering.
+      const updated = await db
         .update(generatedApps)
         .set({ publicSlug: candidate })
-        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)));
-      return candidate;
+        .where(
+          and(
+            eq(generatedApps.id, appId),
+            eq(generatedApps.userId, userId),
+            sql`${generatedApps.publicSlug} IS NULL`,
+          ),
+        )
+        .returning({ publicSlug: generatedApps.publicSlug });
+      if (updated.length > 0) return updated[0].publicSlug;
+      const [row] = await db
+        .select({ publicSlug: generatedApps.publicSlug })
+        .from(generatedApps)
+        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
+        .limit(1);
+      return row?.publicSlug ?? null;
     } catch (err) {
       log.warn({ err, attempt }, "Slug collision while assigning auto-publish slug, retrying");
     }
@@ -564,7 +580,16 @@ export async function runAutoEvaluator(opts: {
         log.warn({ err, appId }, "Failed to clear evaluatorSummary after pass");
       });
 
-    if (row.autoPublish) {
+    // Re-read autoPublish right before deciding — the user may have toggled
+    // it off via the UI while the (slow) evaluator was running. Snapshot
+    // captured at the start of runAutoEvaluator can be minutes old.
+    const [fresh] = await db
+      .select({ autoPublish: generatedApps.autoPublish })
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
+      .limit(1);
+    const shouldAutoPublish = fresh?.autoPublish === true;
+    if (shouldAutoPublish) {
       log.info(
         { appId, jobId, publicUrl },
         `🚀 Publicado automáticamente en ${publicUrl}`,
