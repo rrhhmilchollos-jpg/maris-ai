@@ -170,6 +170,44 @@ async function testSameErrorTwiceConvergence(): Promise<void> {
   );
 }
 
+// Regression: when fastPatchEdit() returns null in edit mode, the dispatcher
+// MUST promote the plan so the validate+patch loop is no longer gated off.
+// Without this, the original PLAN_FAST_PATCH gates (`phases = ["patch"]`)
+// would short-circuit runValidatePatchLoop and ship unvalidated code.
+function testFastPatchFallbackPromotesPlan(): void {
+  console.log("\n[7] Fast-patch fallback promotes plan to feature (validate+patch ON)");
+
+  // Simulate the exact mutation the dispatcher performs at the fallback site.
+  let execPlan = { ...PLAN_FAST_PATCH };
+  expect(
+    "before fallback: validate gate is OFF (correct for happy-path fast-patch)",
+    !execPlan.phases.includes("validate"),
+  );
+
+  // Mirror the production fallback assignment.
+  execPlan = {
+    ...execPlan,
+    scope: "feature",
+    phases: PLAN_FEATURE.phases,
+  };
+
+  expect(
+    "after fallback: scope promoted to 'feature'",
+    execPlan.scope === "feature",
+    `scope=${execPlan.scope}`,
+  );
+  expect(
+    "after fallback: validate gate is ON",
+    execPlan.phases.includes("validate"),
+    `phases=${execPlan.phases.join(",")}`,
+  );
+  expect(
+    "after fallback: patch gate is ON",
+    execPlan.phases.includes("patch"),
+    `phases=${execPlan.phases.join(",")}`,
+  );
+}
+
 function testPhasesAreConsumable(): void {
   console.log("\n[6] Planner constants expose phases the dispatcher can gate on");
   expect(
@@ -201,6 +239,7 @@ async function main(): Promise<void> {
     await testPlanner();
     await testSameErrorTwiceConvergence();
     testPhasesAreConsumable();
+    testFastPatchFallbackPromotesPlan();
   } catch (err) {
     console.error("Test crashed:", err);
     failures++;

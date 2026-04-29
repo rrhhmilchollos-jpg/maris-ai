@@ -11,7 +11,7 @@ const openai = new OpenAI({
 import { validateBundle, type BuildIssue } from "./validate";
 import { logger } from "./logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock } from "./agentMemory";
-import { planExecution, planSummaryEs } from "./planner";
+import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -1710,7 +1710,7 @@ export async function generateApp(
   // existing app it shortcuts straight to the patcher; otherwise the
   // ExecutionPlan.phases array gates each downstream phase below.
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
-  const execPlan = await planExecution(prompt, { hasExistingApp: !!previous });
+  let execPlan = await planExecution(prompt, { hasExistingApp: !!previous });
   log("planner", planSummaryEs(execPlan));
 
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
@@ -1722,6 +1722,17 @@ export async function generateApp(
       const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
       if (fastResult) return fastResult;
       log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
+      // CRITICAL: when fast-patch fails the fallback MUST run the full
+      // validate+patch loop. Otherwise the original PLAN_FAST_PATCH gates
+      // (`phases = ["patch"]`) would short-circuit runValidatePatchLoop and
+      // ship unvalidated code. Promote the plan to "feature" so the rest of
+      // this function takes the architected, validated, patched path.
+      execPlan = {
+        ...execPlan,
+        scope: "feature",
+        phases: PLAN_FEATURE.phases,
+      };
+      log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
     }
 
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
