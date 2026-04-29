@@ -711,11 +711,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     }}
                     theme="light"
                   >
-                    <SandpackLayout style={{ height: "100%", border: "none", borderRadius: 0 }}>
+                    <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
                       <SandpackPreview
                         showOpenInCodeSandbox={false}
                         showRefreshButton
-                        style={{ height: "100%", flex: 1 }}
+                        style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
                       />
                     </SandpackLayout>
                   </SandpackProvider>
