@@ -71,6 +71,23 @@ app.listen(port, async (err) => {
   reclaimOrphanedJobs().catch((reclaimErr) => {
     logger.error({ err: reclaimErr }, "Orphan job reclaim failed");
   });
+
+  // Periodic sweep: re-run the reclaim every 2 minutes so jobs that get stuck
+  // *between* server restarts (worker crashed mid-run, OpenAI call hung past
+  // pg-boss expiry, network partition) don't permanently block the user
+  // behind a 409 "ya hay un cambio en curso". Combined with the inline
+  // recovery in the /generate 409 check, this gives two independent paths
+  // for unsticking a dead job: (1) the user retries and we recover inline,
+  // (2) nobody touches the app and the sweep eventually frees it anyway.
+  const RECLAIM_SWEEP_MS = Number(process.env.RECLAIM_SWEEP_MS) || 2 * 60 * 1000;
+  const sweep = setInterval(() => {
+    reclaimOrphanedJobs().catch((reclaimErr) => {
+      logger.warn({ err: reclaimErr }, "Periodic orphan job reclaim failed");
+    });
+  }, RECLAIM_SWEEP_MS);
+  // unref() so the interval doesn't keep the process alive during graceful
+  // shutdown — pg-boss + Express still hold their own refs.
+  sweep.unref();
 });
 
 // Best-effort graceful shutdown so in-flight jobs get a chance to checkpoint.
