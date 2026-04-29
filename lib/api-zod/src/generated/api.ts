@@ -636,3 +636,59 @@ export const ListAdminAppsResponseItem = zod.object({
   createdAt: zod.coerce.date(),
 });
 export const ListAdminAppsResponse = zod.array(ListAdminAppsResponseItem);
+
+/**
+ * @summary Recent generation jobs across all users (queue health view)
+ */
+export const ListAdminJobsResponse = zod.object({
+  queued: zod.number(),
+  running: zod.number(),
+  failedLast24h: zod.number(),
+  succeededLast24h: zod.number(),
+  jobs: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.string(),
+      userEmail: zod.string().nullish(),
+      appId: zod.number().nullish(),
+      editAppId: zod.number().nullish(),
+      prompt: zod.string(),
+      status: zod.string(),
+      phase: zod.string(),
+      progress: zod.number(),
+      coderModel: zod.string(),
+      language: zod.string(),
+      retryCount: zod.number(),
+      errorMessage: zod.string().nullish(),
+      ageMs: zod.number(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Re-enqueue a failed (or stuck) generation job
+ */
+export const RetryAdminJobParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RetryAdminJobResponse = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  userEmail: zod.string().nullish(),
+  appId: zod.number().nullish(),
+  editAppId: zod.number().nullish(),
+  prompt: zod.string(),
+  status: zod.string(),
+  phase: zod.string(),
+  progress: zod.number(),
+  coderModel: zod.string(),
+  language: zod.string(),
+  retryCount: zod.number(),
+  errorMessage: zod.string().nullish(),
+  ageMs: zod.number(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});

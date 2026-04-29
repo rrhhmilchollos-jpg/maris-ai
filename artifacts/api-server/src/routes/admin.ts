@@ -5,8 +5,11 @@ import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
 import {
   users,
   generatedApps,
+  generationJobs,
   creditTransactions,
 } from "@workspace/db/schema";
+import { reenqueueGenerateJob } from "../lib/jobQueue";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -166,6 +169,168 @@ router.get("/admin/apps", async (_req, res) => {
       createdAt: r.createdAt.toISOString(),
     })),
   );
+});
+
+/**
+ * GET /admin/jobs
+ *
+ * Recent generation jobs across all users with summary counters. Used by
+ * the admin "Cola" tab to monitor queue health and triage stuck jobs.
+ *
+ * Returns the last 100 jobs by recency. Counters look at all queued/running
+ * (any age) plus a 24h window for failed/succeeded so the admin can spot
+ * incident bursts.
+ */
+router.get("/admin/jobs", async (_req, res) => {
+  const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [rows, queuedRow, runningRow, failed24Row, succ24Row] = await Promise.all([
+    db
+      .select({
+        id: generationJobs.id,
+        userId: generationJobs.userId,
+        userEmail: users.email,
+        appId: generationJobs.appId,
+        editAppId: generationJobs.editAppId,
+        prompt: generationJobs.prompt,
+        status: generationJobs.status,
+        phase: generationJobs.phase,
+        progress: generationJobs.progress,
+        coderModel: generationJobs.coderModel,
+        language: generationJobs.language,
+        retryCount: generationJobs.retryCount,
+        errorMessage: generationJobs.errorMessage,
+        createdAt: generationJobs.createdAt,
+        updatedAt: generationJobs.updatedAt,
+      })
+      .from(generationJobs)
+      .leftJoin(users, eq(generationJobs.userId, users.id))
+      .orderBy(desc(generationJobs.createdAt))
+      .limit(100),
+    db.select({ c: count() }).from(generationJobs).where(eq(generationJobs.status, "queued")),
+    db.select({ c: count() }).from(generationJobs).where(eq(generationJobs.status, "running")),
+    db
+      .select({ c: count() })
+      .from(generationJobs)
+      .where(sql`${generationJobs.status} = 'failed' AND ${generationJobs.updatedAt} >= ${sinceDate}`),
+    db
+      .select({ c: count() })
+      .from(generationJobs)
+      .where(sql`${generationJobs.status} = 'succeeded' AND ${generationJobs.updatedAt} >= ${sinceDate}`),
+  ]);
+
+  const now = Date.now();
+  res.json({
+    queued: queuedRow[0]?.c ?? 0,
+    running: runningRow[0]?.c ?? 0,
+    failedLast24h: failed24Row[0]?.c ?? 0,
+    succeededLast24h: succ24Row[0]?.c ?? 0,
+    jobs: rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userEmail: r.userEmail,
+      appId: r.appId,
+      editAppId: r.editAppId,
+      prompt: r.prompt,
+      status: r.status,
+      phase: r.phase,
+      progress: r.progress,
+      coderModel: r.coderModel,
+      language: r.language,
+      retryCount: r.retryCount ?? 0,
+      errorMessage: r.errorMessage,
+      ageMs: now - new Date(r.updatedAt).getTime(),
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+  });
+});
+
+/**
+ * POST /admin/jobs/:id/retry
+ *
+ * Manual re-enqueue. Only allowed for terminal-failure jobs and stale
+ * runners — refusing to resurrect succeeded jobs (would clobber the live
+ * app) and active jobs (still owned by a worker).
+ */
+router.post("/admin/jobs/:id/retry", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: "ID inválido" });
+    return;
+  }
+
+  const [job] = await db
+    .select()
+    .from(generationJobs)
+    .where(eq(generationJobs.id, id))
+    .limit(1);
+  if (!job) {
+    res.status(404).json({ error: "Job no encontrado" });
+    return;
+  }
+
+  const ageMs = Date.now() - new Date(job.updatedAt).getTime();
+  const STALE_MS = 15 * 60 * 1000;
+  const retryable =
+    job.status === "failed" ||
+    (job.status === "running" && ageMs > STALE_MS) ||
+    (job.status === "queued" && ageMs > STALE_MS);
+
+  if (!retryable) {
+    res
+      .status(409)
+      .json({ error: `Job en estado '${job.status}' no es reintentable ahora.` });
+    return;
+  }
+
+  // Reset to queued, bump retry counter and re-enqueue with a fresh nonce
+  // so pg-boss doesn't dedupe against the original singletonKey.
+  const [updated] = await db
+    .update(generationJobs)
+    .set({
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      errorMessage: null,
+      retryCount: (job.retryCount ?? 0) + 1,
+      updatedAt: new Date(),
+    })
+    .where(eq(generationJobs.id, id))
+    .returning();
+
+  try {
+    await reenqueueGenerateJob(id);
+  } catch (err) {
+    logger.error({ err, jobId: id }, "Manual retry: failed to re-enqueue");
+    res.status(500).json({ error: "No se pudo re-encolar el job." });
+    return;
+  }
+
+  const u = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, updated.userId))
+    .limit(1);
+  const ageMsAfter = Date.now() - new Date(updated.updatedAt).getTime();
+  res.json({
+    id: updated.id,
+    userId: updated.userId,
+    userEmail: u[0]?.email ?? null,
+    appId: updated.appId,
+    editAppId: updated.editAppId,
+    prompt: updated.prompt,
+    status: updated.status,
+    phase: updated.phase,
+    progress: updated.progress,
+    coderModel: updated.coderModel,
+    language: updated.language,
+    retryCount: updated.retryCount ?? 0,
+    errorMessage: updated.errorMessage,
+    ageMs: ageMsAfter,
+    createdAt: updated.createdAt.toISOString(),
+    updatedAt: updated.updatedAt.toISOString(),
+  });
 });
 
 export default router;

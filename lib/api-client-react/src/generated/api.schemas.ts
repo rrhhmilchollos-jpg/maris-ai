@@ -313,6 +313,33 @@ export interface AdjustCreditsRequest {
   reason?: string;
 }
 
+export interface AdminJob {
+  id: number;
+  userId: string;
+  userEmail?: string | null;
+  appId?: number | null;
+  editAppId?: number | null;
+  prompt: string;
+  status: string;
+  phase: string;
+  progress: number;
+  coderModel: string;
+  language: string;
+  retryCount: number;
+  errorMessage?: string | null;
+  ageMs: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminJobsResponse {
+  queued: number;
+  running: number;
+  failedLast24h: number;
+  succeededLast24h: number;
+  jobs: AdminJob[];
+}
+
 export type GetGenerationJobLogsParams = {
   /**
    * @minimum 0

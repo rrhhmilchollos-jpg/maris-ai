@@ -19,6 +19,8 @@ import type {
 import type {
   AdjustCreditsRequest,
   AdminApp,
+  AdminJob,
+  AdminJobsResponse,
   AdminOverview,
   AdminUser,
   ApiError,
@@ -2270,3 +2272,162 @@ export function useListAdminApps<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Recent generation jobs across all users (queue health view)
+ */
+export const getListAdminJobsUrl = () => {
+  return `/api/admin/jobs`;
+};
+
+export const listAdminJobs = async (
+  options?: RequestInit,
+): Promise<AdminJobsResponse> => {
+  return customFetch<AdminJobsResponse>(getListAdminJobsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminJobsQueryKey = () => {
+  return [`/api/admin/jobs`] as const;
+};
+
+export const getListAdminJobsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminJobs>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminJobs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminJobsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminJobs>>> = ({
+    signal,
+  }) => listAdminJobs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminJobs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminJobsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminJobs>>
+>;
+export type ListAdminJobsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Recent generation jobs across all users (queue health view)
+ */
+
+export function useListAdminJobs<
+  TData = Awaited<ReturnType<typeof listAdminJobs>>,
+  TError = ErrorType<ApiError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminJobs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminJobsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Re-enqueue a failed (or stuck) generation job
+ */
+export const getRetryAdminJobUrl = (id: number) => {
+  return `/api/admin/jobs/${id}/retry`;
+};
+
+export const retryAdminJob = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminJob> => {
+  return customFetch<AdminJob>(getRetryAdminJobUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRetryAdminJobMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryAdminJob>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof retryAdminJob>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["retryAdminJob"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof retryAdminJob>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return retryAdminJob(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RetryAdminJobMutationResult = NonNullable<
+  Awaited<ReturnType<typeof retryAdminJob>>
+>;
+
+export type RetryAdminJobMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Re-enqueue a failed (or stuck) generation job
+ */
+export const useRetryAdminJob = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof retryAdminJob>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof retryAdminJob>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRetryAdminJobMutationOptions(options));
+};

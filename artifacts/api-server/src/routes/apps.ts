@@ -29,6 +29,7 @@ import { pushAppToGitHub } from "../lib/githubPush";
 import { validateBundle, type BuildIssue } from "../lib/validate";
 import { runVisualTester, VisualTesterError } from "../lib/visualTester";
 import { chargeCredits, refundCredits } from "../lib/credits";
+import { enqueueGenerateJob, reenqueueGenerateJob } from "../lib/jobQueue";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
 const VISUAL_TEST_COST = 30;
@@ -846,22 +847,49 @@ async function diagnoseFailedAgent(opts: {
   }
 }
 
+/** A job stuck in `running` for longer than this is presumed dead (worker crashed). */
+const STALE_RUNNING_MS = 15 * 60 * 1000; // 15 minutes — longer than any realistic single phase
+
 /**
- * On server boot, mark any orphaned jobs (queued/running) as failed and refund
- * their credits. They were interrupted by a previous crash/restart and will
- * never finish on their own.
+ * On server boot, reconcile generation_jobs against the queue.
+ *
+ *   - `queued` jobs: re-enqueue them. They were created in the previous
+ *     process and either never made it to the queue (server crashed between
+ *     the DB insert and the boss.send) or pg-boss already has them — in
+ *     which case the singletonKey dedupe makes the re-enqueue a no-op.
+ *   - `running` jobs older than STALE_RUNNING_MS: mark failed + refund. The
+ *     worker that picked them up must be dead.
+ *   - `running` jobs younger than that: leave alone — another worker (in
+ *     a multi-process setup) might still own them, OR this same worker is
+ *     about to resume after the queue restarts.
  */
 export async function reclaimOrphanedJobs() {
   try {
-    const orphaned = await db
+    const all = await db
       .select()
       .from(generationJobs)
-      .where(
-        sql`${generationJobs.status} IN ('queued', 'running')`,
-      );
-    if (orphaned.length === 0) return;
-    logger.warn({ count: orphaned.length }, "Reclaiming orphaned generation jobs");
-    for (const job of orphaned) {
+      .where(sql`${generationJobs.status} IN ('queued', 'running')`);
+    if (all.length === 0) return;
+
+    const now = Date.now();
+    let requeued = 0;
+    let failed = 0;
+
+    for (const job of all) {
+      if (job.status === "queued") {
+        // Re-enqueue. enqueueGenerateJob uses a singletonKey so duplicates
+        // (already in pg-boss) are silently rejected.
+        try {
+          await enqueueGenerateJob(job.id);
+          requeued++;
+        } catch (err) {
+          logger.warn({ err, jobId: job.id }, "Failed to re-enqueue queued job at boot");
+        }
+        continue;
+      }
+      // running:
+      const ageMs = now - new Date(job.updatedAt).getTime();
+      if (ageMs < STALE_RUNNING_MS) continue;
       await db
         .update(generationJobs)
         .set({
@@ -871,8 +899,6 @@ export async function reclaimOrphanedJobs() {
           updatedAt: new Date(),
         })
         .where(eq(generationJobs.id, job.id));
-      // Refund only if a reservation row exists for this job (admins have none).
-      // Use the actual reserved amount so kind-aware costs roll back correctly.
       const [reservation] = await db
         .select()
         .from(creditTransactions)
@@ -889,10 +915,55 @@ export async function reclaimOrphanedJobs() {
       if (reservation) {
         await refundCredit(job.userId, job.id, Math.abs(reservation.amount));
       }
+      failed++;
+    }
+
+    if (requeued || failed) {
+      logger.warn({ requeued, failed, total: all.length }, "Reclaimed orphaned generation jobs");
     }
   } catch (err) {
     logger.error({ err }, "Failed to reclaim orphaned jobs");
   }
+}
+
+/**
+ * Worker entry point: load all params from the DB row and run the job.
+ *
+ * The pg-boss worker calls this with just the jobId — the row in
+ * generation_jobs is the source of truth for everything else (prompt, edit
+ * target, attachments, model, language, isAdmin). This contract is what
+ * lets the worker run in a separate process or survive a restart.
+ *
+ * Idempotency: if the job is already in a terminal state (succeeded/failed),
+ * we no-op. If it's running, we still re-process — we trust the queue to not
+ * dispatch the same job twice in normal operation; the only way we'd see this
+ * is a crash mid-run or a manual retry.
+ */
+export async function runJobById(jobId: number): Promise<void> {
+  const [job] = await db
+    .select()
+    .from(generationJobs)
+    .where(eq(generationJobs.id, jobId))
+    .limit(1);
+  if (!job) {
+    logger.warn({ jobId }, "Worker received jobId for non-existent generation job");
+    return;
+  }
+  if (job.status === "succeeded" || job.status === "failed") {
+    // Already done — nothing to do. Happens when an old retry fires after
+    // a manual finalisation.
+    return;
+  }
+  await runJob(
+    job.id,
+    job.userId,
+    job.prompt,
+    job.isAdmin,
+    job.editAppId ?? undefined,
+    job.coderModel,
+    job.language as GenLanguage,
+    Array.isArray(job.attachmentIds) ? job.attachmentIds : [],
+  );
 }
 
 interface EnqueueExtras {
@@ -1007,6 +1078,14 @@ async function enqueueGeneration(
           phase: "queued",
           progress: 0,
           appId: editAppId ?? null,
+          // Persist all run params so the worker can rehydrate from this row
+          // alone given just the jobId. This is what makes the queue work
+          // across process boundaries / restarts.
+          editAppId: editAppId ?? null,
+          coderModel,
+          language,
+          attachmentIds: extras?.attachmentIds ?? [],
+          isAdmin,
         })
         .returning();
       if (!isAdmin) {
@@ -1040,21 +1119,31 @@ async function enqueueGeneration(
     return;
   }
 
-  const attachmentIdsForJob = extras?.attachmentIds ?? [];
-  setImmediate(() => {
-    runJob(
-      job.id,
-      userId,
-      cleanedPrompt,
-      isAdmin,
-      editAppId,
-      coderModel,
-      language,
-      attachmentIdsForJob,
-    ).catch((err) => {
-      logger.error({ err, jobId: job.id }, "runJob threw unexpectedly");
+  // Hand off to the persistent queue. The worker (started at boot in
+  // index.ts) reloads everything it needs from generation_jobs.id and calls
+  // runJob. If the queue is down (DB outage, etc.) we fall back to the old
+  // setImmediate path so a single dependency hiccup doesn't strand the user
+  // — the in-process run still works, it just isn't restart-safe.
+  try {
+    await enqueueGenerateJob(job.id);
+  } catch (err) {
+    logger.error({ err, jobId: job.id }, "Failed to enqueue job in queue — falling back to in-process run");
+    const attachmentIdsForJob = extras?.attachmentIds ?? [];
+    setImmediate(() => {
+      runJob(
+        job.id,
+        userId,
+        cleanedPrompt,
+        isAdmin,
+        editAppId,
+        coderModel,
+        language,
+        attachmentIdsForJob,
+      ).catch((runErr) => {
+        logger.error({ err: runErr, jobId: job.id }, "runJob threw unexpectedly");
+      });
     });
-  });
+  }
 
   res.status(202).json(serializeJob(job));
 }
