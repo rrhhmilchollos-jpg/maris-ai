@@ -1,5 +1,4 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { getOpenAI } from "./openai";
 import { validateBundle, type BuildIssue } from "./validate";
 
 /* ============================================================================
@@ -460,19 +459,21 @@ ${planSummary}
 Now produce the JSON object with backendCode.`;
 
   try {
+    // Switched from gpt-5-mini → claude-sonnet-4-6. Sonnet 4.6 is faster than
+    // gpt-5-mini through the proxy and produces noticeably better Express code,
+    // matching the model used by the Frontend Engineer for consistency.
     const response = await withTimeoutOrThrow(
-      getOpenAI().chat.completions.create({
-        model: "gpt-5-mini",
-        max_completion_tokens: 5000,
-        messages: [
-          { role: "system", content: BACKEND_SYSTEM_PROMPT },
-          { role: "user", content: userContent },
-        ],
+      anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 5000,
+        system: BACKEND_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userContent }],
       }),
       45_000,
       "backend-engineer",
     );
-    const raw = response.choices[0]?.message?.content ?? "";
+    const t = response.content.find((b) => b.type === "text");
+    const raw = t && t.type === "text" ? t.text : "";
     const parsed = extractJsonObject<{ backendCode?: string }>(raw);
     if (!parsed || typeof parsed.backendCode !== "string") {
       // Backend was needed but agent flaked. Degrade with a visible note instead
