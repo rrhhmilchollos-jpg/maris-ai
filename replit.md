@@ -40,6 +40,14 @@ AppForge features a React frontend, a Node.js/Express backend, and shared librar
 - Includes an autonomous self-healing loop with `esbuild` for validation and patching.
 - Supports iterative editing and provides real-time progress updates.
 
+**Persistent Job Queue**:
+- Generation jobs are dispatched through `pg-boss` (Postgres-backed queue, no Redis required), wired up in `artifacts/api-server/src/lib/jobQueue.ts`. The queue boots in `index.ts` BEFORE orphan reclaim and the in-process worker is registered there.
+- The HTTP enqueue path (`POST /generate`) inserts the row into `generation_jobs` and then sends `{jobId}` to pg-boss; the worker reloads everything else from the row, keeping the queue payload tiny.
+- Worker concurrency is bounded via `JOB_CONCURRENCY` (default 3, hard cap 10). Retries: 2 with exponential backoff, 25-minute expiry per attempt.
+- Boot reconciliation (`reclaimOrphanedJobs`) re-enqueues `queued` rows (singletonKey dedupes if pg-boss already has them) and only fails `running` rows older than 15 minutes — the rest are assumed live.
+- Admin "Cola" tab (`/admin`, `GET /admin/jobs`) shows queued/running/failed-24h/succeeded-24h counters and the last 100 jobs with a manual `Reintentar` action (`POST /admin/jobs/:id/retry`) for failed or stale jobs.
+- Schema additions on `generation_jobs`: `editAppId`, `coderModel`, `language`, `attachmentIds`, `isAdmin`, `retryCount`, `workerId`. The worker rehydrates the runJob signature from these columns.
+
 **Database and Authentication**:
 - PostgreSQL is used with a schema including `users`, `generated_apps`, `credit_transactions`, `app_messages`, and `job_logs`.
 - Authentication is handled by Clerk, with middleware for user provisioning and credit management.

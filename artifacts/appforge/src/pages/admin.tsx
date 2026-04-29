@@ -4,8 +4,11 @@ import {
   useGetAdminOverview,
   useListAdminUsers,
   useListAdminApps,
+  useListAdminJobs,
   useAdjustUserCredits,
+  useRetryAdminJob,
   getListAdminUsersQueryKey,
+  getListAdminJobsQueryKey,
   getGetAdminOverviewQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -28,7 +32,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck } from "lucide-react";
+import {
+  Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck,
+  RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock,
+} from "lucide-react";
 
 export default function AdminPage() {
   const [, setLocation] = useLocation();
@@ -38,6 +45,34 @@ export default function AdminPage() {
   const { data: overview, isLoading: overviewLoading } = useGetAdminOverview();
   const { data: users, isLoading: usersLoading } = useListAdminUsers();
   const { data: apps, isLoading: appsLoading } = useListAdminApps();
+  const {
+    data: jobsData,
+    isLoading: jobsLoading,
+    refetch: refetchJobs,
+    isFetching: jobsFetching,
+  } = useListAdminJobs({
+    query: {
+      // Refresh the queue view every 5s — admin tabs only, low traffic.
+      refetchInterval: 5_000,
+      queryKey: getListAdminJobsQueryKey(),
+    },
+  });
+
+  const retryMutation = useRetryAdminJob({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAdminJobsQueryKey() });
+        toast({ title: "Job re-encolado", description: "El trabajo se reintentará en breve." });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "No se pudo reintentar",
+          description: err?.response?.data?.error ?? err?.message ?? "Error desconocido",
+          variant: "destructive",
+        });
+      },
+    },
+  });
 
   const [adjustUser, setAdjustUser] = useState<{ id: string; email: string } | null>(null);
   const [delta, setDelta] = useState("10");
@@ -101,6 +136,21 @@ export default function AdminPage() {
           <StatCard label="Ingresos totales" value={overview ? `$${(overview.revenueCentsTotal / 100).toFixed(2)}` : undefined} loading={overviewLoading} icon={CreditCard} subtle />
         </div>
 
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList className="bg-card/40 border border-white/5">
+            <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Usuarios</TabsTrigger>
+            <TabsTrigger value="apps"><Code2 className="h-4 w-4 mr-2" /> Apps</TabsTrigger>
+            <TabsTrigger value="queue">
+              <Activity className="h-4 w-4 mr-2" /> Cola
+              {(jobsData?.queued ?? 0) + (jobsData?.running ?? 0) > 0 && (
+                <Badge className="ml-2 bg-primary/20 text-primary border-primary/30 text-[10px] font-mono">
+                  {(jobsData?.queued ?? 0) + (jobsData?.running ?? 0)}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="users" className="mt-4">
         {/* Usuarios */}
         <Card className="bg-card/40 border-white/5">
           <CardHeader>
@@ -154,7 +204,9 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
 
+          <TabsContent value="apps" className="mt-4">
         {/* Apps generadas */}
         <Card className="bg-card/40 border-white/5">
           <CardHeader>
@@ -199,6 +251,98 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="queue" className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <StatCard label="En cola" value={jobsData?.queued} loading={jobsLoading} icon={Clock} />
+              <StatCard label="Ejecutándose" value={jobsData?.running} loading={jobsLoading} icon={Activity} />
+              <StatCard label="Fallidos (24h)" value={jobsData?.failedLast24h} loading={jobsLoading} icon={AlertTriangle} subtle />
+              <StatCard label="Completados (24h)" value={jobsData?.succeededLast24h} loading={jobsLoading} icon={CheckCircle2} subtle />
+            </div>
+
+            <Card className="bg-card/40 border-white/5">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg flex items-center">
+                  <Activity className="h-5 w-5 mr-2 text-muted-foreground" />
+                  Trabajos recientes ({jobsData?.jobs?.length ?? 0})
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refetchJobs()}
+                  disabled={jobsFetching}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${jobsFetching ? "animate-spin" : ""}`} />
+                  Actualizar
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                {jobsLoading ? (
+                  <div className="p-6 space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+                ) : jobsData?.jobs && jobsData.jobs.length > 0 ? (
+                  <Table>
+                    <TableHeader className="bg-black/20">
+                      <TableRow className="border-white/5 hover:bg-transparent">
+                        <TableHead>#</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Fase</TableHead>
+                        <TableHead>Usuario</TableHead>
+                        <TableHead className="max-w-xs">Prompt</TableHead>
+                        <TableHead className="text-right">Reintentos</TableHead>
+                        <TableHead>Edad</TableHead>
+                        <TableHead className="text-right">Acción</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {jobsData.jobs.map((j) => {
+                        const ageMs = j.ageMs;
+                        const ageStr =
+                          ageMs < 60_000
+                            ? `${Math.round(ageMs / 1000)}s`
+                            : ageMs < 3_600_000
+                            ? `${Math.round(ageMs / 60_000)}m`
+                            : `${Math.round(ageMs / 3_600_000)}h`;
+                        const isStale = (j.status === "running" || j.status === "queued") && ageMs > 15 * 60 * 1000;
+                        const retryable =
+                          j.status === "failed" ||
+                          ((j.status === "running" || j.status === "queued") && isStale);
+                        return (
+                          <TableRow key={j.id} className="border-white/5 hover:bg-white/[0.02]">
+                            <TableCell className="font-mono text-xs text-muted-foreground">{j.id}</TableCell>
+                            <TableCell>
+                              <JobStatusBadge status={j.status} stale={isStale} />
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">{j.phase}</TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground max-w-[160px] truncate">
+                              {j.userEmail || j.userId.slice(0, 12)}
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate text-sm">{j.prompt}</TableCell>
+                            <TableCell className="text-right font-mono text-xs">{j.retryCount}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs font-mono">{ageStr}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!retryable || retryMutation.isPending}
+                                onClick={() => retryMutation.mutate({ id: j.id })}
+                                title={retryable ? "Re-encolar este job" : "Solo se pueden reintentar jobs fallidos o estancados"}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 mr-1" /> Reintentar
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <p className="p-6 text-sm text-muted-foreground">Sin trabajos recientes.</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Diálogo ajustar créditos */}
         <Dialog open={!!adjustUser} onOpenChange={(open) => !open && setAdjustUser(null)}>
@@ -251,6 +395,39 @@ export default function AdminPage() {
         </Dialog>
       </div>
     </Layout>
+  );
+}
+
+function JobStatusBadge({ status, stale }: { status: string; stale: boolean }) {
+  let cls = "bg-muted/30 text-muted-foreground border-white/10";
+  let label = status;
+  switch (status) {
+    case "queued":
+      cls = "bg-blue-500/10 text-blue-400 border-blue-500/30";
+      label = "en cola";
+      break;
+    case "running":
+      cls = "bg-amber-500/10 text-amber-400 border-amber-500/30";
+      label = "ejecutando";
+      break;
+    case "succeeded":
+      cls = "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+      label = "completado";
+      break;
+    case "failed":
+      cls = "bg-destructive/10 text-destructive border-destructive/30";
+      label = "fallido";
+      break;
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Badge className={`${cls} text-[10px] font-mono uppercase border`}>{label}</Badge>
+      {stale && (
+        <Badge className="bg-destructive/10 text-destructive border border-destructive/30 text-[10px] font-mono uppercase">
+          estancado
+        </Badge>
+      )}
+    </div>
   );
 }
 

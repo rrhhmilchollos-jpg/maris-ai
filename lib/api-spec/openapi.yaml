@@ -702,6 +702,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /admin/jobs:
+    get:
+      operationId: listAdminJobs
+      tags: [admin]
+      summary: Recent generation jobs across all users (queue health view)
+      responses:
+        "200":
+          description: List of jobs with owner info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminJobsResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/jobs/{id}/retry:
+    post:
+      operationId: retryAdminJob
+      tags: [admin]
+      summary: Re-enqueue a failed (or stuck) generation job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job re-enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminJob"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Job is not in a retryable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -1260,3 +1308,78 @@ components:
           type: string
       required:
         - delta
+    AdminJob:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        userEmail:
+          type: string
+          nullable: true
+        appId:
+          type: integer
+          nullable: true
+        editAppId:
+          type: integer
+          nullable: true
+        prompt:
+          type: string
+        status:
+          type: string
+        phase:
+          type: string
+        progress:
+          type: integer
+        coderModel:
+          type: string
+        language:
+          type: string
+        retryCount:
+          type: integer
+        errorMessage:
+          type: string
+          nullable: true
+        ageMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - prompt
+        - status
+        - phase
+        - progress
+        - coderModel
+        - language
+        - retryCount
+        - ageMs
+        - createdAt
+        - updatedAt
+    AdminJobsResponse:
+      type: object
+      properties:
+        queued:
+          type: integer
+        running:
+          type: integer
+        failedLast24h:
+          type: integer
+        succeededLast24h:
+          type: integer
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminJob"
+      required:
+        - queued
+        - running
+        - failedLast24h
+        - succeededLast24h
+        - jobs

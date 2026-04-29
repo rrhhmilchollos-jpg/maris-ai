@@ -8,6 +8,8 @@
 
 export * from "./adjustCreditsRequest";
 export * from "./adminApp";
+export * from "./adminJob";
+export * from "./adminJobsResponse";
 export * from "./adminOverview";
 export * from "./adminUser";
 export * from "./apiError";
