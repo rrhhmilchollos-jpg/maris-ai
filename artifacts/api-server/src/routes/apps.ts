@@ -1016,21 +1016,80 @@ async function diagnoseFailedAgent(opts: {
   }
 }
 
-/** A job stuck in `running` for longer than this is presumed dead (worker crashed). */
+/** A job stuck in `running` for longer than this on boot reclaim is presumed dead. */
 const STALE_RUNNING_MS = 15 * 60 * 1000; // 15 minutes — longer than any realistic single phase
 
 /**
- * On server boot, reconcile generation_jobs against the queue.
+ * Threshold for the *inline* stale-job recovery inside the 409 check on the
+ * /generate endpoint. Healthy runs update generation_jobs.updated_at on every
+ * phase transition (planner, architect, integrations, frontend, qa, parsing,
+ * etc.) which fires multiple times per minute. 5 minutes without an update
+ * means the worker silently died — it's safe to reclaim and unblock the user.
  *
- *   - `queued` jobs: re-enqueue them. They were created in the previous
- *     process and either never made it to the queue (server crashed between
- *     the DB insert and the boss.send) or pg-boss already has them — in
- *     which case the singletonKey dedupe makes the re-enqueue a no-op.
+ * Deliberately stricter than STALE_RUNNING_MS so the user isn't blocked for
+ * 15 min when an edit hangs; the boot threshold stays conservative because at
+ * boot we may race with another live worker that's still mid-phase.
+ */
+const STALE_INFLIGHT_INLINE_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Mark a single 'running' job as failed and refund its reservation.
+ * Idempotent at the DB level — if the row was already terminal, the WHERE
+ * clause matches 0 rows and the refund is skipped.
+ *
+ * Used by both the boot-time reclaim sweep and the inline 409 recovery so
+ * the failure UX (status, phase, error message, credit ledger) stays
+ * consistent regardless of which path detected the stale job.
+ */
+async function reclaimSingleStaleJob(
+  job: { id: number; userId: string },
+  reason: string,
+): Promise<void> {
+  await db
+    .update(generationJobs)
+    .set({
+      status: "failed",
+      phase: "failed",
+      errorMessage: reason,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(generationJobs.id, job.id),
+        sql`${generationJobs.status} IN ('queued', 'running')`,
+      ),
+    );
+  const [reservation] = await db
+    .select()
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.userId, job.userId),
+        eq(
+          creditTransactions.description,
+          `Reserva de crédito para job #${job.id}`,
+        ),
+      ),
+    )
+    .limit(1);
+  if (reservation) {
+    await refundCredit(job.userId, job.id, Math.abs(reservation.amount));
+  }
+}
+
+/**
+ * Reconcile generation_jobs against the queue. Called at boot AND on a
+ * periodic interval (every couple of minutes) so apps don't get stuck behind
+ * a dead worker between server restarts.
+ *
+ *   - `queued` jobs: re-enqueue them. They were created in a previous run and
+ *     either never made it to the queue (crash between DB insert and
+ *     boss.send) or pg-boss already has them — singletonKey dedupes the
+ *     re-enqueue.
  *   - `running` jobs older than STALE_RUNNING_MS: mark failed + refund. The
  *     worker that picked them up must be dead.
- *   - `running` jobs younger than that: leave alone — another worker (in
- *     a multi-process setup) might still own them, OR this same worker is
- *     about to resume after the queue restarts.
+ *   - `running` jobs younger than that: leave alone — a live worker may
+ *     still own them.
  */
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}) {
   try {
@@ -1059,32 +1118,12 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}) {
       // running:
       const ageMs = now - new Date(job.updatedAt).getTime();
       if (ageMs < STALE_RUNNING_MS) continue;
-      await db
-        .update(generationJobs)
-        .set({
-          status: "failed",
-          phase: "failed",
-          errorMessage: "Interrumpido por reinicio del servidor.",
-          updatedAt: new Date(),
-        })
-        .where(eq(generationJobs.id, job.id));
-      const [reservation] = await db
-        .select()
-        .from(creditTransactions)
-        .where(
-          and(
-            eq(creditTransactions.userId, job.userId),
-            eq(
-              creditTransactions.description,
-              `Reserva de crédito para job #${job.id}`,
-            ),
-          ),
-        )
-        .limit(1);
-      if (reservation) {
-        await refundCredit(job.userId, job.id, Math.abs(reservation.amount));
+      try {
+        await reclaimSingleStaleJob(job, "Interrumpido — proceso del servidor caído.");
+        failed++;
+      } catch (err) {
+        logger.warn({ err, jobId: job.id }, "Failed to reclaim stale running job");
       }
-      failed++;
     }
 
     if (requeued || failed) {
@@ -1204,12 +1243,25 @@ async function enqueueGeneration(
     return;
   }
 
-  // For edits, refuse if there's already an in-flight job on this app to avoid
-  // last-writer-wins races. The UI also blocks the chat input but a second
-  // tab / API client could try otherwise.
+  // For edits, refuse if there's already a *live* in-flight job on this app
+  // to avoid last-writer-wins races. The UI also blocks the chat input but a
+  // second tab / API client could try otherwise.
+  //
+  // IMPORTANT: a row in 'queued' or 'running' is NOT enough on its own to
+  // block — if a previous worker died (process crash, network split, OpenAI
+  // call hung past pg-boss expiry) the row stays at 'running' forever and
+  // the user gets a permanent 409 with no way out except an admin restart.
+  // We therefore reclaim any in-flight row whose updated_at hasn't moved in
+  // STALE_INFLIGHT_INLINE_MS (healthy generations bump updated_at on every
+  // phase transition, multiple times per minute) and let the request proceed.
   if (editAppId) {
     const inFlight = await db
-      .select({ id: generationJobs.id })
+      .select({
+        id: generationJobs.id,
+        userId: generationJobs.userId,
+        status: generationJobs.status,
+        updatedAt: generationJobs.updatedAt,
+      })
       .from(generationJobs)
       .where(
         and(
@@ -1217,12 +1269,42 @@ async function enqueueGeneration(
           sql`${generationJobs.status} IN ('queued', 'running')`,
         ),
       )
+      .orderBy(sql`${generationJobs.updatedAt} DESC`)
       .limit(1);
     if (inFlight.length > 0) {
-      res.status(409).json({
-        error: "Ya hay un cambio en curso para esta app. Espera a que termine.",
-      });
-      return;
+      const stuck = inFlight[0];
+      const ageMs = Date.now() - new Date(stuck.updatedAt).getTime();
+      if (ageMs >= STALE_INFLIGHT_INLINE_MS) {
+        // Looks dead. Reclaim and continue — the user gets to retry instead
+        // of being told to "wait" for something that will never finish.
+        req.log.warn(
+          { appId: editAppId, jobId: stuck.id, ageMinutes: Math.round(ageMs / 60_000) },
+          "Auto-reclaiming stale in-flight job before accepting new edit",
+        );
+        try {
+          await reclaimSingleStaleJob(
+            { id: stuck.id, userId: stuck.userId },
+            "Liberado automáticamente: el job anterior se quedó colgado más de 5 min sin avanzar.",
+          );
+        } catch (err) {
+          req.log.error({ err, jobId: stuck.id }, "Inline reclaim failed; surfacing 409");
+          res.status(409).json({
+            error: "Ya hay un cambio en curso para esta app. Espera a que termine.",
+          });
+          return;
+        }
+      } else {
+        const remainingSec = Math.max(
+          1,
+          Math.ceil((STALE_INFLIGHT_INLINE_MS - ageMs) / 1000),
+        );
+        res.status(409).json({
+          error:
+            `Ya hay un cambio en curso para esta app. ` +
+            `Espera a que termine (se desbloqueará automáticamente en ~${remainingSec}s si no progresa).`,
+        });
+        return;
+      }
     }
   }
 
