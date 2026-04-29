@@ -191,14 +191,15 @@ Notes for next session:
 - Meta AI was deferred — OpenRouter env vars aren't provisioned in this workspace yet. If they appear, add a 4th `meta-llama` branch alongside the GPT-5 one.
 - The `gpt-5.4` model name comes from the AI integrations skill; if the proxy lists a Codex-specific variant in the future, switch the model id in both branches.
 
-## Apr 29 — Sandpack runtime error surface
+## Apr 29 — Custom CSS files were silently dropped from preview
 
-WallaClone (app id 6) and similar generated apps were rendering only the navbar + start of the page, with everything below blank. Sandpack swallows JS exceptions silently, so a single throw deep in a component (e.g. an undefined map value or an icon name not in a lookup) kills the whole subtree without any visible feedback. There was no way for the user to know what crashed.
+WallaClone (app id 6) was rendering the navbar + hero + "Explorar por categoría" header but everything below appeared blank. Root cause was *not* a React crash — it was that custom CSS files emitted by the model (in this case `src/styles/animations.css`) never loaded in the Sandpack preview.
 
-Fix in `artifacts/appforge/src/lib/parseBundle.ts` (`PREVIEW_INDEX_TSX`):
-- Wrapped the mounted `<App />` in a `PreviewBoundary` class component (`getDerivedStateFromError` + `componentDidCatch`) that paints a Spanish "La aplicación generada no se pudo renderizar" fallback.
-- Added `window.addEventListener("error" | "unhandledrejection", …)` to catch async/global throws the boundary won't see.
-- Both feed `__showPreviewError(title, message, stack)` which builds a fixed-bottom red banner via DOM nodes + `textContent` (no `innerHTML` — the message comes from generated app code, treat as untrusted) with a collapsible `<details>` for the stack and a "Cerrar" button. Capped at `max-height:25vh` so it doesn't bury the app's own bottom UI.
-- Banner z-index is `2147483647` and it lives in the iframe, not the host page, so it can never leak outside the preview.
+Mechanism: `parseBundle.ts` replaces the model's `src/main.tsx` with our own `PREVIEW_INDEX_TSX` entry so we can guarantee Tailwind CDN injection + body reset. The original `main.tsx` would do `import './styles/animations.css'`, but our wrapper only imported `./index.css`. The animations.css file was still in the Sandpack VFS, just orphaned. When the model paired `animate-slideUp` (whose @keyframes live in animations.css and start at `opacity:0` with `animation-fill-mode: both`) with custom utilities Tailwind Play CDN *did* resolve to a real animation rule, every wrapper using that class stayed at opacity 0 forever. The recent products grid, the "¿Por qué elegir Wallaclone?" features, the reviews and the CTA were all wrapped in `animate-slideUp` divs — hence the blank.
 
-Result: any crash in a generated app now surfaces the actual exception inline, instead of leaving the user staring at a half-rendered page.
+Fix in `artifacts/appforge/src/lib/parseBundle.ts → buildSandpackFiles`:
+- Added an `__EXTRA_CSS_IMPORTS__` placeholder in the `PREVIEW_INDEX_TSX` template.
+- After normalizing the bundle, scan `files` for any `.css` paths other than `/index.css`, sort them, and substitute the placeholder with one `import "./<path>";` line per file.
+- The substitution happens before writing `/index.tsx`, so every custom stylesheet (animations, scrollbar, component-scoped) now loads exactly the way the original `main.tsx` would have.
+
+This was the right fix — no visible error UI was needed. An earlier attempt to surface the issue via a red ErrorBoundary banner was rejected by the user and reverted before commit; the only artifact left is this CSS auto-wiring, which is a permanent quality improvement for every generated app.
