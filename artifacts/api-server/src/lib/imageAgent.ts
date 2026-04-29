@@ -103,10 +103,29 @@ function buildPrompt(altText: string, appTitle: string, appDescription: string):
   const subject = altText && altText.length > 3
     ? altText
     : `imagen ilustrativa para "${appTitle}"`;
-  // Keep it simple and concrete; Nano Banana Pro responds well to short,
-  // photographic-style prompts. Force a square aspect-ratio hint in the prompt
-  // text — the API doesn't expose a separate aspect param for this model.
-  return `Genera una imagen fotográfica de alta calidad: ${subject}. Contexto del producto: ${appDescription.slice(0, 160)}. Estilo limpio, iluminación profesional, composición centrada, formato cuadrado 1:1, sin texto superpuesto.`;
+  // Detect avatar/portrait context so we direct the model toward portrait
+  // composition instead of product photography.
+  const altLower = altText.toLowerCase();
+  const isAvatar = /avatar|usuari|perfil|persona|cara|cliente|vendedor|comprador|review|testimoni/.test(altLower);
+  const isHero = /hero|banner|portada|fondo|cover|cabecera/.test(altLower);
+
+  // Nano Banana Pro responds best to concrete, photographic direction. We
+  // include subject + context + style + lighting + composition + camera + a
+  // strict "no text" guardrail. Square aspect-ratio is requested in the prompt
+  // text since this model doesn't expose a separate aspect param.
+  let style: string;
+  if (isAvatar) {
+    style =
+      "Retrato fotográfico profesional de una persona real, ángulo frontal, fondo desenfocado neutro, iluminación natural suave tipo ventana, expresión amable y natural, encuadre desde los hombros hacia arriba, foco nítido en los ojos. Estilo editorial moderno tipo The Verge / Apple. Formato cuadrado 1:1. No incluyas ningún texto, logo, marca de agua ni elementos generados artificialmente";
+  } else if (isHero) {
+    style =
+      "Imagen cinematográfica de gran formato, profundidad de campo amplia, iluminación dorada o azulada con dirección clara, composición que respira, paleta de colores limitada y sofisticada. Estilo de portada editorial moderna. Formato cuadrado 1:1. Sin texto, sin logos, sin marcas de agua";
+  } else {
+    style =
+      "Fotografía de producto profesional estilo e-commerce premium, fondo limpio (blanco roto, lino o superficie de madera clara), iluminación de estudio suave con sombras naturales, composición centrada con espacio negativo, paleta de colores armónica, foco nítido. Estilo Apple / Aesop / Muji. Formato cuadrado 1:1. Sin texto, sin logos, sin marcas de agua";
+  }
+
+  return `${style}.\n\nSujeto principal: ${subject}.\n\nContexto del producto: ${appDescription.slice(0, 200)}.\n\nLa imagen debe verse 100% real y profesional, como una foto tomada por un fotógrafo humano para una marca de gama alta. Evita el aspecto plástico o sobre-renderizado de IA.`;
 }
 
 async function generateOne(
