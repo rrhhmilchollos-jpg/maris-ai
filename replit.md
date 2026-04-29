@@ -190,3 +190,15 @@ User-reported issues addressed in one pass:
 Notes for next session:
 - Meta AI was deferred — OpenRouter env vars aren't provisioned in this workspace yet. If they appear, add a 4th `meta-llama` branch alongside the GPT-5 one.
 - The `gpt-5.4` model name comes from the AI integrations skill; if the proxy lists a Codex-specific variant in the future, switch the model id in both branches.
+
+## Apr 29 — Sandpack runtime error surface
+
+WallaClone (app id 6) and similar generated apps were rendering only the navbar + start of the page, with everything below blank. Sandpack swallows JS exceptions silently, so a single throw deep in a component (e.g. an undefined map value or an icon name not in a lookup) kills the whole subtree without any visible feedback. There was no way for the user to know what crashed.
+
+Fix in `artifacts/appforge/src/lib/parseBundle.ts` (`PREVIEW_INDEX_TSX`):
+- Wrapped the mounted `<App />` in a `PreviewBoundary` class component (`getDerivedStateFromError` + `componentDidCatch`) that paints a Spanish "La aplicación generada no se pudo renderizar" fallback.
+- Added `window.addEventListener("error" | "unhandledrejection", …)` to catch async/global throws the boundary won't see.
+- Both feed `__showPreviewError(title, message, stack)` which builds a fixed-bottom red banner via DOM nodes + `textContent` (no `innerHTML` — the message comes from generated app code, treat as untrusted) with a collapsible `<details>` for the stack and a "Cerrar" button. Capped at `max-height:25vh` so it doesn't bury the app's own bottom UI.
+- Banner z-index is `2147483647` and it lives in the iframe, not the host page, so it can never leak outside the preview.
+
+Result: any crash in a generated app now surfaces the actual exception inline, instead of leaving the user staring at a half-rendered page.
