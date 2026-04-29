@@ -52,11 +52,24 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
+  // Default to GPT-5 Codex when the user is premium/admin (it's the highest-quality
+  // option). Non-premium accounts can't pick gpt-5 from the dropdown — falling back
+  // to "auto" keeps the form valid for them. We initialize to "auto" to avoid a
+  // server submission with a gated model before `me` is loaded, then promote to
+  // "gpt-5" as soon as we know the user qualifies.
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
 
   const { data: me } = useGetMe();
+  // Promote default to GPT-5 once we know the user is premium AND the user hasn't
+  // already chosen something else this session. We compare to "auto" (the initial
+  // value) to avoid overriding a deliberate switch back to Gemini/Claude.
+  useEffect(() => {
+    if (me?.isPremium && coderModel === "auto") {
+      setCoderModel("gpt-5");
+    }
+  }, [me?.isPremium, coderModel]);
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
