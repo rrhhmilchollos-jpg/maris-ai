@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { db } from "../lib/db";
-import { requireAuth, isAdminEmail } from "../lib/auth";
+import { requireAuth, isAdminEmail, ensureUser } from "../lib/auth";
 import { logger } from "../lib/logger";
 import {
   generatedApps,
@@ -515,7 +515,30 @@ async function enqueueGeneration(
   res.status(202).json(serializeJob(job));
 }
 
-router.post("/generate", requireAuth, async (req: Request, res: Response) => {
+router.post(
+  "/generate",
+  async (req: Request, res: Response, next) => {
+    // Admin bypass — same shape as /apps/:id/generate-images. Allows the
+    // server itself (or an operator with SESSION_SECRET) to enqueue a job
+    // on behalf of a known user via x-admin-user-id, without going through
+    // a Clerk session. Used for one-shot scripted generations.
+    const adminKey = req.header("x-admin-key");
+    const adminUserId = req.header("x-admin-user-id");
+    if (adminKey && adminKey === process.env.SESSION_SECRET && adminUserId) {
+      try {
+        const user = await ensureUser(adminUserId);
+        req.userId = adminUserId;
+        req.dbUser = user;
+        return next();
+      } catch (err) {
+        req.log.error({ err, adminUserId }, "admin bypass ensureUser failed");
+        res.status(500).json({ error: "admin bypass failed" });
+        return;
+      }
+    }
+    return requireAuth(req, res, next);
+  },
+  async (req: Request, res: Response) => {
   const prompt: unknown = req.body?.prompt;
   const appIdRaw: unknown = req.body?.appId;
   const coderModelRaw: unknown = req.body?.coderModel;
