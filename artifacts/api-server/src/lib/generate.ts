@@ -73,6 +73,19 @@ ${tsRules}
 IMAGES — placeholders are encouraged:
 - Use \`https://images.unsplash.com/photo-…\` URLs (or \`https://picsum.photos/…\`) for hero/product/avatar images and ALWAYS write a meaningful Spanish \`alt="…"\`. A separate AI agent will replace these with real generated images later, using the alt text as the prompt.
 
+WOUTER v3 — the preview ships wouter ^3.x, where \`<Link>\` ITSELF renders as the anchor tag. NEVER nest \`<a>\` (or \`<button>\`) inside \`<Link>\` — doing so produces invalid \`<a><a>…</a></a>\` markup that throws "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node." at runtime and silently kills the entire \`<main>\` subtree. Pass \`className\`, \`onClick\`, \`aria-label\` etc. DIRECTLY to \`<Link>\` and put plain text/icons as children:
+- WRONG: \`<Link href="/x"><a className="btn">Ir</a></Link>\`
+- RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
+The same applies to \`<Route>\` — render children directly, do not wrap in \`<a>\`.
+
+EXPORTS & IMPORTS — be consistent so imports actually resolve at runtime:
+- Match every \`import { X }\` to a named \`export { X }\`/\`export function X\`/\`export const X\` in the target file. Match every \`import X from\` to an \`export default …\`. Mixing the two yields \`undefined\` and React renders nothing.
+- Pick ONE convention per kind: components default-exported, hooks/utilities/constants/types named-exported — and stick to it across the bundle.
+
+TAILWIND — the preview uses the Tailwind Play CDN (no postcss). This means:
+- Custom theme tokens like \`bg-background\`, \`text-foreground\`, \`bg-primary\`, \`border-input\` only work if you ALSO declare them via the inline config script. Prefer concrete Tailwind classes (\`bg-white\`, \`text-slate-900\`, \`bg-orange-500\`) so the preview renders identically. You can still keep design-system colors as CSS variables in :root for use inside src/styles/*.css, but JSX className strings should use real Tailwind utilities.
+- \`@apply\` inside src/index.css works only with REAL Tailwind utilities (not custom theme tokens). When in doubt, write plain CSS rules instead of \`@apply\`.
+
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content.
 - Use the file list from the plan as the MINIMUM — split UI into the listed files, do not collapse them into App.${ext}.
@@ -185,6 +198,10 @@ ${tsLine}
 - Strip any non-ASCII garbage characters from identifiers/keywords (e.g. \`née\`, smart quotes in code, zero-width spaces). Non-ASCII is fine inside strings and JSX text only.
 - Re-balance every brace, bracket, paren and JSX tag.
 - Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod.
+
+WOUTER v3 — \`<Link>\` already renders as \`<a>\`. If you see \`<Link …><a …>…</a></Link>\` in the bundle, FLATTEN IT: move the \`<a>\`'s className / onClick / aria-* props onto the \`<Link>\` and drop the inner \`<a>\` entirely. Nested anchors throw "Failed to execute 'removeChild' on 'Node'" and silently empty the page.
+
+EXPORTS & IMPORTS — when patching, match every \`import { X }\` to a named export of \`X\` in the target file, and every \`import X from\` to an \`export default\`. If you spot a mismatch, fix the import side to match what the file actually exports.
 
 Rules:
 - Use '// === FILE: <path> ===' separators.
@@ -945,6 +962,10 @@ ${tsLine}
 - NO non-ASCII characters inside identifiers/keywords/punctuation. Non-ASCII allowed ONLY in string literals and JSX text.
 - Every string must be terminated with the same quote it started with (watch out for long URLs and Spanish descriptions with apostrophes).
 - Every brace, bracket, paren and JSX tag must close.
+
+WOUTER v3 — never write \`<Link><a>…</a></Link>\` (nested anchors crash the preview with "removeChild ... not a child"). \`<Link>\` already IS the \`<a>\`; pass className/onClick directly to it.
+
+EXPORTS & IMPORTS — match every \`import { X }\` to a named export and every \`import X from\` to a default export. If you change a file's export style, also update its importers.
 - Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod. Do not invent package names.
 
 Rules:
