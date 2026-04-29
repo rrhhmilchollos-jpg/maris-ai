@@ -1,0 +1,216 @@
+Build a full-stack AI-powered app builder platform that is a clone of Emergent.sh. This is a "vibe coding" SaaS where users describe what they want and AI agents build the full app for them.
+
+---
+
+## TECH STACK
+- Frontend: React + Vite + Tailwind CSS
+- Backend: Node.js + Express
+- Database: MongoDB (via Mongoose) for storing projects and users
+- AI: Claude API (claude-sonnet-4-20250514) via Anthropic SDK
+- Auth: JWT-based auth (email/password + Google OAuth)
+- Real-time: WebSockets (Socket.io) for streaming AI responses live
+- File storage: local filesystem or S3 for generated project files
+
+---
+
+## CORE FEATURES TO BUILD
+
+### 1. LANDING PAGE (public, before login)
+- Dark gradient background (black/dark navy)
+- Hero section: "Build Full-Stack Web & Mobile Apps in minutes"
+- Subtitle: "Transform your ideas into production-ready apps with AI agents. No coding required."
+- CTA button: "Start Building" → goes to signup/login
+- Features section with 4 cards:
+  * "Build websites and mobile apps"
+  * "Build Custom Agents"
+  * "Build powerful integrations"
+  * "Build with your favorite people"
+- Pricing section with 3 tiers:
+  * Free: $0/month, 10 free credits
+  * Standard: $20/month, 100 credits/month, GitHub integration
+  * Pro: $200/month, 750 credits, 1M context window, custom AI agents
+- FAQ section
+- Footer with links: Product, Solutions, Resources, Company
+
+---
+
+### 2. AUTH SYSTEM
+- Sign up / Login page with:
+  * Email + password
+  * "Continue with Google" button (OAuth)
+  * "Continue with GitHub" button (OAuth)
+- JWT tokens stored in httpOnly cookies
+- Protected routes for authenticated users
+
+---
+
+### 3. DASHBOARD (after login)
+- Left sidebar:
+  * Logo + app name at top
+  * "New Project" button (prominent, purple/blue gradient)
+  * List of past projects with project name, date, type (web/mobile)
+  * User profile + credits remaining at the bottom
+- Main area when no project selected:
+  * Large centered prompt input box
+  * Placeholder: "Describe the app you want to build..."
+  * Below the input: quick example chips like:
+    - "E-commerce store with payments"
+    - "AI chatbot with memory"
+    - "Task management SaaS"
+    - "Landing page for my startup"
+  * Attachment button (upload image/PDF as reference)
+  * App type selector: "Full-stack web app" | "Mobile app" | "Landing page"
+  * Submit button: "Build with AI →"
+
+---
+
+### 4. PROJECT BUILDER PAGE (the core experience)
+Split-panel layout:
+
+**LEFT PANEL — Chat/Agent Panel (40% width)**
+- Shows the conversation history between user and AI agents
+- Each AI message shows which "agent" is speaking:
+  * 🧠 Planner Agent — breaks down the task
+  * 💻 Coder Agent — writes the code
+  * 🐛 Debugger Agent — fixes errors
+  * 🎨 Designer Agent — handles UI
+- Messages stream in real-time (token by token via WebSockets)
+- Shows step-by-step progress:
+  * "Planning architecture..."
+  * "Creating file structure..."
+  * "Writing frontend components..."
+  * "Setting up backend routes..."
+  * "Running health check..."
+  * "App ready! ✅"
+- User can type follow-up messages: "Make the button red", "Add user authentication", "Fix the login bug"
+- Shows agent "thinking" indicator (animated dots) while processing
+
+**RIGHT PANEL — Preview + Code Panel (60% width)**
+- Tab bar at top: "Preview" | "Code" | "Files"
+- PREVIEW tab: live iframe rendering the generated app
+- CODE tab: syntax-highlighted code viewer (read-only, with copy button)
+- FILES tab: tree view of all generated files (frontend, backend, etc.)
+- Action buttons at top right:
+  * "Deploy" button → one-click deployment
+  * "Export Code" → download as ZIP
+  * "Open in GitHub" → push to GitHub repo
+  * "Share" → public shareable link
+
+---
+
+### 5. AI AGENT SYSTEM (backend)
+Build a multi-agent pipeline that runs when a user submits a prompt:
+
+**Agent 1 — Planner Agent**
+- Receives user prompt
+- Outputs: app type, tech stack, feature list, file structure plan
+- System prompt: "You are a senior software architect. Analyze the user's request and create a detailed plan for building their app. Output JSON with: {appType, techStack, features[], fileStructure[], estimatedTime}"
+
+**Agent 2 — Coder Agent**
+- Receives plan from Planner
+- Generates actual code files one by one
+- For each file, streams the content to the frontend via WebSocket
+- Generates: React components, API routes, database models, package.json, README
+
+**Agent 3 — Debugger Agent**
+- Takes screenshots of the preview (or analyzes errors)
+- Auto-fixes common issues: missing imports, broken routes, CSS issues
+- Reports what it fixed to the user
+
+**Agent 4 — Designer Agent**
+- Reviews UI screenshots
+- Improves styling, layout, color scheme
+- Makes sure the app looks professional
+
+Each agent call uses:
+```javascript
+const response = await anthropic.messages.create({
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 8192,
+  system: "[agent-specific system prompt]",
+  messages: conversationHistory
+});
+```
+
+Stream results back to frontend via Socket.io.
+
+---
+
+### 6. PROJECT DATA MODEL (MongoDB)
+Project {
+_id, userId, name, description, type (web/mobile/landing),
+status (planning/building/ready/error),
+files: [{ path, content, language }],
+chatHistory: [{ role, agentType, content, timestamp }],
+deploymentUrl, githubRepo,
+creditsUsed, createdAt, updatedAt
+}
+User {
+_id, email, name, avatar, provider (email/google/github),
+credits: { remaining, total },
+plan (free/standard/pro),
+projects: [projectId]
+}
+
+---
+
+### 7. CREDITS SYSTEM
+- Every AI generation costs credits (1 credit = 1 agent run)
+- Track credits per user in MongoDB
+- Show remaining credits in sidebar
+- When credits = 0, show upgrade modal
+
+---
+
+### 8. DEPLOYMENT FEATURE
+- After app is generated, "Deploy" button appears
+- Backend zips the generated files, deploys to a subdomain
+- Returns a live URL like: https://[project-name].yourdomain.com
+- (Can simulate this with a local server serving the files if real hosting is not set up)
+
+---
+
+### 9. GITHUB INTEGRATION
+- "Connect GitHub" in settings → OAuth flow
+- "Push to GitHub" button in project → creates new repo, pushes all files
+- Uses GitHub REST API with user's token
+
+---
+
+### 10. UI/UX DESIGN REQUIREMENTS
+- Dark theme: background #0a0a0f, cards #12121a, accents purple/blue gradient (#7c3aed to #3b82f6)
+- Smooth animations: fade-in for messages, typing indicator, progress bar during build
+- Responsive: works on mobile and desktop
+- Fonts: Inter or Geist
+- Loading states: skeleton screens while loading projects
+- Toast notifications for: "App deployed!", "Code exported", errors
+
+---
+
+## ENVIRONMENT VARIABLES NEEDED
+ANTHROPIC_API_KEY=your_key_here
+MONGODB_URI=your_mongodb_connection
+JWT_SECRET=your_jwt_secret
+GOOGLE_CLIENT_ID=your_google_oauth_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_secret
+GITHUB_CLIENT_ID=your_github_oauth_id
+GITHUB_CLIENT_SECRET=your_github_oauth_secret
+
+---
+
+## FOLDER STRUCTURE
+/
+├── frontend/          (React + Vite)
+│   ├── src/
+│   │   ├── pages/     (Landing, Dashboard, Project, Auth)
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   └── store/     (Zustand for state management)
+├── backend/           (Node.js + Express)
+│   ├── routes/        (auth, projects, agents, deploy)
+│   ├── models/        (User, Project)
+│   ├── agents/        (planner, coder, debugger, designer)
+│   └── middleware/    (auth, credits)
+└── package.json
+
+Build the complete system. Start with the backend API and agent pipeline, then the frontend. Make sure the real-time streaming works so users see the AI building their app live.
