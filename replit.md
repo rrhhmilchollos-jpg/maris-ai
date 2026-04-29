@@ -74,10 +74,18 @@ The AppForge system is composed of a React-based frontend, a Node.js/Express bac
 - The architect prompt (`PLAN_SYSTEM_PROMPT`) understands `[INTENT: …]` hints prefixed by the dashboard's project-type tabs (mobile-first PWA / landing page / fullstack) and biases the plan accordingly.
 
 **Project Type Tabs (Dashboard)**:
-- 3 chips above the prompt textarea on `/dashboard`: **App completa**, **App móvil**, **Landing page**. Default is App completa.
-- Each chip changes the placeholder text and, on submit, prepends an `[INTENT: …]` directive to the prompt sent to the architect.
-- The hint is *only* applied to new-app generation from the dashboard. Edit chat messages on `/app/:id` go through unchanged unless the user types the prefix manually.
-- Implemented as `role="group"` with `aria-pressed` toggle buttons (matching the existing Todas/Desplegadas filter pattern); not WAI-ARIA tabs to avoid needing roving-tabindex/arrow-key navigation.
+- 6 chips above the prompt textarea on `/dashboard`, each with a credit-cost badge:
+  - **App completa** (`fullstack`, 1cr) — default. Standard fullstack/SaaS-style web app.
+  - **App móvil** (`mobile`, 2cr) — mobile-first PWA, single-column, 44px tap targets, bottom nav.
+  - **Landing page** (`landing`, 1cr) — single-page marketing site, `backendNeeded=false`.
+  - **Juego 2D** (`game-2d`, 3cr) — single-page HTML5 Canvas game with game loop, controls, score, state machine.
+  - **Juego 3D** (`game-3d`, 5cr) — single-page Three.js + react-three-fiber game, scene/camera/lights, useFrame loop.
+  - **App híbrida (PWA)** (`hybrid-pwa`, 3cr) — installable PWA with `manifest.webmanifest`, service worker (offline-first), `beforeinstallprompt` UI.
+- Each chip changes the textarea placeholder. On submit the dashboard sends a `kind` field (validated against the `ALLOWED_KINDS` whitelist on the server); the **server** is authoritative for both:
+  - **Cost** — `KIND_COSTS` in `apps.ts`. Reservation, deduction, ledger insert, and refund all use the same `cost` value (transactional UPDATE includes `WHERE credits >= cost` for race-safety; failed-job and orphan-reclaim refunds look up the actual reservation amount, never falling back to a hardcoded 1).
+  - **`[INTENT: …]` directive** — `KIND_INTENTS` in `apps.ts`. Prepended to the user prompt before the architect sees it (clients can't bypass by sending raw text). The architect's `PLAN_SYSTEM_PROMPT` has a matching `INTENT HINTS` section that tells it: backend-needed override, required components, hooks, techStack entries (HTML5 Canvas / pixi.js / three / @react-three/fiber / drei / Service Worker / PWA), and single-page game enforcement.
+- Edits (chat messages on `/app/:id`) ignore `kind` entirely — they always cost 1 credit and inherit the existing app's characteristics from its stored `frontendCode`.
+- Implemented as `role="group"` with `aria-pressed` toggle buttons + `flex-wrap` for narrow viewports (matching the existing Todas/Desplegadas filter pattern); not WAI-ARIA tabs to avoid needing roving-tabindex/arrow-key navigation.
 
 **Annual Upgrade Modal**:
 - A 4th credit package "Annual" (id: `annual`, 600 credits / $399 — ~58% off Pro per credit) is exposed via `CREDIT_PACKAGES`. Reuses the existing checkout/webhook flow (no separate Stripe subscription product yet).

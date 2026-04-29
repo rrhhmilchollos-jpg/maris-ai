@@ -200,6 +200,44 @@ const PREMIUM_CODER_MODELS = new Set(["claude-sonnet-4-6", "gpt-5"]);
 /** Source-language choices the user can pick at generation time. */
 const ALLOWED_LANGUAGES = new Set<GenLanguage>(["typescript", "javascript"]);
 
+/**
+ * Project kinds the user can pick from the dashboard tabs. Each maps to a
+ * credit cost (bigger projects burn credits faster) and a `[INTENT: …]`
+ * directive that's prepended to the user prompt before the architect sees it,
+ * so all downstream agents (architect, designer, coder, visual tester) know
+ * what they're building. Edits ignore the kind entirely — they cost 1 credit
+ * and inherit the original app's characteristics.
+ */
+type ProjectKind =
+  | "fullstack"
+  | "mobile"
+  | "landing"
+  | "game-2d"
+  | "game-3d"
+  | "hybrid-pwa";
+const KIND_COSTS: Record<ProjectKind, number> = {
+  fullstack: 1,
+  mobile: 2,
+  landing: 1,
+  "game-2d": 3,
+  "game-3d": 5,
+  "hybrid-pwa": 3,
+};
+const KIND_INTENTS: Record<ProjectKind, string | null> = {
+  fullstack: null,
+  mobile:
+    "[INTENT: mobile-first PWA — diseño en columna única optimizado para pantallas de teléfono, tipografía grande, áreas de toque generosas (mínimo 44px), barra de navegación inferior fija, todas las páginas deben verse perfectas a 390px de ancho]",
+  landing:
+    "[INTENT: landing page — sitio de marketing de una sola página con hero impactante, sección de features, prueba social/testimonios, pricing y CTA final + footer. No requiere backend ni dashboard, backendNeeded debe ser false]",
+  "game-2d":
+    "[INTENT: 2D game — juego web 2D de una sola página usando HTML5 Canvas (o pixi.js si la mecánica lo justifica). Incluye loop de juego con requestAnimationFrame, controles por teclado/táctil, sistema de puntuación, estados (menu/playing/gameover), reinicio. backendNeeded=false. La página principal ES el juego, no un dashboard. Tabla de records con localStorage]",
+  "game-3d":
+    "[INTENT: 3D game — juego web 3D de una sola página usando three + @react-three/fiber + @react-three/drei. Incluye escena con cámara y luces, loop con useFrame, controles (OrbitControls o teclado WASD), físicas básicas, sistema de puntuación, estados (menu/playing/gameover). backendNeeded=false. La página principal ES el juego. Records en localStorage]",
+  "hybrid-pwa":
+    "[INTENT: hybrid PWA — aplicación instalable estilo app nativa: manifest.json con name/icons/theme_color/display=standalone, service worker registrado para offline-first (cachea shell + assets), prompt de instalación 'Add to Home Screen', diseño mobile-first con bottom navigation, áreas táctiles ≥44px. Debe verse perfecta a 390px y funcionar offline tras la primera carga]",
+};
+const ALLOWED_KINDS = new Set<ProjectKind>(Object.keys(KIND_COSTS) as ProjectKind[]);
+
 function serializeApp(row: GeneratedAppRow) {
   return {
     id: row.id,
@@ -303,25 +341,26 @@ router.delete("/apps/:id", requireAuth, async (req: Request, res: Response) => {
   res.status(204).end();
 });
 
-async function refundCredit(userId: string, jobId: number) {
+async function refundCredit(userId: string, jobId: number, amount = 1) {
+  if (amount <= 0) return;
   try {
     await db.transaction(async (tx) => {
       await tx
         .update(users)
         .set({
-          credits: sql`${users.credits} + 1`,
+          credits: sql`${users.credits} + ${amount}`,
           updatedAt: new Date(),
         })
         .where(eq(users.id, userId));
       await tx.insert(creditTransactions).values({
         userId,
         kind: "refund",
-        amount: 1,
+        amount,
         description: `Reembolso por generación fallida (job #${jobId})`,
       });
     });
   } catch (err) {
-    logger.error({ err, userId, jobId }, "Failed to refund credit");
+    logger.error({ err, userId, jobId, amount }, "Failed to refund credit");
   }
 }
 
@@ -551,7 +590,33 @@ async function runJob(
       }
     }
     if (!isAdmin) {
-      await refundCredit(userId, jobId);
+      // Look up the original reservation amount so we refund exactly what we
+      // charged (kind-aware — a failed game-3d job refunds 5, not 1). If no
+      // reservation row exists, do NOT fall back to 1 — that would mint
+      // credits out of thin air. Log loudly for manual reconciliation
+      // instead. Reservations are written in the same transaction as the
+      // job, so a missing row signals real ledger corruption.
+      const [reservation] = await db
+        .select({ amount: creditTransactions.amount })
+        .from(creditTransactions)
+        .where(
+          and(
+            eq(creditTransactions.userId, userId),
+            eq(
+              creditTransactions.description,
+              `Reserva de crédito para job #${jobId}`,
+            ),
+          ),
+        )
+        .limit(1);
+      if (reservation) {
+        await refundCredit(userId, jobId, Math.abs(reservation.amount));
+      } else {
+        logger.error(
+          { userId, jobId },
+          "Failed-job refund SKIPPED — no reservation row found for this job. Manual reconciliation required.",
+        );
+      }
     }
     // Diagnostic agent: when any agent errors out, kick off a free diagnosis
     // so the user gets actionable info in the chat instead of just a generic
@@ -712,6 +777,7 @@ export async function reclaimOrphanedJobs() {
         })
         .where(eq(generationJobs.id, job.id));
       // Refund only if a reservation row exists for this job (admins have none).
+      // Use the actual reserved amount so kind-aware costs roll back correctly.
       const [reservation] = await db
         .select()
         .from(creditTransactions)
@@ -726,7 +792,7 @@ export async function reclaimOrphanedJobs() {
         )
         .limit(1);
       if (reservation) {
-        await refundCredit(job.userId, job.id);
+        await refundCredit(job.userId, job.id, Math.abs(reservation.amount));
       }
     }
   } catch (err) {
@@ -748,7 +814,12 @@ async function enqueueGeneration(
   extras?: EnqueueExtras,
   coderModelOverride?: string,
   languageOverride?: GenLanguage,
+  kind: ProjectKind = "fullstack",
 ) {
+  // Edits always cost 1 credit (the original kind already informed the
+  // architecture, and re-runs aren't substantially more expensive than a
+  // small fullstack call). New generations scale with the kind.
+  const cost = editAppId ? 1 : KIND_COSTS[kind] ?? 1;
   const userId = req.userId!;
   const user = req.dbUser!;
   const isAdmin = isAdminEmail(user.email);
@@ -780,9 +851,12 @@ async function enqueueGeneration(
     }
   }
 
-  if (!isAdmin && user.credits < 1) {
+  if (!isAdmin && user.credits < cost) {
     res.status(402).json({
-      error: "Te has quedado sin créditos. Compra más para seguir generando.",
+      error:
+        cost > 1
+          ? `Este tipo de proyecto cuesta ${cost} créditos y solo tienes ${user.credits}. Compra más para seguir generando.`
+          : "Te has quedado sin créditos. Compra más para seguir generando.",
     });
     return;
   }
@@ -816,10 +890,10 @@ async function enqueueGeneration(
         const updated = await tx
           .update(users)
           .set({
-            credits: sql`${users.credits} - 1`,
+            credits: sql`${users.credits} - ${cost}`,
             updatedAt: new Date(),
           })
-          .where(and(eq(users.id, userId), sql`${users.credits} >= 1`))
+          .where(and(eq(users.id, userId), sql`${users.credits} >= ${cost}`))
           .returning({ credits: users.credits });
         if (updated.length === 0) {
           throw new Error("INSUFFICIENT_CREDITS");
@@ -840,7 +914,7 @@ async function enqueueGeneration(
         await tx.insert(creditTransactions).values({
           userId,
           kind: "usage",
-          amount: -1,
+          amount: -cost,
           description: `Reserva de crédito para job #${created.id}`,
         });
       }
@@ -903,11 +977,23 @@ router.post(
   const appIdRaw: unknown = req.body?.appId;
   const coderModelRaw: unknown = req.body?.coderModel;
   const languageRaw: unknown = req.body?.language;
+  const kindRaw: unknown = req.body?.kind;
   if (typeof prompt !== "string" || prompt.trim().length < 5) {
     res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
     return;
   }
   const userId = req.userId!;
+  // Validate kind against the whitelist; anything unknown silently falls back
+  // to the default fullstack preset (1 credit, no INTENT prefix). Edits ignore
+  // the kind entirely (set further down).
+  const kind: ProjectKind =
+    typeof kindRaw === "string" && ALLOWED_KINDS.has(kindRaw as ProjectKind)
+      ? (kindRaw as ProjectKind)
+      : "fullstack";
+  // The dashboard sends raw user prompt; the server prepends the kind's
+  // [INTENT: …] directive so the architect can't be talked into ignoring it
+  // by a malicious client. Edits skip this — they inherit the original app's
+  // intent from the existing files.
   const cleanedPrompt = prompt.trim();
   let editAppId: number | undefined;
   if (typeof appIdRaw === "number" && Number.isInteger(appIdRaw)) {
@@ -950,14 +1036,19 @@ router.post(
     typeof languageRaw === "string" && ALLOWED_LANGUAGES.has(languageRaw as GenLanguage)
       ? (languageRaw as GenLanguage)
       : undefined;
+  // Build the final prompt: prepend the kind's intent directive only for new
+  // generations. Edits skip it because they reuse the existing app context.
+  const intent = !editAppId ? KIND_INTENTS[kind] : null;
+  const finalPrompt = intent ? `${intent}\n\n${cleanedPrompt}` : cleanedPrompt;
   await enqueueGeneration(
     req,
     res,
-    cleanedPrompt,
+    finalPrompt,
     editAppId,
     undefined,
     coderModelOverride,
     languageOverride,
+    kind,
   );
 });
 
