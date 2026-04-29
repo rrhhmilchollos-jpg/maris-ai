@@ -19,6 +19,39 @@ export interface ValidationReport {
 
 const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
 
+/**
+ * Walk the VFS looking for `<Link …>` followed (eventually) by a child `<a …>`.
+ * Wouter v3's Link IS the anchor, so nesting <a> creates invalid <a><a> markup
+ * that breaks React reconciliation. We report each occurrence as a build issue
+ * with file + line so the patcher can fix it on the next pass.
+ */
+function detectWouterAnchorNesting(
+  vfs: Record<string, string>,
+): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx$/.test(file)) continue;
+    if (!/<Link\b/.test(contents)) continue;
+    // Match <Link …>  …  <a … where the gap between them is short AND contains
+    // no `</Link>` (which would mean the <a> is a sibling, not a child).
+    // Capped at 240 chars to keep the regex predictable on large files.
+    const re =
+      /<Link\b[^>]*>(?:(?!<\/Link>)[\s\S]){0,240}?<a\b/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(contents)) !== null) {
+      const line = contents.slice(0, m.index).split("\n").length;
+      issues.push({
+        file,
+        line,
+        message:
+          "Nested <a> inside <Link> (wouter v3). Flatten: move className/onClick onto <Link> and remove the inner <a>.",
+      });
+      if (issues.length > 10) return issues;
+    }
+  }
+  return issues;
+}
+
 const SKIP_PREFIXES = ["tests/", "e2e/", "__tests__/", "test/"];
 const SKIP_EXACT = new Set([
   "package.json",
@@ -242,6 +275,13 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
       column: e.location?.column,
       message: e.text,
     }));
+
+    // esbuild compiles cleanly even when JSX nests an <a> inside <Link>, but
+    // wouter v3 renders <Link> AS the anchor — nested <a> blows up at runtime
+    // with "Failed to execute 'removeChild' on 'Node'" and silently empties
+    // the page. Catch the pattern statically so the patcher can fix it.
+    issues.push(...detectWouterAnchorNesting(vfs));
+
     return {
       ok: issues.length === 0,
       issues,
