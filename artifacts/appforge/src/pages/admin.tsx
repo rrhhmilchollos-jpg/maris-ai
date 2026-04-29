@@ -94,14 +94,27 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [delta, setDelta] = useState("10");
   const [reason, setReason] = useState("");
 
-  // Memoria del agente — fetched on demand when the tab is opened.
-  const [memory, setMemory] = useState<{ total: number; entries: MemoryEntry[] } | null>(null);
+  // Memoria del agente — fetched on demand when the tab is opened, with
+  // server-side search + offset pagination.
+  const MEMORY_PAGE_SIZE = 25;
+  const [memory, setMemory] = useState<
+    { total: number; limit: number; offset: number; q: string; entries: MemoryEntry[] } | null
+  >(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryQuery, setMemoryQuery] = useState("");
+  const [memoryOffset, setMemoryOffset] = useState(0);
 
-  const loadMemory = async () => {
+  const loadMemory = async (overrides?: { q?: string; offset?: number }) => {
+    const q = overrides?.q ?? memoryQuery;
+    const offset = overrides?.offset ?? memoryOffset;
     setMemoryLoading(true);
     try {
-      const r = await fetch("/api/admin/memory?limit=100", { credentials: "include" });
+      const params = new URLSearchParams({
+        limit: String(MEMORY_PAGE_SIZE),
+        offset: String(offset),
+      });
+      if (q.trim()) params.set("q", q.trim());
+      const r = await fetch(`/api/admin/memory?${params.toString()}`, { credentials: "include" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setMemory(await r.json());
     } catch (e) {
@@ -332,18 +345,52 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                     error o petición. Cuantas más entradas, más rápido y barato resuelve.
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={loadMemory} disabled={memoryLoading}>
+                <Button variant="outline" size="sm" onClick={() => loadMemory()} disabled={memoryLoading}>
                   <RefreshCw className={`h-4 w-4 mr-2 ${memoryLoading ? "animate-spin" : ""}`} />
                   Refrescar
                 </Button>
               </CardHeader>
               <CardContent>
+                {/* Search + paginator. Submitting resets offset to 0; the
+                    paginator buttons step by MEMORY_PAGE_SIZE. */}
+                <form
+                  className="flex gap-2 mb-4"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setMemoryOffset(0);
+                    void loadMemory({ offset: 0 });
+                  }}
+                >
+                  <Input
+                    placeholder="Buscar en mensaje de error o parche…"
+                    value={memoryQuery}
+                    onChange={(ev) => setMemoryQuery(ev.target.value)}
+                    className="bg-black/20 border-white/10 text-white"
+                  />
+                  <Button type="submit" variant="secondary" disabled={memoryLoading}>
+                    Buscar
+                  </Button>
+                  {memoryQuery && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        setMemoryQuery("");
+                        setMemoryOffset(0);
+                        void loadMemory({ q: "", offset: 0 });
+                      }}
+                    >
+                      Limpiar
+                    </Button>
+                  )}
+                </form>
                 {memoryLoading && !memory ? (
                   <Skeleton className="h-32 w-full" />
                 ) : !memory || memory.entries.length === 0 ? (
                   <p className="text-sm text-white/50 py-8 text-center">
-                    Aún no hay nada en memoria. Se irá llenando a medida que la IA repare bundles
-                    y aplique parches.
+                    {memory && memory.q
+                      ? `Sin coincidencias para "${memory.q}".`
+                      : "Aún no hay nada en memoria. Se irá llenando a medida que la IA repare bundles y aplique parches."}
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -390,6 +437,40 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         </details>
                       </div>
                     ))}
+                  </div>
+                )}
+                {memory && memory.total > MEMORY_PAGE_SIZE && (
+                  <div className="mt-4 flex items-center justify-between text-sm text-white/60">
+                    <span>
+                      Mostrando {memory.offset + 1}–{Math.min(memory.offset + memory.entries.length, memory.total)}{" "}
+                      de {memory.total.toLocaleString("es")}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={memoryLoading || memory.offset === 0}
+                        onClick={() => {
+                          const next = Math.max(0, memory.offset - MEMORY_PAGE_SIZE);
+                          setMemoryOffset(next);
+                          void loadMemory({ offset: next });
+                        }}
+                      >
+                        ← Anterior
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={memoryLoading || memory.offset + memory.entries.length >= memory.total}
+                        onClick={() => {
+                          const next = memory.offset + MEMORY_PAGE_SIZE;
+                          setMemoryOffset(next);
+                          void loadMemory({ offset: next });
+                        }}
+                      >
+                        Siguiente →
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
