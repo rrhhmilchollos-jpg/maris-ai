@@ -1,0 +1,434 @@
+🔴 CUANDO EL STREAMING NO FUNCIONA
+The streaming is not working. Messages appear all at once 
+instead of word by word.
+
+Fix this specifically:
+
+1. In the backend, use Anthropic streaming like this:
+const stream = await anthropic.messages.stream({
+  model: 'claude-sonnet-4-6',
+  max_tokens: 8192,
+  messages: [{ role: 'user', content: prompt }]
+});
+
+for await (const chunk of stream) {
+  if (chunk.type === 'content_block_delta') {
+    const token = chunk.delta.text;
+    socket.emit('file_chunk', { path: currentFile, chunk: token });
+  }
+}
+
+2. In the frontend, the Socket.io listener must append 
+   each chunk to the existing text, NOT replace it:
+   
+socket.on('file_chunk', ({ path, chunk }) => {
+  setStreamingContent(prev => prev + chunk);
+});
+
+Do not change any UI. Only fix the streaming logic.
+
+🔴 CUANDO EL IFRAME DE PREVIEW NO CARGA
+The preview iframe is not loading the generated app.
+
+Fix this:
+
+1. Backend must serve the generated project as static files:
+app.use('/preview/:projectId', (req, res, next) => {
+  const projectPath = path.join(PROJECTS_DIR, req.params.projectId, 'frontend/dist');
+  express.static(projectPath)(req, res, next);
+});
+
+2. After build, run the frontend build:
+const { execSync } = require('child_process');
+execSync('npm install && npm run build', { 
+  cwd: path.join(PROJECTS_DIR, projectId, 'frontend'),
+  timeout: 120000
+});
+
+3. Set the iframe src to:
+`/preview/${projectId}/index.html`
+
+4. Add to Express: app.use(express.static(...)) with correct CORS headers.
+
+Do not change the iframe component itself, only make it load correctly.
+
+🔴 CUANDO LOS AGENTES NO SE EJECUTAN EN SECUENCIA
+The agents are all running at the same time or skipping steps.
+
+Fix the pipeline in /backend/routes/builder.js to be strictly sequential:
+
+async function runBuildPipeline(socket, projectId, prompt, model) {
+  try {
+    // STEP 1
+    socket.emit('agent_update', { agent: 'planner', status: 'thinking', message: 'Analyzing your request...' });
+    const plan = await plannerAgent(prompt);
+    socket.emit('agent_update', { agent: 'planner', status: 'done', message: 'Architecture planned!' });
+
+    // STEP 2
+    socket.emit('agent_update', { agent: 'coder', status: 'thinking', message: 'Writing your code...' });
+    const files = await coderAgent(plan, model, socket);
+    socket.emit('agent_update', { agent: 'coder', status: 'done', message: 'Code complete!' });
+
+    // STEP 3
+    socket.emit('agent_update', { agent: 'debugger', status: 'thinking', message: 'Running health check...' });
+    const isHealthy = await debuggerAgent(projectId, files, socket);
+    socket.emit('agent_update', { agent: 'debugger', status: 'done', message: isHealthy ? 'No issues found!' : 'Fixed all errors!' });
+
+    // STEP 4
+    socket.emit('agent_update', { agent: 'designer', status: 'thinking', message: 'Polishing the UI...' });
+    await designerAgent(projectId, files, socket);
+    socket.emit('agent_update', { agent: 'designer', status: 'done', message: 'Design improved!' });
+
+    // DONE
+    socket.emit('build_complete', { projectId, previewUrl: `/preview/${projectId}`, files });
+
+  } catch (error) {
+    socket.emit('build_error', { message: error.message, recoverable: false });
+  }
+}
+
+Each agent function must be async and must fully resolve before the next one starts.
+Use await — do not use .then() chains.
+
+🔴 CUANDO LOS ARCHIVOS NO SE GUARDAN EN MONGODB
+Generated files are not being saved to MongoDB.
+
+Fix the Project model and save logic:
+
+// In /backend/models/Project.js
+const projectSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  name: String,
+  description: String,
+  type: { type: String, enum: ['web', 'mobile', 'landing'] },
+  status: { type: String, enum: ['building', 'ready', 'error', 'deployed'], default: 'building' },
+  files: [{ path: String, content: String, language: String, size: Number }],
+  chatHistory: [{
+    role: { type: String, enum: ['user', 'agent'] },
+    agentType: String,
+    content: String,
+    timestamp: { type: Date, default: Date.now }
+  }],
+  buildLogs: [String],
+  deploymentUrl: String,
+  creditsUsed: { type: Number, default: 0 },
+  model: String
+}, { timestamps: true });
+
+// After build_complete, save like this:
+await Project.findByIdAndUpdate(projectId, {
+  status: 'ready',
+  files: generatedFiles,
+  $push: { 
+    chatHistory: { $each: agentMessages },
+    buildLogs: { $each: logs }
+  },
+  creditsUsed: totalCredits
+});
+
+Do not change any UI. Only fix the database save logic.
+
+🔴 CUANDO EL FOLLOW-UP CHAT NO MODIFICA EL APP
+Follow-up messages are not modifying the existing app.
+They either rebuild from scratch or do nothing.
+
+Fix the follow-up handler in /backend/routes/builder.js:
+
+socket.on('follow_up', async ({ message, projectId }) => {
+  // 1. Load current project files from MongoDB
+  const project = await Project.findById(projectId);
+  const currentFiles = project.files;
+
+  // 2. Mini planner call — identify which files to change
+  const plannerResponse = await anthropic.messages.create({
+    model: 'claude-opus-4-6',
+    max_tokens: 1000,
+    messages: [{
+      role: 'user',
+      content: `The user wants to modify their existing app.
+      Change requested: "${message}"
+      Current files: ${currentFiles.map(f => f.path).join(', ')}
+      
+      Return ONLY a JSON array of file paths that need to change:
+      ["frontend/src/App.jsx", "frontend/src/styles.css"]`
+    }]
+  });
+  
+  const filesToChange = JSON.parse(plannerResponse.content[0].text);
+
+  // 3. For each file that needs changing, rewrite it
+  for (const filePath of filesToChange) {
+    const currentFile = currentFiles.find(f => f.path === filePath);
+    
+    socket.emit('agent_update', { 
+      agent: 'coder', 
+      status: 'thinking', 
+      message: `Modifying ${filePath}...` 
+    });
+
+    const stream = await anthropic.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
+      messages: [{
+        role: 'user',
+        content: `Modify this file based on the request: "${message}"
+        
+        Current content:
+        ${currentFile.content}
+        
+        Return ONLY the complete new file content, no explanations.`
+      }]
+    });
+
+    let newContent = '';
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta') {
+        newContent += chunk.delta.text;
+        socket.emit('file_chunk', { path: filePath, chunk: chunk.delta.text });
+      }
+    }
+
+    // 4. Write to disk and update MongoDB
+    const fullPath = path.join(PROJECTS_DIR, projectId, filePath);
+    await fs.writeFile(fullPath, newContent);
+    
+    await Project.updateOne(
+      { _id: projectId, 'files.path': filePath },
+      { $set: { 'files.$.content': newContent } }
+    );
+
+    socket.emit('file_done', { path: filePath, fullContent: newContent });
+  }
+
+  // 5. Rebuild frontend and refresh preview
+  execSync('npm run build', { cwd: path.join(PROJECTS_DIR, projectId, 'frontend') });
+  socket.emit('build_complete', { projectId, refreshPreview: true });
+});
+
+🔴 CUANDO EL LOGIN CON GOOGLE NO FUNCIONA
+Google OAuth login is not working. Fix this:
+
+1. Install: npm install passport passport-google-oauth20 express-session
+
+2. In server.js:
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const session = require('express-session');
+
+app.use(session({ secret: process.env.JWT_SECRET, resave: false, saveUninitialized: false }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(new GoogleStrategy({
+  clientID: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL: '/api/auth/google/callback'
+}, async (accessToken, refreshToken, profile, done) => {
+  let user = await User.findOne({ email: profile.emails[0].value });
+  if (!user) {
+    user = await User.create({
+      email: profile.emails[0].value,
+      name: profile.displayName,
+      avatar: profile.photos[0].value,
+      provider: 'google',
+      plan: 'free',
+      credits: { remaining: 10, total: 10 }
+    });
+  }
+  return done(null, user);
+}));
+
+passport.serializeUser((user, done) => done(null, user._id));
+passport.deserializeUser(async (id, done) => {
+  const user = await User.findById(id);
+  done(null, user);
+});
+
+3. Routes:
+app.get('/api/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/api/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  (req, res) => {
+    const token = jwt.sign({ userId: req.user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.redirect(`/?token=${token}`);
+  }
+);
+
+4. In the frontend, the "Continue with Google" button must navigate to:
+window.location.href = '/api/auth/google';
+
+Do not change the button design. Only wire it up.
+
+🔴 CUANDO EL EXPORT ZIP NO DESCARGA
+The Export ZIP button is not downloading anything.
+
+Fix this in /backend/routes/projects.js:
+
+const archiver = require('archiver');
+
+app.get('/api/projects/:projectId/export', authMiddleware, async (req, res) => {
+  const { projectId } = req.params;
+  const project = await Project.findById(projectId);
+  
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  
+  const projectPath = path.join(PROJECTS_DIR, projectId);
+  
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${project.name}-source.zip"`);
+  
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.on('error', err => res.status(500).send(err.message));
+  archive.pipe(res);
+  archive.directory(projectPath, false);
+  archive.finalize();
+});
+
+In the frontend, wire the Export button to:
+const handleExport = async () => {
+  const response = await fetch(`/api/projects/${projectId}/export`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${projectName}-source.zip`;
+  a.click();
+};
+
+Do not change the button design. Only add this function to the onClick.
+
+🔴 CUANDO LOS CRÉDITOS NO SE DESCUENTAN
+Credits are not being deducted after builds.
+
+Fix the credits middleware and build completion:
+
+// /backend/middleware/credits.js
+const deductCredits = async (userId, amount) => {
+  const user = await User.findById(userId);
+  if (user.credits.remaining < amount) {
+    throw new Error('INSUFFICIENT_CREDITS');
+  }
+  await User.findByIdAndUpdate(userId, {
+    $inc: { 'credits.remaining': -amount }
+  });
+  return user.credits.remaining - amount;
+};
+
+// Credit costs:
+const CREDIT_COSTS = {
+  planner: 1,
+  coder: 2,
+  debugger: 1,
+  designer: 1,
+  retry: 1
+};
+
+// In build pipeline, after each agent completes:
+totalCredits += CREDIT_COSTS[agentName];
+
+// After build_complete:
+const remainingCredits = await deductCredits(userId, totalCredits);
+socket.emit('credits_updated', { remaining: remainingCredits });
+
+// In frontend, listen for credits update:
+socket.on('credits_updated', ({ remaining }) => {
+  setCredits(remaining); // update the credits display in sidebar
+});
+
+Do not change the sidebar credits UI. Only update the number.
+
+🔴 CUANDO EL HISTORIAL DE PROYECTOS NO CARGA
+Past projects are not loading when clicked in the sidebar.
+
+Fix the project loading in the frontend:
+
+// When user clicks a project in sidebar:
+const loadProject = async (projectId) => {
+  setLoading(true);
+  
+  const response = await fetch(`/api/projects/${projectId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const project = await response.json();
+  
+  // Restore chat history
+  setChatHistory(project.chatHistory);
+  
+  // Restore file tree
+  setFileTree(project.files);
+  
+  // Restore selected file in code viewer
+  if (project.files.length > 0) {
+    setSelectedFile(project.files[0]);
+  }
+  
+  // Load preview if deployed
+  if (project.deploymentUrl) {
+    setPreviewUrl(project.deploymentUrl);
+  }
+  
+  setCurrentProject(project);
+  setLoading(false);
+};
+
+// Backend route to get project:
+app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
+  const project = await Project.findOne({ 
+    _id: req.params.projectId, 
+    userId: req.user._id 
+  });
+  if (!project) return res.status(404).json({ error: 'Not found' });
+  res.json(project);
+});
+
+Do not change any UI. Only wire up the data loading.
+
+🔴 CUANDO SOCKET.IO NO CONECTA
+Socket.io is not connecting between frontend and backend.
+
+Fix this:
+
+BACKEND (server.js):
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  socket.on('start_build', async (data) => {
+    await runBuildPipeline(socket, data);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+server.listen(process.env.PORT || 5000);
+
+FRONTEND:
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:5000', {
+  withCredentials: true,
+  transports: ['websocket', 'polling']
+});
+
+socket.on('connect', () => console.log('Connected to server'));
+socket.on('connect_error', (err) => console.error('Connection error:', err));
+
+Put socket initialization outside of components (module level),
+not inside useEffect or useState.
