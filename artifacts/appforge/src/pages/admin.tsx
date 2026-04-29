@@ -37,7 +37,9 @@ import {
   RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock,
 } from "lucide-react";
 
-export default function AdminPage() {
+type AdminTab = "users" | "apps" | "queue";
+
+export default function AdminPage({ initialTab = "users" }: { initialTab?: AdminTab } = {}) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -64,10 +66,11 @@ export default function AdminPage() {
         queryClient.invalidateQueries({ queryKey: getListAdminJobsQueryKey() });
         toast({ title: "Job re-encolado", description: "El trabajo se reintentará en breve." });
       },
-      onError: (err: any) => {
+      onError: (err: unknown) => {
+        const e = err as { response?: { data?: { error?: string } }; message?: string };
         toast({
           title: "No se pudo reintentar",
-          description: err?.response?.data?.error ?? err?.message ?? "Error desconocido",
+          description: e?.response?.data?.error ?? e?.message ?? "Error desconocido",
           variant: "destructive",
         });
       },
@@ -88,8 +91,9 @@ export default function AdminPage() {
         setReason("");
         setDelta("10");
       },
-      onError: (err: any) => {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+      onError: (err: unknown) => {
+        const e = err as { message?: string };
+        toast({ title: "Error", description: e?.message ?? "Error desconocido", variant: "destructive" });
       },
     },
   });
@@ -136,7 +140,7 @@ export default function AdminPage() {
           <StatCard label="Ingresos totales" value={overview ? `$${(overview.revenueCentsTotal / 100).toFixed(2)}` : undefined} loading={overviewLoading} icon={CreditCard} subtle />
         </div>
 
-        <Tabs defaultValue="users" className="w-full">
+        <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="bg-card/40 border border-white/5">
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Usuarios</TabsTrigger>
             <TabsTrigger value="apps"><Code2 className="h-4 w-4 mr-2" /> Apps</TabsTrigger>

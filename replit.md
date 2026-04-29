@@ -47,6 +47,8 @@ AppForge features a React frontend, a Node.js/Express backend, and shared librar
 - Boot reconciliation (`reclaimOrphanedJobs`) re-enqueues `queued` rows (singletonKey dedupes if pg-boss already has them) and only fails `running` rows older than 15 minutes — the rest are assumed live.
 - Admin "Cola" tab (`/admin`, `GET /admin/jobs`) shows queued/running/failed-24h/succeeded-24h counters and the last 100 jobs with a manual `Reintentar` action (`POST /admin/jobs/:id/retry`) for failed or stale jobs.
 - Schema additions on `generation_jobs`: `editAppId`, `coderModel`, `language`, `attachmentIds`, `isAdmin`, `retryCount`, `workerId`. The worker rehydrates the runJob signature from these columns.
+- Manual retry (`POST /admin/jobs/:id/retry`) is atomic: it snapshots the prior row state, optimistically updates to `queued`, then sends to pg-boss; if the send throws, the prior state is restored so a row never gets stuck in a "queued forever, not-in-pg-boss" limbo.
+- Restart resilience is verified by `pnpm --filter @workspace/api-server run test:queue` (script: `artifacts/api-server/src/__tests__/queue-recovery.test.ts`). Run against a dedicated `appforge.generate-app.test` queue (set `GENERATE_QUEUE_NAME` env). Last run: all 4 scenarios PASSED — happy path, restart resilience (enqueue→stop→start→pickup), orphan reclaim of `queued` rows (re-enqueued and processed), and stale `running` rows >15min (marked `failed`).
 
 **Database and Authentication**:
 - PostgreSQL is used with a schema including `users`, `generated_apps`, `credit_transactions`, `app_messages`, and `job_logs`.

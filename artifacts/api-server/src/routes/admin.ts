@@ -284,8 +284,17 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
     return;
   }
 
-  // Reset to queued, bump retry counter and re-enqueue with a fresh nonce
-  // so pg-boss doesn't dedupe against the original singletonKey.
+  // Snapshot the prior state so we can roll back atomically if the queue
+  // send fails — without this, the row would be left as "queued" forever
+  // (no worker would ever pick it up), recreating the very stuck-state
+  // problem this whole feature is meant to eliminate.
+  const priorStatus = job.status;
+  const priorPhase = job.phase;
+  const priorProgress = job.progress;
+  const priorErrorMessage = job.errorMessage;
+  const priorRetryCount = job.retryCount ?? 0;
+  const priorUpdatedAt = job.updatedAt;
+
   const [updated] = await db
     .update(generationJobs)
     .set({
@@ -293,7 +302,7 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
       phase: "queued",
       progress: 0,
       errorMessage: null,
-      retryCount: (job.retryCount ?? 0) + 1,
+      retryCount: priorRetryCount + 1,
       updatedAt: new Date(),
     })
     .where(eq(generationJobs.id, id))
@@ -302,7 +311,27 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
   try {
     await reenqueueGenerateJob(id);
   } catch (err) {
-    logger.error({ err, jobId: id }, "Manual retry: failed to re-enqueue");
+    logger.error({ err, jobId: id }, "Manual retry: failed to re-enqueue — rolling back DB state");
+    // Compensating update: restore the previous state. Best-effort; we
+    // never let a rollback-error mask the original enqueue error.
+    try {
+      await db
+        .update(generationJobs)
+        .set({
+          status: priorStatus,
+          phase: priorPhase,
+          progress: priorProgress,
+          errorMessage: priorErrorMessage,
+          retryCount: priorRetryCount,
+          updatedAt: priorUpdatedAt,
+        })
+        .where(eq(generationJobs.id, id));
+    } catch (rollbackErr) {
+      logger.error(
+        { err: rollbackErr, jobId: id },
+        "Manual retry: rollback also failed — admin must fix this row manually",
+      );
+    }
     res.status(500).json({ error: "No se pudo re-encolar el job." });
     return;
   }

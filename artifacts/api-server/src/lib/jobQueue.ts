@@ -25,7 +25,11 @@ interface QueueWorkJob<T> {
  * service that calls `start()` and `work()`.
  */
 
-export const GENERATE_QUEUE = "appforge.generate-app";
+// The queue name can be overridden via env var so the integration test can
+// run against a dedicated queue (`appforge.generate-app.test`) without
+// competing with the live api-server worker for jobs.
+export const GENERATE_QUEUE =
+  process.env.GENERATE_QUEUE_NAME ?? "appforge.generate-app";
 
 const DEFAULT_CONCURRENCY = 3;
 const DEFAULT_MAX_RETRIES = 2;

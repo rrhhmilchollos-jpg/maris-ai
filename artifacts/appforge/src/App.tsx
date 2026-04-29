@@ -222,6 +222,10 @@ function ClerkProviderWithRoutes() {
             <Gated><AdminPage /></Gated>
           </Route>
 
+          <Route path="/admin/jobs">
+            <Gated><AdminPage initialTab="queue" /></Gated>
+          </Route>
+
           <Route path="/__debug-preview/:id">
             {(params) => <DebugPreviewPage params={params as { id: string }} />}
           </Route>
