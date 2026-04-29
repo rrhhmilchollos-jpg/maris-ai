@@ -339,6 +339,62 @@ export type AgentLog = (
   level?: "info" | "warn" | "error",
 ) => void;
 
+/**
+ * A user-supplied attachment that should inform the generation. The route
+ * handler resolves uploads by id, decodes them, and passes a typed context
+ * here. We deliberately keep this small: text-shaped files send their
+ * decoded content (already truncated upstream to keep the prompt sane), and
+ * images/PDFs only send metadata so the model knows they exist and what to
+ * mimic — feeding raw image bytes to every LLM call is expensive and not
+ * supported uniformly across the providers we use today.
+ */
+export interface AttachmentContext {
+  id: number;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** UTF-8 decoded text content for text/* and JSON/CSV/etc. Undefined for images and PDFs. */
+  textContent?: string;
+}
+
+/**
+ * Build a markdown-ish block that summarises uploaded attachments and inlines
+ * their text content where applicable. Prepended to the user prompt for both
+ * initial generation and edit mode so the architect/coder always have it. Hard
+ * caps total size at ~25 KB so a user uploading several large CSVs can't blow
+ * the prompt budget. Images/PDFs become a one-line acknowledgement that asks
+ * the model to treat them as references.
+ */
+export function buildAttachmentBlock(attachments: AttachmentContext[] | undefined): string {
+  if (!attachments || attachments.length === 0) return "";
+  const MAX_TOTAL = 25_000;
+  const parts: string[] = ["[ARCHIVOS ADJUNTOS DEL USUARIO]"];
+  let used = parts[0]!.length;
+  for (const a of attachments) {
+    const sizeKb = Math.max(1, Math.round(a.sizeBytes / 1024));
+    if (a.textContent && a.textContent.trim().length > 0) {
+      const remaining = MAX_TOTAL - used - 200;
+      const text = remaining > 0 ? a.textContent.slice(0, remaining) : "";
+      const block = `\n--- ${a.filename} (${a.mimeType}, ${sizeKb} KB) ---\n${text}${
+        a.textContent.length > text.length ? "\n…(contenido truncado)" : ""
+      }`;
+      parts.push(block);
+      used += block.length;
+      if (used >= MAX_TOTAL) break;
+    } else {
+      const isImg = a.mimeType.startsWith("image/");
+      const note = isImg
+        ? `imagen de referencia visual — replica su estilo/colores/layout cuando sea relevante`
+        : `documento de referencia — usa su contenido como contexto`;
+      const line = `\n- ${a.filename} (${a.mimeType}, ${sizeKb} KB): ${note}.`;
+      parts.push(line);
+      used += line.length;
+    }
+  }
+  parts.push("\n[FIN DE ADJUNTOS]\n");
+  return parts.join("");
+}
+
 interface ProjectPlan {
   title: string;
   description: string;
@@ -1341,7 +1397,16 @@ export async function generateApp(
   coderModel?: string,
   language: GenLanguage = "typescript",
   onAgentLog?: AgentLog,
+  attachments?: AttachmentContext[],
 ): Promise<GeneratedAppPayload> {
+  // Prepend any user-uploaded attachments to the prompt. The block is a clearly
+  // delimited section so models know it's authoritative context (not part of
+  // the natural-language ask). We do this once, before any agent runs, so every
+  // downstream stage sees the same enriched prompt.
+  const attachmentBlock = buildAttachmentBlock(attachments);
+  if (attachmentBlock) {
+    prompt = `${attachmentBlock}\n${prompt}`;
+  }
   // Local helper so every call site is one line. The callback itself is
   // responsible for never throwing, but wrap defensively here too — a bug in
   // the caller's persistence layer must NOT take down a 5-credit generation.

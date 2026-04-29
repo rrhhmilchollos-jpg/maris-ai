@@ -6,6 +6,7 @@ import imagesRouter from "./images";
 import billingRouter from "./billing";
 import adminRouter from "./admin";
 import debugBundleRouter from "./debugBundle";
+import uploadsRouter from "./uploads";
 
 const router: IRouter = Router();
 
@@ -16,6 +17,7 @@ router.use(debugBundleRouter);
 // route is matched without `requireAuth` middleware kicking in from apps.ts.
 router.use(imagesRouter);
 router.use(appsRouter);
+router.use(uploadsRouter);
 router.use(billingRouter);
 router.use(adminRouter);
 

@@ -9,4 +9,9 @@
 export interface SendAppMessageRequest {
   /** @minLength 2 */
   message: string;
+  /**
+   * Optional ids of files previously uploaded via POST /uploads. They become AI context for this edit.
+   * @maxItems 10
+   */
+  attachmentIds?: number[] | null;
 }

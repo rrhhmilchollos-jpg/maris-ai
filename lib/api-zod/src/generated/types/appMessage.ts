@@ -12,5 +12,7 @@ export interface AppMessage {
   /** user | assistant | system */
   role: string;
   content: string;
+  /** Ids of chat_attachments rows referenced by this message. Empty for messages sent without uploads. Use GET /uploads/:id to fetch the bytes. */
+  attachmentIds: number[];
   createdAt: Date;
 }

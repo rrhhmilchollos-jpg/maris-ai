@@ -158,6 +158,8 @@ export const DeleteAppParams = zod.object({
  */
 export const generateAppBodyPromptMin = 5;
 
+export const generateAppBodyAttachmentIdsMax = 10;
+
 export const GenerateAppBody = zod.object({
   prompt: zod.string().min(generateAppBodyPromptMin),
   appId: zod
@@ -191,6 +193,13 @@ export const GenerateAppBody = zod.object({
     .describe(
       "Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack\/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.",
     ),
+  attachmentIds: zod
+    .array(zod.number())
+    .max(generateAppBodyAttachmentIdsMax)
+    .nullish()
+    .describe(
+      "Optional ids of files previously uploaded via POST \/uploads. They get included as context for the AI (text content for text\/json\/csv files, a one-line reference note for images\/PDFs).",
+    ),
 });
 
 /**
@@ -205,6 +214,11 @@ export const ListAppMessagesResponseItem = zod.object({
   appId: zod.number(),
   role: zod.string().describe("user | assistant | system"),
   content: zod.string(),
+  attachmentIds: zod
+    .array(zod.number())
+    .describe(
+      "Ids of chat_attachments rows referenced by this message. Empty for messages sent without uploads. Use GET \/uploads\/:id to fetch the bytes.",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListAppMessagesResponse = zod.array(ListAppMessagesResponseItem);
@@ -218,8 +232,17 @@ export const SendAppMessageParams = zod.object({
 
 export const sendAppMessageBodyMessageMin = 2;
 
+export const sendAppMessageBodyAttachmentIdsMax = 10;
+
 export const SendAppMessageBody = zod.object({
   message: zod.string().min(sendAppMessageBodyMessageMin),
+  attachmentIds: zod
+    .array(zod.number())
+    .max(sendAppMessageBodyAttachmentIdsMax)
+    .nullish()
+    .describe(
+      "Optional ids of files previously uploaded via POST \/uploads. They become AI context for this edit.",
+    ),
 });
 
 /**
