@@ -6,8 +6,17 @@ import { sql, eq } from "drizzle-orm";
 import { logger } from "./logger";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY ?? process.env.REPLIT_AI_INTEGRATIONS_API_KEY ?? "sk-noop",
-  baseURL: process.env.OPENAI_BASE_URL,
+  // Align with the rest of the codebase (generate.ts uses these names) so the
+  // real Replit AI Integrations proxy is used for embeddings when the
+  // integration is configured. We keep the legacy var names as fallbacks for
+  // local dev, and finally fall through to the lexical-hash path if neither
+  // is set or if the proxy returns 401 (current behaviour for embeddings).
+  apiKey:
+    process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
+    process.env.OPENAI_API_KEY ??
+    process.env.REPLIT_AI_INTEGRATIONS_API_KEY ??
+    "sk-noop",
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL,
 });
 
 const EMBED_DIMS = 1536;
@@ -104,13 +113,26 @@ function toVectorLiteral(vec: number[]): string {
   return `[${vec.join(",")}]`;
 }
 
+// Build the canonical text we hand to the embedder. Both recall and remember
+// use this so the cold-store and warm-query embeddings come from the same
+// representation. Including the (truncated) errorContext when available
+// improves retrieval precision when two errors share a message but live in
+// different files / stack frames.
+function embedInputText(errorMessage: string, errorContext?: string): string {
+  const ctx = (errorContext ?? "").trim();
+  if (!ctx) return errorMessage;
+  // Cap context to keep token costs bounded; the message stays ungated so
+  // exact-match recall on the message alone still works for short errors.
+  return `${errorMessage}\nContext:\n${ctx.slice(0, 1500)}`;
+}
+
 export async function recallSimilar(
   errorMessage: string,
-  options: { limit?: number; threshold?: number; language?: string } = {},
+  options: { limit?: number; threshold?: number; language?: string; errorContext?: string } = {},
 ): Promise<MemoryRecallResult[]> {
   const limit = Math.max(1, Math.min(10, options.limit ?? 3));
   const threshold = options.threshold ?? 0.7;
-  const queryVec = await embedText(errorMessage);
+  const queryVec = await embedText(embedInputText(errorMessage, options.errorContext));
   const lit = toVectorLiteral(queryVec);
   try {
     const rows = await db.execute(sql`
@@ -150,7 +172,7 @@ export interface RememberInput {
 export async function rememberPatch(input: RememberInput): Promise<AgentMemoryEntry | null> {
   if (!input.errorMessage || !input.patch) return null;
   try {
-    const vec = await embedText(input.errorMessage);
+    const vec = await embedText(embedInputText(input.errorMessage, input.errorContext));
     const lit = toVectorLiteral(vec);
     const dup = (await db.execute(sql`
       SELECT id, 1 - (embedding <=> ${lit}::vector) AS similarity
