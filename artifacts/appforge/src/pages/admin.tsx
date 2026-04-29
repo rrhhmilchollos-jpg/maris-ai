@@ -34,7 +34,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck,
-  RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock,
+  RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3,
 } from "lucide-react";
 
 type AdminTab = "users" | "apps" | "queue" | "memory";
@@ -205,6 +205,17 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
           <StatCard label="Créditos consumidos" value={overview?.creditsSpentTotal} loading={overviewLoading} icon={Sparkles} subtle />
           <StatCard label="Créditos comprados" value={overview?.creditsPurchasedTotal} loading={overviewLoading} icon={CreditCard} subtle />
           <StatCard label="Ingresos totales" value={overview ? `$${(overview.revenueCentsTotal / 100).toFixed(2)}` : undefined} loading={overviewLoading} icon={CreditCard} subtle />
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLocation("/admin/dashboard")}
+            className="gap-2"
+          >
+            <BarChart3 className="h-4 w-4" /> Panel de métricas
+          </Button>
         </div>
 
         <Tabs defaultValue={initialTab} className="w-full">
