@@ -729,18 +729,20 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 >
                   <Code2 className="h-4 w-4 mr-2" /> Frontend
                 </Button>
-                {/* Backend tab is owner/admin-only — clients shouldn't see
-                    server code in apps published to them. */}
-                {isAdmin && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setActiveTab("backend")}
-                    className={`h-8 rounded-md ${activeTab === "backend" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
-                  >
-                    <Server className="h-4 w-4 mr-2" /> Backend
-                  </Button>
-                )}
+                {/* Backend tab is visible to anyone who reached this page —
+                    GET /apps/:id already gates by ownership / admin, so any
+                    authenticated visitor here owns the app (or is staff).
+                    Hiding the tab made owners think "the agent didn't create
+                    a backend for me" when in reality it was generated and
+                    persisted in `backendCode` but unreachable in the UI. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveTab("backend")}
+                  className={`h-8 rounded-md ${activeTab === "backend" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
+                >
+                  <Server className="h-4 w-4 mr-2" /> Backend
+                </Button>
               </div>
               <div className="flex items-center gap-2">
                 {activeTab !== "preview" && (
