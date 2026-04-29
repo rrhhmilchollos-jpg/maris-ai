@@ -863,12 +863,12 @@ const STALE_RUNNING_MS = 15 * 60 * 1000; // 15 minutes — longer than any reali
  *     a multi-process setup) might still own them, OR this same worker is
  *     about to resume after the queue restarts.
  */
-export async function reclaimOrphanedJobs() {
+export async function reclaimOrphanedJobs(opts: { userId?: string } = {}) {
   try {
-    const all = await db
-      .select()
-      .from(generationJobs)
-      .where(sql`${generationJobs.status} IN ('queued', 'running')`);
+    const where = opts.userId
+      ? sql`${generationJobs.status} IN ('queued', 'running') AND ${generationJobs.userId} = ${opts.userId}`
+      : sql`${generationJobs.status} IN ('queued', 'running')`;
+    const all = await db.select().from(generationJobs).where(where);
     if (all.length === 0) return;
 
     const now = Date.now();
