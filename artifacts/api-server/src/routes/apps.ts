@@ -555,9 +555,27 @@ async function runJob(
       }
     }
 
+    addBreadcrumb("job:start", {
+      jobId,
+      userId,
+      editAppId: editAppId ?? null,
+      coderModel,
+      language,
+      promptChars: prompt.length,
+      attachments: attachmentIds.length,
+      attempt: attemptCtx.attempt,
+    });
     const payload = await generateApp(
       prompt,
       async (p) => {
+        // Each phase progress event becomes a Sentry breadcrumb, so when we
+        // capture an error later we have a timeline of which phases ran and
+        // how far they got. Cheap and bounded — phases are coarse-grained.
+        addBreadcrumb(`phase:${p.phase}`, {
+          jobId,
+          progress: p.progress,
+          note: p.note,
+        });
         try {
           await db
             .update(generationJobs)
@@ -576,6 +594,21 @@ async function runJob(
       language,
       recordLog,
       resolvedAttachments,
+      // Per-phase error reporter: every pipeline phase (planner, researcher,
+      // architect, integrations, design, frontend, backend, qa, tests,
+      // validate-patch-loop) is wrapped by generate.ts so a failure inside
+      // one of them lands in Sentry tagged with the EXACT phase name plus
+      // jobId/userId/appId, instead of the coarse "runJob" attribution from
+      // the outer try/catch below.
+      (phase, err, extras) => {
+        captureAgentError(err, {
+          phase,
+          jobId,
+          userId,
+          appId: editAppId,
+          extra: { ...extras, attempt: attemptCtx.attempt, coderModel, language },
+        });
+      },
     );
     recordLog("system", `Generación completada: ${Math.round(payload.frontendCode.length / 1000)} KB de frontend listos.`);
 

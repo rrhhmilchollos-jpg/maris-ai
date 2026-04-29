@@ -1696,6 +1696,12 @@ export interface PreviousApp {
   backendCode: string;
 }
 
+export type PhaseErrorReporter = (
+  phase: string,
+  err: unknown,
+  extras?: Record<string, unknown>,
+) => void;
+
 export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
@@ -1704,7 +1710,24 @@ export async function generateApp(
   language: GenLanguage = "typescript",
   onAgentLog?: AgentLog,
   attachments?: AttachmentContext[],
+  onPhaseError?: PhaseErrorReporter,
 ): Promise<GeneratedAppPayload> {
+  // Tiny helper that wraps each pipeline phase. If the phase throws we report
+  // the error to the caller (Sentry capture lives there) tagged with the
+  // phase name, then re-throw so the outer flow still aborts. Returning the
+  // value untouched on success keeps call sites readable.
+  const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch (err) {
+      try {
+        onPhaseError?.(phase, err);
+      } catch {
+        /* monitoring must never crash the pipeline */
+      }
+      throw err;
+    }
+  };
   // Prepend any user-uploaded attachments to the prompt. The block is a clearly
   // delimited section so models know it's authoritative context (not part of
   // the natural-language ask). We do this once, before any agent runs, so every
@@ -1728,7 +1751,9 @@ export async function generateApp(
   // existing app it shortcuts straight to the patcher; otherwise the
   // ExecutionPlan.phases array gates each downstream phase below.
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
-  let execPlan = await planExecution(prompt, { hasExistingApp: !!previous });
+  let execPlan = await runPhase("planner", () =>
+    planExecution(prompt, { hasExistingApp: !!previous }),
+  );
   log("planner", planSummaryEs(execPlan));
 
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
@@ -1835,7 +1860,7 @@ export async function generateApp(
       note: "🔎 Investigador buscando referencias en la web (máx 7s)…",
     });
     log("researcher", "Buscando referencias en la web (máx 7s)…");
-    research = await researchTopic(prompt);
+    research = await runPhase("researcher", () => researchTopic(prompt));
     if (research) {
       log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
     } else {
@@ -1855,10 +1880,8 @@ export async function generateApp(
       : "🧠 Arquitecto diseñando la estructura del proyecto…",
   });
   log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
-  const plan = await withTimeoutOrThrow(
-    architectPlan(prompt, research),
-    60_000,
-    "architect",
+  const plan = await runPhase("architect", () =>
+    withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
   );
 
   // Defensive: ensure backendNeeded is a boolean so missing field doesn't
@@ -1887,7 +1910,7 @@ export async function generateApp(
   // Both phases are gated by the planner. When skipped we use minimal defaults
   // so the frontend coder still has *something* to hang structure on.
   const integrationPromise = runIntegration
-    ? specifyIntegrations(plan, prompt)
+    ? runPhase("integrations", () => specifyIntegrations(plan, prompt))
     : Promise.resolve({ services: [], envVars: [] });
   // Minimal but complete DesignSystem fallback used when the planner skips the
   // design phase. Must satisfy every required field so downstream coders don't
@@ -1908,7 +1931,7 @@ export async function generateApp(
     globalCSS: "",
   };
   const designPromise: Promise<DesignSystem> = runDesign
-    ? designSystem(plan, research)
+    ? runPhase("design", () => designSystem(plan, research))
     : Promise.resolve(FALLBACK_DESIGN);
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
   if (!runIntegration) log("integration", "Plan dice saltar integraciones (alcance reducido).");
@@ -1935,24 +1958,26 @@ export async function generateApp(
 
   /* === Phase 3 (parallel): frontend + backend ============================= */
   const TARGET_CHARS = 60_000;
-  const frontendPromise = withTimeoutOrThrow(
-    generateFrontendCode(plan, design, research, prompt, (chars) => {
-      const ratio = Math.min(1, chars / TARGET_CHARS);
-      onProgress?.({
-        phase: "generating",
-        progress: 32 + Math.round(ratio * 45),
-        note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…`,
-      });
-    }, coderModel, language),
-    600_000,
-    "frontend-engineer",
+  const frontendPromise = runPhase("frontend", () =>
+    withTimeoutOrThrow(
+      generateFrontendCode(plan, design, research, prompt, (chars) => {
+        const ratio = Math.min(1, chars / TARGET_CHARS);
+        onProgress?.({
+          phase: "generating",
+          progress: 32 + Math.round(ratio * 45),
+          note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…`,
+        });
+      }, coderModel, language),
+      600_000,
+      "frontend-engineer",
+    ),
   );
   // Backend is gated by BOTH the planner phase AND the architect's
   // backendNeeded flag. If the planner explicitly excludes "backend" we skip
   // the call regardless of what the architect thought.
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
-    ? generateBackendCode(plan, prompt)
+    ? runPhase("backend", () => generateBackendCode(plan, prompt))
     : Promise.resolve(null);
 
   // Frontend is the one mandatory phase: every non-fast-patch flow must
@@ -1991,10 +2016,10 @@ export async function generateApp(
   // empty report (no issues to feed to the patcher); when Tests is skipped
   // we get back null and the bundle ships without test files.
   const reviewPromise = runQa
-    ? reviewBundle(frontendResult.code, plan)
+    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))
     : Promise.resolve({ ok: true, issues: [] } as QAReport);
   const testsPromise = runTests
-    ? generateTests(plan, frontendResult.code)
+    ? runPhase("tests", () => generateTests(plan, frontendResult.code))
     : Promise.resolve(null);
   const [report, testCode] = await Promise.all([reviewPromise, testsPromise]);
   if (!runQa) log("qa", "Plan dice saltar QA (alcance reducido).");
@@ -2011,17 +2036,19 @@ export async function generateApp(
   /* === Phase 5: AUTONOMOUS LOOP (validate → patch → re-validate) ========== */
   // Same logic as before, now extracted into a helper so edit mode can reuse it.
   log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
-  const finalFrontend = await runValidatePatchLoop(
-    frontendResult.code,
-    report,
-    onProgress,
-    /* baseProgressStart */ 80,
-    language,
-    log,
-    {
-      validate: execPlan.phases.includes("validate"),
-      patch: execPlan.phases.includes("patch"),
-    },
+  const finalFrontend = await runPhase("validate-patch-loop", () =>
+    runValidatePatchLoop(
+      frontendResult.code,
+      report,
+      onProgress,
+      /* baseProgressStart */ 80,
+      language,
+      log,
+      {
+        validate: execPlan.phases.includes("validate"),
+        patch: execPlan.phases.includes("patch"),
+      },
+    ),
   );
 
   const testNote = testCode ? "✅ Tests generados. " : "";

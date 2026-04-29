@@ -12,7 +12,7 @@ import router from "./routes";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import { logger } from "./lib/logger";
-import { initSentry, isSentryEnabled, Sentry } from "./lib/sentry";
+import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 
 initSentry();
 
@@ -55,6 +55,28 @@ app.use(
     ),
   })),
 );
+
+// Per-request Sentry breadcrumb. Records the incoming request (method, path,
+// status, duration) so when a downstream error is captured, the Sentry event
+// includes a timeline of the user's recent navigation. No-op if Sentry is
+// not configured. Mounted right before the API router so we capture the auth
+// context already attached by clerkMiddleware.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (!isSentryEnabled()) {
+    next();
+    return;
+  }
+  const start = Date.now();
+  res.on("finish", () => {
+    addBreadcrumb(`${req.method} ${req.path}`, {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+    });
+  });
+  next();
+});
 
 app.use("/api", router);
 
