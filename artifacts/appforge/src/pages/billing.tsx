@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { 
   useGetMe, 
   useListCreditPackages, 
@@ -29,25 +29,58 @@ export default function BillingPage() {
   const { data: transactions, isLoading: txLoading } = useListTransactions();
   
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("canceled") === "1") {
+      setCancelNotice(
+        "Has cancelado el pago. Tu saldo no se ha modificado. Si quieres, puedes intentarlo de nuevo cuando estés listo.",
+      );
+      // Clean the URL so the message doesn't reappear on refresh.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("canceled");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
   const checkoutMutation = useCreateCheckoutSession({
     mutation: {
       onSuccess: (data) => {
         window.location.href = data.url;
       },
       onError: (err: any) => {
-        if (err.message?.includes("503") || err.message?.toLowerCase().includes("stripe")) {
-          setCheckoutError("Los pagos aún se están configurando. Vuelve a intentarlo más tarde.");
+        const raw = (err?.message || "").toString();
+        if (raw.includes("503") || raw.toLowerCase().includes("stripe") || raw.toLowerCase().includes("conectad")) {
+          setCheckoutError(
+            "Los pagos aún se están configurando. Vuelve a intentarlo en unos minutos.",
+          );
         } else {
-          setCheckoutError(err.message || "No pudimos iniciar el pago.");
+          setCheckoutError(
+            "No hemos podido iniciar el pago. Revisa tu conexión y prueba de nuevo en unos minutos.",
+          );
         }
-      }
-    }
+      },
+    },
   });
 
   const handleBuy = (priceId: string) => {
     setCheckoutError(null);
+    setCancelNotice(null);
     checkoutMutation.mutate({ data: { priceId } });
+  };
+
+  const formatPrice = (amountCents: number, currency: string) => {
+    try {
+      return new Intl.NumberFormat("es-ES", {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amountCents / 100);
+    } catch {
+      return `${(amountCents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+    }
   };
 
   return (
@@ -90,6 +123,14 @@ export default function BillingPage() {
           </Alert>
         )}
 
+        {cancelNotice && (
+          <Alert variant="default" className="bg-amber-500/10 border-amber-500/20 text-amber-200">
+            <Info className="h-4 w-4 text-amber-400" />
+            <AlertTitle>Pago cancelado</AlertTitle>
+            <AlertDescription>{cancelNotice}</AlertDescription>
+          </Alert>
+        )}
+
         {checkoutError && (
           <Alert variant="default" className="bg-amber-500/10 border-amber-500/20 text-amber-200">
             <Info className="h-4 w-4 text-amber-400" />
@@ -119,7 +160,7 @@ export default function BillingPage() {
                   <CardTitle className="text-xl">{pkg.name}</CardTitle>
                   <CardDescription>{pkg.description}</CardDescription>
                   <div className="mt-4 text-4xl font-bold text-white">
-                    ${(pkg.priceCents / 100).toFixed(2)}
+                    {formatPrice(pkg.priceCents, pkg.currency)}
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1 flex justify-center items-center pb-8">
@@ -133,6 +174,7 @@ export default function BillingPage() {
                     className={`w-full ${pkg.popular ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
                     onClick={() => handleBuy(pkg.priceId)}
                     disabled={checkoutMutation.isPending}
+                    data-testid={`buy-${pkg.id}`}
                   >
                     {checkoutMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Comprar"}
                   </Button>

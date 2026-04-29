@@ -10,7 +10,7 @@ stripeWebhookRouter.post(
   "/",
   express.raw({ type: "application/json" }),
   async (req: Request, res: Response) => {
-    const stripe = getStripe();
+    const stripe = await getStripe();
     const signature = req.headers["stripe-signature"];
     const secret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!stripe || !signature || !secret) {
