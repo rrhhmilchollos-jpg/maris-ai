@@ -774,7 +774,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               ) : (
                 <Sparkles className="h-4 w-4 mr-1.5" />
               )}
-              Auto-publicar: {app.autoPublish ? "ON" : "OFF"}
+              Auto-publicar cuando esté lista: {app.autoPublish ? "ON" : "OFF"}
             </Button>
 
             {app.githubRepoUrl ? (

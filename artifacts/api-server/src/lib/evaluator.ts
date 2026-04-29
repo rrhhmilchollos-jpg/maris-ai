@@ -27,7 +27,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { db } from "./db";
-import { generatedApps, users, appMessages } from "@workspace/db/schema";
+import { generatedApps, users, appMessages, jobLogs } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { patchBundle, type GenLanguage } from "./generate";
 import { validateBundle } from "./validate";
@@ -418,6 +418,22 @@ export async function runAutoEvaluator(opts: {
       return mod.runDeployForApp(args);
     });
 
+  // Helper to mirror the visual evaluator's milestones into the per-job log
+  // stream consumed by the dashboard timeline. Fire-and-forget so logging
+  // failures never bubble into the orchestrator. Same pattern as `recordLog`
+  // in routes/apps.ts (the generation pipeline).
+  const recordEvalLog = (
+    message: string,
+    level: "info" | "warn" | "error" = "info",
+  ): void => {
+    const trimmed = message.length > 280 ? message.slice(0, 277) + "…" : message;
+    db.insert(jobLogs)
+      .values({ jobId, agent: "evaluator", level, message: trimmed })
+      .catch((err) => {
+        log.warn({ err, jobId, appId }, "Failed to write evaluator job log line");
+      });
+  };
+
   // Bail early if Chromium isn't installed — the evaluator is best-effort.
   // We DO NOT mark the app as needs_review in that case; the user shouldn't
   // be punished for an environment problem.
@@ -486,6 +502,13 @@ export async function runAutoEvaluator(opts: {
     },
     "👁 Evaluating visually…",
   );
+  recordEvalLog(
+    `👁 Evaluando visualmente la app${
+      effectivePlannedPages?.length
+        ? ` (${effectivePlannedPages.length} pantalla(s) planificada(s))`
+        : ""
+    }…`,
+  );
 
   let currentBundle = row.frontendCode;
   let lastReport: EvaluatorReport | null = null;
@@ -525,14 +548,23 @@ export async function runAutoEvaluator(opts: {
 
     if (report.verdict === "pass") {
       log.info({ appId, jobId, round }, "👁 Evaluator passed");
+      recordEvalLog(`✅ Evaluación visual aprobada en la ronda ${round}.`);
       break;
     }
+    recordEvalLog(
+      `👁 Ronda ${round}: el evaluador encontró ${report.issues.length} problema(s). ${report.summary}`,
+      "warn",
+    );
 
     // Fail path. If we've used our budget, stop.
     if (round >= MAX_VISION_ROUNDS) {
       log.info(
         { appId, jobId, round, issues: report.issues.length },
         "👁 Evaluator exhausted retries — leaving for manual review",
+      );
+      recordEvalLog(
+        `⚠️ Se agotaron los intentos automáticos (${MAX_VISION_ROUNDS} ronda(s)). Marcando como "necesita revisión".`,
+        "warn",
       );
       break;
     }
@@ -549,6 +581,9 @@ export async function runAutoEvaluator(opts: {
     log.info(
       { appId, jobId, round, fixCount: patcherIssues.length },
       `🔁 Evaluator pidió arreglar ${patcherIssues.length} cosa(s); llamo al patcher`,
+    );
+    recordEvalLog(
+      `🔁 Aplicando arreglos automáticos para ${patcherIssues.length} problema(s)…`,
     );
 
     let patched: string | null = null;
@@ -669,6 +704,7 @@ export async function runAutoEvaluator(opts: {
         { appId, jobId, publicUrl: finalUrl },
         `🚀 Publicado automáticamente en ${finalUrl}`,
       );
+      recordEvalLog(`🚀 He publicado tu app automáticamente: ${finalUrl}`);
       // Email + chat hint.
       try {
         const [user] = await db
