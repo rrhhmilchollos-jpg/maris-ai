@@ -488,6 +488,44 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /generate/jobs/{id}/logs:
+    get:
+      operationId: getGenerationJobLogs
+      tags: [generation]
+      summary: Stream live agent log lines for a job
+      description: |
+        Returns log lines emitted by individual agents (researcher, architect,
+        designer, integration, coder, qa, validator, patcher, system) during
+        the generation pipeline. Pass `afterId` to fetch only lines newer than
+        the last id you've seen — the dashboard polls this endpoint every
+        ~1.2s while a job is running so the user sees the agents' real-time
+        output.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: afterId
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: New log lines since afterId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobLogList"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /billing/packages:
     get:
       operationId: listCreditPackages
@@ -986,6 +1024,39 @@ components:
         - progress
         - createdAt
         - updatedAt
+    JobLogEntry:
+      type: object
+      description: A single live log line emitted by an agent during generation.
+      properties:
+        id:
+          type: integer
+          description: Monotonic id; pass the highest seen value as `afterId` on the next poll.
+        agent:
+          type: string
+          description: Originating agent (researcher | architect | designer | integration | coder | qa | validator | patcher | system).
+        level:
+          type: string
+          enum: [info, warn, error]
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - agent
+        - level
+        - message
+        - createdAt
+    JobLogList:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/JobLogEntry"
+      required:
+        - logs
     CreditPackage:
       type: object
       properties:

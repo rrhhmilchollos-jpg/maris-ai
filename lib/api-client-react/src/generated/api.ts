@@ -34,10 +34,12 @@ import type {
   GenerateAppRequest,
   GeneratedApp,
   GenerationJob,
+  GetGenerationJobLogsParams,
   GitHubPushResult,
   HealthCheckResult,
   HealthStatus,
   ImageGenerationResult,
+  JobLogList,
   SendAppMessageRequest,
   UpdateCoderModelRequest,
   UserProfile,
@@ -1507,6 +1509,126 @@ export function useGetGenerationJob<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetGenerationJobQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns log lines emitted by individual agents (researcher, architect,
+designer, integration, coder, qa, validator, patcher, system) during
+the generation pipeline. Pass `afterId` to fetch only lines newer than
+the last id you've seen — the dashboard polls this endpoint every
+~1.2s while a job is running so the user sees the agents' real-time
+output.
+
+ * @summary Stream live agent log lines for a job
+ */
+export const getGetGenerationJobLogsUrl = (
+  id: number,
+  params?: GetGenerationJobLogsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/generate/jobs/${id}/logs?${stringifiedParams}`
+    : `/api/generate/jobs/${id}/logs`;
+};
+
+export const getGenerationJobLogs = async (
+  id: number,
+  params?: GetGenerationJobLogsParams,
+  options?: RequestInit,
+): Promise<JobLogList> => {
+  return customFetch<JobLogList>(getGetGenerationJobLogsUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGenerationJobLogsQueryKey = (
+  id: number,
+  params?: GetGenerationJobLogsParams,
+) => {
+  return [
+    `/api/generate/jobs/${id}/logs`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetGenerationJobLogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGenerationJobLogs>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  params?: GetGenerationJobLogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGenerationJobLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetGenerationJobLogsQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getGenerationJobLogs>>
+  > = ({ signal }) =>
+    getGenerationJobLogs(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGenerationJobLogs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGenerationJobLogsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getGenerationJobLogs>>
+>;
+export type GetGenerationJobLogsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Stream live agent log lines for a job
+ */
+
+export function useGetGenerationJobLogs<
+  TData = Awaited<ReturnType<typeof getGenerationJobLogs>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  params?: GetGenerationJobLogsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getGenerationJobLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGenerationJobLogsQueryOptions(id, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

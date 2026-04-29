@@ -324,6 +324,21 @@ export interface GenerateProgress {
   note?: string;
 }
 
+/**
+ * Per-agent log line callback. The pipeline calls this whenever an individual
+ * agent finishes a meaningful step ("Architect → 8 pages, 14 components",
+ * "Coder → wrote frontend/pages/Home.tsx", "Validator → 0 errors"). The
+ * callback is fire-and-forget — implementations MUST swallow their own errors
+ * so a logging failure can never fail the generation. The route handler in
+ * apps.ts wires this to a row insert in `job_logs` so the dashboard can
+ * stream them to the user as a terminal-style live log.
+ */
+export type AgentLog = (
+  agent: string,
+  message: string,
+  level?: "info" | "warn" | "error",
+) => void;
+
 interface ProjectPlan {
   title: string;
   description: string;
@@ -997,9 +1012,12 @@ async function runValidatePatchLoop(
   onProgress: ((p: GenerateProgress) => void) | undefined,
   baseProgressStart: number,
   language: GenLanguage,
+  log?: AgentLog,
 ): Promise<string> {
   const MAX_ITERATIONS = 2;
   let finalFrontend = initialBundle;
+  const noop: AgentLog = () => {};
+  const emit = log ?? noop;
 
   // Seed the loop with the QA-suggested issues so they're addressed even if
   // the bundle technically builds.
@@ -1014,6 +1032,7 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress, 92),
       note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
     });
+    emit("validator", `Intento ${iter}/${MAX_ITERATIONS}: compilando bundle…`);
     const validation = await validateBundle(finalFrontend);
 
     // Combine real build errors with any unresolved QA suggestions on the first
@@ -1029,6 +1048,7 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 1, 93),
         note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
       });
+      emit("validator", `Build OK: ${validation.filesAnalyzed} archivo(s) compilan en ${validation.durationMs} ms.`);
       break;
     }
 
@@ -1039,6 +1059,7 @@ async function runValidatePatchLoop(
         progress: 92,
         note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
       });
+      emit("validator", `Sin más intentos: quedan ${combined.length} problema(s).`, "warn");
       break;
     }
 
@@ -1047,6 +1068,10 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress + 2, 92),
       note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
     });
+    emit(
+      "patcher",
+      `Reparando ${combined.length} problema(s)${combined[0] ? ` (ej: ${combined[0].file} → ${combined[0].message.slice(0, 80)})` : ""}…`,
+    );
     const patched = await patchBundle(
       finalFrontend,
       combined.map((i) => ({
@@ -1062,6 +1087,7 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 2, 92),
         note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
       });
+      emit("patcher", "No pude aplicar el cambio. Conservo el bundle anterior.", "warn");
       break;
     }
     if (patched === finalFrontend) {
@@ -1070,8 +1096,10 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 2, 92),
         note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
       });
+      emit("patcher", "Devolví el mismo bundle (sin cambios). Corto el bucle.", "warn");
       break;
     }
+    emit("patcher", `Aplicado parche: bundle ahora ${Math.round(patched.length / 1000)} KB.`);
     finalFrontend = patched;
   }
 
@@ -1312,10 +1340,22 @@ export async function generateApp(
   previous?: PreviousApp,
   coderModel?: string,
   language: GenLanguage = "typescript",
+  onAgentLog?: AgentLog,
 ): Promise<GeneratedAppPayload> {
+  // Local helper so every call site is one line. The callback itself is
+  // responsible for never throwing, but wrap defensively here too — a bug in
+  // the caller's persistence layer must NOT take down a 5-credit generation.
+  const log: AgentLog = (agent, message, level = "info") => {
+    try {
+      onAgentLog?.(agent, message, level);
+    } catch {
+      /* swallow — logs are best-effort */
+    }
+  };
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
+    log("system", `Modo edición: aplicando cambios sobre la app existente (${Math.round(previous.frontendCode.length / 1000)} KB).`);
     const TARGET = 50_000;
     const onChars = (chars: number) => {
       const ratio = Math.min(1, chars / TARGET);
@@ -1332,12 +1372,14 @@ export async function generateApp(
     // package import) would ship straight to the user's preview as a parse
     // error. Run the same validate→patch loop the initial pipeline uses so
     // edits get the same safety net.
+    log("validator", "Verificando bundle editado con esbuild…");
     const fixedFrontend = await runValidatePatchLoop(
       result.frontendCode,
       { ok: true, issues: [] },
       onProgress,
       /* baseProgressStart */ 70,
       language,
+      log,
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
@@ -1352,7 +1394,15 @@ export async function generateApp(
       progress: 6,
       note: "🔎 Investigador buscando referencias en la web (máx 7s)…",
     });
+    log("researcher", "Buscando referencias en la web (máx 7s)…");
     research = await researchTopic(prompt);
+    if (research) {
+      log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
+    } else {
+      log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
+    }
+  } else {
+    log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
   }
 
   onProgress?.({
@@ -1362,6 +1412,7 @@ export async function generateApp(
       ? "🧠 Arquitecto diseñando estructura con contexto de la web…"
       : "🧠 Arquitecto diseñando la estructura del proyecto…",
   });
+  log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await withTimeoutOrThrow(
     architectPlan(prompt, research),
     60_000,
@@ -1374,11 +1425,21 @@ export async function generateApp(
     plan.backendNeeded = false;
   }
 
+  log(
+    "architect",
+    `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`,
+  );
+  if (plan.pages.length > 0) {
+    log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
+  }
+
   onProgress?.({
     phase: "integrating",
     progress: 20,
     note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…`,
   });
+  log("integration", "Analizando servicios externos necesarios…");
+  log("designer", "Eligiendo paleta y tipografía…");
 
   /* === Phase 2 (parallel): integrations + design system =================== */
   const [integrationSpec, design] = await Promise.all([
@@ -1390,11 +1451,20 @@ export async function generateApp(
     ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
     : "Sin servicios externos requeridos.";
 
+  if (integrationSpec.services.length > 0) {
+    log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
+  } else {
+    log("integration", "Sin servicios externos requeridos.");
+  }
+  log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
+
   onProgress?.({
     phase: "generating",
     progress: 32,
     note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…`,
   });
+  log("coder", `Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
+  if (plan.backendNeeded) log("coder", "Generando backend en paralelo…");
 
   /* === Phase 3 (parallel): frontend + backend ============================= */
   const TARGET_CHARS = 60_000;
@@ -1415,11 +1485,16 @@ export async function generateApp(
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
   if (!frontendResult.code) {
+    log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
     throw new Error(
       frontendResult.truncated
         ? "El ingeniero de frontend se quedó sin tokens. Pide una app más pequeña o más específica."
         : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
     );
+  }
+  log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
+  if (plan.backendNeeded && backendResult?.code) {
+    log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
   }
 
   /* === Phase 4 (parallel): QA review + Test Engineer ====================== */
@@ -1428,27 +1503,41 @@ export async function generateApp(
     progress: 78,
     note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…",
   });
+  log("qa", "Revisando bundle en busca de bugs…");
+  log("qa", "Generando tests en paralelo…");
   const [report, testCode] = await Promise.all([
     reviewBundle(frontendResult.code, plan),
     generateTests(plan, frontendResult.code),
   ]);
+  const issueCount = report.issues?.length ?? 0;
+  log(
+    "qa",
+    issueCount > 0
+      ? `${issueCount} issue(s) detectada(s) — pasando al patcher.`
+      : "Sin issues detectadas en revisión inicial.",
+    issueCount > 0 ? "warn" : "info",
+  );
 
   /* === Phase 5: AUTONOMOUS LOOP (validate → patch → re-validate) ========== */
   // Same logic as before, now extracted into a helper so edit mode can reuse it.
+  log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
   const finalFrontend = await runValidatePatchLoop(
     frontendResult.code,
     report,
     onProgress,
     /* baseProgressStart */ 80,
     language,
+    log,
   );
 
   const testNote = testCode ? "✅ Tests generados. " : "";
+  if (testCode) log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
   onProgress?.({
     phase: "parsing",
     progress: 94,
     note: `${testNote}📦 Empaquetando archivos…`,
   });
+  log("system", "Empaquetando archivos finales…");
 
   /* === Final assembly: tests + SETUP.md =================================== */
   const setupNotes = buildSetupNotes(integrationSpec);

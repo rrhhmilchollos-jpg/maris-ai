@@ -446,6 +446,54 @@ export const GetGenerationJobResponse = zod.object({
 });
 
 /**
+ * Returns log lines emitted by individual agents (researcher, architect,
+designer, integration, coder, qa, validator, patcher, system) during
+the generation pipeline. Pass `afterId` to fetch only lines newer than
+the last id you've seen — the dashboard polls this endpoint every
+~1.2s while a job is running so the user sees the agents' real-time
+output.
+
+ * @summary Stream live agent log lines for a job
+ */
+export const GetGenerationJobLogsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const getGenerationJobLogsQueryAfterIdDefault = 0;
+export const getGenerationJobLogsQueryAfterIdMin = 0;
+
+export const GetGenerationJobLogsQueryParams = zod.object({
+  afterId: zod.coerce
+    .number()
+    .min(getGenerationJobLogsQueryAfterIdMin)
+    .default(getGenerationJobLogsQueryAfterIdDefault),
+});
+
+export const GetGenerationJobLogsResponse = zod.object({
+  logs: zod.array(
+    zod
+      .object({
+        id: zod
+          .number()
+          .describe(
+            "Monotonic id; pass the highest seen value as `afterId` on the next poll.",
+          ),
+        agent: zod
+          .string()
+          .describe(
+            "Originating agent (researcher | architect | designer | integration | coder | qa | validator | patcher | system).",
+          ),
+        level: zod.enum(["info", "warn", "error"]),
+        message: zod.string(),
+        createdAt: zod.coerce.date(),
+      })
+      .describe(
+        "A single live log line emitted by an agent during generation.",
+      ),
+  ),
+});
+
+/**
  * @summary List available credit packages
  */
 export const ListCreditPackagesResponseItem = zod.object({

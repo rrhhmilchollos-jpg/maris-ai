@@ -9,6 +9,7 @@ import {
   creditTransactions,
   generationJobs,
   appMessages,
+  jobLogs,
 } from "@workspace/db/schema";
 
 type GeneratedAppRow = typeof generatedApps.$inferSelect;
@@ -402,6 +403,22 @@ async function runJob(
       }
     }
 
+    // Live agent log: fire-and-forget insert into job_logs so the dashboard
+    // can stream what each agent is doing in real time. We DELIBERATELY do
+    // not await this — the generation pipeline must never block on logging,
+    // and a logging failure must never fail a paid generation.
+    const recordLog = (agent: string, message: string, level: "info" | "warn" | "error" = "info") => {
+      // Trim to keep DB rows small. Anything longer than ~280 chars is a sign
+      // the agent dumped a transcript instead of a status line.
+      const trimmed = message.length > 280 ? message.slice(0, 277) + "…" : message;
+      db.insert(jobLogs)
+        .values({ jobId, agent, level, message: trimmed })
+        .catch((err) => {
+          logger.warn({ err, jobId }, "Failed to write job log line");
+        });
+    };
+    recordLog("system", "Iniciando pipeline multiagente…");
+
     const payload = await generateApp(
       prompt,
       async (p) => {
@@ -421,7 +438,9 @@ async function runJob(
       previous,
       coderModel,
       language,
+      recordLog,
     );
+    recordLog("system", `Generación completada: ${Math.round(payload.frontendCode.length / 1000)} KB de frontend listos.`);
 
     // Atomic finalisation: insert/update app + mark job succeeded in one tx.
     await db.transaction(async (tx) => {
@@ -1604,6 +1623,55 @@ router.get(
       return;
     }
     res.json(serializeJob(row));
+  },
+);
+
+/**
+ * Stream live agent log lines for a job. The dashboard polls this endpoint
+ * with `?afterId=N` to fetch only new lines since the last seen id, which
+ * keeps the payload tiny and avoids re-rendering existing rows. Owner-only:
+ * we verify the job belongs to the requester before returning anything.
+ *
+ * Uses sql`>` instead of gt() to keep the import surface minimal — afterId
+ * is server-clamped to a non-negative int, so no injection surface.
+ */
+router.get(
+  "/generate/jobs/:id/logs",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid job id" });
+      return;
+    }
+    const userId = req.userId!;
+    // Ownership check: we never return logs for someone else's job.
+    const [job] = await db
+      .select({ id: generationJobs.id })
+      .from(generationJobs)
+      .where(and(eq(generationJobs.id, id), eq(generationJobs.userId, userId)))
+      .limit(1);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    const afterRaw = Number(req.query.afterId ?? 0);
+    const afterId = Number.isFinite(afterRaw) && afterRaw > 0 ? Math.floor(afterRaw) : 0;
+    const rows = await db
+      .select()
+      .from(jobLogs)
+      .where(and(eq(jobLogs.jobId, id), sql`${jobLogs.id} > ${afterId}`))
+      .orderBy(jobLogs.id)
+      .limit(500);
+    res.json({
+      logs: rows.map((r) => ({
+        id: r.id,
+        agent: r.agent,
+        level: r.level,
+        message: r.message,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
   },
 );
 
