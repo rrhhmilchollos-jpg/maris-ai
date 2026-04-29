@@ -627,7 +627,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Preview / code panel */}
-          <div className="lg:col-span-9 xl:col-span-10 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
+          <div className="lg:col-span-8 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-[#111118] border-b border-white/5">
               <div className="flex space-x-1">
                 <Button
