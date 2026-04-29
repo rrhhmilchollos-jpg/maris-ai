@@ -1,4 +1,5 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { validateBundle, type BuildIssue } from "./validate";
 
 /* ============================================================================
@@ -328,20 +329,23 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
     : summary;
   let raw = "";
   try {
-    // Switched from gpt-5-mini → claude-haiku-4-5 because Haiku is consistently
-    // ~3-4x faster on JSON-emit tasks like this design system spec.
+    // Designer → gemini-2.5-flash. Flash is great at CSS/design JSON and is
+    // measurably the fastest model we have access to for this kind of short
+    // structured output.
     const response = await withTimeoutOrThrow(
-      anthropic.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 1200,
-        system: DESIGNER_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userContent }],
+      gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: userContent }] }],
+        config: {
+          systemInstruction: DESIGNER_SYSTEM_PROMPT,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
       }),
-      18_000,
+      15_000,
       "designer",
     );
-    const t = response.content.find((b) => b.type === "text");
-    raw = t && t.type === "text" ? t.text : "";
+    raw = response.text ?? "";
   } catch (_err) {
     // Fall through to default design below.
   }
@@ -403,40 +407,49 @@ ${research ? `\nResearch context (visual reference, treat as ground truth):\n${r
 
 Now produce the JSON object with frontendCode containing every listed file.`;
 
-  // 30000 → 18000 tokens. The frontend bundle stays under ~70KB anyway and
-  // every extra token is ~70-90ms of streaming. This was the single biggest
-  // cost in the pipeline.
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: 18000,
-    system: FRONTEND_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userContent }],
+  // Frontend Engineer (the "Coder") → gemini-2.5-flash with streaming.
+  // Flash is the fastest bulk-code model we have access to (~238 tok/s vs
+  // ~85 tok/s for Sonnet). The autonomous validate-then-patch loop downstream
+  // is our safety net for any quality slips. 32k output tokens ≈ 128KB which
+  // is plenty of headroom for the bundle.
+  const stream = await gemini.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: userContent }] }],
+    config: {
+      systemInstruction: FRONTEND_SYSTEM_PROMPT,
+      maxOutputTokens: 32768,
+      responseMimeType: "application/json",
+    },
   });
 
   let accumulated = "";
   let lastReport = 0;
-  for await (const event of stream) {
-    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-      accumulated += event.delta.text;
+  let finishReason: string | undefined;
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) {
+      accumulated += text;
       if (accumulated.length - lastReport >= 1500) {
         lastReport = accumulated.length;
         onChars(accumulated.length);
       }
     }
+    const fr = chunk.candidates?.[0]?.finishReason;
+    if (fr) finishReason = fr;
   }
-  const final = await stream.finalMessage();
-  const truncated = final.stop_reason === "max_tokens";
-  let raw = accumulated.trim();
+  const truncated = finishReason === "MAX_TOKENS";
+  const raw = accumulated.trim();
   if (!raw) {
-    const t = final.content.find((b) => b.type === "text");
-    if (!t || t.type !== "text") return { code: "", truncated, error: "Frontend agent returned no text." };
-    raw = t.text.trim();
+    return { code: "", truncated, error: "Frontend agent returned no text." };
   }
   const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
   if (!parsed || typeof parsed.frontendCode !== "string") {
     return { code: "", truncated, error: "JSON inválido del Frontend Engineer." };
   }
-  return { code: parsed.frontendCode, truncated: false };
+  // Propagate Gemini's MAX_TOKENS finishReason so the caller can warn the user
+  // that the bundle is partial. Even when the JSON parses, the actual file
+  // contents inside frontendCode can still be cut off mid-line.
+  return { code: parsed.frontendCode, truncated };
 }
 
 async function generateBackendCode(
@@ -653,8 +666,11 @@ async function patchBundle(
   return withTimeout(
     (async () => {
       try {
+        // Patcher (the "Debugger") → claude-haiku-4-5. Haiku is ~3x faster
+        // than Sonnet and the patcher only needs to apply small, well-described
+        // diffs to a known bundle, so the quality cost is minimal.
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-haiku-4-5",
           max_tokens: 16000,
           system: PATCHER_SYSTEM_PROMPT,
           messages: [
@@ -750,30 +766,42 @@ ${prompt}
 
 Return the FULL updated app as JSON.`;
 
-  // 32000 → 20000: edit mode rewrites the full bundle, but bundles are usually
-  // well under 70KB so this header room is unnecessary and cost ~30s of latency.
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: 20000,
-    system: EDIT_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userContent }],
+  // Edit mode is also a "Coder" role → gemini-2.5-flash with streaming, for
+  // consistency with generateFrontendCode.
+  const stream = await gemini.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: userContent }] }],
+    config: {
+      systemInstruction: EDIT_SYSTEM_PROMPT,
+      maxOutputTokens: 32768,
+      responseMimeType: "application/json",
+    },
   });
 
   let accumulated = "";
   let lastReport = 0;
-  for await (const event of stream) {
-    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-      accumulated += event.delta.text;
+  let finishReason: string | undefined;
+  for await (const chunk of stream) {
+    const text = chunk.text;
+    if (text) {
+      accumulated += text;
       if (accumulated.length - lastReport >= 1500) {
         lastReport = accumulated.length;
         onChars(accumulated.length);
       }
     }
+    const fr = chunk.candidates?.[0]?.finishReason;
+    if (fr) finishReason = fr;
   }
-  await stream.finalMessage();
   const parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
   if (!parsed || typeof parsed.frontendCode !== "string") {
     throw new Error("No pudimos analizar la respuesta del modelo en modo edición.");
+  }
+  // Refuse a bundle that was clearly cut off mid-output. Even if the JSON
+  // parses, the contents are partial — better to surface the failure so the
+  // user retries than to ship a half-edit silently.
+  if (finishReason === "MAX_TOKENS") {
+    throw new Error("La respuesta del modelo se cortó por límite de tokens. Vuelve a intentarlo con un cambio más pequeño.");
   }
   return {
     title: (parsed.title ?? previous.title).slice(0, 200),
