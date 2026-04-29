@@ -2,6 +2,29 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
+
+/**
+ * Idempotent bootstrap step: ensures the pgvector extension exists in the
+ * connected Postgres database. Required by `lib/db/src/schema/agentMemory.ts`
+ * (1536-dim vector column + HNSW cosine index). Running it on every boot is
+ * safe — `CREATE EXTENSION IF NOT EXISTS` is a no-op when the extension is
+ * already installed, and Neon allows it without superuser. If the host
+ * doesn't allow extension creation we log loudly and continue: the rest of
+ * the API still works; only agent_memory operations would fail.
+ */
+async function ensurePgVector(): Promise<void> {
+  try {
+    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+    logger.info("pgvector extension ensured");
+  } catch (err) {
+    logger.error(
+      { err },
+      "Could not ensure pgvector extension — agent_memory features will be unavailable until it is installed manually",
+    );
+  }
+}
 
 const rawPort = process.env["PORT"];
 
@@ -24,6 +47,11 @@ app.listen(port, async (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // 0) Ensure DB extensions exist before any feature that depends on them
+  //    runs (agent_memory uses pgvector). Best-effort: failures don't block
+  //    server startup.
+  await ensurePgVector();
 
   // 1) Start the persistent queue. Must come before the worker and before
   //    reclaim — reclaim calls enqueueGenerateJob which needs the boss.
