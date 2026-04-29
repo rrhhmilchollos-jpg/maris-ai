@@ -1671,16 +1671,20 @@ export async function generateApp(
       /* swallow — logs are best-effort */
     }
   };
+  // 🧭 Planner runs FIRST for every request (new app or edit). It decides
+  // which phases of the multi-agent pipeline to run. For "fast-patch" on an
+  // existing app it shortcuts straight to the patcher; otherwise the
+  // ExecutionPlan.phases array gates each downstream phase below.
+  onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
+  const execPlan = await planExecution(prompt, { hasExistingApp: !!previous });
+  log("planner", planSummaryEs(execPlan));
+
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
-    onProgress?.({ phase: "generating", progress: 10, note: "Planificando los cambios…" });
-    const plan = await planExecution(prompt, { hasExistingApp: true });
-    log("planner", planSummaryEs(plan));
-
     // Fast-patch shortcut: skip the full coder pass and ask the patcher to
     // apply the user's request directly to the bundle. Saves ~60–90s on
     // cosmetic / one-line edits.
-    if (plan.scope === "fast-patch") {
+    if (execPlan.scope === "fast-patch") {
       const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
       if (fastResult) return fastResult;
       log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
@@ -1729,9 +1733,17 @@ export async function generateApp(
     return { ...result, frontendCode: fixedFrontend };
   }
 
+  // Phase gates derived from the planner's ExecutionPlan.phases. Skipped phases
+  // get sensible defaults so downstream code doesn't need to special-case.
+  const runResearch = execPlan.phases.includes("research");
+  const runDesign = execPlan.phases.includes("design");
+  const runIntegration = execPlan.phases.includes("integration");
+  const runQa = execPlan.phases.includes("qa");
+  const runTests = execPlan.phases.includes("tests");
+
   /* === Phase 1: research first (capped 7s), then architect with context === */
   let research = "";
-  if (shouldResearch(prompt)) {
+  if (runResearch && shouldResearch(prompt)) {
     onProgress?.({
       phase: "researching",
       progress: 6,
@@ -1744,6 +1756,8 @@ export async function generateApp(
     } else {
       log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
     }
+  } else if (!runResearch) {
+    log("researcher", "Plan dice saltar investigación (alcance reducido).");
   } else {
     log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
   }
@@ -1781,14 +1795,39 @@ export async function generateApp(
     progress: 20,
     note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…`,
   });
-  log("integration", "Analizando servicios externos necesarios…");
-  log("designer", "Eligiendo paleta y tipografía…");
+  if (runIntegration) log("integration", "Analizando servicios externos necesarios…");
+  if (runDesign) log("designer", "Eligiendo paleta y tipografía…");
 
   /* === Phase 2 (parallel): integrations + design system =================== */
-  const [integrationSpec, design] = await Promise.all([
-    specifyIntegrations(plan, prompt),
-    designSystem(plan, research),
-  ]);
+  // Both phases are gated by the planner. When skipped we use minimal defaults
+  // so the frontend coder still has *something* to hang structure on.
+  const integrationPromise = runIntegration
+    ? specifyIntegrations(plan, prompt)
+    : Promise.resolve({ services: [], envVars: [] });
+  // Minimal but complete DesignSystem fallback used when the planner skips the
+  // design phase. Must satisfy every required field so downstream coders don't
+  // have to null-check.
+  const FALLBACK_DESIGN: DesignSystem = {
+    theme: "dark",
+    vibe: "moderno y limpio",
+    palette: {
+      primary: "#7c3aed",
+      secondary: "#0ea5e9",
+      background: "#0a0a0a",
+      surface: "#111111",
+      text: "#fafafa",
+    },
+    typography: { sans: "Inter, system-ui, sans-serif", display: "Inter, system-ui, sans-serif" },
+    radius: "0.75rem",
+    tailwindExtend: "",
+    globalCSS: "",
+  };
+  const designPromise: Promise<DesignSystem> = runDesign
+    ? designSystem(plan, research)
+    : Promise.resolve(FALLBACK_DESIGN);
+  const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
+  if (!runIntegration) log("integration", "Plan dice saltar integraciones (alcance reducido).");
+  if (!runDesign) log("designer", "Plan dice saltar diseño (uso paleta por defecto).");
 
   const integrationsNote = integrationSpec.services.length > 0
     ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
@@ -1846,12 +1885,20 @@ export async function generateApp(
     progress: 78,
     note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…",
   });
-  log("qa", "Revisando bundle en busca de bugs…");
-  log("qa", "Generando tests en paralelo…");
-  const [report, testCode] = await Promise.all([
-    reviewBundle(frontendResult.code, plan),
-    generateTests(plan, frontendResult.code),
-  ]);
+  if (runQa) log("qa", "Revisando bundle en busca de bugs…");
+  if (runTests) log("qa", "Generando tests en paralelo…");
+  // Both QA review and Test Engineer are gated. When QA is skipped we use an
+  // empty report (no issues to feed to the patcher); when Tests is skipped
+  // we get back null and the bundle ships without test files.
+  const reviewPromise = runQa
+    ? reviewBundle(frontendResult.code, plan)
+    : Promise.resolve({ ok: true, issues: [] } as QAReport);
+  const testsPromise = runTests
+    ? generateTests(plan, frontendResult.code)
+    : Promise.resolve(null);
+  const [report, testCode] = await Promise.all([reviewPromise, testsPromise]);
+  if (!runQa) log("qa", "Plan dice saltar QA (alcance reducido).");
+  if (!runTests) log("qa", "Plan dice saltar generación de tests.");
   const issueCount = report.issues?.length ?? 0;
   log(
     "qa",

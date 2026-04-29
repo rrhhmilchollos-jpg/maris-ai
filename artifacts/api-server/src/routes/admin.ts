@@ -378,7 +378,14 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
 
 router.get("/admin/memory", async (req, res) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
-  const rows = await db
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const q = (typeof req.query.q === "string" ? req.query.q : "").trim();
+  // Case-insensitive substring search across errorMessage + patch. Drizzle
+  // safely parameterises both bind values, so SQL injection isn't a concern.
+  const where = q
+    ? sql`(${agentMemory.errorMessage} ILIKE ${"%" + q + "%"} OR ${agentMemory.patch} ILIKE ${"%" + q + "%"})`
+    : undefined;
+  const baseRows = db
     .select({
       id: agentMemory.id,
       errorMessage: agentMemory.errorMessage,
@@ -390,14 +397,18 @@ router.get("/admin/memory", async (req, res) => {
       createdAt: agentMemory.createdAt,
       updatedAt: agentMemory.updatedAt,
     })
-    .from(agentMemory)
-    .orderBy(desc(agentMemory.updatedAt))
-    .limit(limit);
-  const [{ value: total } = { value: 0 }] = await db
-    .select({ value: count() })
     .from(agentMemory);
+  const rows = await (where ? baseRows.where(where) : baseRows)
+    .orderBy(desc(agentMemory.updatedAt))
+    .limit(limit)
+    .offset(offset);
+  const baseCount = db.select({ value: count() }).from(agentMemory);
+  const [{ value: total } = { value: 0 }] = await (where ? baseCount.where(where) : baseCount);
   res.json({
     total: Number(total),
+    limit,
+    offset,
+    q,
     entries: rows.map((r) => ({
       id: r.id,
       errorMessage: r.errorMessage,
