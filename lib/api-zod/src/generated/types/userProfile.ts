@@ -13,5 +13,7 @@ export interface UserProfile {
   credits: number;
   appsGenerated: number;
   isAdmin: boolean;
+  isPremium?: boolean;
+  lifetimeCreditsPurchased?: number;
   createdAt: Date;
 }

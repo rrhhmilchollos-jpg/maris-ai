@@ -1,5 +1,13 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import OpenAI from "openai";
+
+// OpenAI client via Replit AI Integrations proxy. Same env-var pattern as the
+// other providers — the proxy URL + dummy API key are auto-provisioned.
+const openai = new OpenAI({
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+});
 import { validateBundle, type BuildIssue } from "./validate";
 import { logger } from "./logger";
 
@@ -110,9 +118,9 @@ TAILWIND — the preview uses the Tailwind Play CDN (no postcss). This means:
 
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
-- Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}, do not invent extra files beyond the plan.
+- Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
-- HARD BUDGET: total \`frontendCode\` ≤ 90 KB of source. If you're nearing that, finish the file you're in and STOP. Better to ship fewer beautifully-finished files than truncate mid-component. Aim for ~6-8 KB per page file, ~3-5 KB per component, ~1-2 KB per util/hook.
+- NO SIZE LIMIT — generate every file the plan needs, in full. This is a paid product; bigger apps deliver more value. Never truncate or "TODO" a file to save tokens.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
@@ -174,10 +182,19 @@ DATA MODELS — make them realistic:
 - Include the fields you'd actually use in a real schema (id, timestamps, relations, status enums).
 - 2-5 models is healthy for most apps.
 
+FULL-STACK RULE — be aggressive about backendNeeded=true:
+- Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X" (clone of an existing product).
+- Keywords that imply full-stack: "marketplace", "ecommerce", "tienda", "shop", "comprar", "vender", "carrito", "subasta", "red social", "comunidad", "foro", "chat", "mensajes", "publicar", "perfil", "cuenta", "login", "auth", "panel", "dashboard", "admin", "saas", "suscripción", "pago", "stripe", "blog", "cms", "reservas", "booking", "agenda", "calendar", "votar", "valorar", "reseña", "review", "API", "backend", "base de datos", "db", "clone", "clon".
+- Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
+
+NO LIMITS — be ambitious:
+- This is a paid product. Bigger apps = more value. Do NOT artificially shrink the plan.
+- A real marketplace clone (Wallapop, eBay, Airbnb…) needs 8-15 pages, 12-25 components, multiple data models. Plan for it.
+- Generate as many frontendFiles as the product genuinely needs. Quality AND quantity.
+
 Rules:
-- Aim for 6-9 frontend files total (pages + components + hooks + utils). Quality over quantity — better one polished page than three rushed ones. NEVER collapse everything into one file.
-- Set backendNeeded=true ONLY if the app genuinely needs persistence/auth/payments/AI/server-side logic. Pure marketing sites, calculators, single-user tools = false.
-- techStack: 4-7 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
+- NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
+- techStack: 4-8 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
 - Output ONLY the JSON object.`;
 
 const DESIGNER_SYSTEM_PROMPT = `You are AppForge's Senior UI/UX Designer. You produce design systems with personality — never generic, never "bootstrap blue". You think in terms of brands like Linear, Vercel, Notion, Stripe, Arc, Raycast, Cred, Loom: distinct, confident, modern. Output STRICT JSON only.
@@ -271,7 +288,7 @@ Rules:
 - Use '// === FILE: <path> ===' separators.
 - Return the FULL bundle (every file, not just patched ones).
 - Don't introduce new bugs. Don't remove existing files unless the fix explicitly says so.
-- Combined output under 110 KB. Close every brace and quote. Output ONLY the JSON object.`;
+- NO SIZE LIMIT — keep the bundle as large as it needs to be. Close every brace and quote. Output ONLY the JSON object.`;
 }
 
 export interface GeneratedAppPayload {
@@ -531,9 +548,10 @@ interface CodeGenResult {
  * streaming. Architect/Backend models are *not* affected — only the Coder
  * role obeys this preference.
  */
-type CoderProvider = "gemini-flash" | "claude-sonnet";
+type CoderProvider = "gemini-flash" | "claude-sonnet" | "gpt-5";
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "claude-sonnet-4-6") return "claude-sonnet";
+  if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
   return "gemini-flash";
 }
 
@@ -602,6 +620,33 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       }
       const fr = chunk.candidates?.[0]?.finishReason;
       if (fr) finishReason = fr;
+    }
+    truncated = finishReason === "MAX_TOKENS";
+  } else if (provider === "gpt-5") {
+    // OpenAI GPT-5 (Codex-grade) via Replit AI Integrations proxy.
+    // Streaming for progress + 10-min cap avoidance.
+    const stream = await openai.chat.completions.create({
+      model: "gpt-5.4",
+      max_completion_tokens: 32000,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      stream: true,
+    });
+    let lastReport = 0;
+    let finishReason: string | undefined;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        accumulated += delta;
+        if (accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onChars(accumulated.length);
+        }
+      }
+      const fr = chunk.choices[0]?.finish_reason;
+      if (fr === "length") finishReason = "MAX_TOKENS";
     }
     truncated = finishReason === "MAX_TOKENS";
   } else {
@@ -1076,7 +1121,7 @@ Rules:
 - Use '// === FILE: <path> ===' separators inside frontendCode/backendCode.
 - Return the FULL updated bundles (every file, not just the changed ones).
 - Do NOT regress existing features. No TODOs. No "I'll skip this for now" — if you can't satisfy a sub-part of the request, do the part you can and leave the rest exactly as it was.
-- Combined output under 110 KB. Close every brace and quote. Output ONLY the JSON object.`;
+- NO SIZE LIMIT — return the full bundle no matter how big. Close every brace and quote. Output ONLY the JSON object.`;
 }
 
 async function singleEditPass(
@@ -1142,18 +1187,55 @@ Return the FULL updated app as JSON.`;
         const fr = chunk.candidates?.[0]?.finishReason;
         if (fr) finishReason = fr;
       }
+    } else if (provider === "gpt-5") {
+      // OpenAI GPT-5 (Codex-grade) via Replit AI Integrations proxy.
+      // Streaming so we surface progress and avoid the 10-min non-stream cap.
+      const stream = await openai.chat.completions.create({
+        model: "gpt-5.4",
+        max_completion_tokens: 32000,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: finalUserContent },
+        ],
+        stream: true,
+      });
+      let lastReport = 0;
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          accumulated += delta;
+          if (accumulated.length - lastReport >= 1500) {
+            lastReport = accumulated.length;
+            onChars(accumulated.length);
+          }
+        }
+        const fr = chunk.choices[0]?.finish_reason;
+        if (fr === "length") finishReason = "MAX_TOKENS";
+      }
     } else {
-      const response = await anthropic.messages.create({
+      // Claude Sonnet — streaming so we don't hit the >10min non-stream cap.
+      // 64k tokens is what we use during initial generation; same here.
+      const stream = anthropic.messages.stream({
         model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        max_tokens: 64000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
-      accumulated = response.content
-        .filter((b: { type: string }) => b.type === "text")
-        .map((b) => (b as { text: string }).text)
-        .join("");
-      if (response.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+      let lastReport = 0;
+      for await (const event of stream) {
+        if (
+          event.type === "content_block_delta" &&
+          event.delta.type === "text_delta"
+        ) {
+          accumulated += event.delta.text;
+          if (accumulated.length - lastReport >= 1500) {
+            lastReport = accumulated.length;
+            onChars(accumulated.length);
+          }
+        }
+      }
+      const final = await stream.finalMessage();
+      if (final.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       onChars(accumulated.length);
     }
     return { text: accumulated, finishReason };

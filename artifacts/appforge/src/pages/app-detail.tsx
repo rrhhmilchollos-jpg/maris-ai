@@ -16,6 +16,7 @@ import {
   getGetMyStatsQueryKey,
   getListAppMessagesQueryKey,
   getGetGenerationJobQueryKey,
+  useGetMe,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -105,6 +106,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const { data: app, isLoading } = useGetApp(id, {
     query: { enabled: !!id, queryKey: getGetAppQueryKey(id) },
   });
+  const { data: me } = useGetMe();
+  const isAdmin = !!me?.isAdmin;
+  const isPremium = !!me?.isPremium;
 
   const { data: messages } = useListAppMessages(id, {
     query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id) },
@@ -394,7 +398,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <SelectContent>
                 <SelectItem value="auto">Auto (Gemini Flash)</SelectItem>
                 <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (rápido)</SelectItem>
-                <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (calidad)</SelectItem>
+                <SelectItem value="gpt-5" disabled={!isPremium}>
+                  ⚡ GPT-5 Codex {isPremium ? "(Ultra Rápido)" : "(Premium)"}
+                </SelectItem>
+                <SelectItem value="claude-sonnet-4-6" disabled={!isPremium}>
+                  Claude Sonnet 4.6 {isPremium ? "(calidad)" : "(Premium)"}
+                </SelectItem>
               </SelectContent>
             </Select>
 
@@ -536,7 +545,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         >
           {/* Chat panel */}
           <div
-            className={`${previewMaximized ? "hidden" : "lg:col-span-4"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
+            className={`${previewMaximized ? "hidden" : "lg:col-span-3"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
           >
             <div className="px-4 py-3 border-b border-white/5 bg-[#111118] flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -618,7 +627,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Preview / code panel */}
-          <div className="lg:col-span-8 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
+          <div className="lg:col-span-9 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 bg-[#111118] border-b border-white/5">
               <div className="flex space-x-1">
                 <Button
@@ -637,14 +646,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 >
                   <Code2 className="h-4 w-4 mr-2" /> Frontend
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setActiveTab("backend")}
-                  className={`h-8 rounded-md ${activeTab === "backend" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
-                >
-                  <Server className="h-4 w-4 mr-2" /> Backend
-                </Button>
+                {/* Backend tab is owner/admin-only — clients shouldn't see
+                    server code in apps published to them. */}
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setActiveTab("backend")}
+                    className={`h-8 rounded-md ${activeTab === "backend" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
+                  >
+                    <Server className="h-4 w-4 mr-2" /> Backend
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {activeTab !== "preview" && (

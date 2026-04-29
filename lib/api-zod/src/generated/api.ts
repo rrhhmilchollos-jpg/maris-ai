@@ -24,6 +24,8 @@ export const GetMeResponse = zod.object({
   credits: zod.number(),
   appsGenerated: zod.number(),
   isAdmin: zod.boolean(),
+  isPremium: zod.boolean().optional(),
+  lifetimeCreditsPurchased: zod.number().optional(),
   createdAt: zod.coerce.date(),
 });
 
