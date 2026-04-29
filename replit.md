@@ -124,3 +124,25 @@ Stripe is **optional**. Without `STRIPE_SECRET_KEY`, `/billing/checkout` and `/b
 - OpenAPI is the source of truth; frontend uses generated React Query hooks from `@workspace/api-client-react`. Backend returns plain JSON shaped to match the OpenAPI schemas (no zod parsing on the server side to avoid orval's operation-derived schema name confusion).
 - The `priceId` field in `CreditPackage` is intentionally the internal package id, so the frontend can request checkout without knowing real Stripe price IDs.
 - The live preview uses Sandpack instead of a real container/sandbox: it's instant, has no per-app cost, and runs entirely client-side. Tradeoff: only the frontend executes; backend code is shown read-only. A real execution sandbox is a future phase.
+
+## Per-app actions (Apr 2026)
+
+Each generated app exposes 5 actions from the detail page header:
+
+1. **Modelo (selector)** — `PATCH /apps/:id/model` swaps the coder model used for subsequent edits. Allowed values: `auto` (= Gemini 2.5 Flash), `gemini-2.5-flash`, `claude-sonnet-4-6`. The dashboard generator has the same selector and persists the choice on the new app row (`generated_apps.coder_model`).
+2. **ZIP** — `GET /apps/:id/export` streams a ZIP via `archiver` containing the parsed frontend files, backend file, and a README with the original prompt + tech stack.
+3. **Chequeo** — `POST /apps/:id/healthcheck`: re-runs `validateBundle`; if it fails, runs one round of `patchBundle` (Claude Haiku, exported from `lib/generate.ts`) and persists the patched bundle if strictly better.
+4. **Publicar / Pública** — `POST /apps/:id/deploy` assigns a CSPRNG slug (`makeSlug`, 10 chars `[a-z0-9]`) on `generated_apps.public_slug` (5 collision retries) and returns the public URL. Once published the button becomes a link to `/p/<slug>`.
+5. **GitHub / Repo** — `POST /apps/:id/github` uses the Replit GitHub connector (`@replit/connectors-sdk`) to create a fresh repo (`appforge-<title>-<rand>`) and push the bundle via the blobs/trees/commits API. The repo URL is stored on `generated_apps.github_repo_url`.
+
+### Public deploy isolation (`/p/:slug`)
+
+- Mounted at the application root (NOT under `/api`) by `routes/publicDeploy.ts`. The path `/p` is registered in `artifact.toml` so the proxy routes it to the API server.
+- **Security boundary**: the deployed app is untrusted, AI-generated JavaScript hosted on the same domain as our authenticated `/api` routes. To prevent session-token theft, the route serves a tiny wrapper HTML containing `<iframe sandbox="allow-scripts" srcdoc="...escaped inner HTML...">`. Without `allow-same-origin`, the iframe gets an opaque origin: no access to AppForge cookies/localStorage, and same-origin fetches are not credentialed. Wrapper response also sends `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy` headers as defense-in-depth.
+- The HTML is rebuilt on every request (no DB cache) by `lib/deployBundle.ts` — it parses the bundle, picks an entry (`src/main.tsx` / `index.tsx` / `App.tsx`), runs an in-memory esbuild with a virtual filesystem plugin (entry-point kind handled explicitly to avoid silent externalization), externalizes bare imports into an esm.sh import map, and wraps with Tailwind CDN. ~50–200 ms per visit.
+- Slug input is strictly validated against `SLUG_PATTERN = /^[a-z0-9]{10}$/` before any DB lookup.
+- `esbuild` is marked external in `artifacts/api-server/build.mjs` so its native binary lookup works at runtime.
+
+### Notes on what was rejected
+
+The user explicitly rejected: MongoDB, Socket.io, per-agent credit pricing, Opus for the Architect role, server-side `npm install`/`npm start` of the generated apps. CSRF middleware on `/api` was deferred — Clerk's default `SameSite=Lax` cookies prevent the sandboxed iframe from sending credentials cross-origin, and adding CSRF tokens is outside the accepted feature scope.

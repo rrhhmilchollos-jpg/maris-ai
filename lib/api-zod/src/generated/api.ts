@@ -46,6 +46,21 @@ export const GetMyStatsResponse = zod.object({
       frontendCode: zod.string(),
       backendCode: zod.string(),
       status: zod.string(),
+      coderModel: zod
+        .string()
+        .describe(
+          "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+        ),
+      publicSlug: zod
+        .string()
+        .nullish()
+        .describe(
+          "When set, the app is publicly viewable at \/p\/{publicSlug}.",
+        ),
+      githubRepoUrl: zod
+        .string()
+        .nullish()
+        .describe("HTML URL of the repo this app was last pushed to."),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -64,6 +79,19 @@ export const ListAppsResponseItem = zod.object({
   frontendCode: zod.string(),
   backendCode: zod.string(),
   status: zod.string(),
+  coderModel: zod
+    .string()
+    .describe(
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  publicSlug: zod
+    .string()
+    .nullish()
+    .describe("When set, the app is publicly viewable at \/p\/{publicSlug}."),
+  githubRepoUrl: zod
+    .string()
+    .nullish()
+    .describe("HTML URL of the repo this app was last pushed to."),
   createdAt: zod.coerce.date(),
 });
 export const ListAppsResponse = zod.array(ListAppsResponseItem);
@@ -85,6 +113,19 @@ export const GetAppResponse = zod.object({
   frontendCode: zod.string(),
   backendCode: zod.string(),
   status: zod.string(),
+  coderModel: zod
+    .string()
+    .describe(
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  publicSlug: zod
+    .string()
+    .nullish()
+    .describe("When set, the app is publicly viewable at \/p\/{publicSlug}."),
+  githubRepoUrl: zod
+    .string()
+    .nullish()
+    .describe("HTML URL of the repo this app was last pushed to."),
   createdAt: zod.coerce.date(),
 });
 
@@ -107,6 +148,12 @@ export const GenerateAppBody = zod.object({
     .nullish()
     .describe(
       "When provided, edits the existing app iteratively instead of creating a new one",
+    ),
+  coderModel: zod
+    .string()
+    .nullish()
+    .describe(
+      "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits.",
     ),
 });
 
@@ -137,6 +184,98 @@ export const sendAppMessageBodyMessageMin = 2;
 
 export const SendAppMessageBody = zod.object({
   message: zod.string().min(sendAppMessageBodyMessageMin),
+});
+
+/**
+ * @summary Update the Coder model preference for an app
+ */
+export const UpdateAppModelParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAppModelBody = zod.object({
+  coderModel: zod
+    .string()
+    .describe("auto | gemini-2.5-flash | claude-sonnet-4-6"),
+});
+
+export const UpdateAppModelResponse = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  frontendCode: zod.string(),
+  backendCode: zod.string(),
+  status: zod.string(),
+  coderModel: zod
+    .string()
+    .describe(
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  publicSlug: zod
+    .string()
+    .nullish()
+    .describe("When set, the app is publicly viewable at \/p\/{publicSlug}."),
+  githubRepoUrl: zod
+    .string()
+    .nullish()
+    .describe("HTML URL of the repo this app was last pushed to."),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Download the app source as a ZIP archive
+ */
+export const ExportAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Validate the app bundle and auto-patch any detected issues
+ */
+export const HealthCheckAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const HealthCheckAppResponse = zod.object({
+  ok: zod.boolean(),
+  fixed: zod
+    .boolean()
+    .describe("True if the bundle was patched and improved (or fully fixed)."),
+  before: zod.object({
+    ok: zod.boolean(),
+    issuesCount: zod.number(),
+  }),
+  after: zod.object({
+    ok: zod.boolean(),
+    issuesCount: zod.number(),
+  }),
+});
+
+/**
+ * @summary Publish the app to a public /p/{slug} URL
+ */
+export const DeployAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeployAppResponse = zod.object({
+  url: zod.string(),
+  slug: zod.string(),
+});
+
+/**
+ * @summary Create a new GitHub repo and push the app source
+ */
+export const PushAppToGitHubParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const PushAppToGitHubResponse = zod.object({
+  url: zod.string(),
+  repoFullName: zod.string(),
 });
 
 /**

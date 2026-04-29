@@ -178,6 +178,9 @@ importers:
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
+      '@replit/connectors-sdk':
+        specifier: ^0.4.0
+        version: 0.4.0
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
@@ -1803,6 +1806,9 @@ packages:
     resolution: {integrity: sha512-IwEphTD75liO8g+6taS+4oqz+nnroocNfWVHWz7j+N+ZO2vYrc6PV1q7GQhuahL0IOR7JccFTsFKQ/mb6iZWAg==}
     peerDependencies:
       react: '>=16.8'
+
+  '@replit/connectors-sdk@0.4.0':
+    resolution: {integrity: sha512-wRuktfdoBsM19NJUi24xzCkQ+idglmU4Cq2ZWvTAnNUVGdcMmn3rLN1F1/MNZCc2HdG+awcGa81XMLpZXZujUg==}
 
   '@replit/vite-plugin-cartographer@0.5.1':
     resolution: {integrity: sha512-KiaQMx4ssTM8hSjMFscyIV1PN1bRVCWCFqN3fXOfXa39uFFCKUaeL3VvH/sxuy7S7ET+MCFOt+J7lLtL56bRrA==}
@@ -5329,6 +5335,8 @@ snapshots:
   '@react-hook/passive-layout-effect@1.2.1(react@19.1.0)':
     dependencies:
       react: 19.1.0
+
+  '@replit/connectors-sdk@0.4.0': {}
 
   '@replit/vite-plugin-cartographer@0.5.1':
     dependencies:

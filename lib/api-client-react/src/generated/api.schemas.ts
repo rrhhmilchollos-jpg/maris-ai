@@ -33,6 +33,12 @@ export interface GeneratedApp {
   frontendCode: string;
   backendCode: string;
   status: string;
+  /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  coderModel: string;
+  /** When set, the app is publicly viewable at /p/{publicSlug}. */
+  publicSlug?: string | null;
+  /** HTML URL of the repo this app was last pushed to. */
+  githubRepoUrl?: string | null;
   createdAt: string;
 }
 
@@ -49,6 +55,41 @@ export interface GenerateAppRequest {
   prompt: string;
   /** When provided, edits the existing app iteratively instead of creating a new one */
   appId?: number | null;
+  /** Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits. */
+  coderModel?: string | null;
+}
+
+export interface UpdateCoderModelRequest {
+  /** auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  coderModel: string;
+}
+
+export type HealthCheckResultBefore = {
+  ok: boolean;
+  issuesCount: number;
+};
+
+export type HealthCheckResultAfter = {
+  ok: boolean;
+  issuesCount: number;
+};
+
+export interface HealthCheckResult {
+  ok: boolean;
+  /** True if the bundle was patched and improved (or fully fixed). */
+  fixed: boolean;
+  before: HealthCheckResultBefore;
+  after: HealthCheckResultAfter;
+}
+
+export interface DeployResult {
+  url: string;
+  slug: string;
+}
+
+export interface GitHubPushResult {
+  url: string;
+  repoFullName: string;
 }
 
 export interface SendAppMessageRequest {

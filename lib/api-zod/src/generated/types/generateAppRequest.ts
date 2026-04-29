@@ -11,4 +11,6 @@ export interface GenerateAppRequest {
   prompt: string;
   /** When provided, edits the existing app iteratively instead of creating a new one */
   appId?: number | null;
+  /** Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits. */
+  coderModel?: string | null;
 }

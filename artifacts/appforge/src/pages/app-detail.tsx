@@ -6,6 +6,10 @@ import {
   useListAppMessages,
   useSendAppMessage,
   useGetGenerationJob,
+  useUpdateAppModel,
+  useHealthCheckApp,
+  useDeployApp,
+  usePushAppToGitHub,
   getGetAppQueryKey,
   getListAppsQueryKey,
   getGetMyStatsQueryKey,
@@ -37,7 +41,19 @@ import {
   Send,
   Loader2,
   Sparkles,
+  Download,
+  HeartPulse,
+  Globe,
+  Github,
+  ExternalLink,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -157,6 +173,93 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     },
   });
 
+  // --- Per-app action mutations ------------------------------------------
+  const updateModelMutation = useUpdateAppModel({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        toast({ title: "Modelo actualizado", description: "Las próximas ediciones usarán el nuevo modelo." });
+      },
+      onError: (err: any) => {
+        toast({ title: "No se pudo cambiar el modelo", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const healthMutation = useHealthCheckApp({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        if (result.ok && !result.fixed) {
+          toast({ title: "Todo en orden", description: "El bundle compila sin problemas." });
+        } else if (result.fixed) {
+          toast({ title: "Reparado", description: `Se corrigieron problemas (antes: ${result.before.issuesCount}, ahora: ${result.after.issuesCount}).` });
+        } else {
+          toast({
+            title: "Sigue habiendo problemas",
+            description: `Detectamos ${result.after.issuesCount} y no pudimos arreglarlos automáticamente.`,
+            variant: "destructive",
+          });
+        }
+      },
+      onError: (err: any) => {
+        toast({ title: "El chequeo falló", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const deployMutation = useDeployApp({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        // Open the public URL in a new tab so the user immediately sees the result.
+        window.open(result.url, "_blank", "noopener,noreferrer");
+        toast({ title: "Publicado", description: "Tu app ya es pública. Abrimos la URL en una pestaña nueva." });
+      },
+      onError: (err: any) => {
+        toast({ title: "No se pudo publicar", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const githubMutation = usePushAppToGitHub({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        window.open(result.url, "_blank", "noopener,noreferrer");
+        toast({ title: "Subido a GitHub", description: result.repoFullName });
+      },
+      onError: (err: any) => {
+        toast({ title: "No se pudo subir a GitHub", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  /**
+   * Trigger a ZIP download of the app source. We hit the export endpoint
+   * directly (bypassing the generated React Query hook, which assumes JSON
+   * responses) and stream the response into a temporary blob URL.
+   */
+  const handleExport = async () => {
+    try {
+      const res = await fetch(`/api/apps/${id}/export`, { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeName = (app?.title ?? "app").toLowerCase().replace(/[^a-z0-9-_]+/g, "-").slice(0, 60) || "app";
+      a.download = `${safeName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "ZIP descargado" });
+    } catch (err: any) {
+      toast({ title: "No se pudo descargar el ZIP", description: err?.message ?? "Error", variant: "destructive" });
+    }
+  };
+
   const sandpackFiles = useMemo(() => {
     if (!app?.frontendCode) return null;
     return buildSandpackFiles(parseBundle(app.frontendCode));
@@ -224,7 +327,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {app.techStack?.slice(0, 4).map((tech) => (
+            {app.techStack?.slice(0, 3).map((tech) => (
               <Badge key={tech} variant="secondary" className="font-mono text-xs bg-secondary/50">
                 {tech}
               </Badge>
@@ -232,6 +335,115 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             <span className="text-xs text-muted-foreground hidden md:inline">
               {format(new Date(app.createdAt), "d MMM yyyy", { locale: es })}
             </span>
+
+            {/* Coder model selector — affects subsequent edits on this app. */}
+            <Select
+              value={app.coderModel ?? "auto"}
+              onValueChange={(value) =>
+                updateModelMutation.mutate({ id: app.id, data: { coderModel: value } })
+              }
+              disabled={updateModelMutation.isPending || isWorking}
+            >
+              <SelectTrigger className="h-8 w-[180px] text-xs bg-white/5 border-white/10">
+                <SelectValue placeholder="Modelo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (Gemini Flash)</SelectItem>
+                <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (rápido)</SelectItem>
+                <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (calidad)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              title="Descargar el código fuente como ZIP"
+            >
+              <Download className="h-4 w-4 mr-1.5" /> ZIP
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => healthMutation.mutate({ id: app.id })}
+              disabled={healthMutation.isPending}
+              className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+              title="Validar el bundle y auto-reparar si hay problemas"
+            >
+              {healthMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <HeartPulse className="h-4 w-4 mr-1.5" />
+              )}
+              Chequeo
+            </Button>
+
+            {app.publicSlug ? (
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 border-emerald-400/30 bg-emerald-400/10 hover:bg-emerald-400/20 text-emerald-300"
+                title="Abrir la URL pública"
+              >
+                <a
+                  href={`/p/${app.publicSlug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="h-4 w-4 mr-1.5" /> Pública
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => deployMutation.mutate({ id: app.id })}
+                disabled={deployMutation.isPending}
+                className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                title="Publicar como /p/<slug> público"
+              >
+                {deployMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Globe className="h-4 w-4 mr-1.5" />
+                )}
+                Publicar
+              </Button>
+            )}
+
+            {app.githubRepoUrl ? (
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                title="Abrir el repositorio en GitHub"
+              >
+                <a href={app.githubRepoUrl} target="_blank" rel="noopener noreferrer">
+                  <Github className="h-4 w-4 mr-1.5" /> Repo
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => githubMutation.mutate({ id: app.id })}
+                disabled={githubMutation.isPending}
+                className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                title="Crear un repo nuevo en GitHub y subir el código"
+              >
+                {githubMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Github className="h-4 w-4 mr-1.5" />
+                )}
+                GitHub
+              </Button>
+            )}
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10">

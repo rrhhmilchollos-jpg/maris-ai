@@ -223,6 +223,151 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/model:
+    patch:
+      operationId: updateAppModel
+      tags: [apps]
+      summary: Update the Coder model preference for an app
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCoderModelRequest"
+      responses:
+        "200":
+          description: Updated app
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedApp"
+        "400":
+          description: Invalid model
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/export:
+    get:
+      operationId: exportApp
+      tags: [apps]
+      summary: Download the app source as a ZIP archive
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: ZIP archive of the app source
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/healthcheck:
+    post:
+      operationId: healthCheckApp
+      tags: [apps]
+      summary: Validate the app bundle and auto-patch any detected issues
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthCheckResult"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/deploy:
+    post:
+      operationId: deployApp
+      tags: [apps]
+      summary: Publish the app to a public /p/{slug} URL
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Public URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeployResult"
+        "400":
+          description: Bundle could not be packaged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/github:
+    post:
+      operationId: pushAppToGitHub
+      tags: [apps]
+      summary: Create a new GitHub repo and push the app source
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: GitHub repo URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubPushResult"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: GitHub API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /generate/jobs/{id}:
     get:
       operationId: getGenerationJob
@@ -509,6 +654,17 @@ components:
           type: string
         status:
           type: string
+        coderModel:
+          type: string
+          description: "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6"
+        publicSlug:
+          type: string
+          nullable: true
+          description: When set, the app is publicly viewable at /p/{publicSlug}.
+        githubRepoUrl:
+          type: string
+          nullable: true
+          description: HTML URL of the repo this app was last pushed to.
         createdAt:
           type: string
           format: date-time
@@ -522,6 +678,7 @@ components:
         - frontendCode
         - backendCode
         - status
+        - coderModel
         - createdAt
     GenerateAppRequest:
       type: object
@@ -533,8 +690,57 @@ components:
           type: integer
           nullable: true
           description: When provided, edits the existing app iteratively instead of creating a new one
+        coderModel:
+          type: string
+          nullable: true
+          description: "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits."
       required:
         - prompt
+    UpdateCoderModelRequest:
+      type: object
+      properties:
+        coderModel:
+          type: string
+          description: "auto | gemini-2.5-flash | claude-sonnet-4-6"
+      required:
+        - coderModel
+    HealthCheckResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        fixed:
+          type: boolean
+          description: True if the bundle was patched and improved (or fully fixed).
+        before:
+          type: object
+          properties:
+            ok: { type: boolean }
+            issuesCount: { type: integer }
+          required: [ok, issuesCount]
+        after:
+          type: object
+          properties:
+            ok: { type: boolean }
+            issuesCount: { type: integer }
+          required: [ok, issuesCount]
+      required: [ok, fixed, before, after]
+    DeployResult:
+      type: object
+      properties:
+        url:
+          type: string
+        slug:
+          type: string
+      required: [url, slug]
+    GitHubPushResult:
+      type: object
+      properties:
+        url:
+          type: string
+        repoFullName:
+          type: string
+      required: [url, repoFullName]
     SendAppMessageRequest:
       type: object
       properties:

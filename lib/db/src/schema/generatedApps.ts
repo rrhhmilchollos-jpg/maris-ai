@@ -19,6 +19,13 @@ export const generatedApps = pgTable("generated_apps", {
   frontendCode: text("frontend_code").notNull(),
   backendCode: text("backend_code").notNull(),
   status: text("status").notNull().default("ready"),
+  // Coder model preference: "auto" (default routing), "gemini-2.5-flash", or "claude-sonnet-4-6".
+  // Architect/Backend always stay on Sonnet; only the Coder/Edit role obeys this.
+  coderModel: text("coder_model").notNull().default("auto"),
+  // Public deploy URL slug. Null until the user clicks "Publicar". Globally unique.
+  publicSlug: text("public_slug").unique(),
+  // Last GitHub repo URL pushed to. Null until the user clicks "Subir a GitHub".
+  githubRepoUrl: text("github_repo_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

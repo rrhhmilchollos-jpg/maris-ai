@@ -28,6 +28,10 @@ async function buildAll() {
     // - uses native modules and loads them dynamically (e.g. sharp)
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
+      // esbuild's JS API needs to spawn its own native binary via a relative
+      // path from its package on disk. Bundling it breaks that lookup, so we
+      // keep it external and let Node resolve it from node_modules at runtime.
+      "esbuild",
       "*.node",
       "sharp",
       "better-sqlite3",

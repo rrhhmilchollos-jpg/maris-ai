@@ -14,9 +14,16 @@ import {
 type GeneratedAppRow = typeof generatedApps.$inferSelect;
 type GenerationJobRow = typeof generationJobs.$inferSelect;
 type AppMessageRow = typeof appMessages.$inferSelect;
-import { generateApp } from "../lib/generate";
+import { generateApp, patchBundle } from "../lib/generate";
+import { streamAppZip } from "../lib/exportZip";
+import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
+import { pushAppToGitHub } from "../lib/githubPush";
+import { validateBundle, type BuildIssue } from "../lib/validate";
 
 const router: IRouter = Router();
+
+/** Coder models the user is allowed to choose from in the dashboard. */
+const ALLOWED_CODER_MODELS = new Set(["auto", "gemini-2.5-flash", "claude-sonnet-4-6"]);
 
 function serializeApp(row: GeneratedAppRow) {
   return {
@@ -29,8 +36,25 @@ function serializeApp(row: GeneratedAppRow) {
     frontendCode: row.frontendCode,
     backendCode: row.backendCode,
     status: row.status,
+    coderModel: row.coderModel,
+    publicSlug: row.publicSlug,
+    githubRepoUrl: row.githubRepoUrl,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/**
+ * Build the full public deploy URL from a slug, using the first
+ * REPLIT_DOMAINS entry. Falls back to a relative `/p/<slug>` if the env var
+ * isn't set so callers always get a usable string in dev.
+ */
+function publicUrlFor(slug: string): string {
+  const domains = (process.env.REPLIT_DOMAINS ?? "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter(Boolean);
+  const host = domains[0];
+  return host ? `https://${host}/p/${slug}` : `/p/${slug}`;
 }
 
 function serializeMessage(row: AppMessageRow) {
@@ -130,7 +154,8 @@ async function runJob(
   userId: string,
   prompt: string,
   isAdmin: boolean,
-  editAppId?: number,
+  editAppId: number | undefined,
+  coderModel: string,
 ) {
   try {
     await db
@@ -178,6 +203,7 @@ async function runJob(
         }
       },
       previous,
+      coderModel,
     );
 
     // Atomic finalisation: insert/update app + mark job succeeded in one tx.
@@ -220,6 +246,10 @@ async function runJob(
             frontendCode: payload.frontendCode,
             backendCode: payload.backendCode,
             status: "ready",
+            // Persist the model the user picked at creation time so subsequent
+            // edits on this app reuse it. Defaults to "auto" when the user
+            // doesn't override.
+            coderModel,
           })
           .returning();
         resultAppId = inserted.id;
@@ -347,10 +377,26 @@ async function enqueueGeneration(
   cleanedPrompt: string,
   editAppId: number | undefined,
   extras?: EnqueueExtras,
+  coderModelOverride?: string,
 ) {
   const userId = req.userId!;
   const user = req.dbUser!;
   const isAdmin = isAdminEmail(user.email);
+  // Resolve which Coder model this run should use:
+  //   - For an edit, prefer the app's own stored preference.
+  //   - For a new generation, take whatever the client passed (validated below).
+  //   - Default to "auto".
+  let coderModel = "auto";
+  if (editAppId) {
+    const [editing] = await db
+      .select({ coderModel: generatedApps.coderModel })
+      .from(generatedApps)
+      .where(eq(generatedApps.id, editAppId))
+      .limit(1);
+    if (editing?.coderModel) coderModel = editing.coderModel;
+  } else if (coderModelOverride && ALLOWED_CODER_MODELS.has(coderModelOverride)) {
+    coderModel = coderModelOverride;
+  }
 
   if (!isAdmin && user.credits < 1) {
     res.status(402).json({
@@ -439,7 +485,7 @@ async function enqueueGeneration(
   }
 
   setImmediate(() => {
-    runJob(job.id, userId, cleanedPrompt, isAdmin, editAppId).catch((err) => {
+    runJob(job.id, userId, cleanedPrompt, isAdmin, editAppId, coderModel).catch((err) => {
       logger.error({ err, jobId: job.id }, "runJob threw unexpectedly");
     });
   });
@@ -450,6 +496,7 @@ async function enqueueGeneration(
 router.post("/generate", requireAuth, async (req: Request, res: Response) => {
   const prompt: unknown = req.body?.prompt;
   const appIdRaw: unknown = req.body?.appId;
+  const coderModelRaw: unknown = req.body?.coderModel;
   if (typeof prompt !== "string" || prompt.trim().length < 5) {
     res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
     return;
@@ -469,7 +516,257 @@ router.post("/generate", requireAuth, async (req: Request, res: Response) => {
     }
     editAppId = appIdRaw;
   }
-  await enqueueGeneration(req, res, cleanedPrompt, editAppId);
+  // Only honor coderModel for *new* generations; edits inherit the app's pref.
+  const coderModelOverride =
+    typeof coderModelRaw === "string" && ALLOWED_CODER_MODELS.has(coderModelRaw)
+      ? coderModelRaw
+      : undefined;
+  await enqueueGeneration(req, res, cleanedPrompt, editAppId, undefined, coderModelOverride);
+});
+
+/**
+ * Update the per-app Coder model preference. Subsequent edits will use it.
+ */
+router.patch("/apps/:id/model", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const model: unknown = req.body?.coderModel;
+  if (typeof model !== "string" || !ALLOWED_CODER_MODELS.has(model)) {
+    res.status(400).json({ error: "Modelo no soportado." });
+    return;
+  }
+  const userId = req.userId!;
+  const result = await db
+    .update(generatedApps)
+    .set({ coderModel: model })
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .returning();
+  if (result.length === 0) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  res.json(serializeApp(result[0]));
+});
+
+/**
+ * Stream a ZIP of the generated app (frontend/, optional backend/, README.md).
+ * Content-Disposition uses a sanitized title slug as the filename.
+ */
+router.get("/apps/:id/export", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  const safeName = row.title.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").slice(0, 60) || "app";
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${safeName}.zip"`);
+  streamAppZip(res, {
+    title: row.title,
+    description: row.description,
+    frontendBundle: row.frontendCode,
+    backendBundle: row.backendCode,
+    onError: (err) => {
+      req.log.error({ err, appId: id }, "ZIP export failed");
+      // If headers already went out we can't change the status — just end.
+      try {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "No pudimos generar el ZIP." });
+        } else {
+          res.end();
+        }
+      } catch {
+        // ignore
+      }
+    },
+  });
+});
+
+/**
+ * Run the validate→patch→revalidate loop on the stored frontend bundle.
+ * Persists any patched bundle so future previews use the fixed version.
+ *
+ * Response: { ok, fixed, before: {ok, issuesCount}, after: {ok, issuesCount} }
+ */
+router.post("/apps/:id/healthcheck", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  try {
+    const before = await validateBundle(row.frontendCode);
+    if (before.ok) {
+      res.json({
+        ok: true,
+        fixed: false,
+        before: { ok: true, issuesCount: 0 },
+        after: { ok: true, issuesCount: 0 },
+      });
+      return;
+    }
+    // Try one auto-patch round. The patcher expects { file, problem, fix }
+    // tuples, so we adapt our richer BuildIssue shape — message becomes
+    // "problem" and we suggest a generic "fix the build error" instruction.
+    const qaIssues = before.issues.map((i: BuildIssue) => ({
+      file: i.file,
+      problem: i.line ? `${i.message} (line ${i.line})` : i.message,
+      fix: "Resuelve el error del build sin romper otras partes del archivo.",
+    }));
+    const patched = await patchBundle(row.frontendCode, qaIssues);
+    if (!patched) {
+      // Patcher refused or timed out — return the original before-state so the
+      // user knows nothing was changed.
+      res.json({
+        ok: false,
+        fixed: false,
+        before: { ok: false, issuesCount: before.issues.length },
+        after: { ok: false, issuesCount: before.issues.length },
+      });
+      return;
+    }
+    const after = await validateBundle(patched);
+    if (after.ok || after.issues.length < before.issues.length) {
+      // Save the improved bundle even if it's not fully clean — strictly better.
+      await db
+        .update(generatedApps)
+        .set({ frontendCode: patched })
+        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    }
+    res.json({
+      ok: after.ok,
+      fixed: after.ok || after.issues.length < before.issues.length,
+      before: { ok: false, issuesCount: before.issues.length },
+      after: { ok: after.ok, issuesCount: after.issues.length },
+    });
+  } catch (err) {
+    req.log.error({ err, appId: id }, "Health check failed");
+    res.status(500).json({ error: "El chequeo falló: " + (err instanceof Error ? err.message : "error desconocido") });
+  }
+});
+
+/**
+ * Bundle the frontend into a self-contained HTML page and assign a public
+ * slug. The actual HTML is built on demand by GET /p/:slug rather than stored
+ * here — keeps the row small and lets the user re-deploy after edits without
+ * any extra step. Returns the canonical public URL.
+ */
+router.post("/apps/:id/deploy", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  // Sanity-build once now to surface bundle errors immediately rather than at
+  // first visit. We discard the output; /p/:slug will rebuild on demand.
+  try {
+    await buildDeployHtml({ bundle: row.frontendCode, title: row.title });
+  } catch (err) {
+    req.log.warn({ err, appId: id }, "Deploy pre-build failed");
+    res.status(400).json({
+      error: "No pudimos empaquetar la app: " + (err instanceof Error ? err.message : "error desconocido"),
+    });
+    return;
+  }
+  // Assign a slug if there isn't one yet. Slugs are stable so the URL the user
+  // shared keeps working through later edits and re-deploys.
+  let slug = row.publicSlug;
+  if (!slug) {
+    // Loop only protects against the (vanishingly rare) collision; the slug
+    // generator already has ~50 bits of entropy.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = makeSlug();
+      try {
+        await db
+          .update(generatedApps)
+          .set({ publicSlug: candidate })
+          .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+        slug = candidate;
+        break;
+      } catch (err) {
+        req.log.warn({ err, attempt }, "Slug collision, retrying");
+      }
+    }
+    if (!slug) {
+      res.status(500).json({ error: "No pudimos asignar una URL pública." });
+      return;
+    }
+  }
+  res.json({ url: publicUrlFor(slug), slug });
+});
+
+/**
+ * Push the app to a brand-new GitHub repo using the Replit GitHub connector.
+ * Stores the resulting repo URL on the app row so the UI can show "View repo"
+ * on subsequent loads.
+ */
+router.post("/apps/:id/github", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  try {
+    const result = await pushAppToGitHub({
+      title: row.title,
+      description: row.description,
+      frontendBundle: row.frontendCode,
+      backendBundle: row.backendCode,
+    });
+    await db
+      .update(generatedApps)
+      .set({ githubRepoUrl: result.url })
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    res.json({ url: result.url, repoFullName: result.repoFullName });
+  } catch (err) {
+    req.log.error({ err, appId: id }, "GitHub push failed");
+    res.status(500).json({
+      error: "No pudimos subir a GitHub: " + (err instanceof Error ? err.message : "error desconocido"),
+    });
+  }
 });
 
 router.get("/apps/:id/messages", requireAuth, async (req: Request, res: Response) => {
