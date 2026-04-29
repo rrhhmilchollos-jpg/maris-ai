@@ -123,8 +123,8 @@ export default function App() {
             theme="light"
           >
             <ConsoleTap onLog={(msg) => setLogs((prev) => [...prev.slice(-500), msg])} />
-            <SandpackLayout style={{ height: "100%", border: "none", borderRadius: 0 }}>
-              <SandpackPreview showOpenInCodeSandbox={false} showRefreshButton style={{ height: "100%", flex: 1 }} />
+            <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
+              <SandpackPreview showOpenInCodeSandbox={false} showRefreshButton style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }} />
             </SandpackLayout>
           </SandpackProvider>
         ) : (
