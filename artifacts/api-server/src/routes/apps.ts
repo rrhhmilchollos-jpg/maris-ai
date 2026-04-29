@@ -94,6 +94,53 @@ async function autoRunVisualTester(opts: {
       },
       "Auto visual tester completed",
     );
+    // Surface the visual test result into the app's chat history so the user
+    // actually sees that the testing agent worked. Without this the 30-credit
+    // charge is invisible work — the user only notices when something goes
+    // wrong. Format: short Spanish summary + score + fix count + top issues.
+    try {
+      const a = report.finalAnalysis;
+      const lines: string[] = [];
+      const headline = a.visuallyCorrect
+        ? `🧪 Testing visual: aprobado (${a.overallScore}/100)`
+        : `🧪 Testing visual: ${a.overallScore}/100`;
+      lines.push(headline);
+      if (report.fixesApplied > 0) {
+        lines.push(
+          `Apliqué ${report.fixesApplied} corrección${report.fixesApplied === 1 ? "" : "es"} automática${report.fixesApplied === 1 ? "" : "s"} en ${report.cycles} ciclo${report.cycles === 1 ? "" : "s"}.`,
+        );
+      } else {
+        lines.push(`Revisé el render en ${report.cycles} ciclo${report.cycles === 1 ? "" : "s"} sin necesidad de cambios.`);
+      }
+      const topIssues = a.issues.slice(0, 3);
+      if (topIssues.length > 0) {
+        lines.push("");
+        lines.push("Hallazgos principales:");
+        for (const issue of topIssues) {
+          const sev =
+            issue.severity === "critical"
+              ? "🔴"
+              : issue.severity === "major"
+                ? "🟠"
+                : "🟡";
+          lines.push(`- ${sev} ${issue.description}`);
+        }
+      }
+      if (a.summary) {
+        lines.push("");
+        lines.push(`_${a.summary}_`);
+      }
+      await db.insert(appMessages).values({
+        appId,
+        role: "assistant",
+        content: lines.join("\n"),
+      });
+    } catch (msgErr) {
+      logger.warn(
+        { err: msgErr, appId, jobId },
+        "Failed to insert visual tester chat message (non-fatal)",
+      );
+    }
   } catch (err) {
     logger.warn(
       { err, appId, jobId },
