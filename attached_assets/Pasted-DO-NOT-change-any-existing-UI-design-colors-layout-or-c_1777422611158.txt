@@ -1,0 +1,237 @@
+DO NOT change any existing UI design, colors, layout or components.
+Keep everything visual exactly as it is now.
+
+Your ONLY job is to implement these functionalities, 
+plugging them into the existing UI:
+
+=======================================================
+FUNCTIONALITY 1 — MULTI-AGENT BUILD PIPELINE
+=======================================================
+
+When user submits a prompt, run these agents IN SEQUENCE:
+
+AGENT 1 - PLANNER (claude-opus-4-6):
+- Receives user prompt
+- Returns JSON plan:
+  {
+    appName, appType, techStack,
+    features[], 
+    fileStructure: [{ path, description, priority }],
+    colorScheme: { primary, background, accent }
+  }
+- Emit to frontend via Socket.io:
+  socket.emit('agent_update', {
+    agent: 'planner',
+    status: 'thinking' | 'done',
+    message: string
+  })
+
+AGENT 2 - CODER (claude-sonnet-4-6, streaming):
+- Loop through every file in fileStructure
+- For each file, call Claude with streaming enabled
+- Stream each token to frontend:
+  socket.emit('file_chunk', { path, chunk })
+  socket.emit('file_done', { path, fullContent })
+- Write each file to disk at /projects/{projectId}/
+
+AGENT 3 - DEBUGGER (claude-haiku-4-5):
+- After all files written, run: npm install && npm start
+- Capture stdout/stderr
+- If errors found, send error + file to Claude Haiku
+- Claude returns fixed file content
+- Overwrite file, retry health check
+- Max 3 retry attempts
+- Emit: socket.emit('debug_update', { error, fix, attempt })
+
+AGENT 4 - DESIGNER (claude-sonnet-4-6):
+- After app is running, review all CSS/styling files
+- Prompt: "Improve the visual design. Make it modern, 
+  professional and beautiful. Return only the improved CSS."
+- Overwrite styling files
+- Emit: socket.emit('design_update', { improved: true })
+
+FINAL EMIT when everything is done:
+socket.emit('build_complete', {
+  projectId,
+  previewUrl,
+  files: fileTree,
+  creditsUsed
+})
+
+=======================================================
+FUNCTIONALITY 2 — REAL-TIME STREAMING TO EXISTING UI
+=======================================================
+
+The existing chat panel on the left must show:
+- Each agent activating one by one with its name
+- Text streaming in word by word (not all at once)
+- Animated typing indicator between messages
+- Step progress updating as each agent finishes
+
+The existing preview panel on the right must:
+- Show skeleton loader while building
+- Auto-load the generated app in the iframe when ready
+- Refresh automatically if debugger makes fixes
+
+The existing file tree must:
+- Add files in real time as Coder agent writes them
+- Highlight the file currently being written
+- Show file size next to each file name
+
+=======================================================
+FUNCTIONALITY 3 — FOLLOW-UP CHAT (iterate on built app)
+=======================================================
+
+After first build is done, user can type follow-up messages like:
+"Add a login page"
+"Change the color to red"  
+"Fix the navigation bug"
+
+When follow-up is sent:
+1. Detect which files need to change (Planner mini-call)
+2. Rewrite only those specific files (Coder)
+3. Run health check (Debugger if needed)
+4. Update preview iframe
+5. Add to chat history
+
+Do NOT rebuild the entire app — only modify affected files.
+
+=======================================================
+FUNCTIONALITY 4 — PROJECT SAVE & HISTORY
+=======================================================
+
+Save to MongoDB after every build:
+- All generated files (path + content)
+- Full chat history with agent labels
+- Build status and logs
+- Credits used
+- Preview URL
+
+When user opens a past project from the sidebar:
+- Load all files back into the file tree
+- Restore chat history in the chat panel
+- Re-serve the app and load it in the preview iframe
+- Allow continuing the conversation
+
+=======================================================
+FUNCTIONALITY 5 — DEPLOY
+=======================================================
+
+"Deploy" button in the existing header:
+1. Take the generated frontend files
+2. Run: npm run build (creates /dist folder)
+3. Serve /dist with an Express static server on a free port
+4. Return a permanent URL: http://localhost:{port}
+5. Show URL in the UI with a copy button
+6. Save deploymentUrl to the project in MongoDB
+
+=======================================================
+FUNCTIONALITY 6 — EXPORT CODE (ZIP download)
+=======================================================
+
+"Export ZIP" button:
+1. Use the 'archiver' npm package
+2. Zip the entire /projects/{projectId}/ folder
+3. Send as file download with Content-Disposition header
+4. Filename: {projectName}-source.zip
+
+=======================================================
+FUNCTIONALITY 7 — GITHUB PUSH
+=======================================================
+
+"GitHub" button:
+1. If user has no GitHub token → show connect modal
+   (OAuth flow: redirect to GitHub → get token → save to User)
+2. If connected:
+   - Create new GitHub repo via GitHub API
+   - Push all project files using octokit
+   - Show repo URL in the UI
+
+=======================================================
+FUNCTIONALITY 8 — CREDITS SYSTEM
+=======================================================
+
+Deduct credits on every build:
+- Planner call:  1 credit
+- Coder call:    2 credits  
+- Debugger call: 1 credit per retry
+- Designer call: 1 credit
+
+Before build starts:
+- Check if user has enough credits
+- If not: show upgrade modal (do not change modal design)
+
+After build:
+- Update credits in MongoDB
+- Update the credits display in the existing sidebar UI
+
+=======================================================
+FUNCTIONALITY 9 — MODEL SELECTOR
+=======================================================
+
+The model dropdown in the existing UI must actually work:
+- claude-sonnet-4-6  → fast, use for Coder + Designer
+- claude-opus-4-6    → smart, use for Planner + complex builds
+- gemini-2.5-flash   → cheapest, use via Google AI SDK
+
+Store selected model per project in MongoDB.
+Use the user's selected model for the Coder agent.
+Always use opus for Planner regardless of selection.
+
+=======================================================
+FUNCTIONALITY 10 — HEALTH CHECK (visible in UI)
+=======================================================
+
+"Health Check" button in existing header:
+1. Re-run npm install + npm start on the project
+2. Ping the preview URL
+3. Show result in a toast:
+   ✅ "App is healthy and running"
+   ❌ "App has errors — running Debugger agent..."
+4. If errors: auto-trigger Debugger agent
+
+=======================================================
+SOCKET.IO EVENT REFERENCE
+(connect existing UI listeners to these exact event names)
+=======================================================
+
+FROM SERVER → CLIENT:
+  'agent_update'    { agent, status, message }
+  'file_chunk'      { path, chunk }
+  'file_done'       { path, fullContent, size }
+  'debug_update'    { error, fix, attempt }
+  'design_update'   { file, improved }
+  'log'             { level: 'info'|'warn'|'error', message }
+  'build_complete'  { projectId, previewUrl, files, creditsUsed }
+  'build_error'     { message, recoverable }
+
+FROM CLIENT → SERVER:
+  'start_build'     { prompt, projectId, model, appType }
+  'follow_up'       { message, projectId }
+  'cancel_build'    { projectId }
+
+=======================================================
+PACKAGES TO INSTALL (backend)
+=======================================================
+
+npm install @anthropic-ai/sdk socket.io mongoose 
+            passport passport-google-oauth20 
+            jsonwebtoken bcryptjs archiver 
+            @octokit/rest express-async-errors
+            dotenv cors helmet
+
+=======================================================
+DO NOT TOUCH:
+=======================================================
+- Any existing component files
+- Any existing CSS or styling
+- Any existing layout or structure
+- Any existing color variables
+- Any existing navigation
+
+ONLY ADD:
+- New backend files in /backend/agents/
+- New backend files in /backend/routes/  
+- Socket.io event listeners in existing frontend components
+- API calls wired to existing buttons
+- MongoDB save/load logic
