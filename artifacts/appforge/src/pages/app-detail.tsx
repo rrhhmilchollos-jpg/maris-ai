@@ -874,7 +874,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         )}
 
         <div
-          className={`grid grid-cols-1 ${previewMaximized || !previewOpen ? "" : "lg:grid-cols-12"} gap-4 min-h-[calc(100dvh-180px)]`}
+          className={`grid grid-cols-1 ${previewMaximized || !previewOpen ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}
         >
           {/* Chat panel */}
           <div

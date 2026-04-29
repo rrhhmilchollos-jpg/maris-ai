@@ -40,17 +40,7 @@ const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
     <title>Preview</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* Height chain bug fix: 'min-height: 100%' on <html> resolves to 0 when
-         its parent (the iframe document) has no explicit height, which causes
-         the body to collapse to header-only and the preview to look like a
-         tiny banner. The reliable chain is: explicit 'height: 100%' on html
-         and body so descendants can use percentage heights, plus
-         'min-height: 100vh' on #root so the React tree always fills at
-         least the viewport regardless of parent. We deliberately do NOT
-         set 'overflow: hidden' anywhere — the user's app must be scrollable. */
-      html, body, #root { margin: 0; padding: 0; height: 100%; width: 100%; }
-      #root { min-height: 100vh; display: flex; flex-direction: column; }
-      #root > * { flex: 1 1 auto; }
+      html, body, #root { margin: 0; min-height: 100%; width: 100%; }
       body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     </style>
   </head>
@@ -100,19 +90,13 @@ if (typeof window !== "undefined") {
 }
 
 if (typeof document !== "undefined") {
-  // Defensive runtime fix: re-assert the height chain after every render in
-  // case a generated stylesheet collapses html/body. Using 100vh on body
-  // sidesteps the percentage-height-needs-explicit-parent rule entirely.
   const html = document.documentElement;
   const body = document.body;
-  if (html) { html.style.margin = "0"; html.style.padding = "0"; html.style.height = "100%"; html.style.width = "100%"; html.style.overflow = "auto"; }
+  if (html) { html.style.margin = "0"; html.style.height = "100%"; html.style.width = "100%"; }
   if (body) {
     body.style.margin = "0";
-    body.style.padding = "0";
-    body.style.height = "100%";
-    body.style.minHeight = "100vh";
+    body.style.minHeight = "100%";
     body.style.width = "100%";
-    body.style.overflow = "auto";
     body.style.fontFamily = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
   }
   if (!document.querySelector('script[data-tw-cdn]')) {

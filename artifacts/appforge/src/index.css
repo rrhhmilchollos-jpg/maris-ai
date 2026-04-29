@@ -129,21 +129,6 @@
     @apply border-border;
   }
 
-  /* Defensive height chain: ensures the app fills the viewport even when
-     embedded inside Replit's workspace iframe wrapper. Without this the
-     percentage heights collapse and the page appears as a header strip only. */
-  html, body, #root {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-  }
-  #root {
-    min-height: 100vh;
-    min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-  }
-
   body {
     @apply font-sans antialiased bg-background text-foreground selection:bg-primary/30;
   }

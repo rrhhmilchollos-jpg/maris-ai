@@ -75,10 +75,6 @@ QUALITY BAR — what separates a demo from a real product. Bake these into the b
 - Accessibility: semantic HTML, labels for every input, aria-hidden on decorative icons, descriptive Spanish alt on every <img>.
 - Mobile: works at 375px, hamburger nav if needed, grids reflow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3.
 
-LAYOUT HEIGHT — every page MUST fill the viewport. The preview iframe has html/body/#root with explicit height: 100% / min-height: 100vh. To benefit:
-- The OUTERMOST wrapper of every page (and of App.${ext}) MUST use \`min-h-screen\` so it stretches to the full viewport. Pair with \`flex flex-col\` when the page has a header + scrollable main + footer; the main content gets \`flex-1\`. Never set \`overflow: hidden\` on \`<html>\`, \`<body>\`, the App root or any top-level page wrapper — it cuts content off in the preview iframe and the user sees only a header strip.
-- Avoid hardcoded heights on top-level wrappers (\`h-[600px]\`, \`max-h-[480px]\`, etc.). If you need a scrollable sub-region (sidebar list, chat panel) use \`flex-1 overflow-y-auto min-h-0\` so it shares the parent's height instead of capping the page.
-
 CSS — encouraged beyond Tailwind:
 - src/index.css holds the @tailwind directives PLUS the design system globals (CSS variables, body styles, smooth scroll, font smoothing antialiased).
 - For animations, keyframes, scrollbar styling, complex hover states or component-scoped polish that's awkward in Tailwind utilities, ADD dedicated files like src/styles/animations.css, src/styles/scrollbar.css, src/styles/<component>.css and import them from src/main.${ext} (or from the component that uses them). Real CSS rules — no @apply outside index.css.
