@@ -146,3 +146,13 @@ Each generated app exposes 5 actions from the detail page header:
 ### Notes on what was rejected
 
 The user explicitly rejected: MongoDB, Socket.io, per-agent credit pricing, Opus for the Architect role, server-side `npm install`/`npm start` of the generated apps. CSRF middleware on `/api` was deferred — Clerk's default `SameSite=Lax` cookies prevent the sandboxed iframe from sending credentials cross-origin, and adding CSRF tokens is outside the accepted feature scope.
+
+## Generated-app quality fixes (Apr 2026)
+
+Three real bugs reported by users were addressed:
+
+1. **Generated UI was sometimes English** — coder prompts now have an explicit `LANGUAGE` block requiring all user-visible copy in Spanish (es-ES). Identifiers stay English. Applied to `FRONTEND_SYSTEM_PROMPT`, `EDIT_SYSTEM_PROMPT`, and `PATCHER_SYSTEM_PROMPT`.
+
+2. **Bundles shipped with syntax errors** (`,,` double-commas, garbage tokens like `née`, unterminated strings) — root cause: edit mode bypassed the validate→patch loop entirely. Fix: extracted the loop into `runValidatePatchLoop(initialBundle, qaReport, onProgress, baseProgressStart)` in `lib/generate.ts` and call it from both initial generation AND edit mode. Loop is bounded (`MAX_ITERATIONS=2`) with stagnation guard. Also added explicit `SYNTAX` rules to the three coder prompts forbidding the observed failure patterns.
+
+3. **`wouter` and other common packages failed to resolve in the Sandpack preview** — Sandpack starts from the `react-ts` template which only ships react/react-dom. Fix: `parseBundle.ts` now exports a `SANDPACK_DEPENDENCIES` map (wouter, lucide-react, clsx, tailwind-merge, date-fns, zod) which `app-detail.tsx` passes to `SandpackProvider.customSetup.dependencies`. The list mirrors the packages the coder prompt allows.
