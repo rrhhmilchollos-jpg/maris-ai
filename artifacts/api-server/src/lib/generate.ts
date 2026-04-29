@@ -10,7 +10,7 @@ const openai = new OpenAI({
 });
 import { validateBundle, type BuildIssue } from "./validate";
 import { logger } from "./logger";
-import { recallSimilar, rememberPatch, buildRecallExamplesBlock } from "./agentMemory";
+import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
@@ -1129,10 +1129,14 @@ async function runValidatePatchLoop(
       // Persist the last successful patch into agent_memory so future runs
       // hitting the same error can reuse the fix.
       if (lastErrorMessage && lastPatchedBundle) {
+        // Memory is shared across apps/users so we MUST NOT persist large
+        // bundle slices. extractFixHint pulls only the lines around the
+        // error location and redactSecrets strips obvious credentials.
+        const fixHint = extractFixHint(lastPatchedBundle, lastErrorMessage);
         rememberPatch({
-          errorMessage: lastErrorMessage,
-          errorContext: `bundle len=${lastPatchedBundle.length}`,
-          patch: lastPatchedBundle.slice(0, 8000),
+          errorMessage: redactSecrets(lastErrorMessage).slice(0, 1000),
+          errorContext: `iter=${iter} bundleLen=${lastPatchedBundle.length}`,
+          patch: fixHint,
           language,
         }).then((entry) => {
           if (entry) emit("memory", `🧠 aprendí esta solución (id ${entry.id})`);
@@ -1649,11 +1653,17 @@ async function fastPatchEdit(
     };
   }
 
-  // Save successful fast-patch into memory so the next "cambia el botón a verde" reuses this.
+  // Save successful fast-patch into memory. Fast-patch isn't keyed on a build
+  // error, so the "errorMessage" is just the user prompt — and we deliberately
+  // do NOT persist any of the patched bundle (no error location to anchor a
+  // safe snippet, plus user prompts may carry app-specific intent that would
+  // poison cross-app recall). We store a short opaque marker instead so the
+  // recall surface for fast-patch entries stays useful only for exact prompt
+  // recurrences without leaking code.
   rememberPatch({
-    errorMessage: prompt.slice(0, 400),
+    errorMessage: redactSecrets(prompt).slice(0, 400),
     errorContext: "fast-patch user request",
-    patch: patched.slice(0, 8000),
+    patch: "(fast-patch convergence; no code stored — recall by prompt only)",
     language,
   }).then((entry) => {
     if (entry) log("memory", `🧠 aprendí este cambio (id ${entry.id})`);
