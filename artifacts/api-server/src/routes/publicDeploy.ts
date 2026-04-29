@@ -14,6 +14,64 @@ const router: IRouter = Router();
  * with the link. We rebuild the HTML on every request rather than caching it
  * in the DB, so re-deploying after an edit is automatic.
  */
+// Inner-frame route: serves the bundled user app HTML directly. Loaded as
+// the `src` of the sandboxed iframe in the wrapper at /p/:slug. Using a real
+// URL (instead of `srcdoc`) lets the routing shim call
+// `history.replaceState('/')` so SPA routers see the home pathname. Sandbox
+// without `allow-same-origin` keeps the iframe at an opaque origin so it
+// cannot read AppForge cookies even though it's served from the same domain.
+router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
+  const rawSlug = req.params.slug;
+  const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug;
+  if (!slug || typeof slug !== "string" || !SLUG_PATTERN.test(slug)) {
+    res.status(404).type("text/plain").send("Not found");
+    return;
+  }
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(eq(generatedApps.publicSlug, slug))
+    .limit(1);
+  if (!row) {
+    res.status(404).type("text/plain").send("No publicada.");
+    return;
+  }
+  try {
+    const innerHtml = await buildDeployHtml({
+      bundle: row.frontendCode,
+      title: row.title,
+    });
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    // Defense-in-depth CSP. Even though sandboxing is the hard isolation
+    // boundary, we lock down what the AI-generated bundle can do at the HTTP
+    // level too. Must permit:
+    //   * inline `<script>` (the routing shim and the user bundle)
+    //   * `unsafe-eval` (esm.sh dynamic imports + Tailwind Play CDN)
+    //   * https: scripts/styles/fonts/connections (esm.sh, Tailwind CDN, etc.)
+    //   * any image/font/XHR origin the user app may need
+    res.setHeader(
+      "Content-Security-Policy",
+      [
+        "default-src 'self' https: data: blob:",
+        "script-src 'unsafe-inline' 'unsafe-eval' https:",
+        "style-src 'unsafe-inline' https:",
+        "font-src https: data:",
+        "img-src 'self' https: data: blob:",
+        "connect-src https:",
+        "frame-src 'self' data: blob:",
+        "child-src 'self' data: blob:",
+      ].join("; "),
+    );
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.send(innerHtml);
+  } catch (err) {
+    req.log.error({ err, slug }, "inner build failed");
+    res.status(500).type("text/plain").send(String(err));
+  }
+});
+
 router.get("/p/:slug", async (req: Request, res: Response) => {
   // `req.params.slug` is typed as `string | string[]` under the generic
   // Express types we re-use across routes. The route literal `/p/:slug` only
@@ -38,28 +96,24 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const innerHtml = await buildDeployHtml({
-      bundle: row.frontendCode,
-      title: row.title,
-    });
     // SECURITY: the generated app is untrusted, AI-written JavaScript and we
     // host it on the same domain as our authenticated /api routes. If we
-    // served `innerHtml` directly, a malicious bundle could `fetch('/api/...')`
-    // with the visitor's session cookies and exfiltrate their data.
+    // served the inner HTML directly at /p/:slug, a malicious bundle could
+    // `fetch('/api/...')` with the visitor's session cookies and exfiltrate
+    // their data.
     //
-    // Mitigation: wrap the page in a top-level sandboxed iframe loaded via
-    // `srcdoc`. Without `allow-same-origin`, the iframe runs in an opaque
-    // origin: no access to AppForge cookies/localStorage, and same-origin
-    // fetches are not credentialed. We also send a strict CSP on the outer
-    // wrapper as defense-in-depth (no scripts at all on the wrapper itself).
+    // Mitigation: serve a tiny wrapper at /p/:slug whose only content is a
+    // top-level sandboxed iframe pointed at /p/:slug/_inner. Without
+    // `allow-same-origin`, the iframe runs in an opaque origin: no access to
+    // AppForge cookies/localStorage, and same-origin fetches are not
+    // credentialed. We use `src=` (not `srcdoc=`) so the iframe has a real
+    // document URL that the routing shim can `history.replaceState` to "/" —
+    // routers like wouter/react-router then match the home route. With
+    // `srcdoc`, location.pathname returns "srcdoc" and the prototype getter
+    // is bypassed by the browser's host-object internal slots, leaving the
+    // app rendering only its layout chrome (blank middle).
     const safeTitle = (row.title || "AppForge App").replace(/[<&>]/g, "");
-    // Escape the HTML for safe embedding inside a srcdoc attribute. Quotes
-    // must become &quot; so the attribute parser doesn't terminate early.
-    const srcdocEscaped = innerHtml
-      .replace(/&/g, "&amp;")
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    const innerUrl = `/p/${encodeURIComponent(slug)}/_inner`;
     const wrapper = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -69,7 +123,7 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
   <style>html,body{margin:0;padding:0;height:100%;background:#fff;}iframe{border:0;width:100vw;height:100vh;display:block;}</style>
 </head>
 <body>
-  <iframe sandbox="allow-scripts" referrerpolicy="no-referrer" srcdoc="${srcdocEscaped}"></iframe>
+  <iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${innerUrl}"></iframe>
 </body>
 </html>`;
     res.setHeader("Cache-Control", "no-store, max-age=0");

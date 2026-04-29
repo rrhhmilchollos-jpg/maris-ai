@@ -96,6 +96,96 @@ export async function buildDeployHtml(opts: {
     ? `\n  <style data-appforge-user-css>${userCss}</style>`
     : "";
 
+  // Routing shim: AI-generated apps invariably declare routes like `/`,
+  // `/buscar`, `/producto/:id` assuming they're mounted at the site root.
+  // But we serve them inside an `srcdoc` sandbox iframe whose URL is
+  // `about:srcdoc` — `location.pathname` is empty and `history.replaceState`
+  // is silently blocked by Chrome/Firefox on opaque origins. Without
+  // normalization, routers such as `wouter` and `react-router` see no match
+  // and render their catch-all 404 — the page looks blank between the
+  // always-rendered navbar and footer.
+  //
+  // We solve this by intercepting `Location.prototype.pathname` so it always
+  // returns the in-memory "virtual" pathname starting at "/". We also patch
+  // `pushState`/`replaceState` to update the virtual pathname (so SPA links
+  // still work) and emit a `popstate` so router subscribers re-render.
+  // `location.search` and `location.hash` remain pass-through — only
+  // `pathname` is virtualized.
+  const routerShim = `(function(){
+  try {
+    var virtualPath = "/";
+    var origPush = window.history.pushState.bind(window.history);
+    var origReplace = window.history.replaceState.bind(window.history);
+    function extractPath(url) {
+      if (typeof url !== "string") return null;
+      try {
+        // Resolve against current virtual location, then take pathname.
+        var u = new URL(url, "http://_appforge_/" + (virtualPath.replace(/^\\//, "")));
+        return u.pathname + u.search + u.hash;
+      } catch (e) { return null; }
+    }
+    function setPath(url) {
+      var p = extractPath(url);
+      if (p) virtualPath = p.split(/[?#]/)[0] || "/";
+    }
+    window.history.pushState = function(state, title, url) {
+      setPath(url);
+      try { origPush(state, title, url); } catch (e) {}
+      window.dispatchEvent(new PopStateEvent("popstate", { state: state }));
+    };
+    window.history.replaceState = function(state, title, url) {
+      setPath(url);
+      try { origReplace(state, title, url); } catch (e) {}
+      window.dispatchEvent(new PopStateEvent("popstate", { state: state }));
+    };
+    // Keep virtualPath aligned with native back/forward navigation. Without
+    // this, after the user clicks "back", virtualPath would still hold the
+    // previous (now stale) location, breaking relative-link resolution.
+    window.addEventListener("popstate", function(){
+      try {
+        var np = window.location.pathname;
+        if (typeof np === "string" && np && np !== "srcdoc") virtualPath = np;
+      } catch (e) {}
+    });
+    // Drop the wrapper path (e.g. /p/abc123/_inner) so any router that reads
+    // location.pathname sees "/" and matches the user's home route. Browsers
+    // permit replaceState within the same scheme+host even from sandboxed
+    // (opaque-origin) iframes, as long as the new URL is same-origin with the
+    // document's URL.
+    var rewroteOk = false;
+    try {
+      var p0 = window.location.pathname || "";
+      if (p0 !== "/") {
+        try { origReplace(null, "", "/"); } catch (e) {}
+        virtualPath = "/";
+        rewroteOk = (window.location.pathname === "/");
+      } else {
+        rewroteOk = true;
+      }
+    } catch (e) {}
+    // Defense-in-depth fallback: if the browser refused to rewrite the URL
+    // (e.g. opaque-origin policies on srcdoc documents), at least try to
+    // shadow Location.prototype.pathname so any router that reads through
+    // the prototype chain gets "/". Modern browsers ignore this for direct
+    // window.location.pathname reads (host-object internal slots win), but
+    // it helps libraries that read via a saved descriptor.
+    if (!rewroteOk) {
+      try {
+        Object.defineProperty(Location.prototype, "pathname", {
+          configurable: true,
+          get: function() { return virtualPath; },
+        });
+      } catch (e) {}
+    }
+  } catch (e) {}
+  window.addEventListener("error", function(e){
+    try { console.error("[appforge] runtime error:", e.error || e.message); } catch(_){}
+  });
+  window.addEventListener("unhandledrejection", function(e){
+    try { console.error("[appforge] unhandled rejection:", e.reason); } catch(_){}
+  });
+})();`;
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -105,6 +195,7 @@ export async function buildDeployHtml(opts: {
   <style>html,body,#root{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}</style>${userStyleTag}
   <script src="https://cdn.tailwindcss.com"></script>
   <script type="importmap">${JSON.stringify({ imports })}</script>
+  <script>${routerShim}</script>
 </head>
 <body>
   <div id="root"></div>
