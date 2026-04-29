@@ -318,6 +318,43 @@ export const DeployAppResponse = zod.object({
 });
 
 /**
+ * @summary Run the Visual Testing Agent (screenshots + Claude Vision + auto-fix). Costs 30 credits.
+ */
+export const VisualTestAppParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const VisualTestAppResponse = zod.object({
+  cycles: zod.number(),
+  fixesApplied: zod.number(),
+  analysis: zod.object({
+    visuallyCorrect: zod.boolean(),
+    overallScore: zod.number(),
+    issues: zod.array(
+      zod.object({
+        severity: zod.enum(["critical", "major", "minor"]),
+        type: zod.string(),
+        viewport: zod.string(),
+        description: zod.string(),
+        suggestion: zod.string(),
+      }),
+    ),
+    positives: zod.array(zod.string()),
+    summary: zod.string(),
+  }),
+  screenshots: zod.array(
+    zod.object({
+      viewport: zod.string(),
+      mimeType: zod.string(),
+      width: zod.number(),
+      height: zod.number(),
+      imageBase64: zod.string().describe("Raw base64 PNG (no data: prefix)"),
+      consoleErrors: zod.array(zod.string()),
+    }),
+  ),
+});
+
+/**
  * @summary Create a new GitHub repo and push the app source
  */
 export const PushAppToGitHubParams = zod.object({

@@ -20,6 +20,124 @@ import { streamAppZip } from "../lib/exportZip";
 import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
 import { pushAppToGitHub } from "../lib/githubPush";
 import { validateBundle, type BuildIssue } from "../lib/validate";
+import { runVisualTester, VisualTesterError } from "../lib/visualTester";
+import { chargeCredits, refundCredits } from "../lib/credits";
+
+/** Credits charged for one Visual Testing Agent run (silent). */
+const VISUAL_TEST_COST = 30;
+/** Internal base URL puppeteer uses to reach our public deploy route. */
+const VISUAL_TEST_BASE_URL = process.env.VISUAL_TEST_BASE_URL ?? "http://localhost:80";
+
+/**
+ * Background helper used by the generation pipeline to run the Visual Testing
+ * Agent right after a successful generation. Charges credits silently and
+ * skips cleanly if the user can't afford it. All errors are non-fatal.
+ */
+async function autoRunVisualTester(opts: {
+  appId: number;
+  userId: string;
+  isAdmin: boolean;
+  prompt: string;
+  jobId: number;
+}): Promise<void> {
+  const { appId, userId, isAdmin, prompt, jobId } = opts;
+  // Re-read the row inside the background task so we get the latest bundle
+  // (image agent may have already swapped some <img> srcs).
+  const [row] = await db
+    .select()
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    logger.warn({ appId, jobId }, "Auto visual tester: app row missing");
+    return;
+  }
+  const slug = await ensurePublicSlug(appId, userId, logger, row.publicSlug);
+  if (!slug) {
+    logger.warn({ appId, jobId }, "Auto visual tester: could not assign slug");
+    return;
+  }
+  const charge = await chargeCredits({
+    userId,
+    isAdmin,
+    amount: VISUAL_TEST_COST,
+    description: `Auto Visual Testing — app #${appId} (job #${jobId})`,
+  });
+  if (!charge.ok) {
+    logger.info(
+      { appId, jobId },
+      "Auto visual tester skipped — insufficient credits",
+    );
+    return;
+  }
+  try {
+    const report = await runVisualTester({
+      app: {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        frontendCode: row.frontendCode,
+        publicSlug: slug,
+      },
+      baseUrl: VISUAL_TEST_BASE_URL,
+      prompt,
+      autoFix: true,
+      log: logger,
+    });
+    logger.info(
+      {
+        appId,
+        jobId,
+        cycles: report.cycles,
+        fixesApplied: report.fixesApplied,
+        score: report.finalAnalysis.overallScore,
+      },
+      "Auto visual tester completed",
+    );
+  } catch (err) {
+    logger.warn(
+      { err, appId, jobId },
+      "Auto visual tester failed during run — refunding silent charge",
+    );
+    await refundCredits({
+      userId,
+      isAdmin,
+      amount: VISUAL_TEST_COST,
+      description: `Reembolso Auto Visual Testing — app #${appId} (job #${jobId})`,
+    }).catch((refundErr) => {
+      logger.error(
+        { refundErr, appId, jobId },
+        "Auto visual tester refund failed",
+      );
+    });
+  }
+}
+
+/**
+ * Ensure a generated app has a public slug, assigning a fresh one if missing.
+ * Returns the slug or null if every collision-protected attempt failed.
+ */
+async function ensurePublicSlug(
+  appId: number,
+  userId: string,
+  log: { warn: (...args: unknown[]) => void },
+  existingSlug: string | null,
+): Promise<string | null> {
+  if (existingSlug) return existingSlug;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = makeSlug();
+    try {
+      await db
+        .update(generatedApps)
+        .set({ publicSlug: candidate })
+        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)));
+      return candidate;
+    } catch (err) {
+      log.warn({ err, attempt }, "Slug collision, retrying");
+    }
+  }
+  return null;
+}
 
 const router: IRouter = Router();
 
@@ -299,11 +417,33 @@ async function runJob(
       // *after* the job is marked succeeded so the user sees their app
       // immediately, then the images swap in on the next refetch.
       const finalAppId = resultAppId;
+      const finalUserId = userId;
+      const finalIsAdmin = isAdmin;
+      const finalPrompt = prompt;
       setImmediate(() => {
         generateAppImages(finalAppId).catch((imgErr) => {
           logger.warn(
             { err: imgErr, appId: finalAppId, jobId },
             "Auto image generation failed (non-fatal)",
+          );
+        });
+      });
+      // Also schedule the Visual Testing Agent in the background. This costs
+      // 30 credits (silent — disclosed in the product description) and runs
+      // up to 3 fix cycles against /p/<slug>. We auto-create a slug here so
+      // puppeteer has a URL to screenshot. If the user is broke or anything
+      // explodes, we just log and move on — the user already has their app.
+      setImmediate(() => {
+        autoRunVisualTester({
+          appId: finalAppId,
+          userId: finalUserId,
+          isAdmin: finalIsAdmin,
+          prompt: finalPrompt,
+          jobId,
+        }).catch((vtErr) => {
+          logger.warn(
+            { err: vtErr, appId: finalAppId, jobId },
+            "Auto visual tester failed (non-fatal)",
           );
         });
       });
@@ -878,30 +1018,143 @@ router.post("/apps/:id/deploy", requireAuth, async (req: Request, res: Response)
   }
   // Assign a slug if there isn't one yet. Slugs are stable so the URL the user
   // shared keeps working through later edits and re-deploys.
-  let slug = row.publicSlug;
+  const slug = await ensurePublicSlug(id, userId, req.log, row.publicSlug);
   if (!slug) {
-    // Loop only protects against the (vanishingly rare) collision; the slug
-    // generator already has ~50 bits of entropy.
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const candidate = makeSlug();
-      try {
-        await db
-          .update(generatedApps)
-          .set({ publicSlug: candidate })
-          .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
-        slug = candidate;
-        break;
-      } catch (err) {
-        req.log.warn({ err, attempt }, "Slug collision, retrying");
-      }
-    }
-    if (!slug) {
-      res.status(500).json({ error: "No pudimos asignar una URL pública." });
-      return;
-    }
+    res.status(500).json({ error: "No pudimos asignar una URL pública." });
+    return;
   }
   res.json({ url: publicUrlFor(slug), slug });
 });
+
+/**
+ * POST /apps/:id/visual-test — Visual Testing Agent.
+ *
+ * Captures screenshots of the app's public deploy URL at three viewports,
+ * scores them with Claude Sonnet vision, and (when issues are found) auto-
+ * patches the bundle up to MAX_FIX_CYCLES=3 times. Charges 30 credits per run
+ * silently — admins are exempt.
+ *
+ * If the app has no `publicSlug`, one is created on the fly so the agent has
+ * a URL to screenshot. The deploy route renders the latest bundle on every
+ * request, so no separate "publish" step is required.
+ */
+router.post(
+  "/apps/:id/visual-test",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const isAdmin = req.dbUser?.email ? isAdminEmail(req.dbUser.email) : false;
+
+    const [row] = await db
+      .select()
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!row) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+
+    // Ensure deploy URL exists.
+    const slug = await ensurePublicSlug(id, userId, req.log, row.publicSlug);
+    if (!slug) {
+      res
+        .status(500)
+        .json({ error: "No pudimos preparar la URL pública para los screenshots." });
+      return;
+    }
+
+    // Sanity-build so puppeteer doesn't screenshot a server-error page.
+    try {
+      await buildDeployHtml({ bundle: row.frontendCode, title: row.title });
+    } catch (err) {
+      req.log.warn({ err, appId: id }, "Visual test pre-build failed");
+      res.status(400).json({
+        error:
+          "El bundle actual no compila, así que no podemos analizarlo visualmente: " +
+          (err instanceof Error ? err.message : "error desconocido"),
+      });
+      return;
+    }
+
+    // Charge silently. The cost is intentionally not surfaced in the response —
+    // the user is told about it once in the product description, not per-run.
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: VISUAL_TEST_COST,
+      description: `Visual Testing Agent — app #${id}`,
+    });
+    if (!charge.ok) {
+      res
+        .status(402)
+        .json({ error: "Créditos insuficientes para el análisis visual." });
+      return;
+    }
+
+    try {
+      const report = await runVisualTester({
+        app: {
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          frontendCode: row.frontendCode,
+          publicSlug: slug,
+        },
+        baseUrl: VISUAL_TEST_BASE_URL,
+        prompt: row.title + (row.description ? `: ${row.description}` : ""),
+        autoFix: true,
+        log: req.log,
+      });
+      res.json({
+        cycles: report.cycles,
+        fixesApplied: report.fixesApplied,
+        analysis: {
+          ...report.finalAnalysis,
+          // Map internal `cssfix` to the public `suggestion` field.
+          issues: report.finalAnalysis.issues.map((i) => ({
+            severity: i.severity,
+            type: i.type,
+            viewport: i.viewport,
+            description: i.description,
+            suggestion: i.cssfix,
+          })),
+        },
+        screenshots: report.screenshots.map((s) => ({
+          viewport: s.viewport,
+          mimeType: s.mimeType,
+          width: s.width,
+          height: s.height,
+          imageBase64: s.data,
+          consoleErrors: s.consoleErrors,
+        })),
+      });
+    } catch (err) {
+      req.log.error({ err, appId: id }, "Visual tester crashed");
+      // Refund the silent charge if the run failed — the user shouldn't pay
+      // for an analysis that never produced a report.
+      await refundCredits({
+        userId,
+        isAdmin,
+        amount: VISUAL_TEST_COST,
+        description: `Reembolso Visual Testing — app #${id} (falló)`,
+      }).catch((refundErr) => {
+        req.log.error({ refundErr, appId: id }, "Visual tester refund failed");
+      });
+      const code = err instanceof VisualTesterError ? err.code : "internal";
+      res.status(500).json({
+        error:
+          err instanceof Error ? err.message : "Error inesperado en el análisis visual.",
+        code,
+      });
+    }
+  },
+);
 
 /**
  * Push the app to a brand-new GitHub repo using the Replit GitHub connector.

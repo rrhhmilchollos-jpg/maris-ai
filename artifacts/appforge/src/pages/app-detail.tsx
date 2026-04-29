@@ -11,12 +11,14 @@ import {
   useDeployApp,
   usePushAppToGitHub,
   useGenerateAppImages,
+  useVisualTestApp,
   getGetAppQueryKey,
   getListAppsQueryKey,
   getGetMyStatsQueryKey,
   getListAppMessagesQueryKey,
   getGetGenerationJobQueryKey,
   useGetMe,
+  type VisualTestReport,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -51,7 +53,15 @@ import {
   ImagePlus,
   Maximize2,
   Minimize2,
+  ScanEye,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -227,6 +237,35 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
       onError: (err: any) => {
         toast({ title: "No se pudo publicar", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  // Visual Testing Agent: takes screenshots of the deployed app, scores them
+  // with Claude Vision, and auto-fixes up to 3 cycles. Costs 30 credits per
+  // run (silent — disclosed in product copy, not per click).
+  const [visualReport, setVisualReport] = useState<VisualTestReport | null>(null);
+  const visualTestMutation = useVisualTestApp({
+    mutation: {
+      onSuccess: (result) => {
+        setVisualReport(result);
+        // The auto-fix loop may have rewritten the bundle, so refetch.
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        toast({
+          title: `Análisis visual: ${Math.round(result.analysis.overallScore)}/100`,
+          description:
+            result.fixesApplied > 0
+              ? `Aplicamos ${result.fixesApplied} ronda(s) de correcciones automáticas.`
+              : result.analysis.summary || "Sin problemas críticos detectados.",
+        });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "Análisis visual falló",
+          description:
+            err?.message ?? "No pudimos analizar la app visualmente.",
+          variant: "destructive",
+        });
       },
     },
   });
@@ -447,6 +486,22 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <ImagePlus className="h-4 w-4 mr-1.5" />
               )}
               Imágenes IA
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => visualTestMutation.mutate({ id: app.id })}
+              disabled={visualTestMutation.isPending || isWorking}
+              className="h-8 border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 text-cyan-300"
+              title="Toma screenshots de tu app (escritorio, tablet, móvil), los analiza con Claude Vision, y arregla problemas visuales automáticamente. Puede tardar 1-3 minutos."
+            >
+              {visualTestMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <ScanEye className="h-4 w-4 mr-1.5" />
+              )}
+              Análisis Visual
             </Button>
 
             {app.publicSlug ? (
@@ -735,6 +790,121 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={!!visualReport}
+        onOpenChange={(open) => !open && setVisualReport(null)}
+      >
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-slate-950 border-cyan-400/30">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-cyan-300">
+              <ScanEye className="h-5 w-5" />
+              Reporte de Análisis Visual
+              {visualReport && (
+                <Badge
+                  variant="outline"
+                  className={
+                    visualReport.analysis.overallScore >= 80
+                      ? "border-emerald-400/40 text-emerald-300"
+                      : visualReport.analysis.overallScore >= 60
+                      ? "border-amber-400/40 text-amber-300"
+                      : "border-rose-400/40 text-rose-300"
+                  }
+                >
+                  {Math.round(visualReport.analysis.overallScore)}/100
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {visualReport?.analysis.summary}
+            </DialogDescription>
+          </DialogHeader>
+
+          {visualReport && (
+            <div className="space-y-6">
+              {visualReport.fixesApplied > 0 && (
+                <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-200">
+                  Aplicamos {visualReport.fixesApplied} ronda(s) de correcciones
+                  automáticas. La app fue regenerada y vuelta a desplegar.
+                </div>
+              )}
+
+              <div>
+                <h3 className="text-sm font-semibold text-slate-200 mb-2">
+                  Capturas ({visualReport.screenshots.length})
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {visualReport.screenshots.map((shot, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-slate-700 overflow-hidden bg-slate-900"
+                    >
+                      <div className="px-2 py-1 text-xs text-slate-400 bg-slate-800/50 flex items-center justify-between">
+                        <span className="capitalize">{shot.viewport}</span>
+                        <span>
+                          {shot.width}×{shot.height}
+                        </span>
+                      </div>
+                      <img
+                        src={`data:image/png;base64,${shot.imageBase64}`}
+                        alt={`${shot.viewport} screenshot`}
+                        className="w-full h-auto"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {visualReport.analysis.issues.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-200 mb-2">
+                    Problemas detectados ({visualReport.analysis.issues.length})
+                  </h3>
+                  <ul className="space-y-2">
+                    {visualReport.analysis.issues.map((issue, idx) => (
+                      <li
+                        key={idx}
+                        className="rounded-lg border border-slate-700 bg-slate-900/50 p-3"
+                      >
+                        <div className="flex items-start gap-2">
+                          <Badge
+                            variant="outline"
+                            className={
+                              issue.severity === "critical"
+                                ? "border-rose-400/40 text-rose-300"
+                                : issue.severity === "major"
+                                ? "border-amber-400/40 text-amber-300"
+                                : "border-slate-500/40 text-slate-300"
+                            }
+                          >
+                            {issue.severity}
+                          </Badge>
+                          <div className="flex-1">
+                            <p className="text-sm text-slate-200">
+                              {issue.description}
+                            </p>
+                            {issue.suggestion && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                💡 {issue.suggestion}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {visualReport.analysis.issues.length === 0 && (
+                <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-200 text-center">
+                  ✨ Sin problemas visuales detectados.
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

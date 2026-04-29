@@ -29,6 +29,7 @@
     "pg": "^8.20.0",
     "pino": "^9",
     "pino-http": "^10",
+    "puppeteer": "^24.42.0",
     "stripe": "^22.1.0"
   },
   "devDependencies": {

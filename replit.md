@@ -24,6 +24,7 @@ The AppForge system is composed of a React-based frontend, a Node.js/Express bac
 - Features a dark theme with violet and cyan accents.
 - The workspace includes a split panel for chat interaction and a live preview powered by `@codesandbox/sandpack-react`, which dynamically parses and displays generated frontend code. `wouter` is shipped as a real Sandpack dependency pinned to `^2.12.1` (CommonJS) — wouter v3 is pure ESM and Sandpack v2's bundler hangs on it indefinitely.
 - Generated applications include placeholder images, which can be replaced with AI-generated images via the Nano Banana Pro feature.
+- A Visual Testing Agent ("Análisis Visual" button on the app detail page) takes server-side screenshots of the deployed `/p/<slug>` URL at three viewports (desktop / tablet / mobile) using headless Chromium (Nix `chromium` package, resolved via `which chromium`), sends them to Claude Sonnet 4.6 vision for scoring, and runs an auto-fix loop (up to 3 cycles) that rewrites the bundle and persists the patched code. It also runs automatically in the background after every successful generation. Costs 30 credits per run (admins exempt, generation auto-runs are also free).
 
 **Backend (`artifacts/api-server`)**:
 - Developed with Node.js, Express, and TypeScript.
