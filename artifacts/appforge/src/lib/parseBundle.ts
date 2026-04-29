@@ -92,12 +92,111 @@ if (typeof document !== "undefined") {
   }
 }
 
+// --- Runtime error surface -------------------------------------------------
+// Sandpack hides JS exceptions silently and the app simply renders blank below
+// the failing component. We catch them in three places (React render errors,
+// window.onerror, unhandledrejection) and paint a red banner at the bottom of
+// the iframe so the user can see WHY the preview died. Without this, debugging
+// a generated app means staring at a white screen. The banner is dismissible.
+function __showPreviewError(title: string, message: string, stack?: string) {
+  if (typeof document === "undefined") return;
+  let host = document.getElementById("__preview_err__");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "__preview_err__";
+    host.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#7f1d1d;color:#fff;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.4;border-top:2px solid #f87171;max-height:25vh;overflow:auto;box-shadow:0 -4px 12px rgba(0,0,0,0.25)";
+    document.body.appendChild(host);
+  }
+  const safeMsg = String(message || "").slice(0, 800);
+  const safeStack = stack ? String(stack).slice(0, 1500) : "";
+  // Build via DOM nodes + textContent so error text from generated apps cannot
+  // inject HTML into the preview iframe (defense-in-depth even though the
+  // iframe is sandboxed).
+  while (host.firstChild) host.removeChild(host.firstChild);
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:10px 12px;";
+  const main = document.createElement("div");
+  main.style.cssText = "flex:1;min-width:0;";
+  const titleEl = document.createElement("div");
+  titleEl.style.cssText = "font-weight:700;color:#fecaca;margin-bottom:4px;";
+  titleEl.textContent = title;
+  const msgEl = document.createElement("div");
+  msgEl.style.cssText = "white-space:pre-wrap;word-break:break-word;";
+  msgEl.textContent = safeMsg;
+  main.appendChild(titleEl);
+  main.appendChild(msgEl);
+  if (safeStack) {
+    const det = document.createElement("details");
+    det.style.cssText = "margin-top:6px;color:#fca5a5;";
+    const sum = document.createElement("summary");
+    sum.style.cssText = "cursor:pointer;";
+    sum.textContent = "Ver stack";
+    const pre = document.createElement("pre");
+    pre.style.cssText = "white-space:pre-wrap;word-break:break-word;margin:6px 0 0;";
+    pre.textContent = safeStack;
+    det.appendChild(sum);
+    det.appendChild(pre);
+    main.appendChild(det);
+  }
+  const btn = document.createElement("button");
+  btn.style.cssText = "background:transparent;border:1px solid #fca5a5;color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;flex-shrink:0;";
+  btn.textContent = "Cerrar";
+  btn.onclick = function() { if (host) host.style.display = "none"; };
+  row.appendChild(main);
+  row.appendChild(btn);
+  host.appendChild(row);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("error", function(ev) {
+    const e = ev as ErrorEvent;
+    __showPreviewError("Error en tiempo de ejecución", e.message || "Error desconocido", e.error && e.error.stack);
+  });
+  window.addEventListener("unhandledrejection", function(ev) {
+    const e = ev as PromiseRejectionEvent;
+    const reason: any = e.reason;
+    const msg = reason && reason.message ? reason.message : String(reason);
+    const stk = reason && reason.stack ? reason.stack : undefined;
+    __showPreviewError("Promesa rechazada", msg, stk);
+  });
+}
+
+class PreviewBoundary extends React.Component<{ children: React.ReactNode }, { err: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { err: null };
+  }
+  static getDerivedStateFromError(err: Error) { return { err }; }
+  componentDidCatch(err: Error, info: { componentStack?: string }) {
+    __showPreviewError(
+      "El componente lanzó un error",
+      err.message || String(err),
+      (err.stack || "") + (info && info.componentStack ? "\\n\\nComponent stack:" + info.componentStack : "")
+    );
+  }
+  render() {
+    if (this.state.err) {
+      return React.createElement(
+        "div",
+        { style: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", background: "#fef2f2", color: "#991b1b", fontFamily: "ui-sans-serif, system-ui, sans-serif" } },
+        React.createElement(
+          "div",
+          { style: { maxWidth: "560px", textAlign: "center" } },
+          React.createElement("div", { style: { fontSize: "20px", fontWeight: 700, marginBottom: "8px" } }, "La aplicación generada no se pudo renderizar"),
+          React.createElement("div", { style: { fontSize: "14px", opacity: 0.85 } }, "Mira el detalle del error en la barra inferior. Pídele al asistente que lo corrija.")
+        )
+      );
+    }
+    return this.props.children as any;
+  }
+}
+
 const container = document.getElementById("root");
 if (container) {
   createRoot(container).render(
-    <React.StrictMode>
+    <PreviewBoundary>
       <App />
-    </React.StrictMode>
+    </PreviewBoundary>
   );
 }
 `;
