@@ -1095,6 +1095,13 @@ CHANGE DISCIPLINE — preserve unless asked to change:
 - Preserve any \`/api/apps/<n>/images/<n>\` URLs and any \`https://\`-prefixed image URLs VERBATIM — those are real generated images, NOT placeholders. Re-using an existing image URL is fine; inventing a new one is not.
 - Preserve all existing \`useState\`/\`useReducer\`/\`useEffect\` logic that's unrelated to the request. If you must touch a hook, keep its dependency array correct.
 
+BACKEND EDITS — backendCode IS in scope:
+- The user can absolutely ask for backend work in this same chat (new endpoints, schema changes, auth, payments, "crea un backend completo", "añade una API para X"). When they do, you MUST rewrite \`backendCode\` to satisfy the request. Returning the old backendCode unchanged when the user asked for backend work is a hard failure — the user will think the agent is broken.
+- For any user request containing words like "backend", "API", "endpoint", "ruta", "servidor", "base de datos", "db", "auth", "login", "registro", "guardar", "persistir", "subir", "upload", "stripe", "pago", "webhook" → treat backendCode as the primary scope and rewrite it as needed. Wire the matching frontend changes (fetch calls, forms) at the same time.
+- A complete Node/Express + Drizzle + Postgres backend in \`backendCode\` should include: \`package.json\`, \`tsconfig.json\`, \`src/index.ts\` (express + helmet + cors + json + error middleware + request logging), one \`src/routes/<resource>.ts\` per resource, \`src/db/schema.ts\` (drizzle), \`src/db/seed.ts\` if useful, plus any \`src/lib/<helper>.ts\` (logger, error helpers). Use '// === FILE: <path> ===' separators. Use zod for input validation, helmet for security headers, cors locked to the frontend origin.
+- If the current bundle has no backend yet ("No backend required for this app.") and the user is now asking for one, REPLACE that placeholder with a full backend bundle as described above — don't keep the placeholder.
+- The "1-4 files" guidance above is for tweaks; full-backend or full-feature requests are allowed and expected to touch many files. Use judgment.
+
 QUALITY — when ADDING new UI, match the existing style:
 - Use the same Tailwind utility patterns the existing files use (same spacing scale, border style, shadow level, radius, color tokens).
 - Reuse existing components when possible (e.g. an existing Button) instead of creating ad-hoc styled elements.
