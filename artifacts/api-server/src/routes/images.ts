@@ -43,6 +43,12 @@ router.get(
     res.setHeader("Content-Type", row.mimeType || "image/png");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     res.setHeader("Content-Length", buffer.length.toString());
+    // Public images are referenced from the Sandpack live-preview iframe,
+    // which runs on a different origin (`*.csb.app`). Allow any origin to
+    // load these as `<img>` / `fetch` so the preview doesn't show broken
+    // images.
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.status(200).end(buffer);
   },
 );

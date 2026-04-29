@@ -1005,48 +1005,82 @@ Return the FULL updated app as JSON.`;
   // Anthropic Sonnet as the only opt-in alternative.
   const provider = resolveCoderProvider(coderModel);
   const systemPrompt = buildEditSystemPrompt(language);
-  let accumulated = "";
-  let finishReason: string | undefined;
-  if (provider === "gemini-flash") {
-    const stream = await gemini.models.generateContentStream({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: userContent }] }],
-      config: {
-        systemInstruction: systemPrompt,
-        maxOutputTokens: 32768,
-        responseMimeType: "application/json",
-      },
-    });
-    let lastReport = 0;
-    for await (const chunk of stream) {
-      const text = chunk.text;
-      if (text) {
-        accumulated += text;
-        if (accumulated.length - lastReport >= 1500) {
-          lastReport = accumulated.length;
-          onChars(accumulated.length);
+
+  /**
+   * Run the chosen provider with an optional reminder appended to the user
+   * content. Returns the raw accumulated text plus the finish reason so the
+   * caller can inspect & retry.
+   */
+  async function callModel(extraReminder: string): Promise<{ text: string; finishReason?: string }> {
+    const finalUserContent = extraReminder
+      ? `${userContent}\n\n${extraReminder}`
+      : userContent;
+    let accumulated = "";
+    let finishReason: string | undefined;
+    if (provider === "gemini-flash") {
+      const stream = await gemini.models.generateContentStream({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: finalUserContent }] }],
+        config: {
+          systemInstruction: systemPrompt,
+          maxOutputTokens: 32768,
+          responseMimeType: "application/json",
+        },
+      });
+      let lastReport = 0;
+      for await (const chunk of stream) {
+        const text = chunk.text;
+        if (text) {
+          accumulated += text;
+          if (accumulated.length - lastReport >= 1500) {
+            lastReport = accumulated.length;
+            onChars(accumulated.length);
+          }
         }
+        const fr = chunk.candidates?.[0]?.finishReason;
+        if (fr) finishReason = fr;
       }
-      const fr = chunk.candidates?.[0]?.finishReason;
-      if (fr) finishReason = fr;
+    } else {
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 16384,
+        system: systemPrompt,
+        messages: [{ role: "user", content: finalUserContent }],
+      });
+      accumulated = response.content
+        .filter((b: { type: string }) => b.type === "text")
+        .map((b) => (b as { text: string }).text)
+        .join("");
+      if (response.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+      onChars(accumulated.length);
     }
-  } else {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 16384,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
-    });
-    accumulated = response.content
-      .filter((b: { type: string }) => b.type === "text")
-      .map((b) => (b as { text: string }).text)
-      .join("");
-    if (response.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
-    onChars(accumulated.length);
+    return { text: accumulated, finishReason };
   }
-  const parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
+
+  // First attempt + a single strict retry. The model occasionally returns
+  // pre-amble text or wraps the JSON in a code fence which breaks
+  // extractJsonObject. The retry adds an unambiguous reminder that the entire
+  // response must be a JSON object with the documented keys.
+  let { text: accumulated, finishReason } = await callModel("");
+  let parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
   if (!parsed || typeof parsed.frontendCode !== "string") {
-    throw new Error("No pudimos analizar la respuesta del modelo en modo edición.");
+    const retry = await callModel(
+      "RECORDATORIO ESTRICTO: tu respuesta DEBE ser exclusivamente un objeto JSON válido " +
+      "(sin texto antes ni después, sin ```json ni comentarios) con las claves " +
+      `"title", "description", "techStack", "frontendCode" y "backendCode". ` +
+      `frontendCode debe contener TODOS los archivos del frontend en el formato // === FILE: path === ` +
+      "y backendCode el server.js completo (o un placeholder si no hay backend).",
+    );
+    accumulated = retry.text;
+    finishReason = retry.finishReason;
+    parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
+  }
+  if (!parsed || typeof parsed.frontendCode !== "string") {
+    const preview = accumulated.slice(0, 200).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `No pudimos analizar la respuesta del modelo en modo edición. ` +
+      `Inicio de la respuesta: "${preview}…". Vuelve a intentarlo o cambia de modelo en el menú "Modelo".`,
+    );
   }
   // Refuse a bundle that was clearly cut off mid-output. Even if the JSON
   // parses, the contents are partial — better to surface the failure so the
