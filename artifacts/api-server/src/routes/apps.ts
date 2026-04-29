@@ -660,9 +660,7 @@ async function runJob(
     const detail = err instanceof Error ? err.message : "Error desconocido";
     const hasMoreAttempts = attemptCtx.attempt < attemptCtx.maxAttempts;
     if (hasMoreAttempts) {
-      // Transient failure path — pg-boss will retry. Do NOT finalise the
-      // row, do NOT refund credits, do NOT post a chat message yet. We just
-      // bump retryCount and re-throw so the queue applies its backoff.
+      // Transient failure: bump retryCount, rethrow so pg-boss schedules backoff.
       logger.warn(
         { err, jobId, attempt: attemptCtx.attempt, maxAttempts: attemptCtx.maxAttempts },
         "Generation job attempt failed — pg-boss will retry",
@@ -683,8 +681,7 @@ async function runJob(
       throw err;
     }
 
-    // Final attempt failed — finalise: mark failed, refund credits, post
-    // chat message. This is the path the user actually sees.
+    // Final attempt: finalise (failed + refund + chat message).
     logger.error(
       { err, jobId, attempt: attemptCtx.attempt, maxAttempts: attemptCtx.maxAttempts },
       "Generation job failed after all retries",
@@ -701,17 +698,8 @@ async function runJob(
         })
         .where(eq(generationJobs.id, jobId));
     } catch (updateErr) {
-      // CRITICAL: if we cannot mark the row as terminally failed, we MUST
-      // re-throw. Otherwise pg-boss thinks the job succeeded and will not
-      // dispatch it again, leaving the row stuck in `running`/`retrying`
-      // forever (until the >15min stale-running reclaim eventually picks it
-      // up). Re-throwing on the final attempt does NOT cause another retry
-      // (we're at maxAttempts), but it does ensure pg-boss records the
-      // failure and operators can see the row needs manual attention.
-      logger.error(
-        { err: updateErr, jobId },
-        "Failed to mark job as failed — rethrowing so pg-boss records terminal failure",
-      );
+      // Rethrow if terminal write fails so pg-boss doesn't record success.
+      logger.error({ err: updateErr, jobId }, "Failed to mark job as failed — rethrowing");
       throw updateErr;
     }
     // CRITICAL UX: when an *edit* fails, the user has just sent a message and
@@ -1171,13 +1159,33 @@ async function enqueueGeneration(
     return;
   }
 
-  // Hand off to the persistent queue. The worker (started at boot in
-  // index.ts) reloads everything it needs from generation_jobs.id and calls
-  // runJob. If the queue is down (DB outage, etc.) we fall back to the old
-  // setImmediate path so a single dependency hiccup doesn't strand the user
-  // — the in-process run still works, it just isn't restart-safe.
+  // Hand off to the persistent queue; fall back to setImmediate if the queue is down.
   try {
     await enqueueGenerateJob(job.id);
+    // Visible queue position in the job log stream so users see "tu app está #3 en la cola".
+    try {
+      const [{ ahead }] = await db
+        .select({ ahead: sql<number>`count(*)::int` })
+        .from(generationJobs)
+        .where(
+          and(
+            eq(generationJobs.status, "queued"),
+            sql`${generationJobs.id} < ${job.id}`,
+          ),
+        );
+      const position = Number(ahead) + 1;
+      await db.insert(jobLogs).values({
+        jobId: job.id,
+        agent: "queue",
+        level: "info",
+        message:
+          position === 1
+            ? "Tu solicitud está en cola y empezará a procesarse en breve."
+            : `Tu solicitud está en cola en posición #${position}.`,
+      });
+    } catch (logErr) {
+      logger.warn({ err: logErr, jobId: job.id }, "Failed to write queue-position log line");
+    }
   } catch (err) {
     logger.error({ err, jobId: job.id }, "Failed to enqueue job in queue — falling back to in-process run");
     const attachmentIdsForJob = extras?.attachmentIds ?? [];
@@ -1875,7 +1883,22 @@ router.get(
       res.status(404).json({ error: "Job not found" });
       return;
     }
-    res.json(serializeJob(row));
+    // Queue position: how many queued jobs are ahead of this one (older id,
+    // status=queued). Returns 0 if this job is no longer queued.
+    let queuePosition: number | null = null;
+    if (row.status === "queued") {
+      const [{ ahead }] = await db
+        .select({ ahead: sql<number>`count(*)::int` })
+        .from(generationJobs)
+        .where(
+          and(
+            eq(generationJobs.status, "queued"),
+            sql`${generationJobs.id} < ${id}`,
+          ),
+        );
+      queuePosition = Number(ahead) + 1;
+    }
+    res.json({ ...serializeJob(row), queuePosition });
   },
 );
 

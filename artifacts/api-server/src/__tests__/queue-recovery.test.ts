@@ -1,28 +1,6 @@
-/**
- * Integration test for the persistent generation queue.
- *
- * Why this exists:
- *   The whole point of moving generations from setImmediate() onto pg-boss
- *   is restart-resilience. A reviewer can't take "trust me" for that — this
- *   script proves it by exercising the four failure modes that mattered most
- *   in the design:
- *
- *     1. Happy path: enqueue → worker picks up → row updates.
- *     2. Restart resilience: enqueue → STOP queue without processing → start
- *        queue + worker again → worker picks up the leftover job.
- *     3. Orphan reclaim (queued): a row exists in `generation_jobs` with
- *        status="queued" but pg-boss has no entry for it (e.g. crash before
- *        send). Boot's reclaim re-enqueues it; worker processes it.
- *     4. Stale running fail: a row stuck in status="running" for >15min is
- *        marked failed by reclaim (not silently re-enqueued — the user gets
- *        their credit back via the existing failure path).
- *
- * How to run:
- *   pnpm --filter @workspace/api-server run test:queue
- *
- * The test creates one disposable user + one disposable app, runs all four
- * scenarios, prints PASS/FAIL, and cleans up. Exit code 0 on success.
- */
+// Integration test for the persistent generation queue.
+// Run: pnpm --filter @workspace/api-server run test:queue
+// Set GENERATE_QUEUE_NAME to use an isolated queue (recommended for CI).
 
 import { db, generationJobs, users, generatedApps } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
@@ -190,14 +168,13 @@ async function runScenario1HappyPath(appId: number) {
 }
 
 async function runScenario2RestartResilience(appId: number) {
-  // Stage 1: enqueue without registering a worker, then stop queue.
+  // Stage 1: enqueue, no worker, stop.
   await startQueue();
   const jobId = await insertJobRow(appId);
   await enqueueGenerateJob(jobId);
   await stopQueue();
 
-  // Stage 2: fresh boot — start queue + worker. The job should be picked up
-  // even though no worker was running when it was sent.
+  // Stage 2: fresh boot, register worker, expect pickup.
   const processed = new Set<number>();
   await startQueue();
   await registerGenerateWorker(makeStubHandler(processed));
@@ -227,16 +204,14 @@ async function runScenario2RestartResilience(appId: number) {
 }
 
 async function runScenario3OrphanReclaimQueued(appId: number) {
-  // Insert a row that LOOKS queued but was never sent to pg-boss (simulating
-  // a crash between DB tx commit and queue.send).
+  // Row looks queued but was never sent (simulates crash between insert and send).
   const jobId = await insertJobRow(appId, { status: "queued", phase: "queued" });
 
   const processed = new Set<number>();
   await startQueue();
   await registerGenerateWorker(makeStubHandler(processed));
 
-  // Run the same reclaim function the server runs at boot. Scoped to the
-  // test user so we never touch real users' jobs.
+  // Same reclaim used at boot, scoped to test user.
   await reclaimOrphanedJobs({ userId: TEST_USER_ID });
 
   let pickedUp = false;
@@ -263,9 +238,7 @@ async function runScenario3OrphanReclaimQueued(appId: number) {
 }
 
 async function runScenario4StaleRunningFails(appId: number) {
-  // Insert a row stuck in "running" for 20 minutes — simulates a worker that
-  // crashed mid-generation. Reclaim should mark it failed (not silently
-  // re-enqueue, because we have no idea how far it got).
+  // Row stuck in "running" for 20 min: reclaim must mark failed (not re-enqueue).
   const twentyMinAgo = new Date(Date.now() - 20 * 60 * 1000);
   const jobId = await insertJobRow(appId, {
     status: "running",
@@ -276,8 +249,7 @@ async function runScenario4StaleRunningFails(appId: number) {
   });
 
   await startQueue();
-  // No worker registered — we don't want this re-picked up if reclaim
-  // misbehaves. A failure here should be observable purely via the row state.
+  // No worker registered: failure must be observable purely via row state.
   await reclaimOrphanedJobs();
 
   const after = await getJob(jobId);
@@ -310,9 +282,7 @@ async function enqueueWithFastRetry(jobId: number, retryLimit: number) {
 }
 
 async function runScenario5RetriesAreDispatched(appId: number) {
-  // Fail the first attempt, succeed on the second. Verifies that pg-boss
-  // actually re-dispatches when the worker re-throws — the bug the previous
-  // review caught (runJob swallowing all errors) would make this fail.
+  // First attempt throws, second succeeds — proves pg-boss re-dispatches on rethrow.
   const attempts: number[] = [];
   const handler = makeFlakyHandler(/* failuresBeforeSuccess */ 1, attempts);
   await startQueue();
@@ -347,13 +317,8 @@ async function runScenario5RetriesAreDispatched(appId: number) {
 }
 
 async function runScenario6FinalAttemptFinalises(appId: number) {
-  // Verify the contract that runJob's catch block honours: when the handler
-  // is invoked on the FINAL attempt and throws, the row gets finalised
-  // (status=failed, retryCount=max) and the throw is absorbed (no further
-  // retry). We stub a handler that mimics runJob's branch so the test
-  // doesn't have to spin up the real AI pipeline (which can take minutes
-  // and call paid APIs). The contract under test is the worker behaviour:
-  // earlier attempts re-throw, final attempt absorbs.
+  // Stub mimics runJob's branch: rethrow on early attempts, finalise on final.
+  // Verifies retry exhaustion finalises the row exactly once.
   const attempts: number[] = [];
   const stub = async (jobId: number, ctx: { attempt: number; maxAttempts: number }) => {
     attempts.push(ctx.attempt);
@@ -414,20 +379,12 @@ async function runScenario6FinalAttemptFinalises(appId: number) {
 }
 
 async function runScenario7HandlerAlwaysThrowsRecordedAsFailed(appId: number) {
-  // Contract under test: when runJob's final-attempt DB write fails, runJob
-  // re-throws. The worker re-throws. pg-boss records the job as failed
-  // (i.e. it does NOT think the job succeeded — which is what would happen
-  // if we silently absorbed the error).
-  //
-  // We simulate this directly with a handler that always throws on every
-  // attempt, including the final one. This is the exact wire-level
-  // observation the operator gets if runJob's terminal DB write blows up.
+  // Stub always throws — simulates final-attempt DB-write failure path.
+  // Asserts row never gets silently flipped to "succeeded".
   const attempts: number[] = [];
   const stub = async (jobId: number, ctx: { attempt: number; maxAttempts: number }) => {
     attempts.push(ctx.attempt);
-    // Mark the row as `running` so we can detect that it never reaches
-    // `succeeded` (which is the silent-success failure mode we're guarding
-    // against).
+    // Mark row as `running` so we can detect it never silently flips to `succeeded`.
     await db
       .update(generationJobs)
       .set({ status: "running", phase: "retrying", updatedAt: new Date() })
@@ -441,11 +398,7 @@ async function runScenario7HandlerAlwaysThrowsRecordedAsFailed(appId: number) {
   const jobId = await insertJobRow(appId);
   await enqueueWithFastRetry(jobId, MAX_ATTEMPTS - 1);
 
-  // Wait for pg-boss to consume all attempts and stop dispatching. We
-  // observe by waiting until `attempts.length === MAX_ATTEMPTS` then giving
-  // pg-boss a beat to record state. The job in pg-boss should end up in
-  // `failed`, and the DB row should be in `running`/`retrying` (the stale-
-  // running reclaim will eventually catch it) — critically NOT `succeeded`.
+  // Wait until all attempts consumed; row must NOT be `succeeded`.
   try {
     await waitFor(
       `job ${jobId} dispatched ${MAX_ATTEMPTS} times`,
@@ -462,9 +415,7 @@ async function runScenario7HandlerAlwaysThrowsRecordedAsFailed(appId: number) {
   const queueState = await queue
     .getJobById(GENERATE_QUEUE, "stub")
     .catch(() => null);
-  // The important assertion: row was never silently flipped to succeeded.
-  // pg-boss's own job state is checked indirectly by counting attempts —
-  // it stops dispatching once retries are exhausted.
+  // Key assertion: row never silently flipped to succeeded.
   const ok =
     attempts.length === MAX_ATTEMPTS &&
     after?.status !== "succeeded" &&
@@ -481,15 +432,7 @@ async function runScenario7HandlerAlwaysThrowsRecordedAsFailed(appId: number) {
 }
 
 async function runScenario8ConcurrentAdminRetrySingleEnqueue(appId: number) {
-  // Contract under test: the admin retry endpoint uses an UPDATE ... WHERE
-  // status=? AND updatedAt=? guard so that two concurrent retry requests
-  // racing for the same row result in exactly ONE successful state
-  // transition (and therefore exactly ONE enqueue). The other request gets
-  // zero rows back and returns 409.
-  //
-  // We exercise the SQL guard directly here (the HTTP handler isn't
-  // exported), running the exact same UPDATE pattern in parallel and
-  // asserting only one of them returns a row.
+  // Two concurrent guarded UPDATEs on the same row: exactly one wins.
   const jobId = await insertJobRow(appId, {
     status: "failed",
     phase: "failed",
@@ -521,8 +464,7 @@ async function runScenario8ConcurrentAdminRetrySingleEnqueue(appId: number) {
       )
       .returning({ id: generationJobs.id });
 
-  // Fire both updates concurrently. Postgres serialises row writes so
-  // exactly one will win.
+  // Fire both updates concurrently; PG serialises so exactly one wins.
   const [a, b] = await Promise.all([guardedUpdate(), guardedUpdate()]);
   const winners = [a, b].filter((r) => r.length === 1).length;
   const losers = [a, b].filter((r) => r.length === 0).length;
@@ -535,8 +477,7 @@ async function runScenario8ConcurrentAdminRetrySingleEnqueue(appId: number) {
 }
 
 async function purgeTestQueue() {
-  // Wipe any leftover jobs in the test queue from prior runs so we don't
-  // race with stale items. Best-effort — never throws.
+  // Best-effort wipe of leftover jobs from prior runs.
   try {
     await startQueue();
     const boss = getQueue();
