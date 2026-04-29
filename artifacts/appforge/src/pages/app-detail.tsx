@@ -66,6 +66,9 @@ import {
   PanelRightOpen,
   GitFork,
   AlertCircle,
+  Monitor,
+  Tablet,
+  Smartphone,
 } from "lucide-react";
 import {
   Dialog,
@@ -121,11 +124,33 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [activeTab, setActiveTab] = useState<TabKey>("preview");
   const [copied, setCopied] = useState(false);
   const [previewMaximized, setPreviewMaximized] = useState(false);
+  // Viewport mode for the preview pane. "fit" = render the iframe at the
+  // panel's actual size (current default). The other modes render the iframe
+  // at a fixed device width and visually scale it to fit the panel — same UX
+  // as v0/lovable/emergent. "Fit" was the only behaviour before; with narrow
+  // panels (chat open) responsive apps designed for ≥1024px collapsed into a
+  // mobile layout that misled users into thinking the build was broken.
+  type PreviewViewport = "fit" | "desktop" | "tablet" | "mobile";
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  const [previewBoxSize, setPreviewBoxSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   // Live preview window visibility. Mirrors emergent.sh — the preview can be
   // closed (chat takes the full width) and re-opened from a button. The agent
   // also auto-opens it when it starts a new job so the user sees its work in
   // real time, and on job success.
   const [previewOpen, setPreviewOpen] = useState(true);
+  useEffect(() => {
+    const el = previewBoxRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setPreviewBoxSize({ w: r.width, h: r.height });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [previewOpen, previewMaximized, activeTab]);
   const [draft, setDraft] = useState("");
   const [chatAttachments, setChatAttachments] = useState<UploadedAttachment[]>([]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
@@ -860,6 +885,39 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 </Button>
               </div>
               <div className="flex items-center gap-2">
+                {activeTab === "preview" && (
+                  <div
+                    className="flex items-center bg-white/5 border border-white/10 rounded-md p-0.5"
+                    role="group"
+                    aria-label="Tamaño de vista previa"
+                  >
+                    {(
+                      [
+                        { v: "desktop", label: "Escritorio", Icon: Monitor },
+                        { v: "tablet", label: "Tablet", Icon: Tablet },
+                        { v: "mobile", label: "Móvil", Icon: Smartphone },
+                        { v: "fit", label: "Ajustar al panel", Icon: Maximize2 },
+                      ] as { v: PreviewViewport; label: string; Icon: typeof Monitor }[]
+                    ).map(({ v, label, Icon }) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setPreviewViewport(v)}
+                        className={`h-7 w-8 flex items-center justify-center rounded transition-colors ${
+                          previewViewport === v
+                            ? "bg-white/15 text-white"
+                            : "text-muted-foreground hover:text-white hover:bg-white/10"
+                        }`}
+                        title={label}
+                        aria-label={label}
+                        aria-pressed={previewViewport === v}
+                        data-testid={`preview-viewport-${v}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {activeTab !== "preview" && (
                   <Button
                     variant="outline"
@@ -906,34 +964,80 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-hidden bg-white">
+            <div ref={previewBoxRef} className="flex-1 overflow-hidden bg-[#0d0d12] relative">
               {activeTab === "preview" ? (
                 sandpackFiles ? (
-                  <SandpackProvider
-                    template="react-ts"
-                    files={sandpackFiles}
-                    customSetup={{
-                      entry: "/index.tsx",
-                      // Common packages the coder is allowed to import. Without
-                      // this, Sandpack only knows react/react-dom and dies with
-                      // "Could not find dependency: 'wouter'" when the
-                      // generated app does multi-page routing.
-                      dependencies: SANDPACK_DEPENDENCIES,
-                    }}
-                    options={{
-                      recompileMode: "delayed",
-                      recompileDelay: 500,
-                    }}
-                    theme="light"
-                  >
-                    <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
-                      <SandpackPreview
-                        showOpenInCodeSandbox={false}
-                        showRefreshButton
-                        style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
-                      />
-                    </SandpackLayout>
-                  </SandpackProvider>
+                  (() => {
+                    // Compute the inner viewport size and the scale factor used
+                    // to fit it inside the actual panel. "fit" mirrors the old
+                    // behaviour (1:1, no scaling, iframe = panel size). The
+                    // device modes render at a fixed width and scale down with
+                    // CSS transform so the user sees the full responsive layout
+                    // even when the chat is open beside the preview.
+                    const VIEWPORT_W: Record<Exclude<PreviewViewport, "fit">, number> = {
+                      desktop: 1280,
+                      tablet: 768,
+                      mobile: 390,
+                    };
+                    const isFit = previewViewport === "fit";
+                    const innerW = isFit ? previewBoxSize.w : VIEWPORT_W[previewViewport];
+                    const scale = isFit || innerW <= 0 || previewBoxSize.w <= 0
+                      ? 1
+                      : Math.min(1, previewBoxSize.w / innerW);
+                    const innerH = isFit
+                      ? previewBoxSize.h
+                      : Math.max(0, previewBoxSize.h / (scale || 1));
+                    const sandpack = (
+                      <SandpackProvider
+                        template="react-ts"
+                        files={sandpackFiles}
+                        customSetup={{
+                          entry: "/index.tsx",
+                          // Common packages the coder is allowed to import. Without
+                          // this, Sandpack only knows react/react-dom and dies with
+                          // "Could not find dependency: 'wouter'" when the
+                          // generated app does multi-page routing.
+                          dependencies: SANDPACK_DEPENDENCIES,
+                        }}
+                        options={{
+                          recompileMode: "delayed",
+                          recompileDelay: 500,
+                        }}
+                        theme="light"
+                      >
+                        <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
+                          <SandpackPreview
+                            showOpenInCodeSandbox={false}
+                            showRefreshButton
+                            style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
+                          />
+                        </SandpackLayout>
+                      </SandpackProvider>
+                    );
+                    if (isFit) {
+                      return <div className="absolute inset-0 bg-white">{sandpack}</div>;
+                    }
+                    return (
+                      <div className="absolute inset-0 flex items-start justify-center overflow-hidden">
+                        <div
+                          style={{
+                            width: innerW,
+                            height: innerH,
+                            transform: `scale(${scale})`,
+                            transformOrigin: "top center",
+                            background: "white",
+                            boxShadow: "0 4px 24px rgba(0,0,0,0.35)",
+                            borderRadius: previewViewport === "mobile" ? 24 : 8,
+                            overflow: "hidden",
+                            flexShrink: 0,
+                          }}
+                          data-testid="preview-viewport-frame"
+                        >
+                          {sandpack}
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     No hay vista previa disponible
