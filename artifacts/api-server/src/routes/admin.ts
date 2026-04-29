@@ -438,4 +438,141 @@ router.delete("/admin/memory/:id", async (req, res) => {
   res.json({ ok: true, id });
 });
 
+/**
+ * Aggregated business metrics for the admin dashboard. Single endpoint so the
+ * UI can refresh every 30s with one query. All windows are computed in JS
+ * from raw SQL groupings to keep the queries portable.
+ */
+router.get("/admin/metrics", async (_req, res) => {
+  const now = new Date();
+  const day = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // 1) Jobs in the last 24h: total / success / fail / avg duration (ms).
+  const jobs24h = await db
+    .select({
+      status: generationJobs.status,
+      total: count(),
+      avgMs: sql<
+        number | null
+      >`AVG(EXTRACT(EPOCH FROM (${generationJobs.updatedAt} - ${generationJobs.createdAt})) * 1000)::int`,
+    })
+    .from(generationJobs)
+    .where(gte(generationJobs.createdAt, day))
+    .groupBy(generationJobs.status);
+
+  let jobsTotal = 0;
+  let jobsSuccess = 0;
+  let jobsFailed = 0;
+  let avgDurationMsAccum = 0;
+  let avgDurationCount = 0;
+  for (const row of jobs24h) {
+    jobsTotal += row.total;
+    if (row.status === "succeeded") jobsSuccess += row.total;
+    if (row.status === "failed") jobsFailed += row.total;
+    if (row.avgMs && (row.status === "succeeded" || row.status === "failed")) {
+      avgDurationMsAccum += row.avgMs * row.total;
+      avgDurationCount += row.total;
+    }
+  }
+  const avgDurationMs =
+    avgDurationCount > 0 ? Math.round(avgDurationMsAccum / avgDurationCount) : 0;
+
+  // 2) Top failing phases in the last 24h.
+  const failingPhases = await db
+    .select({
+      phase: generationJobs.phase,
+      total: count(),
+    })
+    .from(generationJobs)
+    .where(
+      and(eq(generationJobs.status, "failed"), gte(generationJobs.createdAt, day)),
+    )
+    .groupBy(generationJobs.phase)
+    .orderBy(desc(count()))
+    .limit(3);
+
+  // 3) Credits spent today and this month (usage = negative amounts).
+  const [creditsToday] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)::int`,
+    })
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.kind, "usage"),
+        gte(creditTransactions.createdAt, todayStart),
+      ),
+    );
+  const [creditsMonth] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)::int`,
+    })
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.kind, "usage"),
+        gte(creditTransactions.createdAt, monthStart),
+      ),
+    );
+
+  // 4) Top 5 users by credits consumed all-time.
+  const topUsers = await db
+    .select({
+      userId: creditTransactions.userId,
+      email: users.email,
+      total: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)::int`,
+    })
+    .from(creditTransactions)
+    .leftJoin(users, eq(users.id, creditTransactions.userId))
+    .where(eq(creditTransactions.kind, "usage"))
+    .groupBy(creditTransactions.userId, users.email)
+    .orderBy(desc(sql`SUM(ABS(${creditTransactions.amount}))`))
+    .limit(5);
+
+  // 5) Apps published today + total. "Published" = has a public_slug.
+  const [publishedTotal] = await db
+    .select({ total: count() })
+    .from(generatedApps)
+    .where(sql`${generatedApps.publicSlug} IS NOT NULL`);
+  const [publishedToday] = await db
+    .select({ total: count() })
+    .from(generatedApps)
+    .where(
+      and(
+        sql`${generatedApps.publicSlug} IS NOT NULL`,
+        gte(generatedApps.createdAt, todayStart),
+      ),
+    );
+
+  res.json({
+    generatedAt: now.toISOString(),
+    jobs24h: {
+      total: jobsTotal,
+      succeeded: jobsSuccess,
+      failed: jobsFailed,
+      successRate: jobsTotal > 0 ? Math.round((jobsSuccess / jobsTotal) * 100) : null,
+      avgDurationMs,
+    },
+    topFailingPhases: failingPhases.map((p) => ({
+      phase: p.phase,
+      count: p.total,
+    })),
+    credits: {
+      today: creditsToday?.total ?? 0,
+      month: creditsMonth?.total ?? 0,
+    },
+    topUsers: topUsers.map((u) => ({
+      userId: u.userId,
+      email: u.email ?? "(usuario eliminado)",
+      creditsUsed: u.total,
+    })),
+    publishedApps: {
+      today: publishedToday?.total ?? 0,
+      total: publishedTotal?.total ?? 0,
+    },
+  });
+});
+
 export default router;

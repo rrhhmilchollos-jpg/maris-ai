@@ -10,12 +10,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Pages
+import { setSentryUser } from "@/lib/sentry";
 import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
 import AppDetailPage from "@/pages/app-detail";
 import BillingPage from "@/pages/billing";
 import BillingSuccessPage from "@/pages/billing-success";
 import AdminPage from "@/pages/admin";
+import AdminDashboardPage from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 import DebugPreviewPage from "@/pages/debug-preview";
 
@@ -131,6 +133,14 @@ function ClerkQueryClientCacheInvalidator() {
         queryClient.clear();
       }
       prevUserIdRef.current = userId;
+      setSentryUser(
+        user
+          ? {
+              id: user.id,
+              email: user.primaryEmailAddress?.emailAddress,
+            }
+          : null,
+      );
     });
     return unsubscribe;
   }, [addListener, queryClient]);
@@ -228,6 +238,10 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/admin/memory">
             <Gated><AdminPage initialTab="memory" /></Gated>
+          </Route>
+
+          <Route path="/admin/dashboard">
+            <Gated><AdminDashboardPage /></Gated>
           </Route>
 
           <Route path="/__debug-preview/:id">

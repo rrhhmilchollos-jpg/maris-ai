@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
@@ -12,6 +12,9 @@ import router from "./routes";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import { logger } from "./lib/logger";
+import { initSentry, isSentryEnabled, Sentry } from "./lib/sentry";
+
+initSentry();
 
 const app: Express = express();
 
@@ -58,5 +61,24 @@ app.use("/api", router);
 // Public unauthenticated route for deployed AppForge apps. Mounted on the root
 // (outside /api) so /p/<slug> resolves on the published domain directly.
 app.use(publicDeployRouter);
+
+// Sentry error capture middleware. Must come AFTER all routes so Express
+// forwards the error here, but BEFORE the final JSON error responder.
+app.use((err: unknown, req: Request, _res: Response, next: NextFunction) => {
+  if (isSentryEnabled()) {
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTag("path", req.path);
+        scope.setTag("method", req.method);
+        const userId = (req as Request & { dbUser?: { id?: string } }).dbUser?.id;
+        if (userId) scope.setUser({ id: userId });
+        Sentry.captureException(err);
+      });
+    } catch {
+      // ignore monitoring errors
+    }
+  }
+  next(err);
+});
 
 export default app;

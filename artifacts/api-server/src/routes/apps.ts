@@ -32,6 +32,7 @@ import { runVisualTester, VisualTesterError } from "../lib/visualTester";
 import { runAutoEvaluator } from "../lib/evaluator";
 import { chargeCredits, refundCredits } from "../lib/credits";
 import { enqueueGenerateJob, reenqueueGenerateJob } from "../lib/jobQueue";
+import { captureAgentError, addBreadcrumb } from "../lib/sentry";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
 const VISUAL_TEST_COST = 30;
@@ -744,6 +745,20 @@ async function runJob(
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Error desconocido";
     const hasMoreAttempts = attemptCtx.attempt < attemptCtx.maxAttempts;
+    captureAgentError(err, {
+      jobId,
+      userId,
+      appId: editAppId,
+      phase: "runJob",
+      extra: {
+        attempt: attemptCtx.attempt,
+        maxAttempts: attemptCtx.maxAttempts,
+        editAppId,
+        coderModel,
+        language,
+        willRetry: hasMoreAttempts,
+      },
+    });
     if (hasMoreAttempts) {
       // Transient failure: bump retryCount, rethrow so pg-boss schedules backoff.
       logger.warn(
