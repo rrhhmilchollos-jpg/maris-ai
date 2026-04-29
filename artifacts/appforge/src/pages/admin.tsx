@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import {
   useGetAdminOverview,
@@ -37,7 +37,20 @@ import {
   RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue";
+type AdminTab = "users" | "apps" | "queue" | "memory";
+
+interface MemoryEntry {
+  id: number;
+  errorMessage: string;
+  errorContext: string;
+  patchPreview: string;
+  patchLength: number;
+  language: string;
+  framework: string;
+  successCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function AdminPage({ initialTab = "users" }: { initialTab?: AdminTab } = {}) {
   const [, setLocation] = useLocation();
@@ -80,6 +93,47 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [adjustUser, setAdjustUser] = useState<{ id: string; email: string } | null>(null);
   const [delta, setDelta] = useState("10");
   const [reason, setReason] = useState("");
+
+  // Memoria del agente — fetched on demand when the tab is opened.
+  const [memory, setMemory] = useState<{ total: number; entries: MemoryEntry[] } | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+
+  const loadMemory = async () => {
+    setMemoryLoading(true);
+    try {
+      const r = await fetch("/api/admin/memory?limit=100", { credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setMemory(await r.json());
+    } catch (e) {
+      toast({
+        title: "No se pudo cargar la memoria",
+        description: e instanceof Error ? e.message : "Error desconocido",
+        variant: "destructive",
+      });
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const deleteMemoryEntry = async (id: number) => {
+    try {
+      const r = await fetch(`/api/admin/memory/${id}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      toast({ title: "Entrada eliminada", description: `id ${id} borrada de la memoria.` });
+      await loadMemory();
+    } catch (e) {
+      toast({
+        title: "No se pudo borrar",
+        description: e instanceof Error ? e.message : "Error desconocido",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (initialTab === "memory") void loadMemory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab]);
 
   const adjustMutation = useAdjustUserCredits({
     mutation: {
@@ -144,6 +198,14 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
           <TabsList className="bg-card/40 border border-white/5">
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Usuarios</TabsTrigger>
             <TabsTrigger value="apps"><Code2 className="h-4 w-4 mr-2" /> Apps</TabsTrigger>
+            <TabsTrigger value="memory" onClick={() => { if (!memory) void loadMemory(); }}>
+              <Sparkles className="h-4 w-4 mr-2" /> Memoria
+              {memory && memory.total > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-purple-500/15 text-purple-300 border-purple-500/30">
+                  {memory.total}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="queue">
               <Activity className="h-4 w-4 mr-2" /> Cola
               {(jobsData?.queued ?? 0) + (jobsData?.running ?? 0) > 0 && (
@@ -255,6 +317,83 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="memory" className="mt-4 space-y-4">
+            <Card className="bg-card/40 border-white/5">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <div>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-purple-300" />
+                    Memoria del agente
+                  </CardTitle>
+                  <p className="text-sm text-white/60 mt-1">
+                    Parches que la IA ha aplicado con éxito y reutiliza cuando vuelve a ver el mismo
+                    error o petición. Cuantas más entradas, más rápido y barato resuelve.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={loadMemory} disabled={memoryLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${memoryLoading ? "animate-spin" : ""}`} />
+                  Refrescar
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {memoryLoading && !memory ? (
+                  <Skeleton className="h-32 w-full" />
+                ) : !memory || memory.entries.length === 0 ? (
+                  <p className="text-sm text-white/50 py-8 text-center">
+                    Aún no hay nada en memoria. Se irá llenando a medida que la IA repare bundles
+                    y aplique parches.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {memory.entries.map((e) => (
+                      <div
+                        key={e.id}
+                        className="rounded-lg border border-white/5 bg-black/20 p-3 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 text-xs text-white/50 mb-1">
+                              <span className="font-mono">#{e.id}</span>
+                              <Badge variant="secondary" className="bg-white/5 text-white/70 border-white/10">
+                                {e.language}
+                              </Badge>
+                              <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-300 border-emerald-500/20">
+                                ×{e.successCount}
+                              </Badge>
+                              <span>
+                                {format(new Date(e.updatedAt), "d MMM HH:mm", { locale: es })}
+                              </span>
+                            </div>
+                            <p className="text-sm text-white/90 break-words">
+                              {e.errorMessage}
+                            </p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            onClick={() => deleteMemoryEntry(e.id)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <details className="text-xs">
+                          <summary className="cursor-pointer text-white/50 hover:text-white/70">
+                            Ver parche ({e.patchLength.toLocaleString("es")} caracteres)
+                          </summary>
+                          <pre className="mt-2 p-2 rounded bg-black/40 overflow-x-auto text-white/70 max-h-64">
+                            {e.patchPreview}
+                            {e.patchLength > e.patchPreview.length ? "\n…" : ""}
+                          </pre>
+                        </details>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="queue" className="mt-4 space-y-4">

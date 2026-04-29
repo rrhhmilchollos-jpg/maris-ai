@@ -10,6 +10,8 @@ const openai = new OpenAI({
 });
 import { validateBundle, type BuildIssue } from "./validate";
 import { logger } from "./logger";
+import { recallSimilar, rememberPatch, buildRecallExamplesBlock } from "./agentMemory";
+import { planExecution, planSummaryEs } from "./planner";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -976,6 +978,7 @@ export async function patchBundle(
   frontendCode: string,
   issues: QAIssue[],
   language: GenLanguage = "typescript",
+  memoryContext: string = "",
 ): Promise<string | null> {
   if (issues.length === 0) return null;
   const issueList = issues
@@ -984,9 +987,7 @@ export async function patchBundle(
   return withTimeout(
     (async () => {
       try {
-        // Patcher (the "Debugger") → claude-haiku-4-5. Haiku is ~3x faster
-        // than Sonnet and the patcher only needs to apply small, well-described
-        // diffs to a known bundle, so the quality cost is minimal.
+        // Patcher → claude-haiku-4-5: small diffs on a known bundle, ~3× faster than Sonnet.
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
           max_tokens: 16000,
@@ -996,7 +997,7 @@ export async function patchBundle(
               role: "user",
               content: `ISSUES TO FIX:
 ${issueList}
-
+${memoryContext}
 CURRENT FRONTEND BUNDLE:
 ${frontendCode}
 
@@ -1081,6 +1082,11 @@ async function runValidatePatchLoop(
     ? []
     : qaReport.issues.map((i) => ({ file: i.file, message: `${i.problem} → ${i.fix}` }));
 
+  // Track the last (errorMessage, patchedBundle) pair so we can persist a
+  // successful fix into agent_memory at the end of the loop.
+  let lastErrorMessage: string | null = null;
+  let lastPatchedBundle: string | null = null;
+
   for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
     const baseProgress = baseProgressStart + iter * 3;
     onProgress?.({
@@ -1105,6 +1111,18 @@ async function runValidatePatchLoop(
         note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
       });
       emit("validator", `✓ build OK · ${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"}`);
+      // Persist the last successful patch into agent_memory so future runs
+      // hitting the same error can reuse the fix.
+      if (lastErrorMessage && lastPatchedBundle) {
+        rememberPatch({
+          errorMessage: lastErrorMessage,
+          errorContext: `bundle len=${lastPatchedBundle.length}`,
+          patch: lastPatchedBundle.slice(0, 8000),
+          language,
+        }).then((entry) => {
+          if (entry) emit("memory", `🧠 aprendí esta solución (id ${entry.id})`);
+        }).catch(() => {});
+      }
       break;
     }
 
@@ -1125,6 +1143,20 @@ async function runValidatePatchLoop(
       note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
     });
     emit("patcher", `🔧 patch · ${combined.length}`);
+    // Build a recall block from agent_memory using the FIRST issue's message
+    // as the semantic query. Threshold filters keep low-confidence matches out.
+    const primaryError = `${combined[0].message}${combined[0].file ? ` (in ${combined[0].file})` : ""}`;
+    let memoryBlock = "";
+    try {
+      const matches = await recallSimilar(primaryError, { limit: 3, threshold: 0.7, language });
+      if (matches.length > 0) {
+        emit("memory", `🧠 recall · ${matches.length} fix(es) similar(es)`);
+        memoryBlock = buildRecallExamplesBlock(matches);
+      }
+    } catch {
+      /* recall is best-effort */
+    }
+    lastErrorMessage = primaryError;
     const patched = await patchBundle(
       finalFrontend,
       combined.map((i) => ({
@@ -1133,6 +1165,7 @@ async function runValidatePatchLoop(
         fix: "Fix the import / symbol / syntax so the file compiles.",
       })),
       language,
+      memoryBlock,
     );
     if (!patched) {
       onProgress?.({
@@ -1154,6 +1187,7 @@ async function runValidatePatchLoop(
     }
     emit("patcher", "✓ patch aplicado");
     finalFrontend = patched;
+    lastPatchedBundle = patched;
   }
 
   return finalFrontend;
@@ -1521,6 +1555,87 @@ Return the FULL updated app as JSON.`;
 
 /* ----------------------------- public API --------------------------------- */
 
+/**
+ * Fast path for trivial edits ("change button color", "rename title", "fix
+ * typo"). Bypasses singleEditPass (which sends ALL the bundle through the
+ * coder model) and instead asks the patcher to apply the user's request
+ * directly. ~3× cheaper and ~5× faster than a full edit pass; falls back to
+ * the full pipeline if the patcher returns nothing or the bundle still has
+ * build errors after one validate iteration.
+ */
+async function fastPatchEdit(
+  prompt: string,
+  previous: PreviousApp,
+  language: GenLanguage,
+  log: AgentLog,
+  onProgress?: (p: GenerateProgress) => void,
+): Promise<GeneratedAppPayload | null> {
+  onProgress?.({ phase: "fixing", progress: 30, note: "Aplicando parche directo…" });
+  log("patcher", "Aplicando tu cambio directamente al bundle (modo rápido).");
+
+  // Recall similar past fixes by user prompt — for cosmetic edits the prompt
+  // itself is the best semantic key.
+  let memoryBlock = "";
+  try {
+    const matches = await recallSimilar(prompt, { limit: 2, threshold: 0.78, language });
+    if (matches.length > 0) {
+      log("memory", `🧠 recall · ${matches.length} cambio(s) similar(es) ya hechos`);
+      memoryBlock = buildRecallExamplesBlock(matches);
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  const issues: QAIssue[] = [
+    {
+      file: "user-request",
+      problem: prompt.slice(0, 1500),
+      fix: "Aplica EXACTAMENTE lo que pide la usuaria, modificando solo lo mínimo necesario. NO reescribas archivos enteros si no hace falta. Conserva todo el resto del bundle intacto.",
+    },
+  ];
+
+  const patched = await patchBundle(previous.frontendCode, issues, language, memoryBlock);
+  if (!patched || patched.length < 100) {
+    log("patcher", "El parche directo devolvió un bundle vacío.", "warn");
+    return null;
+  }
+
+  onProgress?.({ phase: "validating", progress: 75, note: "Validando el parche…" });
+  const validation = await validateBundle(patched);
+  if (!validation.ok && validation.issues.length > 0) {
+    // Give it ONE auto-repair attempt before bailing to the full pipeline.
+    const repaired = await runValidatePatchLoop(patched, { ok: true, issues: [] }, onProgress, 70, language, log);
+    onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
+    return {
+      title: previous.title,
+      description: previous.description,
+      techStack: previous.techStack,
+      frontendCode: repaired,
+      backendCode: previous.backendCode,
+    };
+  }
+
+  // Save successful fast-patch into memory so the next "cambia el botón a verde" reuses this.
+  rememberPatch({
+    errorMessage: prompt.slice(0, 400),
+    errorContext: "fast-patch user request",
+    patch: patched.slice(0, 8000),
+    language,
+  }).then((entry) => {
+    if (entry) log("memory", `🧠 aprendí este cambio (id ${entry.id})`);
+  }).catch(() => {});
+
+  onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
+  log("patcher", "✓ parche aplicado y validado.");
+  return {
+    title: previous.title,
+    description: previous.description,
+    techStack: previous.techStack,
+    frontendCode: patched,
+    backendCode: previous.backendCode,
+  };
+}
+
 export interface PreviousApp {
   title: string;
   description: string;
@@ -1558,6 +1673,19 @@ export async function generateApp(
   };
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
+    onProgress?.({ phase: "generating", progress: 10, note: "Planificando los cambios…" });
+    const plan = await planExecution(prompt, { hasExistingApp: true });
+    log("planner", planSummaryEs(plan));
+
+    // Fast-patch shortcut: skip the full coder pass and ask the patcher to
+    // apply the user's request directly to the bundle. Saves ~60–90s on
+    // cosmetic / one-line edits.
+    if (plan.scope === "fast-patch") {
+      const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
+      if (fastResult) return fastResult;
+      log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
+    }
+
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
     log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
     log("coder", "Calentando motores…");

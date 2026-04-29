@@ -10,6 +10,7 @@ import {
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob } from "../lib/jobQueue";
 import { logger } from "../lib/logger";
+import { agentMemory } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -373,6 +374,57 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
     createdAt: updated.createdAt.toISOString(),
     updatedAt: updated.updatedAt.toISOString(),
   });
+});
+
+router.get("/admin/memory", async (req, res) => {
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const rows = await db
+    .select({
+      id: agentMemory.id,
+      errorMessage: agentMemory.errorMessage,
+      errorContext: agentMemory.errorContext,
+      patch: agentMemory.patch,
+      language: agentMemory.language,
+      framework: agentMemory.framework,
+      successCount: agentMemory.successCount,
+      createdAt: agentMemory.createdAt,
+      updatedAt: agentMemory.updatedAt,
+    })
+    .from(agentMemory)
+    .orderBy(desc(agentMemory.updatedAt))
+    .limit(limit);
+  const [{ value: total } = { value: 0 }] = await db
+    .select({ value: count() })
+    .from(agentMemory);
+  res.json({
+    total: Number(total),
+    entries: rows.map((r) => ({
+      id: r.id,
+      errorMessage: r.errorMessage,
+      errorContext: r.errorContext,
+      patchPreview: r.patch.slice(0, 600),
+      patchLength: r.patch.length,
+      language: r.language,
+      framework: r.framework,
+      successCount: r.successCount,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    })),
+  });
+});
+
+router.delete("/admin/memory/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ message: "id inválido" });
+    return;
+  }
+  const deleted = await db.delete(agentMemory).where(eq(agentMemory.id, id)).returning();
+  if (deleted.length === 0) {
+    res.status(404).json({ message: "no encontrado" });
+    return;
+  }
+  res.json({ ok: true, id });
 });
 
 export default router;
