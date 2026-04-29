@@ -54,6 +54,8 @@ import {
   Maximize2,
   Minimize2,
   ScanEye,
+  X,
+  PanelRightOpen,
 } from "lucide-react";
 import {
   Dialog,
@@ -109,6 +111,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [activeTab, setActiveTab] = useState<TabKey>("preview");
   const [copied, setCopied] = useState(false);
   const [previewMaximized, setPreviewMaximized] = useState(false);
+  // Live preview window visibility. Mirrors emergent.sh — the preview can be
+  // closed (chat takes the full width) and re-opened from a button. The agent
+  // also auto-opens it when it starts a new job so the user sees its work in
+  // real time, and on job success.
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [draft, setDraft] = useState("");
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -145,6 +152,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
       setActiveJobId(null);
+      // Surface the preview so the user can immediately see the result.
+      setPreviewOpen(true);
       toast({ title: "Cambios aplicados", description: "La vista previa se ha actualizado." });
     } else if (job.status === "failed") {
       setActiveJobId(null);
@@ -165,6 +174,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     mutation: {
       onSuccess: (newJob) => {
         setActiveJobId(newJob.id);
+        // Auto-open the live preview the moment the agent starts working so
+        // the user can watch the changes happen instead of staring at chat.
+        setPreviewOpen(true);
         setDraft("");
         queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
       },
@@ -596,15 +608,29 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         </div>
 
         <div
-          className={`grid grid-cols-1 ${previewMaximized ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}
+          className={`grid grid-cols-1 ${previewMaximized || !previewOpen ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}
         >
           {/* Chat panel */}
           <div
-            className={`${previewMaximized ? "hidden" : "lg:col-span-4"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
+            className={`${previewMaximized ? "hidden" : previewOpen ? "lg:col-span-4" : "lg:col-span-12"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
           >
-            <div className="px-4 py-3 border-b border-white/5 bg-[#111118] flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium text-white">Chat con el agente</span>
+            <div className="px-4 py-3 border-b border-white/5 bg-[#111118] flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-white">Chat con el agente</span>
+              </div>
+              {!previewOpen && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPreviewOpen(true)}
+                  className="h-8 border-cyan-400/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200"
+                  title="Abrir la ventana de preview en vivo"
+                >
+                  <PanelRightOpen className="h-4 w-4 mr-2" />
+                  Abrir preview en vivo
+                </Button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -682,7 +708,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Preview / code panel */}
-          <div className="lg:col-span-8 flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden">
+          <div
+            className={`${!previewOpen ? "hidden" : previewMaximized ? "lg:col-span-12" : "lg:col-span-8"} flex flex-col bg-[#0d0d12] rounded-xl border border-white/10 overflow-hidden`}
+          >
             <div className="flex items-center justify-between px-3 py-2 bg-[#111118] border-b border-white/5">
               <div className="flex space-x-1">
                 <Button
@@ -742,6 +770,21 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                       <Maximize2 className="h-4 w-4 mr-2" /> Maximizar
                     </>
                   )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setPreviewOpen(false);
+                    // If the user closes from a maximized state, also un-maximize
+                    // so reopening puts them back into the normal split view.
+                    setPreviewMaximized(false);
+                  }}
+                  className="h-8 w-8 text-muted-foreground hover:text-white hover:bg-white/10"
+                  title="Cerrar preview"
+                  aria-label="Cerrar preview en vivo"
+                >
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             </div>
