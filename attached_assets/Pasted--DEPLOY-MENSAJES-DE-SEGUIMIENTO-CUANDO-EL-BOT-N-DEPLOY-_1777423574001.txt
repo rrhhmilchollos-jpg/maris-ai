@@ -1,0 +1,601 @@
+🚀 DEPLOY — MENSAJES DE SEGUIMIENTO
+🔴 CUANDO EL BOTÓN DEPLOY NO HACE NADA
+The Deploy button is not working. Fix this completely:
+
+BACKEND — /backend/routes/deploy.js:
+
+const express = require('express');
+const path = require('path');
+const { execSync } = require('child_process');
+const getPort = require('get-port');
+const Project = require('../models/Project');
+const authMiddleware = require('../middleware/auth');
+
+const runningServers = new Map(); // projectId → { port, server }
+
+router.post('/api/deploy/:projectId', authMiddleware, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const project = await Project.findOne({ 
+      _id: projectId, 
+      userId: req.user._id 
+    });
+    
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const projectPath = path.join(process.env.PROJECTS_DIR, projectId);
+    const frontendPath = path.join(projectPath, 'frontend');
+
+    // Step 1: Install dependencies
+    execSync('npm install', { 
+      cwd: frontendPath, 
+      timeout: 120000,
+      stdio: 'pipe'
+    });
+
+    // Step 2: Build frontend
+    execSync('npm run build', { 
+      cwd: frontendPath, 
+      timeout: 120000,
+      stdio: 'pipe'
+    });
+
+    // Step 3: Find a free port
+    const port = await getPort({ port: getPort.makeRange(4000, 5000) });
+
+    // Step 4: Stop previous server if exists
+    if (runningServers.has(projectId)) {
+      runningServers.get(projectId).server.close();
+    }
+
+    // Step 5: Serve the built files
+    const deployApp = express();
+    deployApp.use(express.static(path.join(frontendPath, 'dist')));
+    deployApp.get('*', (req, res) => {
+      res.sendFile(path.join(frontendPath, 'dist', 'index.html'));
+    });
+
+    const deployServer = deployApp.listen(port);
+    runningServers.set(projectId, { port, server: deployServer });
+
+    const deploymentUrl = `http://localhost:${port}`;
+
+    // Step 6: Save URL to MongoDB
+    await Project.findByIdAndUpdate(projectId, { 
+      deploymentUrl,
+      status: 'deployed'
+    });
+
+    res.json({ 
+      success: true, 
+      deploymentUrl,
+      port,
+      message: 'App deployed successfully!'
+    });
+
+  } catch (error) {
+    console.error('Deploy error:', error);
+    res.status(500).json({ 
+      error: 'Deploy failed', 
+      details: error.message 
+    });
+  }
+});
+
+module.exports = router;
+
+FRONTEND — wire the Deploy button:
+
+const handleDeploy = async () => {
+  setDeployLoading(true);
+  setDeployStatus('deploying');
+  
+  try {
+    const response = await fetch(`/api/deploy/${currentProject._id}`, {
+      method: 'POST',
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      setDeploymentUrl(data.deploymentUrl);
+      setDeployStatus('success');
+      toast.success('App deployed! ' + data.deploymentUrl);
+    } else {
+      setDeployStatus('error');
+      toast.error('Deploy failed: ' + data.error);
+    }
+  } catch (err) {
+    setDeployStatus('error');
+    toast.error('Deploy failed: ' + err.message);
+  } finally {
+    setDeployLoading(false);
+  }
+};
+
+Also install: npm install get-port
+
+Do not change any button design. Only add this logic.
+
+🔴 CUANDO EL BUILD DE VITE FALLA DURANTE EL DEPLOY
+The Vite build is failing during deployment with errors like
+"vite: not found" or "Cannot find module".
+
+Fix this:
+
+1. Make sure the generated frontend always has this package.json:
+{
+  "name": "generated-app",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^5.0.0"
+  }
+}
+
+2. Make sure vite.config.js is always generated:
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: 'dist'
+  }
+})
+
+3. Use this exact execSync for the build:
+execSync('npm install --legacy-peer-deps && npm run build', {
+  cwd: frontendPath,
+  timeout: 180000,
+  stdio: 'pipe',
+  env: { ...process.env, NODE_ENV: 'production' }
+});
+
+4. Add the Coder agent to ALWAYS generate these two files
+   as the first files in every project:
+   - frontend/package.json
+   - frontend/vite.config.js
+   - frontend/index.html
+
+Do not change any existing UI. Only fix the build process.
+
+🔴 CUANDO EL URL DE DEPLOY NO SE COPIA
+The copy button next to the deployment URL is not working.
+
+Fix this in the frontend component that shows the deploy URL:
+
+const handleCopyUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(deploymentUrl);
+    setCopied(true);
+    toast.success('URL copied to clipboard!');
+    setTimeout(() => setCopied(false), 2000);
+  } catch (err) {
+    // Fallback for browsers that don't support clipboard API
+    const textArea = document.createElement('textarea');
+    textArea.value = deploymentUrl;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+};
+
+Wire this to the existing copy icon button's onClick.
+Do not change the button design.
+
+🔴 CUANDO EL DEPLOY FUNCIONA PERO EL PREVIEW NO ABRE
+The deployment URL is generated but clicking it does nothing
+or shows a blank page.
+
+Fix this:
+
+1. The deployed app must be accessible from the browser.
+   Make sure Express is listening on 0.0.0.0 not just localhost:
+
+const deployServer = deployApp.listen(port, '0.0.0.0', () => {
+  console.log(`Project ${projectId} deployed on port ${port}`);
+});
+
+2. Add CORS to the deploy server:
+deployApp.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  next();
+});
+
+3. Open the URL in a new tab from the frontend:
+const handleOpenDeploy = () => {
+  window.open(deploymentUrl, '_blank', 'noopener,noreferrer');
+};
+
+4. If running on Replit, the URL format must be:
+https://{replit-project-name}.{username}.repl.co:{port}
+
+Detect if running on Replit:
+const isReplit = process.env.REPL_SLUG !== undefined;
+const deploymentUrl = isReplit
+  ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co:${port}`
+  : `http://localhost:${port}`;
+
+Do not change any UI. Only fix the URL generation.
+
+🐙 GITHUB — MENSAJES DE SEGUIMIENTO
+🔴 CUANDO EL BOTÓN GITHUB NO ABRE EL FLUJO DE CONEXIÓN
+The GitHub button is not opening the OAuth connection flow.
+
+Fix this completely:
+
+BACKEND — GitHub OAuth setup in server.js:
+
+const passport = require('passport');
+const GitHubStrategy = require('passport-github2').Strategy;
+
+passport.use(new GitHubStrategy({
+  clientID: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  callbackURL: '/api/auth/github/callback',
+  scope: ['repo', 'user:email']
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    let user = await User.findOne({ 
+      $or: [
+        { githubId: profile.id },
+        { email: profile.emails?.[0]?.value }
+      ]
+    });
+    
+    if (user) {
+      // Update GitHub token
+      user.githubToken = accessToken;
+      user.githubId = profile.id;
+      await user.save();
+    } else {
+      user = await User.create({
+        email: profile.emails?.[0]?.value || `${profile.username}@github.com`,
+        name: profile.displayName || profile.username,
+        avatar: profile.photos?.[0]?.value,
+        provider: 'github',
+        githubId: profile.id,
+        githubToken: accessToken,
+        plan: 'free',
+        credits: { remaining: 10, total: 10 }
+      });
+    }
+    return done(null, user);
+  } catch (err) {
+    return done(err);
+  }
+}));
+
+BACKEND — Routes:
+app.get('/api/auth/github', 
+  passport.authenticate('github', { scope: ['repo', 'user:email'] })
+);
+
+app.get('/api/auth/github/callback',
+  passport.authenticate('github', { failureRedirect: '/login?error=github' }),
+  (req, res) => {
+    const token = jwt.sign(
+      { userId: req.user._id }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '7d' }
+    );
+    // Redirect back to the app with token
+    res.redirect(`/?token=${token}&github=connected`);
+  }
+);
+
+// Check if user has GitHub connected:
+app.get('/api/auth/github/status', authMiddleware, async (req, res) => {
+  const user = await User.findById(req.user._id);
+  res.json({ 
+    connected: !!user.githubToken,
+    username: user.githubUsername 
+  });
+});
+
+FRONTEND — GitHub button logic:
+const handleGitHubClick = async () => {
+  // Check if already connected
+  const response = await fetch('/api/auth/github/status', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const { connected } = await response.json();
+  
+  if (!connected) {
+    // Open OAuth flow
+    window.location.href = '/api/auth/github';
+  } else {
+    // Already connected, proceed to push
+    handleGitHubPush();
+  }
+};
+
+Install: npm install passport-github2 @octokit/rest
+
+Do not change the button design. Only add this logic.
+
+🔴 CUANDO EL PUSH A GITHUB FALLA
+GitHub push is failing with authentication or API errors.
+
+Fix the push logic completely in /backend/routes/github.js:
+
+const { Octokit } = require('@octokit/rest');
+const Project = require('../models/Project');
+const User = require('../models/User');
+const path = require('path');
+const fs = require('fs').promises;
+const authMiddleware = require('../middleware/auth');
+
+router.post('/api/github/push/:projectId', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (!user.githubToken) {
+      return res.status(401).json({ 
+        error: 'GitHub not connected',
+        connectUrl: '/api/auth/github'
+      });
+    }
+
+    const project = await Project.findById(req.params.projectId);
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+
+    const octokit = new Octokit({ auth: user.githubToken });
+    
+    // Get GitHub username
+    const { data: githubUser } = await octokit.rest.users.getAuthenticated();
+    const repoName = project.name
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 100);
+
+    // Create repository
+    let repo;
+    try {
+      const { data } = await octokit.rest.repos.createForAuthenticatedUser({
+        name: repoName,
+        description: `Built with AI on our platform`,
+        private: false,
+        auto_init: false
+      });
+      repo = data;
+    } catch (err) {
+      if (err.status === 422) {
+        // Repo already exists, use it
+        const { data } = await octokit.rest.repos.get({
+          owner: githubUser.login,
+          repo: repoName
+        });
+        repo = data;
+      } else throw err;
+    }
+
+    // Push all project files
+    const projectPath = path.join(process.env.PROJECTS_DIR, project._id.toString());
+    
+    async function getAllFiles(dirPath, baseDir = dirPath) {
+      const files = [];
+      const items = await fs.readdir(dirPath, { withFileTypes: true });
+      
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item.name);
+        // Skip node_modules and dist
+        if (item.name === 'node_modules' || item.name === 'dist' || item.name === '.git') continue;
+        
+        if (item.isDirectory()) {
+          files.push(...await getAllFiles(fullPath, baseDir));
+        } else {
+          const relativePath = path.relative(baseDir, fullPath);
+          const content = await fs.readFile(fullPath, 'utf-8');
+          files.push({ path: relativePath, content });
+        }
+      }
+      return files;
+    }
+
+    const allFiles = await getAllFiles(projectPath);
+
+    // Push files one by one
+    for (const file of allFiles) {
+      const contentBase64 = Buffer.from(file.content).toString('base64');
+      
+      // Check if file exists (to get SHA for update)
+      let sha;
+      try {
+        const { data } = await octokit.rest.repos.getContent({
+          owner: githubUser.login,
+          repo: repoName,
+          path: file.path
+        });
+        sha = data.sha;
+      } catch (e) {
+        // File doesn't exist yet, that's fine
+      }
+
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: githubUser.login,
+        repo: repoName,
+        path: file.path,
+        message: sha ? `Update ${file.path}` : `Add ${file.path}`,
+        content: contentBase64,
+        ...(sha ? { sha } : {})
+      });
+    }
+
+    // Save repo URL to project
+    await Project.findByIdAndUpdate(project._id, {
+      githubRepo: repo.html_url
+    });
+
+    res.json({
+      success: true,
+      repoUrl: repo.html_url,
+      repoName: repo.full_name,
+      message: `Successfully pushed ${allFiles.length} files to GitHub`
+    });
+
+  } catch (error) {
+    console.error('GitHub push error:', error);
+    res.status(500).json({ 
+      error: 'GitHub push failed',
+      details: error.message
+    });
+  }
+});
+
+FRONTEND — wire the push result:
+const handleGitHubPush = async () => {
+  setGithubLoading(true);
+  
+  try {
+    const response = await fetch(`/api/github/push/${currentProject._id}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      setGithubRepoUrl(data.repoUrl);
+      toast.success('Pushed to GitHub!');
+      // Open repo in new tab
+      window.open(data.repoUrl, '_blank');
+    } else if (data.connectUrl) {
+      // Not connected, redirect to OAuth
+      window.location.href = data.connectUrl;
+    } else {
+      toast.error('Push failed: ' + data.error);
+    }
+  } catch (err) {
+    toast.error('Push failed: ' + err.message);
+  } finally {
+    setGithubLoading(false);
+  }
+};
+
+Install: npm install @octokit/rest
+
+Do not change any UI. Only add this logic.
+
+🔴 CUANDO EL REPO SE CREA PERO LOS ARCHIVOS NO SE SUBEN
+GitHub repo is created successfully but files are not uploaded.
+The repo appears empty.
+
+This is a rate limiting issue with the GitHub API.
+Fix by adding delays between file uploads and batching:
+
+async function pushFilesWithRetry(octokit, owner, repo, files) {
+  const BATCH_SIZE = 5;
+  const DELAY_MS = 500;
+  
+  for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    const batch = files.slice(i, i + BATCH_SIZE);
+    
+    await Promise.all(batch.map(async (file) => {
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          const contentBase64 = Buffer.from(file.content, 'utf-8').toString('base64');
+          
+          let sha;
+          try {
+            const { data } = await octokit.rest.repos.getContent({
+              owner, repo: repo, path: file.path
+            });
+            sha = data.sha;
+          } catch (e) {}
+
+          await octokit.rest.repos.createOrUpdateFileContents({
+            owner,
+            repo,
+            path: file.path,
+            message: `Add ${file.path}`,
+            content: contentBase64,
+            ...(sha ? { sha } : {})
+          });
+          break; // Success, exit retry loop
+        } catch (err) {
+          retries--;
+          if (retries === 0) throw err;
+          await new Promise(r => setTimeout(r, 1000 * (4 - retries)));
+        }
+      }
+    }));
+    
+    // Delay between batches to avoid rate limiting
+    if (i + BATCH_SIZE < files.length) {
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+  }
+}
+
+Replace the file upload loop in /backend/routes/github.js
+with this function.
+Do not change any UI.
+
+🔴 CUANDO MUESTRA "GITHUB NOT CONNECTED" AUNQUE YA CONECTASTE
+The app shows "GitHub not connected" even after completing OAuth.
+
+This is a token persistence issue. Fix it:
+
+1. In the User model, make sure githubToken is saved:
+githubToken: { type: String, select: false }
+
+Note: select: false means it won't be returned by default queries.
+When you need it, use: User.findById(id).select('+githubToken')
+
+2. Fix the GitHub status check route:
+app.get('/api/auth/github/status', authMiddleware, async (req, res) => {
+  const user = await User.findById(req.user._id).select('+githubToken');
+  res.json({ 
+    connected: !!user.githubToken,
+    githubUsername: user.githubUsername || null
+  });
+});
+
+3. Fix the push route to also select the token:
+const user = await User.findById(req.user._id).select('+githubToken');
+
+4. After OAuth callback, store username too:
+const { data: githubUser } = await octokit.rest.users.getAuthenticated();
+await User.findByIdAndUpdate(req.user._id, {
+  githubToken: accessToken,
+  githubUsername: githubUser.login
+});
+
+5. In frontend, check GitHub status on page load:
+useEffect(() => {
+  const checkGitHub = async () => {
+    const res = await fetch('/api/auth/github/status', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const { connected, githubUsername } = await res.json();
+    setGithubConnected(connected);
+    setGithubUsername(githubUsername);
+  };
+  if (token) checkGitHub();
+}, [token]);
+
+Do not change any UI. Only fix the token persistence.

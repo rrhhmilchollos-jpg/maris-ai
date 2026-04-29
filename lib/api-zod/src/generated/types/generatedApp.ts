@@ -16,5 +16,11 @@ export interface GeneratedApp {
   frontendCode: string;
   backendCode: string;
   status: string;
+  /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  coderModel: string;
+  /** When set, the app is publicly viewable at /p/{publicSlug}. */
+  publicSlug?: string | null;
+  /** HTML URL of the repo this app was last pushed to. */
+  githubRepoUrl?: string | null;
   createdAt: Date;
 }

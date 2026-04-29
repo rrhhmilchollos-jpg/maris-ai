@@ -23,6 +23,13 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   queued: { label: "En cola…", icon: Loader2 },
@@ -45,6 +52,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
+  const [coderModel, setCoderModel] = useState<string>("auto");
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
 
   const { data: me } = useGetMe();
@@ -125,7 +133,9 @@ export default function DashboardPage() {
       return;
     }
 
-    generateMutation.mutate({ data: { prompt } });
+    // Pass the user-selected coder model. The server validates it against an
+    // allow-list and falls back to "auto" if the value is unknown.
+    generateMutation.mutate({ data: { prompt, coderModel } });
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
@@ -218,10 +228,22 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">
-                  {isAdmin ? "Costo: gratis (admin)" : "Costo: 1 crédito"}
-                </p>
+              <div className="flex flex-wrap justify-between items-center gap-3">
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">
+                    {isAdmin ? "Costo: gratis (admin)" : "Costo: 1 crédito"}
+                  </p>
+                  <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
+                    <SelectTrigger className="h-9 w-[210px] text-xs bg-background/50 border-border/50">
+                      <SelectValue placeholder="Modelo del coder" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto (Gemini Flash, rápido)</SelectItem>
+                      <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                      <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (calidad)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {!isAdmin && stats && stats.credits <= 0 ? (
                   <Button type="button" onClick={() => setLocation("/billing")} variant="destructive" data-testid="button-out-of-credits">
                     Sin créditos <ArrowRight className="ml-2 h-4 w-4" />

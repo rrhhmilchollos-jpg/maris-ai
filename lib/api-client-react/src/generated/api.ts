@@ -30,11 +30,15 @@ import type {
   CreditPackage,
   CreditTransaction,
   DashboardStats,
+  DeployResult,
   GenerateAppRequest,
   GeneratedApp,
   GenerationJob,
+  GitHubPushResult,
+  HealthCheckResult,
   HealthStatus,
   SendAppMessageRequest,
+  UpdateCoderModelRequest,
   UserProfile,
 } from "./api.schemas";
 
@@ -744,6 +748,430 @@ export const useSendAppMessage = <
   TContext
 > => {
   return useMutation(getSendAppMessageMutationOptions(options));
+};
+
+/**
+ * @summary Update the Coder model preference for an app
+ */
+export const getUpdateAppModelUrl = (id: number) => {
+  return `/api/apps/${id}/model`;
+};
+
+export const updateAppModel = async (
+  id: number,
+  updateCoderModelRequest: UpdateCoderModelRequest,
+  options?: RequestInit,
+): Promise<GeneratedApp> => {
+  return customFetch<GeneratedApp>(getUpdateAppModelUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateCoderModelRequest),
+  });
+};
+
+export const getUpdateAppModelMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppModel>>,
+    TError,
+    { id: number; data: BodyType<UpdateCoderModelRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAppModel>>,
+  TError,
+  { id: number; data: BodyType<UpdateCoderModelRequest> },
+  TContext
+> => {
+  const mutationKey = ["updateAppModel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAppModel>>,
+    { id: number; data: BodyType<UpdateCoderModelRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAppModel(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAppModelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAppModel>>
+>;
+export type UpdateAppModelMutationBody = BodyType<UpdateCoderModelRequest>;
+export type UpdateAppModelMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Update the Coder model preference for an app
+ */
+export const useUpdateAppModel = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppModel>>,
+    TError,
+    { id: number; data: BodyType<UpdateCoderModelRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAppModel>>,
+  TError,
+  { id: number; data: BodyType<UpdateCoderModelRequest> },
+  TContext
+> => {
+  return useMutation(getUpdateAppModelMutationOptions(options));
+};
+
+/**
+ * @summary Download the app source as a ZIP archive
+ */
+export const getExportAppUrl = (id: number) => {
+  return `/api/apps/${id}/export`;
+};
+
+export const exportApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportAppUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportAppQueryKey = (id: number) => {
+  return [`/api/apps/${id}/export`] as const;
+};
+
+export const getExportAppQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportApp>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportApp>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportAppQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportApp>>> = ({
+    signal,
+  }) => exportApp(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof exportApp>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type ExportAppQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportApp>>
+>;
+export type ExportAppQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Download the app source as a ZIP archive
+ */
+
+export function useExportApp<
+  TData = Awaited<ReturnType<typeof exportApp>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportApp>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportAppQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Validate the app bundle and auto-patch any detected issues
+ */
+export const getHealthCheckAppUrl = (id: number) => {
+  return `/api/apps/${id}/healthcheck`;
+};
+
+export const healthCheckApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<HealthCheckResult> => {
+  return customFetch<HealthCheckResult>(getHealthCheckAppUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getHealthCheckAppMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof healthCheckApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof healthCheckApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["healthCheckApp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof healthCheckApp>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return healthCheckApp(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type HealthCheckAppMutationResult = NonNullable<
+  Awaited<ReturnType<typeof healthCheckApp>>
+>;
+
+export type HealthCheckAppMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Validate the app bundle and auto-patch any detected issues
+ */
+export const useHealthCheckApp = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof healthCheckApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof healthCheckApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getHealthCheckAppMutationOptions(options));
+};
+
+/**
+ * @summary Publish the app to a public /p/{slug} URL
+ */
+export const getDeployAppUrl = (id: number) => {
+  return `/api/apps/${id}/deploy`;
+};
+
+export const deployApp = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DeployResult> => {
+  return customFetch<DeployResult>(getDeployAppUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDeployAppMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deployApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deployApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deployApp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deployApp>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deployApp(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeployAppMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deployApp>>
+>;
+
+export type DeployAppMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Publish the app to a public /p/{slug} URL
+ */
+export const useDeployApp = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deployApp>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deployApp>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeployAppMutationOptions(options));
+};
+
+/**
+ * @summary Create a new GitHub repo and push the app source
+ */
+export const getPushAppToGitHubUrl = (id: number) => {
+  return `/api/apps/${id}/github`;
+};
+
+export const pushAppToGitHub = async (
+  id: number,
+  options?: RequestInit,
+): Promise<GitHubPushResult> => {
+  return customFetch<GitHubPushResult>(getPushAppToGitHubUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getPushAppToGitHubMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pushAppToGitHub>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof pushAppToGitHub>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["pushAppToGitHub"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof pushAppToGitHub>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return pushAppToGitHub(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PushAppToGitHubMutationResult = NonNullable<
+  Awaited<ReturnType<typeof pushAppToGitHub>>
+>;
+
+export type PushAppToGitHubMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Create a new GitHub repo and push the app source
+ */
+export const usePushAppToGitHub = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof pushAppToGitHub>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof pushAppToGitHub>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getPushAppToGitHubMutationOptions(options));
 };
 
 /**

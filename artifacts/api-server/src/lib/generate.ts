@@ -378,12 +378,26 @@ interface CodeGenResult {
   error?: string;
 }
 
+/**
+ * Resolve the user's model preference into the concrete provider call we
+ * should make. Only "claude-sonnet-4-6" overrides the default; everything
+ * else (auto, unknown, or explicit gemini-2.5-flash) routes to Gemini Flash
+ * streaming. Architect/Backend models are *not* affected — only the Coder
+ * role obeys this preference.
+ */
+type CoderProvider = "gemini-flash" | "claude-sonnet";
+function resolveCoderProvider(coderModel?: string): CoderProvider {
+  if (coderModel === "claude-sonnet-4-6") return "claude-sonnet";
+  return "gemini-flash";
+}
+
 async function generateFrontendCode(
   plan: ProjectPlan,
   design: DesignSystem,
   research: string,
   prompt: string,
   onChars: (chars: number) => void,
+  coderModel?: string,
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -407,37 +421,57 @@ ${research ? `\nResearch context (visual reference, treat as ground truth):\n${r
 
 Now produce the JSON object with frontendCode containing every listed file.`;
 
-  // Frontend Engineer (the "Coder") → gemini-2.5-flash with streaming.
-  // Flash is the fastest bulk-code model we have access to (~238 tok/s vs
-  // ~85 tok/s for Sonnet). The autonomous validate-then-patch loop downstream
-  // is our safety net for any quality slips. 32k output tokens ≈ 128KB which
-  // is plenty of headroom for the bundle.
-  const stream = await gemini.models.generateContentStream({
-    model: "gemini-2.5-flash",
-    contents: [{ role: "user", parts: [{ text: userContent }] }],
-    config: {
-      systemInstruction: FRONTEND_SYSTEM_PROMPT,
-      maxOutputTokens: 32768,
-      responseMimeType: "application/json",
-    },
-  });
-
+  // Frontend Engineer (the "Coder") — model is selectable per-app.
+  // Default ("auto" / "gemini-2.5-flash") → Gemini Flash streaming, which is
+  // the fastest bulk-code model we have access to (~238 tok/s vs ~85 tok/s for
+  // Sonnet). 32k output tokens ≈ 128KB is plenty of headroom for the bundle.
+  // Override "claude-sonnet-4-6" → Anthropic non-streaming Sonnet, slower but
+  // sometimes higher quality. The autonomous validate-then-patch loop below
+  // is our safety net for any quality slips either way.
+  const provider = resolveCoderProvider(coderModel);
   let accumulated = "";
-  let lastReport = 0;
-  let finishReason: string | undefined;
-  for await (const chunk of stream) {
-    const text = chunk.text;
-    if (text) {
-      accumulated += text;
-      if (accumulated.length - lastReport >= 1500) {
-        lastReport = accumulated.length;
-        onChars(accumulated.length);
+  let truncated = false;
+  if (provider === "gemini-flash") {
+    const stream = await gemini.models.generateContentStream({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: userContent }] }],
+      config: {
+        systemInstruction: FRONTEND_SYSTEM_PROMPT,
+        maxOutputTokens: 32768,
+        responseMimeType: "application/json",
+      },
+    });
+    let lastReport = 0;
+    let finishReason: string | undefined;
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) {
+        accumulated += text;
+        if (accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onChars(accumulated.length);
+        }
       }
+      const fr = chunk.candidates?.[0]?.finishReason;
+      if (fr) finishReason = fr;
     }
-    const fr = chunk.candidates?.[0]?.finishReason;
-    if (fr) finishReason = fr;
+    truncated = finishReason === "MAX_TOKENS";
+  } else {
+    // Claude Sonnet — non-streaming for simplicity. We can't show progressive
+    // chars but we still emit one final "done writing" tick.
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 16384,
+      system: FRONTEND_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userContent }],
+    });
+    accumulated = response.content
+      .filter((b): b is { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    truncated = response.stop_reason === "max_tokens";
+    onChars(accumulated.length);
   }
-  const truncated = finishReason === "MAX_TOKENS";
   const raw = accumulated.trim();
   if (!raw) {
     return { code: "", truncated, error: "Frontend agent returned no text." };
@@ -446,9 +480,9 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   if (!parsed || typeof parsed.frontendCode !== "string") {
     return { code: "", truncated, error: "JSON inválido del Frontend Engineer." };
   }
-  // Propagate Gemini's MAX_TOKENS finishReason so the caller can warn the user
-  // that the bundle is partial. Even when the JSON parses, the actual file
-  // contents inside frontendCode can still be cut off mid-line.
+  // Propagate the truncation flag so the caller can warn the user that the
+  // bundle is partial. Even when the JSON parses, the actual file contents
+  // inside frontendCode can still be cut off mid-line.
   return { code: parsed.frontendCode, truncated };
 }
 
@@ -655,7 +689,7 @@ Return the JSON object with testCode.`,
   );
 }
 
-async function patchBundle(
+export async function patchBundle(
   frontendCode: string,
   issues: QAIssue[],
 ): Promise<string | null> {
@@ -749,6 +783,7 @@ async function singleEditPass(
   prompt: string,
   previous: PreviousApp,
   onChars: (chars: number) => void,
+  coderModel?: string,
 ): Promise<GeneratedAppPayload> {
   const userContent = `CURRENT APP:
 - Title: ${previous.title}
@@ -766,32 +801,48 @@ ${prompt}
 
 Return the FULL updated app as JSON.`;
 
-  // Edit mode is also a "Coder" role → gemini-2.5-flash with streaming, for
-  // consistency with generateFrontendCode.
-  const stream = await gemini.models.generateContentStream({
-    model: "gemini-2.5-flash",
-    contents: [{ role: "user", parts: [{ text: userContent }] }],
-    config: {
-      systemInstruction: EDIT_SYSTEM_PROMPT,
-      maxOutputTokens: 32768,
-      responseMimeType: "application/json",
-    },
-  });
-
+  // Edit mode is also a "Coder" role → respects the same per-app model
+  // override as the initial generation. Default Gemini Flash streaming, with
+  // Anthropic Sonnet as the only opt-in alternative.
+  const provider = resolveCoderProvider(coderModel);
   let accumulated = "";
-  let lastReport = 0;
   let finishReason: string | undefined;
-  for await (const chunk of stream) {
-    const text = chunk.text;
-    if (text) {
-      accumulated += text;
-      if (accumulated.length - lastReport >= 1500) {
-        lastReport = accumulated.length;
-        onChars(accumulated.length);
+  if (provider === "gemini-flash") {
+    const stream = await gemini.models.generateContentStream({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: userContent }] }],
+      config: {
+        systemInstruction: EDIT_SYSTEM_PROMPT,
+        maxOutputTokens: 32768,
+        responseMimeType: "application/json",
+      },
+    });
+    let lastReport = 0;
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) {
+        accumulated += text;
+        if (accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onChars(accumulated.length);
+        }
       }
+      const fr = chunk.candidates?.[0]?.finishReason;
+      if (fr) finishReason = fr;
     }
-    const fr = chunk.candidates?.[0]?.finishReason;
-    if (fr) finishReason = fr;
+  } else {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 16384,
+      system: EDIT_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userContent }],
+    });
+    accumulated = response.content
+      .filter((b): b is { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    if (response.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+    onChars(accumulated.length);
   }
   const parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
   if (!parsed || typeof parsed.frontendCode !== "string") {
@@ -826,6 +877,7 @@ export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
   previous?: PreviousApp,
+  coderModel?: string,
 ): Promise<GeneratedAppPayload> {
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
@@ -839,7 +891,7 @@ export async function generateApp(
         note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)`,
       });
     };
-    const result = await singleEditPass(prompt, previous, onChars);
+    const result = await singleEditPass(prompt, previous, onChars, coderModel);
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
     return result;
   }
@@ -906,7 +958,7 @@ export async function generateApp(
         progress: 32 + Math.round(ratio * 45),
         note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…`,
       });
-    }),
+    }, coderModel),
     110_000,
     "frontend-engineer",
   );

@@ -10,6 +10,7 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
+import publicDeployRouter from "./routes/publicDeploy";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -53,5 +54,9 @@ app.use(
 );
 
 app.use("/api", router);
+
+// Public unauthenticated route for deployed AppForge apps. Mounted on the root
+// (outside /api) so /p/<slug> resolves on the published domain directly.
+app.use(publicDeployRouter);
 
 export default app;
