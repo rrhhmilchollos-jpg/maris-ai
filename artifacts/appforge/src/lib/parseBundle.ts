@@ -114,6 +114,25 @@ function normalizeForSandpack(path: string): string | null {
 }
 
 /**
+ * Common npm packages the generator is allowed to import. Sandpack starts from
+ * the `react-ts` template which only ships react/react-dom, so anything else
+ * (router, icons, util libs) needs to be declared up front or the preview
+ * crashes with "Could not find dependency". We pin compatible versions that
+ * match what the coder prompt instructs the model to use.
+ *
+ * Exported so app-detail.tsx can pass it as `customSetup.dependencies` to
+ * SandpackProvider.
+ */
+export const SANDPACK_DEPENDENCIES: Record<string, string> = {
+  wouter: "^3.3.5",
+  "lucide-react": "^0.460.0",
+  clsx: "^2.1.1",
+  "tailwind-merge": "^2.5.4",
+  "date-fns": "^4.1.0",
+  zod: "^3.23.8",
+};
+
+/**
  * Build a Sandpack files map from a parsed bundle. Strategy: drop build configs,
  * map src/* → /*, prefer the generated entry/css when present (so providers,
  * routers and custom styles survive), fallback to safe defaults only when absent.

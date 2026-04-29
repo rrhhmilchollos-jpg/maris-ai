@@ -32,10 +32,23 @@ Use '// === FILE: <path> ===' to separate files inside frontendCode. ALWAYS incl
 
 Stack: React 18 + TypeScript + Tailwind v3 + wouter (if multi-page) + lucide-react icons. Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
 
+LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES):
+- Every label, button, heading, placeholder, alt text, error message, empty state, tooltip → Spanish.
+- Seed/mock data (product names, descriptions, user names, comments, addresses) → Spanish where it makes sense.
+- Identifiers, variable names, file names, type names → English (standard code).
+- HTML lang attribute → "es".
+
+SYNTAX — code must parse with a strict TypeScript parser (Babel/SWC/esbuild):
+- NO trailing commas after the last element of an object literal, array literal or call argument list when followed immediately by a closing token. Specifically NEVER write \`,,\` (double comma) or \`,)\` or \`,]\` or \`,}\` patterns where the second comma was a typo.
+- NO non-ASCII characters inside identifiers, keywords or punctuation. Non-ASCII is allowed ONLY inside string literals and JSX text. Examples of FORBIDDEN garbage tokens: \`née\`, \`café\` as a property name, smart quotes \`"…"\` instead of plain \`"\`, em-dashes inside code.
+- Every string must be properly terminated with the SAME quote it started with. Long URLs and descriptions are common offenders — re-check them.
+- Every \`{\`, \`(\`, \`[\` must have a matching \`}\`, \`)\`, \`]\`. Every JSX tag must close.
+- All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. Stick to: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod. Do not invent package names.
+
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content.
 - Use the file list from the plan as the MINIMUM — split UI into the listed files, do not collapse them into App.tsx.
-- Polished layout, real copy in the user's language, accessible markup.
+- Polished layout, accessible markup, semantic HTML.
 - Combined output must stay under 70 KB. Trim seed data before truncating files.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 
@@ -129,6 +142,14 @@ const PATCHER_SYSTEM_PROMPT = `You are AppForge's Patcher. Apply ONLY the listed
 
 Output STRICT JSON only:
 {"frontendCode":"all frontend files as one string"}
+
+LANGUAGE — preserve Spanish copy. If new copy is added, write it in Spanish too.
+
+SYNTAX — the patched bundle must parse cleanly:
+- Remove every \`,,\` (double comma), \`,)\`, \`,]\` and \`,}\` pattern you find while patching.
+- Strip any non-ASCII garbage characters from identifiers/keywords (e.g. \`née\`, smart quotes in code, zero-width spaces). Non-ASCII is fine inside strings and JSX text only.
+- Re-balance every brace, bracket, paren and JSX tag.
+- Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod.
 
 Rules:
 - Use '// === FILE: <path> ===' separators.
@@ -765,12 +786,119 @@ function buildSetupNotes(spec: IntegrationSpec): string {
   return `\n\n// === FILE: SETUP.md ===\n${lines.join("\n")}`;
 }
 
+/* ------------------------ validate → patch loop --------------------------- */
+
+/**
+ * Run the autonomous validate-then-patch loop on a frontend bundle.
+ *
+ * Real esbuild build in memory ("ejecutar el código"). If it fails, we feed
+ * the build errors back to the patcher and try again. Bounded to MAX_ITERATIONS
+ * so the pipeline can never spiral.
+ *
+ * Used by BOTH initial generation and edit mode — keeps any broken bundle
+ * (trailing commas, garbage tokens, missing imports) from reaching the user
+ * regardless of how the bundle was produced.
+ */
+async function runValidatePatchLoop(
+  initialBundle: string,
+  qaReport: QAReport,
+  onProgress: ((p: GenerateProgress) => void) | undefined,
+  baseProgressStart: number,
+): Promise<string> {
+  const MAX_ITERATIONS = 2;
+  let finalFrontend = initialBundle;
+
+  // Seed the loop with the QA-suggested issues so they're addressed even if
+  // the bundle technically builds.
+  let pendingIssues: BuildIssue[] = qaReport.ok
+    ? []
+    : qaReport.issues.map((i) => ({ file: i.file, message: `${i.problem} → ${i.fix}` }));
+
+  for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
+    const baseProgress = baseProgressStart + iter * 3;
+    onProgress?.({
+      phase: "validating",
+      progress: Math.min(baseProgress, 92),
+      note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
+    });
+    const validation = await validateBundle(finalFrontend);
+
+    // Combine real build errors with any unresolved QA suggestions on the first
+    // pass. After the first pass, only build errors drive the loop.
+    const combined: BuildIssue[] = iter === 1
+      ? [...validation.issues, ...pendingIssues].slice(0, 6)
+      : validation.issues.slice(0, 6);
+    pendingIssues = [];
+
+    if (validation.ok && combined.length === 0) {
+      onProgress?.({
+        phase: "validating",
+        progress: Math.min(baseProgress + 1, 93),
+        note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
+      });
+      break;
+    }
+
+    if (iter === MAX_ITERATIONS) {
+      // Out of iterations — keep the best bundle we have and surface a note.
+      onProgress?.({
+        phase: "validating",
+        progress: 92,
+        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
+      });
+      break;
+    }
+
+    onProgress?.({
+      phase: "fixing",
+      progress: Math.min(baseProgress + 2, 92),
+      note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
+    });
+    const patched = await patchBundle(
+      finalFrontend,
+      combined.map((i) => ({
+        file: i.file,
+        problem: `Build error${i.line ? ` at line ${i.line}` : ""}: ${i.message}`,
+        fix: "Fix the import / symbol / syntax so the file compiles.",
+      })),
+    );
+    if (!patched) {
+      onProgress?.({
+        phase: "fixing",
+        progress: Math.min(baseProgress + 2, 92),
+        note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
+      });
+      break;
+    }
+    if (patched === finalFrontend) {
+      onProgress?.({
+        phase: "fixing",
+        progress: Math.min(baseProgress + 2, 92),
+        note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
+      });
+      break;
+    }
+    finalFrontend = patched;
+  }
+
+  return finalFrontend;
+}
+
 /* ----------------------------- edit mode ---------------------------------- */
 
 const EDIT_SYSTEM_PROMPT = `You are AppForge editing an existing web app. Apply the user's requested change while preserving everything else that works.
 
 Output STRICT JSON only matching:
 {"title":"…","description":"…","techStack":[…],"frontendCode":"…","backendCode":"…"}
+
+LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES). Identifiers stay in English.
+
+SYNTAX — code MUST parse with a strict TypeScript parser:
+- NEVER produce \`,,\` (double comma), \`,)\`, \`,]\` or \`,}\` patterns. No trailing commas immediately before a close token.
+- NO non-ASCII characters inside identifiers/keywords/punctuation. Non-ASCII allowed ONLY in string literals and JSX text.
+- Every string must be terminated with the same quote it started with (watch out for long URLs and Spanish descriptions with apostrophes).
+- Every brace, bracket, paren and JSX tag must close.
+- Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod. Do not invent package names.
 
 Rules:
 - Use '// === FILE: <path> ===' separators inside frontendCode/backendCode.
@@ -881,19 +1009,32 @@ export async function generateApp(
 ): Promise<GeneratedAppPayload> {
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
-    onProgress?.({ phase: "generating", progress: 25, note: "Aplicando cambios al código…" });
+    onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
     const TARGET = 50_000;
     const onChars = (chars: number) => {
       const ratio = Math.min(1, chars / TARGET);
       onProgress?.({
         phase: "generating",
-        progress: 25 + Math.round(ratio * 60),
+        progress: 20 + Math.round(ratio * 50),
         note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)`,
       });
     };
     const result = await singleEditPass(prompt, previous, onChars, coderModel);
+
+    // Edit mode used to skip validation entirely, so a single bad token from
+    // the coder (trailing comma, garbage identifier like "née", invented
+    // package import) would ship straight to the user's preview as a parse
+    // error. Run the same validate→patch loop the initial pipeline uses so
+    // edits get the same safety net.
+    const fixedFrontend = await runValidatePatchLoop(
+      result.frontendCode,
+      { ok: true, issues: [] },
+      onProgress,
+      /* baseProgressStart */ 70,
+    );
+
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
-    return result;
+    return { ...result, frontendCode: fixedFrontend };
   }
 
   /* === Phase 1: research first (capped 7s), then architect with context === */
@@ -986,90 +1127,13 @@ export async function generateApp(
   ]);
 
   /* === Phase 5: AUTONOMOUS LOOP (validate → patch → re-validate) ========== */
-  // Real build via esbuild ("ejecutar el código"). If it fails, feed the build
-  // errors back to the patcher and try again. Bounded to MAX_ITERATIONS so the
-  // pipeline can never spiral.
-  // 4 → 2: at most one validate+patch+revalidate cycle. Each patch is up to
-  // 35s, so this caps the loop at ~70s in the worst case (was ~240s).
-  const MAX_ITERATIONS = 2;
-  let finalFrontend = frontendResult.code;
-
-  // Seed the loop with the QA-suggested issues so they're addressed even if
-  // the bundle technically builds.
-  let pendingIssues: BuildIssue[] = report.ok
-    ? []
-    : report.issues.map((i) => ({ file: i.file, message: `${i.problem} → ${i.fix}` }));
-
-  for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
-    const baseProgress = 80 + iter * 3;
-    onProgress?.({
-      phase: "validating",
-      progress: Math.min(baseProgress, 92),
-      note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
-    });
-    const validation = await validateBundle(finalFrontend);
-
-    // Combine real build errors with any unresolved QA suggestions on the first
-    // pass. After the first pass, only build errors drive the loop.
-    const combined: BuildIssue[] = iter === 1
-      ? [...validation.issues, ...pendingIssues].slice(0, 6)
-      : validation.issues.slice(0, 6);
-    pendingIssues = [];
-
-    if (validation.ok && combined.length === 0) {
-      onProgress?.({
-        phase: "validating",
-        progress: Math.min(baseProgress + 1, 93),
-        note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
-      });
-      break;
-    }
-
-    if (iter === MAX_ITERATIONS) {
-      // Out of iterations — keep the best bundle we have and surface a note.
-      onProgress?.({
-        phase: "validating",
-        progress: 92,
-        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
-      });
-      break;
-    }
-
-    onProgress?.({
-      phase: "fixing",
-      progress: Math.min(baseProgress + 2, 92),
-      note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
-    });
-    const patched = await patchBundle(
-      finalFrontend,
-      combined.map((i) => ({
-        file: i.file,
-        problem: `Build error${i.line ? ` at line ${i.line}` : ""}: ${i.message}`,
-        fix: "Fix the import / symbol / syntax so the file compiles.",
-      })),
-    );
-    if (!patched) {
-      // Patcher failed to produce a usable bundle; bail out gracefully.
-      onProgress?.({
-        phase: "fixing",
-        progress: Math.min(baseProgress + 2, 92),
-        note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
-      });
-      break;
-    }
-    // Stagnation guard: if the patcher returned an unchanged bundle, the next
-    // iteration would be identical — break early instead of burning the
-    // remaining budget on the same input.
-    if (patched === finalFrontend) {
-      onProgress?.({
-        phase: "fixing",
-        progress: Math.min(baseProgress + 2, 92),
-        note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
-      });
-      break;
-    }
-    finalFrontend = patched;
-  }
+  // Same logic as before, now extracted into a helper so edit mode can reuse it.
+  const finalFrontend = await runValidatePatchLoop(
+    frontendResult.code,
+    report,
+    onProgress,
+    /* baseProgressStart */ 80,
+  );
 
   const testNote = testCode ? "✅ Tests generados. " : "";
   onProgress?.({

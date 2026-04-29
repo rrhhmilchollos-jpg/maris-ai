@@ -65,7 +65,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { parseBundle, buildSandpackFiles } from "@/lib/parseBundle";
+import { parseBundle, buildSandpackFiles, SANDPACK_DEPENDENCIES } from "@/lib/parseBundle";
 
 type TabKey = "preview" | "frontend" | "backend";
 
@@ -603,6 +603,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     files={sandpackFiles}
                     customSetup={{
                       entry: "/index.tsx",
+                      // Common packages the coder is allowed to import. Without
+                      // this, Sandpack only knows react/react-dom and dies with
+                      // "Could not find dependency: 'wouter'" when the
+                      // generated app does multi-page routing.
+                      dependencies: SANDPACK_DEPENDENCIES,
                     }}
                     options={{
                       recompileMode: "delayed",
