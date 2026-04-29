@@ -1088,7 +1088,7 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress, 92),
       note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
     });
-    emit("validator", `Intento ${iter}/${MAX_ITERATIONS}: compilando bundle…`);
+    emit("validator", iter === 1 ? "Probando que todo compila…" : `Volviendo a probar (intento ${iter})…`);
     const validation = await validateBundle(finalFrontend);
 
     // Combine real build errors with any unresolved QA suggestions on the first
@@ -1104,7 +1104,7 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 1, 93),
         note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
       });
-      emit("validator", `Build OK: ${validation.filesAnalyzed} archivo(s) compilan en ${validation.durationMs} ms.`);
+      emit("validator", `Todo cuadra ✓ (${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"} OK).`);
       break;
     }
 
@@ -1115,7 +1115,7 @@ async function runValidatePatchLoop(
         progress: 92,
         note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
       });
-      emit("validator", `Sin más intentos: quedan ${combined.length} problema(s).`, "warn");
+      emit("validator", `Quedan ${combined.length} detalle${combined.length === 1 ? "" : "s"} por pulir.`, "warn");
       break;
     }
 
@@ -1124,10 +1124,7 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress + 2, 92),
       note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
     });
-    emit(
-      "patcher",
-      `Reparando ${combined.length} problema(s)${combined[0] ? ` (ej: ${combined[0].file} → ${combined[0].message.slice(0, 80)})` : ""}…`,
-    );
+    emit("patcher", `Puliendo ${combined.length} detalle${combined.length === 1 ? "" : "s"}…`);
     const patched = await patchBundle(
       finalFrontend,
       combined.map((i) => ({
@@ -1143,7 +1140,7 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 2, 92),
         note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
       });
-      emit("patcher", "No pude aplicar el cambio. Conservo el bundle anterior.", "warn");
+      emit("patcher", "No pude pulir esto, lo dejo como estaba.", "warn");
       break;
     }
     if (patched === finalFrontend) {
@@ -1152,10 +1149,10 @@ async function runValidatePatchLoop(
         progress: Math.min(baseProgress + 2, 92),
         note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
       });
-      emit("patcher", "Devolví el mismo bundle (sin cambios). Corto el bucle.", "warn");
+      emit("patcher", "Sin cambios que aplicar, sigo.", "warn");
       break;
     }
-    emit("patcher", `Aplicado parche: bundle ahora ${Math.round(patched.length / 1000)} KB.`);
+    emit("patcher", "Pulido aplicado, sigo comprobando…");
     finalFrontend = patched;
   }
 
@@ -1223,6 +1220,85 @@ Rules:
 - NO SIZE LIMIT — return the full bundle no matter how big. Close every brace and quote. Output ONLY the JSON object.`;
 }
 
+/**
+ * Translate a raw file path (as the model emits it inside `// === FILE: … ===`)
+ * into a friendly Spanish phrase suitable for the end-user log. We deliberately
+ * NEVER show the literal path — the user doesn't care that the file is
+ * `src/pages/Anuncios.tsx`, they care that "the robot is working on the Anuncios
+ * page". This mirrors how emergent.sh communicates progress.
+ *
+ * Order of checks matters: more specific patterns first, then folder-based
+ * fallbacks, then a generic "tocando archivos" catch-all.
+ */
+function friendlyFileLabel(rawPath: string, isBackend: boolean): string {
+  const path = rawPath.replace(/^[./\\]+/, "").trim();
+  // ---- exact filenames ----
+  if (/^package\.json$/i.test(path)) return "Ajustando dependencias";
+  if (/^tsconfig(\..*)?\.json$/i.test(path)) return "Configurando TypeScript";
+  if (/^vite\.config/i.test(path)) return "Preparando el empaquetador";
+  if (/^tailwind\.config/i.test(path)) return "Configurando los estilos";
+  if (/^postcss\.config/i.test(path)) return "Configurando los estilos";
+  if (/^index\.html$/i.test(path)) return "Preparando la página principal";
+  if (/^setup\.md$/i.test(path)) return "Escribiendo la guía de configuración";
+  if (/^readme\.md$/i.test(path)) return "Escribiendo la documentación";
+  if (/^\.env(\.|$)/i.test(path)) return "Preparando las variables de entorno";
+  if (/\.(css|scss)$/i.test(path)) return "Ajustando los estilos";
+
+  // ---- entry points ----
+  if (/(^|\/)(src\/)?(index|main|server|app)\.(t|j)sx?$/i.test(path)) {
+    return isBackend ? "Montando el servidor" : "Armando la app principal";
+  }
+
+  // ---- folder-based heuristics ----
+  // Capture: folder + filename (no extension), e.g. pages/Anuncios
+  const m = path.match(
+    /(^|\/)(pages|components|hooks|routes|middleware|controllers|services|lib|utils|helpers|db|schemas?|store|stores|context|contexts|providers)\/([^/]+?)(\.[a-z]+)?$/i,
+  );
+  if (m) {
+    const folder = m[2].toLowerCase();
+    const rawName = m[3];
+    const pretty = rawName
+      .replace(/^use([A-Z])/, "$1") // useFoo → Foo
+      .replace(/[-_]/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2"); // FooBar → Foo Bar
+    switch (folder) {
+      case "pages":
+        return `Trabajando en la página de ${pretty}`;
+      case "components":
+        return `Creando el componente ${pretty}`;
+      case "hooks":
+        return `Creando el hook de ${pretty}`;
+      case "routes":
+        return `Creando rutas de ${pretty}`;
+      case "middleware":
+        return `Configurando middlewares`;
+      case "controllers":
+        return `Creando el controlador de ${pretty}`;
+      case "services":
+        return `Creando el servicio de ${pretty}`;
+      case "lib":
+      case "utils":
+      case "helpers":
+        return `Preparando utilidades`;
+      case "db":
+      case "schema":
+      case "schemas":
+        if (/seed/i.test(rawName)) return "Sembrando datos de ejemplo";
+        if (/schema/i.test(rawName)) return "Diseñando la base de datos";
+        return "Trabajando en la base de datos";
+      case "store":
+      case "stores":
+        return `Configurando el estado global`;
+      case "context":
+      case "contexts":
+      case "providers":
+        return `Configurando ${pretty}`;
+    }
+  }
+
+  return "Tocando archivos del proyecto";
+}
+
 async function singleEditPass(
   prompt: string,
   previous: PreviousApp,
@@ -1285,24 +1361,25 @@ Return the FULL updated app as JSON.`;
         const tail = buffer.slice(Math.max(0, scanFrom - 64));
         if (!sawFrontendKey && /"frontendCode"\s*:\s*"/.test(tail)) {
           sawFrontendKey = true;
-          emit("coder", "Reescribiendo el frontend…");
+          emit("coder", "Empezando a tocar la interfaz…");
         }
         if (!sawBackendKey && /"backendCode"\s*:\s*"/.test(tail)) {
           sawBackendKey = true;
           inBackend = true;
-          emit("coder", "Generando el backend (Express + Drizzle)…");
+          emit("coder", "Empezando a tocar el servidor…");
         }
         FILE_MARKER.lastIndex = 0;
         let m: RegExpExecArray | null;
         while ((m = FILE_MARKER.exec(tail)) !== null) {
           // Inside JSON the model often emits forward slashes as `\/` — strip
-          // those so the user sees `src/App.tsx`, not `src\/App.tsx`.
-          const file = m[1].replace(/\\\//g, "/").trim().slice(0, 80);
+          // those so the file matcher works the same on either form.
+          const file = m[1].replace(/\\\//g, "/").trim().slice(0, 120);
           if (file && !seenFiles.has(file)) {
             seenFiles.add(file);
-            // Files seen *after* the backendCode key are server-side files.
-            const where = inBackend ? "backend" : "frontend";
-            emit("coder", `Escribiendo ${where}: ${file}`);
+            // Translate the raw path into a human phrase before logging it
+            // so the user never sees `src/pages/Anuncios.tsx` — only
+            // "Trabajando en la página de Anuncios".
+            emit("coder", friendlyFileLabel(file, inBackend));
           }
         }
         scanFrom = buffer.length;
@@ -1489,15 +1566,8 @@ export async function generateApp(
   // Edit mode: skip the multi-agent pipeline; we already have a working app.
   if (previous) {
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
-    log("system", `Modo edición: aplicando cambios sobre la app existente (${Math.round(previous.frontendCode.length / 1000)} KB).`);
-    // Surface which model is actually doing the work so the user knows
-    // whether they're on the fast (Gemini Flash) or quality (Sonnet) path.
-    const provider = resolveCoderProvider(coderModel);
-    const providerLabel =
-      provider === "gemini-flash" ? "Gemini 2.5 Flash (rápido)"
-      : provider === "claude-sonnet" ? "Claude Sonnet 4.6 (calidad)"
-      : "GPT-5 Codex";
-    log("coder", `Modelo seleccionado: ${providerLabel}.`);
+    log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
+    log("coder", "Calentando motores…");
     const TARGET = 50_000;
     // Heartbeat every ~2.5s so the log feels alive even when the model is
     // chewing through a long backend bundle without crossing a file marker.
@@ -1512,22 +1582,18 @@ export async function generateApp(
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
-        log("coder", `Recibiendo respuesta… ${Math.round(chars / 1000)} KB hasta ahora.`);
+        log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
     };
-    log("coder", "Esperando primer token del modelo…");
+    log("coder", "Pensando…");
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
-    log(
-      "coder",
-      `Bundle nuevo listo: frontend ${Math.round(result.frontendCode.length / 1000)} KB, backend ${Math.round((result.backendCode || "").length / 1000)} KB.`,
-    );
+    log("coder", "Código listo, comprobando que todo encaje…");
 
     // Edit mode used to skip validation entirely, so a single bad token from
     // the coder (trailing comma, garbage identifier like "née", invented
     // package import) would ship straight to the user's preview as a parse
     // error. Run the same validate→patch loop the initial pipeline uses so
     // edits get the same safety net.
-    log("validator", "Verificando bundle editado con esbuild…");
     const fixedFrontend = await runValidatePatchLoop(
       result.frontendCode,
       { ok: true, issues: [] },
@@ -1538,7 +1604,7 @@ export async function generateApp(
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
-    log("system", "Empaquetando archivos finales…");
+    log("system", "Empaquetando todo…");
     return { ...result, frontendCode: fixedFrontend };
   }
 
