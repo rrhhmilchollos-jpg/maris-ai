@@ -22,7 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, X } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -71,33 +71,52 @@ export default function DashboardPage() {
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   // Recent-apps filter — "all" or only those with a public deploy URL.
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
-  // Generation kind preset — biases the architect toward fullstack apps,
-  // mobile-first PWAs, or single-page landing pages by prepending an
-  // [INTENT: …] hint to the prompt. The hint is only added at submit time
-  // so the user's textarea content stays readable.
-  const [kind, setKind] = useState<"fullstack" | "mobile" | "landing">("fullstack");
-  const KIND_META: Record<typeof kind, { label: string; icon: typeof Layers; placeholder: string; intent: string | null }> = {
+  // Generation kind preset — drives the architect's INTENT directive AND the
+  // credit cost. The cost is enforced server-side; the dashboard mirrors it
+  // here purely for display (badge on each chip + button label). Authoritative
+  // mapping lives in artifacts/api-server/src/routes/apps.ts (KIND_COSTS /
+  // KIND_INTENTS / ALLOWED_KINDS) — keep both in sync.
+  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa";
+  const [kind, setKind] = useState<Kind>("fullstack");
+  const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
     fullstack: {
       label: "App completa",
       icon: Layers,
       placeholder: "ej. Un marketplace estilo Wallapop con publicaciones, búsqueda, mensajes y perfil de usuario...",
-      intent: null,
+      cost: 1,
     },
     mobile: {
       label: "App móvil",
       icon: Smartphone,
       placeholder: "ej. Un diario de hábitos para móvil con racha diaria, notificaciones de recordatorio y vista de calendario...",
-      intent:
-        "[INTENT: mobile-first PWA — diseño en columna única optimizado para pantallas de teléfono, tipografía grande, áreas de toque generosas (mínimo 44px), barra de navegación inferior fija, todas las páginas deben verse perfectas a 390px de ancho]",
+      cost: 2,
     },
     landing: {
       label: "Landing page",
       icon: Rocket,
       placeholder: "ej. Una landing page para una herramienta SaaS de productividad con hero, features, testimonios, pricing y CTA final...",
-      intent:
-        "[INTENT: landing page — sitio de marketing de una sola página con hero impactante, sección de features, prueba social/testimonios, pricing y CTA final + footer. No requiere backend ni dashboard, backendNeeded debe ser false]",
+      cost: 1,
+    },
+    "game-2d": {
+      label: "Juego 2D",
+      icon: Gamepad2,
+      placeholder: "ej. Un juego arcade tipo Snake con controles WASD, niveles de dificultad creciente y tabla de records local...",
+      cost: 3,
+    },
+    "game-3d": {
+      label: "Juego 3D",
+      icon: Box,
+      placeholder: "ej. Un juego 3D first-person de coleccionar monedas en un laberinto con física básica y temporizador...",
+      cost: 5,
+    },
+    "hybrid-pwa": {
+      label: "App híbrida (PWA)",
+      icon: Globe,
+      placeholder: "ej. Una app instalable de notas con sincronización offline, búsqueda y categorías por colores...",
+      cost: 3,
     },
   };
+  const kindCost = KIND_META[kind].cost;
   // Annual upgrade modal — pops up once per 7 days for non-admin users on
   // the dashboard. Dismissed-state lives in localStorage so it doesn't
   // nag on every navigation.
@@ -183,23 +202,25 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!prompt.trim()) return;
 
-    if (!isAdmin && stats && stats.credits <= 0) {
+    if (!isAdmin && stats && stats.credits < kindCost) {
       toast({
-        title: "Sin créditos",
-        description: "Compra más créditos para seguir generando apps.",
+        title: "Créditos insuficientes",
+        description:
+          kindCost > 1
+            ? `Este tipo de proyecto cuesta ${kindCost} créditos y solo tienes ${stats.credits}. Compra más para continuar.`
+            : "Compra más créditos para seguir generando apps.",
         variant: "destructive",
       });
       setLocation("/billing");
       return;
     }
 
-    // Pass the user-selected coder model + source language. The server
-    // validates both against allow-lists and falls back to defaults if
-    // anything is unknown. Prepend the kind-intent hint so the architect
-    // biases the plan accordingly (mobile-first / landing-only / fullstack).
-    const intent = KIND_META[kind].intent;
-    const finalPrompt = intent ? `${intent}\n\n${prompt}` : prompt;
-    generateMutation.mutate({ data: { prompt: finalPrompt, coderModel, language } });
+    // Pass the user-selected coder model + source language + project kind.
+    // The server validates everything against allow-lists, falls back to
+    // safe defaults if anything is unknown, and prepends the kind's
+    // [INTENT: …] directive itself so the architect can't be tricked by
+    // a hand-crafted client. The cost is also enforced server-side.
+    generateMutation.mutate({ data: { prompt, coderModel, language, kind } });
   };
 
   // Annual modal trigger — show once per 7 days for non-admins after the
@@ -309,10 +330,12 @@ export default function DashboardPage() {
           <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
               {/* Tipo de proyecto — chips arriba del Textarea. Cada chip
-                  cambia el placeholder y prepende un hint [INTENT: …] al
-                  prompt al enviar para guiar al arquitecto. */}
+                  cambia el placeholder y manda un `kind` al backend; el
+                  servidor decide el costo (1-5 créditos) y prepende el hint
+                  [INTENT: …] que guía al arquitecto, diseñador, coder y
+                  agente de testing visual. */}
               <div
-                className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-background/50 p-1"
+                className="flex flex-wrap items-center gap-1 rounded-lg border border-white/10 bg-background/50 p-1"
                 role="group"
                 aria-label="Tipo de proyecto"
                 data-testid="kind-tabs"
@@ -328,6 +351,7 @@ export default function DashboardPage() {
                       aria-pressed={active}
                       onClick={() => setKind(k)}
                       disabled={isWorking}
+                      title={`${meta.label} — ${meta.cost} ${meta.cost === 1 ? "crédito" : "créditos"}`}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         active
                           ? "bg-primary/15 text-primary"
@@ -337,6 +361,16 @@ export default function DashboardPage() {
                     >
                       <Icon className="h-3.5 w-3.5" />
                       {meta.label}
+                      <span
+                        className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-mono leading-none ${
+                          active
+                            ? "bg-primary/25 text-primary"
+                            : "bg-white/5 text-muted-foreground/70"
+                        }`}
+                        data-testid={`kind-cost-${k}`}
+                      >
+                        {meta.cost}cr
+                      </span>
                     </button>
                   );
                 })}
@@ -420,7 +454,12 @@ export default function DashboardPage() {
                       </>
                     ) : (
                       <>
-                        Generar App <Plus className="ml-2 h-4 w-4" />
+                        Generar {!isAdmin && (
+                          <span className="ml-1.5 rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-mono leading-none">
+                            {kindCost}cr
+                          </span>
+                        )}
+                        <Plus className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>

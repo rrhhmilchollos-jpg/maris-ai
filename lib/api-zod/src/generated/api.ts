@@ -154,7 +154,7 @@ export const DeleteAppParams = zod.object({
 });
 
 /**
- * @summary Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
+ * @summary Enqueue an app generation job (cost depends on kind — fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5; free for admins). If appId is provided, edits the existing app instead of creating a new one (always 1 credit).
  */
 export const generateAppBodyPromptMin = 5;
 
@@ -177,6 +177,19 @@ export const GenerateAppBody = zod.object({
     .nullish()
     .describe(
       "Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins).",
+    ),
+  kind: zod
+    .enum([
+      "fullstack",
+      "mobile",
+      "landing",
+      "game-2d",
+      "game-3d",
+      "hybrid-pwa",
+    ])
+    .nullish()
+    .describe(
+      "Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack\/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.",
     ),
 });
 

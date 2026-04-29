@@ -493,7 +493,7 @@ export const useDeleteApp = <
 };
 
 /**
- * @summary Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
+ * @summary Enqueue an app generation job (cost depends on kind — fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5; free for admins). If appId is provided, edits the existing app instead of creating a new one (always 1 credit).
  */
 export const getGenerateAppUrl = () => {
   return `/api/generate`;
@@ -556,7 +556,7 @@ export type GenerateAppMutationBody = BodyType<GenerateAppRequest>;
 export type GenerateAppMutationError = ErrorType<ApiError>;
 
 /**
- * @summary Enqueue an app generation job (costs 1 credit on success, free for admins). If appId is provided, edits the existing app instead of creating a new one.
+ * @summary Enqueue an app generation job (cost depends on kind — fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5; free for admins). If appId is provided, edits the existing app instead of creating a new one (always 1 credit).
  */
 export const useGenerateApp = <
   TError = ErrorType<ApiError>,

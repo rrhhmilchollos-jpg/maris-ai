@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { GenerateAppRequestKind } from "./generateAppRequestKind";
 
 export interface GenerateAppRequest {
   /** @minLength 5 */
@@ -15,4 +16,6 @@ export interface GenerateAppRequest {
   coderModel?: string | null;
   /** Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins). */
   language?: string | null;
+  /** Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics. */
+  kind?: GenerateAppRequestKind;
 }

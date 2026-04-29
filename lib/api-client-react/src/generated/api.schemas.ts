@@ -54,6 +54,22 @@ export interface DashboardStats {
   recentApps: GeneratedApp[];
 }
 
+/**
+ * Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.
+ */
+export type GenerateAppRequestKind =
+  | (typeof GenerateAppRequestKind)[keyof typeof GenerateAppRequestKind]
+  | null;
+
+export const GenerateAppRequestKind = {
+  fullstack: "fullstack",
+  mobile: "mobile",
+  landing: "landing",
+  "game-2d": "game-2d",
+  "game-3d": "game-3d",
+  "hybrid-pwa": "hybrid-pwa",
+} as const;
+
 export interface GenerateAppRequest {
   /** @minLength 5 */
   prompt: string;
@@ -63,6 +79,8 @@ export interface GenerateAppRequest {
   coderModel?: string | null;
   /** Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins). */
   language?: string | null;
+  /** Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics. */
+  kind?: GenerateAppRequestKind;
 }
 
 export interface UpdateCoderModelRequest {

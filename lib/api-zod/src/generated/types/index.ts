@@ -21,6 +21,7 @@ export * from "./creditTransaction";
 export * from "./dashboardStats";
 export * from "./deployResult";
 export * from "./generateAppRequest";
+export * from "./generateAppRequestKind";
 export * from "./generatedApp";
 export * from "./generationJob";
 export * from "./gitHubPushResult";
