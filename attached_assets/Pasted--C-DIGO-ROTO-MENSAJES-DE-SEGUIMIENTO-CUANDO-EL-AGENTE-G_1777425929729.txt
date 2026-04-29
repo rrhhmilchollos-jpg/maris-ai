@@ -1,0 +1,777 @@
+🤖 CÓDIGO ROTO — MENSAJES DE SEGUIMIENTO
+🔴 CUANDO EL AGENTE GENERA CÓDIGO INCOMPLETO (se corta a mitad)
+The Coder agent is generating incomplete code. 
+Files are being cut off before they finish.
+
+This is a max_tokens limit issue. Fix this:
+
+1. Increase max_tokens for the Coder agent:
+const stream = await anthropic.messages.stream({
+  model: 'claude-sonnet-4-6',
+  max_tokens: 16000,  // increase from default 1000/4096
+  messages: [{ role: 'user', content: prompt }]
+});
+
+2. If the file is still being cut, implement continuation:
+async function generateFileWithContinuation(prompt, socket, filePath) {
+  let fullContent = '';
+  let isComplete = false;
+  let iteration = 0;
+  const MAX_ITERATIONS = 5;
+
+  while (!isComplete && iteration < MAX_ITERATIONS) {
+    const messages = iteration === 0
+      ? [{ role: 'user', content: prompt }]
+      : [
+          { role: 'user', content: prompt },
+          { role: 'assistant', content: fullContent },
+          { role: 'user', content: 'Continue exactly from where you left off. Do not repeat anything.' }
+        ];
+
+    const stream = await anthropic.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 16000,
+      messages
+    });
+
+    let chunkContent = '';
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta') {
+        chunkContent += chunk.delta.text;
+        socket.emit('file_chunk', { path: filePath, chunk: chunk.delta.text });
+      }
+    }
+
+    fullContent += chunkContent;
+
+    // Check if file looks complete
+    const trimmed = fullContent.trim();
+    isComplete = (
+      trimmed.endsWith('}') ||
+      trimmed.endsWith('};') ||
+      trimmed.endsWith('/>') ||
+      trimmed.endsWith('</div>') ||
+      trimmed.endsWith('```')
+    );
+
+    iteration++;
+  }
+
+  return fullContent;
+}
+
+3. Add this system prompt rule to the Coder agent:
+"CRITICAL: Always generate complete, working files.
+Never truncate or summarize code with comments like 
+'// ... rest of code' or '// ... continue'.
+If the file is long, generate it completely anyway.
+End every file with its proper closing syntax."
+
+Replace the existing file generation with this function.
+Do not change any UI.
+
+🔴 CUANDO EL AGENTE GENERA IMPORTS QUE NO EXISTEN
+The generated code has import errors like:
+"Cannot find module './components/SomeComponent'"
+"Module not found: @/utils/helpers"
+
+Fix the Coder agent system prompt to prevent this:
+
+Add these rules to the Coder agent system prompt:
+
+"STRICT RULES FOR IMPORTS:
+1. Only import files that you are also generating in this project
+2. Only import npm packages that are in the package.json you generated
+3. Never use path aliases like @/ unless you also configure them in vite.config.js
+4. For React projects, always use relative imports like './Component' not '@/Component'
+5. Before writing any import statement, verify the file exists in the fileStructure plan
+6. If you need a utility function, write it in the same file instead of importing it
+
+BEFORE generating each file, output a mental checklist:
+- What does this file import?
+- Does each imported file exist in my fileStructure plan?
+- Is each npm package in my package.json?
+If any answer is NO, fix it before writing the code."
+
+Also fix the Planner agent to output a complete dependency list:
+Add to planner system prompt:
+"In your JSON plan, include a complete 'npmPackages' array with 
+every single package the generated code will need.
+Example: 'npmPackages': ['react', 'react-dom', 'react-router-dom', 
+'axios', 'tailwindcss']"
+
+Then in the Coder agent, use the planner's npmPackages to generate
+the correct package.json before generating any other file.
+
+Do not change any UI. Only fix the agent prompts.
+
+🔴 CUANDO EL AGENTE GENERA JSX/SYNTAX ERRORS
+The generated React code has syntax errors like:
+"Unexpected token"
+"JSX element is not closed"
+"Expected '}' but found..."
+
+Fix this by adding a syntax validation step after each file:
+
+1. Install: npm install @babel/parser
+
+2. After each file is generated, validate it:
+const parser = require('@babel/parser');
+
+function validateJSX(code, filePath) {
+  if (!filePath.endsWith('.jsx') && !filePath.endsWith('.js') && !filePath.endsWith('.tsx')) {
+    return { valid: true };
+  }
+  
+  try {
+    parser.parse(code, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+      errorRecovery: false
+    });
+    return { valid: true };
+  } catch (err) {
+    return { 
+      valid: false, 
+      error: err.message,
+      line: err.loc?.line,
+      column: err.loc?.column
+    };
+  }
+}
+
+3. If validation fails, auto-fix with Claude Haiku:
+async function fixSyntaxError(code, error, filePath) {
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: 16000,
+    messages: [{
+      role: 'user',
+      content: `Fix this JavaScript/JSX syntax error.
+      
+File: ${filePath}
+Error: ${error}
+
+Code with error:
+${code}
+
+Return ONLY the corrected complete file content. No explanations.`
+    }]
+  });
+  
+  return response.content[0].text;
+}
+
+4. Wire it into the Coder agent loop:
+let fileContent = await generateFileWithContinuation(prompt, socket, filePath);
+const validation = validateJSX(fileContent, filePath);
+
+if (!validation.valid) {
+  socket.emit('agent_update', { 
+    agent: 'debugger', 
+    status: 'thinking',
+    message: `Fixing syntax error in ${filePath}...`
+  });
+  fileContent = await fixSyntaxError(fileContent, validation.error, filePath);
+}
+
+await fs.writeFile(fullFilePath, fileContent);
+
+Do not change any UI. Only add this validation layer.
+
+🔴 CUANDO EL AGENTE GENERA CÓDIGO CON MARKDOWN DENTRO
+The generated files contain markdown formatting like:
+```jsx
+import React...
+```
+instead of raw code.
+
+The Coder agent is wrapping code in markdown code blocks.
+Fix the response parsing to strip markdown:
+
+function extractCodeFromResponse(response, filePath) {
+  let code = response.trim();
+  
+  // Remove markdown code blocks with language specifier
+  // e.g. ```jsx, ```javascript, ```css, ```json
+  const codeBlockRegex = /^```(?:jsx?|tsx?|javascript|typescript|css|json|html|bash|sh)?\n([\s\S]*?)```$/;
+  const match = code.match(codeBlockRegex);
+  
+  if (match) {
+    code = match[1].trim();
+  }
+  
+  // Also handle code blocks without language
+  const genericBlockRegex = /^```\n?([\s\S]*?)```$/;
+  const genericMatch = code.match(genericBlockRegex);
+  if (genericMatch) {
+    code = genericMatch[1].trim();
+  }
+  
+  // Remove any leading/trailing backticks
+  code = code.replace(/^`+|`+$/g, '').trim();
+  
+  return code;
+}
+
+Apply this function to EVERY file generated by the Coder agent,
+before writing to disk and before streaming to frontend.
+
+Also add to Coder agent system prompt:
+"CRITICAL: Output ONLY raw code. 
+Never wrap code in markdown code blocks.
+Never use triple backticks.
+Never add explanations before or after the code.
+The very first character of your response must be the 
+first character of the actual code (e.g. 'import' or '{' or '<')."
+
+Do not change any UI. Only fix the parsing.
+
+🔴 CUANDO EL AGENTE GENERA UN SOLO ARCHIVO EN VEZ DE TODOS
+The Coder agent is generating only one large file
+instead of the multiple files in the plan.
+
+Fix the Coder agent to loop through ALL files:
+
+async function coderAgent(plan, model, socket, projectId) {
+  const generatedFiles = [];
+  const projectPath = path.join(process.env.PROJECTS_DIR, projectId);
+  
+  // ALWAYS generate these foundation files first, in this order:
+  const foundationFiles = [
+    'frontend/package.json',
+    'frontend/vite.config.js', 
+    'frontend/index.html',
+    'frontend/src/index.css',
+    'frontend/src/main.jsx',
+    'backend/package.json',
+    'backend/server.js'
+  ];
+  
+  // Then generate the rest from the plan
+  const planFiles = plan.fileStructure.map(f => f.path);
+  
+  // Merge without duplicates
+  const allFiles = [
+    ...foundationFiles,
+    ...planFiles.filter(p => !foundationFiles.includes(p))
+  ];
+
+  for (const filePath of allFiles) {
+    socket.emit('agent_update', {
+      agent: 'coder',
+      status: 'thinking',
+      message: `Writing ${filePath}...`
+    });
+
+    // Build context from already generated files
+    const context = generatedFiles
+      .slice(-5) // last 5 files to avoid token limit
+      .map(f => `// FILE: ${f.path}\n${f.content.slice(0, 500)}...`)
+      .join('\n\n');
+
+    const prompt = `
+You are building: ${plan.appName}
+App type: ${plan.appType}
+Tech stack: ${JSON.stringify(plan.techStack)}
+Features: ${plan.features.join(', ')}
+Color scheme: ${JSON.stringify(plan.colorScheme)}
+
+Already generated files (for context):
+${context}
+
+Now generate the complete content for: ${filePath}
+
+Rules:
+- Output ONLY the raw file content
+- Make it complete and working
+- Reference other files correctly based on the context above
+- For React components: include all imports, the component, and export default
+- For server files: include all routes, middleware, and module.exports
+`;
+
+    let content = await generateFileWithContinuation(prompt, socket, filePath);
+    content = extractCodeFromResponse(content, filePath);
+
+    // Write file to disk
+    const fullPath = path.join(projectPath, filePath);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+
+    generatedFiles.push({ path: filePath, content, language: getLanguage(filePath) });
+    
+    socket.emit('file_done', { 
+      path: filePath, 
+      fullContent: content,
+      size: content.length,
+      totalFiles: allFiles.length,
+      currentIndex: generatedFiles.length
+    });
+  }
+
+  return generatedFiles;
+}
+
+function getLanguage(filePath) {
+  const ext = path.extname(filePath);
+  const map = {
+    '.jsx': 'jsx', '.js': 'javascript', '.ts': 'typescript',
+    '.tsx': 'tsx', '.css': 'css', '.json': 'json',
+    '.html': 'html', '.md': 'markdown'
+  };
+  return map[ext] || 'text';
+}
+
+Replace the existing coderAgent function with this.
+Do not change any UI.
+
+🏥 HEALTH CHECK — MENSAJES DE SEGUIMIENTO
+🔴 CUANDO EL HEALTH CHECK SIEMPRE FALLA
+The Health Check always fails even when the app looks correct.
+It shows errors but the app actually works.
+
+Fix the health check logic completely:
+
+async function runHealthCheck(projectId, socket) {
+  const projectPath = path.join(process.env.PROJECTS_DIR, projectId);
+  const frontendPath = path.join(projectPath, 'frontend');
+  const backendPath = path.join(projectPath, 'backend');
+  
+  const results = {
+    frontendInstall: false,
+    frontendBuild: false,
+    backendInstall: false,
+    backendStart: false,
+    errors: []
+  };
+
+  // CHECK 1: Frontend npm install
+  try {
+    socket.emit('log', { level: 'info', message: 'Installing frontend dependencies...' });
+    execSync('npm install --legacy-peer-deps', { 
+      cwd: frontendPath, 
+      timeout: 120000,
+      stdio: 'pipe'
+    });
+    results.frontendInstall = true;
+    socket.emit('log', { level: 'info', message: '✅ Frontend dependencies installed' });
+  } catch (err) {
+    results.errors.push({ phase: 'frontend-install', error: err.stderr?.toString() || err.message });
+    socket.emit('log', { level: 'error', message: '❌ Frontend install failed: ' + err.message });
+  }
+
+  // CHECK 2: Frontend build (only if install succeeded)
+  if (results.frontendInstall) {
+    try {
+      socket.emit('log', { level: 'info', message: 'Building frontend...' });
+      const buildOutput = execSync('npm run build', {
+        cwd: frontendPath,
+        timeout: 120000,
+        stdio: 'pipe'
+      });
+      results.frontendBuild = true;
+      socket.emit('log', { level: 'info', message: '✅ Frontend build successful' });
+    } catch (err) {
+      const errorText = err.stderr?.toString() || err.stdout?.toString() || err.message;
+      results.errors.push({ phase: 'frontend-build', error: errorText });
+      socket.emit('log', { level: 'error', message: '❌ Frontend build failed' });
+    }
+  }
+
+  // CHECK 3: Backend npm install (if backend exists)
+  const hasBackend = await fs.access(backendPath).then(() => true).catch(() => false);
+  if (hasBackend) {
+    try {
+      socket.emit('log', { level: 'info', message: 'Installing backend dependencies...' });
+      execSync('npm install', {
+        cwd: backendPath,
+        timeout: 120000,
+        stdio: 'pipe'
+      });
+      results.backendInstall = true;
+      socket.emit('log', { level: 'info', message: '✅ Backend dependencies installed' });
+    } catch (err) {
+      results.errors.push({ phase: 'backend-install', error: err.message });
+      socket.emit('log', { level: 'error', message: '❌ Backend install failed' });
+    }
+  }
+
+  // CHECK 4: Backend syntax check (no need to actually start it)
+  if (hasBackend && results.backendInstall) {
+    try {
+      execSync('node --check server.js', {
+        cwd: backendPath,
+        timeout: 10000,
+        stdio: 'pipe'
+      });
+      results.backendStart = true;
+      socket.emit('log', { level: 'info', message: '✅ Backend syntax valid' });
+    } catch (err) {
+      results.errors.push({ phase: 'backend-syntax', error: err.message });
+      socket.emit('log', { level: 'error', message: '❌ Backend has syntax errors' });
+    }
+  }
+
+  const isHealthy = results.frontendBuild && (results.backendStart || !hasBackend);
+
+  socket.emit('health_check_complete', {
+    healthy: isHealthy,
+    results,
+    errors: results.errors
+  });
+
+  return { healthy: isHealthy, errors: results.errors };
+}
+
+Replace existing health check with this.
+Do not change any UI.
+
+🔴 CUANDO EL DEBUGGER ENTRA EN BUCLE INFINITO
+The Debugger agent keeps retrying forever and never resolves.
+The build gets stuck in a loop.
+
+Fix the Debugger agent with a proper retry limit and escalation:
+
+async function debuggerAgent(projectId, errors, socket) {
+  const MAX_RETRIES = 3;
+  const fixedFiles = new Set();
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    socket.emit('agent_update', {
+      agent: 'debugger',
+      status: 'thinking',
+      message: `Fix attempt ${attempt}/${MAX_RETRIES}...`
+    });
+
+    // Group errors by file
+    const errorsByFile = {};
+    for (const err of errors) {
+      if (!errorsByFile[err.file]) errorsByFile[err.file] = [];
+      errorsByFile[err.file].push(err.error);
+    }
+
+    let anyFixed = false;
+
+    for (const [filePath, fileErrors] of Object.entries(errorsByFile)) {
+      // Skip files we already tried fixing twice
+      const fixKey = `${filePath}-${attempt}`;
+      if (fixedFiles.has(fixKey)) continue;
+      fixedFiles.add(fixKey);
+
+      const fullPath = path.join(process.env.PROJECTS_DIR, projectId, filePath);
+      
+      let currentContent;
+      try {
+        currentContent = await fs.readFile(fullPath, 'utf-8');
+      } catch (e) {
+        continue; // File doesn't exist, skip
+      }
+
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 16000,
+        messages: [{
+          role: 'user',
+          content: `Fix these errors in this file.
+
+File: ${filePath}
+Errors:
+${fileErrors.join('\n')}
+
+Current file content:
+${currentContent}
+
+Rules:
+- Return ONLY the complete fixed file content
+- Fix ALL the listed errors
+- Do not introduce new errors
+- Do not change working functionality
+- If the error is an import that doesn't exist, remove that import and inline the code instead`
+        }]
+      });
+
+      let fixedContent = response.content[0].text;
+      fixedContent = extractCodeFromResponse(fixedContent, filePath);
+
+      await fs.writeFile(fullPath, fixedContent, 'utf-8');
+      
+      socket.emit('file_done', { 
+        path: filePath, 
+        fullContent: fixedContent,
+        wasFixed: true,
+        attempt
+      });
+
+      anyFixed = true;
+    }
+
+    // Re-run health check after fixes
+    const { healthy, errors: newErrors } = await runHealthCheck(projectId, socket);
+    
+    if (healthy) {
+      socket.emit('agent_update', {
+        agent: 'debugger',
+        status: 'done',
+        message: `✅ All errors fixed after ${attempt} attempt(s)!`
+      });
+      return true;
+    }
+
+    if (!anyFixed) {
+      // Nothing was fixed this round, no point retrying
+      break;
+    }
+
+    errors = newErrors; // Use new errors for next iteration
+  }
+
+  // Max retries reached — do not loop more
+  socket.emit('agent_update', {
+    agent: 'debugger',
+    status: 'done',
+    message: '⚠️ Some issues remain. App may still work partially.'
+  });
+
+  // Still emit build_complete so user can see what was built
+  socket.emit('build_complete', {
+    projectId,
+    previewUrl: `/preview/${projectId}`,
+    hasWarnings: true,
+    message: 'Built with warnings. Some features may not work perfectly.'
+  });
+
+  return false;
+}
+
+Replace the existing debugger agent with this.
+Do not change any UI.
+
+🔴 CUANDO EL ERROR DEL BUILD NO SE MUESTRA AL USUARIO
+When the build fails, nothing is shown to the user.
+The UI just freezes or shows a blank state.
+
+Fix error propagation from backend to frontend:
+
+BACKEND — always emit errors properly:
+
+// Wrap entire pipeline in try/catch with detailed error reporting
+async function runBuildPipeline(socket, { prompt, projectId, model, userId }) {
+  try {
+    await runAgentPipeline(socket, prompt, projectId, model);
+  } catch (error) {
+    console.error('Build pipeline error:', error);
+    
+    // Always emit to unblock the UI
+    socket.emit('build_error', {
+      message: error.message || 'Unknown error occurred',
+      phase: error.phase || 'unknown',
+      recoverable: error.recoverable !== false,
+      suggestion: getSuggestion(error)
+    });
+
+    // Update project status in DB
+    await Project.findByIdAndUpdate(projectId, { 
+      status: 'error',
+      $push: { buildLogs: `ERROR: ${error.message}` }
+    });
+  }
+}
+
+function getSuggestion(error) {
+  const msg = error.message?.toLowerCase() || '';
+  if (msg.includes('credits')) return 'You need more credits to build this app.';
+  if (msg.includes('timeout')) return 'The build timed out. Try a simpler app first.';
+  if (msg.includes('anthropic')) return 'AI service error. Please try again in a moment.';
+  if (msg.includes('enospc')) return 'Disk space full. Please contact support.';
+  return 'Try again or simplify your app description.';
+}
+
+FRONTEND — listen for errors and show them:
+
+socket.on('build_error', ({ message, phase, recoverable, suggestion }) => {
+  setBuildStatus('error');
+  setIsBuilding(false);
+  
+  // Show error in chat panel (use existing message component)
+  addMessage({
+    role: 'agent',
+    agentType: 'system',
+    content: `❌ Build failed during ${phase || 'generation'}.\n\nError: ${message}\n\n${suggestion || ''}`,
+    timestamp: new Date()
+  });
+
+  // Show toast notification
+  toast.error(message, { duration: 5000 });
+  
+  // Show retry button in existing UI
+  setShowRetryButton(recoverable);
+});
+
+// Retry button handler
+const handleRetry = () => {
+  setShowRetryButton(false);
+  setBuildStatus('idle');
+  // Re-submit with same prompt
+  handleBuild(lastPrompt);
+};
+
+Do not change any UI components.
+Only add the error listeners and handlers.
+
+🔴 CUANDO EL BUILD SE QUEDA COLGADO SIN PROGRESAR
+The build starts but gets stuck. No messages appear,
+no progress, the UI just spins forever.
+
+Fix this by adding a build timeout and heartbeat:
+
+BACKEND — add timeout to the entire pipeline:
+
+const BUILD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max
+
+async function runBuildPipeline(socket, data) {
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      reject(Object.assign(
+        new Error('Build timed out after 5 minutes'),
+        { phase: 'timeout', recoverable: true }
+      ));
+    }, BUILD_TIMEOUT_MS);
+  });
+
+  // Send heartbeat every 10 seconds so frontend knows we're alive
+  const heartbeat = setInterval(() => {
+    socket.emit('heartbeat', { timestamp: Date.now() });
+  }, 10000);
+
+  try {
+    await Promise.race([
+      runAgentPipeline(socket, data),
+      timeoutPromise
+    ]);
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+FRONTEND — detect stalled build:
+
+let lastHeartbeat = Date.now();
+let heartbeatChecker;
+
+socket.on('connect', () => {
+  // Start checking for stalled build
+  heartbeatChecker = setInterval(() => {
+    if (isBuilding && Date.now() - lastHeartbeat > 30000) {
+      // No heartbeat for 30 seconds during a build
+      setIsBuilding(false);
+      setBuildStatus('error');
+      addMessage({
+        role: 'agent',
+        agentType: 'system',
+        content: '⚠️ Build appears to have stalled. Please try again.',
+        timestamp: new Date()
+      });
+      toast.error('Build stalled. Please retry.');
+    }
+  }, 15000);
+});
+
+socket.on('heartbeat', () => {
+  lastHeartbeat = Date.now();
+});
+
+socket.on('disconnect', () => {
+  clearInterval(heartbeatChecker);
+  if (isBuilding) {
+    setIsBuilding(false);
+    setBuildStatus('error');
+    toast.error('Connection lost. Please refresh and retry.');
+  }
+});
+
+Do not change any UI. Only add these timeout mechanisms.
+
+🔴 CUANDO EL HEALTH CHECK DICE "HEALTHY" PERO EL PREVIEW ESTÁ ROTO
+The Health Check says the app is healthy but the preview
+iframe shows a blank page or errors.
+
+Fix this by adding a real HTTP ping after the build:
+
+async function verifyPreviewIsActuallyWorking(previewUrl, maxAttempts = 10) {
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+  
+  for (let i = 1; i <= maxAttempts; i++) {
+    try {
+      const response = await fetch(previewUrl, { 
+        method: 'GET',
+        timeout: 5000,
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (response.ok) {
+        const html = await response.text();
+        // Make sure it's not an empty page
+        if (html.length > 100 && html.includes('<html')) {
+          return { working: true, attempt: i };
+        }
+      }
+    } catch (err) {
+      // Not ready yet, keep trying
+    }
+    
+    // Wait before retry (exponential backoff)
+    await delay(Math.min(1000 * i, 5000));
+  }
+  
+  return { working: false };
+}
+
+// Use it after deploy:
+socket.emit('log', { level: 'info', message: 'Verifying preview is accessible...' });
+const { working, attempt } = await verifyPreviewIsActuallyWorking(previewUrl);
+
+if (working) {
+  socket.emit('log', { level: 'info', message: `✅ Preview confirmed working (attempt ${attempt})` });
+  socket.emit('build_complete', { projectId, previewUrl, files });
+} else {
+  socket.emit('log', { level: 'warn', message: '⚠️ Preview may take a moment to load' });
+  // Still emit complete but with a warning
+  socket.emit('build_complete', { 
+    projectId, 
+    previewUrl, 
+    files,
+    previewWarning: 'App is built but may take 10-15 seconds to become accessible'
+  });
+}
+
+FRONTEND — handle the warning:
+socket.on('build_complete', ({ previewUrl, previewWarning }) => {
+  setPreviewUrl(previewUrl);
+  if (previewWarning) {
+    toast('⏳ ' + previewWarning, { duration: 8000 });
+    // Retry loading iframe after delay
+    setTimeout(() => {
+      setPreviewKey(prev => prev + 1); // force iframe reload
+    }, 10000);
+  }
+});
+
+Do not change any UI. Only add the verification logic.
+
+💡 GUÍA RÁPIDA DE USO
+Guarda estos mensajes organizados así:
+Código roto:
+
+Archivo cortado a mitad → mensaje 1
+Imports que no existen → mensaje 2
+Errores JSX/syntax → mensaje 3
+Código con markdown → mensaje 4
+Solo genera un archivo → mensaje 5
+
+Health Check:
+
+Siempre falla → mensaje 1
+Bucle infinito → mensaje 2
+Errores no se muestran → mensaje 3
+Build colgado → mensaje 4
+Dice healthy pero roto → mensaje 5
