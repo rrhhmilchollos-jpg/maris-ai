@@ -184,11 +184,29 @@ async function ensurePublicSlug(
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = makeSlug();
     try {
-      await db
+      // Only assign if no slug exists yet — protects against two concurrent
+      // callers (e.g. evaluator + manual publish) racing to overwrite each
+      // other's slug. RETURNING tells us whether we won the race.
+      const updated = await db
         .update(generatedApps)
         .set({ publicSlug: candidate })
-        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)));
-      return candidate;
+        .where(
+          and(
+            eq(generatedApps.id, appId),
+            eq(generatedApps.userId, userId),
+            sql`${generatedApps.publicSlug} IS NULL`,
+          ),
+        )
+        .returning({ publicSlug: generatedApps.publicSlug });
+      if (updated.length > 0) return updated[0].publicSlug;
+      // We didn't win the race — re-read to find the slug the other caller
+      // assigned, and return it so both callers agree on the same URL.
+      const [row] = await db
+        .select({ publicSlug: generatedApps.publicSlug })
+        .from(generatedApps)
+        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
+        .limit(1);
+      return row?.publicSlug ?? null;
     } catch (err) {
       log.warn({ err, attempt }, "Slug collision, retrying");
     }
@@ -1501,6 +1519,12 @@ router.post(
       `INTENCIÓN ORIGINAL:\n${row.prompt}\n\n` +
       `RAZONES DEL RECHAZO:\n${row.evaluatorSummary ?? "(sin detalle)"}\n\n` +
       `Aplica los cambios necesarios para que pase la evaluación.`;
+    // Snapshot the prior needs_review state so we can restore it if the
+    // enqueue fails — otherwise a 402/409/etc would leave the app stuck in
+    // "ready" with `evaluatorSummary` wiped, and the next call to this
+    // endpoint would 409 (status !== "needs_review").
+    const previousStatus = row.status;
+    const previousSummary = row.evaluatorSummary;
     // Clear the needs_review state up front so the dashboard reflects the
     // retry immediately (the worker will set status back to ready on success).
     await db
@@ -1510,10 +1534,33 @@ router.post(
     // Reuse the same enqueue path the chat /messages endpoint takes — that
     // way credit accounting, in-flight protection, and chat-message
     // persistence behave identically to a normal user-initiated edit.
-    await enqueueGeneration(req, res, retryPrompt, id, {
-      chatMessage: { appId: id, content: retryPrompt },
-      attachmentIds: [],
-    });
+    try {
+      await enqueueGeneration(req, res, retryPrompt, id, {
+        chatMessage: { appId: id, content: retryPrompt },
+        attachmentIds: [],
+      });
+    } catch (err) {
+      // enqueueGeneration normally responds via res; an unexpected throw is
+      // truly exceptional. Restore state and rethrow so the user can retry.
+      await db
+        .update(generatedApps)
+        .set({ status: previousStatus, evaluatorSummary: previousSummary })
+        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+        .catch(() => undefined);
+      throw err;
+    }
+    // enqueueGeneration writes its own response. If it short-circuited with
+    // a 4xx/5xx (out of credits, in-flight job, etc.), restore the prior
+    // needs_review state so the user can retry from the same UI.
+    if (res.statusCode >= 400) {
+      await db
+        .update(generatedApps)
+        .set({ status: previousStatus, evaluatorSummary: previousSummary })
+        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+        .catch((err) => {
+          req.log.warn({ err, appId: id }, "Failed to restore needs_review after retry rejection");
+        });
+    }
   },
 );
 
