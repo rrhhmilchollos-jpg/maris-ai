@@ -170,7 +170,15 @@ async function captureViewport(
   }
 }
 
-async function takeScreenshots(url: string): Promise<ViewportShot[]> {
+/**
+ * Capture screenshots of a deployed app at the standard three viewports.
+ * Exported so the autonomous evaluator (`lib/evaluator.ts`) can reuse the
+ * exact same Puppeteer setup without re-implementing browser launch + viewport
+ * iteration. Returns one ViewportShot per VIEWPORT — failures are captured as
+ * empty `data` plus a console-error string so callers can decide how strict
+ * to be.
+ */
+export async function takeScreenshots(url: string): Promise<ViewportShot[]> {
   const browser = await launchBrowser();
   try {
     const shots: ViewportShot[] = [];

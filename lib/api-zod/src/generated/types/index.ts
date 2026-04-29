@@ -37,6 +37,7 @@ export * from "./jobLogEntry";
 export * from "./jobLogEntryLevel";
 export * from "./jobLogList";
 export * from "./sendAppMessageRequest";
+export * from "./updateAutoPublishRequest";
 export * from "./updateCoderModelRequest";
 export * from "./userProfile";
 export * from "./visualAnalysis";

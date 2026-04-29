@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:queue": "tsx ./src/__tests__/queue-recovery.test.ts",
     "test:agent-memory": "tsx ./src/__tests__/agent-memory.test.ts",
-    "test": "pnpm run test:agent-memory && pnpm run test:queue"
+    "test:evaluator": "tsx ./src/__tests__/evaluator.test.ts",
+    "test": "pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator"
   },
   "dependencies": {
     "@clerk/express": "^2.1.9",

@@ -91,3 +91,17 @@ AppForge features a React frontend, a Node.js/Express backend, and shared librar
 - **esbuild**: Bundle validation and processing.
 - **archiver**: ZIP file export.
 - **OpenAPI 3.1**: API specification.
+
+## Evaluador autónomo + Auto-publicar (Task #11)
+
+- Nuevo agente "Visual Evaluator" en `artifacts/api-server/src/lib/evaluator.ts`. Funciona como segunda etapa después del Visual Tester: cuando el tester termina, `runAutoEvaluator` toma screenshots con Puppeteer (reutilizando `takeScreenshots` exportado desde `visualTester.ts`) y pide a Claude Sonnet 4.6 con visión un veredicto estricto `pass | fail` comparando lo renderizado contra el prompt original Y las pantallas declaradas por el Arquitecto.
+- Bucle de retry máximo: 1 evaluación inicial + hasta 2 rondas con patcher = 3 visitas en total. Cada ronda reusa `patchBundle`, valida con `validateBundle` y persiste con concurrencia optimista (`UPDATE ... WHERE frontendCode = previousBundle`) — si el bundle cambió mientras tanto (por ejemplo un edit del usuario en chat) el evaluador se rinde.
+- Si el evaluador aprueba y la app tiene `autoPublish=true`, se asegura un slug, se inserta un mensaje 🚀 en el chat con la URL pública y se llama a `sendAutoPublishEmail`. Si rechaza, marca `status="needs_review"`, escribe `evaluatorSummary` (resumen + top 5 issues) y manda `sendNeedsReviewEmail`.
+- Schema: `generated_apps.autoPublish` (boolean default false) y `generated_apps.evaluatorSummary` (text nullable). `serializeApp` los incluye, OpenAPI los expone en `GeneratedApp`. Sincronizado vía `pnpm --filter @workspace/db run push --force`.
+- Endpoints nuevos:
+  - `PATCH /apps/:id/auto-publish` — `{ autoPublish: boolean }`. UI: botón "Auto-publicar: ON/OFF" junto a "Publicar" en el panel de la app.
+  - `POST /apps/:id/retry-generation` — sólo válido cuando `status === "needs_review"`. Reusa `enqueueGeneration` con un prompt que combina la intención original + el `evaluatorSummary` para que el siguiente intento converja. Limpia `needs_review` y `evaluatorSummary` antes de encolar.
+- UI: panel rojo encima del split chat/preview cuando `status === "needs_review"`, muestra `evaluatorSummary` y un botón "Reintentar generación" cableado al endpoint anterior.
+- Notificaciones (pendiente de email provider): `artifacts/api-server/src/lib/notify.ts` exporta `sendAutoPublishEmail` y `sendNeedsReviewEmail`. **No hay proveedor de email configurado todavía** (ni Resend ni SendGrid ni SES). Por ahora ambas funciones loguean un payload estructurado con `msg: "📬 email_pending"` que un pipeline externo o Loki puede recoger fácilmente. Cuando se añada el proveedor real, basta con sustituir el cuerpo de `emit()` y todo lo demás (asunto, cuerpo en castellano, fallbacks de saludo) ya está listo.
+- Robustez: si Chromium no está instalado el evaluador se salta limpiamente y devuelve `pass` (no penaliza al usuario por un problema de entorno). Excepciones del evaluador o del patcher se tratan como `fail` en esa ronda y nunca tumban la generación principal — el `setImmediate(...).catch(...)` en `apps.ts` garantiza que cualquier explosión queda en logs.
+- Tests: `artifacts/api-server/src/__tests__/evaluator.test.ts` cubre `normalizeVerdict` (acepta `pass`/`PASS`/`{pass:true}`, fuerza `fail` cuando hay critical issue aunque el modelo diga `pass`, normaliza severities desconocidas) y `formatIssuesForPatcher` (descarta `minor`, cap a 6, sintetiza `fix` cuando viene vacío). Comando: `pnpm --filter @workspace/api-server run test:evaluator`.

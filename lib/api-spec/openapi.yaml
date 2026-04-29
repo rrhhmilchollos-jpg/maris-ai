@@ -259,6 +259,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/auto-publish:
+    patch:
+      operationId: updateAppAutoPublish
+      tags: [apps]
+      summary: Toggle the auto-publish flag for an app
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAutoPublishRequest"
+      responses:
+        "200":
+          description: Updated app
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedApp"
+        "400":
+          description: Invalid value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/retry-generation:
+    post:
+      operationId: retryAppGeneration
+      tags: [apps]
+      summary: Re-trigger generation for an app stuck in needs_review
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "202":
+          description: Retry job enqueued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: App is not in needs_review state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/export:
     get:
       operationId: exportApp
@@ -854,6 +920,13 @@ components:
           type: string
           nullable: true
           description: HTML URL of the repo this app was last pushed to.
+        autoPublish:
+          type: boolean
+          description: When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically.
+        evaluatorSummary:
+          type: string
+          nullable: true
+          description: Spanish summary written by the evaluator when an app is in needs_review state.
         createdAt:
           type: string
           format: date-time
@@ -869,6 +942,7 @@ components:
         - status
         - coderModel
         - language
+        - autoPublish
         - createdAt
     GenerateAppRequest:
       type: object
@@ -910,6 +984,13 @@ components:
           description: "auto | gemini-2.5-flash | claude-sonnet-4-6"
       required:
         - coderModel
+    UpdateAutoPublishRequest:
+      type: object
+      properties:
+        autoPublish:
+          type: boolean
+      required:
+        - autoPublish
     ImageGenerationResult:
       type: object
       properties:

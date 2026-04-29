@@ -68,6 +68,17 @@ export const GetMyStatsResponse = zod.object({
         .string()
         .nullish()
         .describe("HTML URL of the repo this app was last pushed to."),
+      autoPublish: zod
+        .boolean()
+        .describe(
+          "When true, the autonomous evaluator publishes successful generations to \/p\/{slug} automatically.",
+        ),
+      evaluatorSummary: zod
+        .string()
+        .nullish()
+        .describe(
+          "Spanish summary written by the evaluator when an app is in needs_review state.",
+        ),
       createdAt: zod.coerce.date(),
     }),
   ),
@@ -104,6 +115,17 @@ export const ListAppsResponseItem = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  autoPublish: zod
+    .boolean()
+    .describe(
+      "When true, the autonomous evaluator publishes successful generations to \/p\/{slug} automatically.",
+    ),
+  evaluatorSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Spanish summary written by the evaluator when an app is in needs_review state.",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListAppsResponse = zod.array(ListAppsResponseItem);
@@ -143,6 +165,17 @@ export const GetAppResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  autoPublish: zod
+    .boolean()
+    .describe(
+      "When true, the autonomous evaluator publishes successful generations to \/p\/{slug} automatically.",
+    ),
+  evaluatorSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Spanish summary written by the evaluator when an app is in needs_review state.",
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -286,7 +319,78 @@ export const UpdateAppModelResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  autoPublish: zod
+    .boolean()
+    .describe(
+      "When true, the autonomous evaluator publishes successful generations to \/p\/{slug} automatically.",
+    ),
+  evaluatorSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Spanish summary written by the evaluator when an app is in needs_review state.",
+    ),
   createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Toggle the auto-publish flag for an app
+ */
+export const UpdateAppAutoPublishParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAppAutoPublishBody = zod.object({
+  autoPublish: zod.boolean(),
+});
+
+export const UpdateAppAutoPublishResponse = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  description: zod.string(),
+  techStack: zod.array(zod.string()),
+  frontendCode: zod.string(),
+  backendCode: zod.string(),
+  status: zod.string(),
+  coderModel: zod
+    .string()
+    .describe(
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
+    ),
+  language: zod
+    .string()
+    .describe(
+      "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation.",
+    ),
+  publicSlug: zod
+    .string()
+    .nullish()
+    .describe("When set, the app is publicly viewable at \/p\/{publicSlug}."),
+  githubRepoUrl: zod
+    .string()
+    .nullish()
+    .describe("HTML URL of the repo this app was last pushed to."),
+  autoPublish: zod
+    .boolean()
+    .describe(
+      "When true, the autonomous evaluator publishes successful generations to \/p\/{slug} automatically.",
+    ),
+  evaluatorSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Spanish summary written by the evaluator when an app is in needs_review state.",
+    ),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Re-trigger generation for an app stuck in needs_review
+ */
+export const RetryAppGenerationParams = zod.object({
+  id: zod.coerce.number(),
 });
 
 /**
@@ -388,6 +492,17 @@ export const ForkAppResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  autoPublish: zod
+    .boolean()
+    .describe(
+      "When true, the autonomous evaluator publishes successful generations to \/p\/{slug} automatically.",
+    ),
+  evaluatorSummary: zod
+    .string()
+    .nullish()
+    .describe(
+      "Spanish summary written by the evaluator when an app is in needs_review state.",
+    ),
   createdAt: zod.coerce.date(),
 });
 
