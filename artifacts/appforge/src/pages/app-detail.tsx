@@ -137,7 +137,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // panels (chat open) responsive apps designed for ≥1024px collapsed into a
   // mobile layout that misled users into thinking the build was broken.
   type PreviewViewport = "fit" | "desktop" | "tablet" | "mobile";
-  const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("desktop");
+  // Default to "fit" so the iframe fills the panel exactly (1:1 with the
+  // available space). Device modes are opt-in: they render at a fixed real
+  // device viewport and letterbox to fit, useful for checking specific
+  // breakpoints. We used to default to "desktop", which forced 1280-wide
+  // rendering and stretched the iframe height — apps with natural-height
+  // content showed at the top with a big white gap below, exactly the bug
+  // the user reported. "Fit" guarantees the app gets the full panel size.
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewport>("fit");
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const [previewBoxSize, setPreviewBoxSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   // Live preview window visibility. Mirrors emergent.sh — the preview can be
@@ -1148,19 +1155,39 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     // device modes render at a fixed width and scale down with
                     // CSS transform so the user sees the full responsive layout
                     // even when the chat is open beside the preview.
-                    const VIEWPORT_W: Record<Exclude<PreviewViewport, "fit">, number> = {
-                      desktop: 1280,
-                      tablet: 768,
-                      mobile: 390,
+                    // Real device viewports — width × height in CSS pixels.
+                    // Heights are deliberate (MacBook 13", iPad portrait,
+                    // iPhone 14 Pro) so the iframe shows what a real screen
+                    // would: app fills its viewport, bottom of the page
+                    // doesn't bleed out as white space the way the old
+                    // "stretch height to fill panel" logic did.
+                    const VIEWPORT_DIM: Record<
+                      Exclude<PreviewViewport, "fit">,
+                      { w: number; h: number }
+                    > = {
+                      desktop: { w: 1280, h: 800 },
+                      tablet: { w: 768, h: 1024 },
+                      mobile: { w: 390, h: 844 },
                     };
                     const isFit = previewViewport === "fit";
-                    const innerW = isFit ? previewBoxSize.w : VIEWPORT_W[previewViewport];
-                    const scale = isFit || innerW <= 0 || previewBoxSize.w <= 0
-                      ? 1
-                      : Math.min(1, previewBoxSize.w / innerW);
-                    const innerH = isFit
-                      ? previewBoxSize.h
-                      : Math.max(0, previewBoxSize.h / (scale || 1));
+                    const innerW = isFit ? previewBoxSize.w : VIEWPORT_DIM[previewViewport].w;
+                    const innerH = isFit ? previewBoxSize.h : VIEWPORT_DIM[previewViewport].h;
+                    // Scale to fit BOTH dimensions of the panel (min of the
+                    // two ratios) so device frames letterbox cleanly inside
+                    // the dark panel background instead of overflowing or
+                    // leaving a white tail underneath.
+                    const scale =
+                      isFit ||
+                      innerW <= 0 ||
+                      innerH <= 0 ||
+                      previewBoxSize.w <= 0 ||
+                      previewBoxSize.h <= 0
+                        ? 1
+                        : Math.min(
+                            1,
+                            previewBoxSize.w / innerW,
+                            previewBoxSize.h / innerH,
+                          );
                     const sandpack = (
                       <SandpackProvider
                         template="react-ts"
@@ -1192,13 +1219,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                       return <div className="absolute inset-0 bg-white">{sandpack}</div>;
                     }
                     return (
-                      <div className="absolute inset-0 flex items-start justify-center overflow-hidden">
+                      <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#0d0d12]">
                         <div
                           style={{
                             width: innerW,
                             height: innerH,
                             transform: `scale(${scale})`,
-                            transformOrigin: "top center",
+                            transformOrigin: "center center",
                             background: "white",
                             boxShadow: "0 4px 24px rgba(0,0,0,0.35)",
                             borderRadius: previewViewport === "mobile" ? 24 : 8,
