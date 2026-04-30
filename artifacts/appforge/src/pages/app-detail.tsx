@@ -25,6 +25,9 @@ import {
   getGetGenerationJobQueryKey,
   getListAppRuntimeErrorsQueryKey,
   useGetMe,
+  useGetAppNotes,
+  useUpdateAppNotes,
+  getGetAppNotesQueryKey,
   type VisualTestReport,
   type AppRuntimeError,
 } from "@workspace/api-client-react";
@@ -36,6 +39,7 @@ import {
 } from "@codesandbox/sandpack-react";
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
+import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import {
   AttachmentPicker,
   AttachmentChips,
@@ -906,6 +910,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               )}
             </div>
 
+            <div className="px-3 pt-3">
+              <AppNotesSection appId={id} />
+            </div>
+
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
               {(messages ?? []).length === 0 && !isWorking ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
@@ -1512,5 +1520,35 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         </DialogContent>
       </Dialog>
     </Layout>
+  );
+}
+
+/**
+ * Per-app agent memory editor. Wired to GET/PUT /apps/:id/notes. Pulled out
+ * into its own component so each tab/route mount manages its own query and
+ * mutation state without rebuilding the whole detail page on every save.
+ */
+function AppNotesSection({ appId }: { appId: number }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetAppNotes(appId);
+  const updateMutation = useUpdateAppNotes({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetAppNotesQueryKey(appId) });
+      },
+    },
+  });
+  return (
+    <AgentNotesPanel
+      title="Memoria del agente para esta app"
+      description="Notas que el agente recordará al editar esta app: decisiones de diseño, convenciones de código, integraciones, etc."
+      initialValue={data?.notes}
+      isLoading={isLoading}
+      isSaving={updateMutation.isPending}
+      onSave={async (notes) => {
+        await updateMutation.mutateAsync({ id: appId, data: { notes } });
+      }}
+      testIdPrefix="app-notes"
+    />
   );
 }

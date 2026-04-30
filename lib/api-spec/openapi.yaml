@@ -223,6 +223,94 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/notes:
+    get:
+      operationId: getAppNotes
+      tags: [apps]
+      summary: Get the agent's persistent notes for an app
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentNotes"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: updateAppNotes
+      tags: [apps]
+      summary: Replace the agent's persistent notes for an app (max 3000 chars)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentNotes"
+      responses:
+        "200":
+          description: Updated notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentNotes"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /me/preferences:
+    get:
+      operationId: getMyPreferences
+      tags: [me]
+      summary: Get the user's cross-app preferences (memory layer #3)
+      responses:
+        "200":
+          description: Preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentNotes"
+    put:
+      operationId: updateMyPreferences
+      tags: [me]
+      summary: Replace the user's cross-app preferences (max 3000 chars)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentNotes"
+      responses:
+        "200":
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentNotes"
   /apps/{id}/model:
     patch:
       operationId: updateAppModel
@@ -1190,6 +1278,14 @@ components:
         - content
         - attachmentIds
         - createdAt
+    AgentNotes:
+      type: object
+      description: Persistent agent memory (per-app or per-user). Capped at 3000 chars.
+      properties:
+        notes:
+          type: string
+      required:
+        - notes
     GenerationJob:
       type: object
       properties:

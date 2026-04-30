@@ -11,6 +11,7 @@ const openai = new OpenAI({
 import { validateBundle, type BuildIssue } from "./validate";
 import { logger } from "./logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
+import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
@@ -1711,6 +1712,7 @@ export async function generateApp(
   onAgentLog?: AgentLog,
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
+  agentMemory?: AgentMemoryContext,
 ): Promise<GeneratedAppPayload> {
   // Tiny helper that wraps each pipeline phase. If the phase throws we report
   // the error to the caller (Sentry capture lives there) tagged with the
@@ -1728,6 +1730,16 @@ export async function generateApp(
       throw err;
     }
   };
+  // Prepend persistent agent memory (cross-app preferences, per-app notes,
+  // recent chat history). Same pattern as attachments: one upfront concat so
+  // every downstream stage (planner, architect, coder, patcher) sees the
+  // exact same enriched prompt without needing the memory parameter threaded
+  // through every signature. Empty when there is nothing to inject, so it's
+  // safe for first-time users / brand-new apps.
+  const memoryBlock = formatMemoryBlock(agentMemory);
+  if (memoryBlock) {
+    prompt = `${memoryBlock}\n${prompt}`;
+  }
   // Prepend any user-uploaded attachments to the prompt. The block is a clearly
   // delimited section so models know it's authoritative context (not part of
   // the natural-language ask). We do this once, before any agent runs, so every

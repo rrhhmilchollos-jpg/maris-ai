@@ -33,6 +33,8 @@ import { runAutoEvaluator } from "../lib/evaluator";
 import { chargeCredits, refundCredits } from "../lib/credits";
 import { enqueueGenerateJob, reenqueueGenerateJob } from "../lib/jobQueue";
 import { captureAgentError, addBreadcrumb } from "../lib/sentry";
+import { loadAgentMemory } from "../lib/agentMemoryContext";
+import { runMemoryExtractor } from "../lib/agentMemoryExtractor";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
 const VISUAL_TEST_COST = 30;
@@ -555,6 +557,21 @@ async function runJob(
       }
     }
 
+    // Load persistent agent memory: cross-app preferences + (when editing)
+    // per-app notes + recent chat turns. Failures here just degrade to "no
+    // memory" — never block the generation.
+    const agentMemory = await loadAgentMemory(userId, editAppId);
+    if (
+      agentMemory.conversationHistory.length > 0 ||
+      agentMemory.appNotes.length > 0 ||
+      agentMemory.userPreferences.length > 0
+    ) {
+      recordLog(
+        "system",
+        `Memoria cargada: ${agentMemory.conversationHistory.length} turnos previos, ${agentMemory.appNotes.length} chars de notas de app, ${agentMemory.userPreferences.length} chars de preferencias.`,
+      );
+    }
+
     addBreadcrumb("job:start", {
       jobId,
       userId,
@@ -564,6 +581,9 @@ async function runJob(
       promptChars: prompt.length,
       attachments: attachmentIds.length,
       attempt: attemptCtx.attempt,
+      memoryTurns: agentMemory.conversationHistory.length,
+      memoryNotesChars: agentMemory.appNotes.length,
+      memoryPrefsChars: agentMemory.userPreferences.length,
     });
     const payload = await generateApp(
       prompt,
@@ -609,10 +629,17 @@ async function runJob(
           extra: { ...extras, attempt: attemptCtx.attempt, coderModel, language },
         });
       },
+      agentMemory,
     );
     recordLog("system", `Generación completada: ${Math.round(payload.frontendCode.length / 1000)} KB de frontend listos.`);
 
     // Atomic finalisation: insert/update app + mark job succeeded in one tx.
+    // We capture the resulting appId in this outer var so we can schedule
+    // post-commit work (memory extractor, image gen, visual tester) AFTER
+    // the transaction is durably committed — scheduling from inside the
+    // transaction callback risks firing before the COMMIT lands, which can
+    // race against UPDATE/INSERT statements that depend on the new row.
+    let finalAppIdAfterTx: number | null = null;
     await db.transaction(async (tx) => {
       let resultAppId: number;
       if (editAppId) {
@@ -690,6 +717,11 @@ async function runJob(
           updatedAt: new Date(),
         })
         .where(eq(generationJobs.id, jobId));
+
+      // Hand the resulting appId back to the outer scope so the post-commit
+      // hooks below can schedule the memory extractor *after* this tx has
+      // really landed in the database.
+      finalAppIdAfterTx = resultAppId;
 
       // Schedule automatic AI image generation in the background after the
       // transaction commits. The Unsplash placeholder URLs the coder emits
@@ -775,6 +807,29 @@ async function runJob(
           );
       }
     });
+
+    // Post-commit hook: launch the memory extractor only AFTER the txn has
+    // durably committed. Doing this from inside the transaction callback
+    // would risk a race where the extractor's UPDATE on agent_notes runs
+    // before the row exists, or where a rolled-back transaction still writes
+    // memory for an app that never came into being. Fire-and-forget — any
+    // failure is logged and swallowed because the user already has their app.
+    if (finalAppIdAfterTx !== null) {
+      const memoryAppId: number = finalAppIdAfterTx;
+      setImmediate(() => {
+        runMemoryExtractor({
+          userId,
+          appId: memoryAppId,
+          userPrompt: prompt,
+          appDescription: payload.description,
+        }).catch((memErr) => {
+          logger.warn(
+            { err: memErr, appId: memoryAppId, jobId },
+            "Memory extractor failed (non-fatal)",
+          );
+        });
+      });
+    }
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Error desconocido";
     const hasMoreAttempts = attemptCtx.attempt < attemptCtx.maxAttempts;
@@ -2350,5 +2405,57 @@ router.delete(
     res.status(204).end();
   },
 );
+
+// =============================================================================
+// Per-app agent notes (memory layer #2). Read by every edit, written by the
+// post-edit memory extractor, also editable by the user.
+// =============================================================================
+
+router.get("/apps/:id/notes", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const userId = req.userId!;
+  const [row] = await db
+    .select({ agentNotes: generatedApps.agentNotes })
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  res.json({ notes: row.agentNotes ?? "" });
+});
+
+router.put("/apps/:id/notes", requireAuth, async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid app id" });
+    return;
+  }
+  const notes: unknown = req.body?.notes;
+  if (typeof notes !== "string") {
+    res.status(400).json({ error: "notes debe ser una cadena" });
+    return;
+  }
+  // Hard cap at 3 KB — same limit the writer enforces on auto-extracted
+  // notes. Beyond this we silently truncate; the agent can always re-add
+  // the most relevant bits next time.
+  const trimmed = notes.slice(0, 3000);
+  const userId = req.userId!;
+  const updated = await db
+    .update(generatedApps)
+    .set({ agentNotes: trimmed })
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .returning({ id: generatedApps.id });
+  if (updated.length === 0) {
+    res.status(404).json({ error: "App not found" });
+    return;
+  }
+  res.json({ notes: trimmed });
+});
 
 export default router;

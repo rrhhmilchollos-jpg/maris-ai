@@ -39,6 +39,15 @@ Maris AI features a React frontend, a Node.js/Express backend, and shared librar
 - A small Gemini-2.5-flash classifier (planner) determines the scope (`fast-patch`, `feature`, `full-build`) for each request, directing the AI pipeline accordingly.
 - An `agent_memory` table stores successful patches, indexed by pgvector embeddings of error messages, to improve subsequent patch attempts.
 
+**Memoria persistente del agente y del chat (3 capas)**:
+- Implementado en `artifacts/api-server/src/lib/agentMemoryContext.ts` y `agentMemoryExtractor.ts`.
+- Capa 1 — historial de chat: últimos 12 turnos de la app actual, capados a 600 chars/turno.
+- Capa 2 — `generated_apps.agent_notes` (text, 3KB cap): notas persistentes por app (decisiones de diseño, paleta, etc.).
+- Capa 3 — tabla `user_preferences` (PK `userId`, text `notes` 3KB cap): preferencias cross-app válidas para todas las apps del usuario.
+- `loadAgentMemory(userId, appId?)` se llama antes de cada `generateApp(...)` en `apps.ts runJob`. El bloque "## CONTEXTO PERSISTENTE" se inyecta al inicio del prompt (planner/architect/coder/patcher comparten el mismo userContent). Las notas se inyectan como DATOS, no como instrucciones, y se sanitizan contra prompt-injection ("ignora las instrucciones anteriores", role-swap, etc.).
+- Tras commit exitoso del job (post-tx), un `runMemoryExtractor` fire-and-forget (Haiku, JSON estricto) destila aprendizajes durables y los hace merge+dedupe en `agent_notes` y `user_preferences`. Falla en silencio.
+- CRUD: `GET/PUT /api/apps/:id/notes` y `GET/PUT /api/me/preferences`. UI: panel colapsable `<AgentNotesPanel/>` reusable, montado como `<AppNotesSection/>` en `app-detail.tsx` (chat) y `<UserPreferencesSection/>` en `dashboard.tsx`.
+
 **Persistent Job Queue**:
 - Generation jobs are managed by `pg-boss` (Postgres-backed queue) for robust, asynchronous processing.
 - Supports job concurrency control, retries with exponential backoff, and orphan job reclamation.
