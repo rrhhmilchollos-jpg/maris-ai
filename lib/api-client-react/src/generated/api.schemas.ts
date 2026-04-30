@@ -196,6 +196,35 @@ export interface SendAppMessageRequest {
   attachmentIds?: number[] | null;
 }
 
+export type SendAppMessageDirectResponseKind =
+  (typeof SendAppMessageDirectResponseKind)[keyof typeof SendAppMessageDirectResponseKind];
+
+export const SendAppMessageDirectResponseKind = {
+  answered: "answered",
+} as const;
+
+export type SendAppMessageDirectResponseIntent =
+  (typeof SendAppMessageDirectResponseIntent)[keyof typeof SendAppMessageDirectResponseIntent];
+
+export const SendAppMessageDirectResponseIntent = {
+  question: "question",
+  research: "research",
+} as const;
+
+/**
+ * Returned with HTTP 200 when the chat message did NOT require a
+regeneration. Happens when the intent classifier decides the user
+was asking a question about the app or asking for pure web
+research — both are answered inline without spending credits.
+
+ */
+export interface SendAppMessageDirectResponse {
+  kind: SendAppMessageDirectResponseKind;
+  intent: SendAppMessageDirectResponseIntent;
+  /** The assistant's plain-text reply, already persisted as an app_message row. */
+  reply: string;
+}
+
 export interface AppMessage {
   id: number;
   appId: number;

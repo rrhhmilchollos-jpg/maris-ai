@@ -50,6 +50,7 @@ import type {
   ImageGenerationResult,
   JobLogList,
   RestoreAppRevision200,
+  SendAppMessageDirectResponse,
   SendAppMessageRequest,
   TemplateList,
   UpdateAutoPublishRequest,
@@ -691,13 +692,16 @@ export const sendAppMessage = async (
   id: number,
   sendAppMessageRequest: SendAppMessageRequest,
   options?: RequestInit,
-): Promise<GenerationJob> => {
-  return customFetch<GenerationJob>(getSendAppMessageUrl(id), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(sendAppMessageRequest),
-  });
+): Promise<SendAppMessageDirectResponse | GenerationJob> => {
+  return customFetch<SendAppMessageDirectResponse | GenerationJob>(
+    getSendAppMessageUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(sendAppMessageRequest),
+    },
+  );
 };
 
 export const getSendAppMessageMutationOptions = <

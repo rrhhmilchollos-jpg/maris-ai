@@ -241,8 +241,30 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const sendMutation = useSendAppMessage({
     mutation: {
-      onSuccess: (newJob) => {
-        setActiveJobId(newJob.id);
+      onSuccess: (response) => {
+        // The server now returns one of two shapes:
+        //  - GenerationJob (HTTP 202) → an edit was enqueued, watch its progress.
+        //  - SendAppMessageDirectResponse (HTTP 200) → the intent classifier
+        //    decided this was a question or a research request and answered
+        //    inline; no job, no credit charged. Just refresh the chat.
+        const isAnswered =
+          response != null &&
+          typeof response === "object" &&
+          "kind" in response &&
+          (response as { kind?: string }).kind === "answered";
+        if (isAnswered) {
+          // No job, no preview to open — just clear the draft, drop
+          // attachments and refresh the message list so the assistant
+          // reply pops in.
+          setDraft("");
+          chatAttachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+          setChatAttachments([]);
+          queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
+          return;
+        }
+        // Default: it's a GenerationJob. Track it.
+        const job = response as { id: number };
+        setActiveJobId(job.id);
         // Auto-open the live preview the moment the agent starts working so
         // the user can watch the changes happen instead of staring at chat.
         setPreviewOpen(true);
