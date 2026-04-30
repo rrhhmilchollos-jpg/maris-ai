@@ -74,6 +74,18 @@ export const GetMyStatsResponse = zod.object({
         .describe(
           "Last public URL Vercel returned for this app, or null if never deployed there.",
         ),
+      vercelProjectId: zod
+        .string()
+        .nullish()
+        .describe(
+          "Vercel project id this app is wired to (null until first deploy).",
+        ),
+      vercelCustomDomain: zod
+        .string()
+        .nullish()
+        .describe(
+          "Custom domain attached to the Vercel project, or null if none.",
+        ),
       autoPublish: zod
         .boolean()
         .describe(
@@ -127,6 +139,16 @@ export const ListAppsResponseItem = zod.object({
     .describe(
       "Last public URL Vercel returned for this app, or null if never deployed there.",
     ),
+  vercelProjectId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vercel project id this app is wired to (null until first deploy).",
+    ),
+  vercelCustomDomain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain attached to the Vercel project, or null if none."),
   autoPublish: zod
     .boolean()
     .describe(
@@ -183,6 +205,16 @@ export const GetAppResponse = zod.object({
     .describe(
       "Last public URL Vercel returned for this app, or null if never deployed there.",
     ),
+  vercelProjectId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vercel project id this app is wired to (null until first deploy).",
+    ),
+  vercelCustomDomain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain attached to the Vercel project, or null if none."),
   autoPublish: zod
     .boolean()
     .describe(
@@ -443,6 +475,133 @@ export const DeployAppToVercelResponse = zod.object({
 });
 
 /**
+ * @summary Read the current custom Vercel domain for the app (with verification status)
+ */
+export const GetAppCustomDomainParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAppCustomDomainResponse = zod.object({
+  domain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain currently attached, or null if none"),
+  verified: zod
+    .boolean()
+    .optional()
+    .describe("True once Vercel has confirmed DNS + ownership"),
+  verification: zod
+    .array(
+      zod.object({
+        type: zod.string().optional(),
+        domain: zod.string().optional(),
+        value: zod.string().optional(),
+        reason: zod.string().optional(),
+      }),
+    )
+    .optional(),
+  recommendedDns: zod
+    .array(
+      zod.object({
+        type: zod.string().describe("DNS record type (A or CNAME)"),
+        name: zod
+          .string()
+          .describe(
+            'Host portion to set in the DNS zone (e.g. \"@\" for apex)',
+          ),
+        value: zod.string().describe("Target value of the record"),
+      }),
+    )
+    .optional(),
+  spentCents: zod
+    .number()
+    .optional()
+    .describe(
+      "User's lifetime EUR spend in cents (used to display gate progress)",
+    ),
+  requiredCents: zod
+    .number()
+    .optional()
+    .describe("Threshold in cents required to unlock custom domains"),
+  warning: zod
+    .string()
+    .optional()
+    .describe("Optional soft warning if Vercel API is briefly unreachable"),
+});
+
+/**
+ * @summary Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+ */
+export const AttachAppCustomDomainParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AttachAppCustomDomainBody = zod.object({
+  domain: zod
+    .string()
+    .describe('Bare domain name like \"mitienda.com\" or \"www.mitienda.com\"'),
+});
+
+export const AttachAppCustomDomainResponse = zod.object({
+  domain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain currently attached, or null if none"),
+  verified: zod
+    .boolean()
+    .optional()
+    .describe("True once Vercel has confirmed DNS + ownership"),
+  verification: zod
+    .array(
+      zod.object({
+        type: zod.string().optional(),
+        domain: zod.string().optional(),
+        value: zod.string().optional(),
+        reason: zod.string().optional(),
+      }),
+    )
+    .optional(),
+  recommendedDns: zod
+    .array(
+      zod.object({
+        type: zod.string().describe("DNS record type (A or CNAME)"),
+        name: zod
+          .string()
+          .describe(
+            'Host portion to set in the DNS zone (e.g. \"@\" for apex)',
+          ),
+        value: zod.string().describe("Target value of the record"),
+      }),
+    )
+    .optional(),
+  spentCents: zod
+    .number()
+    .optional()
+    .describe(
+      "User's lifetime EUR spend in cents (used to display gate progress)",
+    ),
+  requiredCents: zod
+    .number()
+    .optional()
+    .describe("Threshold in cents required to unlock custom domains"),
+  warning: zod
+    .string()
+    .optional()
+    .describe("Optional soft warning if Vercel API is briefly unreachable"),
+});
+
+/**
+ * @summary Detach the custom domain from the app's Vercel project
+ */
+export const DetachAppCustomDomainParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DetachAppCustomDomainResponse = zod.object({
+  ok: zod.boolean().optional(),
+});
+
+/**
  * @summary Update the Coder model preference for an app
  */
 export const UpdateAppModelParams = zod.object({
@@ -489,6 +648,16 @@ export const UpdateAppModelResponse = zod.object({
     .describe(
       "Last public URL Vercel returned for this app, or null if never deployed there.",
     ),
+  vercelProjectId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vercel project id this app is wired to (null until first deploy).",
+    ),
+  vercelCustomDomain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain attached to the Vercel project, or null if none."),
   autoPublish: zod
     .boolean()
     .describe(
@@ -548,6 +717,16 @@ export const UpdateAppAutoPublishResponse = zod.object({
     .describe(
       "Last public URL Vercel returned for this app, or null if never deployed there.",
     ),
+  vercelProjectId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vercel project id this app is wired to (null until first deploy).",
+    ),
+  vercelCustomDomain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain attached to the Vercel project, or null if none."),
   autoPublish: zod
     .boolean()
     .describe(
@@ -674,6 +853,16 @@ export const ForkAppResponse = zod.object({
     .describe(
       "Last public URL Vercel returned for this app, or null if never deployed there.",
     ),
+  vercelProjectId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Vercel project id this app is wired to (null until first deploy).",
+    ),
+  vercelCustomDomain: zod
+    .string()
+    .nullish()
+    .describe("Custom domain attached to the Vercel project, or null if none."),
   autoPublish: zod
     .boolean()
     .describe(

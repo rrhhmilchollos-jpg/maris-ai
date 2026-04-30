@@ -32,6 +32,10 @@ import {
   useListAppRevisions,
   getListAppRevisionsQueryKey,
   useRestoreAppRevision,
+  useGetAppCustomDomain,
+  getGetAppCustomDomainQueryKey,
+  useAttachAppCustomDomain,
+  useDetachAppCustomDomain,
   type VisualTestReport,
   type AppRuntimeError,
 } from "@workspace/api-client-react";
@@ -997,6 +1001,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             <div className="px-3 pt-3 space-y-2">
               <AppNotesSection appId={id} />
               <RevisionHistorySection appId={id} />
+              {app.vercelProjectId ? (
+                <CustomDomainSection appId={id} />
+              ) : null}
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -1644,6 +1651,237 @@ function AppNotesSection({ appId }: { appId: number }) {
  * revision automatically saves the current state as a "restore-backup"
  * snapshot first so the user can always come back.
  */
+/**
+ * Custom Vercel domain panel. Only mounted once the app has been deployed
+ * to Vercel at least once (parent gates on `app.vercelProjectId`). Three
+ * UI states based on what the API returns:
+ *
+ *  1. spentCents < requiredCents   → locked card, shows progress to unlock.
+ *  2. unlocked, no domain attached → form to enter the bare domain.
+ *  3. unlocked, domain attached    → shows DNS records the user must add at
+ *                                    their registrar (Arsys, Hostinger…) +
+ *                                    verification status + remove button.
+ *
+ * The 50€ gate is enforced server-side too — this component just hides the
+ * form when the user hasn't unlocked it.
+ */
+function CustomDomainSection({ appId }: { appId: number }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useGetAppCustomDomain(appId, {
+    query: {
+      queryKey: getGetAppCustomDomainQueryKey(appId),
+      // Verification status changes when the user updates DNS — refresh on
+      // focus and every 30s so "✓ verificado" appears without manual reload.
+      refetchOnWindowFocus: true,
+      refetchInterval: 30_000,
+    },
+  });
+  const [domainInput, setDomainInput] = useState("");
+  const attachMutation = useAttachAppCustomDomain({
+    mutation: {
+      onSuccess: () => {
+        setDomainInput("");
+        void queryClient.invalidateQueries({
+          queryKey: getGetAppCustomDomainQueryKey(appId),
+        });
+        toast({ title: "Dominio conectado", description: "Añade los registros DNS en tu registrador para activarlo." });
+      },
+      onError: (err: any) => {
+        const msg = err?.response?.data?.error ?? "No pude conectar el dominio.";
+        toast({ title: "No se pudo conectar", description: msg, variant: "destructive" });
+      },
+    },
+  });
+  const detachMutation = useDetachAppCustomDomain({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetAppCustomDomainQueryKey(appId),
+        });
+        toast({ title: "Dominio desconectado" });
+      },
+    },
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-slate-400">
+        Cargando estado del dominio…
+      </div>
+    );
+  }
+
+  const spentCents = data.spentCents ?? 0;
+  const requiredCents = data.requiredCents ?? 5000;
+  const unlocked = spentCents >= requiredCents;
+  const eur = (cents: number) => (cents / 100).toFixed(2);
+
+  // 1. Locked.
+  if (!unlocked) {
+    const remaining = Math.max(0, requiredCents - spentCents);
+    const pct = Math.min(100, Math.round((spentCents / requiredCents) * 100));
+    return (
+      <div
+        className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3"
+        data-testid="custom-domain-locked"
+      >
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="text-sm font-medium text-amber-100">
+            🔒 Conecta tu propio dominio
+          </div>
+          <div className="text-[11px] text-amber-200/80 font-mono">
+            {eur(spentCents)} € / {eur(requiredCents)} €
+          </div>
+        </div>
+        <div className="h-1.5 rounded-full bg-amber-500/15 overflow-hidden mb-2">
+          <div
+            className="h-full bg-amber-400/70 transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="text-xs text-amber-100/80 leading-relaxed">
+          Puedes conectar tu propio dominio (p. ej. <span className="font-mono">mitienda.com</span>) cuando acumules {eur(requiredCents)} € en compras.
+          Te faltan <span className="font-medium">{eur(remaining)} €</span>.
+        </p>
+      </div>
+    );
+  }
+
+  // 2/3. Unlocked → either form or attached state.
+  const attached = !!data.domain;
+
+  return (
+    <div
+      className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 p-3 space-y-3"
+      data-testid="custom-domain-panel"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium text-emerald-100">
+          🌐 Dominio personalizado
+        </div>
+        {attached ? (
+          data.verified ? (
+            <Badge className="bg-emerald-500/15 text-emerald-200 border-emerald-400/30 text-[10px]">
+              ✓ Verificado
+            </Badge>
+          ) : (
+            <Badge
+              variant="secondary"
+              className="bg-amber-500/15 text-amber-200 border-amber-400/30 text-[10px]"
+            >
+              Pendiente DNS
+            </Badge>
+          )
+        ) : null}
+      </div>
+
+      {!attached ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const v = domainInput.trim().toLowerCase();
+            if (!v) return;
+            attachMutation.mutate({ id: appId, data: { domain: v } });
+          }}
+          className="space-y-2"
+        >
+          <input
+            type="text"
+            value={domainInput}
+            onChange={(e) => setDomainInput(e.target.value)}
+            placeholder="mitienda.com"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
+            data-testid="input-custom-domain"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={attachMutation.isPending || !domainInput.trim()}
+            className="w-full h-8 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-100"
+            data-testid="button-attach-domain"
+          >
+            {attachMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : null}
+            Conectar dominio
+          </Button>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Solo el nombre, sin <span className="font-mono">https://</span> ni barra final. Después tendrás que añadir 2 registros DNS en tu registrador (Arsys, Hostinger, GoDaddy, IONOS, Cloudflare…).
+          </p>
+        </form>
+      ) : (
+        <>
+          <div className="rounded-md bg-black/30 border border-white/5 p-2 font-mono text-xs text-emerald-100 break-all">
+            {data.domain}
+          </div>
+          {data.recommendedDns && data.recommendedDns.length > 0 ? (
+            <div>
+              <div className="text-xs text-emerald-100/80 font-medium mb-1.5">
+                Añade estos registros en tu registrador:
+              </div>
+              <div className="rounded-md bg-black/30 border border-white/5 overflow-hidden">
+                <table className="w-full text-[11px] font-mono text-slate-200">
+                  <thead className="bg-white/5 text-slate-400">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Tipo</th>
+                      <th className="px-2 py-1 text-left">Nombre</th>
+                      <th className="px-2 py-1 text-left">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.recommendedDns.map((rec, i) => (
+                      <tr key={i} className="border-t border-white/5">
+                        <td className="px-2 py-1">{rec.type}</td>
+                        <td className="px-2 py-1">{rec.name}</td>
+                        <td className="px-2 py-1 break-all">{rec.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                Vercel verifica el dominio automáticamente cuando los DNS propagan (puede tardar de 5 minutos a varias horas según tu registrador).
+              </p>
+            </div>
+          ) : null}
+          {data.verification && data.verification.length > 0 ? (
+            <div className="rounded-md border border-amber-400/20 bg-amber-500/5 p-2 text-[11px] text-amber-100">
+              <div className="font-medium mb-1">Verificación pendiente:</div>
+              <ul className="space-y-0.5">
+                {data.verification.map((v, i) => (
+                  <li key={i} className="font-mono break-all">
+                    {v.type} {v.domain} → {v.value}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {data.warning ? (
+            <div className="text-[11px] text-amber-200/80">{data.warning}</div>
+          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => detachMutation.mutate({ id: appId })}
+            disabled={detachMutation.isPending}
+            className="w-full h-8 border-white/10 bg-white/5 hover:bg-red-500/15 hover:border-red-400/30 hover:text-red-200 text-slate-300"
+            data-testid="button-detach-domain"
+          >
+            {detachMutation.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : null}
+            Quitar dominio
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function RevisionHistorySection({ appId }: { appId: number }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useListAppRevisions(appId, {

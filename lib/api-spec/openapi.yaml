@@ -423,6 +423,127 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /apps/{id}/domain:
+    get:
+      operationId: getAppCustomDomain
+      tags: [apps]
+      summary: Read the current custom Vercel domain for the app (with verification status)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Domain status (or null if not configured)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomDomainStatus"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: attachAppCustomDomain
+      tags: [apps]
+      summary: Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain:
+                  type: string
+                  description: Bare domain name like "mitienda.com" or "www.mitienda.com"
+      responses:
+        "200":
+          description: Domain attached, returns DNS instructions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomDomainStatus"
+        "400":
+          description: Invalid domain or app has not been deployed to Vercel yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "402":
+          description: User has not spent enough to unlock custom domains
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiError"
+                  - type: object
+                    properties:
+                      spentCents:
+                        type: integer
+                      requiredCents:
+                        type: integer
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Vercel rejected the request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: VERCEL_TOKEN not configured on the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: detachAppCustomDomain
+      tags: [apps]
+      summary: Detach the custom domain from the app's Vercel project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Domain detached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Vercel rejected the request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/model:
     patch:
       operationId: updateAppModel
@@ -1175,6 +1296,14 @@ components:
           type: string
           nullable: true
           description: Last public URL Vercel returned for this app, or null if never deployed there.
+        vercelProjectId:
+          type: string
+          nullable: true
+          description: Vercel project id this app is wired to (null until first deploy).
+        vercelCustomDomain:
+          type: string
+          nullable: true
+          description: Custom domain attached to the Vercel project, or null if none.
         autoPublish:
           type: boolean
           description: When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically.
@@ -1484,6 +1613,55 @@ components:
         - url
         - projectId
         - deploymentId
+    DnsRecord:
+      type: object
+      properties:
+        type:
+          type: string
+          description: DNS record type (A or CNAME)
+        name:
+          type: string
+          description: Host portion to set in the DNS zone (e.g. "@" for apex)
+        value:
+          type: string
+          description: Target value of the record
+      required: [type, name, value]
+    CustomDomainStatus:
+      type: object
+      properties:
+        domain:
+          type: string
+          nullable: true
+          description: Custom domain currently attached, or null if none
+        verified:
+          type: boolean
+          description: True once Vercel has confirmed DNS + ownership
+        verification:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              domain:
+                type: string
+              value:
+                type: string
+              reason:
+                type: string
+        recommendedDns:
+          type: array
+          items:
+            $ref: "#/components/schemas/DnsRecord"
+        spentCents:
+          type: integer
+          description: User's lifetime EUR spend in cents (used to display gate progress)
+        requiredCents:
+          type: integer
+          description: Threshold in cents required to unlock custom domains
+        warning:
+          type: string
+          description: Optional soft warning if Vercel API is briefly unreachable
     GenerationJob:
       type: object
       properties:

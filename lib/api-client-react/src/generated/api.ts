@@ -28,14 +28,18 @@ import type {
   AppMessage,
   AppRevisionList,
   AppRuntimeErrorList,
+  AttachAppCustomDomain402,
+  AttachAppCustomDomainBody,
   CheckoutSession,
   ConfirmCheckoutRequest,
   ConfirmCheckoutResult,
   CreateCheckoutRequest,
   CreditPackage,
   CreditTransaction,
+  CustomDomainStatus,
   DashboardStats,
   DeployResult,
+  DetachAppCustomDomain200,
   GenerateAppRequest,
   GeneratedApp,
   GenerationJob,
@@ -1430,6 +1434,270 @@ export const useDeployAppToVercel = <
   TContext
 > => {
   return useMutation(getDeployAppToVercelMutationOptions(options));
+};
+
+/**
+ * @summary Read the current custom Vercel domain for the app (with verification status)
+ */
+export const getGetAppCustomDomainUrl = (id: number) => {
+  return `/api/apps/${id}/domain`;
+};
+
+export const getAppCustomDomain = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CustomDomainStatus> => {
+  return customFetch<CustomDomainStatus>(getGetAppCustomDomainUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAppCustomDomainQueryKey = (id: number) => {
+  return [`/api/apps/${id}/domain`] as const;
+};
+
+export const getGetAppCustomDomainQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAppCustomDomain>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAppCustomDomain>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAppCustomDomainQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getAppCustomDomain>>
+  > = ({ signal }) => getAppCustomDomain(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAppCustomDomain>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAppCustomDomainQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAppCustomDomain>>
+>;
+export type GetAppCustomDomainQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Read the current custom Vercel domain for the app (with verification status)
+ */
+
+export function useGetAppCustomDomain<
+  TData = Awaited<ReturnType<typeof getAppCustomDomain>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAppCustomDomain>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAppCustomDomainQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+ */
+export const getAttachAppCustomDomainUrl = (id: number) => {
+  return `/api/apps/${id}/domain`;
+};
+
+export const attachAppCustomDomain = async (
+  id: number,
+  attachAppCustomDomainBody: AttachAppCustomDomainBody,
+  options?: RequestInit,
+): Promise<CustomDomainStatus> => {
+  return customFetch<CustomDomainStatus>(getAttachAppCustomDomainUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(attachAppCustomDomainBody),
+  });
+};
+
+export const getAttachAppCustomDomainMutationOptions = <
+  TError = ErrorType<ApiError | AttachAppCustomDomain402>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof attachAppCustomDomain>>,
+    TError,
+    { id: number; data: BodyType<AttachAppCustomDomainBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof attachAppCustomDomain>>,
+  TError,
+  { id: number; data: BodyType<AttachAppCustomDomainBody> },
+  TContext
+> => {
+  const mutationKey = ["attachAppCustomDomain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof attachAppCustomDomain>>,
+    { id: number; data: BodyType<AttachAppCustomDomainBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return attachAppCustomDomain(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AttachAppCustomDomainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof attachAppCustomDomain>>
+>;
+export type AttachAppCustomDomainMutationBody =
+  BodyType<AttachAppCustomDomainBody>;
+export type AttachAppCustomDomainMutationError = ErrorType<
+  ApiError | AttachAppCustomDomain402
+>;
+
+/**
+ * @summary Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+ */
+export const useAttachAppCustomDomain = <
+  TError = ErrorType<ApiError | AttachAppCustomDomain402>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof attachAppCustomDomain>>,
+    TError,
+    { id: number; data: BodyType<AttachAppCustomDomainBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof attachAppCustomDomain>>,
+  TError,
+  { id: number; data: BodyType<AttachAppCustomDomainBody> },
+  TContext
+> => {
+  return useMutation(getAttachAppCustomDomainMutationOptions(options));
+};
+
+/**
+ * @summary Detach the custom domain from the app's Vercel project
+ */
+export const getDetachAppCustomDomainUrl = (id: number) => {
+  return `/api/apps/${id}/domain`;
+};
+
+export const detachAppCustomDomain = async (
+  id: number,
+  options?: RequestInit,
+): Promise<DetachAppCustomDomain200> => {
+  return customFetch<DetachAppCustomDomain200>(
+    getDetachAppCustomDomainUrl(id),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDetachAppCustomDomainMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof detachAppCustomDomain>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof detachAppCustomDomain>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["detachAppCustomDomain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof detachAppCustomDomain>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return detachAppCustomDomain(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DetachAppCustomDomainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof detachAppCustomDomain>>
+>;
+
+export type DetachAppCustomDomainMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Detach the custom domain from the app's Vercel project
+ */
+export const useDetachAppCustomDomain = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof detachAppCustomDomain>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof detachAppCustomDomain>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDetachAppCustomDomainMutationOptions(options));
 };
 
 /**
