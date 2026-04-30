@@ -1188,35 +1188,79 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                             previewBoxSize.w / innerW,
                             previewBoxSize.h / innerH,
                           );
+                    // Force a definite-height chain into Sandpack: the
+                    // provider renders a plain div with no height set, which
+                    // means SandpackLayout's `height: 100%` would resolve
+                    // against an auto-height parent and fall back to the
+                    // library's CSS variable default (~300px). That's why
+                    // the iframe was rendering as a small strip with the
+                    // rest of the panel blank. We pass an explicit style to
+                    // the provider AND wrap it in a flex container so every
+                    // descendant has a real pixel height to consume.
                     const sandpack = (
-                      <SandpackProvider
-                        template="react-ts"
-                        files={sandpackFiles}
-                        customSetup={{
-                          entry: "/index.tsx",
-                          // Common packages the coder is allowed to import. Without
-                          // this, Sandpack only knows react/react-dom and dies with
-                          // "Could not find dependency: 'wouter'" when the
-                          // generated app does multi-page routing.
-                          dependencies: SANDPACK_DEPENDENCIES,
+                      <div
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                          minHeight: 0,
                         }}
-                        options={{
-                          recompileMode: "delayed",
-                          recompileDelay: 500,
-                        }}
-                        theme="light"
                       >
-                        <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
-                          <SandpackPreview
-                            showOpenInCodeSandbox={false}
-                            showRefreshButton
-                            style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
-                          />
-                        </SandpackLayout>
-                      </SandpackProvider>
+                        <SandpackProvider
+                          template="react-ts"
+                          files={sandpackFiles}
+                          customSetup={{
+                            entry: "/index.tsx",
+                            // Common packages the coder is allowed to import. Without
+                            // this, Sandpack only knows react/react-dom and dies with
+                            // "Could not find dependency: 'wouter'" when the
+                            // generated app does multi-page routing.
+                            dependencies: SANDPACK_DEPENDENCIES,
+                          }}
+                          options={{
+                            recompileMode: "delayed",
+                            recompileDelay: 500,
+                          }}
+                          theme="light"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            flex: 1,
+                            minHeight: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                        >
+                          <SandpackLayout
+                            style={{
+                              height: "100%",
+                              width: "100%",
+                              flex: 1,
+                              minHeight: 0,
+                              border: "none",
+                              borderRadius: 0,
+                            }}
+                          >
+                            <SandpackPreview
+                              showOpenInCodeSandbox={false}
+                              showRefreshButton
+                              style={{
+                                height: "100%",
+                                width: "100%",
+                                flex: 1,
+                                minWidth: 0,
+                                minHeight: 0,
+                              }}
+                            />
+                          </SandpackLayout>
+                        </SandpackProvider>
+                      </div>
                     );
                     if (isFit) {
-                      return <div className="absolute inset-0 bg-white">{sandpack}</div>;
+                      return (
+                        <div className="absolute inset-0 bg-white flex">{sandpack}</div>
+                      );
                     }
                     return (
                       <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#0d0d12]">
