@@ -155,7 +155,7 @@ export async function deployAppToVercel(opts: {
  */
 async function callVercel<T>(opts: {
   token: string;
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "DELETE";
   path: string;
   body?: unknown;
   log: Logger;
@@ -207,6 +207,182 @@ async function callVercel<T>(opts: {
   }
 
   return { ok: true, data: (await res.json()) as T };
+}
+
+/* ----------------------- custom domain helpers ----------------------------- */
+
+export type VercelDomainRecord = {
+  /** "ALIAS" / "CNAME" / "A" — the DNS record type the user must create. */
+  type: "A" | "CNAME";
+  /** Host part to set in the DNS zone. "@" for the apex domain. */
+  name: string;
+  /** Target value for the record. */
+  value: string;
+};
+
+export type VercelDomainStatus = {
+  domain: string;
+  /** True once Vercel has confirmed both DNS resolution and ownership. */
+  verified: boolean;
+  /**
+   * Pending verification challenges. When `verified` is false and this is
+   * non-empty, the user must add the listed TXT record(s) to their DNS
+   * before the domain works. When `verified` is true this is empty.
+   */
+  verification: Array<{ type: string; domain: string; value: string; reason?: string }>;
+  /**
+   * DNS records the user must point at Vercel. Always returned so the UI
+   * can show clear instructions even before verification finishes.
+   */
+  recommendedDns: VercelDomainRecord[];
+};
+
+/**
+ * Decide which DNS records the registrar (Arsys, Hostinger, GoDaddy, IONOS,
+ * Cloudflare, …) must serve so the domain points at the Vercel project.
+ *
+ * Convention used by Vercel's docs:
+ *   - Apex domain (`mitienda.com`)  → A   record `@`     → 76.76.21.21
+ *   - Sub domain (`www.mitienda.com`) → CNAME            → cname.vercel-dns.com
+ *
+ * Both are stable, documented Vercel endpoints. We always return both halves
+ * (apex + www CNAME) for an apex domain so the user can wire the canonical
+ * pair in one go.
+ */
+export function recommendedDnsFor(domain: string): VercelDomainRecord[] {
+  const parts = domain.split(".");
+  const isApex = parts.length === 2;
+  if (isApex) {
+    return [
+      { type: "A", name: "@", value: "76.76.21.21" },
+      { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
+    ];
+  }
+  // Subdomain — single CNAME at the leaf.
+  const host = parts.slice(0, -2).join(".");
+  return [{ type: "CNAME", name: host || "@", value: "cname.vercel-dns.com" }];
+}
+
+/**
+ * Attach a custom domain to the app's Vercel project. Caller is responsible
+ * for ALL eligibility checks (project exists, user spend gate, etc.) — this
+ * helper only talks to Vercel and persists the column. Returns the typed
+ * failure verbatim so the route handler can surface Vercel's error message.
+ */
+export async function addVercelDomainForApp(opts: {
+  appId: number;
+  userId: string;
+  projectId: string;
+  domain: string;
+  log: Logger;
+}): Promise<
+  | { ok: true; status: VercelDomainStatus }
+  | { ok: false; failure: VercelDeployFailure }
+> {
+  const { appId, projectId, domain, log } = opts;
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) return { ok: false, failure: { kind: "missing_token" } };
+
+  const added = await callVercel<{
+    name: string;
+    verified?: boolean;
+    verification?: Array<{ type: string; domain: string; value: string; reason?: string }>;
+  }>({
+    token,
+    method: "POST",
+    path: `/v10/projects/${projectId}/domains`,
+    body: { name: domain },
+    log,
+  });
+  if (!added.ok) return { ok: false, failure: added.failure };
+
+  await db
+    .update(generatedApps)
+    .set({ vercelCustomDomain: domain })
+    .where(eq(generatedApps.id, appId));
+
+  return {
+    ok: true,
+    status: {
+      domain,
+      verified: added.data.verified ?? false,
+      verification: added.data.verification ?? [],
+      recommendedDns: recommendedDnsFor(domain),
+    },
+  };
+}
+
+/**
+ * Read the current verification status of an existing domain on the project.
+ * Used by the UI to refresh "still waiting on DNS…" → "✓ verificado" without
+ * re-creating the domain.
+ */
+export async function getVercelDomainStatus(opts: {
+  projectId: string;
+  domain: string;
+  log: Logger;
+}): Promise<
+  | { ok: true; status: VercelDomainStatus }
+  | { ok: false; failure: VercelDeployFailure }
+> {
+  const { projectId, domain, log } = opts;
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) return { ok: false, failure: { kind: "missing_token" } };
+
+  const fetched = await callVercel<{
+    name: string;
+    verified?: boolean;
+    verification?: Array<{ type: string; domain: string; value: string; reason?: string }>;
+  }>({
+    token,
+    method: "GET",
+    path: `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
+    log,
+  });
+  if (!fetched.ok) return { ok: false, failure: fetched.failure };
+
+  return {
+    ok: true,
+    status: {
+      domain,
+      verified: fetched.data.verified ?? false,
+      verification: fetched.data.verification ?? [],
+      recommendedDns: recommendedDnsFor(domain),
+    },
+  };
+}
+
+/**
+ * Detach a custom domain from the project AND clear it from the app row.
+ * Tolerates "domain not found in project" (404) so calling DELETE twice
+ * doesn't error out — we still want the local column cleared in that case.
+ */
+export async function removeVercelDomainForApp(opts: {
+  appId: number;
+  projectId: string;
+  domain: string;
+  log: Logger;
+}): Promise<{ ok: true } | { ok: false; failure: VercelDeployFailure }> {
+  const { appId, projectId, domain, log } = opts;
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) return { ok: false, failure: { kind: "missing_token" } };
+
+  const removed = await callVercel<unknown>({
+    token,
+    method: "DELETE",
+    path: `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
+    log,
+  });
+  if (!removed.ok && removed.failure.kind === "vercel_api_error" && removed.failure.status !== 404) {
+    return { ok: false, failure: removed.failure };
+  }
+
+  await db
+    .update(generatedApps)
+    .set({ vercelCustomDomain: null })
+    .where(eq(generatedApps.id, appId));
+
+  return { ok: true };
 }
 
 /**

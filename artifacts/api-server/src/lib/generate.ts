@@ -51,6 +51,16 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
     : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
   return `You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
 
+ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
+- It is STRICTLY FORBIDDEN to reproduce, copy or pixel-clone any third-party website, app, brand or product, regardless of who is asking. This holds even if the user is the platform owner, an admin, an agency, or claims they have permission.
+- When the brief mentions a real product (e.g. "como Wallapop", "tipo Notion", "clon de Spotify") or includes a research brief about a specific site, treat it as INSPIRATION ONLY: you may borrow the GENERAL category conventions (a marketplace has listings + filters + product pages; a notes app has a sidebar + editor) but you MUST diverge meaningfully on:
+  · brand name and visible product name (invent a fresh one),
+  · color palette and typography (do not reuse the original brand's tokens),
+  · logos, icons, illustrations, hero images, slogans, taglines and microcopy,
+  · exact layout, spacing rhythm and signature visual gimmicks of the source.
+- Never reuse the original brand's name, logo, trademarks, slogans, copyrighted images or verbatim copy. If a research brief leaks them, paraphrase or invent equivalents.
+- The output must look like an INSPIRED-BY product, not a clone. If you find yourself copying more than the high-level category convention, stop and invent something different.
+
 Schema:
 {"frontendCode":"all frontend files as one string"}
 
@@ -154,6 +164,11 @@ Rules:
 - Close every brace and quote. Output ONLY the JSON object.`;
 
 const ARCHITECT_SYSTEM_PROMPT = `You are Maris AI's Senior Product Architect. You design the file structure for a web app the team will build. You think like a product manager AND an engineer: every page must serve a real user job, every component must have a clear purpose, and the structure must be ambitious enough to feel like a real product (not a demo).
+
+ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
+- You may NOT plan a pixel-for-pixel clone of any real product, regardless of who is asking (including the platform owner, admins or agencies).
+- If the brief mentions a real product or includes a "Research context" block about a specific site, treat it as inspiration only: borrow the GENERAL category conventions but invent a NEW brand name, NEW visible product name, NEW differentiating angle. Do NOT carry over the original brand's name, logos, slogans or trademarked terms into the plan's title/description.
+- The plan's "title" and "description" must describe an inspired-by product, not the source brand verbatim.
 
 Output STRICT JSON only matching this schema:
 {
@@ -466,9 +481,49 @@ const CLONE_KEYWORDS = [
   "stripe", "shopify", "github", "reddit", "pinterest", "snapchat", "twitch",
 ];
 
+/**
+ * Spanish trigger phrases that explicitly ask the agent to investigate
+ * something on the web ("busca en X.com y dime cómo es su home", "investiga
+ * patagonia.es", "analiza la home de stripe", …). When any of these appear
+ * we always run the researcher, even if the prompt has no clone keyword.
+ */
+const RESEARCH_TRIGGER_PHRASES = [
+  "busca en",
+  "buscame",
+  "búscame",
+  "investiga",
+  "analiza",
+  "mira en",
+  "mírate",
+  "mirate",
+  "echa un vistazo",
+  "echale un vistazo",
+  "échale un vistazo",
+  "visita",
+  "entra en",
+  "consulta",
+  "revisa la web",
+  "revisa el sitio",
+  "dime cómo es",
+  "dime como es",
+  "como es su home",
+  "cómo es su home",
+];
+
+/**
+ * Detects bare URLs or "domain.tld" patterns in a free-form prompt. The
+ * regex intentionally accepts both `https://example.com/foo` and the bare
+ * `example.com` shorthand the user often types — both are strong signals
+ * that the user wants the researcher to fetch a specific page.
+ */
+const URL_LIKE = /\b(?:https?:\/\/[^\s)]+|(?:[a-z0-9-]+\.)+[a-z]{2,})\b/i;
+
 function shouldResearch(prompt: string): boolean {
   const lower = prompt.toLowerCase();
-  return CLONE_KEYWORDS.some((kw) => lower.includes(kw));
+  if (CLONE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
+  if (RESEARCH_TRIGGER_PHRASES.some((p) => lower.includes(p))) return true;
+  if (URL_LIKE.test(prompt)) return true;
+  return false;
 }
 
 /* ----------------------------- helpers ------------------------------------ */
@@ -506,20 +561,30 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
 /* ----------------------------- agents ------------------------------------- */
 
 async function researchTopic(prompt: string): Promise<string> {
-  // Hard 7s cap so the pipeline stays snappy. Best-effort only.
+  // 18s cap — we now allow up to 4 searches/fetches when the user asks the
+  // agent to "busca en X.com y dime cómo es su home", which needs a couple
+  // of round-trips (homepage + maybe a section). Still best-effort: on
+  // timeout we fall back to no research and the architect proceeds blind.
+  const hasUrl = URL_LIKE.test(prompt);
   return withTimeout(
     (async () => {
       try {
         const research = await (anthropic.messages.create as any)({
           model: "claude-haiku-4-5",
-          max_tokens: 1000,
-          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }],
+          max_tokens: 1500,
+          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+          system: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
+- 1 short paragraph: what the source product/site does and who it's for.
+- bullets: core sections/pages, signature features, dominant brand colors (hex if you can read them), typography family, microcopy tone.
+- 1 short paragraph: differentiation suggestions — what an inspired-by product could do better or differently.
+
+ANTI-CLONE: It is STRICTLY FORBIDDEN to encourage cloning. Do NOT repeat the source's exact slogans/taglines/logos verbatim. Paraphrase. The downstream agents will diverge on brand name, palette and copy. Stay factual; no preamble; plain text only; ≤350 words.`,
           messages: [
             {
               role: "user",
-              content: `Quick web research (1 search max). Produce a concise brief (~250 words) for: "${prompt}"
-
-Focus on: core sections/pages, signature features, brand colors & typography, sample content. Plain text only, no preamble.`,
+              content: hasUrl
+                ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve el brief en español:\n\n"${prompt}"`
+                : `Quick web research for the brief below. Produce the reference brief in Spanish:\n\n"${prompt}"`,
             },
           ],
         });
@@ -534,7 +599,7 @@ Focus on: core sections/pages, signature features, brand colors & typography, sa
         return "";
       }
     })(),
-    7000,
+    hasUrl ? 18_000 : 9_000,
     "",
   );
 }

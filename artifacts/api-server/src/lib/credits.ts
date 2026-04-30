@@ -1,6 +1,51 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { creditTransactions, users } from "@workspace/db/schema";
+import { CREDIT_PACKAGES } from "./stripe";
+
+/**
+ * Lifetime EUR spent by the user, in cents. Used to gate features that
+ * we only want to expose to paying customers (custom Vercel domains,
+ * priority queue, …).
+ *
+ * We compute this on demand from `credit_transactions` rows of
+ * `kind = "purchase"` instead of caching it. The price isn't stored on
+ * the row directly (only the credits granted), so we look up the matching
+ * EUR-priced package by credit count. USD packages (e.g. the annual
+ * mega-pack) and unmatched amounts are skipped — they don't count toward
+ * the EUR threshold by design. Spend is small and bounded per user, so
+ * this query is cheap and we don't need a cached column.
+ */
+export async function getUserSpentCents(userId: string): Promise<number> {
+  const eurPriceByCredits = new Map<number, number>();
+  for (const pkg of CREDIT_PACKAGES) {
+    if (pkg.currency === "eur") {
+      eurPriceByCredits.set(pkg.credits, pkg.priceCents);
+    }
+  }
+  const rows = await db
+    .select({ amount: creditTransactions.amount })
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.userId, userId),
+        eq(creditTransactions.kind, "purchase"),
+      ),
+    );
+  let totalCents = 0;
+  for (const r of rows) {
+    const cents = eurPriceByCredits.get(r.amount);
+    if (cents) totalCents += cents;
+  }
+  return totalCents;
+}
+
+/**
+ * EUR threshold required to unlock a custom Vercel domain. Kept in one
+ * place so the gate, the API response, and the UI message can never
+ * disagree.
+ */
+export const CUSTOM_DOMAIN_MIN_SPEND_CENTS = 5000;
 
 /**
  * Refund a previously-charged amount of credits and log the transaction.

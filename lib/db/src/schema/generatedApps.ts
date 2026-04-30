@@ -42,6 +42,11 @@ export const generatedApps = pgTable("generated_apps", {
   // Format: "https://<project>-<hash>.vercel.app" or the user's custom domain
   // if they set one in their Vercel dashboard later.
   vercelDeployUrl: text("vercel_deploy_url"),
+  // Custom domain the user attached to this app's Vercel project (e.g.
+  // "mitienda.com"). Only set after the user spends ≥ 50 EUR — gated server
+  // side, not just in the UI. Null = no custom domain, the app is reachable
+  // only at the default *.vercel.app URL above.
+  vercelCustomDomain: text("vercel_custom_domain"),
   // Auto-publish toggle. When true, the autonomous visual evaluator deploys
   // the app to /p/<slug> (assigning a fresh slug if needed) and emails the
   // owner the link as soon as the evaluator's verdict is "pass". Off by

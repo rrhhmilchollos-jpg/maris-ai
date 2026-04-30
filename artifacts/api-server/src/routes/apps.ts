@@ -41,7 +41,13 @@ import {
   revisionSourceLabel,
 } from "../lib/appRevisions";
 import { TEMPLATES } from "../lib/templates";
-import { deployAppToVercel } from "../lib/vercelDeploy";
+import {
+  deployAppToVercel,
+  addVercelDomainForApp,
+  getVercelDomainStatus,
+  removeVercelDomainForApp,
+} from "../lib/vercelDeploy";
+import { getUserSpentCents, CUSTOM_DOMAIN_MIN_SPEND_CENTS } from "../lib/credits";
 import { appRevisions } from "@workspace/db/schema";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
@@ -293,6 +299,8 @@ function serializeApp(row: GeneratedAppRow) {
     publicSlug: row.publicSlug,
     githubRepoUrl: row.githubRepoUrl,
     vercelDeployUrl: row.vercelDeployUrl,
+    vercelProjectId: row.vercelProjectId,
+    vercelCustomDomain: row.vercelCustomDomain,
     autoPublish: row.autoPublish,
     evaluatorSummary: row.evaluatorSummary,
     createdAt: row.createdAt.toISOString(),
@@ -2621,6 +2629,218 @@ router.post(
       req.log.error({ err, appId: id }, "Vercel deploy unexpected failure");
       res.status(500).json({ error: "No pude desplegar a Vercel." });
     }
+  },
+);
+
+/**
+ * Custom Vercel domain endpoints — POST/GET/DELETE /apps/:id/domain.
+ *
+ * Gated server-side by `getUserSpentCents(userId) >= CUSTOM_DOMAIN_MIN_SPEND_CENTS`
+ * (= 50 EUR). The UI also enforces this for UX, but we re-check it here so a
+ * crafted curl request can't bypass the rule.
+ *
+ * Pre-conditions:
+ *  - The app must already have a Vercel deploy (vercelProjectId not null).
+ *    Otherwise we'd be attaching a domain to a project that doesn't exist.
+ *
+ * Spend gate is checked AFTER ownership so we don't leak whether an app id
+ * exists to a non-paying user.
+ */
+
+function isPlausibleDomain(input: string): boolean {
+  // Conservative validator — the real check happens at Vercel. We just
+  // reject obviously broken inputs to keep noise out of the upstream call.
+  // Allows xn-- (IDN) prefix so "miweb.es" with accents post-punycoded works.
+  return /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(
+    input.trim(),
+  );
+}
+
+async function loadAppForDomain(
+  id: number,
+  userId: string,
+): Promise<
+  | { ok: true; row: { id: number; vercelProjectId: string | null; vercelCustomDomain: string | null } }
+  | { ok: false; status: 404 }
+> {
+  const [row] = await db
+    .select({
+      id: generatedApps.id,
+      vercelProjectId: generatedApps.vercelProjectId,
+      vercelCustomDomain: generatedApps.vercelCustomDomain,
+    })
+    .from(generatedApps)
+    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+    .limit(1);
+  if (!row) return { ok: false, status: 404 };
+  return { ok: true, row };
+}
+
+router.post(
+  "/apps/:id/domain",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const domainRaw = String(req.body?.domain ?? "").trim().toLowerCase();
+    if (!isPlausibleDomain(domainRaw)) {
+      res.status(400).json({
+        error:
+          "Dominio no válido. Escribe sólo el nombre, p. ej. mitienda.com (sin https://, sin / al final).",
+      });
+      return;
+    }
+
+    const app = await loadAppForDomain(id, userId);
+    if (!app.ok) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    if (!app.row.vercelProjectId) {
+      res.status(400).json({
+        error:
+          "Antes de conectar un dominio personalizado tienes que desplegar la app a Vercel al menos una vez.",
+      });
+      return;
+    }
+
+    // Spend gate. Computed after ownership check (info-hiding) so non-paying
+    // users can't probe for app existence.
+    const spentCents = await getUserSpentCents(userId);
+    if (spentCents < CUSTOM_DOMAIN_MIN_SPEND_CENTS) {
+      const remainingCents = CUSTOM_DOMAIN_MIN_SPEND_CENTS - spentCents;
+      res.status(402).json({
+        error: `Conectar tu propio dominio se desbloquea cuando acumulas ${(CUSTOM_DOMAIN_MIN_SPEND_CENTS / 100).toFixed(0)} € en compras. Te faltan ${(remainingCents / 100).toFixed(2)} €.`,
+        spentCents,
+        requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS,
+      });
+      return;
+    }
+
+    try {
+      const r = await addVercelDomainForApp({
+        appId: id,
+        userId,
+        projectId: app.row.vercelProjectId,
+        domain: domainRaw,
+        log: req.log,
+      });
+      if (r.ok) {
+        res.json(r.status);
+        return;
+      }
+      switch (r.failure.kind) {
+        case "missing_token":
+          res.status(503).json({
+            error:
+              "El despliegue a Vercel no está configurado en este servidor. Pide al administrador que añada VERCEL_TOKEN.",
+          });
+          return;
+        case "vercel_api_error":
+          res.status(502).json({
+            error: `Vercel rechazó el dominio (${r.failure.status}): ${r.failure.message}`,
+          });
+          return;
+        default:
+          res.status(500).json({ error: "No pude conectar el dominio." });
+          return;
+      }
+    } catch (err) {
+      req.log.error({ err, appId: id }, "Vercel domain attach unexpected failure");
+      res.status(500).json({ error: "No pude conectar el dominio." });
+    }
+  },
+);
+
+router.get(
+  "/apps/:id/domain",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const app = await loadAppForDomain(id, userId);
+    if (!app.ok) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    const spentCents = await getUserSpentCents(userId);
+
+    if (!app.row.vercelCustomDomain || !app.row.vercelProjectId) {
+      res.json({
+        domain: null,
+        spentCents,
+        requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS,
+      });
+      return;
+    }
+
+    const r = await getVercelDomainStatus({
+      projectId: app.row.vercelProjectId,
+      domain: app.row.vercelCustomDomain,
+      log: req.log,
+    });
+    if (r.ok) {
+      res.json({ ...r.status, spentCents, requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS });
+      return;
+    }
+    // Vercel call failed — don't 500 the whole thing; return cached domain
+    // so the UI still shows what's saved with a soft warning.
+    res.json({
+      domain: app.row.vercelCustomDomain,
+      verified: false,
+      verification: [],
+      recommendedDns: [],
+      spentCents,
+      requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS,
+      warning: r.failure.kind === "vercel_api_error" ? r.failure.message : "Vercel no está disponible.",
+    });
+  },
+);
+
+router.delete(
+  "/apps/:id/domain",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    const app = await loadAppForDomain(id, userId);
+    if (!app.ok) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    if (!app.row.vercelCustomDomain || !app.row.vercelProjectId) {
+      res.json({ ok: true });
+      return;
+    }
+    const r = await removeVercelDomainForApp({
+      appId: id,
+      projectId: app.row.vercelProjectId,
+      domain: app.row.vercelCustomDomain,
+      log: req.log,
+    });
+    if (r.ok) {
+      res.json({ ok: true });
+      return;
+    }
+    if (r.failure.kind === "missing_token") {
+      res.status(503).json({ error: "VERCEL_TOKEN no configurado." });
+      return;
+    }
+    res.status(502).json({
+      error: `No pude quitar el dominio en Vercel: ${r.failure.kind === "vercel_api_error" ? r.failure.message : "error desconocido"}`,
+    });
   },
 );
 

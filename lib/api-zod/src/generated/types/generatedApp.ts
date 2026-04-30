@@ -26,6 +26,10 @@ export interface GeneratedApp {
   githubRepoUrl?: string | null;
   /** Last public URL Vercel returned for this app, or null if never deployed there. */
   vercelDeployUrl?: string | null;
+  /** Vercel project id this app is wired to (null until first deploy). */
+  vercelProjectId?: string | null;
+  /** Custom domain attached to the Vercel project, or null if none. */
+  vercelCustomDomain?: string | null;
   /** When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically. */
   autoPublish: boolean;
   /** Spanish summary written by the evaluator when an app is in needs_review state. */

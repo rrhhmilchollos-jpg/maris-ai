@@ -45,6 +45,10 @@ export interface GeneratedApp {
   githubRepoUrl?: string | null;
   /** Last public URL Vercel returned for this app, or null if never deployed there. */
   vercelDeployUrl?: string | null;
+  /** Vercel project id this app is wired to (null until first deploy). */
+  vercelProjectId?: string | null;
+  /** Custom domain attached to the Vercel project, or null if none. */
+  vercelCustomDomain?: string | null;
   /** When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically. */
   autoPublish: boolean;
   /** Spanish summary written by the evaluator when an app is in needs_review state. */
@@ -254,6 +258,37 @@ export interface VercelDeployResult {
   deploymentId: string;
 }
 
+export interface DnsRecord {
+  /** DNS record type (A or CNAME) */
+  type: string;
+  /** Host portion to set in the DNS zone (e.g. "@" for apex) */
+  name: string;
+  /** Target value of the record */
+  value: string;
+}
+
+export type CustomDomainStatusVerificationItem = {
+  type?: string;
+  domain?: string;
+  value?: string;
+  reason?: string;
+};
+
+export interface CustomDomainStatus {
+  /** Custom domain currently attached, or null if none */
+  domain?: string | null;
+  /** True once Vercel has confirmed DNS + ownership */
+  verified?: boolean;
+  verification?: CustomDomainStatusVerificationItem[];
+  recommendedDns?: DnsRecord[];
+  /** User's lifetime EUR spend in cents (used to display gate progress) */
+  spentCents?: number;
+  /** Threshold in cents required to unlock custom domains */
+  requiredCents?: number;
+  /** Optional soft warning if Vercel API is briefly unreachable */
+  warning?: string;
+}
+
 export interface GenerationJob {
   id: number;
   /** queued | running | succeeded | failed */
@@ -425,6 +460,20 @@ export interface AdminJobsResponse {
 
 export type RestoreAppRevision200 = {
   ok: boolean;
+};
+
+export type AttachAppCustomDomainBody = {
+  /** Bare domain name like "mitienda.com" or "www.mitienda.com" */
+  domain: string;
+};
+
+export type AttachAppCustomDomain402 = ApiError & {
+  spentCents?: number;
+  requiredCents?: number;
+};
+
+export type DetachAppCustomDomain200 = {
+  ok?: boolean;
 };
 
 export type GetGenerationJobLogsParams = {
