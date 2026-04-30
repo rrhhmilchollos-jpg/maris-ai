@@ -632,6 +632,16 @@ export async function runAutoEvaluator(opts: {
     }
     currentBundle = patched;
     fixesApplied++;
+    // Snapshot the patched bundle so the user can roll back if the evaluator's
+    // strict critique made things worse than the previous, looser version.
+    void import("./appRevisions").then(({ snapshotCurrentApp }) =>
+      snapshotCurrentApp({
+        appId,
+        source: "visual-fix",
+        summary: `Reparación del evaluador autónomo (ronda ${round})`,
+        jobId: jobId ?? null,
+      }),
+    );
     // Tiny pause so the public deploy route reflects the new bundle for the
     // next puppeteer cycle.
     await new Promise((r) => setTimeout(r, 1200));

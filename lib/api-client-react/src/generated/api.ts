@@ -26,6 +26,7 @@ import type {
   AgentNotes,
   ApiError,
   AppMessage,
+  AppRevisionList,
   AppRuntimeErrorList,
   CheckoutSession,
   ConfirmCheckoutRequest,
@@ -44,7 +45,9 @@ import type {
   HealthStatus,
   ImageGenerationResult,
   JobLogList,
+  RestoreAppRevision200,
   SendAppMessageRequest,
+  TemplateList,
   UpdateAutoPublishRequest,
   UpdateCoderModelRequest,
   UserProfile,
@@ -1093,6 +1096,256 @@ export const useUpdateMyPreferences = <
 > => {
   return useMutation(getUpdateMyPreferencesMutationOptions(options));
 };
+
+/**
+ * @summary List the revision history (snapshots) of an app, newest first
+ */
+export const getListAppRevisionsUrl = (id: number) => {
+  return `/api/apps/${id}/revisions`;
+};
+
+export const listAppRevisions = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AppRevisionList> => {
+  return customFetch<AppRevisionList>(getListAppRevisionsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAppRevisionsQueryKey = (id: number) => {
+  return [`/api/apps/${id}/revisions`] as const;
+};
+
+export const getListAppRevisionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAppRevisions>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAppRevisions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAppRevisionsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAppRevisions>>
+  > = ({ signal }) => listAppRevisions(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAppRevisions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAppRevisionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAppRevisions>>
+>;
+export type ListAppRevisionsQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary List the revision history (snapshots) of an app, newest first
+ */
+
+export function useListAppRevisions<
+  TData = Awaited<ReturnType<typeof listAppRevisions>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listAppRevisions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAppRevisionsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Restore an app to a previous revision (current state saved as backup)
+ */
+export const getRestoreAppRevisionUrl = (id: number, revisionId: number) => {
+  return `/api/apps/${id}/revisions/${revisionId}/restore`;
+};
+
+export const restoreAppRevision = async (
+  id: number,
+  revisionId: number,
+  options?: RequestInit,
+): Promise<RestoreAppRevision200> => {
+  return customFetch<RestoreAppRevision200>(
+    getRestoreAppRevisionUrl(id, revisionId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getRestoreAppRevisionMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreAppRevision>>,
+    TError,
+    { id: number; revisionId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restoreAppRevision>>,
+  TError,
+  { id: number; revisionId: number },
+  TContext
+> => {
+  const mutationKey = ["restoreAppRevision"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restoreAppRevision>>,
+    { id: number; revisionId: number }
+  > = (props) => {
+    const { id, revisionId } = props ?? {};
+
+    return restoreAppRevision(id, revisionId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RestoreAppRevisionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof restoreAppRevision>>
+>;
+
+export type RestoreAppRevisionMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Restore an app to a previous revision (current state saved as backup)
+ */
+export const useRestoreAppRevision = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreAppRevision>>,
+    TError,
+    { id: number; revisionId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof restoreAppRevision>>,
+  TError,
+  { id: number; revisionId: number },
+  TContext
+> => {
+  return useMutation(getRestoreAppRevisionMutationOptions(options));
+};
+
+/**
+ * @summary List curated starter templates the dashboard can show as cards
+ */
+export const getListTemplatesUrl = () => {
+  return `/api/templates`;
+};
+
+export const listTemplates = async (
+  options?: RequestInit,
+): Promise<TemplateList> => {
+  return customFetch<TemplateList>(getListTemplatesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTemplatesQueryKey = () => {
+  return [`/api/templates`] as const;
+};
+
+export const getListTemplatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTemplatesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTemplates>>> = ({
+    signal,
+  }) => listTemplates({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTemplates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTemplatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTemplates>>
+>;
+export type ListTemplatesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List curated starter templates the dashboard can show as cards
+ */
+
+export function useListTemplates<
+  TData = Awaited<ReturnType<typeof listTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTemplatesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update the Coder model preference for an app

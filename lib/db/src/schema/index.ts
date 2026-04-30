@@ -9,3 +9,4 @@ export * from "./chatAttachments";
 export * from "./agentMemory";
 export * from "./appRuntimeErrors";
 export * from "./userPreferences";
+export * from "./appRevisions";

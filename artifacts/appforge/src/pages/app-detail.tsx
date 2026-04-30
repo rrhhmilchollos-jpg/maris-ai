@@ -28,6 +28,9 @@ import {
   useGetAppNotes,
   useUpdateAppNotes,
   getGetAppNotesQueryKey,
+  useListAppRevisions,
+  getListAppRevisionsQueryKey,
+  useRestoreAppRevision,
   type VisualTestReport,
   type AppRuntimeError,
 } from "@workspace/api-client-react";
@@ -40,6 +43,7 @@ import {
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
+import { RevisionHistoryPanel } from "@/components/revision-history-panel";
 import {
   AttachmentPicker,
   AttachmentChips,
@@ -910,8 +914,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               )}
             </div>
 
-            <div className="px-3 pt-3">
+            <div className="px-3 pt-3 space-y-2">
               <AppNotesSection appId={id} />
+              <RevisionHistorySection appId={id} />
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -1549,6 +1554,54 @@ function AppNotesSection({ appId }: { appId: number }) {
         await updateMutation.mutateAsync({ id: appId, data: { notes } });
       }}
       testIdPrefix="app-notes"
+    />
+  );
+}
+
+/**
+ * Revision history with one-click rollback. Each successful generation,
+ * edit, and visual fix is captured as an immutable snapshot. Restoring a
+ * revision automatically saves the current state as a "restore-backup"
+ * snapshot first so the user can always come back.
+ */
+function RevisionHistorySection({ appId }: { appId: number }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useListAppRevisions(appId, {
+    query: {
+      queryKey: getListAppRevisionsQueryKey(appId),
+      // Refetch when the user comes back to the tab so a freshly-finished
+      // visual-fix snapshot shows up without needing a manual reload.
+      refetchOnWindowFocus: true,
+      // Light polling so snapshots that land while the tab is open also show.
+      refetchInterval: 30_000,
+    },
+  });
+  const restoreMutation = useRestoreAppRevision({
+    mutation: {
+      onSuccess: () => {
+        // Refetch everything that derives from the app's content: the app row
+        // (frontend/backend bundles drive the preview), the chat (we appended
+        // a "I restored revision #N" assistant message), and the revision
+        // list itself (the restore created a "restore-backup" snapshot).
+        void queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(appId) });
+        void queryClient.invalidateQueries({
+          queryKey: getListAppMessagesQueryKey(appId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: getListAppRevisionsQueryKey(appId),
+        });
+      },
+    },
+  });
+  return (
+    <RevisionHistoryPanel
+      revisions={data?.revisions}
+      isLoading={isLoading}
+      isRestoring={restoreMutation.isPending}
+      pendingRevisionId={restoreMutation.variables?.revisionId ?? null}
+      onRestore={async (revisionId) => {
+        await restoreMutation.mutateAsync({ id: appId, revisionId });
+      }}
     />
   );
 }

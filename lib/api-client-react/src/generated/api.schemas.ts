@@ -208,6 +208,41 @@ export interface AgentNotes {
   notes: string;
 }
 
+/**
+ * A snapshot of an app at a point in time, used for rollback.
+ */
+export interface AppRevision {
+  id: number;
+  /** create | edit | visual-fix | health-fix | restore-backup */
+  source: string;
+  /** Friendly Spanish label for the source */
+  sourceLabel: string;
+  summary: string;
+  createdAt: string;
+}
+
+export interface AppRevisionList {
+  revisions: AppRevision[];
+}
+
+/**
+ * A curated starter template (kind + seed prompt) for the dashboard.
+ */
+export interface Template {
+  id: string;
+  name: string;
+  description: string;
+  /** fullstack | mobile | landing | game-2d | game-3d | hybrid-pwa */
+  kind: string;
+  seedPrompt: string;
+  /** lucide-react icon name */
+  icon: string;
+}
+
+export interface TemplateList {
+  templates: Template[];
+}
+
 export interface GenerationJob {
   id: number;
   /** queued | running | succeeded | failed */
@@ -376,6 +411,10 @@ export interface AdminJobsResponse {
   succeededLast24h: number;
   jobs: AdminJob[];
 }
+
+export type RestoreAppRevision200 = {
+  ok: boolean;
+};
 
 export type GetGenerationJobLogsParams = {
   /**

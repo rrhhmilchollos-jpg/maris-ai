@@ -311,6 +311,76 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgentNotes"
+  /apps/{id}/revisions:
+    get:
+      operationId: listAppRevisions
+      tags: [apps]
+      summary: List the revision history (snapshots) of an app, newest first
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Revision list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppRevisionList"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /apps/{id}/revisions/{revisionId}/restore:
+    post:
+      operationId: restoreAppRevision
+      tags: [apps]
+      summary: Restore an app to a previous revision (current state saved as backup)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: revisionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                  - ok
+        "404":
+          description: App or revision not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [apps]
+      summary: List curated starter templates the dashboard can show as cards
+      responses:
+        "200":
+          description: Template catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateList"
   /apps/{id}/model:
     patch:
       operationId: updateAppModel
@@ -1286,6 +1356,72 @@ components:
           type: string
       required:
         - notes
+    AppRevision:
+      type: object
+      description: A snapshot of an app at a point in time, used for rollback.
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+          description: create | edit | visual-fix | health-fix | restore-backup
+        sourceLabel:
+          type: string
+          description: Friendly Spanish label for the source
+        summary:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - source
+        - sourceLabel
+        - summary
+        - createdAt
+    AppRevisionList:
+      type: object
+      properties:
+        revisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppRevision"
+      required:
+        - revisions
+    Template:
+      type: object
+      description: A curated starter template (kind + seed prompt) for the dashboard.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          description: fullstack | mobile | landing | game-2d | game-3d | hybrid-pwa
+        seedPrompt:
+          type: string
+        icon:
+          type: string
+          description: lucide-react icon name
+      required:
+        - id
+        - name
+        - description
+        - kind
+        - seedPrompt
+        - icon
+    TemplateList:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Template"
+      required:
+        - templates
     GenerationJob:
       type: object
       properties:

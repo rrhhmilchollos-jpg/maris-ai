@@ -8,6 +8,7 @@ import {
   useGetGenerationJob,
   useGetMyPreferences,
   useUpdateMyPreferences,
+  useListTemplates,
   getGetGenerationJobQueryKey,
   getGetMyStatsQueryKey,
   getListAppsQueryKey,
@@ -32,7 +33,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, type LucideIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// Map of lucide icon NAMES (sent by GET /api/templates) to actual icon
+// components. Templates only reference icons that we've imported here, so
+// this whitelist doubles as a safety net — unknown names fall back to
+// Sparkles instead of crashing.
+const TEMPLATE_ICONS: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  Rocket,
+  ShoppingBag,
+  Smartphone,
+  Gamepad2,
+  Notebook,
+  Layers,
+  Globe,
+  Box,
+};
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   queued: { label: "En cola…", icon: Loader2 },
@@ -355,6 +372,21 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
+              {/* Galería de plantillas pre-fabricadas. Click en una tarjeta
+                  rellena el textarea con el seedPrompt y selecciona el `kind`
+                  correcto. Después el usuario puede editar el prompt antes
+                  de generar — las plantillas son sólo un atajo, no un nuevo
+                  pipeline. */}
+              <TemplateGallery
+                disabled={isWorking}
+                onPick={(t) => {
+                  // Map server-side kind ("mobile-pwa" doesn't exist — the
+                  // dashboard's Kind union uses "mobile" for mobile-first).
+                  // Both ends use the same string set so a direct cast is OK.
+                  setKind(t.kind as Kind);
+                  setPrompt(t.seedPrompt);
+                }}
+              />
               {/* Tipo de proyecto — chips arriba del Textarea. Cada chip
                   cambia el placeholder y manda un `kind` al backend; el
                   servidor decide el costo (1-5 créditos) y prepende el hint
@@ -720,5 +752,67 @@ function UserPreferencesSection() {
       }}
       testIdPrefix="user-preferences"
     />
+  );
+}
+
+/**
+ * Galería de plantillas pre-fabricadas. Carga el catálogo desde
+ * GET /api/templates y renderiza una tarjeta por plantilla. Click rellena
+ * el textarea + selecciona el `kind`. Si el endpoint falla simplemente no
+ * mostramos nada (no es crítico para el flujo de generación).
+ */
+function TemplateGallery({
+  disabled,
+  onPick,
+}: {
+  disabled?: boolean;
+  onPick: (t: { id: string; kind: string; seedPrompt: string; name: string }) => void;
+}) {
+  const { data, isLoading } = useListTemplates();
+  const templates = data?.templates ?? [];
+  if (isLoading) {
+    return (
+      <div className="flex flex-wrap gap-2" data-testid="template-gallery-loading">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-20 w-44 rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+  if (templates.length === 0) return null;
+  return (
+    <div data-testid="template-gallery">
+      <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+        <Sparkles className="h-3.5 w-3.5 text-primary" />
+        Empieza desde una plantilla
+        <span className="text-muted-foreground/60 font-normal">
+          (rellena el prompt, lo puedes editar antes de generar)
+        </span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        {templates.map((t) => {
+          const Icon = TEMPLATE_ICONS[t.icon] ?? Sparkles;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onPick(t)}
+              disabled={disabled}
+              title={t.description}
+              className="group flex flex-col items-start gap-1 rounded-lg border border-white/10 bg-background/40 hover:bg-primary/5 hover:border-primary/40 p-3 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid={`template-card-${t.id}`}
+            >
+              <Icon className="h-4 w-4 text-primary/80 group-hover:text-primary" />
+              <div className="text-xs font-semibold text-white leading-tight">
+                {t.name}
+              </div>
+              <div className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
+                {t.description}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
