@@ -68,6 +68,12 @@ export const GetMyStatsResponse = zod.object({
         .string()
         .nullish()
         .describe("HTML URL of the repo this app was last pushed to."),
+      vercelDeployUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Last public URL Vercel returned for this app, or null if never deployed there.",
+        ),
       autoPublish: zod
         .boolean()
         .describe(
@@ -115,6 +121,12 @@ export const ListAppsResponseItem = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  vercelDeployUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Last public URL Vercel returned for this app, or null if never deployed there.",
+    ),
   autoPublish: zod
     .boolean()
     .describe(
@@ -165,6 +177,12 @@ export const GetAppResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  vercelDeployUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Last public URL Vercel returned for this app, or null if never deployed there.",
+    ),
   autoPublish: zod
     .boolean()
     .describe(
@@ -408,6 +426,23 @@ export const ListTemplatesResponse = zod.object({
 });
 
 /**
+ * @summary Push the app to the user's Vercel account as a static deploy
+ */
+export const DeployAppToVercelParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeployAppToVercelResponse = zod.object({
+  url: zod.string().describe("Public URL Vercel assigned to this deployment"),
+  projectId: zod
+    .string()
+    .describe("Vercel project id (reused across future deploys)"),
+  deploymentId: zod
+    .string()
+    .describe("Vercel deployment id (visible in the user's dashboard)"),
+});
+
+/**
  * @summary Update the Coder model preference for an app
  */
 export const UpdateAppModelParams = zod.object({
@@ -448,6 +483,12 @@ export const UpdateAppModelResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  vercelDeployUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Last public URL Vercel returned for this app, or null if never deployed there.",
+    ),
   autoPublish: zod
     .boolean()
     .describe(
@@ -501,6 +542,12 @@ export const UpdateAppAutoPublishResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  vercelDeployUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Last public URL Vercel returned for this app, or null if never deployed there.",
+    ),
   autoPublish: zod
     .boolean()
     .describe(
@@ -621,6 +668,12 @@ export const ForkAppResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  vercelDeployUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Last public URL Vercel returned for this app, or null if never deployed there.",
+    ),
   autoPublish: zod
     .boolean()
     .describe(

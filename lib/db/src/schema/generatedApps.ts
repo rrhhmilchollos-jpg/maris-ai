@@ -33,6 +33,15 @@ export const generatedApps = pgTable("generated_apps", {
   publicSlug: text("public_slug").unique(),
   // Last GitHub repo URL pushed to. Null until the user clicks "Subir a GitHub".
   githubRepoUrl: text("github_repo_url"),
+  // Vercel project ID — assigned the FIRST time the user clicks "Desplegar
+  // en Vercel". Reused on subsequent deploys so updates land on the SAME
+  // project (and the same custom URL) instead of creating a new one each
+  // time. Null until the first Vercel deploy.
+  vercelProjectId: text("vercel_project_id"),
+  // Last public URL Vercel returned for this app. Null until first deploy.
+  // Format: "https://<project>-<hash>.vercel.app" or the user's custom domain
+  // if they set one in their Vercel dashboard later.
+  vercelDeployUrl: text("vercel_deploy_url"),
   // Auto-publish toggle. When true, the autonomous visual evaluator deploys
   // the app to /p/<slug> (assigning a fresh slug if needed) and emails the
   // owner the link as soon as the evaluator's verdict is "pass". Off by

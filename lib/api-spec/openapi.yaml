@@ -381,6 +381,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TemplateList"
+  /apps/{id}/deploy/vercel:
+    post:
+      operationId: deployAppToVercel
+      tags: [apps]
+      summary: Push the app to the user's Vercel account as a static deploy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deployment URL on Vercel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VercelDeployResult"
+        "400":
+          description: Bundle could not be compiled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Vercel rejected the deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: VERCEL_TOKEN not configured on the server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /apps/{id}/model:
     patch:
       operationId: updateAppModel
@@ -1129,6 +1171,10 @@ components:
           type: string
           nullable: true
           description: HTML URL of the repo this app was last pushed to.
+        vercelDeployUrl:
+          type: string
+          nullable: true
+          description: Last public URL Vercel returned for this app, or null if never deployed there.
         autoPublish:
           type: boolean
           description: When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically.
@@ -1422,6 +1468,22 @@ components:
             $ref: "#/components/schemas/Template"
       required:
         - templates
+    VercelDeployResult:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Public URL Vercel assigned to this deployment
+        projectId:
+          type: string
+          description: Vercel project id (reused across future deploys)
+        deploymentId:
+          type: string
+          description: Vercel deployment id (visible in the user's dashboard)
+      required:
+        - url
+        - projectId
+        - deploymentId
     GenerationJob:
       type: object
       properties:

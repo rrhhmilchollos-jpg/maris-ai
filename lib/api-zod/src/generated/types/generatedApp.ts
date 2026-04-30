@@ -24,6 +24,8 @@ export interface GeneratedApp {
   publicSlug?: string | null;
   /** HTML URL of the repo this app was last pushed to. */
   githubRepoUrl?: string | null;
+  /** Last public URL Vercel returned for this app, or null if never deployed there. */
+  vercelDeployUrl?: string | null;
   /** When true, the autonomous evaluator publishes successful generations to /p/{slug} automatically. */
   autoPublish: boolean;
   /** Spanish summary written by the evaluator when an app is in needs_review state. */

@@ -56,6 +56,14 @@ Maris AI features a React frontend, a Node.js/Express backend, and shared librar
 **Deployment Architecture**:
 - Generated apps can be publicly deployed with unique slugs using sandboxed iframes for security, exported as ZIP files, pushed to GitHub, and forked.
 - `backendCode` is explicitly included in the edit prompt context for AI to modify backend aspects.
+- **Vercel external deploy** (`lib/vercelDeploy.ts` + `POST /api/apps/:id/deploy/vercel`): pushes the same self-contained `index.html` produced by `buildDeployHtml` to the user's Vercel account via the Vercel REST API (`/v9/projects` to create, `/v13/deployments` with `target=production` to deploy). The first click creates a Vercel project named `maris-<appId>-<slug>` and persists `vercelProjectId` on the app row; subsequent clicks reuse the same project so the URL stays stable. The new `vercelDeployUrl` column is exposed in the API and the dashboard renders a "Vercel" link + "Re-desplegar" button once present, or a "Desplegar en Vercel" CTA otherwise. Requires the `VERCEL_TOKEN` server secret.
+
+**Versions & rollback** (`app_revisions` table + `lib/appRevisions.ts`):
+- Every successful create / edit / healthcheck / visualTester / evaluator commit snapshots `frontendCode`, `backendCode` and a short `source` label into `app_revisions` inside the same transaction (with index `(app_id, created_at desc)`).
+- `GET /api/apps/:id/revisions` lists them; `POST /api/apps/:id/revisions/:revisionId/restore` rolls the app back. Restore takes a row-level `FOR UPDATE` lock and rejects with `409` if a queued/running generation job exists for that app, so a rollback can never race with the worker. The frontend `RevisionHistorySection` panel in `app-detail.tsx` shows the list with confirm-before-restore.
+
+**Plantillas pre-fabricadas** (`lib/templates.ts`):
+- 6 curated starter templates (`saas-dashboard`, `landing-saas`, `tienda-online`, `habit-tracker`, `snake-2d`, `notas-pwa`) exposed via `GET /api/templates` (no auth — they're just metadata + seed prompt). The `TemplateGallery` component on the dashboard renders them as cards above the kind tabs; clicking one calls `setKind()` + `setPrompt()` so the user lands inside the existing generation flow with the right intent and a starter prompt pre-filled. Icon names are sent as Lucide identifiers and mapped client-side in a `TEMPLATE_ICONS` dict.
 
 **Autonomous Evaluator**:
 - A "Visual Evaluator" agent runs after the Visual Tester, taking screenshots with Puppeteer and using Claude Sonnet 4.6 with vision to determine `pass | fail` against the original prompt and architect-declared screens.
