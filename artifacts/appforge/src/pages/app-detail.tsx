@@ -559,9 +559,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-4 max-w-[1500px]">
+      <div className="container mx-auto px-4 py-4 max-w-[1500px] h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden">
         {/* Header bar */}
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <Button
               variant="ghost"
@@ -836,7 +836,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
         {app.status === "needs_review" && (
           <div
-            className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-100"
+            className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-red-100 flex-shrink-0"
             data-testid="panel-needs-review"
           >
             <div className="flex items-start gap-3">
@@ -874,7 +874,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         )}
 
         <div
-          className={`grid grid-cols-1 ${previewMaximized || !previewOpen ? "" : "lg:grid-cols-12"} gap-4 h-[calc(100vh-160px)] min-h-[600px]`}
+          className={`grid grid-cols-1 ${previewMaximized || !previewOpen ? "" : "lg:grid-cols-12"} gap-4 flex-1 min-h-0`}
         >
           {/* Chat panel */}
           <div
