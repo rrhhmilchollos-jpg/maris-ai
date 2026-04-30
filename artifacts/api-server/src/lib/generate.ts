@@ -560,7 +560,7 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
 
 /* ----------------------------- agents ------------------------------------- */
 
-async function researchTopic(prompt: string): Promise<string> {
+export async function researchTopic(prompt: string): Promise<string> {
   // 18s cap — we now allow up to 4 searches/fetches when the user asks the
   // agent to "busca en X.com y dime cómo es su home", which needs a couple
   // of round-trips (homepage + maybe a section). Still best-effort: on

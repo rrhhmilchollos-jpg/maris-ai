@@ -20,9 +20,12 @@ type AppMessageRow = typeof appMessages.$inferSelect;
 import {
   generateApp,
   patchBundle,
+  researchTopic,
   type GenLanguage,
   type AttachmentContext,
 } from "../lib/generate";
+import { classifyChatIntent } from "../lib/intentClassifier";
+import { tryConsumeFreeAnswer } from "../lib/freeAnswerLimiter";
 import { generateAppImages } from "../lib/imageAgent";
 import { streamAppZip } from "../lib/exportZip";
 import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
@@ -2264,8 +2267,16 @@ router.post("/apps/:id/messages", requireAuth, async (req: Request, res: Respons
     return;
   }
   const userId = req.userId!;
+  // Load the full row so the intent classifier can reason with title +
+  // description + persistent agent notes — without that context the
+  // "question" branch can't answer "¿de qué va esta app?" sensibly.
   const [owned] = await db
-    .select({ id: generatedApps.id })
+    .select({
+      id: generatedApps.id,
+      title: generatedApps.title,
+      description: generatedApps.description,
+      agentNotes: generatedApps.agentNotes,
+    })
     .from(generatedApps)
     .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
     .limit(1);
@@ -2280,6 +2291,100 @@ router.post("/apps/:id/messages", requireAuth, async (req: Request, res: Respons
         .filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0)
         .slice(0, 10)
     : [];
+
+  // Intent classifier — runs BEFORE we enqueue so questions and pure
+  // research requests don't waste a credit on a full regeneration. If the
+  // user attached images we always treat the message as an edit (no point
+  // running text-only classification when the user clearly wants the
+  // image baked into the app).
+  if (attachmentIds.length === 0) {
+    // Pull the last 10 chat turns so the classifier can disambiguate
+    // follow-ups like "y ahora más grande" (clearly an edit referring to
+    // the previous answer) vs "¿y por qué hiciste eso?" (a question).
+    const history = await db
+      .select({ role: appMessages.role, content: appMessages.content })
+      .from(appMessages)
+      .where(eq(appMessages.appId, id))
+      .orderBy(desc(appMessages.id))
+      .limit(10);
+    const recentMessages = history.reverse();
+
+    // Rate-limit gate BEFORE we call the classifier so an abusive user
+    // can't even spend a Haiku classification call on us once they're
+    // capped. Admins bypass. If the user is over the free quota we fall
+    // straight through to enqueueGeneration — they pay 1 credit like a
+    // normal edit, no bespoke 429 (which the chat UI doesn't know how to
+    // render anyway).
+    const isAdmin = isAdminEmail(req.dbUser!.email);
+    const limit = await tryConsumeFreeAnswer(userId, isAdmin);
+    const classified = limit.allowed
+      ? await classifyChatIntent({
+          appTitle: owned.title,
+          appDescription: owned.description ?? "",
+          agentNotes: owned.agentNotes ?? "",
+          recentMessages,
+          message: cleanedMessage,
+          log: req.log,
+        })
+      : { intent: "edit" as const, reply: "" };
+    if (!limit.allowed) {
+      req.log.info(
+        { userId, resetMs: limit.resetMs },
+        "Free-answer cap hit — routing message through paid edit path",
+      );
+    }
+
+    if (classified.intent === "question" || classified.intent === "research") {
+      // Build the assistant reply. Question → use the model's reply
+      // verbatim. Research → call the existing researchTopic helper which
+      // returns a Spanish brief; if it fails (timeout, no key) fall back
+      // to a clear apology so the chat never goes silent.
+      let assistantReply = classified.reply;
+      if (classified.intent === "research") {
+        try {
+          const brief = await researchTopic(cleanedMessage);
+          assistantReply = brief && brief.length > 0
+            ? brief
+            : "No pude completar la búsqueda en este momento. Inténtalo otra vez en unos segundos o reformula la petición.";
+        } catch (err) {
+          req.log.warn({ err, appId: id }, "researchTopic failed inside chat");
+          assistantReply =
+            "No pude completar la búsqueda en este momento. Inténtalo otra vez en unos segundos.";
+        }
+      }
+      // Empty reply guard — should be rare but means the model returned
+      // intent=question with no body. Fall through to a generic line so
+      // we still close the loop with the user.
+      if (!assistantReply || assistantReply.trim().length === 0) {
+        assistantReply =
+          "No tengo suficiente información para responder. ¿Puedes reformular la pregunta?";
+      }
+      // Persist user + assistant turns in a single transaction so partial
+      // writes can never strand the chat with an unanswered user line.
+      await db.transaction(async (tx) => {
+        await tx.insert(appMessages).values({
+          appId: id,
+          role: "user",
+          content: cleanedMessage,
+          attachmentIds: "[]",
+        });
+        await tx.insert(appMessages).values({
+          appId: id,
+          role: "assistant",
+          content: assistantReply,
+          attachmentIds: "[]",
+        });
+      });
+      res.status(200).json({
+        kind: "answered",
+        intent: classified.intent,
+        reply: assistantReply,
+      });
+      return;
+    }
+  }
+
+  // Default path: real edit → existing generation pipeline.
   await enqueueGeneration(req, res, cleanedMessage, id, {
     chatMessage: { appId: id, content: cleanedMessage },
     attachmentIds,

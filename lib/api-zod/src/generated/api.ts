@@ -328,6 +328,20 @@ export const SendAppMessageBody = zod.object({
     ),
 });
 
+export const SendAppMessageResponse = zod
+  .object({
+    kind: zod.enum(["answered"]),
+    intent: zod.enum(["question", "research"]),
+    reply: zod
+      .string()
+      .describe(
+        "The assistant's plain-text reply, already persisted as an app_message row.",
+      ),
+  })
+  .describe(
+    "Returned with HTTP 200 when the chat message did NOT require a\nregeneration. Happens when the intent classifier decides the user\nwas asking a question about the app or asking for pure web\nresearch — both are answered inline without spending credits.\n",
+  );
+
 /**
  * @summary Get the agent's persistent notes for an app
  */

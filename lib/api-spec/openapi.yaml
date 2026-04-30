@@ -205,6 +205,12 @@ paths:
             schema:
               $ref: "#/components/schemas/SendAppMessageRequest"
       responses:
+        "200":
+          description: Message answered directly without enqueuing a job (questions, web research)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendAppMessageDirectResponse"
         "202":
           description: Edit job enqueued
           content:
@@ -1496,6 +1502,27 @@ components:
           description: "Optional ids of files previously uploaded via POST /uploads. They become AI context for this edit."
       required:
         - message
+    SendAppMessageDirectResponse:
+      type: object
+      description: |
+        Returned with HTTP 200 when the chat message did NOT require a
+        regeneration. Happens when the intent classifier decides the user
+        was asking a question about the app or asking for pure web
+        research — both are answered inline without spending credits.
+      properties:
+        kind:
+          type: string
+          enum: [answered]
+        intent:
+          type: string
+          enum: [question, research]
+        reply:
+          type: string
+          description: The assistant's plain-text reply, already persisted as an app_message row.
+      required:
+        - kind
+        - intent
+        - reply
     AppMessage:
       type: object
       properties:
