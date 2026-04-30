@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
+import { startSelfMonitor } from "./lib/selfMonitor";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -71,6 +72,15 @@ app.listen(port, async (err) => {
   reclaimOrphanedJobs().catch((reclaimErr) => {
     logger.error({ err: reclaimErr }, "Orphan job reclaim failed");
   });
+
+  // 4) Self-monitor (Fase 9 PRO scaffold, real version): periodic DB
+  //    snapshot → state sync → analyzer → optimizer events. Failures
+  //    inside the monitor never throw out — it logs and keeps going.
+  try {
+    startSelfMonitor();
+  } catch (selfErr) {
+    logger.error({ err: selfErr }, "Failed to start self-monitor");
+  }
 
   // Periodic sweep: re-run the reclaim every 2 minutes so jobs that get stuck
   // *between* server restarts (worker crashed mid-run, OpenAI call hung past
