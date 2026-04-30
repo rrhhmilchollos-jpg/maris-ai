@@ -347,6 +347,67 @@ export const UpdateMyPreferencesResponse = zod
   );
 
 /**
+ * @summary List the revision history (snapshots) of an app, newest first
+ */
+export const ListAppRevisionsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListAppRevisionsResponse = zod.object({
+  revisions: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        source: zod
+          .string()
+          .describe("create | edit | visual-fix | health-fix | restore-backup"),
+        sourceLabel: zod
+          .string()
+          .describe("Friendly Spanish label for the source"),
+        summary: zod.string(),
+        createdAt: zod.coerce.date(),
+      })
+      .describe("A snapshot of an app at a point in time, used for rollback."),
+  ),
+});
+
+/**
+ * @summary Restore an app to a previous revision (current state saved as backup)
+ */
+export const RestoreAppRevisionParams = zod.object({
+  id: zod.coerce.number(),
+  revisionId: zod.coerce.number(),
+});
+
+export const RestoreAppRevisionResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary List curated starter templates the dashboard can show as cards
+ */
+export const ListTemplatesResponse = zod.object({
+  templates: zod.array(
+    zod
+      .object({
+        id: zod.string(),
+        name: zod.string(),
+        description: zod.string(),
+        kind: zod
+          .string()
+          .describe(
+            "fullstack | mobile | landing | game-2d | game-3d | hybrid-pwa",
+          ),
+        seedPrompt: zod.string(),
+        icon: zod.string().describe("lucide-react icon name"),
+      })
+      .describe(
+        "A curated starter template (kind + seed prompt) for the dashboard.",
+      ),
+  ),
+});
+
+/**
  * @summary Update the Coder model preference for an app
  */
 export const UpdateAppModelParams = zod.object({

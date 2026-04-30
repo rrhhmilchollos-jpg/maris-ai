@@ -35,6 +35,13 @@ import { enqueueGenerateJob, reenqueueGenerateJob } from "../lib/jobQueue";
 import { captureAgentError, addBreadcrumb } from "../lib/sentry";
 import { loadAgentMemory } from "../lib/agentMemoryContext";
 import { runMemoryExtractor } from "../lib/agentMemoryExtractor";
+import {
+  insertAppRevisionFromRow,
+  restoreAppRevision,
+  revisionSourceLabel,
+} from "../lib/appRevisions";
+import { TEMPLATES } from "../lib/templates";
+import { appRevisions } from "@workspace/db/schema";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
 const VISUAL_TEST_COST = 30;
@@ -671,6 +678,14 @@ async function runJob(
           role: "assistant",
           content: `Aplicado: ${payload.description}`,
         });
+        // Snapshot the new state into the revision history so the user can
+        // roll back to this exact bundle later if a future edit breaks it.
+        await insertAppRevisionFromRow(tx, {
+          row: updated,
+          source: "edit",
+          summary: payload.description,
+          jobId,
+        });
       } else {
         const [inserted] = await tx
           .insert(generatedApps)
@@ -705,6 +720,15 @@ async function runJob(
             content: `He generado "${payload.title}". ${payload.description}`,
           },
         ]);
+        // First revision in the history — the genesis snapshot. The user can
+        // always come back to "the original generation" with one click, no
+        // matter how many edits happen later.
+        await insertAppRevisionFromRow(tx, {
+          row: inserted,
+          source: "create",
+          summary: payload.description || "Creación inicial",
+          jobId,
+        });
       }
 
       await tx
@@ -1899,6 +1923,15 @@ router.post("/apps/:id/healthcheck", requireAuth, async (req: Request, res: Resp
         .update(generatedApps)
         .set({ frontendCode: patched })
         .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+      // Capture the post-fix bundle in revision history. We use snapshotCurrentApp
+      // (re-reads the row) to keep this lightweight and to never block the
+      // user-facing response on a snapshot failure.
+      const { snapshotCurrentApp } = await import("../lib/appRevisions");
+      void snapshotCurrentApp({
+        appId: id,
+        source: "health-fix",
+        summary: `Reparación automática del build (${before.issues.length} → ${after.issues.length} errores)`,
+      });
     }
     res.json({
       ok: after.ok,
@@ -2428,6 +2461,106 @@ router.get("/apps/:id/notes", requireAuth, async (req: Request, res: Response) =
     return;
   }
   res.json({ notes: row.agentNotes ?? "" });
+});
+
+/**
+ * List the revision history of an app — most recent first. Returns light
+ * metadata only (id, source, summary, createdAt) so the dashboard can render
+ * a timeline without paying the cost of shipping every bundle.
+ */
+router.get(
+  "/apps/:id/revisions",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    // Ownership gate first — never leak revision metadata across users.
+    const [appRow] = await db
+      .select({ id: generatedApps.id })
+      .from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .limit(1);
+    if (!appRow) {
+      res.status(404).json({ error: "App not found" });
+      return;
+    }
+    const rows = await db
+      .select({
+        id: appRevisions.id,
+        source: appRevisions.source,
+        summary: appRevisions.summary,
+        createdAt: appRevisions.createdAt,
+      })
+      .from(appRevisions)
+      .where(eq(appRevisions.appId, id))
+      .orderBy(desc(appRevisions.createdAt))
+      .limit(100);
+    res.json({
+      revisions: rows.map((r) => ({
+        id: r.id,
+        source: r.source,
+        sourceLabel: revisionSourceLabel(r.source),
+        summary: r.summary,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
+  },
+);
+
+/**
+ * Restore the app to a previous revision. Snapshots the current state as
+ * "restore-backup" first so the user can always undo their undo.
+ */
+router.post(
+  "/apps/:id/revisions/:revisionId/restore",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const revisionId = Number(req.params.revisionId);
+    if (!Number.isInteger(id) || !Number.isInteger(revisionId)) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const userId = req.userId!;
+    try {
+      const result = await restoreAppRevision({ appId: id, revisionId, userId });
+      if (!result.ok) {
+        if (result.reason === "job_in_flight") {
+          // 409 Conflict — there's a generation/edit job still running for
+          // this app. Restoring now would race with its eventual write.
+          res.status(409).json({
+            error:
+              "No puedo restaurar mientras hay una generación o edición en curso. Espera a que termine e inténtalo de nuevo.",
+          });
+          return;
+        }
+        // Forbidden vs not_found are intentionally collapsed into 404 to
+        // avoid leaking which app IDs exist for other users.
+        res
+          .status(404)
+          .json({ error: result.reason === "forbidden" ? "App not found" : "Revision not found" });
+        return;
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      req.log.error({ err, appId: id, revisionId }, "restoreAppRevision failed");
+      res.status(500).json({ error: "No pude restaurar esa versión." });
+    }
+  },
+);
+
+/**
+ * Public catalog of curated starter templates the dashboard renders as
+ * clickable cards. No auth required — they're just labels + seed prompts;
+ * clicking one only pre-fills the prompt textarea on the client. Actual
+ * generation still goes through /generate with the user's session.
+ */
+router.get("/templates", (_req: Request, res: Response) => {
+  res.json({ templates: TEMPLATES });
 });
 
 router.put("/apps/:id/notes", requireAuth, async (req: Request, res: Response) => {

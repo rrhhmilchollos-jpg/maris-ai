@@ -519,6 +519,16 @@ export async function runVisualTester(opts: {
     currentBundle = patched;
     fixesApplied++;
 
+    // Snapshot the post-fix bundle so the user can roll back if the visual
+    // tester's "improvement" actually regressed something. Fire-and-forget.
+    void import("./appRevisions").then(({ snapshotCurrentApp }) =>
+      snapshotCurrentApp({
+        appId: app.id,
+        source: "visual-fix",
+        summary: `Reparación visual automática (ciclo ${cycle})`,
+      }),
+    );
+
     // Brief pause so the public deploy route reflects the new bundle when
     // puppeteer hits it again on the next cycle.
     await new Promise((r) => setTimeout(r, 1200));
