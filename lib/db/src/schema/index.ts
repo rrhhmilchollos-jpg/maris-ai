@@ -8,3 +8,4 @@ export * from "./jobLogs";
 export * from "./chatAttachments";
 export * from "./agentMemory";
 export * from "./appRuntimeErrors";
+export * from "./userPreferences";

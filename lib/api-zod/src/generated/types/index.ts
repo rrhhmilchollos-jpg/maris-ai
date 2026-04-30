@@ -12,6 +12,7 @@ export * from "./adminJob";
 export * from "./adminJobsResponse";
 export * from "./adminOverview";
 export * from "./adminUser";
+export * from "./agentNotes";
 export * from "./apiError";
 export * from "./appMessage";
 export * from "./appRuntimeError";

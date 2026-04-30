@@ -52,6 +52,14 @@ export const generatedApps = pgTable("generated_apps", {
   plannedPages: jsonb("planned_pages").$type<
     Array<{ name: string; route?: string; purpose?: string }>
   >(),
+  // Persistent agent memory specific to THIS app. The agent appends short
+  // notes here after each successful edit (e.g. "the user wants dark mode by
+  // default", "all colors must use the brand palette #6B46C1", "the login
+  // flow uses Clerk"). It is read back in every subsequent edit so behavior
+  // stays consistent. The user can also view and edit it from the app
+  // panel — it's their app, their rules. Hard-capped at ~3 KB by the writer
+  // so it never explodes the prompt budget.
+  agentNotes: text("agent_notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

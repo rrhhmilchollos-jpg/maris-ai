@@ -23,6 +23,7 @@ import type {
   AdminJobsResponse,
   AdminOverview,
   AdminUser,
+  AgentNotes,
   ApiError,
   AppMessage,
   AppRuntimeErrorList,
@@ -756,6 +757,341 @@ export const useSendAppMessage = <
   TContext
 > => {
   return useMutation(getSendAppMessageMutationOptions(options));
+};
+
+/**
+ * @summary Get the agent's persistent notes for an app
+ */
+export const getGetAppNotesUrl = (id: number) => {
+  return `/api/apps/${id}/notes`;
+};
+
+export const getAppNotes = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AgentNotes> => {
+  return customFetch<AgentNotes>(getGetAppNotesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAppNotesQueryKey = (id: number) => {
+  return [`/api/apps/${id}/notes`] as const;
+};
+
+export const getGetAppNotesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAppNotes>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAppNotes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAppNotesQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAppNotes>>> = ({
+    signal,
+  }) => getAppNotes(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAppNotes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAppNotesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAppNotes>>
+>;
+export type GetAppNotesQueryError = ErrorType<ApiError>;
+
+/**
+ * @summary Get the agent's persistent notes for an app
+ */
+
+export function useGetAppNotes<
+  TData = Awaited<ReturnType<typeof getAppNotes>>,
+  TError = ErrorType<ApiError>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getAppNotes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAppNotesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the agent's persistent notes for an app (max 3000 chars)
+ */
+export const getUpdateAppNotesUrl = (id: number) => {
+  return `/api/apps/${id}/notes`;
+};
+
+export const updateAppNotes = async (
+  id: number,
+  agentNotes: AgentNotes,
+  options?: RequestInit,
+): Promise<AgentNotes> => {
+  return customFetch<AgentNotes>(getUpdateAppNotesUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(agentNotes),
+  });
+};
+
+export const getUpdateAppNotesMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppNotes>>,
+    TError,
+    { id: number; data: BodyType<AgentNotes> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAppNotes>>,
+  TError,
+  { id: number; data: BodyType<AgentNotes> },
+  TContext
+> => {
+  const mutationKey = ["updateAppNotes"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAppNotes>>,
+    { id: number; data: BodyType<AgentNotes> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateAppNotes(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateAppNotesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateAppNotes>>
+>;
+export type UpdateAppNotesMutationBody = BodyType<AgentNotes>;
+export type UpdateAppNotesMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Replace the agent's persistent notes for an app (max 3000 chars)
+ */
+export const useUpdateAppNotes = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAppNotes>>,
+    TError,
+    { id: number; data: BodyType<AgentNotes> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateAppNotes>>,
+  TError,
+  { id: number; data: BodyType<AgentNotes> },
+  TContext
+> => {
+  return useMutation(getUpdateAppNotesMutationOptions(options));
+};
+
+/**
+ * @summary Get the user's cross-app preferences (memory layer
+ */
+export const getGetMyPreferencesUrl = () => {
+  return `/api/me/preferences`;
+};
+
+export const getMyPreferences = async (
+  options?: RequestInit,
+): Promise<AgentNotes> => {
+  return customFetch<AgentNotes>(getGetMyPreferencesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyPreferencesQueryKey = () => {
+  return [`/api/me/preferences`] as const;
+};
+
+export const getGetMyPreferencesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyPreferences>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPreferences>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyPreferencesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMyPreferences>>
+  > = ({ signal }) => getMyPreferences({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPreferences>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyPreferencesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyPreferences>>
+>;
+export type GetMyPreferencesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the user's cross-app preferences (memory layer
+ */
+
+export function useGetMyPreferences<
+  TData = Awaited<ReturnType<typeof getMyPreferences>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPreferences>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyPreferencesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the user's cross-app preferences (max 3000 chars)
+ */
+export const getUpdateMyPreferencesUrl = () => {
+  return `/api/me/preferences`;
+};
+
+export const updateMyPreferences = async (
+  agentNotes: AgentNotes,
+  options?: RequestInit,
+): Promise<AgentNotes> => {
+  return customFetch<AgentNotes>(getUpdateMyPreferencesUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(agentNotes),
+  });
+};
+
+export const getUpdateMyPreferencesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyPreferences>>,
+    TError,
+    { data: BodyType<AgentNotes> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateMyPreferences>>,
+  TError,
+  { data: BodyType<AgentNotes> },
+  TContext
+> => {
+  const mutationKey = ["updateMyPreferences"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateMyPreferences>>,
+    { data: BodyType<AgentNotes> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateMyPreferences(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateMyPreferencesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateMyPreferences>>
+>;
+export type UpdateMyPreferencesMutationBody = BodyType<AgentNotes>;
+export type UpdateMyPreferencesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Replace the user's cross-app preferences (max 3000 chars)
+ */
+export const useUpdateMyPreferences = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateMyPreferences>>,
+    TError,
+    { data: BodyType<AgentNotes> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateMyPreferences>>,
+  TError,
+  { data: BodyType<AgentNotes> },
+  TContext
+> => {
+  return useMutation(getUpdateMyPreferencesMutationOptions(options));
 };
 
 /**

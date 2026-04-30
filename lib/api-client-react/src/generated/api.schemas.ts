@@ -201,6 +201,13 @@ export interface AppMessage {
   createdAt: string;
 }
 
+/**
+ * Persistent agent memory (per-app or per-user). Capped at 3000 chars.
+ */
+export interface AgentNotes {
+  notes: string;
+}
+
 export interface GenerationJob {
   id: number;
   /** queued | running | succeeded | failed */

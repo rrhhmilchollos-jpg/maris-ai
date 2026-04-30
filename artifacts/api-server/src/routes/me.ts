@@ -5,6 +5,7 @@ import { requireAuth, isAdminEmail } from "../lib/auth";
 import {
   generatedApps,
   creditTransactions,
+  userPreferences,
 } from "@workspace/db/schema";
 
 const router: IRouter = Router();
@@ -99,6 +100,45 @@ router.get("/me/stats", requireAuth, async (req, res) => {
       createdAt: r.createdAt.toISOString(),
     })),
   });
+});
+
+// =============================================================================
+// Cross-app user preferences (memory layer #3). Same shape as per-app notes
+// but applies to ALL of the user's future generations.
+// =============================================================================
+
+router.get("/me/preferences", requireAuth, async (req, res) => {
+  const userId = req.userId!;
+  const [row] = await db
+    .select()
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  res.json({ notes: row?.notes ?? "" });
+});
+
+router.put("/me/preferences", requireAuth, async (req, res) => {
+  const userId = req.userId!;
+  const notes: unknown = req.body?.notes;
+  if (typeof notes !== "string") {
+    res.status(400).json({ error: "notes debe ser una cadena" });
+    return;
+  }
+  const trimmed = notes.slice(0, 3000);
+  const [existing] = await db
+    .select({ userId: userPreferences.userId })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId))
+    .limit(1);
+  if (existing) {
+    await db
+      .update(userPreferences)
+      .set({ notes: trimmed, updatedAt: new Date() })
+      .where(eq(userPreferences.userId, userId));
+  } else {
+    await db.insert(userPreferences).values({ userId, notes: trimmed });
+  }
+  res.json({ notes: trimmed });
 });
 
 export default router;

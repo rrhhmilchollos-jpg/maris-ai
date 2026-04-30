@@ -279,6 +279,74 @@ export const SendAppMessageBody = zod.object({
 });
 
 /**
+ * @summary Get the agent's persistent notes for an app
+ */
+export const GetAppNotesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetAppNotesResponse = zod
+  .object({
+    notes: zod.string(),
+  })
+  .describe(
+    "Persistent agent memory (per-app or per-user). Capped at 3000 chars.",
+  );
+
+/**
+ * @summary Replace the agent's persistent notes for an app (max 3000 chars)
+ */
+export const UpdateAppNotesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateAppNotesBody = zod
+  .object({
+    notes: zod.string(),
+  })
+  .describe(
+    "Persistent agent memory (per-app or per-user). Capped at 3000 chars.",
+  );
+
+export const UpdateAppNotesResponse = zod
+  .object({
+    notes: zod.string(),
+  })
+  .describe(
+    "Persistent agent memory (per-app or per-user). Capped at 3000 chars.",
+  );
+
+/**
+ * @summary Get the user's cross-app preferences (memory layer
+ */
+export const GetMyPreferencesResponse = zod
+  .object({
+    notes: zod.string(),
+  })
+  .describe(
+    "Persistent agent memory (per-app or per-user). Capped at 3000 chars.",
+  );
+
+/**
+ * @summary Replace the user's cross-app preferences (max 3000 chars)
+ */
+export const UpdateMyPreferencesBody = zod
+  .object({
+    notes: zod.string(),
+  })
+  .describe(
+    "Persistent agent memory (per-app or per-user). Capped at 3000 chars.",
+  );
+
+export const UpdateMyPreferencesResponse = zod
+  .object({
+    notes: zod.string(),
+  })
+  .describe(
+    "Persistent agent memory (per-app or per-user). Capped at 3000 chars.",
+  );
+
+/**
  * @summary Update the Coder model preference for an app
  */
 export const UpdateAppModelParams = zod.object({

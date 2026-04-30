@@ -6,14 +6,18 @@ import {
   useGenerateApp,
   useGetMe,
   useGetGenerationJob,
+  useGetMyPreferences,
+  useUpdateMyPreferences,
   getGetGenerationJobQueryKey,
   getGetMyStatsQueryKey,
   getListAppsQueryKey,
   getGetMeQueryKey,
+  getGetMyPreferencesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
+import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import {
   AttachmentPicker,
   AttachmentChips,
@@ -335,6 +339,9 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Preferencias globales del agente — memoria multi-app */}
+        <UserPreferencesSection />
 
         {/* Generador */}
         <Card className="border-primary/20 bg-card/60 backdrop-blur shadow-lg overflow-hidden relative">
@@ -683,5 +690,35 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
     </Layout>
+  );
+}
+
+/**
+ * Cross-app agent memory editor (memory layer #3). What the user puts here is
+ * loaded by every generation across every app, so it's the right place for
+ * "always-true" preferences (idioma, estilo, stack favorito, etc.).
+ */
+function UserPreferencesSection() {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useGetMyPreferences();
+  const updateMutation = useUpdateMyPreferences({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetMyPreferencesQueryKey() });
+      },
+    },
+  });
+  return (
+    <AgentNotesPanel
+      title="Mis preferencias para el agente"
+      description="Reglas que el agente respetará en TODAS tus apps. Por ejemplo: idioma del producto, estética, librerías favoritas o cosas que nunca debe hacer."
+      initialValue={data?.notes}
+      isLoading={isLoading}
+      isSaving={updateMutation.isPending}
+      onSave={async (notes) => {
+        await updateMutation.mutateAsync({ data: { notes } });
+      }}
+      testIdPrefix="user-preferences"
+    />
   );
 }
