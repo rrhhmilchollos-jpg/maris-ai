@@ -41,6 +41,7 @@ import {
   revisionSourceLabel,
 } from "../lib/appRevisions";
 import { TEMPLATES } from "../lib/templates";
+import { deployAppToVercel } from "../lib/vercelDeploy";
 import { appRevisions } from "@workspace/db/schema";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
@@ -291,6 +292,7 @@ function serializeApp(row: GeneratedAppRow) {
     language: row.language,
     publicSlug: row.publicSlug,
     githubRepoUrl: row.githubRepoUrl,
+    vercelDeployUrl: row.vercelDeployUrl,
     autoPublish: row.autoPublish,
     evaluatorSummary: row.evaluatorSummary,
     createdAt: row.createdAt.toISOString(),
@@ -2562,6 +2564,65 @@ router.post(
 router.get("/templates", (_req: Request, res: Response) => {
   res.json({ templates: TEMPLATES });
 });
+
+/**
+ * POST /apps/:id/deploy/vercel — push the current bundle to the user's
+ * Vercel account as a static deployment. Reuses the same Vercel project
+ * across deploys so the production URL stays stable. Returns the URL
+ * immediately once Vercel acknowledges the deployment (Vercel's edge will
+ * finish building the static page within a few seconds).
+ *
+ * Failures map to:
+ *  - 503 if VERCEL_TOKEN isn't configured (operator action required).
+ *  - 404 if the app doesn't belong to the requester (info-hiding: same
+ *    code as not-found).
+ *  - 400 if the bundle won't compile (the user can fix it from chat).
+ *  - 502 if Vercel's API rejects the request — message is forwarded so
+ *    the user can see whether it was, e.g., a duplicate project name.
+ */
+router.post(
+  "/apps/:id/deploy/vercel",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid app id" });
+      return;
+    }
+    const userId = req.userId!;
+    try {
+      const r = await deployAppToVercel({ appId: id, userId, log: req.log });
+      if (r.ok) {
+        res.json(r.result);
+        return;
+      }
+      switch (r.failure.kind) {
+        case "missing_token":
+          res.status(503).json({
+            error:
+              "El despliegue a Vercel no está configurado en este servidor. Pide al administrador que añada VERCEL_TOKEN.",
+          });
+          return;
+        case "app_not_found":
+          res.status(404).json({ error: "App not found" });
+          return;
+        case "build_failed":
+          res.status(400).json({
+            error: `No pude empaquetar la app: ${r.failure.message}`,
+          });
+          return;
+        case "vercel_api_error":
+          res.status(502).json({
+            error: `Vercel rechazó el despliegue (${r.failure.status}): ${r.failure.message}`,
+          });
+          return;
+      }
+    } catch (err) {
+      req.log.error({ err, appId: id }, "Vercel deploy unexpected failure");
+      res.status(500).json({ error: "No pude desplegar a Vercel." });
+    }
+  },
+);
 
 router.put("/apps/:id/notes", requireAuth, async (req: Request, res: Response) => {
   const id = Number(req.params.id);

@@ -51,6 +51,7 @@ import type {
   UpdateAutoPublishRequest,
   UpdateCoderModelRequest,
   UserProfile,
+  VercelDeployResult,
   VisualTestReport,
 } from "./api.schemas";
 
@@ -1346,6 +1347,90 @@ export function useListTemplates<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Push the app to the user's Vercel account as a static deploy
+ */
+export const getDeployAppToVercelUrl = (id: number) => {
+  return `/api/apps/${id}/deploy/vercel`;
+};
+
+export const deployAppToVercel = async (
+  id: number,
+  options?: RequestInit,
+): Promise<VercelDeployResult> => {
+  return customFetch<VercelDeployResult>(getDeployAppToVercelUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDeployAppToVercelMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deployAppToVercel>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deployAppToVercel>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deployAppToVercel"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deployAppToVercel>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deployAppToVercel(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeployAppToVercelMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deployAppToVercel>>
+>;
+
+export type DeployAppToVercelMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Push the app to the user's Vercel account as a static deploy
+ */
+export const useDeployAppToVercel = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deployAppToVercel>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deployAppToVercel>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeployAppToVercelMutationOptions(options));
+};
 
 /**
  * @summary Update the Coder model preference for an app

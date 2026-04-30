@@ -48,6 +48,7 @@ export * from "./templateList";
 export * from "./updateAutoPublishRequest";
 export * from "./updateCoderModelRequest";
 export * from "./userProfile";
+export * from "./vercelDeployResult";
 export * from "./visualAnalysis";
 export * from "./visualIssue";
 export * from "./visualIssueSeverity";

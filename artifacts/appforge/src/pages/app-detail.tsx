@@ -11,6 +11,7 @@ import {
   useRetryAppGeneration,
   useHealthCheckApp,
   useDeployApp,
+  useDeployAppToVercel,
   usePushAppToGitHub,
   useGenerateAppImages,
   useVisualTestApp,
@@ -71,6 +72,7 @@ import {
   HeartPulse,
   Globe,
   Github,
+  Rocket,
   ExternalLink,
   ImagePlus,
   Maximize2,
@@ -367,6 +369,30 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
       onError: (err: any) => {
         toast({ title: "No se pudo publicar", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  // Deploy to Vercel — independent from the internal /p/<slug> publish.
+  // The first click creates a Vercel project and reuses it on subsequent
+  // deploys, so the URL stays stable and the user can also point a custom
+  // domain at it from their own Vercel dashboard.
+  const vercelDeployMutation = useDeployAppToVercel({
+    mutation: {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        window.open(result.url, "_blank", "noopener,noreferrer");
+        toast({
+          title: "Desplegado en Vercel",
+          description: "Vercel está terminando de servir tu app. Abrimos la URL en una pestaña nueva.",
+        });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "No se pudo desplegar en Vercel",
+          description: err?.message ?? "Error",
+          variant: "destructive",
+        });
       },
     },
   });
@@ -819,6 +845,60 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <Github className="h-4 w-4 mr-1.5" />
                 )}
                 GitHub
+              </Button>
+            )}
+
+            {/* Vercel deploy. Two-state button: when there's no previous
+                deploy we show "Desplegar en Vercel" + a single triangle
+                icon; once deployed we show a small "Vercel" link to the
+                live URL plus a "Re-desplegar" action that pushes the
+                latest bundle to the same Vercel project. */}
+            {app.vercelDeployUrl ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  title="Abrir la app en Vercel"
+                >
+                  <a href={app.vercelDeployUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-1.5" /> Vercel
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => vercelDeployMutation.mutate({ id: app.id })}
+                  disabled={vercelDeployMutation.isPending || app.status !== "ready"}
+                  className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  title="Volver a desplegar la versión actual a Vercel (mismo proyecto, misma URL)"
+                  data-testid="button-vercel-redeploy"
+                >
+                  {vercelDeployMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <Rocket className="h-4 w-4 mr-1.5" />
+                  )}
+                  Re-desplegar
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => vercelDeployMutation.mutate({ id: app.id })}
+                disabled={vercelDeployMutation.isPending || app.status !== "ready"}
+                className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                title="Desplegar esta app a tu cuenta de Vercel (URL pública en Vercel)"
+                data-testid="button-vercel-deploy"
+              >
+                {vercelDeployMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Rocket className="h-4 w-4 mr-1.5" />
+                )}
+                Desplegar en Vercel
               </Button>
             )}
 
