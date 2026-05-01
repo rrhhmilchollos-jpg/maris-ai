@@ -8,9 +8,10 @@ import {
   generationJobs,
   creditTransactions,
 } from "@workspace/db/schema";
-import { reenqueueGenerateJob } from "../lib/jobQueue";
+import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { logger } from "../lib/logger";
 import { agentMemory } from "@workspace/db";
+import { getMetricsSnapshot } from "../lib/metrics";
 
 const router: IRouter = Router();
 
@@ -571,6 +572,38 @@ router.get("/admin/metrics", async (_req, res) => {
     publishedApps: {
       today: publishedToday?.total ?? 0,
       total: publishedTotal?.total ?? 0,
+    },
+  });
+});
+
+// Operational metrics: in-memory request counters + live queue state.
+// Survives only until process restart — intentional, no external dep.
+router.get("/admin/metrics", async (_req, res) => {
+  const snapshot = getMetricsSnapshot();
+
+  // Pull queue state from generation_jobs (the source of truth Maris uses).
+  // Last 24h window so the numbers reflect "what's happening now" rather
+  // than lifetime totals.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const statusRows = await db
+    .select({
+      status: generationJobs.status,
+      total: count(),
+    })
+    .from(generationJobs)
+    .where(gte(generationJobs.createdAt, since))
+    .groupBy(generationJobs.status);
+
+  const queueByStatus: Record<string, number> = {};
+  for (const row of statusRows) {
+    queueByStatus[row.status] = Number(row.total);
+  }
+
+  res.json({
+    server: snapshot,
+    queue: {
+      ready: isQueueReady(),
+      jobs24hByStatus: queueByStatus,
     },
   });
 });
