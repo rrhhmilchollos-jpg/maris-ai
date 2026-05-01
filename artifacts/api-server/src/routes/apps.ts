@@ -278,7 +278,7 @@ const KIND_INTENTS: Record<ProjectKind, string | null> = {
   landing:
     "[INTENT: landing page — sitio de marketing de una sola página con hero impactante, sección de features, prueba social/testimonios, pricing y CTA final + footer. No requiere backend ni dashboard, backendNeeded debe ser false]",
   "game-2d":
-    "[INTENT: 2D game — juego web 2D de una sola página usando HTML5 Canvas (o pixi.js si la mecánica lo justifica). Incluye loop de juego con requestAnimationFrame, controles por teclado/táctil, sistema de puntuación, estados (menu/playing/gameover), reinicio. backendNeeded=false. La página principal ES el juego, no un dashboard. Tabla de records con localStorage]",
+    "[INTENT: 2D game — juego web 2D de una sola página. Elige librería según la mecánica: HTML5 Canvas crudo para juegos sencillos (snake, pong, breakout), Phaser 3 (paquete 'phaser' montado en useEffect dentro de un componente React, destruido en cleanup) para plataformas/shoot'em up/RPG con física Arcade y sprites, o pixi.js si solo necesitas renderer 2D performante sin física. Incluye loop de juego, controles teclado/táctil, sistema de puntuación, estados (menu/playing/gameover), reinicio. backendNeeded=false. La página principal ES el juego, no un dashboard. Records en localStorage]",
   "game-3d":
     "[INTENT: 3D game — juego web 3D de una sola página usando three + @react-three/fiber + @react-three/drei. Incluye escena con cámara y luces, loop con useFrame, controles (OrbitControls o teclado WASD), físicas básicas, sistema de puntuación, estados (menu/playing/gameover). backendNeeded=false. La página principal ES el juego. Records en localStorage]",
   "hybrid-pwa":

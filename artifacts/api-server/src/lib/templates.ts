@@ -84,6 +84,26 @@ export const TEMPLATES: AppTemplate[] = [
       "Un juego arcade tipo Snake en HTML5 Canvas. Controles WASD y flechas, la serpiente come comida que aparece en posiciones aleatorias, crece y la velocidad aumenta cada 5 puntos. Pantalla de menú con título, instrucciones y botón 'Empezar'. Pantalla de game over con puntuación final, mejor record (en localStorage) y botón 'Reintentar'. HUD durante el juego con puntuación actual y record. Estética retro pixel art, paleta verde fosforescente sobre negro.",
   },
   {
+    id: "phaser-platformer",
+    name: "Plataformas 2D (Phaser)",
+    description:
+      "Juego de plataformas con física, sprites animados, enemigos y monedas usando Phaser 3.",
+    kind: "game-2d",
+    icon: "Joystick",
+    seedPrompt:
+      "Un juego de plataformas 2D usando Phaser 3 (paquete 'phaser' en npm) montado dentro de un componente React que crea la instancia Phaser.Game en useEffect y la destruye en cleanup. Una sola escena con: personaje principal con física Arcade (gravedad, salto, colisiones), 3 plataformas estáticas a distintas alturas, 5 monedas que se recogen al tocarlas (suman 10 puntos cada una), 1 enemigo que patrulla horizontalmente y mata al jugador al contacto (vuelve al menú), controles flechas para mover y barra espaciadora para saltar. HUD con puntuación arriba a la izquierda. Pantalla de menú con título 'Aventura Pixel' y botón 'Jugar'. Pantalla de game over con puntuación final y botón 'Reintentar'. Sprites generados con formas de colores planos (rectángulos y círculos creados con this.add.graphics) — no hace falta cargar assets externos. Paleta verde menta y rosa coral sobre fondo azul cielo.",
+  },
+  {
+    id: "three-runner",
+    name: "Runner 3D (Three.js)",
+    description:
+      "Juego 3D infinito tipo runner con cámara en tercera persona, obstáculos y monedas usando React Three Fiber.",
+    kind: "game-3d",
+    icon: "Box",
+    seedPrompt:
+      "Un juego 3D infinito tipo runner usando three + @react-three/fiber + @react-three/drei. Vista en tercera persona desde detrás del personaje (un cubo de color), que avanza automáticamente por un pasillo plano que se extiende al infinito. Controles: flecha izquierda y derecha para cambiar entre 3 carriles. El suelo es un PlaneGeometry con un patrón a cuadros (textura procedural). Aparecen obstáculos (cubos rojos) en posiciones aleatorias en uno de los 3 carriles cada cierto tiempo: si el jugador colisiona, game over. También aparecen monedas (esferas amarillas que rotan) que al recogerse suman 10 puntos. La velocidad aumenta gradualmente con el tiempo. Iluminación con ambientLight + directionalLight. HUD HTML superpuesto con puntuación actual y mejor record (localStorage). Pantalla de menú con título 'Cosmic Runner', controles explicados y botón 'Empezar'. Pantalla de game over con puntuación final y 'Reintentar'. Paleta espacial: fondo azul oscuro con estrellas, personaje cian fluorescente.",
+  },
+  {
     id: "notas-pwa",
     name: "App de notas (PWA)",
     description:
