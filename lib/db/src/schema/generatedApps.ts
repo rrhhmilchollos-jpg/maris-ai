@@ -33,6 +33,12 @@ export const generatedApps = pgTable("generated_apps", {
   publicSlug: text("public_slug").unique(),
   // Last GitHub repo URL pushed to. Null until the user clicks "Subir a GitHub".
   githubRepoUrl: text("github_repo_url"),
+  // GitHub repo identifier in `owner/repo` form. Stored alongside githubRepoUrl
+  // so subsequent pushes can target the SAME repo (commit on top of main)
+  // instead of creating a new one each click. Filled the first time the
+  // user pushes; reused on every update afterwards. If the repo is deleted
+  // on GitHub the next push detects that and recreates a fresh repo.
+  githubRepoFullName: text("github_repo_full_name"),
   // Vercel project ID — assigned the FIRST time the user clicks "Desplegar
   // en Vercel". Reused on subsequent deploys so updates land on the SAME
   // project (and the same custom URL) instead of creating a new one each

@@ -313,6 +313,7 @@ function serializeApp(row: GeneratedAppRow) {
     language: row.language,
     publicSlug: row.publicSlug,
     githubRepoUrl: row.githubRepoUrl,
+    githubRepoFullName: row.githubRepoFullName,
     vercelDeployUrl: row.vercelDeployUrl,
     vercelProjectId: row.vercelProjectId,
     vercelCustomDomain: row.vercelCustomDomain,
@@ -2267,12 +2268,22 @@ router.post("/apps/:id/github", requireAuth, async (req: Request, res: Response)
       description: row.description,
       frontendBundle: row.frontendCode,
       backendBundle: row.backendCode,
+      // Persisted from the previous push, if any. Lets the helper decide
+      // whether to update the existing repo or create a fresh one.
+      existingRepoFullName: row.githubRepoFullName,
     });
     await db
       .update(generatedApps)
-      .set({ githubRepoUrl: result.url })
+      .set({
+        githubRepoUrl: result.url,
+        githubRepoFullName: result.repoFullName,
+      })
       .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
-    res.json({ url: result.url, repoFullName: result.repoFullName });
+    res.json({
+      url: result.url,
+      repoFullName: result.repoFullName,
+      updated: result.updated,
+    });
   } catch (err) {
     req.log.error({ err, appId: id }, "GitHub push failed");
     res.status(500).json({

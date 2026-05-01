@@ -68,6 +68,12 @@ export const GetMyStatsResponse = zod.object({
         .string()
         .nullish()
         .describe("HTML URL of the repo this app was last pushed to."),
+      githubRepoFullName: zod
+        .string()
+        .nullish()
+        .describe(
+          "GitHub identifier in `owner\/repo` form. Persisted so subsequent\npushes update the same repo with a new commit on `main` instead\nof creating a new repo each time.\n",
+        ),
       vercelDeployUrl: zod
         .string()
         .nullish()
@@ -133,6 +139,12 @@ export const ListAppsResponseItem = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  githubRepoFullName: zod
+    .string()
+    .nullish()
+    .describe(
+      "GitHub identifier in `owner\/repo` form. Persisted so subsequent\npushes update the same repo with a new commit on `main` instead\nof creating a new repo each time.\n",
+    ),
   vercelDeployUrl: zod
     .string()
     .nullish()
@@ -199,6 +211,12 @@ export const GetAppResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  githubRepoFullName: zod
+    .string()
+    .nullish()
+    .describe(
+      "GitHub identifier in `owner\/repo` form. Persisted so subsequent\npushes update the same repo with a new commit on `main` instead\nof creating a new repo each time.\n",
+    ),
   vercelDeployUrl: zod
     .string()
     .nullish()
@@ -687,6 +705,12 @@ export const UpdateAppModelResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  githubRepoFullName: zod
+    .string()
+    .nullish()
+    .describe(
+      "GitHub identifier in `owner\/repo` form. Persisted so subsequent\npushes update the same repo with a new commit on `main` instead\nof creating a new repo each time.\n",
+    ),
   vercelDeployUrl: zod
     .string()
     .nullish()
@@ -756,6 +780,12 @@ export const UpdateAppAutoPublishResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  githubRepoFullName: zod
+    .string()
+    .nullish()
+    .describe(
+      "GitHub identifier in `owner\/repo` form. Persisted so subsequent\npushes update the same repo with a new commit on `main` instead\nof creating a new repo each time.\n",
+    ),
   vercelDeployUrl: zod
     .string()
     .nullish()
@@ -892,6 +922,12 @@ export const ForkAppResponse = zod.object({
     .string()
     .nullish()
     .describe("HTML URL of the repo this app was last pushed to."),
+  githubRepoFullName: zod
+    .string()
+    .nullish()
+    .describe(
+      "GitHub identifier in `owner\/repo` form. Persisted so subsequent\npushes update the same repo with a new commit on `main` instead\nof creating a new repo each time.\n",
+    ),
   vercelDeployUrl: zod
     .string()
     .nullish()
@@ -1010,7 +1046,11 @@ export const ClearAppRuntimeErrorsParams = zod.object({
 });
 
 /**
- * @summary Create a new GitHub repo and push the app source
+ * @summary Push the app source to GitHub. Idempotent: the FIRST push creates a
+new public repo under the connected account; subsequent pushes add
+a fresh commit on `main` to the same repo (replacing the file tree
+with the current snapshot, so deleted files are also removed).
+
  */
 export const PushAppToGitHubParams = zod.object({
   id: zod.coerce.number(),
@@ -1019,6 +1059,11 @@ export const PushAppToGitHubParams = zod.object({
 export const PushAppToGitHubResponse = zod.object({
   url: zod.string(),
   repoFullName: zod.string(),
+  updated: zod
+    .boolean()
+    .describe(
+      "true → the existing repo received a new commit on `main`.\nfalse → a brand-new repo was created (first push, or previous\nrepo was deleted on GitHub).\n",
+    ),
 });
 
 /**

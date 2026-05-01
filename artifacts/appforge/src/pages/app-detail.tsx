@@ -77,6 +77,7 @@ import {
   HeartPulse,
   Globe,
   Github,
+  RefreshCw,
   Rocket,
   ExternalLink,
   ImagePlus,
@@ -541,7 +542,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       onSuccess: (result) => {
         queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
         window.open(result.url, "_blank", "noopener,noreferrer");
-        toast({ title: "Subido a GitHub", description: result.repoFullName });
+        // Differentiate "first push" (created a fresh repo) from "update"
+        // (added a new commit to the existing repo) so the user sees what
+        // actually happened. Both cases open the repo in a new tab.
+        toast({
+          title: result.updated
+            ? "Repo actualizado en GitHub"
+            : "Repo creado en GitHub",
+          description: result.updated
+            ? `Nuevo commit en ${result.repoFullName}`
+            : result.repoFullName,
+        });
       },
       onError: (err: any) => {
         toast({ title: "No se pudo subir a GitHub", description: err?.message ?? "Error", variant: "destructive" });
@@ -848,17 +859,43 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </Button>
 
             {app.githubRepoUrl ? (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                title="Abrir el repositorio en GitHub"
-              >
-                <a href={app.githubRepoUrl} target="_blank" rel="noopener noreferrer">
-                  <Github className="h-4 w-4 mr-1.5" /> Repo
-                </a>
-              </Button>
+              // Two-state when there's already a repo: a passive link to
+              // open it on GitHub + an active "Actualizar" button that
+              // pushes the current snapshot as a new commit on `main`
+              // (server-side handles the `existingRepoFullName` plumbing).
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  title={
+                    app.githubRepoFullName
+                      ? `Abrir ${app.githubRepoFullName} en GitHub`
+                      : "Abrir el repositorio en GitHub"
+                  }
+                >
+                  <a href={app.githubRepoUrl} target="_blank" rel="noopener noreferrer">
+                    <Github className="h-4 w-4 mr-1.5" />
+                    {app.githubRepoFullName ?? "Repo"}
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => githubMutation.mutate({ id: app.id })}
+                  disabled={githubMutation.isPending}
+                  className="h-8 border-white/10 bg-white/5 hover:bg-white/10 text-white"
+                  title="Subir un nuevo commit con el código actual al mismo repo"
+                >
+                  {githubMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1.5" />
+                  )}
+                  Actualizar
+                </Button>
+              </>
             ) : (
               <Button
                 variant="outline"
