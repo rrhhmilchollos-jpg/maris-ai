@@ -104,6 +104,46 @@ export const TEMPLATES: AppTemplate[] = [
       "Un juego 3D infinito tipo runner usando three + @react-three/fiber + @react-three/drei. Vista en tercera persona desde detrás del personaje (un cubo de color), que avanza automáticamente por un pasillo plano que se extiende al infinito. Controles: flecha izquierda y derecha para cambiar entre 3 carriles. El suelo es un PlaneGeometry con un patrón a cuadros (textura procedural). Aparecen obstáculos (cubos rojos) en posiciones aleatorias en uno de los 3 carriles cada cierto tiempo: si el jugador colisiona, game over. También aparecen monedas (esferas amarillas que rotan) que al recogerse suman 10 puntos. La velocidad aumenta gradualmente con el tiempo. Iluminación con ambientLight + directionalLight. HUD HTML superpuesto con puntuación actual y mejor record (localStorage). Pantalla de menú con título 'Cosmic Runner', controles explicados y botón 'Empezar'. Pantalla de game over con puntuación final y 'Reintentar'. Paleta espacial: fondo azul oscuro con estrellas, personaje cian fluorescente.",
   },
   {
+    id: "kaplay-arcade",
+    name: "Arcade rápido (Kaplay)",
+    description:
+      "Juego arcade 2D con sintaxis declarativa de Kaplay. Ideal para shooters y juegos sencillos con física simple.",
+    kind: "game-2d",
+    icon: "Cat",
+    seedPrompt:
+      "Un juego arcade 2D usando la librería 'kaplay' (npm install kaplay) montado dentro de un componente React. Inicializa kaplay() en useEffect apuntando a un <canvas ref={...}/>; en cleanup llama a destroyAll() y k.quit(). Mecánica: una nave triangular en la parte inferior controlada con flechas izquierda/derecha y barra espaciadora para disparar láseres hacia arriba. Enemigos cuadrados rojos descienden desde arriba en oleadas; al recibir un láser explotan (suman 10 puntos), si tocan al jugador o llegan abajo, game over. Cada 100 puntos sube la velocidad y la frecuencia de oleadas. Usa add([rect/circle/pos/area/body/...]) para entidades, onKeyPress/onKeyDown para input, onUpdate para lógica, onCollide para colisiones. HUD con score y record. Pantalla de menú y de game over con scenes ('menu', 'game', 'gameover') y go(). Estética neón retro: fondo negro, jugador cian, enemigos magenta, láseres amarillos.",
+  },
+  {
+    id: "pixi-rain",
+    name: "Catch Game (PixiJS)",
+    description:
+      "Juego de atrapar objetos que caen con renderizado WebGL de PixiJS. Cientos de partículas a 60 FPS sin esfuerzo.",
+    kind: "game-2d",
+    icon: "Zap",
+    seedPrompt:
+      "Un juego 2D de atrapar objetos usando la librería 'pixi.js' v8 (npm install pixi.js) — usa APIs actuales de v8, NO la sintaxis legacy v7. Componente React: en useEffect crea `const app = new PIXI.Application()` y luego `await app.init({ resizeTo: window, background: 0x1a0033, antialias: true })`; cuando esté listo inyecta `app.canvas` (en v8 es .canvas, no .view) en un <div ref>. En cleanup llama a `app.destroy(true, { children: true, texture: true })`. Mecánica: una cesta (PIXI.Graphics con .rect().fill()) en la parte inferior controlada con mousemove y flechas izquierda/derecha. Desde arriba caen tres tipos de objetos generados aleatoriamente cada ~500ms: estrellas amarillas (+10), gemas azules (+25) y bombas grises (-1 vida, empiezas con 3). Usa `app.ticker.add((ticker) => ...)` (v8 pasa Ticker, no delta number) para mover los objetos hacia abajo y detectar colisiones AABB con la cesta. Para los muchos objetos cayendo usa contenedores PIXI.Container normales (en v8 ParticleContainer cambió de API). HUD HTML superpuesto con score, vidas restantes y mejor record (localStorage). Pantallas de menú y game over como overlays React condicionales. Paleta cálida: fondo púrpura oscuro, cesta marrón, partículas brillantes.",
+  },
+  {
+    id: "r3f-physics",
+    name: "Demo física 3D (R3F + Rapier)",
+    description:
+      "Escena 3D interactiva con física realista usando React Three Fiber, drei y Rapier. Apila cajas, derríbalas, gana puntos.",
+    kind: "game-3d",
+    icon: "Atom",
+    seedPrompt:
+      "Un mini juego 3D de física usando 'three' + '@react-three/fiber' + '@react-three/drei' + '@react-three/rapier'. Escena con un suelo (RigidBody type='fixed' con CuboidCollider), una torre de 8 cajas apiladas (cada una RigidBody dinámico con masa) y una cámara orbital (OrbitControls de drei). El usuario hace clic en cualquier punto del suelo: aparece una bola roja (RigidBody dinámico con esfera) que se lanza desde la posición de la cámara hacia el punto clicado con applyImpulse. Cada caja que cae fuera de un radio de 5m del centro suma 10 puntos (detecta con onCollisionEnter del suelo + posición y). Iluminación: ambientLight + directionalLight con sombras (castShadow), Environment de drei con preset='city'. HUD HTML superpuesto con puntuación actual, número de cajas restantes y botón 'Reset' que reinicia la escena. Pantalla de bienvenida con título 'Knock Down' e instrucciones, botón 'Empezar'. Paleta industrial: cajas de madera, suelo de cemento, bola roja brillante.",
+  },
+  {
+    id: "babylon-explorer",
+    name: "Mundo 3D (Babylon.js)",
+    description:
+      "Mundo 3D explorable en primera persona con Babylon.js. WASD para moverte, ratón para mirar, recoge cristales.",
+    kind: "game-3d",
+    icon: "Globe",
+    seedPrompt:
+      "Un mundo 3D explorable en primera persona usando la librería '@babylonjs/core' (npm install @babylonjs/core). Componente React que crea new BABYLON.Engine(canvas, true) y new BABYLON.Scene en useEffect; en cleanup llama a engine.dispose(). Cámara FreeCamera con controles WASD (camera.attachControl(canvas, true)) y ratón para mirar (PointerLock). Escena: un terreno plano (Ground) de 100x100 con textura procedural, 5 árboles (cilindro marrón + esfera verde), 10 cristales flotantes (PolyhedronBuilder de tipo octaedro) en posiciones aleatorias que rotan continuamente con scene.onBeforeRenderObservable. Cuando el jugador se acerca a menos de 2m de un cristal, este desaparece (mesh.dispose()) y suma 50 puntos. Iluminación: HemisphericLight + DirectionalLight con shadowGenerator. Skybox con createDefaultSkybox. HUD HTML superpuesto con cristales recogidos, total restantes y mensaje '¡Has explorado todo!' al recoger los 10. Botón inicial 'Click para empezar' que activa pointerLock. Paleta natural: cielo azul, terreno verde, cristales púrpura brillante.",
+  },
+  {
     id: "notas-pwa",
     name: "App de notas (PWA)",
     description:
