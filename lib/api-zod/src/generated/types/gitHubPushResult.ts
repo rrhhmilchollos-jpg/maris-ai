@@ -9,4 +9,9 @@
 export interface GitHubPushResult {
   url: string;
   repoFullName: string;
+  /** true → the existing repo received a new commit on `main`.
+false → a brand-new repo was created (first push, or previous
+repo was deleted on GitHub).
+ */
+  updated: boolean;
 }

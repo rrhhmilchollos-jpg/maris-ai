@@ -2649,7 +2649,11 @@ export const useClearAppRuntimeErrors = <
 };
 
 /**
- * @summary Create a new GitHub repo and push the app source
+ * @summary Push the app source to GitHub. Idempotent: the FIRST push creates a
+new public repo under the connected account; subsequent pushes add
+a fresh commit on `main` to the same repo (replacing the file tree
+with the current snapshot, so deleted files are also removed).
+
  */
 export const getPushAppToGitHubUrl = (id: number) => {
   return `/api/apps/${id}/github`;
@@ -2710,7 +2714,11 @@ export type PushAppToGitHubMutationResult = NonNullable<
 export type PushAppToGitHubMutationError = ErrorType<ApiError>;
 
 /**
- * @summary Create a new GitHub repo and push the app source
+ * @summary Push the app source to GitHub. Idempotent: the FIRST push creates a
+new public repo under the connected account; subsequent pushes add
+a fresh commit on `main` to the same repo (replacing the file tree
+with the current snapshot, so deleted files are also removed).
+
  */
 export const usePushAppToGitHub = <
   TError = ErrorType<ApiError>,

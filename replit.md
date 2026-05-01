@@ -218,3 +218,60 @@ Fix en `app-detail.tsx`:
   la pestaña Live (que usa el host nativo, sin depender de CodeSandbox).
 - `SandpackLayout` ahora tiene `position: relative` para que el overlay
   se posicione correctamente sobre el iframe.
+
+## 2026-05-01 — GitHub y Vercel: subir TODO el repo en cada update
+
+Síntoma: cada vez que el usuario pulsaba "GitHub" se creaba un repo
+NUEVO con sufijo aleatorio (`maris-app-3xK7w`) en vez de actualizar el
+existente, y el "Deploy a Vercel" sólo subía un único `index.html`
+inlined sin el código fuente real.
+
+Causas:
+- `pushAppToGitHub` siempre llamaba a `createFreshRepo` con un sufijo
+  random; nunca consultaba si la app ya tenía un repo asociado.
+- `deployAppToVercel` usaba `buildDeployHtml` (un único HTML autocontenido
+  para previews públicas) en vez del bundle Vite real.
+- No había columna en `generated_apps` para recordar el repo.
+
+Fix:
+- Nueva columna `github_repo_full_name` (text, nullable) en
+  `lib/db/src/schema/generatedApps.ts` + `db push`.
+- `lib/githubPush.ts` reescrito:
+  - `repoNameFromTitle` produce un slug estable sin sufijo random.
+  - `pushAppToGitHub` ahora acepta `existingRepoFullName`. Si existe,
+    hace `GET /repos/{full_name}` → si responde 200 reutiliza y commitea
+    SIN `base_tree` (snapshot limpio: los archivos borrados desaparecen).
+    Si responde 404 (repo borrado en GitHub) recrea con el mismo slug.
+    Si nunca hubo repo, `createFreshRepo` resuelve colisiones con
+    sufijos `-2`..`-10`.
+  - Devuelve `{url, repoFullName, updated}`.
+- `lib/vercelDeploy.ts` reescrito:
+  - Importa `bundleToFiles` (en vez de `buildDeployHtml`) para subir
+    el bundle Vite completo.
+  - Nueva `prepareViteProjectForVercel(files)`: normaliza paths,
+    descarta `node_modules/`, `dist/`, tests, etc., e inyecta
+    `package.json`, `vite.config.ts` o `index.html` mínimos si faltan.
+  - El POST a `/v9/projects` declara `framework: "vite"` y
+    `projectSettings` con `installCommand`, `buildCommand` y
+    `outputDirectory: "dist"` para que Vercel haga el build real.
+- Endpoint `POST /apps/:id/github` pasa `existingRepoFullName: row.githubRepoFullName`
+  y persiste el `repoFullName` que devuelve el helper junto al
+  `githubRepoUrl`.
+- `serializeApp` expone `githubRepoFullName`; añadido al schema App
+  en `openapi.yaml` y al response `GitHubPushResult` (`updated: bool`).
+- UI en `app-detail.tsx`: cuando ya hay repo se muestran DOS botones
+  lado a lado — el link "owner/repo" abre GitHub y "Actualizar"
+  dispara `usePushAppToGitHub`. El toast distingue
+  "Repo creado" vs "Repo actualizado".
+
+### Fixes post code-review (mismo día)
+- `pushAppToGitHub`: el campo `updated` ahora refleja la realidad
+  (`reusedExisting`, calculado tras la resolución del repo). Antes
+  devolvía `true` cuando el usuario había borrado el repo en GitHub y
+  acabamos creando uno nuevo, mintiendo a la UI.
+- Race en el fast-forward final del PATCH `/git/refs/heads/{branch}`:
+  añadido un loop con hasta 4 reintentos que detecta el 422 "not a fast
+  forward", re-lee HEAD, re-crea el commit con el nuevo padre y vuelve
+  a hacer PATCH. Nunca usa `force: true`, así que jamás sobrescribe
+  commits manuales del usuario; si tras 5 intentos sigue fallando
+  propaga el error y la UI muestra el toast destructivo.

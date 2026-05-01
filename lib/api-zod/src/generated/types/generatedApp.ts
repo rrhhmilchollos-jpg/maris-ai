@@ -24,6 +24,11 @@ export interface GeneratedApp {
   publicSlug?: string | null;
   /** HTML URL of the repo this app was last pushed to. */
   githubRepoUrl?: string | null;
+  /** GitHub identifier in `owner/repo` form. Persisted so subsequent
+pushes update the same repo with a new commit on `main` instead
+of creating a new repo each time.
+ */
+  githubRepoFullName?: string | null;
   /** Last public URL Vercel returned for this app, or null if never deployed there. */
   vercelDeployUrl?: string | null;
   /** Vercel project id this app is wired to (null until first deploy). */

@@ -1,8 +1,18 @@
 /**
  * Vercel deployment integration. Pushes a generated app to Vercel as a
- * single-file static deployment (one self-contained `index.html` produced
- * by `buildDeployHtml`) so the user gets a real public URL on Vercel's
- * edge network — independent from our own `/p/<slug>` proxy.
+ * REAL Vite project (the full source tree from the app's frontend bundle
+ * uploaded as individual files), so Vercel runs `vite build` server-side
+ * on every deploy. The result is the same `dist/` you'd get locally —
+ * with code-splitting, tree-shaking and proper asset hashing — instead
+ * of a single inlined HTML file.
+ *
+ * Why not the previous "single index.html" path? Because it was just a
+ * snapshot of one in-browser bundle (Sandpack/esbuild) inlined into one
+ * file. That worked for tiny demos but skipped the user-visible benefits
+ * of a real Vercel project: per-route source maps, edge caching of
+ * individual assets, real analytics. The Maris AI bundle already obeys
+ * the Vite project layout (package.json, vite.config.*, src/*, public/*),
+ * so we can ship it verbatim.
  *
  * Auth: VERCEL_TOKEN secret (personal access token, scope "Full Account").
  * Sent as `Authorization: Bearer <token>` on every request.
@@ -14,15 +24,17 @@
  * production URL) instead of cluttering the user's dashboard with one
  * project per click.
  *
- * Files: a single `index.html` payload — Vercel's API expects each file
- * uploaded with `{ file: "index.html", data: "<...>" }`.
+ * Files: each entry in the bundle uploaded as `{ file: "<path>", data: "<contents>" }`.
+ * Binary files would need base64 + `encoding: "base64"` but the Maris AI
+ * bundle is text-only (.tsx/.ts/.css/.json/.html/.md), so plain UTF-8 strings
+ * are fine.
  */
 
 import type { Logger } from "pino";
 import { and, eq } from "drizzle-orm";
 import { generatedApps } from "@workspace/db/schema";
 import { db } from "./db";
-import { buildDeployHtml } from "./deployBundle";
+import { bundleToFiles } from "./exportZip";
 
 const VERCEL_API = "https://api.vercel.com";
 
@@ -67,20 +79,22 @@ export async function deployAppToVercel(opts: {
     return { ok: false, failure: { kind: "app_not_found" } };
   }
 
-  // 2. Build the same self-contained HTML our /p/<slug> route serves. If
-  //    the bundle is broken we surface the real esbuild message so the
-  //    user can fix it from the chat instead of a generic "build failed".
-  let html: string;
-  try {
-    html = await buildDeployHtml({
-      bundle: row.frontendCode,
-      title: row.title,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "error desconocido";
-    log.warn({ err, appId }, "Vercel deploy: buildDeployHtml failed");
-    return { ok: false, failure: { kind: "build_failed", message } };
+  // 2. Materialise the full Vite project tree from the bundle. Each entry
+  //    becomes one file uploaded to Vercel. We refuse empty bundles so the
+  //    UI shows "build failed" instead of silently deploying nothing (which
+  //    would leave a broken white page on the user's vercel.app URL).
+  const bundleFiles = bundleToFiles(row.frontendCode);
+  if (Object.keys(bundleFiles).length === 0) {
+    return {
+      ok: false,
+      failure: {
+        kind: "build_failed",
+        message:
+          "El bundle del frontend está vacío — el generador no produjo archivos.",
+      },
+    };
   }
+  const deployFiles = prepareViteProjectForVercel(bundleFiles);
 
   // 3. Resolve (or create) the Vercel project for this app. Project name
   //    must be lowercase, kebab-case, and stable across deploys so the
@@ -94,7 +108,10 @@ export async function deployAppToVercel(opts: {
       token,
       method: "POST",
       path: "/v9/projects",
-      body: { name: projectName, framework: null },
+      // framework: "vite" → Vercel sets installCommand=`npm install`,
+      // buildCommand=`vite build`, outputDirectory=`dist`. Saves us from
+      // hard-coding those in projectSettings on every deploy.
+      body: { name: projectName, framework: "vite" },
       log,
     });
     if (!created.ok) return { ok: false, failure: created.failure };
@@ -108,7 +125,9 @@ export async function deployAppToVercel(opts: {
       .where(eq(generatedApps.id, appId));
   }
 
-  // 4. Create a production deployment with the single index.html file.
+  // 4. Create a production deployment with the FULL project tree. Vercel
+  //    runs `npm install` + `vite build` on its build infrastructure and
+  //    serves the `dist/` output at the project's main URL.
   //    `target: "production"` makes Vercel point the project's main URL
   //    (e.g. <project>.vercel.app) at this build instead of giving us a
   //    one-off preview URL.
@@ -124,8 +143,13 @@ export async function deployAppToVercel(opts: {
       name: projectName,
       project: projectId,
       target: "production",
-      files: [{ file: "index.html", data: html }],
-      projectSettings: { framework: null },
+      files: Object.entries(deployFiles).map(([file, data]) => ({ file, data })),
+      projectSettings: {
+        framework: "vite",
+        installCommand: "npm install",
+        buildCommand: "vite build",
+        outputDirectory: "dist",
+      },
     },
     log,
   });
@@ -402,4 +426,91 @@ function sanitiseProjectName(raw: string): string {
   const trimmed = stripped.slice(0, 100) || "maris-app";
   // Vercel rejects names starting with a hyphen.
   return trimmed.replace(/^-+/, "");
+}
+
+/**
+ * Normalise a generated Vite bundle into the file shape Vercel expects:
+ *   - paths must NOT start with "/" or "./"
+ *   - we drop tests/, e2e/, __tests__/, and editor noise (.replit, .DS_Store)
+ *   - we ensure a `package.json`, `vite.config.*` and an `index.html` exist;
+ *     if any are missing we inject a minimal one so `vite build` succeeds.
+ *
+ * The Maris AI generator already follows this layout, but a future change in
+ * the prompt could regress and we'd rather inject a tiny default than push a
+ * broken project to the user's Vercel dashboard.
+ */
+function prepareViteProjectForVercel(
+  files: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [rawPath, contents] of Object.entries(files)) {
+    let p = rawPath;
+    if (p.startsWith("./")) p = p.slice(2);
+    if (p.startsWith("/")) p = p.slice(1);
+    if (!p) continue;
+    if (p.includes("..")) continue;
+    // Skip dirs that don't belong in a published bundle and would just slow
+    // down `npm install` or trip the build.
+    if (
+      p.startsWith("node_modules/") ||
+      p.startsWith("dist/") ||
+      p.startsWith("build/") ||
+      p.startsWith(".vercel/") ||
+      p.startsWith("tests/") ||
+      p.startsWith("e2e/") ||
+      p.startsWith("__tests__/") ||
+      p === ".replit" ||
+      p === ".DS_Store"
+    ) {
+      continue;
+    }
+    out[p] = contents;
+  }
+
+  if (!out["package.json"]) {
+    out["package.json"] = JSON.stringify(
+      {
+        name: "maris-app",
+        private: true,
+        version: "0.0.0",
+        type: "module",
+        scripts: {
+          dev: "vite",
+          build: "vite build",
+          preview: "vite preview",
+        },
+        dependencies: {
+          react: "^19.0.0",
+          "react-dom": "^19.0.0",
+        },
+        devDependencies: {
+          "@vitejs/plugin-react": "^4.3.4",
+          vite: "^6.0.0",
+          typescript: "^5.6.0",
+        },
+      },
+      null,
+      2,
+    ) + "\n";
+  }
+  if (!out["vite.config.ts"] && !out["vite.config.js"]) {
+    out["vite.config.ts"] =
+      `import { defineConfig } from "vite";\n` +
+      `import react from "@vitejs/plugin-react";\n\n` +
+      `export default defineConfig({\n` +
+      `  plugins: [react()],\n` +
+      `});\n`;
+  }
+  if (!out["index.html"]) {
+    out["index.html"] =
+      `<!doctype html>\n<html lang="es">\n  <head>\n` +
+      `    <meta charset="UTF-8" />\n` +
+      `    <meta name="viewport" content="width=device-width, initial-scale=1" />\n` +
+      `    <title>Maris AI</title>\n` +
+      `  </head>\n  <body>\n    <div id="root"></div>\n` +
+      `    <script type="module" src="/src/main.tsx"></script>\n` +
+      `  </body>\n</html>\n`;
+  }
+
+  return out;
 }
