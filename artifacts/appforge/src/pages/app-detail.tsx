@@ -44,6 +44,7 @@ import {
   SandpackProvider,
   SandpackPreview,
   SandpackLayout,
+  useSandpack,
 } from "@codesandbox/sandpack-react";
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
@@ -1371,6 +1372,23 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                           options={{
                             recompileMode: "delayed",
                             recompileDelay: 500,
+                            // El default de la librería son 40 s. En redes
+                            // lentas o cuando el bundler de CodeSandbox
+                            // tiene latencia alta el iframe reporta
+                            // "ERROR: TIME_OUT" antes de poder instalar
+                            // las deps + bootstrappear React. Subimos a
+                            // 2 minutos: el coste real es sólo el tiempo
+                            // que el usuario espera ANTES de que aparezca
+                            // el botón de reintentar; si el bundler
+                            // responde en 30 s el preview sigue
+                            // apareciendo igual de rápido.
+                            bundlerTimeOut: 120_000,
+                            // No arrancar el bundler hasta que el panel
+                            // de preview sea realmente visible. Si el
+                            // usuario está editando código sin abrir el
+                            // preview no tiene sentido pagar el coste
+                            // del install.
+                            initMode: "user-visible",
                           }}
                           theme="light"
                           style={{
@@ -1390,6 +1408,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                               minHeight: 0,
                               border: "none",
                               borderRadius: 0,
+                              position: "relative",
                             }}
                           >
                             <SandpackPreview
@@ -1402,6 +1421,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                                 minWidth: 0,
                                 minHeight: 0,
                               }}
+                            />
+                            <SandpackTimeoutOverlay
+                              onSwitchToLive={() => setActiveTab("live")}
                             />
                           </SandpackLayout>
                         </SandpackProvider>
@@ -1980,5 +2002,65 @@ function RevisionHistorySection({ appId }: { appId: number }) {
         await restoreMutation.mutateAsync({ id: appId, revisionId });
       }}
     />
+  );
+}
+
+/**
+ * Overlay que se monta dentro de <SandpackProvider> y escucha el `status`
+ * del bundler. Cuando Sandpack se queda sin tiempo conectando con el
+ * runtime de CodeSandbox (status === "timeout"), tapamos el iframe
+ * corrupto con un mensaje accionable: explicar QUÉ ha pasado, ofrecer un
+ * botón para reintentar y sugerir cambiar a la pestaña "Live" (que usa
+ * el host nativo en vez del bundler in-browser y por tanto no depende
+ * de la red de CodeSandbox). El comportamiento por defecto de la
+ * librería es mostrar el cartel inglés "Couldn't connect to server.
+ * ENV: create-react-app, ERROR: TIME_OUT" sin botón de recuperación, lo
+ * que dejaba al usuario atrapado.
+ */
+function SandpackTimeoutOverlay({
+  onSwitchToLive,
+}: {
+  onSwitchToLive?: () => void;
+}) {
+  const { sandpack } = useSandpack();
+  if (sandpack.status !== "timeout") return null;
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/95 backdrop-blur-sm p-6">
+      <div className="max-w-md text-center space-y-3">
+        <div className="text-base font-semibold text-gray-900">
+          La preview rápida ha tardado demasiado en arrancar
+        </div>
+        <p className="text-sm text-gray-600 leading-relaxed">
+          Esta vista usa el bundler en navegador de CodeSandbox para mostrarte
+          la app sin instalar nada. A veces su servidor está saturado o tu red
+          es lenta y se queda sin tiempo. No es un problema de tu app: el
+          código sigue intacto.
+        </p>
+        <div className="flex flex-col gap-2 pt-2">
+          <Button
+            type="button"
+            onClick={() => sandpack.runSandpack()}
+            className="w-full"
+          >
+            Reintentar
+          </Button>
+          {onSwitchToLive ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onSwitchToLive}
+              className="w-full"
+            >
+              Usar preview "Live" (más estable)
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-gray-500 pt-1">
+          La pestaña Live tarda más en arrancar la primera vez (instala
+          dependencias en el contenedor) pero no depende de servidores
+          externos.
+        </p>
+      </div>
+    </div>
   );
 }
