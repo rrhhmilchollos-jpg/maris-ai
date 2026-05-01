@@ -7,7 +7,7 @@
  */
 
 /**
- * Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing/vue/svelte 1, mobile/nextjs 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.
+ * Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing/vue/svelte 1, mobile/nextjs/python-api/django 2, hybrid-pwa 3, game-2d 3, game-3d 5). Python kinds (python-api/django) generate Python source code instead of JS — no in-browser preview, exporta a ZIP/GitHub o despliega a Vercel. Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.
  */
 export type GenerateAppRequestKind =
   | (typeof GenerateAppRequestKind)[keyof typeof GenerateAppRequestKind]
@@ -23,4 +23,6 @@ export const GenerateAppRequestKind = {
   vue: "vue",
   svelte: "svelte",
   nextjs: "nextjs",
+  "python-api": "python-api",
+  django: "django",
 } as const;

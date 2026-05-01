@@ -15,6 +15,12 @@ export const generationJobs = pgTable("generation_jobs", {
   editAppId: integer("edit_app_id"),
   coderModel: text("coder_model").default("auto").notNull(),
   language: text("language").default("typescript").notNull(),
+  // Project kind preset chosen at enqueue time. Persisted on the job so the
+  // worker can re-read it after a crash without needing the original HTTP
+  // request, and so the resulting generatedApps row can be tagged with it.
+  // Defaults to "fullstack" for back-compat with rows enqueued before this
+  // column existed.
+  kind: text("kind").default("fullstack").notNull(),
   attachmentIds: jsonb("attachment_ids").$type<number[]>().default([]).notNull(),
   isAdmin: boolean("is_admin").default(false).notNull(),
   // Tracking for the queue/worker:

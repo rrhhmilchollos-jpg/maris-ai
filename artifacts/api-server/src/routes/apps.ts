@@ -265,7 +265,9 @@ type ProjectKind =
   | "hybrid-pwa"
   | "vue"
   | "svelte"
-  | "nextjs";
+  | "nextjs"
+  | "python-api"
+  | "django";
 const KIND_COSTS: Record<ProjectKind, number> = {
   fullstack: 1,
   mobile: 2,
@@ -276,7 +278,19 @@ const KIND_COSTS: Record<ProjectKind, number> = {
   vue: 1,
   svelte: 1,
   nextjs: 2,
+  "python-api": 2,
+  django: 2,
 };
+/**
+ * Kinds whose primary deliverable is NOT JavaScript and therefore cannot run
+ * inside our in-browser esbuild preview. The dashboard's "abrir publicada" /
+ * preview iframe shows a static landing card instead, and the canonical way
+ * to run them is Export ZIP / GitHub / Vercel deploy.
+ */
+const NON_JS_KINDS = new Set<ProjectKind>(["python-api", "django"]);
+export function isNonJsKind(kind: string | null | undefined): boolean {
+  return typeof kind === "string" && NON_JS_KINDS.has(kind as ProjectKind);
+}
 const KIND_INTENTS: Record<ProjectKind, string | null> = {
   fullstack: null,
   mobile:
@@ -295,6 +309,10 @@ const KIND_INTENTS: Record<ProjectKind, string | null> = {
     "[INTENT: SvelteKit app — aplicación con SvelteKit (Svelte 5 runes: $state, $derived, $effect — NO usar la sintaxis legacy reactive `$:`), TypeScript, file-based routing en src/routes/, +page.svelte para páginas, +layout.svelte para layouts compartidos, load() functions en +page.ts para data fetching. Tailwind para estilos. backendNeeded por defecto false; cuando se necesite API usa +server.ts endpoints en lugar de un Express separado]",
   nextjs:
     "[INTENT: Next.js 14+ App Router — aplicación full-stack con Next.js usando App Router (NO Pages Router): app/layout.tsx raíz, app/page.tsx home, app/<segment>/page.tsx para rutas, Server Components por defecto, \"use client\" SOLO cuando se necesite interactividad/hooks. API routes en app/api/<route>/route.ts (GET/POST/etc exportados). Tailwind para estilos, TypeScript estricto. Para data fetching prefiere Server Components con fetch() async; React Query solo en client components. backendNeeded=true porque Next ES el backend — no hace falta Express separado]",
+  "python-api":
+    "[INTENT: Python FastAPI backend — API REST en Python 3.11+ usando FastAPI (paquete 'fastapi') con uvicorn como servidor ASGI ('uvicorn[standard]'). Estructura: archivo principal `main.py` con `app = FastAPI(title=..., version=...)`, modelos pydantic v2 en el mismo archivo o en `models.py`, rutas con `@app.get/post/put/delete` y type hints estrictos en TODOS los parámetros para que FastAPI genere OpenAPI automáticamente. Validación de entrada con BaseModel pydantic. Persistencia: SQLite con SQLAlchemy 2.0 (paquete 'sqlalchemy') usando una sola base de datos 'app.db' relativa al working dir, declarative_base + Session, crea las tablas con `Base.metadata.create_all(engine)` al arranque. Responde con códigos HTTP correctos (200/201/204/400/404/422). Habilita CORS con CORSMiddleware permitiendo todos los orígenes para que el frontend genérico pueda probar. Incluye `/health` que devuelve {\"status\":\"ok\"} y rutas CRUD completas para el recurso principal. Genera SIEMPRE: requirements.txt con versiones fijadas (fastapi==0.115.x, uvicorn[standard]==0.32.x, sqlalchemy==2.0.x, pydantic==2.9.x), un README.md con `pip install -r requirements.txt` + `uvicorn main:app --reload --port 8000`, y un archivo `.env.example` si la app usa variables. NO generes frontend HTML/JS — el resultado es una API pura (los clientes consumirán los endpoints). backendNeeded debe tratarse como N/A: el bundle FRONTEND debe contener los archivos Python en su raíz; el backend bundle queda vacío. Usa el marcador `// === FILE: nombre.py` igual que para JS, el contenido va literalmente en Python tal cual]",
+  django:
+    "[INTENT: Python Django web app — aplicación web full-stack en Python 3.11+ con Django 5.x. Estructura mínima de un solo archivo configurada (Django funciona también con un único `app.py` si se hace `settings.configure()` antes de definir URLs/views/models — usa esa modalidad para mantener el bundle compacto en una app pequeña, pero si la funcionalidad es no trivial usa el layout estándar: `manage.py`, paquete del proyecto con `settings.py`, `urls.py`, `wsgi.py`, `asgi.py`, y al menos una app con `models.py`, `views.py`, `urls.py`, `admin.py` y carpeta `templates/`). Plantillas Django (Jinja-like, `{% %}` y `{{ }}`) en `templates/` con un `base.html` y herencia. CSS sencillo embebido en base.html (no React/Vite — esto es server-rendered). Modelos con `models.Model`, vistas con función o CBV, formularios con `forms.ModelForm` cuando aplique. Persistencia con SQLite por defecto (DATABASES default sqlite3 'db.sqlite3'). Incluye admin de Django si tiene sentido (registra modelos en `admin.py`). Genera SIEMPRE: requirements.txt fijado (django==5.1.x), README.md con `pip install -r requirements.txt`, `python manage.py migrate`, `python manage.py runserver 0.0.0.0:8000`, instrucciones para crear superuser. NO uses React ni Vite ni Tailwind del CDN — esto es un proyecto Python puro. El bundle FRONTEND debe contener los archivos Python+templates en su raíz; backend bundle vacío. SECRET_KEY puede ser un placeholder claro tipo 'change-me-in-production' con comentario de cambiarlo]",
 };
 const ALLOWED_KINDS = new Set<ProjectKind>(Object.keys(KIND_COSTS) as ProjectKind[]);
 
@@ -350,8 +368,13 @@ export async function runDeployForApp(opts: {
     throw new Error("App not found");
   }
   // Sanity-build once now to surface bundle errors immediately rather than at
-  // first visit. We discard the output; /p/:slug will rebuild on demand.
-  await buildDeployHtml({ bundle: row.frontendCode, title: row.title });
+  // first visit. We discard the output; /p/:slug will rebuild on demand. For
+  // non-JS kinds (Python) the build is a no-op landing page generator.
+  await buildDeployHtml({
+    bundle: row.frontendCode,
+    title: row.title,
+    kind: row.kind,
+  });
   const slug = await ensurePublicSlug(appId, userId, log, row.publicSlug);
   if (!slug) {
     throw new Error("Could not assign public slug");
@@ -488,6 +511,7 @@ async function runJob(
   language: GenLanguage,
   attachmentIds: number[] = [],
   attemptCtx: RunAttemptContext = { attempt: 1, maxAttempts: 1 },
+  kind: ProjectKind = "fullstack",
 ) {
   try {
     await db
@@ -731,6 +755,10 @@ async function runJob(
             // Same idea for the source language — locked at creation, all
             // edits reuse the same JS/TS choice.
             language,
+            // Persist the kind preset too — needed by the public preview
+            // (non-JS landing card) and by Vercel deploy (Python runtime
+            // selection) without re-deriving from prompt text.
+            kind,
             // Architect's planned page list — fed to the autonomous evaluator
             // so vision can verify "the app actually has these screens".
             plannedPages: payload.plannedPages,
@@ -1280,6 +1308,7 @@ export async function runJobById(
     job.language as GenLanguage,
     Array.isArray(job.attachmentIds) ? job.attachmentIds : [],
     attemptCtx,
+    (job.kind as ProjectKind) ?? "fullstack",
   );
 }
 
@@ -1472,6 +1501,7 @@ async function enqueueGeneration(
           editAppId: editAppId ?? null,
           coderModel,
           language,
+          kind,
           attachmentIds: extras?.attachmentIds ?? [],
           isAdmin,
         })
@@ -1557,6 +1587,8 @@ async function enqueueGeneration(
         coderModel,
         language,
         attachmentIdsForJob,
+        { attempt: 1, maxAttempts: 1 },
+        kind,
       ).catch((runErr) => {
         logger.error({ err: runErr, jobId: job.id }, "runJob threw unexpectedly");
       });
@@ -2156,7 +2188,11 @@ router.post(
 
     // Sanity-build so puppeteer doesn't screenshot a server-error page.
     try {
-      await buildDeployHtml({ bundle: row.frontendCode, title: row.title });
+      await buildDeployHtml({
+        bundle: row.frontendCode,
+        title: row.title,
+        kind: row.kind,
+      });
     } catch (err) {
       req.log.warn({ err, appId: id }, "Visual test pre-build failed");
       res.status(400).json({

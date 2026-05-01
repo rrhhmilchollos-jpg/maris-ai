@@ -26,7 +26,21 @@ export async function buildDeployHtml(opts: {
    * pipelines that build a throwaway HTML), the reporter is a no-op.
    */
   slug?: string;
+  /**
+   * Project kind. Non-JS kinds (python-api, django) cannot be bundled with
+   * esbuild — we serve a static informational landing card instead, with
+   * instructions for running the project locally and the canonical export
+   * paths (ZIP / GitHub / Vercel).
+   */
+  kind?: string | null;
 }): Promise<string> {
+  if (isNonJsKindLocal(opts.kind)) {
+    return buildNonJsLandingHtml({
+      bundle: opts.bundle,
+      title: opts.title,
+      kind: opts.kind ?? "",
+    });
+  }
   const vfs = bundleToFiles(opts.bundle);
   const entry = pickEntry(vfs);
   if (!entry) {
@@ -608,3 +622,95 @@ export function makeSlug(): string {
 
 /** Matches the format produced by makeSlug — used to reject malformed input. */
 export const SLUG_PATTERN = /^[a-z0-9]{10}$/;
+
+/**
+ * Local copy of the NON_JS_KINDS check from routes/apps.ts so this lib stays
+ * import-free of the route file (which itself imports from here — would
+ * create a cycle).
+ */
+function isNonJsKindLocal(kind: string | null | undefined): boolean {
+  return kind === "python-api" || kind === "django";
+}
+
+/**
+ * Build a static landing card for non-JS kinds (Python). Lists the files in
+ * the bundle and tells the user how to run the project locally + how to ship
+ * it via ZIP / GitHub / Vercel. No esbuild involved.
+ */
+function buildNonJsLandingHtml(opts: {
+  bundle: string;
+  title: string;
+  kind: string;
+}): string {
+  const files = bundleToFiles(opts.bundle);
+  const fileNames = Object.keys(files).sort();
+  const safeTitle = (opts.title || "Maris AI App").replace(/[<&>]/g, "");
+  const stackLabel =
+    opts.kind === "django" ? "Django 5 (Python)" : "FastAPI (Python)";
+  const runCmd =
+    opts.kind === "django"
+      ? "python manage.py migrate &amp;&amp; python manage.py runserver 0.0.0.0:8000"
+      : "uvicorn main:app --reload --port 8000";
+  const fileListHtml = fileNames.length
+    ? `<ul>${fileNames
+        .map(
+          (n) =>
+            `<li><code>${n.replace(/[<&>]/g, (c) =>
+              c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;",
+            )}</code></li>`,
+        )
+        .join("")}</ul>`
+    : `<p><em>El bundle está vacío.</em></p>`;
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${safeTitle}</title>
+  <style>
+    :root { color-scheme: dark; }
+    html,body { margin:0; min-height:100vh; background:#0b1020; color:#e5e7eb; font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+    .badge { display:inline-block; padding:4px 10px; border-radius:9999px; background:#1f2937; color:#a78bfa; font-size:12px; letter-spacing:.04em; text-transform:uppercase; }
+    h1 { font-size: 32px; margin: 16px 0 8px; }
+    .lede { color:#9ca3af; line-height:1.5; }
+    .card { background:#111827; border:1px solid #1f2937; border-radius:12px; padding:20px 24px; margin-top:24px; }
+    .card h2 { margin: 0 0 12px; font-size:18px; }
+    code { background:#0b1020; padding:2px 6px; border-radius:4px; font-size: 13px; }
+    pre { background:#0b1020; padding:12px 16px; border-radius:8px; overflow:auto; font-size: 13px; line-height:1.5; }
+    ul { padding-left: 20px; }
+    li { margin: 4px 0; }
+    .grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-top: 16px; }
+    .step { background:#0f172a; border:1px solid #1f2937; border-radius:8px; padding:12px 14px; }
+    .step b { color:#a78bfa; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="badge">${stackLabel}</span>
+    <h1>${safeTitle}</h1>
+    <p class="lede">Esta app está escrita en Python — no se puede previsualizar dentro del navegador como una app de React. Aquí tienes cómo correrla en local o desplegarla.</p>
+
+    <div class="card">
+      <h2>Correr en tu máquina</h2>
+      <pre>pip install -r requirements.txt
+${runCmd}</pre>
+    </div>
+
+    <div class="card">
+      <h2>Cómo desplegarla</h2>
+      <div class="grid">
+        <div class="step"><b>1. ZIP</b><br/>Descarga el código como ZIP desde el botón "Exportar" del panel.</div>
+        <div class="step"><b>2. GitHub</b><br/>Sube a un repo con un clic; cada actualización en Maris hace push automático.</div>
+        <div class="step"><b>3. Vercel</b><br/>Pulsa "Desplegar a Vercel" y Maris configura runtime Python automáticamente.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Archivos generados (${fileNames.length})</h2>
+      ${fileListHtml}
+    </div>
+  </div>
+</body>
+</html>`;
+}

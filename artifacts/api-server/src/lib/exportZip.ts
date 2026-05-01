@@ -50,6 +50,13 @@ export function streamAppZip(
     description: string;
     frontendBundle: string;
     backendBundle: string;
+    /**
+     * Project kind. Controls archive layout and README contents:
+     *  - "python-api" / "django": flat layout (no frontend/ split), Python
+     *    README with venv + uvicorn / runserver instructions.
+     *  - anything else: legacy frontend/ + backend/ split, Vite README.
+     */
+    kind?: string;
     onError?: (err: Error) => void;
   },
 ): void {
@@ -67,12 +74,16 @@ export function streamAppZip(
 
   archive.pipe(res);
 
+  const isPython = opts.kind === "python-api" || opts.kind === "django";
   const frontendFiles = bundleToFiles(opts.frontendBundle);
   for (const [p, contents] of Object.entries(frontendFiles)) {
-    archive.append(contents, { name: `frontend/${p}` });
+    // Python projects ship a single tree at the repo root — burying main.py
+    // inside `frontend/` would be confusing and breaks `python main.py`.
+    archive.append(contents, { name: isPython ? p : `frontend/${p}` });
   }
 
   const hasBackend =
+    !isPython &&
     opts.backendBundle &&
     !/^no backend required/i.test(opts.backendBundle.trim());
   if (hasBackend) {
@@ -87,18 +98,46 @@ export function streamAppZip(
     }
   }
 
-  const readme = `# ${opts.title}\n\n${opts.description}\n\n` +
-    `Generado con Maris AI.\n\n` +
-    `## Estructura\n\n` +
-    `- \`frontend/\` — proyecto React + Vite + Tailwind. ` +
-    `Entra y ejecuta \`pnpm install\` y \`pnpm dev\`.\n` +
-    (hasBackend
-      ? `- \`backend/\` — servidor Node + Express. ` +
-        `Entra y ejecuta \`pnpm install\` y \`pnpm dev\`.\n`
-      : "") +
-    `\n## Notas\n\nEsta carpeta contiene el código tal y como lo generó la IA. ` +
-    `Revisa los archivos antes de correrlos en producción.\n`;
+  const readme = isPython
+    ? buildPythonReadme(opts.title, opts.description, opts.kind!)
+    : `# ${opts.title}\n\n${opts.description}\n\n` +
+      `Generado con Maris AI.\n\n` +
+      `## Estructura\n\n` +
+      `- \`frontend/\` — proyecto React + Vite + Tailwind. ` +
+      `Entra y ejecuta \`pnpm install\` y \`pnpm dev\`.\n` +
+      (hasBackend
+        ? `- \`backend/\` — servidor Node + Express. ` +
+          `Entra y ejecuta \`pnpm install\` y \`pnpm dev\`.\n`
+        : "") +
+      `\n## Notas\n\nEsta carpeta contiene el código tal y como lo generó la IA. ` +
+      `Revisa los archivos antes de correrlos en producción.\n`;
   archive.append(readme, { name: "README.md" });
 
   archive.finalize();
+}
+
+function buildPythonReadme(
+  title: string,
+  description: string,
+  kind: string,
+): string {
+  const isFastApi = kind === "python-api";
+  const runCmd = isFastApi
+    ? "uvicorn main:app --reload --port 8000"
+    : "python manage.py migrate && python manage.py runserver 0.0.0.0:8000";
+  const stack = isFastApi ? "FastAPI + Uvicorn + SQLAlchemy" : "Django 5";
+  return (
+    `# ${title}\n\n${description}\n\nGenerado con Maris AI.\n\n` +
+    `## Stack\n\n${stack} (Python 3.11+).\n\n` +
+    `## Cómo correrlo localmente\n\n` +
+    "```bash\n" +
+    `python -m venv .venv\n` +
+    `source .venv/bin/activate   # Windows: .venv\\Scripts\\activate\n` +
+    `pip install -r requirements.txt\n` +
+    `${runCmd}\n` +
+    "```\n\n" +
+    `Después abre http://localhost:8000 en el navegador.\n\n` +
+    `## Notas\n\nEsta carpeta contiene el código tal y como lo generó la IA. ` +
+    `Revisa los archivos antes de correrlos en producción.\n`
+  );
 }

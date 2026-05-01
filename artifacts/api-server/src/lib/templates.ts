@@ -23,7 +23,9 @@ export type TemplateKind =
   | "hybrid-pwa"
   | "vue"
   | "svelte"
-  | "nextjs";
+  | "nextjs"
+  | "python-api"
+  | "django";
 
 export interface AppTemplate {
   id: string;
@@ -235,6 +237,32 @@ export const TEMPLATES: AppTemplate[] = [
     icon: "Mic",
     seedPrompt:
       "Una app full-stack mobile-first (layout vertical centrado, controles grandes, max-width 480px) de notas de voz con transcripción IA: frontend React + backend Express compatible con Vercel serverless. Pantalla principal con un botón gigante circular en el centro: pulsar para grabar (MediaRecorder API con mimeType 'audio/webm'), pulsar de nuevo para parar; mientras graba muestra forma de onda animada y temporizador. Al parar, sube el blob WebM al backend POST /api/transcribe (multer con storage: multer.memoryStorage(), hasta 10MB porque Vercel limita el body) que llama a OpenAI audio.transcriptions.create con model='whisper-1' usando la SDK 'openai' (OPENAI_API_KEY en env, NUNCA en cliente). Devuelve el texto transcrito. Después llama automáticamente a POST /api/summarize que pide al modelo un título corto (3-5 palabras), un resumen de 2 frases y 3 acciones extraídas. Lista inferior de notas previas con título, fecha y duración; tap abre el detalle (texto completo, resumen, acciones, botón reproducir audio original). Persistencia en Postgres usando 'pg' (DATABASE_URL de env, compatible con Vercel Postgres / Neon / Supabase) — NO uses sqlite. Tabla: notes(id serial pk, title text, summary text, actions jsonb, transcript text, audio_url text, duration_sec int, created_at timestamptz default now()). El audio se sube a Vercel Blob con '@vercel/blob' (npm install @vercel/blob, BLOB_READ_WRITE_TOKEN en env) y se guarda solo la URL pública en BD — NO uses /uploads local porque Vercel tiene FS efímero. CREATE TABLE IF NOT EXISTS al arranque. README explica las 3 env vars: OPENAI_API_KEY, DATABASE_URL, BLOB_READ_WRITE_TOKEN. Diseño calmado: fondo crema o gris claro, botón de grabación rojo coral, modo oscuro toggleable.",
+  },
+  // ─── Backends en Python ─────────────────────────────────────────────────
+  // Plantillas que generan código Python puro (no JS). En la previsualización
+  // del navegador el bundle muestra una tarjeta informativa con instrucciones
+  // — para correrlo, exporta a ZIP / GitHub o despliega a Vercel (que tiene
+  // runtime @vercel/python para FastAPI). Persistencia con SQLite local en
+  // dev. La Maris UI las marca con coste 2 créditos.
+  {
+    id: "fastapi-todo",
+    name: "API REST en Python (FastAPI)",
+    description:
+      "Backend FastAPI con CRUD completo, validación pydantic y SQLite. Listo para correr con uvicorn o desplegar a Vercel serverless.",
+    kind: "python-api",
+    icon: "Webhook",
+    seedPrompt:
+      "Una API REST de tareas (todo list) en Python 3.11+ usando FastAPI 0.115 + uvicorn + SQLAlchemy 2.0 + pydantic v2 + SQLite. Estructura mínima: archivo principal `main.py` que define `app = FastAPI(title='Todo API', version='1.0.0')`, modelos pydantic `TodoCreate`, `TodoUpdate`, `TodoOut` con type hints estrictos, modelo SQLAlchemy `Todo(id int pk, title str, done bool default False, created_at datetime default now)` con declarative_base + Session local, motor sqlite `app.db` y `Base.metadata.create_all(engine)` al arranque. Endpoints completos: GET /health → {status:'ok'}; GET /todos → lista todos los todos; POST /todos (TodoCreate) → 201 con TodoOut creado; GET /todos/{id} → TodoOut o 404; PUT /todos/{id} (TodoUpdate parcial) → TodoOut actualizado o 404; DELETE /todos/{id} → 204 o 404. Habilita CORSMiddleware con `allow_origins=['*']` para que cualquier frontend pueda probar. Genera obligatoriamente: `requirements.txt` con `fastapi==0.115.5`, `uvicorn[standard]==0.32.1`, `sqlalchemy==2.0.36`, `pydantic==2.10.3`; un `README.md` con instrucciones `pip install -r requirements.txt` + `uvicorn main:app --reload --port 8000` + ejemplo curl para cada endpoint + sección 'Deploy a Vercel' explicando que el usuario debe crear un `api/index.py` que reexporta `app` y un `vercel.json` con `@vercel/python` (Maris lo añade automáticamente al desplegar). NO incluyas frontend HTML/JS — esto es backend puro. Todos los archivos van como Python plano usando el marcador `// === FILE: nombre.py` con el contenido literal.",
+  },
+  {
+    id: "django-blog",
+    name: "Blog con Django",
+    description:
+      "Blog full-stack server-rendered con Django 5: modelos, vistas, plantillas, admin y SQLite. Estructura estándar `manage.py`.",
+    kind: "django",
+    icon: "Library",
+    seedPrompt:
+      "Un blog full-stack en Python 3.11+ con Django 5.1 server-rendered (NO React, NO Vite, NO Tailwind del CDN — esto es Django plantillas puras). Layout estándar con `manage.py`, paquete `mysite/` (settings.py, urls.py, wsgi.py, asgi.py) y app `blog/` (models.py, views.py, urls.py, admin.py, templates/blog/). Modelos: `Post(title CharField, slug SlugField unique, body TextField, author CharField, published_at DateTimeField default now, is_published BooleanField default False)`. Migraciones iniciales NO se generan (el README explica `python manage.py makemigrations blog` + `python manage.py migrate`). Vistas: lista de posts publicados ordenados por `-published_at` en `/`, detalle por slug en `/posts/<slug>/`. Plantillas: `templates/blog/base.html` con header (logo 'Mi Blog' + nav Inicio/Admin) + bloque {% block content %} + footer; `list.html` muestra cards con título, autor, extracto (primeras 200 chars del body) y enlace 'Leer más'; `detail.html` muestra post completo con título grande, meta autor+fecha y body con saltos de línea preservados. Admin de Django registrado en `admin.py` con `list_display=['title','author','published_at','is_published']` y `prepopulated_fields={'slug':('title',)}`. CSS minimalista embebido en base.html (paleta crema y burdeos, tipografía serif para textos, max-width 720px centrado). `settings.py` con `DEBUG=True`, `ALLOWED_HOSTS=['*']`, `SECRET_KEY='change-me-in-production'` con comentario claro, `DATABASES` default sqlite3 'db.sqlite3', `INSTALLED_APPS` incluyendo 'blog'. URL config raíz incluye admin y blog. Genera obligatoriamente: `requirements.txt` con `django==5.1.4`; `README.md` con `pip install -r requirements.txt`, `python manage.py migrate`, `python manage.py createsuperuser`, `python manage.py runserver 0.0.0.0:8000`. NO incluyas frontend JS aparte. Todos los archivos como Python/HTML planos usando `// === FILE: ruta/archivo.ext` con el contenido literal.",
   },
   {
     id: "notas-pwa",
