@@ -199,6 +199,7 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
       bundle: row.frontendCode,
       title: row.title,
       slug,
+      kind: row.kind,
     });
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.setHeader("Content-Type", "text/html; charset=utf-8");

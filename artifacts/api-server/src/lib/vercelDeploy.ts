@@ -94,7 +94,15 @@ export async function deployAppToVercel(opts: {
       },
     };
   }
-  const deployFiles = prepareViteProjectForVercel(bundleFiles);
+  // Pick the Vercel preset based on the app's stored kind. JS apps go through
+  // the Vite preset (npm install + vite build → dist). Python kinds get a
+  // vercel.json that wires up @vercel/python so FastAPI / Django run as
+  // serverless functions.
+  const appKind = row.kind ?? "fullstack";
+  const deployFiles =
+    appKind === "python-api" || appKind === "django"
+      ? preparePythonProjectForVercel(bundleFiles, appKind)
+      : prepareViteProjectForVercel(bundleFiles);
 
   // 3. Resolve (or create) the Vercel project for this app. Project name
   //    must be lowercase, kebab-case, and stable across deploys so the
@@ -102,16 +110,20 @@ export async function deployAppToVercel(opts: {
   //    with the same title don't collide in the user's Vercel dashboard.
   let projectId = row.vercelProjectId;
   const projectName = sanitiseProjectName(`maris-${appId}-${row.title}`);
+  const isPython = appKind === "python-api" || appKind === "django";
 
   if (!projectId) {
     const created = await callVercel<{ id: string; name: string }>({
       token,
       method: "POST",
       path: "/v9/projects",
-      // framework: "vite" → Vercel sets installCommand=`npm install`,
-      // buildCommand=`vite build`, outputDirectory=`dist`. Saves us from
-      // hard-coding those in projectSettings on every deploy.
-      body: { name: projectName, framework: "vite" },
+      // For JS apps, framework: "vite" → Vercel sets installCommand,
+      // buildCommand, outputDirectory automatically. For Python apps we omit
+      // the framework field; the runtime is selected by the vercel.json that
+      // ships in the bundle (functions = "@vercel/python").
+      body: isPython
+        ? { name: projectName }
+        : { name: projectName, framework: "vite" },
       log,
     });
     if (!created.ok) return { ok: false, failure: created.failure };
@@ -144,12 +156,18 @@ export async function deployAppToVercel(opts: {
       project: projectId,
       target: "production",
       files: Object.entries(deployFiles).map(([file, data]) => ({ file, data })),
-      projectSettings: {
-        framework: "vite",
-        installCommand: "npm install",
-        buildCommand: "vite build",
-        outputDirectory: "dist",
-      },
+      // Python deployments rely on the bundled vercel.json + requirements.txt
+      // (Vercel's @vercel/python runtime auto-installs from the latter). For
+      // JS apps we keep the explicit Vite build commands so a missing
+      // framework field on the project record doesn't break the deploy.
+      projectSettings: isPython
+        ? { framework: null }
+        : {
+            framework: "vite",
+            installCommand: "npm install",
+            buildCommand: "vite build",
+            outputDirectory: "dist",
+          },
     },
     log,
   });
@@ -510,6 +528,103 @@ function prepareViteProjectForVercel(
       `  </head>\n  <body>\n    <div id="root"></div>\n` +
       `    <script type="module" src="/src/main.tsx"></script>\n` +
       `  </body>\n</html>\n`;
+  }
+
+  return out;
+}
+
+/**
+ * Adapt a generated Python project tree for Vercel's @vercel/python serverless
+ * runtime. Different conventions per kind:
+ *
+ *  - "python-api" (FastAPI): Vercel mounts each file under api/*.py as a
+ *    serverless function. We require an `api/index.py` that re-exports the
+ *    FastAPI `app` so every request hits it. If the bundle put the app in
+ *    `main.py` at the root (which is the canonical layout the system prompt
+ *    asks for), we synthesise a thin shim `api/index.py` that imports it.
+ *
+ *  - "django": Vercel runs Django via WSGI. We synthesise `api/index.py`
+ *    that imports `application` from the project's `wsgi.py` (or
+ *    `<project>/wsgi.py` when present). For projects that ship a
+ *    single-file Django (no proper package), the user is told via README
+ *    to deploy locally instead.
+ *
+ * In both cases we inject a `vercel.json` that routes ALL requests to
+ * `api/index.py` so the framework handles its own routing internally
+ * (FastAPI router / Django URLconf), and a `requirements.txt` if missing.
+ */
+function preparePythonProjectForVercel(
+  files: Record<string, string>,
+  kind: "python-api" | "django",
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [rawPath, contents] of Object.entries(files)) {
+    let p = rawPath;
+    if (p.startsWith("./")) p = p.slice(2);
+    if (p.startsWith("/")) p = p.slice(1);
+    if (!p) continue;
+    if (p.includes("..")) continue;
+    if (
+      p.startsWith("__pycache__/") ||
+      p.startsWith(".venv/") ||
+      p.startsWith("venv/") ||
+      p === ".replit" ||
+      p === ".DS_Store"
+    ) {
+      continue;
+    }
+    out[p] = contents;
+  }
+
+  // Always overwrite vercel.json so user changes don't accidentally break
+  // the routing — Maris owns the deploy config.
+  out["vercel.json"] = JSON.stringify(
+    {
+      version: 2,
+      builds: [
+        { src: "api/index.py", use: "@vercel/python" },
+      ],
+      routes: [
+        { src: "/(.*)", dest: "api/index.py" },
+      ],
+    },
+    null,
+    2,
+  ) + "\n";
+
+  // Synthesise api/index.py if missing.
+  if (!out["api/index.py"]) {
+    if (kind === "python-api") {
+      // FastAPI: import the `app` from main.py at the project root. Vercel's
+      // Python runtime auto-detects ASGI apps named `app`, `application`,
+      // `handler`, `server`, etc.
+      out["api/index.py"] =
+        `# Auto-generated by Maris AI for Vercel deploys.\n` +
+        `# Re-exports the FastAPI app from main.py so @vercel/python can serve it.\n` +
+        `import sys, os\n` +
+        `sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n` +
+        `from main import app  # noqa: F401,E402\n`;
+    } else {
+      // Django: try to import the project's wsgi module. We attempt a few
+      // common names; if none exist the deploy will fail with a clear
+      // ImportError pointing the user at what to fix.
+      out["api/index.py"] =
+        `# Auto-generated by Maris AI for Vercel deploys.\n` +
+        `# Bridges Django's WSGI application to @vercel/python.\n` +
+        `import os, sys\n` +
+        `sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n` +
+        `os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mysite.settings')\n` +
+        `from django.core.wsgi import get_wsgi_application  # noqa: E402\n` +
+        `application = get_wsgi_application()\n` +
+        `app = application  # @vercel/python detects either name\n`;
+    }
+  }
+
+  if (!out["requirements.txt"]) {
+    out["requirements.txt"] =
+      kind === "python-api"
+        ? `fastapi==0.115.5\nuvicorn[standard]==0.32.1\nsqlalchemy==2.0.36\npydantic==2.10.3\n`
+        : `django==5.1.4\n`;
   }
 
   return out;

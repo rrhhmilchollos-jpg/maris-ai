@@ -33,7 +33,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, FileText, Brain, Mic, type LucideIcon } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, FileText, Brain, Mic, Webhook, Library, type LucideIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -78,6 +78,9 @@ const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   FileText,
   Brain,
   Mic,
+  // Python
+  Webhook,
+  Library,
 };
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
@@ -117,7 +120,7 @@ export default function DashboardPage() {
   // here purely for display (badge on each chip + button label). Authoritative
   // mapping lives in artifacts/api-server/src/routes/apps.ts (KIND_COSTS /
   // KIND_INTENTS / ALLOWED_KINDS) — keep both in sync.
-  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs";
+  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django";
   const [kind, setKind] = useState<Kind>("fullstack");
   const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
     fullstack: {
@@ -172,6 +175,18 @@ export default function DashboardPage() {
       label: "Next.js",
       icon: Server,
       placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...",
+      cost: 2,
+    },
+    "python-api": {
+      label: "Python (FastAPI)",
+      icon: Webhook,
+      placeholder: "ej. Una API REST de tareas con FastAPI, validación pydantic, SQLAlchemy + SQLite y endpoints CRUD completos...",
+      cost: 2,
+    },
+    django: {
+      label: "Django",
+      icon: Library,
+      placeholder: "ej. Un blog en Django 5 con modelos, vistas, plantillas, admin y SQLite...",
       cost: 2,
     },
   };

@@ -29,6 +29,16 @@ export const generatedApps = pgTable("generated_apps", {
   // Source language preference: "typescript" (default, .tsx files) or "javascript" (.jsx files).
   // Affects file extensions and TS-only syntax in prompts. Edits inherit this.
   language: text("language").notNull().default("typescript"),
+  // Project kind preset captured at generation time. One of:
+  //   fullstack | mobile | landing | game-2d | game-3d | hybrid-pwa | vue
+  //   svelte | nextjs | python-api | django
+  // Drives downstream behaviors that need to know the original stack:
+  //   - the public preview switches to a static info card for non-JS kinds
+  //     (python-api, django) instead of trying to esbuild Python.
+  //   - Vercel deploy chooses the right runtime preset (Vite vs @vercel/python).
+  //   - Export ZIP / GitHub README mention the right stack.
+  // Default "fullstack" so legacy rows and edits stay backwards-compatible.
+  kind: text("kind").notNull().default("fullstack"),
   // Public deploy URL slug. Null until the user clicks "Publicar". Globally unique.
   publicSlug: text("public_slug").unique(),
   // Last GitHub repo URL pushed to. Null until the user clicks "Subir a GitHub".
