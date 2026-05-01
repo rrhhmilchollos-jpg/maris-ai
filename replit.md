@@ -191,3 +191,30 @@ Cambios:
 - `lib/db/src/schema/creditTransactions.ts`: añadido índice `credit_tx_user_kind_idx (user_id, kind)` para que `userHasAnyPurchase` y los listados de transacciones del panel admin no degraden con volumen.
 
 Verificación: typecheck verde 4 paquetes, db push aplicado, índice presente en pg_indexes, /api/healthz ok.
+
+## Sandpack TIME_OUT — endurecido (Mayo 2026)
+
+Síntoma: en la pestaña "Preview" de la app generada el iframe mostraba
+"Couldn't connect to server. ENV: create-react-app, ERROR: TIME_OUT" y
+dejaba al usuario atrapado sin botón de recuperación.
+
+Causa: el bundler in-browser de CodeSandbox (https://sandpack-bundler.codesandbox.io)
+tiene un timeout interno de 40 s en sandpack-react v2.20. Si la red del
+usuario, su CDN o el servicio están lentos, el bundler no puede instalar
+todas las deps + arrancar React antes del límite y reporta TIME_OUT. No
+es un bug en la app generada — el código está intacto.
+
+Fix en `app-detail.tsx`:
+- `options.bundlerTimeOut: 120_000` (40 s → 2 min). El coste real es solo
+  el tiempo que el usuario espera ANTES del cartel de reintentar; si el
+  bundler responde rápido, el preview aparece igual.
+- `options.initMode: "user-visible"`. El bundler no se inicializa hasta
+  que el panel de preview está visible, así no pagamos el coste del
+  install cuando el usuario está editando código.
+- Nuevo componente `SandpackTimeoutOverlay` (al final del archivo) que
+  escucha `useSandpack().sandpack.status` y, cuando es "timeout", tapa
+  el iframe corrupto con un mensaje en español, un botón "Reintentar"
+  (`sandpack.runSandpack()`) y un botón "Usar preview Live" que cambia a
+  la pestaña Live (que usa el host nativo, sin depender de CodeSandbox).
+- `SandpackLayout` ahora tiene `position: relative` para que el overlay
+  se posicione correctamente sobre el iframe.
