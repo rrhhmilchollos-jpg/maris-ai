@@ -33,7 +33,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, type LucideIcon } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, type LucideIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +65,10 @@ const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   Layers,
   Globe,
   Box,
+  Joystick,
+  Cat,
+  Zap,
+  Atom,
 };
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
