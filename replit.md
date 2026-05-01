@@ -135,11 +135,21 @@ Cambios aplicados:
 - `dashboard.tsx`: extendidos `Kind` y `KIND_META`. Iconos lucide nuevos: `Component` (vue), `Flame` (svelte), `Server` (nextjs), más `ListTodo`/`CloudSun`/`Newspaper` para los templates.
 - `TEMPLATE_ICONS` ampliado con los nuevos iconos para que la galería los renderice.
 
+## Plantillas IA/ML (Mayo 2026)
+
+Añadidas 5 plantillas nuevas a `artifacts/api-server/src/lib/templates.ts` orientadas a apps con LLMs (categoría "IA / ML", todas `kind: "fullstack"`): `ai-chatbot` (chat estilo ChatGPT con streaming SSE), `ai-image-gen` (estudio dall-e-3), `ai-doc-summarizer` (PDF + chat sobre el doc, pdf-parse en memoria), `ai-code-assistant` (Monaco + explicar/refactorizar/tests/traducir), `ai-voice-notes` (MediaRecorder + whisper-1, mobile-first). Total ahora: **20 plantillas**.
+
+Decisiones clave (review de seguridad/deploy):
+- **Compatibles con Vercel serverless**: persistencia con Postgres + `pg` (NO better-sqlite3 — binarios nativos + FS efímero rompen en lambda). Cada prompt indica `CREATE TABLE IF NOT EXISTS` al arranque y referencia DATABASE_URL como env var (Vercel Postgres / Neon / Supabase).
+- **Uploads** (audio en voice-notes, imágenes generadas en image-gen): `@vercel/blob` con BLOB_READ_WRITE_TOKEN en env. NO `/uploads` local. multer usa `multer.memoryStorage()` con límite 10MB para respetar el body limit de Vercel.
+- **Key safety**: comentario global en templates.ts (~182-191) y cada seedPrompt repiten que `OPENAI_API_KEY` solo va por env del backend; toda llamada al LLM pasa por `/api/*` propio. Frontend nunca importa `openai`.
+- **Iconos**: `MessagesSquare` / `ImagePlay` / `FileText` / `Brain` / `Mic` añadidos a imports y a `TEMPLATE_ICONS` en `dashboard.tsx`. Verificados como exports reales de lucide-react.
+- `ai-voice-notes` se descartó como `kind: "mobile"` porque el INTENT de mobile fuerza PWA offline-first (service worker, bottom nav) que choca con grabación + IO; queda como fullstack con descripción mobile-first explícita en el seedPrompt.
+
 Pendientes del cheat-sheet del usuario (próximas sesiones, en orden):
 1. Backend Python (FastAPI/Django) además de Node — kinds `python-api` / `django`.
 2. Juegos: subkinds explícitos para Phaser 2D y Three.js 3D (hoy se eligen dentro del INTENT genérico, separarlos da plantillas mejor especializadas).
-3. Plantillas IA/ML (Python + Jupyter + scikit-learn/TF/PyTorch).
-4. Generación de Dockerfile + docker-compose.yml para los proyectos exportados.
+3. Generación de Dockerfile + docker-compose.yml para los proyectos exportados.
 
 ## Planner — el flujo nunca se salta validación (Mayo 2026)
 

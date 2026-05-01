@@ -176,6 +176,66 @@ export const TEMPLATES: AppTemplate[] = [
     seedPrompt:
       "Un blog full-stack con Next.js 14+ App Router (NO Pages Router) y TypeScript. Estructura: app/layout.tsx con header (logo + nav Inicio/Admin) y footer; app/page.tsx (Server Component) lista los posts publicados con título, extracto y fecha; app/posts/[slug]/page.tsx renderiza un post completo (Server Component, getPost(slug) async); app/admin/page.tsx (Client Component, 'use client') con formulario para crear/editar/eliminar posts. API routes en app/api/posts/route.ts (GET lista, POST crea) y app/api/posts/[slug]/route.ts (GET uno, PUT edita, DELETE borra). Persistencia en un array module-level (con disclaimer en el README de que se reinicia al redeploy — para producción enchufar Postgres/SQLite). Tailwind para estilos, tipografía serif para los posts, paleta crema y burdeos.",
   },
+  // ─── IA / ML ────────────────────────────────────────────────────────────
+  // Las apps generadas a partir de estas plantillas asumen que el usuario
+  // pondrá su propia API key (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) y
+  // su DATABASE_URL como variables de entorno en Vercel tras el deploy.
+  // El seed prompt deja claro al architect que TODAS las llamadas al LLM
+  // van por una /api/* del backend generado para no exponer la key en el
+  // cliente. Persistencia: usamos Postgres (pg) en vez de SQLite/sqlite3
+  // porque Vercel serverless tiene FS efímero + binarios nativos restringidos
+  // — Vercel Postgres / Neon / Supabase son la opción canónica. Para
+  // ficheros subidos por el usuario (audio, imágenes), usamos @vercel/blob.
+  {
+    id: "ai-chatbot",
+    name: "Chatbot conversacional con IA",
+    description:
+      "Asistente conversacional con historial, streaming y soporte para múltiples sesiones. Backend Express + frontend React.",
+    kind: "fullstack",
+    icon: "MessagesSquare",
+    seedPrompt:
+      "Una app de chatbot conversacional full-stack: frontend React + backend Express compatible con deploy a Vercel serverless. UI tipo ChatGPT con sidebar de conversaciones (cada una con título auto-generado del primer mensaje), área central de mensajes (markdown renderizado, bloques de código resaltados), input al pie con envío con Enter (Shift+Enter = salto de línea), botón 'Nueva conversación' y botón 'Borrar'. El backend expone POST /api/chat que recibe {sessionId, messages:[{role,content}]} y hace streaming de la respuesta del modelo (Server-Sent Events). Usa la SDK oficial 'openai' (npm install openai) leyendo OPENAI_API_KEY de process.env — NUNCA expongas la key al cliente. Persistencia en Postgres usando 'pg' (npm install pg) leyendo DATABASE_URL de env (compatible con Vercel Postgres / Neon / Supabase) — NO uses sqlite/better-sqlite3 (no funciona en serverless). Tablas: sessions(id serial pk, title text, created_at timestamptz default now()) y messages(id serial pk, session_id int references sessions(id) on delete cascade, role text, content text, created_at timestamptz default now()). Crea las tablas en el arranque con CREATE TABLE IF NOT EXISTS. README claro con DATABASE_URL + OPENAI_API_KEY como env vars. Diseño limpio, modo oscuro por defecto, paleta morado/cian.",
+  },
+  {
+    id: "ai-image-gen",
+    name: "Generador de imágenes IA",
+    description:
+      "Estudio de generación de imágenes con prompts, historial, descarga y galería. Backend protege la API key.",
+    kind: "fullstack",
+    icon: "ImagePlay",
+    seedPrompt:
+      "Un estudio web de generación de imágenes con IA: frontend React + backend Express compatible con Vercel serverless. UI dividida: panel izquierdo con textarea para el prompt, selector de tamaño (1024×1024 / 1792×1024 / 1024×1792 — los soportados por dall-e-3), selector de cantidad (1-4 imágenes) y botón 'Generar' con loading state; panel central muestra las imágenes generadas en grid; panel derecho con historial scrolleable de generaciones previas (prompt + thumbnails). Cada imagen tiene botón 'Descargar' y 'Variar' (envía el mismo prompt). Backend POST /api/generate-image que llama a la SDK 'openai' usando images.generate con dall-e-3 (lee OPENAI_API_KEY de process.env, NUNCA en el cliente), devuelve las URLs. Persistencia en Postgres usando 'pg' (DATABASE_URL de env, compatible con Vercel Postgres / Neon / Supabase) — NO uses sqlite. Tabla: generations(id serial pk, prompt text, size text, urls jsonb, created_at timestamptz default now()). Para que las imágenes sigan accesibles después de 1h (las URLs de OpenAI expiran), descarga cada imagen al recibirla y súbela a Vercel Blob con '@vercel/blob' (npm install @vercel/blob, lee BLOB_READ_WRITE_TOKEN de env); guarda en BD la URL pública del blob, no la URL temporal de OpenAI. CREATE TABLE IF NOT EXISTS al arranque. README explica las 3 env vars: OPENAI_API_KEY, DATABASE_URL, BLOB_READ_WRITE_TOKEN. Estética estudio creativo: fondo gris muy oscuro, acentos magenta y cian, tipografía mono.",
+  },
+  {
+    id: "ai-doc-summarizer",
+    name: "Resumidor de PDFs",
+    description:
+      "Sube un PDF y obtén un resumen ejecutivo, puntos clave y un chat para hacer preguntas sobre el documento.",
+    kind: "fullstack",
+    icon: "FileText",
+    seedPrompt:
+      "Una app full-stack de análisis de documentos PDF con IA: frontend React + backend Express compatible con Vercel serverless. Flow: el usuario arrastra un PDF (o lo selecciona), se sube al backend (multer en memoria con storage: multer.memoryStorage(), hasta 10MB porque Vercel limita el body), el backend extrae texto con 'pdf-parse' (npm install pdf-parse) directamente del Buffer en memoria sin tocar el FS, recorta a ~12k tokens si excede (split por palabras), y envía el texto a la API de chat para generar (a) un resumen ejecutivo de 5-8 frases, (b) una lista de 5-10 puntos clave en bullets y (c) 5 preguntas sugeridas que se podrían hacer sobre el documento. Mostrar todo en cards. Debajo, un chat conversacional donde el usuario puede preguntar cualquier cosa sobre el PDF: el backend POST /api/chat recibe {docId, question, history} y reenvía al modelo con el texto del PDF como contexto en el system prompt. Sidebar con lista de PDFs subidos. Persistencia en Postgres usando 'pg' (DATABASE_URL de env, compatible con Vercel Postgres / Neon / Supabase) — NO uses sqlite. Tablas: docs(id serial pk, filename text, text text, summary jsonb, created_at timestamptz default now()) y messages(id serial pk, doc_id int references docs(id) on delete cascade, role text, content text, created_at timestamptz default now()). Click en un doc lo abre. Usa SDK 'openai' con OPENAI_API_KEY de env (jamás en cliente). CREATE TABLE IF NOT EXISTS al arranque. README con instrucciones para OPENAI_API_KEY + DATABASE_URL y nota sobre el límite de 10MB y de tokens. Diseño profesional: fondo blanco, acentos azul corporativo, tipografía serif para textos largos.",
+  },
+  {
+    id: "ai-code-assistant",
+    name: "Asistente de código",
+    description:
+      "Editor de código con explicación, refactor, generación de tests y traducción entre lenguajes vía IA.",
+    kind: "fullstack",
+    icon: "Brain",
+    seedPrompt:
+      "Una app full-stack de asistente de programación: frontend React + backend Express compatible con Vercel serverless. UI tipo IDE simplificado: editor de código grande con Monaco Editor (paquete '@monaco-editor/react') con selector de lenguaje (JS/TS/Python/Go/Rust/Java) y resaltado de sintaxis. Cuatro botones de acción sobre el código actual: 'Explicar' (muestra explicación paso a paso en panel lateral), 'Refactorizar' (sugiere mejoras y muestra diff aceptable), 'Generar tests' (escribe tests unitarios para el código), 'Traducir a…' (selector de lenguaje destino, devuelve la versión traducida en otro panel). Cada acción llama a su endpoint POST /api/explain | /api/refactor | /api/test | /api/translate del backend, que usa SDK 'openai' con OPENAI_API_KEY de env (NUNCA en cliente) y un system prompt específico para cada acción. Persistencia en Postgres usando 'pg' (DATABASE_URL de env, compatible con Vercel Postgres / Neon / Supabase) — NO uses sqlite. Tabla: actions(id serial pk, kind text, language text, input text, output text, created_at timestamptz default now()) accesible desde un drawer lateral con el historial reciente. CREATE TABLE IF NOT EXISTS al arranque. README con OPENAI_API_KEY + DATABASE_URL como env vars. Estética dev tools: fondo casi negro, monospace, acentos verde fluorescente.",
+  },
+  {
+    id: "ai-voice-notes",
+    name: "Notas de voz con transcripción",
+    description:
+      "App mobile-first para grabar notas de voz, transcribirlas con Whisper y resumirlas automáticamente.",
+    kind: "fullstack",
+    icon: "Mic",
+    seedPrompt:
+      "Una app full-stack mobile-first (layout vertical centrado, controles grandes, max-width 480px) de notas de voz con transcripción IA: frontend React + backend Express compatible con Vercel serverless. Pantalla principal con un botón gigante circular en el centro: pulsar para grabar (MediaRecorder API con mimeType 'audio/webm'), pulsar de nuevo para parar; mientras graba muestra forma de onda animada y temporizador. Al parar, sube el blob WebM al backend POST /api/transcribe (multer con storage: multer.memoryStorage(), hasta 10MB porque Vercel limita el body) que llama a OpenAI audio.transcriptions.create con model='whisper-1' usando la SDK 'openai' (OPENAI_API_KEY en env, NUNCA en cliente). Devuelve el texto transcrito. Después llama automáticamente a POST /api/summarize que pide al modelo un título corto (3-5 palabras), un resumen de 2 frases y 3 acciones extraídas. Lista inferior de notas previas con título, fecha y duración; tap abre el detalle (texto completo, resumen, acciones, botón reproducir audio original). Persistencia en Postgres usando 'pg' (DATABASE_URL de env, compatible con Vercel Postgres / Neon / Supabase) — NO uses sqlite. Tabla: notes(id serial pk, title text, summary text, actions jsonb, transcript text, audio_url text, duration_sec int, created_at timestamptz default now()). El audio se sube a Vercel Blob con '@vercel/blob' (npm install @vercel/blob, BLOB_READ_WRITE_TOKEN en env) y se guarda solo la URL pública en BD — NO uses /uploads local porque Vercel tiene FS efímero. CREATE TABLE IF NOT EXISTS al arranque. README explica las 3 env vars: OPENAI_API_KEY, DATABASE_URL, BLOB_READ_WRITE_TOKEN. Diseño calmado: fondo crema o gris claro, botón de grabación rojo coral, modo oscuro toggleable.",
+  },
   {
     id: "notas-pwa",
     name: "App de notas (PWA)",
