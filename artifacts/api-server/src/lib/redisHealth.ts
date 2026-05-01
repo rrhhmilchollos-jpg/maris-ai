@@ -16,6 +16,20 @@ let lastError: string | null = null;
  */
 const RESP_URL_RE = /^rediss?:\/\//i;
 
+/**
+ * Strip credentials from any Redis-URL-shaped substring inside an error
+ * message before it lands in logs or in the admin metrics response. ioredis
+ * sometimes embeds the connection URL in error text (`getaddrinfo ENOTFOUND
+ * redis://default:HUNTER2@…`), and we don't want passwords leaking out — not
+ * even to admin users, since admins are humans who screenshot dashboards.
+ */
+function redactRedisCredentials(text: string): string {
+  return text.replace(
+    /(rediss?:\/\/)([^:@\s/]+):([^@\s/]+)@/gi,
+    (_m, scheme, user) => `${scheme}${user}:***@`,
+  );
+}
+
 export function isRedisConfigured(): boolean {
   const url = process.env.REDIS_URL;
   return Boolean(url) && RESP_URL_RE.test(url!);
@@ -53,10 +67,11 @@ export function getRedisClient(): Redis | null {
     reconnectOnError: () => false,
   });
   client.on("error", (err: Error) => {
-    lastError = err.message;
+    const safeMsg = redactRedisCredentials(err.message);
+    lastError = safeMsg;
     // Single-line log; keep it terse so a misconfigured URL doesn't dump
     // multi-line stack frames every reconnect attempt.
-    logger.warn({ msg: err.message }, "Redis client error");
+    logger.warn({ msg: safeMsg }, "Redis client error");
   });
   return client;
 }
@@ -118,7 +133,8 @@ export async function pingRedis(): Promise<{
     lastPingOk = false;
     lastPingMs = Date.now() - start;
     lastPingAt = Date.now();
-    lastError = err instanceof Error ? err.message : String(err);
+    const raw = err instanceof Error ? err.message : String(err);
+    lastError = redactRedisCredentials(raw);
     return { ok: false, latencyMs: lastPingMs, error: lastError };
   }
 }
