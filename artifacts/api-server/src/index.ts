@@ -92,7 +92,14 @@ app.listen(port, async (err) => {
     pingRedis()
       .then((result) => {
         if (result.ok) {
-          logger.info({ latencyMs: result.latencyMs }, "Redis ping ok");
+          // Redis is reachable. Log it explicitly as "ready for BullMQ" so an
+          // operator looking for the trigger to migrate the queue from
+          // pg-boss can spot it. The actual swap is still manual (we don't
+          // hot-swap a live queue), but this signal removes the guesswork.
+          logger.info(
+            { latencyMs: result.latencyMs },
+            "Redis ping ok — ready for BullMQ migration when desired (currently using pg-boss)",
+          );
         } else {
           logger.warn({ err: result.error }, "Redis ping failed at boot");
         }

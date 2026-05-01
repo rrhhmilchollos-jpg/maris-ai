@@ -9,6 +9,8 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
 import { validateBundle, type BuildIssue } from "./validate";
+import { validateBundleInE2B } from "./e2bValidator";
+import { shouldValidateInE2B } from "./e2bGate";
 import { logger } from "./logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
@@ -1124,6 +1126,28 @@ function buildSetupNotes(spec: IntegrationSpec): string {
   return `\n\n// === FILE: SETUP.md ===\n${lines.join("\n")}`;
 }
 
+/* ------------------------ E2B real-build validation ----------------------- */
+
+/**
+ * Convert E2B build/install stderr into a single BuildIssue we can feed into
+ * the existing patcher. We don't try to parse line numbers — the LLM is
+ * better at locating the offending file from the error message + the bundle
+ * than a hand-rolled regex would be. Cap the message length to keep prompts
+ * cheap.
+ */
+function e2bResultToIssue(stderr: string, reason: string): BuildIssue {
+  const truncated = stderr.length > 4000
+    ? `${stderr.slice(0, 2000)}\n…(truncated)…\n${stderr.slice(-1500)}`
+    : stderr;
+  const trimmed = truncated.trim();
+  return {
+    file: "package.json",
+    message: trimmed.length > 0
+      ? `E2B real build failed (${reason}):\n${trimmed}`
+      : `E2B real build failed (${reason})`,
+  };
+}
+
 /* ------------------------ validate → patch loop --------------------------- */
 
 /**
@@ -1288,6 +1312,110 @@ async function runValidatePatchLoop(
     emit("patcher", "✓ patch aplicado");
     finalFrontend = patched;
     lastPatchedBundle = patched;
+  }
+
+  // ── E2B real-build verification (opt-in) ──────────────────────────────────
+  // After the in-memory AST loop converges, optionally fire up an E2B microVM
+  // and run `npm install && npm run build` for real. This catches issues the
+  // in-memory validator can't see:
+  //   - missing/typo'd npm package names that the AST treats as "external"
+  //   - vite plugin misconfigurations / wrong vite/react versions
+  //   - postinstall scripts that fail
+  //   - lockfile drift that breaks resolution
+  // Soft-fail policy: any E2B issue (timeout, network error, sandbox limits,
+  // even a real build failure) MUST NOT abort the user's generation. We log
+  // it, optionally try ONE patcher round to fix it, and ship whatever bundle
+  // we have. The in-memory validator already protected us from the most
+  // egregious garbage.
+  if (shouldValidateInE2B() && phaseGates.patch) {
+    onProgress?.({
+      phase: "validating",
+      progress: 93,
+      note: "⚙️ Build real en sandbox E2B (npm install + build)…",
+    });
+    emit("validator", "⚙️ E2B real build · arrancando microVM");
+    try {
+      const e2b = await validateBundleInE2B({ bundle: finalFrontend, log: logger });
+      if (e2b.ok) {
+        onProgress?.({
+          phase: "validating",
+          progress: 94,
+          note: `✅ E2B build OK (${Math.round(e2b.durationMs / 1000)}s).`,
+        });
+        emit("validator", `✓ E2B build OK · ${Math.round(e2b.durationMs / 1000)}s`);
+      } else if (e2b.reason === "install_failed" || e2b.reason === "build_failed") {
+        // Real failure — give the patcher one more shot using the actual
+        // npm/vite/tsc error output. Much richer signal than the AST-level
+        // BuildIssues we get from validateBundle().
+        emit(
+          "validator",
+          `△ E2B ${e2b.reason} · ${Math.round(e2b.durationMs / 1000)}s — intentando reparar`,
+          "warn",
+        );
+        onProgress?.({
+          phase: "fixing",
+          progress: 94,
+          note: `🔧 E2B detectó ${e2b.reason}. Auto-reparando con error real…`,
+        });
+        const stderr = e2b.reason === "install_failed" ? e2b.installStderr : e2b.buildStderr;
+        const issue = e2bResultToIssue(stderr, e2b.reason);
+        try {
+          const repaired = await patchBundle(
+            finalFrontend,
+            [
+              {
+                file: "package.json",
+                problem: issue.message,
+                fix: "Fix the package name(s), version(s), build config or imports so `npm install && npm run build` succeeds in a clean Linux microVM.",
+              },
+            ],
+            language,
+            "",
+          );
+          if (repaired && repaired !== finalFrontend) {
+            // Mandatory revalidation: the LLM patcher can introduce its own
+            // syntax/import regressions while trying to fix the original
+            // build error. If the in-memory AST validator says the patch is
+            // worse than what we had, throw it away and keep the previous
+            // bundle — better to ship a build that passed the AST gate but
+            // fails npm install than one that doesn't even parse.
+            try {
+              const reReport = await validateBundle(repaired);
+              if (reReport.ok) {
+                emit("patcher", "✓ patch tras E2B aplicado y revalidado");
+                finalFrontend = repaired;
+              } else {
+                emit(
+                  "patcher",
+                  `△ patch tras E2B introdujo ${reReport.issues.length} issue(s) — descartando`,
+                  "warn",
+                );
+              }
+            } catch (revErr) {
+              logger.warn({ err: revErr }, "post-E2B patch revalidation threw");
+              emit("patcher", "△ revalidación tras E2B falló — descartando patch", "warn");
+            }
+          } else {
+            emit("patcher", "△ patch tras E2B sin cambios — dejando bundle previo", "warn");
+          }
+        } catch (patchErr) {
+          logger.warn({ err: patchErr }, "patcher failed after E2B build error");
+          emit("patcher", "△ reparador falló tras E2B — dejando bundle previo", "warn");
+        }
+      } else {
+        // Soft errors: empty bundle, no package.json, exception, key missing.
+        // Don't waste a patcher round — just log and ship.
+        emit(
+          "validator",
+          `△ E2B saltado · ${e2b.reason ?? "unknown"}`,
+          "warn",
+        );
+      }
+    } catch (e2bErr) {
+      // Total failure of the E2B layer (network, SDK, etc.) — never abort.
+      logger.warn({ err: e2bErr }, "E2B validation threw — continuing without it");
+      emit("validator", "△ E2B falló (excepción) — continuando", "warn");
+    }
   }
 
   return finalFrontend;
