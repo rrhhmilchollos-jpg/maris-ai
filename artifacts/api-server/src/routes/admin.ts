@@ -13,6 +13,7 @@ import { logger } from "../lib/logger";
 import { agentMemory } from "@workspace/db";
 import { getMetricsSnapshot } from "../lib/metrics";
 import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
+import { getE2BGateEnabled, setE2BGateEnabled } from "../lib/e2bGate";
 import { pingRedis, getRedisStatus } from "../lib/redisHealth";
 
 const router: IRouter = Router();
@@ -549,6 +550,21 @@ router.get("/admin/metrics", async (_req, res) => {
       ),
     );
 
+  // Operational add-ons: in-memory request counters, live queue state by
+  // status (last 24h), Redis health, and E2B gate. Merged into this single
+  // /admin/metrics handler so the dashboard receives everything in one
+  // payload — Express only invokes the first matching route, so a duplicate
+  // handler below would have been silently unreachable.
+  const queueByStatus: Record<string, number> = {};
+  const allStatusRows = await db
+    .select({ status: generationJobs.status, total: count() })
+    .from(generationJobs)
+    .where(gte(generationJobs.createdAt, day))
+    .groupBy(generationJobs.status);
+  for (const row of allStatusRows) {
+    queueByStatus[row.status] = Number(row.total);
+  }
+
   res.json({
     generatedAt: now.toISOString(),
     jobs24h: {
@@ -575,40 +591,22 @@ router.get("/admin/metrics", async (_req, res) => {
       today: publishedToday?.total ?? 0,
       total: publishedTotal?.total ?? 0,
     },
-  });
-});
-
-// Operational metrics: in-memory request counters + live queue state.
-// Survives only until process restart — intentional, no external dep.
-router.get("/admin/metrics", async (_req, res) => {
-  const snapshot = getMetricsSnapshot();
-
-  // Pull queue state from generation_jobs (the source of truth Maris uses).
-  // Last 24h window so the numbers reflect "what's happening now" rather
-  // than lifetime totals.
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const statusRows = await db
-    .select({
-      status: generationJobs.status,
-      total: count(),
-    })
-    .from(generationJobs)
-    .where(gte(generationJobs.createdAt, since))
-    .groupBy(generationJobs.status);
-
-  const queueByStatus: Record<string, number> = {};
-  for (const row of statusRows) {
-    queueByStatus[row.status] = Number(row.total);
-  }
-
-  res.json({
-    server: snapshot,
+    server: getMetricsSnapshot(),
     queue: {
       ready: isQueueReady(),
       jobs24hByStatus: queueByStatus,
     },
     redis: getRedisStatus(),
-    e2b: { configured: isE2BEnabled() },
+    e2b: {
+      configured: isE2BEnabled(),
+      // Runtime gate that controls whether the generation pipeline runs the
+      // real-build E2B step after the in-memory validator. Default seeded
+      // from the E2B_VALIDATE_ON_GENERATE env var on boot, mutable via
+      // POST /admin/e2b-toggle. Reports `effective` so the dashboard can
+      // show "ON but not configured = effectively OFF".
+      validateOnGenerate: getE2BGateEnabled(),
+      effective: isE2BEnabled() && getE2BGateEnabled(),
+    },
   });
 });
 
@@ -624,6 +622,20 @@ router.post("/admin/redis-ping", async (_req, res) => {
 router.post("/admin/e2b-smoke", async (_req, res) => {
   const result = await e2bSmokeTest();
   res.json(result);
+});
+
+// Toggle the E2B real-build validation step on/off without restarting the
+// server. Body: { enabled: boolean }. Returns the new state. Note that the
+// state is in-memory: a server restart re-reads E2B_VALIDATE_ON_GENERATE.
+router.post("/admin/e2b-toggle", (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  const next = setE2BGateEnabled(enabled);
+  req.log?.info({ enabled: next }, "E2B validateOnGenerate toggled");
+  res.json({
+    validateOnGenerate: next,
+    configured: isE2BEnabled(),
+    effective: isE2BEnabled() && next,
+  });
 });
 
 export default router;
