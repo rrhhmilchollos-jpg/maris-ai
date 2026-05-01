@@ -148,7 +148,11 @@ export default function DashboardPage() {
       cost: 3,
     },
   };
-  const kindCost = KIND_META[kind].cost;
+  // KIND_META[kind] can be undefined if a stale localStorage value or a
+  // template payload sneaks in a string outside the Kind union — fall back
+  // to the cheapest tier so the UI never crashes on dereference.
+  const kindMeta = KIND_META[kind] ?? KIND_META.fullstack;
+  const kindCost = kindMeta.cost;
   // Annual upgrade modal — pops up once per 7 days for non-admin users on
   // the dashboard. Dismissed-state lives in localStorage so it doesn't
   // nag on every navigation.
@@ -492,7 +496,9 @@ export default function DashboardPage() {
               <div className="flex flex-wrap justify-between items-center gap-3">
                 <div className="flex items-center gap-3">
                   <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">
-                    {isAdmin ? "Costo: gratis (admin)" : "Costo: 1 crédito"}
+                    {isAdmin
+                      ? "Costo: gratis (admin)"
+                      : `Costo: ${kindCost} ${kindCost === 1 ? "crédito" : "créditos"}`}
                   </p>
                   <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
                     <SelectTrigger className="h-9 w-[230px] text-xs bg-background/50 border-border/50">

@@ -1,8 +1,6 @@
 import express, { Router, type IRouter, type Request, type Response } from "express";
-import { eq, and, sql } from "drizzle-orm";
-import { db } from "../lib/db";
-import { creditTransactions, users } from "@workspace/db/schema";
 import { getStripe } from "../lib/stripe";
+import { creditPurchase } from "../lib/credits";
 
 export const stripeWebhookRouter: IRouter = Router();
 
@@ -36,31 +34,27 @@ stripeWebhookRouter.post(
         credits > 0 &&
         session.payment_status === "paid"
       ) {
-        const existing = await db
-          .select()
-          .from(creditTransactions)
-          .where(
-            and(
-              eq(creditTransactions.userId, clerkUserId),
-              eq(creditTransactions.stripeSessionId, session.id),
-            ),
-          )
-          .limit(1);
-        if (existing.length === 0) {
-          await db.insert(creditTransactions).values({
+        // Idempotent — see creditPurchase docs. Racing with /billing/confirm
+        // is fine, only one INSERT wins thanks to the unique index on
+        // (user_id, stripe_session_id).
+        try {
+          await creditPurchase({
             userId: clerkUserId,
-            kind: "purchase",
             amount: credits,
-            description: `Purchased ${credits} credits`,
             stripeSessionId: session.id,
+            description: `Purchased ${credits} credits`,
           });
-          await db
-            .update(users)
-            .set({
-              credits: sql`${users.credits} + ${credits}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(users.id, clerkUserId));
+        } catch (err) {
+          // Surface a 5xx so Stripe retries this webhook (they back off and
+          // try again for ~3 days). Swallowing it would silently drop credits
+          // on transient DB blips. The retry is safe because the operation
+          // is idempotent on (user_id, stripe_session_id).
+          req.log.error(
+            { err, sessionId: session.id, clerkUserId },
+            "creditPurchase failed in webhook — returning 500 so Stripe retries",
+          );
+          res.status(500).json({ error: "internal" });
+          return;
         }
       }
     }

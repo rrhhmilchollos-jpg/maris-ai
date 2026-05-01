@@ -73,8 +73,12 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     // Use only the jobId in the key so re-renders from `lastId` changes don't
     // create infinite new query keys. The afterId is passed via queryFn.
     queryKey,
-    queryFn: () =>
-      getGenerationJobLogs(jobId ?? 0, { afterId: lastId }, { signal: undefined }),
+    queryFn: ({ signal }) =>
+      // Forward React Query's AbortSignal so an in-flight poll is cancelled
+      // when the job switches or the component unmounts. Without this, the
+      // tail of a long request can resolve after teardown and stamp stale
+      // lines into the next job's stream.
+      getGenerationJobLogs(jobId ?? 0, { afterId: lastId }, { signal }),
     enabled,
     // Poll fast while running; stop once the job terminates. Tail-loss (lines
     // committed by the unawaited fire-and-forget INSERT after the job is

@@ -102,3 +102,17 @@ Maris AI features a React frontend, a Node.js/Express backend, and shared librar
   - Servidor (`app.ts`): middleware por petición que registra `method`, `path`, `status` y `durationMs` cuando `res` finaliza.
   - Servidor (`apps.ts`): breadcrumb `job:start` y un breadcrumb por cada cambio de fase (`phase:<nombre>`) con `jobId`, progreso y nota.
   - Cliente (`appforge/src/lib/sentry.ts`): `breadcrumbsIntegration` activado explícitamente para `fetch`, `xhr`, `console`, `dom` e `history`, así Sentry capta automáticamente todas las llamadas de React Query, navegaciones y clics relevantes.
+## Auditoría y arreglos (Mayo 2026)
+
+Tras la revisión interna del codebase, se aplicaron los siguientes endurecimientos:
+
+- **Seguridad — `routes/debugBundle.ts`**: el endpoint `GET /api/__debug/bundle/:id` ahora exige `requireAuth + requireAdmin`. Antes era accesible sin sesión (sólo bloqueado por `NODE_ENV=production`), lo que en cualquier entorno de staging exponía el código fuente de cualquier app por id.
+- **Seguridad — Live Preview iframe (`components/live-preview.tsx`)**: el iframe que renderiza código generado por el LLM ahora usa `sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"`. Sin `allow-top-navigation*` para impedir que una app maliciosa secuestre la pestaña del usuario.
+- **Estabilidad — Live Preview**: la promesa que espera `server-ready` ahora limpia el listener y el `setTimeout` en TODAS las salidas (resolve, exit-failure, timeout). Antes, los reintentos acumulaban handlers/timers.
+- **Idempotencia de cobros — `lib/credits.ts`**: nuevo helper `creditPurchase()` que hace `INSERT ... ON CONFLICT DO NOTHING RETURNING id` + bump de `users.credits` dentro de una sola transacción. `routes/billing.ts` (polling de éxito) y `routes/stripeWebhook.ts` (webhook Stripe) ahora lo usan, eliminando la race condition que podía doble-acreditar al usuario.
+- **Schema — `lib/db/src/schema/creditTransactions.ts`**: añadido `uniqueIndex("credit_tx_stripe_session_uq")` sobre `(user_id, stripe_session_id)`. NO parcial (en Postgres `NULL != NULL` dentro de unique index, así que las filas `kind='use'` con sessionId NULL siguen permitiendo duplicados sin restricción). El índice no parcial también permite que `ON CONFLICT (user_id, stripe_session_id)` infiera el constraint sin predicado adicional.
+- **Resiliencia — Stripe webhook**: ante un fallo transitorio de DB ahora se devuelve **500** para que Stripe reintente automáticamente (~3 días de back-off). La operación es idempotente, así que es seguro reintentar.
+- **UI — `pages/dashboard.tsx`**: `KIND_META[kind]` se accede con fallback (`KIND_META[kind] ?? KIND_META.fullstack`) para evitar crashes si llega un `kind` fuera de la unión. El texto del costo ahora es dinámico (`Costo: N créditos`) en vez del literal `"Costo: 1 crédito"`.
+- **Cancelación — `components/agent-log-stream.tsx`**: el `queryFn` ahora propaga el `signal` de React Query al cliente generado, así un poll en vuelo se cancela al cambiar de job o desmontar.
+- **Cancelación — `pages/debug-preview.tsx`**: el `fetch` del bundle ahora usa un `AbortController` que se aborta en cleanup del efecto.
+- **Accesibilidad — `pages/app-detail.tsx`**: añadidos `aria-label` y `title` a los botones icon-only (enviar mensaje, eliminar app).
