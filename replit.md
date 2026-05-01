@@ -140,3 +140,34 @@ Pendientes del cheat-sheet del usuario (próximas sesiones, en orden):
 2. Juegos: subkinds explícitos para Phaser 2D y Three.js 3D (hoy se eligen dentro del INTENT genérico, separarlos da plantillas mejor especializadas).
 3. Plantillas IA/ML (Python + Jupyter + scikit-learn/TF/PyTorch).
 4. Generación de Dockerfile + docker-compose.yml para los proyectos exportados.
+
+## Planner — el flujo nunca se salta validación (Mayo 2026)
+
+Síntoma reportado por el usuario: una petición pequeña entró por `fast-patch`, el log dijo "saltando investigación y diseño" y se entregó código con un error de dependencia. Sentía que Maris "se saltaba pasos" como un humano descuidado.
+
+Causa real: el `fastPatchEdit` SÍ valida el bundle y SÍ tiene un loop de auto-reparación (1 intento) antes de escalar a `feature` con el pipeline completo. Lo que estaba mal era:
+1. La heurística metía cualquier prompt corto en `fast-patch`, incluyendo reportes de bug/dependencia, donde el síntoma puede esconder un problema más amplio.
+2. El system-prompt del planner-LLM no tenía una regla explícita "errores → nunca fast-patch".
+3. `planSummaryEs` decía "saltando investigación y diseño" — texto engañoso que no mencionaba la validación que SÍ se hace.
+
+Cambios en `artifacts/api-server/src/lib/planner.ts`:
+- Nuevo `BUG_RX` que matchea error/fallo/crash/dependencia/cannot find/module not found/pantalla en blanco/repara/arregla/corrige/etc. Si matchea y hay app existente, fuerza `PLAN_FEATURE` (architect + frontend + validate + patch). Tiene prioridad sobre `COSMETIC_RX`.
+- `PLANNER_SYSTEM` ampliado: regla explícita de que cualquier reporte técnico va a `feature`, nunca a `fast-patch`, más una "regla de oro" — ante la duda, escalar.
+- `planSummaryEs` reescrito: ya no dice "saltando X". Para `fast-patch` deja claro que se valida y se escala automáticamente si falla. Para `full-build` enumera todas las fases para que el usuario vea el rigor.
+- Eliminados "arregla|corrige|fix" de `COSMETIC_RX` (ahora viven en `BUG_RX`).
+
+Comportamiento que NO cambia (ya estaba bien):
+- `fastPatchEdit` valida el bundle resultante y tiene auto-repair.
+- Si el fast-patch no converge, se escala a `feature` con `PLAN_FEATURE.phases` completas (ver generate.ts:1969-1983).
+- `runValidatePatchLoop` ya estaba bloqueando entrega si quedaba un error de compilación.
+
+### Refinamiento tras code-review (misma sesión)
+
+El architect detectó 2 issues en BUG_RX:
+- `404|500|importar|repara` eran demasiado amplios → falsos positivos en frases inocentes ("quiero importar un CSV", "preparar el deploy").
+- El LLM podía devolver `fast-patch` para un bug y la heurística no lo re-validaba.
+
+Fix:
+- BUG_RX ahora exige contexto técnico explícito ("error 404" en vez de "404", "import faltante" en vez de "importar"). "preparar" ya no matchea por word-boundary `\b`.
+- Post-guard determinístico añadido en `planExecution`: si el LLM dice fast-patch pero `BUG_RX.test(prompt)` es true, se promueve a `feature` con razón explícita. Garantiza que NINGÚN bug pueda colarse al shortcut, venga del LLM o de la heurística.
+- Test aislado de regex: 15/15 casos correctos (8 reportes técnicos escalados, 7 cosméticos/features no escalados).
