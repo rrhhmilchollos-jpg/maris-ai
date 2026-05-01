@@ -171,3 +171,23 @@ Fix:
 - BUG_RX ahora exige contexto técnico explícito ("error 404" en vez de "404", "import faltante" en vez de "importar"). "preparar" ya no matchea por word-boundary `\b`.
 - Post-guard determinístico añadido en `planExecution`: si el LLM dice fast-patch pero `BUG_RX.test(prompt)` es true, se promueve a `feature` con razón explícita. Garantiza que NINGÚN bug pueda colarse al shortcut, venga del LLM o de la heurística.
 - Test aislado de regex: 15/15 casos correctos (8 reportes técnicos escalados, 7 cosméticos/features no escalados).
+
+## Dominio personalizado — gate por plan, no por gasto (Mayo 2026)
+
+Regla anterior (mal): "Conecta tu dominio propio cuando acumules 50 € en compras". Esto bloqueaba a usuarios con planes pequeños (10 €, 20 €) y no se ajustaba a la realidad de producto.
+
+Regla nueva:
+- **Plan gratis**: solo deploy con el subdominio de preview que asigna Maris AI (sin dominio propio).
+- **Cualquier plan de pago** (cualquier compra > 0 €, da igual el tamaño): desbloquea dominio propio.
+- **Admin / propietario** (`rrhh.milchollos@gmail.com`): desbloqueado siempre, créditos ilimitados, todo gratis.
+
+Cambios:
+- `lib/auth.ts`: `OWNER_EMAIL = "rrhh.milchollos@gmail.com"` hardcodeado en `adminEmailSet()`. La env var `ADMIN_EMAILS` sigue funcionando como extensión, pero el propietario nunca puede quedarse fuera por una env mal configurada.
+- `lib/credits.ts`: nuevo `userHasAnyPurchase(userId)` (LIMIT 1, índice compuesto). `CUSTOM_DOMAIN_MIN_SPEND_CENTS` deprecated y puesto a 0.
+- `routes/apps.ts` `POST /apps/:id/domain`: gate cambiado a `isAdmin || hasPurchase`. 402 con mensaje claro "necesitas plan de pago" en vez de "te faltan X €".
+- `routes/apps.ts` `GET /apps/:id/domain`: respuesta ahora incluye `unlocked: boolean` y `unlockReason: "admin" | "purchase" | null`. `requiredCents` siempre 0 (legacy).
+- `lib/api-spec/openapi.yaml`: añadidos `unlocked` y `unlockReason` en `CustomDomainStatus`. `requiredCents` marcado deprecated. Codegen regenerado.
+- `app-detail.tsx`: usa `data.unlocked` (con fallback a la regla vieja por compatibilidad). Mensaje rediseñado, sin barra de progreso ni "X € / 50 €".
+- `lib/db/src/schema/creditTransactions.ts`: añadido índice `credit_tx_user_kind_idx (user_id, kind)` para que `userHasAnyPurchase` y los listados de transacciones del panel admin no degraden con volumen.
+
+Verificación: typecheck verde 4 paquetes, db push aplicado, índice presente en pg_indexes, /api/healthz ok.

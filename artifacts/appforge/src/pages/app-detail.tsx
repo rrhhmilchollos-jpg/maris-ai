@@ -1770,15 +1770,19 @@ function CustomDomainSection({ appId }: { appId: number }) {
     );
   }
 
-  const spentCents = data.spentCents ?? 0;
-  const requiredCents = data.requiredCents ?? 5000;
-  const unlocked = spentCents >= requiredCents;
-  const eur = (cents: number) => (cents / 100).toFixed(2);
+  // Nuevo gate (Mayo 2026): el dominio propio se desbloquea con CUALQUIER
+  // plan de pago o si la cuenta es admin/propietaria. Ya no hay un umbral
+  // de € acumulados — el backend devuelve `unlocked` y `unlockReason`.
+  // Fallback al campo legacy spentCents/requiredCents por si un cliente
+  // viejo recibe la respuesta antigua.
+  const unlocked =
+    typeof data.unlocked === "boolean"
+      ? data.unlocked
+      : (data.spentCents ?? 0) >= (data.requiredCents ?? 0);
 
-  // 1. Locked.
+  // 1. Locked → mensaje claro de "necesitas plan de pago", sin barra de
+  //    progreso (ya no aplica el umbral en €).
   if (!unlocked) {
-    const remaining = Math.max(0, requiredCents - spentCents);
-    const pct = Math.min(100, Math.round((spentCents / requiredCents) * 100));
     return (
       <div
         className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-3"
@@ -1788,19 +1792,16 @@ function CustomDomainSection({ appId }: { appId: number }) {
           <div className="text-sm font-medium text-amber-100">
             🔒 Conecta tu propio dominio
           </div>
-          <div className="text-[11px] text-amber-200/80 font-mono">
-            {eur(spentCents)} € / {eur(requiredCents)} €
+          <div className="text-[10px] uppercase tracking-wide text-amber-200/70">
+            Plan de pago
           </div>
         </div>
-        <div className="h-1.5 rounded-full bg-amber-500/15 overflow-hidden mb-2">
-          <div
-            className="h-full bg-amber-400/70 transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
         <p className="text-xs text-amber-100/80 leading-relaxed">
-          Puedes conectar tu propio dominio (p. ej. <span className="font-mono">mitienda.com</span>) cuando acumules {eur(requiredCents)} € en compras.
-          Te faltan <span className="font-medium">{eur(remaining)} €</span>.
+          En el plan gratis puedes desplegar tu app, pero solo con el subdominio
+          de preview que asigna Maris AI.
+          Para conectar tu propio dominio (p. ej. <span className="font-mono">mitienda.com</span>)
+          necesitas un plan de pago — basta con comprar cualquier paquete de
+          créditos para desbloquearlo.
         </p>
       </div>
     );

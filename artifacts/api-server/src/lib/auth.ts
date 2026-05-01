@@ -16,14 +16,22 @@ declare global {
   }
 }
 
+// Email del propietario de Maris AI. Siempre es admin: créditos ilimitados,
+// sin límites de uso, dominio propio gratis. Se incluye en código (no solo en
+// env var) porque es la cuenta dueña del producto y no debería poder quedarse
+// fuera por una variable mal configurada en deploy.
+const OWNER_EMAIL = "rrhh.milchollos@gmail.com";
+
 function adminEmailSet(): Set<string> {
   const raw = process.env.ADMIN_EMAILS ?? "";
-  return new Set(
+  const set = new Set(
     raw
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
   );
+  set.add(OWNER_EMAIL);
+  return set;
 }
 
 export function isAdminEmail(email: string | null | undefined): boolean {

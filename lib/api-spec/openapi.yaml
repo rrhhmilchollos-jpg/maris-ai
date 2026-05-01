@@ -456,7 +456,7 @@ paths:
     post:
       operationId: attachAppCustomDomain
       tags: [apps]
-      summary: Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+      summary: Attach a custom domain to the app's Vercel project (paid-plan only)
       parameters:
         - name: id
           in: path
@@ -488,7 +488,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "402":
-          description: User has not spent enough to unlock custom domains
+          description: |
+            Custom domain is locked. Free plan only allows the auto-assigned
+            preview domain — paid plans unlock custom domains.
           content:
             application/json:
               schema:
@@ -496,10 +498,12 @@ paths:
                   - $ref: "#/components/schemas/ApiError"
                   - type: object
                     properties:
-                      spentCents:
-                        type: integer
-                      requiredCents:
-                        type: integer
+                      unlocked:
+                        type: boolean
+                      unlockReason:
+                        type: string
+                        enum: ["admin", "purchase"]
+                        nullable: true
         "404":
           description: App not found
           content:
@@ -1682,10 +1686,27 @@ components:
             $ref: "#/components/schemas/DnsRecord"
         spentCents:
           type: integer
-          description: User's lifetime EUR spend in cents (used to display gate progress)
+          description: |
+            User's lifetime EUR spend in cents. Informational only — the
+            unlock gate no longer uses a spend threshold.
         requiredCents:
           type: integer
-          description: Threshold in cents required to unlock custom domains
+          description: |
+            Deprecated. Always 0 since May 2026. The unlock rule is now
+            "any paid purchase OR admin email", not a EUR threshold.
+        unlocked:
+          type: boolean
+          description: |
+            Whether this user can attach a custom domain to this app.
+            True for admin emails OR users who have made any purchase.
+        unlockReason:
+          type: string
+          enum: ["admin", "purchase"]
+          nullable: true
+          description: |
+            How the user qualified for custom-domain access:
+            "admin" = owner email, "purchase" = at least one paid plan,
+            null = locked (free plan).
         warning:
           type: string
           description: Optional soft warning if Vercel API is briefly unreachable

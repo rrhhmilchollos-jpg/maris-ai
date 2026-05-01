@@ -1528,7 +1528,7 @@ export function useGetAppCustomDomain<
 }
 
 /**
- * @summary Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+ * @summary Attach a custom domain to the app's Vercel project (paid-plan only)
  */
 export const getAttachAppCustomDomainUrl = (id: number) => {
   return `/api/apps/${id}/domain`;
@@ -1595,7 +1595,7 @@ export type AttachAppCustomDomainMutationError = ErrorType<
 >;
 
 /**
- * @summary Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+ * @summary Attach a custom domain to the app's Vercel project (paid-plan only)
  */
 export const useAttachAppCustomDomain = <
   TError = ErrorType<ApiError | AttachAppCustomDomain402>,

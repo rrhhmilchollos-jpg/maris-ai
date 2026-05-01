@@ -534,12 +534,26 @@ export const GetAppCustomDomainResponse = zod.object({
     .number()
     .optional()
     .describe(
-      "User's lifetime EUR spend in cents (used to display gate progress)",
+      "User's lifetime EUR spend in cents. Informational only — the\nunlock gate no longer uses a spend threshold.\n",
     ),
   requiredCents: zod
     .number()
     .optional()
-    .describe("Threshold in cents required to unlock custom domains"),
+    .describe(
+      'Deprecated. Always 0 since May 2026. The unlock rule is now\n\"any paid purchase OR admin email\", not a EUR threshold.\n',
+    ),
+  unlocked: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this user can attach a custom domain to this app.\nTrue for admin emails OR users who have made any purchase.\n",
+    ),
+  unlockReason: zod
+    .enum(["admin", "purchase"])
+    .nullish()
+    .describe(
+      'How the user qualified for custom-domain access:\n\"admin\" = owner email, \"purchase\" = at least one paid plan,\nnull = locked (free plan).\n',
+    ),
   warning: zod
     .string()
     .optional()
@@ -547,7 +561,7 @@ export const GetAppCustomDomainResponse = zod.object({
 });
 
 /**
- * @summary Attach a custom domain to the app's Vercel project (gated at 50€ lifetime spend)
+ * @summary Attach a custom domain to the app's Vercel project (paid-plan only)
  */
 export const AttachAppCustomDomainParams = zod.object({
   id: zod.coerce.number(),
@@ -595,12 +609,26 @@ export const AttachAppCustomDomainResponse = zod.object({
     .number()
     .optional()
     .describe(
-      "User's lifetime EUR spend in cents (used to display gate progress)",
+      "User's lifetime EUR spend in cents. Informational only — the\nunlock gate no longer uses a spend threshold.\n",
     ),
   requiredCents: zod
     .number()
     .optional()
-    .describe("Threshold in cents required to unlock custom domains"),
+    .describe(
+      'Deprecated. Always 0 since May 2026. The unlock rule is now\n\"any paid purchase OR admin email\", not a EUR threshold.\n',
+    ),
+  unlocked: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether this user can attach a custom domain to this app.\nTrue for admin emails OR users who have made any purchase.\n",
+    ),
+  unlockReason: zod
+    .enum(["admin", "purchase"])
+    .nullish()
+    .describe(
+      'How the user qualified for custom-domain access:\n\"admin\" = owner email, \"purchase\" = at least one paid plan,\nnull = locked (free plan).\n',
+    ),
   warning: zod
     .string()
     .optional()

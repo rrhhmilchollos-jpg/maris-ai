@@ -41,11 +41,38 @@ export async function getUserSpentCents(userId: string): Promise<number> {
 }
 
 /**
- * EUR threshold required to unlock a custom Vercel domain. Kept in one
- * place so the gate, the API response, and the UI message can never
- * disagree.
+ * @deprecated El umbral de gasto ya no se usa para desbloquear el dominio
+ * propio. La nueva regla es: dominio propio se desbloquea con CUALQUIER plan
+ * de pago (cualquier compra > 0). Los admins siempre lo tienen desbloqueado.
+ * Se mantiene exportado solo para no romper consumidores legacy mientras
+ * migran al nuevo helper `userHasAnyPurchase`.
  */
-export const CUSTOM_DOMAIN_MIN_SPEND_CENTS = 5000;
+export const CUSTOM_DOMAIN_MIN_SPEND_CENTS = 0;
+
+/**
+ * Devuelve true si el usuario ha hecho al menos UNA compra de créditos
+ * (cualquier paquete, EUR o USD). Se usa para desbloquear features de pago
+ * como el dominio personalizado en Vercel: la regla de producto es "plan
+ * gratis sólo deploy con dominio de preview, dominio propio sólo si has
+ * pagado al menos una vez".
+ *
+ * No filtra por moneda ni por importe — basta con tener un movimiento de
+ * tipo "purchase" (los regalos de bienvenida son `kind = "grant"`, no
+ * cuentan). Query indexada por `(user_id, kind)` y limitada a 1 fila.
+ */
+export async function userHasAnyPurchase(userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: creditTransactions.id })
+    .from(creditTransactions)
+    .where(
+      and(
+        eq(creditTransactions.userId, userId),
+        eq(creditTransactions.kind, "purchase"),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
 
 /**
  * Atomically credit a Stripe purchase to the user, with hard idempotency on

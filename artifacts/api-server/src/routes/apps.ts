@@ -50,7 +50,7 @@ import {
   getVercelDomainStatus,
   removeVercelDomainForApp,
 } from "../lib/vercelDeploy";
-import { getUserSpentCents, CUSTOM_DOMAIN_MIN_SPEND_CENTS } from "../lib/credits";
+import { getUserSpentCents, userHasAnyPurchase, CUSTOM_DOMAIN_MIN_SPEND_CENTS } from "../lib/credits";
 import { appRevisions } from "@workspace/db/schema";
 
 /** Credits charged for one Visual Testing Agent run (silent). */
@@ -2790,16 +2790,27 @@ router.post(
 /**
  * Custom Vercel domain endpoints — POST/GET/DELETE /apps/:id/domain.
  *
- * Gated server-side by `getUserSpentCents(userId) >= CUSTOM_DOMAIN_MIN_SPEND_CENTS`
- * (= 50 EUR). The UI also enforces this for UX, but we re-check it here so a
- * crafted curl request can't bypass the rule.
+ * Regla de producto (Mayo 2026):
+ *   - Plan gratis → SOLO se puede hacer deploy con el dominio de preview que
+ *     asigna Maris AI (subdominio gestionado). NO se permite dominio propio.
+ *   - Cualquier plan de pago (cualquier compra > 0 €) → desbloquea dominio
+ *     propio. No hay umbral mínimo de gasto.
+ *   - Admin / propietario (rrhh.milchollos@gmail.com) → desbloqueado siempre,
+ *     gratis e ilimitado.
+ *
+ * Cambia respecto a la versión anterior: se eliminó el "umbral de 50 € en
+ * compras". Ahora basta una compra cualquiera para desbloquear.
+ *
+ * Gate server-side: `unlocked = isAdminEmail(email) || userHasAnyPurchase(userId)`.
+ * El frontend también lo aplica para UX, pero re-validamos aquí para que un
+ * curl manipulado no se lo salte.
  *
  * Pre-conditions:
  *  - The app must already have a Vercel deploy (vercelProjectId not null).
  *    Otherwise we'd be attaching a domain to a project that doesn't exist.
  *
- * Spend gate is checked AFTER ownership so we don't leak whether an app id
- * exists to a non-paying user.
+ * El gate de pago se comprueba DESPUÉS del ownership check para no filtrar
+ * la existencia de un appId a un usuario sin plan de pago.
  */
 
 function isPlausibleDomain(input: string): boolean {
@@ -2863,15 +2874,17 @@ router.post(
       return;
     }
 
-    // Spend gate. Computed after ownership check (info-hiding) so non-paying
-    // users can't probe for app existence.
-    const spentCents = await getUserSpentCents(userId);
-    if (spentCents < CUSTOM_DOMAIN_MIN_SPEND_CENTS) {
-      const remainingCents = CUSTOM_DOMAIN_MIN_SPEND_CENTS - spentCents;
+    // Paywall: dominio propio sólo con plan de pago. Admin pasa siempre.
+    // Comprobado después del ownership check para no filtrar la existencia
+    // del appId a usuarios sin plan.
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const hasPurchase = isAdmin ? true : await userHasAnyPurchase(userId);
+    if (!isAdmin && !hasPurchase) {
       res.status(402).json({
-        error: `Conectar tu propio dominio se desbloquea cuando acumulas ${(CUSTOM_DOMAIN_MIN_SPEND_CENTS / 100).toFixed(0)} € en compras. Te faltan ${(remainingCents / 100).toFixed(2)} €.`,
-        spentCents,
-        requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS,
+        error:
+          "Conectar tu propio dominio requiere un plan de pago. En el plan gratis puedes desplegar tu app, pero solo con el dominio de preview que asigna Maris AI. Compra cualquier paquete de créditos para desbloquearlo.",
+        unlocked: false,
+        unlockReason: null,
       });
       return;
     }
@@ -2926,14 +2939,27 @@ router.get(
       res.status(404).json({ error: "App not found" });
       return;
     }
+    // Calculamos `unlocked` (admin OR cualquier compra). `spentCents` y
+    // `requiredCents` se mantienen en la respuesta como legacy/informativo
+    // para no romper clientes antiguos: requiredCents=0 ahora siempre.
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const hasPurchase = isAdmin ? true : await userHasAnyPurchase(userId);
+    const unlocked = isAdmin || hasPurchase;
+    const unlockReason: "admin" | "purchase" | null = isAdmin
+      ? "admin"
+      : hasPurchase
+        ? "purchase"
+        : null;
     const spentCents = await getUserSpentCents(userId);
+    const baseStatus = {
+      spentCents,
+      requiredCents: 0,
+      unlocked,
+      unlockReason,
+    };
 
     if (!app.row.vercelCustomDomain || !app.row.vercelProjectId) {
-      res.json({
-        domain: null,
-        spentCents,
-        requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS,
-      });
+      res.json({ domain: null, ...baseStatus });
       return;
     }
 
@@ -2943,7 +2969,7 @@ router.get(
       log: req.log,
     });
     if (r.ok) {
-      res.json({ ...r.status, spentCents, requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS });
+      res.json({ ...r.status, ...baseStatus });
       return;
     }
     // Vercel call failed — don't 500 the whole thing; return cached domain
@@ -2953,8 +2979,7 @@ router.get(
       verified: false,
       verification: [],
       recommendedDns: [],
-      spentCents,
-      requiredCents: CUSTOM_DOMAIN_MIN_SPEND_CENTS,
+      ...baseStatus,
       warning: r.failure.kind === "vercel_api_error" ? r.failure.message : "Vercel no está disponible.",
     });
   },
