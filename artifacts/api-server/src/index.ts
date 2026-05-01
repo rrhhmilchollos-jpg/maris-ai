@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
+import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -80,6 +81,27 @@ app.listen(port, async (err) => {
     startSelfMonitor();
   } catch (selfErr) {
     logger.error({ err: selfErr }, "Failed to start self-monitor");
+  }
+
+  // 5) Best-effort Redis ping. If REDIS_URL is set we want to know at boot
+  //    whether it's reachable (and how fast) so the admin panel reflects the
+  //    real state. A failure here is logged and ignored — Redis is not yet on
+  //    the critical path; the existing pg-boss queue keeps generations
+  //    running. This becomes the foundation for the BullMQ migration.
+  if (isRedisConfigured()) {
+    pingRedis()
+      .then((result) => {
+        if (result.ok) {
+          logger.info({ latencyMs: result.latencyMs }, "Redis ping ok");
+        } else {
+          logger.warn({ err: result.error }, "Redis ping failed at boot");
+        }
+      })
+      .catch((pingErr) => {
+        logger.warn({ err: pingErr }, "Redis ping threw at boot");
+      });
+  } else {
+    logger.info("Redis not configured (REDIS_URL unset) — skipping ping");
   }
 
   // Periodic sweep: re-run the reclaim every 2 minutes so jobs that get stuck

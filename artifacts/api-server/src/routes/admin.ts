@@ -12,6 +12,8 @@ import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { logger } from "../lib/logger";
 import { agentMemory } from "@workspace/db";
 import { getMetricsSnapshot } from "../lib/metrics";
+import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
+import { pingRedis, getRedisStatus } from "../lib/redisHealth";
 
 const router: IRouter = Router();
 
@@ -605,7 +607,23 @@ router.get("/admin/metrics", async (_req, res) => {
       ready: isQueueReady(),
       jobs24hByStatus: queueByStatus,
     },
+    redis: getRedisStatus(),
+    e2b: { configured: isE2BEnabled() },
   });
+});
+
+// On-demand Redis round-trip ping. Refreshes the cached status reported by
+// /admin/metrics. Safe to call repeatedly — it's just a PING.
+router.post("/admin/redis-ping", async (_req, res) => {
+  const result = await pingRedis();
+  res.json(result);
+});
+
+// Spin up a tiny E2B microVM, run `echo`, kill it. Verifies the API key and
+// outbound connectivity without spending the credits of a full bundle build.
+router.post("/admin/e2b-smoke", async (_req, res) => {
+  const result = await e2bSmokeTest();
+  res.json(result);
 });
 
 export default router;
