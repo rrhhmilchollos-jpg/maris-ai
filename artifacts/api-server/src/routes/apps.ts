@@ -1403,6 +1403,34 @@ async function enqueueGeneration(
   let job;
   try {
     job = await db.transaction(async (tx) => {
+      // Concurrency guard for edits: take a per-app advisory lock so two
+      // simultaneous edit requests on the same app can't both pass the
+      // pre-tx in-flight check, both insert a job, and both bill the user.
+      // The lock is released automatically at tx commit/rollback. Namespace
+      // (first arg, 0x4D415249 = "MARI") keeps us from colliding with any
+      // other advisory lock taken elsewhere in the codebase.
+      //
+      // We re-check in-flight INSIDE the lock — the pre-tx check stays as a
+      // fast-path so most users still get a clean 409 without paying the
+      // round-trip of opening a tx + taking a lock.
+      if (editAppId) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(1296126537, ${editAppId})`);
+        const conflict = await tx
+          .select({ id: generationJobs.id })
+          .from(generationJobs)
+          .where(
+            and(
+              eq(generationJobs.appId, editAppId),
+              sql`${generationJobs.status} IN ('queued', 'running')`,
+            ),
+          )
+          .limit(1);
+        if (conflict.length > 0) {
+          // Throw a sentinel so the catch below maps it to 409 without
+          // double-billing. The lock's still held until rollback completes.
+          throw new Error("APP_BUSY");
+        }
+      }
       if (!isAdmin) {
         const updated = await tx
           .update(users)
@@ -1458,6 +1486,16 @@ async function enqueueGeneration(
     if (err instanceof Error && err.message === "INSUFFICIENT_CREDITS") {
       res.status(402).json({
         error: "Te has quedado sin créditos. Compra más para seguir generando.",
+      });
+      return;
+    }
+    if (err instanceof Error && err.message === "APP_BUSY") {
+      // Lost the advisory-lock race — another concurrent edit on the same
+      // app got the lock first and is already queued. Same UX as the pre-tx
+      // 409, but here it means the lock check (not the read-only pre-check)
+      // caught it.
+      res.status(409).json({
+        error: "Ya hay un cambio en curso para esta app. Espera a que termine.",
       });
       return;
     }
