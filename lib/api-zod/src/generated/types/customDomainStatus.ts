@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomDomainStatusUnlockReason } from "./customDomainStatusUnlockReason";
 import type { CustomDomainStatusVerificationItem } from "./customDomainStatusVerificationItem";
 import type { DnsRecord } from "./dnsRecord";
 
@@ -15,10 +16,23 @@ export interface CustomDomainStatus {
   verified?: boolean;
   verification?: CustomDomainStatusVerificationItem[];
   recommendedDns?: DnsRecord[];
-  /** User's lifetime EUR spend in cents (used to display gate progress) */
+  /** User's lifetime EUR spend in cents. Informational only — the
+unlock gate no longer uses a spend threshold.
+ */
   spentCents?: number;
-  /** Threshold in cents required to unlock custom domains */
+  /** Deprecated. Always 0 since May 2026. The unlock rule is now
+"any paid purchase OR admin email", not a EUR threshold.
+ */
   requiredCents?: number;
+  /** Whether this user can attach a custom domain to this app.
+True for admin emails OR users who have made any purchase.
+ */
+  unlocked?: boolean;
+  /** How the user qualified for custom-domain access:
+"admin" = owner email, "purchase" = at least one paid plan,
+null = locked (free plan).
+ */
+  unlockReason?: CustomDomainStatusUnlockReason;
   /** Optional soft warning if Vercel API is briefly unreachable */
   warning?: string;
 }

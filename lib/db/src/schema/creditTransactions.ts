@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
@@ -40,6 +41,12 @@ export const creditTransactions = pgTable(
       table.userId,
       table.stripeSessionId,
     ),
+    // Index para `userHasAnyPurchase(userId)` y para los listados del panel
+    // admin (transacciones por usuario filtradas por kind="purchase"/"use"/
+    // "grant"). Sin él, una cuenta con miles de movimientos forzaría seq
+    // scan de toda la tabla. La query siempre filtra por (user_id, kind),
+    // así que el índice compuesto es el correcto.
+    userKindIdx: index("credit_tx_user_kind_idx").on(table.userId, table.kind),
   }),
 );
 

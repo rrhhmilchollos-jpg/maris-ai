@@ -306,6 +306,21 @@ export type CustomDomainStatusVerificationItem = {
   reason?: string;
 };
 
+/**
+ * How the user qualified for custom-domain access:
+"admin" = owner email, "purchase" = at least one paid plan,
+null = locked (free plan).
+
+ */
+export type CustomDomainStatusUnlockReason =
+  | (typeof CustomDomainStatusUnlockReason)[keyof typeof CustomDomainStatusUnlockReason]
+  | null;
+
+export const CustomDomainStatusUnlockReason = {
+  admin: "admin",
+  purchase: "purchase",
+} as const;
+
 export interface CustomDomainStatus {
   /** Custom domain currently attached, or null if none */
   domain?: string | null;
@@ -313,10 +328,23 @@ export interface CustomDomainStatus {
   verified?: boolean;
   verification?: CustomDomainStatusVerificationItem[];
   recommendedDns?: DnsRecord[];
-  /** User's lifetime EUR spend in cents (used to display gate progress) */
+  /** User's lifetime EUR spend in cents. Informational only — the
+unlock gate no longer uses a spend threshold.
+ */
   spentCents?: number;
-  /** Threshold in cents required to unlock custom domains */
+  /** Deprecated. Always 0 since May 2026. The unlock rule is now
+"any paid purchase OR admin email", not a EUR threshold.
+ */
   requiredCents?: number;
+  /** Whether this user can attach a custom domain to this app.
+True for admin emails OR users who have made any purchase.
+ */
+  unlocked?: boolean;
+  /** How the user qualified for custom-domain access:
+"admin" = owner email, "purchase" = at least one paid plan,
+null = locked (free plan).
+ */
+  unlockReason?: CustomDomainStatusUnlockReason;
   /** Optional soft warning if Vercel API is briefly unreachable */
   warning?: string;
 }
@@ -499,9 +527,18 @@ export type AttachAppCustomDomainBody = {
   domain: string;
 };
 
+export type AttachAppCustomDomain402UnlockReason =
+  | (typeof AttachAppCustomDomain402UnlockReason)[keyof typeof AttachAppCustomDomain402UnlockReason]
+  | null;
+
+export const AttachAppCustomDomain402UnlockReason = {
+  admin: "admin",
+  purchase: "purchase",
+} as const;
+
 export type AttachAppCustomDomain402 = ApiError & {
-  spentCents?: number;
-  requiredCents?: number;
+  unlocked?: boolean;
+  unlockReason?: AttachAppCustomDomain402UnlockReason;
 };
 
 export type DetachAppCustomDomain200 = {

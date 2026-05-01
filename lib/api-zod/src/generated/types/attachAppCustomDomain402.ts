@@ -6,8 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ApiError } from "./apiError";
+import type { AttachAppCustomDomain402UnlockReason } from "./attachAppCustomDomain402UnlockReason";
 
 export type AttachAppCustomDomain402 = ApiError & {
-  spentCents?: number;
-  requiredCents?: number;
+  unlocked?: boolean;
+  unlockReason?: AttachAppCustomDomain402UnlockReason;
 };
