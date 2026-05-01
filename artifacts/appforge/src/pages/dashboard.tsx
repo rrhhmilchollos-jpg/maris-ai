@@ -33,7 +33,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, type LucideIcon } from "lucide-react";
+import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, Server, ListTodo, CloudSun, Newspaper, type LucideIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +69,9 @@ const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   Cat,
   Zap,
   Atom,
+  ListTodo,
+  CloudSun,
+  Newspaper,
 };
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
@@ -108,7 +111,7 @@ export default function DashboardPage() {
   // here purely for display (badge on each chip + button label). Authoritative
   // mapping lives in artifacts/api-server/src/routes/apps.ts (KIND_COSTS /
   // KIND_INTENTS / ALLOWED_KINDS) — keep both in sync.
-  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa";
+  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs";
   const [kind, setKind] = useState<Kind>("fullstack");
   const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
     fullstack: {
@@ -146,6 +149,24 @@ export default function DashboardPage() {
       icon: Globe,
       placeholder: "ej. Una app instalable de notas con sincronización offline, búsqueda y categorías por colores...",
       cost: 3,
+    },
+    vue: {
+      label: "Vue 3",
+      icon: Component,
+      placeholder: "ej. Una app de tareas con Vue 3 Composition API, vue-router y Pinia, persistida en localStorage...",
+      cost: 1,
+    },
+    svelte: {
+      label: "SvelteKit",
+      icon: Flame,
+      placeholder: "ej. Un dashboard del tiempo con SvelteKit, Svelte 5 runes y datos desde Open-Meteo...",
+      cost: 1,
+    },
+    nextjs: {
+      label: "Next.js",
+      icon: Server,
+      placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...",
+      cost: 2,
     },
   };
   // KIND_META[kind] can be undefined if a stale localStorage value or a

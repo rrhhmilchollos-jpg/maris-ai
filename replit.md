@@ -117,3 +117,26 @@ Tras la revisión interna del codebase, se aplicaron los siguientes endurecimien
 - **Cancelación — `pages/debug-preview.tsx`**: el `fetch` del bundle ahora usa un `AbortController` que se aborta en cleanup del efecto.
 - **Accesibilidad — `pages/app-detail.tsx`**: añadidos `aria-label` y `title` a los botones icon-only (enviar mensaje, eliminar app).
 - **Concurrencia — `routes/apps.ts` (`enqueueGeneration`)**: añadido `pg_advisory_xact_lock(1296126537, appId)` dentro de la transacción del enqueue + re-check de jobs in-flight. La namespace 0x4D415249 ("MARI") evita colisión con otros locks. El lock se libera automáticamente al commit/rollback. Antes, dos requests concurrentes para la misma app podían pasar el check pre-tx (ambos veían 0 in-flight), insertar dos jobs y doble-cobrar el crédito. La pre-check sigue como fast-path (mayoría de 409 sin abrir tx); el lock+re-check garantiza correctitud bajo concurrencia real. Se devuelve 409 con sentinel `APP_BUSY` cuando se pierde la carrera.
+
+## Nuevos kinds de proyecto (Mayo 2026 — fase 1 cheat-sheet usuario)
+
+Maris ahora soporta 9 tipos de proyecto en lugar de 6. Añadidos: **vue**, **svelte**, **nextjs**.
+
+| Kind | Coste | INTENT resumido |
+|------|-------|-----------------|
+| vue | 1 | Vue 3 SPA + Vite + vue-router + Pinia + Tailwind, Composition API + `<script setup lang="ts">`. |
+| svelte | 1 | SvelteKit + Svelte 5 runes (`$state`/`$derived`/`$effect`, no la sintaxis legacy `$:`), file-based routing, +server.ts para APIs. |
+| nextjs | 2 | Next.js 14+ App Router (NO Pages Router), Server Components por defecto, `app/api/<route>/route.ts` para endpoints. |
+
+Cambios aplicados:
+- `routes/apps.ts`: extendidos `ProjectKind`, `KIND_COSTS`, `KIND_INTENTS`. Las INTENT incluyen reglas anti-pitfall (no `$:` en svelte, no Pages Router en next, etc).
+- `lib/templates.ts`: extendido `TemplateKind` y añadidas 3 plantillas nuevas (`vue-todo`, `svelte-weather`, `nextjs-blog`). Total: 15 templates.
+- `lib/api-spec/openapi.yaml`: enum `kind` ampliado y descripciones de coste actualizadas; `pnpm --filter @workspace/api-spec run codegen` regenera el cliente y los esquemas zod.
+- `dashboard.tsx`: extendidos `Kind` y `KIND_META`. Iconos lucide nuevos: `Component` (vue), `Flame` (svelte), `Server` (nextjs), más `ListTodo`/`CloudSun`/`Newspaper` para los templates.
+- `TEMPLATE_ICONS` ampliado con los nuevos iconos para que la galería los renderice.
+
+Pendientes del cheat-sheet del usuario (próximas sesiones, en orden):
+1. Backend Python (FastAPI/Django) además de Node — kinds `python-api` / `django`.
+2. Juegos: subkinds explícitos para Phaser 2D y Three.js 3D (hoy se eligen dentro del INTENT genérico, separarlos da plantillas mejor especializadas).
+3. Plantillas IA/ML (Python + Jupyter + scikit-learn/TF/PyTorch).
+4. Generación de Dockerfile + docker-compose.yml para los proyectos exportados.
