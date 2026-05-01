@@ -13,10 +13,18 @@ import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
+import { apiRateLimiter } from "./middlewares/rateLimit";
+import { metricsMiddleware } from "./lib/metrics";
 
 initSentry();
 
 const app: Express = express();
+
+// Behind the Replit shared reverse proxy (mTLS). Without trust proxy=1,
+// req.ip is always the proxy hop and the rate-limiter buckets every user
+// into the same key. Trusting one hop is the documented setup for a single
+// upstream proxy and is what express-rate-limit expects.
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -77,6 +85,16 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   });
   next();
 });
+
+// Global API rate limit (per IP, per Clerk userId once authenticated). Mounted
+// before the API router so every /api/* request passes through it. Public
+// /p/* deploy routes and Stripe webhooks are intentionally outside this scope.
+app.use("/api", apiRateLimiter);
+
+// In-memory request/error/duration counters surfaced via /api/admin/metrics.
+// No external dependency, resets on process restart — good enough for a
+// single-instance Replit deployment.
+app.use("/api", metricsMiddleware);
 
 app.use("/api", router);
 
