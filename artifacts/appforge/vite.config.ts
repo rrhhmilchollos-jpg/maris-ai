@@ -72,10 +72,31 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // WebContainers (used by the Live Preview feature in app-detail) require
+    // SharedArrayBuffer, which only works under cross-origin isolation.
+    //
+    // We use `credentialless` (NOT `require-corp`) so third-party resources
+    // we depend on — Clerk auth scripts, Tailwind CDN, Google fonts, image
+    // CDNs (Unsplash etc.) — keep loading without each requiring a
+    // `Cross-Origin-Resource-Policy` header. `credentialless` strips
+    // cookies from cross-origin sub-resource requests, which is fine here
+    // since none of the embedded third-parties depend on our cookies.
+    //
+    // Browser support: Chrome/Edge 96+. In older browsers
+    // `crossOriginIsolated` will be false and `LivePreview` will show its
+    // friendly fallback message instead of crashing.
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "credentialless",
+    },
   },
   preview: {
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "credentialless",
+    },
   },
 });

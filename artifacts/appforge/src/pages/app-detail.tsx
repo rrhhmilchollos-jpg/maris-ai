@@ -89,6 +89,7 @@ import {
   Monitor,
   Tablet,
   Smartphone,
+  Zap,
 } from "lucide-react";
 import {
   Dialog,
@@ -116,8 +117,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { parseBundle, buildSandpackFiles, SANDPACK_DEPENDENCIES } from "@/lib/parseBundle";
+import { LivePreview } from "@/components/live-preview";
 
-type TabKey = "preview" | "frontend" | "backend";
+type TabKey = "preview" | "live" | "frontend" | "backend";
 
 const PHASE_LABELS: Record<string, string> = {
   queued: "En cola…",
@@ -930,7 +932,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                  aria-label="Eliminar aplicación"
+                  title="Eliminar aplicación"
+                >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </AlertDialogTrigger>
@@ -1136,6 +1144,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   disabled={isWorking || outOfCredits || draft.trim().length < 2 || sendMutation.isPending}
                   onClick={handleSend}
                   className="absolute right-2 bottom-2 h-8 w-8"
+                  aria-label="Enviar mensaje"
+                  title="Enviar mensaje"
                 >
                   {sendMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1162,7 +1172,23 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   onClick={() => setActiveTab("preview")}
                   className={`h-8 rounded-md ${activeTab === "preview" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
                 >
-                  <Eye className="h-4 w-4 mr-2" /> Preview en vivo
+                  <Eye className="h-4 w-4 mr-2" /> Preview
+                </Button>
+                {/* "Live" tab boots a real Node.js inside the browser via
+                    WebContainer and runs the generated bundle with vite dev,
+                    same way the user's published app would run. Slower to
+                    start than Sandpack (~30-90s npm install) but a true
+                    fidelity preview — real npm graph, real HMR, real
+                    tailwind/postcss pipeline. The preview/sandpack tab stays
+                    as the always-available instant fallback. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveTab("live")}
+                  className={`h-8 rounded-md ${activeTab === "live" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`}
+                  title="Ejecuta tu app en un Node real dentro del navegador (Chrome/Edge)"
+                >
+                  <Zap className="h-4 w-4 mr-2" /> Live
                 </Button>
                 <Button
                   variant="ghost"
@@ -1221,7 +1247,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     ))}
                   </div>
                 )}
-                {activeTab !== "preview" && (
+                {/* Copy button only makes sense in code tabs (frontend/backend);
+                    "preview" and "live" both render iframes, no text to copy. */}
+                {(activeTab === "frontend" || activeTab === "backend") && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -1408,6 +1436,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     No hay vista previa disponible
+                  </div>
+                )
+              ) : activeTab === "live" ? (
+                app?.frontendCode ? (
+                  <LivePreview frontendCode={app.frontendCode} />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    Aún no hay bundle para ejecutar.
                   </div>
                 )
               ) : (

@@ -48,6 +48,71 @@ export async function getUserSpentCents(userId: string): Promise<number> {
 export const CUSTOM_DOMAIN_MIN_SPEND_CENTS = 5000;
 
 /**
+ * Atomically credit a Stripe purchase to the user, with hard idempotency on
+ * `(userId, stripeSessionId)`. Safe to call concurrently from the
+ * `/billing/confirm` polling endpoint AND the Stripe webhook — at most one
+ * caller will actually grant credits; everyone else gets `alreadyProcessed`.
+ *
+ * Idempotency is enforced two ways:
+ *   1. A partial unique index on `credit_transactions(user_id, stripe_session_id)`
+ *      where `stripe_session_id IS NOT NULL` — the database refuses dupes.
+ *   2. `INSERT ... ON CONFLICT DO NOTHING RETURNING id` — if the row was
+ *      inserted we get an id back and proceed to bump the balance, otherwise
+ *      we no-op. The whole pair runs inside a single transaction so we never
+ *      end up with a ledger row but no balance bump (or vice versa).
+ */
+export async function creditPurchase(opts: {
+  userId: string;
+  amount: number;
+  stripeSessionId: string;
+  description: string;
+}): Promise<{ creditsAdded: number; alreadyProcessed: boolean; newBalance: number }> {
+  const { userId, amount, stripeSessionId, description } = opts;
+  return await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(creditTransactions)
+      .values({
+        userId,
+        kind: "purchase",
+        amount,
+        description,
+        stripeSessionId,
+      })
+      .onConflictDoNothing({
+        target: [creditTransactions.userId, creditTransactions.stripeSessionId],
+      })
+      .returning({ id: creditTransactions.id });
+
+    if (inserted.length === 0) {
+      // Already processed by a concurrent caller (other endpoint or retry).
+      const [row] = await tx
+        .select({ credits: users.credits })
+        .from(users)
+        .where(eq(users.id, userId));
+      return {
+        creditsAdded: 0,
+        alreadyProcessed: true,
+        newBalance: row?.credits ?? 0,
+      };
+    }
+
+    const [updated] = await tx
+      .update(users)
+      .set({
+        credits: sql`${users.credits} + ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning({ credits: users.credits });
+    return {
+      creditsAdded: amount,
+      alreadyProcessed: false,
+      newBalance: updated?.credits ?? 0,
+    };
+  });
+}
+
+/**
  * Refund a previously-charged amount of credits and log the transaction.
  * No-op for admins (they were never charged in the first place).
  */

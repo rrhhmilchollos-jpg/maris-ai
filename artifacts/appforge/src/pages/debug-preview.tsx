@@ -47,7 +47,18 @@ export default function DebugPreviewPage({ params }: { params: { id: string } })
   const [logs, setLogs] = useState<string[]>([]);
   useEffect(() => {
     if (id === "min") { setBundle("MIN"); return; }
-    fetch(`/api/__debug/bundle/${id}`).then((r) => r.json()).then((d) => setBundle(d.frontendCode || ""));
+    // Cancel the in-flight bundle fetch on unmount or `id` change so a slow
+    // response can't `setBundle` after the component is gone (or for the
+    // wrong app id).
+    const controller = new AbortController();
+    fetch(`/api/__debug/bundle/${id}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((d) => setBundle(d.frontendCode || ""))
+      .catch((err) => {
+        if (err?.name !== "AbortError") {
+          console.error("debug-preview fetch failed", err);
+        }
+      });
     const onMsg = (e: MessageEvent) => {
       const d: any = e.data;
       if (d && d.__appforgeDebug) {
@@ -55,7 +66,10 @@ export default function DebugPreviewPage({ params }: { params: { id: string } })
       }
     };
     window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
+    return () => {
+      controller.abort();
+      window.removeEventListener("message", onMsg);
+    };
   }, [id]);
   const sandpackFiles = useMemo(() => {
     if (bundle === "MIN") {

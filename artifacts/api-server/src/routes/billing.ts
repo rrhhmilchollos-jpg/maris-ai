@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "../lib/db";
 import { requireAuth } from "../lib/auth";
 import { users, creditTransactions } from "@workspace/db/schema";
@@ -8,6 +8,7 @@ import {
   findPackageByPriceId,
   getStripe,
 } from "../lib/stripe";
+import { creditPurchase } from "../lib/credits";
 
 const router: IRouter = Router();
 
@@ -161,46 +162,17 @@ router.post(
       return;
     }
 
-    const existing = await db
-      .select()
-      .from(creditTransactions)
-      .where(
-        and(
-          eq(creditTransactions.userId, req.userId!),
-          eq(creditTransactions.stripeSessionId, session.id),
-        ),
-      )
-      .limit(1);
-
-    let creditsAdded = 0;
-    if (existing.length === 0) {
-      await db.insert(creditTransactions).values({
-        userId: req.userId!,
-        kind: "purchase",
-        amount: credits,
-        description: `Purchased ${credits} credits`,
-        stripeSessionId: session.id,
-      });
-      await db
-        .update(users)
-        .set({
-          credits: sql`${users.credits} + ${credits}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, req.userId!));
-      creditsAdded = credits;
-    }
-
-    const [refreshed] = await db
-      .select({ credits: users.credits })
-      .from(users)
-      .where(eq(users.id, req.userId!));
-
-    res.json({
-      creditsAdded,
-      newBalance: refreshed?.credits ?? req.dbUser!.credits,
-      alreadyProcessed: existing.length > 0,
+    // Idempotent — racing with the webhook is fine, only one wins the
+    // INSERT and the loser sees `alreadyProcessed: true` with the same
+    // post-credit balance.
+    const result = await creditPurchase({
+      userId: req.userId!,
+      amount: credits,
+      stripeSessionId: session.id,
+      description: `Purchased ${credits} credits`,
     });
+
+    res.json(result);
   },
 );
 
