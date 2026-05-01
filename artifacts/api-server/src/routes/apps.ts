@@ -262,7 +262,10 @@ type ProjectKind =
   | "landing"
   | "game-2d"
   | "game-3d"
-  | "hybrid-pwa";
+  | "hybrid-pwa"
+  | "vue"
+  | "svelte"
+  | "nextjs";
 const KIND_COSTS: Record<ProjectKind, number> = {
   fullstack: 1,
   mobile: 2,
@@ -270,6 +273,9 @@ const KIND_COSTS: Record<ProjectKind, number> = {
   "game-2d": 3,
   "game-3d": 5,
   "hybrid-pwa": 3,
+  vue: 1,
+  svelte: 1,
+  nextjs: 2,
 };
 const KIND_INTENTS: Record<ProjectKind, string | null> = {
   fullstack: null,
@@ -283,6 +289,12 @@ const KIND_INTENTS: Record<ProjectKind, string | null> = {
     "[INTENT: 3D game — juego web 3D de una sola página. Elige stack: React Three Fiber (paquetes 'three' + '@react-three/fiber' + '@react-three/drei', con '@react-three/rapier' añadido cuando se necesita física) para juegos 3D declarativos en React — opción por defecto; Babylon.js (paquete '@babylonjs/core', new BABYLON.Engine + new BABYLON.Scene en useEffect, engine.dispose() en cleanup) para mundos 3D explorables más complejos con cámaras nativas FreeCamera/ArcRotateCamera, físicas con Cannon, partículas y skybox; three.js puro si el usuario lo pide explícitamente. Incluye escena con cámara y luces, loop (useFrame en R3F o scene.onBeforeRenderObservable en Babylon), controles (OrbitControls/PointerLock/WASD), físicas básicas, sistema de puntuación, estados (menu/playing/gameover). backendNeeded=false. La página principal ES el juego. Records en localStorage]",
   "hybrid-pwa":
     "[INTENT: hybrid PWA — aplicación instalable estilo app nativa: manifest.json con name/icons/theme_color/display=standalone, service worker registrado para offline-first (cachea shell + assets), prompt de instalación 'Add to Home Screen', diseño mobile-first con bottom navigation, áreas táctiles ≥44px. Debe verse perfecta a 390px y funcionar offline tras la primera carga]",
+  vue:
+    "[INTENT: Vue 3 SPA — aplicación de una sola página con Vue 3 (Composition API + <script setup lang=\"ts\">), Vite como bundler, vue-router para navegación cliente, Pinia para estado global cuando haga falta, Tailwind para estilos. Estructura: src/main.ts monta la app, src/App.vue es el shell, src/views/*.vue son las páginas, src/components/*.vue componentes reutilizables. backendNeeded por defecto false salvo que el usuario pida persistencia/auth]",
+  svelte:
+    "[INTENT: SvelteKit app — aplicación con SvelteKit (Svelte 5 runes: $state, $derived, $effect — NO usar la sintaxis legacy reactive `$:`), TypeScript, file-based routing en src/routes/, +page.svelte para páginas, +layout.svelte para layouts compartidos, load() functions en +page.ts para data fetching. Tailwind para estilos. backendNeeded por defecto false; cuando se necesite API usa +server.ts endpoints en lugar de un Express separado]",
+  nextjs:
+    "[INTENT: Next.js 14+ App Router — aplicación full-stack con Next.js usando App Router (NO Pages Router): app/layout.tsx raíz, app/page.tsx home, app/<segment>/page.tsx para rutas, Server Components por defecto, \"use client\" SOLO cuando se necesite interactividad/hooks. API routes en app/api/<route>/route.ts (GET/POST/etc exportados). Tailwind para estilos, TypeScript estricto. Para data fetching prefiere Server Components con fetch() async; React Query solo en client components. backendNeeded=true porque Next ES el backend — no hace falta Express separado]",
 };
 const ALLOWED_KINDS = new Set<ProjectKind>(Object.keys(KIND_COSTS) as ProjectKind[]);
 

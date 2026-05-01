@@ -7,7 +7,7 @@
  */
 
 /**
- * Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing 1, mobile 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.
+ * Project kind preset. Drives the architect's INTENT directive and the credit cost (fullstack/landing/vue/svelte 1, mobile/nextjs 2, hybrid-pwa 3, game-2d 3, game-3d 5). Ignored on edits — they always cost 1 credit and inherit the app's original characteristics.
  */
 export type GenerateAppRequestKind =
   | (typeof GenerateAppRequestKind)[keyof typeof GenerateAppRequestKind]
@@ -20,4 +20,7 @@ export const GenerateAppRequestKind = {
   "game-2d": "game-2d",
   "game-3d": "game-3d",
   "hybrid-pwa": "hybrid-pwa",
+  vue: "vue",
+  svelte: "svelte",
+  nextjs: "nextjs",
 } as const;

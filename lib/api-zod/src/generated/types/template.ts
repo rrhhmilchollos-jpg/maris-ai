@@ -13,7 +13,7 @@ export interface Template {
   id: string;
   name: string;
   description: string;
-  /** fullstack | mobile | landing | game-2d | game-3d | hybrid-pwa */
+  /** fullstack | mobile | landing | game-2d | game-3d | hybrid-pwa | vue | svelte | nextjs */
   kind: string;
   seedPrompt: string;
   /** lucide-react icon name */

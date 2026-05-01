@@ -20,7 +20,10 @@ export type TemplateKind =
   | "landing"
   | "game-2d"
   | "game-3d"
-  | "hybrid-pwa";
+  | "hybrid-pwa"
+  | "vue"
+  | "svelte"
+  | "nextjs";
 
 export interface AppTemplate {
   id: string;
@@ -142,6 +145,36 @@ export const TEMPLATES: AppTemplate[] = [
     icon: "Globe",
     seedPrompt:
       "Un mundo 3D explorable en primera persona usando la librería '@babylonjs/core' (npm install @babylonjs/core). Componente React que crea new BABYLON.Engine(canvas, true) y new BABYLON.Scene en useEffect; en cleanup llama a engine.dispose(). Cámara FreeCamera con controles WASD (camera.attachControl(canvas, true)) y ratón para mirar (PointerLock). Escena: un terreno plano (Ground) de 100x100 con textura procedural, 5 árboles (cilindro marrón + esfera verde), 10 cristales flotantes (PolyhedronBuilder de tipo octaedro) en posiciones aleatorias que rotan continuamente con scene.onBeforeRenderObservable. Cuando el jugador se acerca a menos de 2m de un cristal, este desaparece (mesh.dispose()) y suma 50 puntos. Iluminación: HemisphericLight + DirectionalLight con shadowGenerator. Skybox con createDefaultSkybox. HUD HTML superpuesto con cristales recogidos, total restantes y mensaje '¡Has explorado todo!' al recoger los 10. Botón inicial 'Click para empezar' que activa pointerLock. Paleta natural: cielo azul, terreno verde, cristales púrpura brillante.",
+  },
+  {
+    id: "vue-todo",
+    name: "Lista de tareas (Vue 3)",
+    description:
+      "App de tareas con Vue 3 Composition API, vue-router y Pinia. Filtros por estado y persistencia en localStorage.",
+    kind: "vue",
+    icon: "ListTodo",
+    seedPrompt:
+      "Una app de gestión de tareas con Vue 3 (Composition API + <script setup lang=\"ts\">), Vite y vue-router. Vista principal con input para crear tareas, lista de tareas con checkbox, texto y botón eliminar. Filtros tabbed: Todas / Activas / Completadas. Contador de tareas pendientes. Vista secundaria '/stats' (vue-router) con número total, completadas y porcentaje. Estado global con Pinia (store de tasks). Persistencia automática en localStorage al cambiar el store. Tailwind para estilos, paleta verde menta, modo claro/oscuro toggleable.",
+  },
+  {
+    id: "svelte-weather",
+    name: "Dashboard del tiempo (SvelteKit)",
+    description:
+      "Dashboard meteorológico con SvelteKit, Svelte 5 runes, fetch desde API pública y gráficos.",
+    kind: "svelte",
+    icon: "CloudSun",
+    seedPrompt:
+      "Un dashboard del tiempo con SvelteKit y Svelte 5 (usa runes: $state, $derived, $effect — NUNCA $: legacy). File-based routing en src/routes/: '/' muestra ciudad actual con temperatura grande, sensación térmica, humedad, viento e icono; '/forecast' muestra previsión a 7 días en cards; '/cities' permite buscar y guardar ciudades favoritas en localStorage. Datos desde Open-Meteo (https://api.open-meteo.com — no requiere API key) usando load() functions en +page.ts. Cambio de unidades °C/°F con un store global. Tailwind para estilos, paleta azul cielo / amarillo sol, modo oscuro automático según hora local.",
+  },
+  {
+    id: "nextjs-blog",
+    name: "Blog con CMS (Next.js)",
+    description:
+      "Blog full-stack con Next.js App Router, Server Components, API routes y persistencia en memoria/JSON.",
+    kind: "nextjs",
+    icon: "Newspaper",
+    seedPrompt:
+      "Un blog full-stack con Next.js 14+ App Router (NO Pages Router) y TypeScript. Estructura: app/layout.tsx con header (logo + nav Inicio/Admin) y footer; app/page.tsx (Server Component) lista los posts publicados con título, extracto y fecha; app/posts/[slug]/page.tsx renderiza un post completo (Server Component, getPost(slug) async); app/admin/page.tsx (Client Component, 'use client') con formulario para crear/editar/eliminar posts. API routes en app/api/posts/route.ts (GET lista, POST crea) y app/api/posts/[slug]/route.ts (GET uno, PUT edita, DELETE borra). Persistencia en un array module-level (con disclaimer en el README de que se reinicia al redeploy — para producción enchufar Postgres/SQLite). Tailwind para estilos, tipografía serif para los posts, paleta crema y burdeos.",
   },
   {
     id: "notas-pwa",
