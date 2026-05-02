@@ -1788,7 +1788,7 @@ export async function generateApp(
 
 /* === FINAL EXPORTS (Required by index.ts and routes/index.ts) === */
 import { Router } from "express";
-import { createApp } from "../lib/db"; 
+
 const router = Router();
 
 // Ruta para generar aplicaciones
