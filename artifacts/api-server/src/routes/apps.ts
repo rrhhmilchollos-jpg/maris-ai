@@ -1,3102 +1,1787 @@
-import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
-import { db } from "../lib/db";
-import { requireAuth, isAdminEmail, ensureUser } from "../lib/auth";
-import { logger } from "../lib/logger";
-import {
-  generatedApps,
-  users,
-  creditTransactions,
-  generationJobs,
-  appMessages,
-  jobLogs,
-  chatAttachments,
-  appRuntimeErrors,
-} from "@workspace/db/schema";
+import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import OpenAI from "openai";
 
-type GeneratedAppRow = typeof generatedApps.$inferSelect;
-type GenerationJobRow = typeof generationJobs.$inferSelect;
-type AppMessageRow = typeof appMessages.$inferSelect;
-import {
-  generateApp,
-  patchBundle,
-  researchTopic,
-  type GenLanguage,
-  type AttachmentContext,
-} from "../lib/generate";
-import { classifyChatIntent } from "../lib/intentClassifier";
-import { tryConsumeFreeAnswer } from "../lib/freeAnswerLimiter";
-import { generateAppImages } from "../lib/imageAgent";
-import { streamAppZip } from "../lib/exportZip";
-import { buildDeployHtml, makeSlug } from "../lib/deployBundle";
-import { pushAppToGitHub } from "../lib/githubPush";
-import { validateBundle, type BuildIssue } from "../lib/validate";
-import { runVisualTester, VisualTesterError } from "../lib/visualTester";
-import { runAutoEvaluator } from "../lib/evaluator";
-import { chargeCredits, refundCredits } from "../lib/credits";
-import { enqueueGenerateJob, reenqueueGenerateJob } from "../lib/jobQueue";
-import { captureAgentError, addBreadcrumb } from "../lib/sentry";
-import { loadAgentMemory } from "../lib/agentMemoryContext";
-import { runMemoryExtractor } from "../lib/agentMemoryExtractor";
-import {
-  insertAppRevisionFromRow,
-  restoreAppRevision,
-  revisionSourceLabel,
-} from "../lib/appRevisions";
-import { TEMPLATES } from "../lib/templates";
-import {
-  deployAppToVercel,
-  addVercelDomainForApp,
-  getVercelDomainStatus,
-  removeVercelDomainForApp,
-} from "../lib/vercelDeploy";
-import { getUserSpentCents, userHasAnyPurchase, CUSTOM_DOMAIN_MIN_SPEND_CENTS } from "../lib/credits";
-import { appRevisions } from "@workspace/db/schema";
+// OpenAI client via Replit AI Integrations proxy.
+const openai = new OpenAI({
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+});
+import { validateBundle, type BuildIssue } from "./validate";
+import { validateBundleInE2B } from "./e2bValidator";
+import { shouldValidateInE2B } from "./e2bGate";
+import { logger } from "./logger";
+import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
+import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
+import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 
-/** Credits charged for one Visual Testing Agent run (silent). */
-const VISUAL_TEST_COST = 30;
-/** Internal base URL puppeteer uses to reach our public deploy route. */
-const VISUAL_TEST_BASE_URL = process.env.VISUAL_TEST_BASE_URL ?? "http://localhost:80";
+/** Source language the generated app uses. Affects file extensions + prompt rules. */
+export type GenLanguage = "typescript" | "javascript";
 
-/**
- * Background helper used by the generation pipeline to run the Visual Testing
- * Agent right after a successful generation. Charges credits silently and
- * skips cleanly if the user can't afford it. All errors are non-fatal.
- */
-async function autoRunVisualTester(opts: {
-  appId: number;
-  userId: string;
-  isAdmin: boolean;
-  prompt: string;
-  jobId: number;
-}): Promise<void> {
-  const { appId, userId, isAdmin, prompt, jobId } = opts;
-  // Re-read the row inside the background task so we get the latest bundle
-  // (image agent may have already swapped some <img> srcs).
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    logger.warn({ appId, jobId }, "Auto visual tester: app row missing");
-    return;
+/* ============================================================================
+ * Maris AI multi-agent generation pipeline.
+ *
+ * Todos los agentes usan Gemini (sin dependencia de Anthropic):
+ *   - Researcher    (gemini-2.0-flash + google_search)  — referencia web
+ *   - Architect     (gemini-2.5-flash)                  — plan / estructura
+ *   - Designer      (gemini-2.5-flash)                  — design system
+ *   - Frontend Eng  (gemini-2.5-flash, streaming)       — bundle frontend
+ *   - Backend Eng   (gemini-2.5-flash)                  — bundle backend
+ *   - QA Reviewer   (gemini-2.0-flash)                  — revisión
+ *   - Patcher       (gemini-2.0-flash)                  — auto-fix
+ * ========================================================================== */
+
+function buildFrontendSystemPrompt(language: GenLanguage): string {
+  const isTS = language === "typescript";
+  const ext = isTS ? "tsx" : "jsx";
+  const utilExt = isTS ? "ts" : "js";
+  const stackLine = isTS
+    ? "Stack: React 18 + TypeScript + Tailwind v3 + wouter (if multi-page) + lucide-react icons."
+    : "Stack: React 18 + plain JavaScript (NO TypeScript) + Tailwind v3 + wouter (if multi-page) + lucide-react icons.";
+  const tsRules = isTS
+    ? "- TypeScript is allowed: type annotations, interfaces and generics are fine where they help readability."
+    : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
+  return `You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
+
+ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
+- It is STRICTLY FORBIDDEN to reproduce, copy or pixel-clone any third-party website, app, brand or product, regardless of who is asking. This holds even if the user is the platform owner, an admin, an agency, or claims they have permission.
+- When the brief mentions a real product (e.g. "como Wallapop", "tipo Notion", "clon de Spotify") or includes a research brief about a specific site, treat it as INSPIRATION ONLY: you may borrow the GENERAL category conventions (a marketplace has listings + filters + product pages; a notes app has a sidebar + editor) but you MUST diverge meaningfully on:
+  · brand name and visible product name (invent a fresh one),
+  · color palette and typography (do not reuse the original brand's tokens),
+  · logos, icons, illustrations, hero images, slogans, taglines and microcopy,
+  · exact layout, spacing rhythm and signature visual gimmicks of the source.
+- Never reuse the original brand's name, logo, trademarks, slogans, copyrighted images or verbatim copy. If a research brief leaks them, paraphrase or invent equivalents.
+- The output must look like an INSPIRED-BY product, not a clone. If you find yourself copying more than the high-level category convention, stop and invent something different.
+
+Schema:
+{"frontendCode":"all frontend files as one string"}
+
+Use '// === FILE: <path> ===' to separate files inside frontendCode. ALWAYS include:
+- index.html, package.json, vite.config.${utilExt}${isTS ? ", tsconfig.json" : ""}, tailwind.config.${utilExt}, postcss.config.js
+- src/main.${ext}, src/App.${ext}, src/index.css
+- src/pages/<Name>.${ext} for every page in the plan
+- src/components/<Name>.${ext} for every component in the plan
+- src/lib/<name>.${utilExt} for every util in the plan (cn helper, formatters, etc.)
+- src/hooks/<name>.${utilExt} for every hook in the plan
+${isTS ? "- src/types/index.ts when types are shared\n" : ""}
+${stackLine} Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
+
+QUALITY BAR — what separates a demo from a real product. Bake these into the bundle but stay CONCISE in code (no over-commenting, no padding):
+- Visual hierarchy: large display headings (text-3xl/4xl/5xl) with tight tracking; body text-sm/base; generous whitespace (py-12+ heroes, gap-6+ grids).
+- Layout: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 on every page. Mobile-first responsive classes.
+- Depth: cards use border + shadow-sm hover:shadow-md. Off-white section bgs (bg-slate-50) under white cards. ONE accent color for CTAs.
+- Interactivity: every interactive element has hover, focus-visible ring, active state, transition-all duration-200. Cards lift on hover (hover:-translate-y-0.5).
+- Real interactivity (not static): useState/useMemo for filters, search, tabs, modals (with Esc + backdrop close), toggles. NEVER just static arrays.
+- States: loading skeletons (animate-pulse), empty states (icon + headline + sub + CTA in Spanish), errors, disabled. EVERY list/table has an empty state.
+- Icons: lucide-react in headers, buttons, empty states.
+- Animation: define keyframes (fadeIn, slideUp) in src/styles/animations.css, apply on heroes/modals/on-mount.
+- Accessibility: semantic HTML, labels for every input, aria-hidden on decorative icons, descriptive Spanish alt on every <img>.
+- Mobile: works at 375px, hamburger nav if needed, grids reflow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3.
+
+CSS — encouraged beyond Tailwind:
+- src/index.css holds the @tailwind directives PLUS the design system globals (CSS variables, body styles, smooth scroll, font smoothing antialiased).
+- For animations, keyframes, scrollbar styling, complex hover states or component-scoped polish that's awkward in Tailwind utilities, ADD dedicated files like src/styles/animations.css, src/styles/scrollbar.css, src/styles/<component>.css and import them from src/main.${ext} (or from the component that uses them). Real CSS rules — no @apply outside index.css.
+
+LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES):
+- Every label, button, heading, placeholder, alt text, error message, empty state, tooltip → Spanish. Use natural, friendly product copy ("Aún no has añadido productos", "Explorar catálogo", "Guardar cambios"), not literal translations.
+- Seed/mock data (product names, descriptions, user names, comments, addresses) → Spanish where it makes sense (Spanish names: Lucía, Mateo, Sofía, Diego, Carmen; Spanish cities: Madrid, Barcelona, Sevilla, Valencia, Bilbao).
+- Identifiers, variable names, file names, type names → English (standard code).
+- HTML lang attribute → "es".
+
+DATA — seed enough to look real:
+- Lists/grids: 6-12 realistic items minimum (products, posts, users, etc.) with varied images, prices, dates, statuses.
+- Detail pages: full content (description, specs, reviews, related items).
+- User data: 3-5 plausible Spanish people with avatars (Unsplash photo-1500000000000-... portrait URLs).
+- Avoid lorem ipsum. Avoid "Producto 1", "Producto 2" — give them real-sounding Spanish names.
+
+SYNTAX — code must parse with a strict ${isTS ? "TypeScript" : "JavaScript"} parser (Babel/SWC/esbuild):
+${tsRules}
+- NO trailing commas after the last element of an object literal, array literal or call argument list when followed immediately by a closing token. Specifically NEVER write \`,,\` (double comma) or \`,)\` or \`,]\` or \`,}\` patterns where the second comma was a typo.
+- NO non-ASCII characters inside identifiers, keywords or punctuation. Non-ASCII is allowed ONLY inside string literals and JSX text. Examples of FORBIDDEN garbage tokens: \`née\`, \`café\` as a property name, smart quotes \`"…"\` instead of plain \`"\`, em-dashes inside code.
+- Every string must be properly terminated with the SAME quote it started with. Long URLs and descriptions are common offenders — re-check them.
+- Every \`{\`, \`(\`, \`[\` must have a matching \`}\`, \`)\`, \`]\`. Every JSX tag must close.
+- All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. Stick to: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod. Do not invent package names.
+- Every \`.map(item => …)\` over an array MUST give the rendered element a stable \`key={item.id ?? \`\${prefix}-\${index}\`}\`.
+- Hooks (useState/useEffect/useMemo) at the top of the component body, never inside conditionals/loops.
+
+IMAGES — placeholders are encouraged:
+- Use \`https://images.unsplash.com/photo-…\` URLs (or \`https://picsum.photos/…\`) for hero/product/avatar images and ALWAYS write a meaningful, descriptive Spanish \`alt="…"\` (the more specific the alt, the better the AI replacement: "sofá modular gris en salón luminoso" beats "imagen 1"). A separate AI agent will replace these with real generated images later, using the alt text as the prompt.
+- For avatars, prefer compact crops (e.g. portrait-style Unsplash photos). For heroes, prefer wide cinematic photos.
+
+WOUTER v3 — the preview ships wouter ^3.x, where \`<Link>\` ITSELF renders as the anchor tag. NEVER nest \`<a>\` (or \`<button>\`) inside \`<Link>\` — doing so produces invalid \`<a><a>…</a></a>\` markup that throws "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node." at runtime and silently kills the entire \`<main>\` subtree. Pass \`className\`, \`onClick\`, \`aria-label\` etc. DIRECTLY to \`<Link>\` and put plain text/icons as children:
+- WRONG: \`<Link href="/x"><a className="btn">Ir</a></Link>\`
+- RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
+The same applies to \`<Route>\` — render children directly, do not wrap in \`<a>\`.
+
+EXPORTS & IMPORTS — be consistent so imports actually resolve at runtime:
+- Match every \`import { X }\` to a named \`export { X }\`/\`export function X\`/\`export const X\` in the target file. Match every \`import X from\` to an \`export default …\`. Mixing the two yields \`undefined\` and React renders nothing.
+- Pick ONE convention per kind: components default-exported, hooks/utilities/constants/types named-exported — and stick to it across the bundle.
+
+TAILWIND — the preview uses the Tailwind Play CDN (no postcss). This means:
+- Custom theme tokens like \`bg-background\`, \`text-foreground\`, \`bg-primary\`, \`border-input\` only work if you ALSO declare them via the inline config script. Prefer concrete Tailwind classes (\`bg-white\`, \`text-slate-900\`, \`bg-orange-500\`) so the preview renders identically. You can still keep design-system colors as CSS variables in :root for use inside src/styles/*.css, but JSX className strings should use real Tailwind utilities.
+- \`@apply\` inside src/index.css works only with REAL Tailwind utilities (not custom theme tokens). When in doubt, write plain CSS rules instead of \`@apply\`.
+
+Rules:
+- Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
+- Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
+- Polished layout, accessible markup, semantic HTML, mobile-first responsive.
+- NO SIZE LIMIT — generate every file the plan needs, in full. This is a paid product; bigger apps deliver more value. Never truncate or "TODO" a file to save tokens.
+- Close every quote, brace and bracket. Output ONLY the JSON object.`;
+}
+
+const BACKEND_SYSTEM_PROMPT = `You are Maris AI's Senior Backend Engineer. Generate a complete, production-quality Node/Express backend as STRICT JSON only. Your code is what would pass a senior code review at a serious startup.
+
+Schema:
+{"backendCode":"all backend files as one string OR 'No backend required for this app.'"}
+
+Use '// === FILE: <path> ===' to separate files. When a backend is needed include:
+- package.json, tsconfig.json, src/index.ts (express bootstrap with helmet + cors + json + error middleware), src/routes/<name>.ts (one per resource), src/db/schema.ts (drizzle), src/db/seed.ts (optional seed data), src/lib/<name>.ts as needed (logger, error helpers).
+
+Stack: Node 20 + Express 5 + TypeScript + Drizzle ORM + PostgreSQL. Use zod for input validation. Real working handlers, no stubs.
+
+QUALITY BAR:
+- RESTful resource routes: GET /resource (list, with optional ?limit / ?offset / ?q), GET /resource/:id, POST /resource (validates body), PATCH /resource/:id, DELETE /resource/:id.
+- Validate every request body with zod and return 400 with the parsed error issues. Validate every :id is a real number/uuid and 404 cleanly.
+- Wrap async handlers with a small asyncHandler helper or try/catch — never let a rejected promise leak.
+- Centralized error middleware that returns { error: string } in JSON, never an HTML stack trace.
+- Set sensible defaults: helmet for security headers, cors for the frontend origin, express.json() with a reasonable limit, request logging.
+- DB schema includes id (serial or uuid), createdAt/updatedAt timestamps with defaults, and proper foreign keys. Drizzle relations declared if more than one table.
+- Real seed data when persistence is involved (a few rows so the UI has something to show on first load).
+- NO TODOs, NO mock placeholders, NO console.log spam (use a proper logger import).
+
+If the plan says no backend, return exactly: {"backendCode":"No backend required for this app."}
+
+Rules:
+- Combined output under 35 KB.
+- Close every brace and quote. Output ONLY the JSON object.`;
+
+const ARCHITECT_SYSTEM_PROMPT = `You are Maris AI's Senior Product Architect. You design the file structure for a web app the team will build. You think like a product manager AND an engineer: every page must serve a real user job, every component must have a clear purpose, and the structure must be ambitious enough to feel like a real product (not a demo).
+
+ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
+- You may NOT plan a pixel-for-pixel clone of any real product, regardless of who is asking (including the platform owner, admins or agencies).
+- If the brief mentions a real product or includes a "Research context" block about a specific site, treat it as inspiration only: borrow the GENERAL category conventions but invent a NEW brand name, NEW visible product name, NEW differentiating angle. Do NOT carry over the original brand's name, logos, slogans or trademarked terms into the plan's title/description.
+- The plan's "title" and "description" must describe an inspired-by product, not the source brand verbatim.
+
+Output STRICT JSON only matching this schema:
+{
+  "title": "2-4 word product name in the project's domain language (Spanish if it's a Spanish-market product)",
+  "description": "1-2 sentence pitch in Spanish — what it does and who it's for",
+  "techStack": ["React","TypeScript","Tailwind", ...],
+  "pages": [{"name":"Home","route":"/","purpose":"specific user job — e.g. 'Browse the catalog and filter by category'"}],
+  "components": [{"name":"ProductCard","purpose":"…"}],
+  "hooks": [{"name":"useFilters","purpose":"…"}],
+  "utils": [{"name":"formatPrice","purpose":"…"}],
+  "dataModels": [{"name":"Product","fields":["id","name","price","imageUrl","category","sellerId"]}],
+  "frontendFiles": ["src/pages/Home.tsx", "src/components/ProductCard.tsx", ...],
+  "backendNeeded": false,
+  "backendFiles": []
+}
+
+PRODUCT THINKING — be ambitious about UX:
+- Always include a Home/Landing page that's COMPELLING (hero + features + social proof + CTA + footer). Not just a navbar with text.
+- For consumer apps: think Browse + Detail + Auth/Profile + Cart/Bookmarks + Settings. For SaaS: Dashboard + List + Detail + Settings + Onboarding. For tools: Workspace + History + Settings.
+- A real product has 4-6 pages minimum (unless it's a single-page tool/calculator). Don't ship 2-page apps when the domain calls for more.
+- Think about empty states, error states, loading states — they're real screens.
+
+COMPONENTS — model real reusable pieces:
+- Always include: Navbar, Footer, Button (if you need a custom button), Card variant(s), at least one Form component.
+- Include domain-specific components: ProductCard, PostItem, UserAvatar, PriceTag, FilterSidebar, SearchBar, EmptyState, etc. The names should be obvious.
+- Aim for 6-12 components. Each gets its own file.
+
+DATA MODELS — make them realistic:
+- Include the fields you'd actually use in a real schema (id, timestamps, relations, status enums).
+- 2-5 models is healthy for most apps.
+
+INTENT HINTS — when the user prompt starts with a bracketed hint like "[INTENT: …]", that's a top-priority directive from the dashboard's project-type tabs. Honor it strictly. The hint OVERRIDES the FULL-STACK RULE below — if the hint says backendNeeded=false, set backendNeeded=false even if there are full-stack keywords.
+
+FULL-STACK RULE — be aggressive about backendNeeded=true:
+- Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
+- Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
+
+NO LIMITS — be ambitious:
+- This is a paid product. Bigger apps = more value. Do NOT artificially shrink the plan.
+- Generate as many frontendFiles as the product genuinely needs. Quality AND quantity.
+
+Rules:
+- NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
+- techStack: 4-8 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
+- Output ONLY the JSON object.`;
+
+const DESIGNER_SYSTEM_PROMPT = `You are Maris AI's Senior UI/UX Designer. You produce design systems with personality — never generic, never "bootstrap blue". Output STRICT JSON only.
+
+Schema:
+{
+  "theme": "light" | "dark" | "auto",
+  "palette": {"primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","foreground":"#hex","muted":"#hex"},
+  "typography": {"sans":"font-name","display":"font-name","sizes":{"base":"16px","lg":"18px"}},
+  "radius": "sm" | "md" | "lg" | "xl",
+  "vibe": "1-line description of the visual mood",
+  "tailwindExtend": "JSON-stringified object you would put inside tailwind.config.ts theme.extend",
+  "globalCSS": "string with @import or :root CSS variables you would put in src/index.css after @tailwind directives"
+}
+
+Rules:
+- Real hex colors with good contrast. Match the product's domain and any research context provided.
+- Output ONLY the JSON object.`;
+
+const INTEGRATION_SYSTEM_PROMPT = `You are Maris AI's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics).
+
+Output STRICT JSON only:
+{"services":[{"name":"Clerk","why":"User auth","envVars":["CLERK_PUBLISHABLE_KEY"],"setupSteps":["Create Clerk app","Copy publishable key into env"]}]}
+
+Rules:
+- Max 4 services. Only include what's truly needed for the requested app.
+- If the app is a simple landing page, calculator, or self-contained demo, return {"services":[]}.
+- Output ONLY the JSON object.`;
+
+const TEST_SYSTEM_PROMPT = `You are Maris AI's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
+
+Output STRICT JSON only:
+{"testCode":"all test files as one string"}
+
+Use '// === FILE: <path> ===' separators. ALWAYS produce:
+- tests/setup.ts (vitest + @testing-library/jest-dom setup)
+- vitest.config.ts (jsdom environment, points to tests/setup.ts)
+- tests/<ComponentName>.test.tsx — 1 smoke test per listed component (max 3)
+- tests/<utilName>.test.ts — 1 unit test per listed util (max 2)
+- e2e/home.spec.ts — 1 Playwright test that loads "/" and checks the main heading.
+- playwright.config.ts (basic chromium config)
+
+Rules:
+- Real working tests. No TODOs, no placeholders.
+- Combined output under 6 KB. Close every brace. Output ONLY the JSON object.`;
+
+function buildPatcherSystemPrompt(language: GenLanguage): string {
+  const isTS = language === "typescript";
+  const tsLine = isTS
+    ? "- This is a TypeScript bundle (.tsx/.ts). Type annotations are fine."
+    : "- This is a plain JavaScript bundle (.jsx/.js). Do NOT introduce TypeScript syntax during patching.";
+  return `You are Maris AI's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
+
+Output STRICT JSON only:
+{"frontendCode":"all frontend files as one string"}
+
+LANGUAGE — preserve Spanish copy. If new copy is added, write it in Spanish too.
+
+SYNTAX — the patched bundle must parse cleanly:
+${tsLine}
+- Remove every \`,,\` (double comma), \`,)\`, \`,]\` and \`,}\` pattern you find while patching.
+- Strip any non-ASCII garbage characters from identifiers/keywords.
+- Re-balance every brace, bracket, paren and JSX tag.
+- Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod.
+
+WOUTER v3 — \`<Link>\` already renders as \`<a>\`. If you see \`<Link …><a …>…</a></Link>\` in the bundle, FLATTEN IT.
+
+Rules:
+- Use '// === FILE: <path> ===' separators.
+- Return the FULL bundle (every file, not just patched ones).
+- Don't introduce new bugs. Close every brace and quote. Output ONLY the JSON object.`;
+}
+
+export interface GeneratedAppPayload {
+  title: string;
+  description: string;
+  techStack: string[];
+  frontendCode: string;
+  backendCode: string;
+  plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
+}
+
+export type GeneratePhase =
+  | "researching"
+  | "architecting"
+  | "integrating"
+  | "designing"
+  | "generating"
+  | "reviewing"
+  | "validating"
+  | "fixing"
+  | "parsing";
+
+export interface GenerateProgress {
+  phase: GeneratePhase;
+  progress: number;
+  note?: string;
+}
+
+export type AgentLog = (
+  agent: string,
+  message: string,
+  level?: "info" | "warn" | "error",
+) => void;
+
+export interface AttachmentContext {
+  id: number;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  textContent?: string;
+}
+
+export function buildAttachmentBlock(attachments: AttachmentContext[] | undefined): string {
+  if (!attachments || attachments.length === 0) return "";
+  const MAX_TOTAL = 25_000;
+  const parts: string[] = ["[ARCHIVOS ADJUNTOS DEL USUARIO]"];
+  let used = parts[0]!.length;
+  for (const a of attachments) {
+    const sizeKb = Math.max(1, Math.round(a.sizeBytes / 1024));
+    if (a.textContent && a.textContent.trim().length > 0) {
+      const remaining = MAX_TOTAL - used - 200;
+      const text = remaining > 0 ? a.textContent.slice(0, remaining) : "";
+      const block = `\n--- ${a.filename} (${a.mimeType}, ${sizeKb} KB) ---\n${text}${
+        a.textContent.length > text.length ? "\n…(contenido truncado)" : ""
+      }`;
+      parts.push(block);
+      used += block.length;
+      if (used >= MAX_TOTAL) break;
+    } else {
+      const isImg = a.mimeType.startsWith("image/");
+      const note = isImg
+        ? `imagen de referencia visual — replica su estilo/colores/layout cuando sea relevante`
+        : `documento de referencia — usa su contenido como contexto`;
+      const line = `\n- ${a.filename} (${a.mimeType}, ${sizeKb} KB): ${note}.`;
+      parts.push(line);
+      used += line.length;
+    }
   }
-  const slug = await ensurePublicSlug(appId, userId, logger, row.publicSlug);
-  if (!slug) {
-    logger.warn({ appId, jobId }, "Auto visual tester: could not assign slug");
-    return;
-  }
-  const charge = await chargeCredits({
-    userId,
-    isAdmin,
-    amount: VISUAL_TEST_COST,
-    description: `Auto Visual Testing — app #${appId} (job #${jobId})`,
-  });
-  if (!charge.ok) {
-    logger.info(
-      { appId, jobId },
-      "Auto visual tester skipped — insufficient credits",
-    );
-    return;
-  }
+  parts.push("\n[FIN DE ADJUNTOS]\n");
+  return parts.join("");
+}
+
+interface ProjectPlan {
+  title: string;
+  description: string;
+  techStack: string[];
+  pages: Array<{ name: string; route: string; purpose: string }>;
+  components: Array<{ name: string; purpose: string }>;
+  hooks: Array<{ name: string; purpose: string }>;
+  utils: Array<{ name: string; purpose: string }>;
+  dataModels: Array<{ name: string; fields: string[] }>;
+  frontendFiles: string[];
+  backendNeeded: boolean;
+  backendFiles: string[];
+}
+
+interface DesignSystem {
+  theme: string;
+  palette: Record<string, string>;
+  typography: { sans: string; display?: string; sizes?: Record<string, string> };
+  radius: string;
+  vibe: string;
+  tailwindExtend: string;
+  globalCSS: string;
+}
+
+interface IntegrationService {
+  name: string;
+  why: string;
+  envVars: string[];
+  setupSteps: string[];
+}
+
+interface IntegrationSpec {
+  services: IntegrationService[];
+}
+
+interface QAIssue {
+  file: string;
+  problem: string;
+  fix: string;
+}
+
+interface QAReport {
+  ok: boolean;
+  issues: QAIssue[];
+}
+
+const CLONE_KEYWORDS = [
+  "clon", "clone", "copia", "copy", "como ", "like ", "similar a", "similar to",
+  "réplica", "replica", "imita", "estilo de", "version de", "versión de",
+  "wallapop", "vinted", "airbnb", "twitter", "instagram", "tiktok", "uber",
+  "amazon", "ebay", "spotify", "netflix", "youtube", "linkedin", "facebook",
+  "whatsapp", "telegram", "discord", "slack", "notion", "trello", "asana",
+  "stripe", "shopify", "github", "reddit", "pinterest", "snapchat", "twitch",
+];
+
+const RESEARCH_TRIGGER_PHRASES = [
+  "busca en", "buscame", "búscame", "investiga", "analiza", "mira en",
+  "mírate", "mirate", "echa un vistazo", "echale un vistazo", "échale un vistazo",
+  "visita", "entra en", "consulta", "revisa la web", "revisa el sitio",
+  "dime cómo es", "dime como es", "como es su home", "cómo es su home",
+];
+
+const URL_LIKE = /\b(?:https?:\/\/[^\s)]+|(?:[a-z0-9-]+\.)+[a-z]{2,})\b/i;
+
+function shouldResearch(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  if (CLONE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
+  if (RESEARCH_TRIGGER_PHRASES.some((p) => lower.includes(p))) return true;
+  if (URL_LIKE.test(prompt)) return true;
+  return false;
+}
+
+/* ----------------------------- helpers ------------------------------------ */
+
+function extractJsonObject<T = any>(raw: string): T | null {
+  let s = raw.trim();
+  if (s.startsWith("```")) s = s.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first === -1 || last === -1) return null;
   try {
-    const report = await runVisualTester({
-      app: {
-        id: row.id,
-        title: row.title,
-        description: row.description,
-        frontendCode: row.frontendCode,
-        publicSlug: slug,
-      },
-      baseUrl: VISUAL_TEST_BASE_URL,
-      prompt,
-      autoFix: true,
-      log: logger,
-    });
-    logger.info(
-      {
-        appId,
-        jobId,
-        cycles: report.cycles,
-        fixesApplied: report.fixesApplied,
-        score: report.finalAnalysis.overallScore,
-      },
-      "Auto visual tester completed",
-    );
-    // Surface the visual test result into the app's chat history so the user
-    // actually sees that the testing agent worked. Without this the 30-credit
-    // charge is invisible work — the user only notices when something goes
-    // wrong. Format: short Spanish summary + score + fix count + top issues.
-    try {
-      const a = report.finalAnalysis;
-      const lines: string[] = [];
-      const headline = a.visuallyCorrect
-        ? `🧪 Testing visual: aprobado (${a.overallScore}/100)`
-        : `🧪 Testing visual: ${a.overallScore}/100`;
-      lines.push(headline);
-      if (report.fixesApplied > 0) {
-        lines.push(
-          `Apliqué ${report.fixesApplied} corrección${report.fixesApplied === 1 ? "" : "es"} automática${report.fixesApplied === 1 ? "" : "s"} en ${report.cycles} ciclo${report.cycles === 1 ? "" : "s"}.`,
-        );
-      } else {
-        lines.push(`Revisé el render en ${report.cycles} ciclo${report.cycles === 1 ? "" : "s"} sin necesidad de cambios.`);
-      }
-      const topIssues = a.issues.slice(0, 3);
-      if (topIssues.length > 0) {
-        lines.push("");
-        lines.push("Hallazgos principales:");
-        for (const issue of topIssues) {
-          const sev =
-            issue.severity === "critical"
-              ? "🔴"
-              : issue.severity === "major"
-                ? "🟠"
-                : "🟡";
-          lines.push(`- ${sev} ${issue.description}`);
-        }
-      }
-      if (a.summary) {
-        lines.push("");
-        lines.push(`_${a.summary}_`);
-      }
-      await db.insert(appMessages).values({
-        appId,
-        role: "assistant",
-        content: lines.join("\n"),
-      });
-    } catch (msgErr) {
-      logger.warn(
-        { err: msgErr, appId, jobId },
-        "Failed to insert visual tester chat message (non-fatal)",
-      );
-    }
-  } catch (err) {
-    logger.warn(
-      { err, appId, jobId },
-      "Auto visual tester failed during run — refunding silent charge",
-    );
-    await refundCredits({
-      userId,
-      isAdmin,
-      amount: VISUAL_TEST_COST,
-      description: `Reembolso Auto Visual Testing — app #${appId} (job #${jobId})`,
-    }).catch((refundErr) => {
-      logger.error(
-        { refundErr, appId, jobId },
-        "Auto visual tester refund failed",
-      );
-    });
-  }
-}
-
-/**
- * Ensure a generated app has a public slug, assigning a fresh one if missing.
- * Returns the slug or null if every collision-protected attempt failed.
- */
-async function ensurePublicSlug(
-  appId: number,
-  userId: string,
-  log: { warn: (...args: unknown[]) => void },
-  existingSlug: string | null,
-): Promise<string | null> {
-  if (existingSlug) return existingSlug;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = makeSlug();
-    try {
-      // Only assign if no slug exists yet — protects against two concurrent
-      // callers (e.g. evaluator + manual publish) racing to overwrite each
-      // other's slug. RETURNING tells us whether we won the race.
-      const updated = await db
-        .update(generatedApps)
-        .set({ publicSlug: candidate })
-        .where(
-          and(
-            eq(generatedApps.id, appId),
-            eq(generatedApps.userId, userId),
-            sql`${generatedApps.publicSlug} IS NULL`,
-          ),
-        )
-        .returning({ publicSlug: generatedApps.publicSlug });
-      if (updated.length > 0) return updated[0].publicSlug;
-      // We didn't win the race — re-read to find the slug the other caller
-      // assigned, and return it so both callers agree on the same URL.
-      const [row] = await db
-        .select({ publicSlug: generatedApps.publicSlug })
-        .from(generatedApps)
-        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-        .limit(1);
-      return row?.publicSlug ?? null;
-    } catch (err) {
-      log.warn({ err, attempt }, "Slug collision, retrying");
-    }
-  }
-  return null;
-}
-
-const router: IRouter = Router();
-
-/** Coder models the user is allowed to choose from in the dashboard. */
-const ALLOWED_CODER_MODELS = new Set([
-  "auto",
-  "gemini-2.5-flash",
-  "claude-sonnet-4-6",
-  "gpt-5",
-]);
-/** Premium-tier models — only users with isPremium === true may use them. */
-const PREMIUM_CODER_MODELS = new Set(["claude-sonnet-4-6", "gpt-5"]);
-/** Source-language choices the user can pick at generation time. */
-const ALLOWED_LANGUAGES = new Set<GenLanguage>(["typescript", "javascript"]);
-
-/**
- * Project kinds the user can pick from the dashboard tabs. Each maps to a
- * credit cost (bigger projects burn credits faster) and a `[INTENT: …]`
- * directive that's prepended to the user prompt before the architect sees it,
- * so all downstream agents (architect, designer, coder, visual tester) know
- * what they're building. Edits ignore the kind entirely — they cost 1 credit
- * and inherit the original app's characteristics.
- */
-type ProjectKind =
-  | "fullstack"
-  | "mobile"
-  | "landing"
-  | "game-2d"
-  | "game-3d"
-  | "hybrid-pwa"
-  | "vue"
-  | "svelte"
-  | "nextjs"
-  | "python-api"
-  | "django";
-const KIND_COSTS: Record<ProjectKind, number> = {
-  fullstack: 1,
-  mobile: 2,
-  landing: 1,
-  "game-2d": 3,
-  "game-3d": 5,
-  "hybrid-pwa": 3,
-  vue: 1,
-  svelte: 1,
-  nextjs: 2,
-  "python-api": 2,
-  django: 2,
-};
-/**
- * Kinds whose primary deliverable is NOT JavaScript and therefore cannot run
- * inside our in-browser esbuild preview. The dashboard's "abrir publicada" /
- * preview iframe shows a static landing card instead, and the canonical way
- * to run them is Export ZIP / GitHub / Vercel deploy.
- */
-const NON_JS_KINDS = new Set<ProjectKind>(["python-api", "django"]);
-export function isNonJsKind(kind: string | null | undefined): boolean {
-  return typeof kind === "string" && NON_JS_KINDS.has(kind as ProjectKind);
-}
-const KIND_INTENTS: Record<ProjectKind, string | null> = {
-  fullstack: null,
-  mobile:
-    "[INTENT: mobile-first PWA — diseño en columna única optimizado para pantallas de teléfono, tipografía grande, áreas de toque generosas (mínimo 44px), barra de navegación inferior fija, todas las páginas deben verse perfectas a 390px de ancho]",
-  landing:
-    "[INTENT: landing page — sitio de marketing de una sola página con hero impactante, sección de features, prueba social/testimonios, pricing y CTA final + footer. No requiere backend ni dashboard, backendNeeded debe ser false]",
-  "game-2d":
-    "[INTENT: 2D game — juego web 2D de una sola página. Elige librería según la mecánica: HTML5 Canvas crudo para juegos sencillos (snake, pong, breakout); Phaser 3 (paquete 'phaser', montado en useEffect dentro de un componente React, destruido en cleanup) para plataformas/shoot'em up/RPG con física Arcade y sprites; Kaplay (paquete 'kaplay' = Kaboom.js renombrado, kaplay() en useEffect, destroyAll()/k.quit() en cleanup) para arcade declarativo rápido (shooters, runners, mini-juegos sencillos); PixiJS v8 (paquete 'pixi.js'; usa la API moderna: `const app = new PIXI.Application()` + `await app.init({...})` en useEffect, monta `app.canvas` —NO `app.view`—, cleanup con `app.destroy(true, { children: true })`. NO uses la API legacy v7) cuando necesitas un renderer WebGL muy performante para cientos de objetos sin física; Matter.js si necesitas física 2D realista. Incluye loop de juego, controles teclado/táctil, sistema de puntuación, estados (menu/playing/gameover), reinicio. backendNeeded=false. La página principal ES el juego, no un dashboard. Records en localStorage]",
-  "game-3d":
-    "[INTENT: 3D game — juego web 3D de una sola página. Elige stack: React Three Fiber (paquetes 'three' + '@react-three/fiber' + '@react-three/drei', con '@react-three/rapier' añadido cuando se necesita física) para juegos 3D declarativos en React — opción por defecto; Babylon.js (paquete '@babylonjs/core', new BABYLON.Engine + new BABYLON.Scene en useEffect, engine.dispose() en cleanup) para mundos 3D explorables más complejos con cámaras nativas FreeCamera/ArcRotateCamera, físicas con Cannon, partículas y skybox; three.js puro si el usuario lo pide explícitamente. Incluye escena con cámara y luces, loop (useFrame en R3F o scene.onBeforeRenderObservable en Babylon), controles (OrbitControls/PointerLock/WASD), físicas básicas, sistema de puntuación, estados (menu/playing/gameover). backendNeeded=false. La página principal ES el juego. Records en localStorage]",
-  "hybrid-pwa":
-    "[INTENT: hybrid PWA — aplicación instalable estilo app nativa: manifest.json con name/icons/theme_color/display=standalone, service worker registrado para offline-first (cachea shell + assets), prompt de instalación 'Add to Home Screen', diseño mobile-first con bottom navigation, áreas táctiles ≥44px. Debe verse perfecta a 390px y funcionar offline tras la primera carga]",
-  vue:
-    "[INTENT: Vue 3 SPA — aplicación de una sola página con Vue 3 (Composition API + <script setup lang=\"ts\">), Vite como bundler, vue-router para navegación cliente, Pinia para estado global cuando haga falta, Tailwind para estilos. Estructura: src/main.ts monta la app, src/App.vue es el shell, src/views/*.vue son las páginas, src/components/*.vue componentes reutilizables. backendNeeded por defecto false salvo que el usuario pida persistencia/auth]",
-  svelte:
-    "[INTENT: SvelteKit app — aplicación con SvelteKit (Svelte 5 runes: $state, $derived, $effect — NO usar la sintaxis legacy reactive `$:`), TypeScript, file-based routing en src/routes/, +page.svelte para páginas, +layout.svelte para layouts compartidos, load() functions en +page.ts para data fetching. Tailwind para estilos. backendNeeded por defecto false; cuando se necesite API usa +server.ts endpoints en lugar de un Express separado]",
-  nextjs:
-    "[INTENT: Next.js 14+ App Router — aplicación full-stack con Next.js usando App Router (NO Pages Router): app/layout.tsx raíz, app/page.tsx home, app/<segment>/page.tsx para rutas, Server Components por defecto, \"use client\" SOLO cuando se necesite interactividad/hooks. API routes en app/api/<route>/route.ts (GET/POST/etc exportados). Tailwind para estilos, TypeScript estricto. Para data fetching prefiere Server Components con fetch() async; React Query solo en client components. backendNeeded=true porque Next ES el backend — no hace falta Express separado]",
-  "python-api":
-    "[INTENT: Python FastAPI backend — API REST en Python 3.11+ usando FastAPI (paquete 'fastapi') con uvicorn como servidor ASGI ('uvicorn[standard]'). Estructura: archivo principal `main.py` con `app = FastAPI(title=..., version=...)`, modelos pydantic v2 en el mismo archivo o en `models.py`, rutas con `@app.get/post/put/delete` y type hints estrictos en TODOS los parámetros para que FastAPI genere OpenAPI automáticamente. Validación de entrada con BaseModel pydantic. Persistencia: SQLite con SQLAlchemy 2.0 (paquete 'sqlalchemy') usando una sola base de datos 'app.db' relativa al working dir, declarative_base + Session, crea las tablas con `Base.metadata.create_all(engine)` al arranque. Responde con códigos HTTP correctos (200/201/204/400/404/422). Habilita CORS con CORSMiddleware permitiendo todos los orígenes para que el frontend genérico pueda probar. Incluye `/health` que devuelve {\"status\":\"ok\"} y rutas CRUD completas para el recurso principal. Genera SIEMPRE: requirements.txt con versiones fijadas (fastapi==0.115.x, uvicorn[standard]==0.32.x, sqlalchemy==2.0.x, pydantic==2.9.x), un README.md con `pip install -r requirements.txt` + `uvicorn main:app --reload --port 8000`, y un archivo `.env.example` si la app usa variables. NO generes frontend HTML/JS — el resultado es una API pura (los clientes consumirán los endpoints). backendNeeded debe tratarse como N/A: el bundle FRONTEND debe contener los archivos Python en su raíz; el backend bundle queda vacío. Usa el marcador `// === FILE: nombre.py` igual que para JS, el contenido va literalmente en Python tal cual]",
-  django:
-    "[INTENT: Python Django web app — aplicación web full-stack en Python 3.11+ con Django 5.x. Estructura mínima de un solo archivo configurada (Django funciona también con un único `app.py` si se hace `settings.configure()` antes de definir URLs/views/models — usa esa modalidad para mantener el bundle compacto en una app pequeña, pero si la funcionalidad es no trivial usa el layout estándar: `manage.py`, paquete del proyecto con `settings.py`, `urls.py`, `wsgi.py`, `asgi.py`, y al menos una app con `models.py`, `views.py`, `urls.py`, `admin.py` y carpeta `templates/`). Plantillas Django (Jinja-like, `{% %}` y `{{ }}`) en `templates/` con un `base.html` y herencia. CSS sencillo embebido en base.html (no React/Vite — esto es server-rendered). Modelos con `models.Model`, vistas con función o CBV, formularios con `forms.ModelForm` cuando aplique. Persistencia con SQLite por defecto (DATABASES default sqlite3 'db.sqlite3'). Incluye admin de Django si tiene sentido (registra modelos en `admin.py`). Genera SIEMPRE: requirements.txt fijado (django==5.1.x), README.md con `pip install -r requirements.txt`, `python manage.py migrate`, `python manage.py runserver 0.0.0.0:8000`, instrucciones para crear superuser. NO uses React ni Vite ni Tailwind del CDN — esto es un proyecto Python puro. El bundle FRONTEND debe contener los archivos Python+templates en su raíz; backend bundle vacío. SECRET_KEY puede ser un placeholder claro tipo 'change-me-in-production' con comentario de cambiarlo]",
-};
-const ALLOWED_KINDS = new Set<ProjectKind>(Object.keys(KIND_COSTS) as ProjectKind[]);
-
-function serializeApp(row: GeneratedAppRow) {
-  return {
-    id: row.id,
-    userId: row.userId,
-    title: row.title,
-    prompt: row.prompt,
-    description: row.description,
-    techStack: row.techStack,
-    frontendCode: row.frontendCode,
-    backendCode: row.backendCode,
-    status: row.status,
-    coderModel: row.coderModel,
-    language: row.language,
-    publicSlug: row.publicSlug,
-    githubRepoUrl: row.githubRepoUrl,
-    githubRepoFullName: row.githubRepoFullName,
-    vercelDeployUrl: row.vercelDeployUrl,
-    vercelProjectId: row.vercelProjectId,
-    vercelCustomDomain: row.vercelCustomDomain,
-    autoPublish: row.autoPublish,
-    evaluatorSummary: row.evaluatorSummary,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-/**
- * Build the full public deploy URL from a slug, using the first
- * REPLIT_DOMAINS entry. Falls back to a relative `/p/<slug>` if the env var
- * isn't set so callers always get a usable string in dev.
- */
-/**
- * Internal deploy helper shared between `POST /apps/:id/deploy` (manual button)
- * and the autonomous evaluator's auto-publish path. Runs the same sanity build
- * the manual deploy does, assigns a slug if missing, and returns the canonical
- * URL. Throws on failure (caller decides how to surface the error: HTTP 400
- * for the route, log + email_pending for the evaluator).
- */
-export async function runDeployForApp(opts: {
-  appId: number;
-  userId: string;
-  log: { warn: (...args: unknown[]) => void };
-}): Promise<{ url: string; slug: string }> {
-  const { appId, userId, log } = opts;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    throw new Error("App not found");
-  }
-  // Sanity-build once now to surface bundle errors immediately rather than at
-  // first visit. We discard the output; /p/:slug will rebuild on demand. For
-  // non-JS kinds (Python) the build is a no-op landing page generator.
-  await buildDeployHtml({
-    bundle: row.frontendCode,
-    title: row.title,
-    kind: row.kind,
-  });
-  const slug = await ensurePublicSlug(appId, userId, log, row.publicSlug);
-  if (!slug) {
-    throw new Error("Could not assign public slug");
-  }
-  return { url: publicUrlFor(slug), slug };
-}
-
-function publicUrlFor(slug: string): string {
-  const domains = (process.env.REPLIT_DOMAINS ?? "")
-    .split(",")
-    .map((d) => d.trim())
-    .filter(Boolean);
-  const host = domains[0];
-  return host ? `https://${host}/p/${slug}` : `/p/${slug}`;
-}
-
-function serializeMessage(row: AppMessageRow) {
-  // attachment_ids is a JSON-encoded array of integers — defensively parse so a
-  // bad row never takes down the whole /messages response.
-  let attachmentIds: number[] = [];
-  try {
-    const parsed = JSON.parse(row.attachmentIds || "[]");
-    if (Array.isArray(parsed)) {
-      attachmentIds = parsed.filter((n) => Number.isInteger(n)) as number[];
-    }
+    return JSON.parse(s.slice(first, last + 1)) as T;
   } catch {
-    /* ignore — leave empty */
-  }
-  return {
-    id: row.id,
-    appId: row.appId,
-    role: row.role,
-    content: row.content,
-    attachmentIds,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-function serializeJob(row: GenerationJobRow) {
-  return {
-    id: row.id,
-    status: row.status,
-    phase: row.phase,
-    progress: row.progress,
-    appId: row.appId,
-    errorMessage: row.errorMessage,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
-router.get("/apps", requireAuth, async (req: Request, res: Response) => {
-  const userId = req.userId!;
-  const rows = await db
-    .select()
-    .from(generatedApps)
-    .where(eq(generatedApps.userId, userId))
-    .orderBy(desc(generatedApps.createdAt));
-  res.json(rows.map(serializeApp));
-});
-
-router.get("/apps/:id", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  res.json(serializeApp(row));
-});
-
-router.delete("/apps/:id", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const result = await db
-    .delete(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .returning({ id: generatedApps.id });
-  if (result.length === 0) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  res.status(204).end();
-});
-
-async function refundCredit(userId: string, jobId: number, amount = 1) {
-  if (amount <= 0) return;
-  try {
-    await db.transaction(async (tx) => {
-      await tx
-        .update(users)
-        .set({
-          credits: sql`${users.credits} + ${amount}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userId));
-      await tx.insert(creditTransactions).values({
-        userId,
-        kind: "refund",
-        amount,
-        description: `Reembolso por generación fallida (job #${jobId})`,
-      });
-    });
-  } catch (err) {
-    logger.error({ err, userId, jobId, amount }, "Failed to refund credit");
+    return null;
   }
 }
 
-interface RunAttemptContext {
-  attempt: number;
-  maxAttempts: number;
+async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
 }
 
-async function runJob(
-  jobId: number,
-  userId: string,
-  prompt: string,
-  isAdmin: boolean,
-  editAppId: number | undefined,
-  coderModel: string,
-  language: GenLanguage,
-  attachmentIds: number[] = [],
-  attemptCtx: RunAttemptContext = { attempt: 1, maxAttempts: 1 },
-  kind: ProjectKind = "fullstack",
-) {
-  try {
-    await db
-      .update(generationJobs)
-      .set({
-        status: "running",
-        phase: "starting",
-        progress: 5,
-        updatedAt: new Date(),
-      })
-      .where(eq(generationJobs.id, jobId));
+async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms),
+    ),
+  ]);
+}
 
-    let previous: import("../lib/generate").PreviousApp | undefined;
-    if (editAppId) {
-      const [row] = await db
-        .select()
-        .from(generatedApps)
-        .where(and(eq(generatedApps.id, editAppId), eq(generatedApps.userId, userId)))
-        .limit(1);
-      if (row) {
-        previous = {
-          title: row.title,
-          description: row.description,
-          techStack: row.techStack ?? [],
-          frontendCode: row.frontendCode,
-          backendCode: row.backendCode,
-        };
-      }
-    }
+/* ----------------------------- agents ------------------------------------- */
 
-    // Live agent log: fire-and-forget insert into job_logs so the dashboard
-    // can stream what each agent is doing in real time. We DELIBERATELY do
-    // not await this — the generation pipeline must never block on logging,
-    // and a logging failure must never fail a paid generation.
-    const recordLog = (agent: string, message: string, level: "info" | "warn" | "error" = "info") => {
-      // Trim to keep DB rows small. Anything longer than ~280 chars is a sign
-      // the agent dumped a transcript instead of a status line.
-      const trimmed = message.length > 280 ? message.slice(0, 277) + "…" : message;
-      db.insert(jobLogs)
-        .values({ jobId, agent, level, message: trimmed })
-        .catch((err) => {
-          logger.warn({ err, jobId }, "Failed to write job log line");
-        });
-    };
-    recordLog("system", "Iniciando pipeline multiagente…");
-
-    // Resolve any user-uploaded attachments into a typed context for the AI.
-    // We always re-check ownership here even though the upload route enforced
-    // it — defense in depth, and clients could in theory POST a foreign id.
-    let resolvedAttachments: AttachmentContext[] | undefined;
-    if (attachmentIds.length > 0) {
+/**
+ * Researcher — Gemini 2.0 Flash con google_search tool.
+ */
+export async function researchTopic(prompt: string): Promise<string> {
+  const hasUrl = URL_LIKE.test(prompt);
+  return withTimeout(
+    (async () => {
       try {
-        const ids = attachmentIds.filter((n) => Number.isInteger(n) && n > 0);
-        if (ids.length > 0) {
-          const rows = await db
-            .select()
-            .from(chatAttachments)
-            .where(
-              and(
-                eq(chatAttachments.userId, userId),
-                sql`${chatAttachments.id} = ANY(${ids})`,
-              ),
-            );
-          resolvedAttachments = rows.map((r) => {
-            const isText =
-              r.mimeType.startsWith("text/") ||
-              r.mimeType === "application/json" ||
-              r.mimeType === "application/xml";
-            let textContent: string | undefined;
-            if (isText) {
-              try {
-                // Cap at 10 KB per file before the prompt builder applies its
-                // own 25 KB total cap. Anything bigger is almost certainly
-                // noise the user didn't read either.
-                const buf = Buffer.from(r.dataBase64, "base64");
-                textContent = buf.toString("utf8").slice(0, 10_000);
-              } catch {
-                textContent = undefined;
-              }
-            }
-            return {
-              id: r.id,
-              filename: r.filename,
-              mimeType: r.mimeType,
-              sizeBytes: r.sizeBytes,
-              textContent,
-            } satisfies AttachmentContext;
-          });
-          recordLog(
-            "system",
-            `Adjuntos cargados: ${resolvedAttachments.length} archivo(s) (${resolvedAttachments
-              .map((a) => a.filename)
-              .slice(0, 3)
-              .join(", ")}${resolvedAttachments.length > 3 ? "…" : ""}).`,
-          );
-        }
-      } catch (attErr) {
-        logger.warn({ attErr, jobId }, "Failed to resolve attachments — continuing without them");
-        recordLog("system", "No pude cargar los adjuntos; sigo sin ellos.", "warn");
-      }
-    }
+        const response = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: hasUrl
+                    ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`
+                    : `Haz una búsqueda rápida sobre este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`,
+                },
+              ],
+            },
+          ],
+          config: {
+            systemInstruction: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
+- 1 short paragraph: what the source product/site does and who it's for.
+- bullets: core sections/pages, signature features, dominant brand colors (hex if you can read them), typography family, microcopy tone.
+- 1 short paragraph: differentiation suggestions — what an inspired-by product could do better or differently.
 
-    // Load persistent agent memory: cross-app preferences + (when editing)
-    // per-app notes + recent chat turns. Failures here just degrade to "no
-    // memory" — never block the generation.
-    const agentMemory = await loadAgentMemory(userId, editAppId);
-    if (
-      agentMemory.conversationHistory.length > 0 ||
-      agentMemory.appNotes.length > 0 ||
-      agentMemory.userPreferences.length > 0
-    ) {
-      recordLog(
-        "system",
-        `Memoria cargada: ${agentMemory.conversationHistory.length} turnos previos, ${agentMemory.appNotes.length} chars de notas de app, ${agentMemory.userPreferences.length} chars de preferencias.`,
-      );
-    }
-
-    addBreadcrumb("job:start", {
-      jobId,
-      userId,
-      editAppId: editAppId ?? null,
-      coderModel,
-      language,
-      promptChars: prompt.length,
-      attachments: attachmentIds.length,
-      attempt: attemptCtx.attempt,
-      memoryTurns: agentMemory.conversationHistory.length,
-      memoryNotesChars: agentMemory.appNotes.length,
-      memoryPrefsChars: agentMemory.userPreferences.length,
-    });
-    const payload = await generateApp(
-      prompt,
-      async (p) => {
-        // Each phase progress event becomes a Sentry breadcrumb, so when we
-        // capture an error later we have a timeline of which phases ran and
-        // how far they got. Cheap and bounded — phases are coarse-grained.
-        addBreadcrumb(`phase:${p.phase}`, {
-          jobId,
-          progress: p.progress,
-          note: p.note,
-        });
-        try {
-          await db
-            .update(generationJobs)
-            .set({
-              phase: p.phase,
-              progress: p.progress,
-              updatedAt: new Date(),
-            })
-            .where(eq(generationJobs.id, jobId));
-        } catch (err) {
-          logger.warn({ err, jobId }, "Failed to update job progress");
-        }
-      },
-      previous,
-      coderModel,
-      language,
-      recordLog,
-      resolvedAttachments,
-      // Per-phase error reporter: every pipeline phase (planner, researcher,
-      // architect, integrations, design, frontend, backend, qa, tests,
-      // validate-patch-loop) is wrapped by generate.ts so a failure inside
-      // one of them lands in Sentry tagged with the EXACT phase name plus
-      // jobId/userId/appId, instead of the coarse "runJob" attribution from
-      // the outer try/catch below.
-      (phase, err, extras) => {
-        captureAgentError(err, {
-          phase,
-          jobId,
-          userId,
-          appId: editAppId,
-          extra: { ...extras, attempt: attemptCtx.attempt, coderModel, language },
-        });
-      },
-      agentMemory,
-    );
-    recordLog("system", `Generación completada: ${Math.round(payload.frontendCode.length / 1000)} KB de frontend listos.`);
-
-    // Atomic finalisation: insert/update app + mark job succeeded in one tx.
-    // We capture the resulting appId in this outer var so we can schedule
-    // post-commit work (memory extractor, image gen, visual tester) AFTER
-    // the transaction is durably committed — scheduling from inside the
-    // transaction callback risks firing before the COMMIT lands, which can
-    // race against UPDATE/INSERT statements that depend on the new row.
-    let finalAppIdAfterTx: number | null = null;
-    await db.transaction(async (tx) => {
-      let resultAppId: number;
-      if (editAppId) {
-        const updatedRows = await tx
-          .update(generatedApps)
-          .set({
-            title: payload.title,
-            description: payload.description,
-            techStack: payload.techStack,
-            frontendCode: payload.frontendCode,
-            backendCode: payload.backendCode,
-            status: "ready",
-            // Refresh the persisted plan so the evaluator and any future
-            // re-runs ground themselves against the most recent architect
-            // plan, not the original one from app creation.
-            plannedPages: payload.plannedPages,
-          })
-          .where(and(eq(generatedApps.id, editAppId), eq(generatedApps.userId, userId)))
-          .returning();
-        if (updatedRows.length === 0) {
-          // App was deleted (or ownership changed) between enqueue and finalize.
-          throw new Error("APP_NO_LONGER_AVAILABLE");
-        }
-        const updated = updatedRows[0];
-        resultAppId = updated.id;
-        // Append assistant message acknowledging the change.
-        await tx.insert(appMessages).values({
-          appId: resultAppId,
-          role: "assistant",
-          content: `Aplicado: ${payload.description}`,
-        });
-        // Snapshot the new state into the revision history so the user can
-        // roll back to this exact bundle later if a future edit breaks it.
-        await insertAppRevisionFromRow(tx, {
-          row: updated,
-          source: "edit",
-          summary: payload.description,
-          jobId,
-        });
-      } else {
-        const [inserted] = await tx
-          .insert(generatedApps)
-          .values({
-            userId,
-            title: payload.title,
-            description: payload.description,
-            prompt,
-            techStack: payload.techStack,
-            frontendCode: payload.frontendCode,
-            backendCode: payload.backendCode,
-            status: "ready",
-            // Persist the model the user picked at creation time so subsequent
-            // edits on this app reuse it. Defaults to "auto" when the user
-            // doesn't override.
-            coderModel,
-            // Same idea for the source language — locked at creation, all
-            // edits reuse the same JS/TS choice.
-            language,
-            // Persist the kind preset too — needed by the public preview
-            // (non-JS landing card) and by Vercel deploy (Python runtime
-            // selection) without re-deriving from prompt text.
-            kind,
-            // Architect's planned page list — fed to the autonomous evaluator
-            // so vision can verify "the app actually has these screens".
-            plannedPages: payload.plannedPages,
-          })
-          .returning();
-        resultAppId = inserted.id;
-        // Seed initial assistant message for the chat history.
-        await tx.insert(appMessages).values([
-          { appId: resultAppId, role: "user", content: prompt },
-          {
-            appId: resultAppId,
-            role: "assistant",
-            content: `He generado "${payload.title}". ${payload.description}`,
+ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual; no preamble; plain text only; ≤350 words.`,
+            tools: [{ googleSearch: {} }],
+            maxOutputTokens: 1500,
           },
-        ]);
-        // First revision in the history — the genesis snapshot. The user can
-        // always come back to "the original generation" with one click, no
-        // matter how many edits happen later.
-        await insertAppRevisionFromRow(tx, {
-          row: inserted,
-          source: "create",
-          summary: payload.description || "Creación inicial",
-          jobId,
         });
+        const text = response.text ?? "";
+        return text.trim().slice(0, 4000);
+      } catch {
+        return "";
       }
+    })(),
+    hasUrl ? 18_000 : 9_000,
+    "",
+  );
+}
 
-      await tx
-        .update(generationJobs)
-        .set({
-          status: "succeeded",
-          phase: "ready",
-          progress: 100,
-          appId: resultAppId,
-          updatedAt: new Date(),
-        })
-        .where(eq(generationJobs.id, jobId));
+/**
+ * Architect — Gemini 2.5 Flash.
+ */
+async function architectPlan(prompt: string, research: string): Promise<ProjectPlan> {
+  const userContent = research
+    ? `Design the file structure for this app:\n\n${prompt}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
+    : `Design the file structure for this app:\n\n${prompt}`;
 
-      // Hand the resulting appId back to the outer scope so the post-commit
-      // hooks below can schedule the memory extractor *after* this tx has
-      // really landed in the database.
-      finalAppIdAfterTx = resultAppId;
+  const response = await withTimeoutOrThrow(
+    gemini.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: userContent }] }],
+      config: {
+        systemInstruction: ARCHITECT_SYSTEM_PROMPT,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+      },
+    }),
+    60_000,
+    "architect",
+  );
 
-      // Schedule automatic AI image generation in the background after the
-      // transaction commits. The Unsplash placeholder URLs the coder emits
-      // often 404 (rate-limited / removed photos) so the bundle ships with
-      // broken <img> tags showing alt text overlays. Nano Banana replaces
-      // them with real generated images stored in app_images. We do this
-      // *after* the job is marked succeeded so the user sees their app
-      // immediately, then the images swap in on the next refetch.
-      const finalAppId = resultAppId;
-      const finalUserId = userId;
-      const finalIsAdmin = isAdmin;
-      const finalPrompt = prompt;
-      setImmediate(() => {
-        generateAppImages(finalAppId).catch((imgErr) => {
-          logger.warn(
-            { err: imgErr, appId: finalAppId, jobId },
-            "Auto image generation failed (non-fatal)",
-          );
-        });
-      });
-      // Also schedule the Visual Testing Agent in the background. This costs
-      // 30 credits (silent — disclosed in the product description) and runs
-      // up to 3 fix cycles against /p/<slug>. We auto-create a slug here so
-      // puppeteer has a URL to screenshot. If the user is broke or anything
-      // explodes, we just log and move on — the user already has their app.
-      setImmediate(() => {
-        autoRunVisualTester({
-          appId: finalAppId,
-          userId: finalUserId,
-          isAdmin: finalIsAdmin,
-          prompt: finalPrompt,
-          jobId,
-        })
-          .catch((vtErr) => {
-            logger.warn(
-              { err: vtErr, appId: finalAppId, jobId },
-              "Auto visual tester failed (non-fatal)",
-            );
-          })
-          .finally(() => {
-            // Chain the autonomous Visual Evaluator AFTER the visual tester
-            // so they run in series. The tester is generic auto-fix; the
-            // evaluator is a strict pass/fail judgment that can auto-publish
-            // the app if the user opted in. Errors here MUST NOT take down
-            // the generation — the user already has their app.
-            runAutoEvaluator({
-              appId: finalAppId,
-              userId: finalUserId,
-              userIntent: finalPrompt,
-              // The architect's planned page list (persisted on the row by
-              // the transaction above) is fed to the vision model as ground
-              // truth so it can complain when planned screens are missing.
-              plannedPages: payload.plannedPages,
-              jobId,
-              baseUrl: VISUAL_TEST_BASE_URL,
-              log: logger,
-            }).catch((evErr) => {
-              logger.warn(
-                { err: evErr, appId: finalAppId, jobId },
-                "Auto evaluator failed (non-fatal)",
-              );
-            });
-          });
-      });
+  const raw = response.text ?? "";
+  const plan = extractJsonObject<ProjectPlan>(raw);
+  if (!plan || !plan.title || !Array.isArray(plan.frontendFiles)) {
+    logger.error({ rawPreview: raw.slice(0, 600) }, "Architect returned invalid plan JSON");
+    throw new Error("El arquitecto no devolvió un plan válido.");
+  }
+  plan.pages = plan.pages ?? [];
+  plan.components = plan.components ?? [];
+  plan.hooks = plan.hooks ?? [];
+  plan.utils = plan.utils ?? [];
+  plan.dataModels = plan.dataModels ?? [];
+  plan.backendFiles = plan.backendFiles ?? [];
+  plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
+  return plan;
+}
 
-      // Replace the placeholder "reservation" ledger row with the final one.
-      if (!isAdmin) {
-        await tx
-          .update(creditTransactions)
-          .set({
-            description: editAppId
-              ? `Edición de app: ${payload.title}`
-              : `App generada: ${payload.title}`,
-          })
-          .where(
-            and(
-              eq(creditTransactions.userId, userId),
-              eq(
-                creditTransactions.description,
-                `Reserva de crédito para job #${jobId}`,
-              ),
-            ),
-          );
-      }
+/**
+ * Designer — Gemini 2.5 Flash.
+ */
+async function designSystem(plan: ProjectPlan, research: string): Promise<DesignSystem> {
+  const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
+  const userContent = research
+    ? `${summary}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
+    : summary;
+  let raw = "";
+  try {
+    const response = await withTimeoutOrThrow(
+      gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: userContent }] }],
+        config: {
+          systemInstruction: DESIGNER_SYSTEM_PROMPT,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
+      }),
+      15_000,
+      "designer",
+    );
+    raw = response.text ?? "";
+  } catch (_err) {
+    // Fall through to default design below.
+  }
+  const design = extractJsonObject<DesignSystem>(raw);
+  if (!design || !design.palette) {
+    return {
+      theme: "light",
+      palette: {
+        primary: "#7c3aed",
+        secondary: "#22d3ee",
+        accent: "#f97316",
+        background: "#0b0b12",
+        foreground: "#f8fafc",
+        muted: "#1e1e2a",
+      },
+      typography: { sans: "Inter, system-ui, sans-serif" },
+      radius: "lg",
+      vibe: "Modern, polished, dark-first SaaS aesthetic",
+      tailwindExtend: "{}",
+      globalCSS: "",
+    };
+  }
+  return design;
+}
+
+interface CodeGenResult {
+  code: string;
+  truncated: boolean;
+  error?: string;
+}
+
+type CoderProvider = "gemini-flash" | "claude-sonnet" | "gpt-5";
+function resolveCoderProvider(coderModel?: string): CoderProvider {
+  if (coderModel === "claude-sonnet-4-6") return "gemini-flash"; // Fallback a Gemini (sin key Anthropic)
+  if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
+  return "gemini-flash";
+}
+
+/**
+ * Frontend Engineer — Gemini 2.5 Flash streaming (default) o GPT-5.
+ * Claude Sonnet redirigido a Gemini Flash (sin key Anthropic disponible).
+ */
+async function generateFrontendCode(
+  plan: ProjectPlan,
+  design: DesignSystem,
+  research: string,
+  prompt: string,
+  onChars: (chars: number) => void,
+  coderModel: string | undefined,
+  language: GenLanguage,
+): Promise<CodeGenResult> {
+  const planSummary = JSON.stringify({
+    title: plan.title,
+    pages: plan.pages,
+    components: plan.components,
+    hooks: plan.hooks,
+    utils: plan.utils,
+    dataModels: plan.dataModels,
+    requiredFiles: plan.frontendFiles,
+  });
+  const designSummary = JSON.stringify(design);
+
+  const userContent = `User request: ${prompt}
+
+Project plan (you MUST implement every listed file):
+${planSummary}
+
+Design system (apply EXACTLY in tailwind.config.ts theme.extend and src/index.css):
+${designSummary}
+${research ? `\nResearch context (visual reference, treat as ground truth):\n${research.slice(0, 2000)}` : ""}
+
+Now produce the JSON object with frontendCode containing every listed file.`;
+
+  const provider = resolveCoderProvider(coderModel);
+  const systemPrompt = buildFrontendSystemPrompt(language);
+  let accumulated = "";
+  let truncated = false;
+
+  if (provider === "gpt-5") {
+    const stream = await openai.chat.completions.create({
+      model: "gpt-5.4",
+      max_completion_tokens: 32000,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
+      stream: true,
     });
-
-    // Post-commit hook: launch the memory extractor only AFTER the txn has
-    // durably committed. Doing this from inside the transaction callback
-    // would risk a race where the extractor's UPDATE on agent_notes runs
-    // before the row exists, or where a rolled-back transaction still writes
-    // memory for an app that never came into being. Fire-and-forget — any
-    // failure is logged and swallowed because the user already has their app.
-    if (finalAppIdAfterTx !== null) {
-      const memoryAppId: number = finalAppIdAfterTx;
-      setImmediate(() => {
-        runMemoryExtractor({
-          userId,
-          appId: memoryAppId,
-          userPrompt: prompt,
-          appDescription: payload.description,
-        }).catch((memErr) => {
-          logger.warn(
-            { err: memErr, appId: memoryAppId, jobId },
-            "Memory extractor failed (non-fatal)",
-          );
-        });
-      });
+    let lastReport = 0;
+    let finishReason: string | undefined;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        accumulated += delta;
+        if (accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onChars(accumulated.length);
+        }
+      }
+      const fr = chunk.choices[0]?.finish_reason;
+      if (fr === "length") finishReason = "MAX_TOKENS";
     }
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "Error desconocido";
-    const hasMoreAttempts = attemptCtx.attempt < attemptCtx.maxAttempts;
-    captureAgentError(err, {
-      jobId,
-      userId,
-      appId: editAppId,
-      phase: "runJob",
-      extra: {
-        attempt: attemptCtx.attempt,
-        maxAttempts: attemptCtx.maxAttempts,
-        editAppId,
-        coderModel,
-        language,
-        willRetry: hasMoreAttempts,
+    truncated = finishReason === "MAX_TOKENS";
+  } else {
+    // Gemini 2.5 Flash streaming (default para todos los modelos incluido claude-sonnet)
+    const stream = await gemini.models.generateContentStream({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: userContent }] }],
+      config: {
+        systemInstruction: systemPrompt,
+        maxOutputTokens: 32768,
+        responseMimeType: "application/json",
       },
     });
-    if (hasMoreAttempts) {
-      // Transient failure: bump retryCount, rethrow so pg-boss schedules backoff.
-      logger.warn(
-        { err, jobId, attempt: attemptCtx.attempt, maxAttempts: attemptCtx.maxAttempts },
-        "Generation job attempt failed — pg-boss will retry",
-      );
-      try {
-        await db
-          .update(generationJobs)
-          .set({
-            phase: "retrying",
-            errorMessage: `Reintento ${attemptCtx.attempt}/${attemptCtx.maxAttempts}: ${detail}`,
-            retryCount: attemptCtx.attempt,
-            updatedAt: new Date(),
-          })
-          .where(eq(generationJobs.id, jobId));
-      } catch (updateErr) {
-        logger.error({ updateErr, jobId }, "Failed to mark job as retrying");
-      }
-      throw err;
-    }
-
-    // Final attempt: finalise (failed + refund + chat message).
-    logger.error(
-      { err, jobId, attempt: attemptCtx.attempt, maxAttempts: attemptCtx.maxAttempts },
-      "Generation job failed after all retries",
-    );
-    try {
-      await db
-        .update(generationJobs)
-        .set({
-          status: "failed",
-          phase: "failed",
-          errorMessage: `Falló la generación: ${detail}`,
-          retryCount: attemptCtx.attempt,
-          updatedAt: new Date(),
-        })
-        .where(eq(generationJobs.id, jobId));
-    } catch (updateErr) {
-      // Rethrow if terminal write fails so pg-boss doesn't record success.
-      logger.error({ err: updateErr, jobId }, "Failed to mark job as failed — rethrowing");
-      throw updateErr;
-    }
-    // CRITICAL UX: when an *edit* fails, the user has just sent a message and
-    // is sitting waiting in the chat. Without an assistant reply they see
-    // nothing happen and assume the agent is broken. Drop a clear assistant
-    // message into the conversation so the chat history reflects the
-    // failure.
-    if (editAppId) {
-      try {
-        await db.insert(appMessages).values({
-          appId: editAppId,
-          role: "assistant",
-          content:
-            `❌ No pude aplicar el cambio: ${detail}\n\n` +
-            `He devuelto el crédito. Vuelve a intentarlo o reformula la petición. ` +
-            `Si el problema persiste, prueba con otro modelo desde el botón "Modelo".`,
-        });
-      } catch (msgErr) {
-        logger.error({ msgErr, jobId, editAppId }, "Failed to insert error chat message");
-      }
-    }
-    if (!isAdmin) {
-      // Look up the original reservation amount so we refund exactly what we
-      // charged (kind-aware — a failed game-3d job refunds 5, not 1). If no
-      // reservation row exists, do NOT fall back to 1 — that would mint
-      // credits out of thin air. Log loudly for manual reconciliation
-      // instead. Reservations are written in the same transaction as the
-      // job, so a missing row signals real ledger corruption.
-      const [reservation] = await db
-        .select({ amount: creditTransactions.amount })
-        .from(creditTransactions)
-        .where(
-          and(
-            eq(creditTransactions.userId, userId),
-            eq(
-              creditTransactions.description,
-              `Reserva de crédito para job #${jobId}`,
-            ),
-          ),
-        )
-        .limit(1);
-      if (reservation) {
-        await refundCredit(userId, jobId, Math.abs(reservation.amount));
-      } else {
-        logger.error(
-          { userId, jobId },
-          "Failed-job refund SKIPPED — no reservation row found for this job. Manual reconciliation required.",
-        );
-      }
-    }
-    // Diagnostic agent: when any agent errors out, kick off a free diagnosis
-    // so the user gets actionable info in the chat instead of just a generic
-    // failure. If there's a deployed app, we run the Visual Testing Agent on
-    // the live URL; otherwise we run the static health-check (esbuild) on the
-    // last good bundle.
-    if (editAppId) {
-      diagnoseFailedAgent({
-        appId: editAppId,
-        userId,
-        jobId,
-        failureDetail: detail,
-      }).catch((diagErr) => {
-        logger.warn(
-          { diagErr, jobId, editAppId },
-          "Post-failure diagnostic agent crashed",
-        );
-      });
-    }
-  }
-}
-
-/**
- * Free post-failure diagnostic. Tries the Visual Testing Agent against the
- * live deploy if the app already has a public slug (auto-fix disabled — we
- * only want to surface what's wrong, not patch it without consent), otherwise
- * falls back to the static esbuild health check. Posts a single assistant
- * message into the chat with the findings so the user has actionable info.
- *
- * Never charges credits — this is a courtesy diagnostic that fires after we've
- * already refunded the failed job.
- */
-async function diagnoseFailedAgent(opts: {
-  appId: number;
-  userId: string;
-  jobId: number;
-  failureDetail: string;
-}): Promise<void> {
-  const { appId, userId, jobId } = opts;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) return;
-
-  // Path 1: deployed app → Visual Testing Agent (read-only, no auto-fix).
-  if (row.publicSlug && row.frontendCode) {
-    try {
-      const report = await runVisualTester({
-        app: {
-          id: row.id,
-          title: row.title,
-          description: row.description,
-          frontendCode: row.frontendCode,
-          publicSlug: row.publicSlug,
-        },
-        baseUrl: VISUAL_TEST_BASE_URL,
-        prompt: row.title + (row.description ? `: ${row.description}` : ""),
-        autoFix: false,
-        log: logger,
-      });
-      const top = report.finalAnalysis.issues
-        .slice(0, 3)
-        .map(
-          (i, idx) =>
-            `${idx + 1}. [${i.severity}/${i.viewport}] ${i.description}`,
-        )
-        .join("\n");
-      await db.insert(appMessages).values({
-        appId,
-        role: "assistant",
-        content:
-          `🔎 **Diagnóstico automático tras el error**\n` +
-          `Mi compañero de pruebas visuales analizó la versión actual desplegada (sin tocarla).\n\n` +
-          `Puntuación visual: **${Math.round(report.finalAnalysis.overallScore)}/100**\n` +
-          (top
-            ? `Problemas detectados:\n${top}\n\n`
-            : `No detectó problemas visuales serios — el error parece ser de lógica/agente, no del UI.\n\n`) +
-          `Si quieres, vuelve a intentar la edición, prueba con otro modelo, o pulsa "Análisis Visual" para un reporte completo (gratis esta vez no, normalmente cuesta 30 créditos).`,
-      });
-      logger.info(
-        { appId, jobId, score: report.finalAnalysis.overallScore },
-        "Post-failure diagnostic completed via Visual Testing Agent",
-      );
-      return;
-    } catch (err) {
-      logger.warn(
-        { err, appId, jobId },
-        "Post-failure Visual Testing Agent failed, falling back to esbuild",
-      );
-      // Fall through to static check.
-    }
-  }
-
-  // Path 2: no deploy (or visual tester crashed) → static esbuild health check.
-  if (row.frontendCode) {
-    try {
-      const report = await validateBundle(row.frontendCode);
-      const lines: string[] = [];
-      if (report.ok) {
-        lines.push(
-          "El bundle actual compila sin errores — el fallo parece ser específico de la nueva edición que pediste.",
-        );
-      } else {
-        const top: string = report.issues
-          .slice(0, 3)
-          .map((i: BuildIssue, idx: number) => `${idx + 1}. ${i.message}`)
-          .join("\n");
-        lines.push(
-          `El bundle actual tiene ${report.issues.length} error(es) de compilación:\n${top}`,
-        );
-      }
-      await db.insert(appMessages).values({
-        appId,
-        role: "assistant",
-        content:
-          `🔎 **Diagnóstico automático tras el error**\n` +
-          `Hice un chequeo de salud del código actual:\n\n${lines.join("\n")}\n\n` +
-          `Vuelve a intentar la edición o reformula la petición.`,
-      });
-      logger.info(
-        { appId, jobId, ok: report.ok },
-        "Post-failure diagnostic completed via static health check",
-      );
-    } catch (err) {
-      logger.warn(
-        { err, appId, jobId },
-        "Post-failure static health check also failed",
-      );
-    }
-  }
-}
-
-/** A job stuck in `running` for longer than this on boot reclaim is presumed dead. */
-const STALE_RUNNING_MS = 15 * 60 * 1000; // 15 minutes — longer than any realistic single phase
-
-/**
- * Threshold for the *inline* stale-job recovery inside the 409 check on the
- * /generate endpoint. Healthy runs update generation_jobs.updated_at on every
- * phase transition (planner, architect, integrations, frontend, qa, parsing,
- * etc.) which fires multiple times per minute. 5 minutes without an update
- * means the worker silently died — it's safe to reclaim and unblock the user.
- *
- * Deliberately stricter than STALE_RUNNING_MS so the user isn't blocked for
- * 15 min when an edit hangs; the boot threshold stays conservative because at
- * boot we may race with another live worker that's still mid-phase.
- */
-const STALE_INFLIGHT_INLINE_MS = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Mark a single 'running' job as failed and refund its reservation.
- * Idempotent at the DB level — if the row was already terminal, the WHERE
- * clause matches 0 rows and the refund is skipped.
- *
- * Used by both the boot-time reclaim sweep and the inline 409 recovery so
- * the failure UX (status, phase, error message, credit ledger) stays
- * consistent regardless of which path detected the stale job.
- */
-async function reclaimSingleStaleJob(
-  job: { id: number; userId: string },
-  reason: string,
-): Promise<void> {
-  await db
-    .update(generationJobs)
-    .set({
-      status: "failed",
-      phase: "failed",
-      errorMessage: reason,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(generationJobs.id, job.id),
-        sql`${generationJobs.status} IN ('queued', 'running')`,
-      ),
-    );
-  const [reservation] = await db
-    .select()
-    .from(creditTransactions)
-    .where(
-      and(
-        eq(creditTransactions.userId, job.userId),
-        eq(
-          creditTransactions.description,
-          `Reserva de crédito para job #${job.id}`,
-        ),
-      ),
-    )
-    .limit(1);
-  if (reservation) {
-    await refundCredit(job.userId, job.id, Math.abs(reservation.amount));
-  }
-}
-
-/**
- * Reconcile generation_jobs against the queue. Called at boot AND on a
- * periodic interval (every couple of minutes) so apps don't get stuck behind
- * a dead worker between server restarts.
- *
- *   - `queued` jobs: re-enqueue them. They were created in a previous run and
- *     either never made it to the queue (crash between DB insert and
- *     boss.send) or pg-boss already has them — singletonKey dedupes the
- *     re-enqueue.
- *   - `running` jobs older than STALE_RUNNING_MS: mark failed + refund. The
- *     worker that picked them up must be dead.
- *   - `running` jobs younger than that: leave alone — a live worker may
- *     still own them.
- */
-export async function reclaimOrphanedJobs(opts: { userId?: string } = {}) {
-  try {
-    const where = opts.userId
-      ? sql`${generationJobs.status} IN ('queued', 'running') AND ${generationJobs.userId} = ${opts.userId}`
-      : sql`${generationJobs.status} IN ('queued', 'running')`;
-    const all = await db.select().from(generationJobs).where(where);
-    if (all.length === 0) return;
-
-    const now = Date.now();
-    let requeued = 0;
-    let failed = 0;
-
-    for (const job of all) {
-      if (job.status === "queued") {
-        // Re-enqueue. enqueueGenerateJob uses a singletonKey so duplicates
-        // (already in pg-boss) are silently rejected.
-        try {
-          await enqueueGenerateJob(job.id);
-          requeued++;
-        } catch (err) {
-          logger.warn({ err, jobId: job.id }, "Failed to re-enqueue queued job at boot");
-        }
-        continue;
-      }
-      // running:
-      const ageMs = now - new Date(job.updatedAt).getTime();
-      if (ageMs < STALE_RUNNING_MS) continue;
-      try {
-        await reclaimSingleStaleJob(job, "Interrumpido — proceso del servidor caído.");
-        failed++;
-      } catch (err) {
-        logger.warn({ err, jobId: job.id }, "Failed to reclaim stale running job");
-      }
-    }
-
-    if (requeued || failed) {
-      logger.warn({ requeued, failed, total: all.length }, "Reclaimed orphaned generation jobs");
-    }
-  } catch (err) {
-    logger.error({ err }, "Failed to reclaim orphaned jobs");
-  }
-}
-
-/**
- * Worker entry point: load all params from the DB row and run the job.
- *
- * The pg-boss worker calls this with just the jobId — the row in
- * generation_jobs is the source of truth for everything else (prompt, edit
- * target, attachments, model, language, isAdmin). This contract is what
- * lets the worker run in a separate process or survive a restart.
- *
- * Idempotency: if the job is already in a terminal state (succeeded/failed),
- * we no-op. If it's running, we still re-process — we trust the queue to not
- * dispatch the same job twice in normal operation; the only way we'd see this
- * is a crash mid-run or a manual retry.
- */
-export async function runJobById(
-  jobId: number,
-  attemptCtx: { attempt: number; maxAttempts: number } = { attempt: 1, maxAttempts: 1 },
-): Promise<void> {
-  const [job] = await db
-    .select()
-    .from(generationJobs)
-    .where(eq(generationJobs.id, jobId))
-    .limit(1);
-  if (!job) {
-    logger.warn({ jobId }, "Worker received jobId for non-existent generation job");
-    return;
-  }
-  if (job.status === "succeeded" || job.status === "failed") {
-    // Already done — nothing to do. Happens when an old retry fires after
-    // a manual finalisation.
-    return;
-  }
-  await runJob(
-    job.id,
-    job.userId,
-    job.prompt,
-    job.isAdmin,
-    job.editAppId ?? undefined,
-    job.coderModel,
-    job.language as GenLanguage,
-    Array.isArray(job.attachmentIds) ? job.attachmentIds : [],
-    attemptCtx,
-    (job.kind as ProjectKind) ?? "fullstack",
-  );
-}
-
-interface EnqueueExtras {
-  // Optional: a chat user message to persist atomically with the job. If the
-  // enqueue (credit reservation, etc.) fails, the message is rolled back too.
-  chatMessage?: { appId: number; content: string };
-  // Optional: ids of chat_attachments rows that the user attached to this
-  // prompt. They get (a) persisted on the message row so the chat bubble can
-  // render thumbnails, and (b) loaded by runJob and fed to the AI.
-  attachmentIds?: number[];
-}
-
-async function enqueueGeneration(
-  req: Request,
-  res: Response,
-  cleanedPrompt: string,
-  editAppId: number | undefined,
-  extras?: EnqueueExtras,
-  coderModelOverride?: string,
-  languageOverride?: GenLanguage,
-  kind: ProjectKind = "fullstack",
-) {
-  // Edits always cost 1 credit (the original kind already informed the
-  // architecture, and re-runs aren't substantially more expensive than a
-  // small fullstack call). New generations scale with the kind.
-  const cost = editAppId ? 1 : KIND_COSTS[kind] ?? 1;
-  const userId = req.userId!;
-  const user = req.dbUser!;
-  const isAdmin = isAdminEmail(user.email);
-  // Resolve which Coder model + source language this run should use:
-  //   - For an edit, prefer the app's own stored preferences (model + language).
-  //   - For a new generation, take whatever the client passed (validated below).
-  //   - Default to "auto" / "typescript".
-  let coderModel = "auto";
-  let language: GenLanguage = "typescript";
-  if (editAppId) {
-    const [editing] = await db
-      .select({
-        coderModel: generatedApps.coderModel,
-        language: generatedApps.language,
-      })
-      .from(generatedApps)
-      .where(eq(generatedApps.id, editAppId))
-      .limit(1);
-    if (editing?.coderModel) coderModel = editing.coderModel;
-    if (editing?.language && ALLOWED_LANGUAGES.has(editing.language as GenLanguage)) {
-      language = editing.language as GenLanguage;
-    }
-  } else {
-    if (coderModelOverride && ALLOWED_CODER_MODELS.has(coderModelOverride)) {
-      coderModel = coderModelOverride;
-    }
-    if (languageOverride && ALLOWED_LANGUAGES.has(languageOverride)) {
-      language = languageOverride;
-    }
-  }
-
-  if (!isAdmin && user.credits < cost) {
-    res.status(402).json({
-      error:
-        cost > 1
-          ? `Este tipo de proyecto cuesta ${cost} créditos y solo tienes ${user.credits}. Compra más para seguir generando.`
-          : "Te has quedado sin créditos. Compra más para seguir generando.",
-    });
-    return;
-  }
-
-  // For edits, refuse if there's already a *live* in-flight job on this app
-  // to avoid last-writer-wins races. The UI also blocks the chat input but a
-  // second tab / API client could try otherwise.
-  //
-  // IMPORTANT: a row in 'queued' or 'running' is NOT enough on its own to
-  // block — if a previous worker died (process crash, network split, OpenAI
-  // call hung past pg-boss expiry) the row stays at 'running' forever and
-  // the user gets a permanent 409 with no way out except an admin restart.
-  // We therefore reclaim any in-flight row whose updated_at hasn't moved in
-  // STALE_INFLIGHT_INLINE_MS (healthy generations bump updated_at on every
-  // phase transition, multiple times per minute) and let the request proceed.
-  if (editAppId) {
-    const inFlight = await db
-      .select({
-        id: generationJobs.id,
-        userId: generationJobs.userId,
-        status: generationJobs.status,
-        updatedAt: generationJobs.updatedAt,
-      })
-      .from(generationJobs)
-      .where(
-        and(
-          eq(generationJobs.appId, editAppId),
-          sql`${generationJobs.status} IN ('queued', 'running')`,
-        ),
-      )
-      .orderBy(sql`${generationJobs.updatedAt} DESC`)
-      .limit(1);
-    if (inFlight.length > 0) {
-      const stuck = inFlight[0];
-      const ageMs = Date.now() - new Date(stuck.updatedAt).getTime();
-      if (ageMs >= STALE_INFLIGHT_INLINE_MS) {
-        // Looks dead. Reclaim and continue — the user gets to retry instead
-        // of being told to "wait" for something that will never finish.
-        req.log.warn(
-          { appId: editAppId, jobId: stuck.id, ageMinutes: Math.round(ageMs / 60_000) },
-          "Auto-reclaiming stale in-flight job before accepting new edit",
-        );
-        try {
-          await reclaimSingleStaleJob(
-            { id: stuck.id, userId: stuck.userId },
-            "Liberado automáticamente: el job anterior se quedó colgado más de 5 min sin avanzar.",
-          );
-        } catch (err) {
-          req.log.error({ err, jobId: stuck.id }, "Inline reclaim failed; surfacing 409");
-          res.status(409).json({
-            error: "Ya hay un cambio en curso para esta app. Espera a que termine.",
-          });
-          return;
-        }
-      } else {
-        const remainingSec = Math.max(
-          1,
-          Math.ceil((STALE_INFLIGHT_INLINE_MS - ageMs) / 1000),
-        );
-        res.status(409).json({
-          error:
-            `Ya hay un cambio en curso para esta app. ` +
-            `Espera a que termine (se desbloqueará automáticamente en ~${remainingSec}s si no progresa).`,
-        });
-        return;
-      }
-    }
-  }
-
-  let job;
-  try {
-    job = await db.transaction(async (tx) => {
-      // Concurrency guard for edits: take a per-app advisory lock so two
-      // simultaneous edit requests on the same app can't both pass the
-      // pre-tx in-flight check, both insert a job, and both bill the user.
-      // The lock is released automatically at tx commit/rollback. Namespace
-      // (first arg, 0x4D415249 = "MARI") keeps us from colliding with any
-      // other advisory lock taken elsewhere in the codebase.
-      //
-      // We re-check in-flight INSIDE the lock — the pre-tx check stays as a
-      // fast-path so most users still get a clean 409 without paying the
-      // round-trip of opening a tx + taking a lock.
-      if (editAppId) {
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(1296126537, ${editAppId})`);
-        const conflict = await tx
-          .select({ id: generationJobs.id })
-          .from(generationJobs)
-          .where(
-            and(
-              eq(generationJobs.appId, editAppId),
-              sql`${generationJobs.status} IN ('queued', 'running')`,
-            ),
-          )
-          .limit(1);
-        if (conflict.length > 0) {
-          // Throw a sentinel so the catch below maps it to 409 without
-          // double-billing. The lock's still held until rollback completes.
-          throw new Error("APP_BUSY");
+    let lastReport = 0;
+    let finishReason: string | undefined;
+    for await (const chunk of stream) {
+      const text = chunk.text;
+      if (text) {
+        accumulated += text;
+        if (accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onChars(accumulated.length);
         }
       }
-      if (!isAdmin) {
-        const updated = await tx
-          .update(users)
-          .set({
-            credits: sql`${users.credits} - ${cost}`,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(users.id, userId), sql`${users.credits} >= ${cost}`))
-          .returning({ credits: users.credits });
-        if (updated.length === 0) {
-          throw new Error("INSUFFICIENT_CREDITS");
-        }
-      }
-      const [created] = await tx
-        .insert(generationJobs)
-        .values({
-          userId,
-          prompt: cleanedPrompt,
-          status: "queued",
-          phase: "queued",
-          progress: 0,
-          appId: editAppId ?? null,
-          // Persist all run params so the worker can rehydrate from this row
-          // alone given just the jobId. This is what makes the queue work
-          // across process boundaries / restarts.
-          editAppId: editAppId ?? null,
-          coderModel,
-          language,
-          kind,
-          attachmentIds: extras?.attachmentIds ?? [],
-          isAdmin,
-        })
-        .returning();
-      if (!isAdmin) {
-        await tx.insert(creditTransactions).values({
-          userId,
-          kind: "usage",
-          amount: -cost,
-          description: `Reserva de crédito para job #${created.id}`,
-        });
-      }
-      // Persist the chat message in the same tx so it never lingers without a job.
-      if (extras?.chatMessage) {
-        await tx.insert(appMessages).values({
-          appId: extras.chatMessage.appId,
-          role: "user",
-          content: extras.chatMessage.content,
-          attachmentIds: JSON.stringify(extras?.attachmentIds ?? []),
-        });
-      }
-      return created;
-    });
-  } catch (err) {
-    if (err instanceof Error && err.message === "INSUFFICIENT_CREDITS") {
-      res.status(402).json({
-        error: "Te has quedado sin créditos. Compra más para seguir generando.",
-      });
-      return;
+      const fr = chunk.candidates?.[0]?.finishReason;
+      if (fr) finishReason = fr;
     }
-    if (err instanceof Error && err.message === "APP_BUSY") {
-      // Lost the advisory-lock race — another concurrent edit on the same
-      // app got the lock first and is already queued. Same UX as the pre-tx
-      // 409, but here it means the lock check (not the read-only pre-check)
-      // caught it.
-      res.status(409).json({
-        error: "Ya hay un cambio en curso para esta app. Espera a que termine.",
-      });
-      return;
-    }
-    req.log.error({ err }, "Failed to enqueue generation job");
-    res.status(500).json({ error: "No pudimos encolar la generación. Inténtalo otra vez." });
-    return;
+    truncated = finishReason === "MAX_TOKENS";
   }
 
-  // Hand off to the persistent queue; fall back to setImmediate if the queue is down.
-  try {
-    await enqueueGenerateJob(job.id);
-    // Visible queue position in the job log stream so users see "tu app está #3 en la cola".
-    try {
-      const [{ ahead }] = await db
-        .select({ ahead: sql<number>`count(*)::int` })
-        .from(generationJobs)
-        .where(
-          and(
-            eq(generationJobs.status, "queued"),
-            sql`${generationJobs.id} < ${job.id}`,
-          ),
-        );
-      const position = Number(ahead) + 1;
-      await db.insert(jobLogs).values({
-        jobId: job.id,
-        agent: "queue",
-        level: "info",
-        message:
-          position === 1
-            ? "Tu solicitud está en cola y empezará a procesarse en breve."
-            : `Tu solicitud está en cola en posición #${position}.`,
-      });
-    } catch (logErr) {
-      logger.warn({ err: logErr, jobId: job.id }, "Failed to write queue-position log line");
-    }
-  } catch (err) {
-    logger.error({ err, jobId: job.id }, "Failed to enqueue job in queue — falling back to in-process run");
-    const attachmentIdsForJob = extras?.attachmentIds ?? [];
-    setImmediate(() => {
-      runJob(
-        job.id,
-        userId,
-        cleanedPrompt,
-        isAdmin,
-        editAppId,
-        coderModel,
-        language,
-        attachmentIdsForJob,
-        { attempt: 1, maxAttempts: 1 },
-        kind,
-      ).catch((runErr) => {
-        logger.error({ err: runErr, jobId: job.id }, "runJob threw unexpectedly");
-      });
-    });
+  const raw = accumulated.trim();
+  if (!raw) {
+    return { code: "", truncated, error: "Frontend agent returned no text." };
   }
-
-  res.status(202).json(serializeJob(job));
+  const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
+  if (!parsed || typeof parsed.frontendCode !== "string") {
+    return { code: "", truncated, error: "JSON inválido del Frontend Engineer." };
+  }
+  return { code: parsed.frontendCode, truncated };
 }
 
-router.post(
-  "/generate",
-  async (req: Request, res: Response, next) => {
-    // Admin bypass — same shape as /apps/:id/generate-images. Allows the
-    // server itself (or an operator with SESSION_SECRET) to enqueue a job
-    // on behalf of a known user via x-admin-user-id, without going through
-    // a Clerk session. Used for one-shot scripted generations.
-    const adminKey = req.header("x-admin-key");
-    const adminUserId = req.header("x-admin-user-id");
-    if (adminKey && adminKey === process.env.SESSION_SECRET && adminUserId) {
-      try {
-        const user = await ensureUser(adminUserId);
-        req.userId = adminUserId;
-        req.dbUser = user;
-        return next();
-      } catch (err) {
-        req.log.error({ err, adminUserId }, "admin bypass ensureUser failed");
-        res.status(500).json({ error: "admin bypass failed" });
-        return;
-      }
-    }
-    return requireAuth(req, res, next);
-  },
-  async (req: Request, res: Response) => {
-  const prompt: unknown = req.body?.prompt;
-  const appIdRaw: unknown = req.body?.appId;
-  const coderModelRaw: unknown = req.body?.coderModel;
-  const languageRaw: unknown = req.body?.language;
-  const kindRaw: unknown = req.body?.kind;
-  const attachmentIdsRaw: unknown = req.body?.attachmentIds;
-  // Sanitise: only keep positive integers, hard-cap at 10 attachments per
-  // request so a malicious client can't DoS us by sending 10 000 ids.
-  const attachmentIds: number[] = Array.isArray(attachmentIdsRaw)
-    ? attachmentIdsRaw
-        .filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0)
-        .slice(0, 10)
-    : [];
-  if (typeof prompt !== "string" || prompt.trim().length < 5) {
-    res.status(400).json({ error: "El prompt debe tener al menos 5 caracteres." });
-    return;
-  }
-  const userId = req.userId!;
-  // Validate kind against the whitelist; anything unknown silently falls back
-  // to the default fullstack preset (1 credit, no INTENT prefix). Edits ignore
-  // the kind entirely (set further down).
-  const kind: ProjectKind =
-    typeof kindRaw === "string" && ALLOWED_KINDS.has(kindRaw as ProjectKind)
-      ? (kindRaw as ProjectKind)
-      : "fullstack";
-  // The dashboard sends raw user prompt; the server prepends the kind's
-  // [INTENT: …] directive so the architect can't be talked into ignoring it
-  // by a malicious client. Edits skip this — they inherit the original app's
-  // intent from the existing files.
-  const cleanedPrompt = prompt.trim();
-  let editAppId: number | undefined;
-  if (typeof appIdRaw === "number" && Number.isInteger(appIdRaw)) {
-    const [owned] = await db
-      .select({ id: generatedApps.id })
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, appIdRaw), eq(generatedApps.userId, userId)))
-      .limit(1);
-    if (!owned) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    editAppId = appIdRaw;
-  }
-  // Only honor coderModel + language for *new* generations; edits inherit the
-  // app's stored preferences.
-  // Premium models (GPT-5, Claude Sonnet) are gated by lifetime spend — admins
-  // and paying users only. Sneaky callers that send the value over the API
-  // get downgraded to "auto" silently rather than a 403.
-  const user = req.dbUser!;
-  const isAdmin = isAdminEmail(user.email);
-  const txns = await db
-    .select()
-    .from(creditTransactions)
-    .where(eq(creditTransactions.userId, userId));
-  const lifetimePurchased = txns.reduce(
-    (sum, t) => sum + (t.kind === "purchase" ? Math.abs(t.amount) : 0),
-    0,
-  );
-  const isPremium = isAdmin || lifetimePurchased >= 200;
-  const requestedModel =
-    typeof coderModelRaw === "string" && ALLOWED_CODER_MODELS.has(coderModelRaw)
-      ? coderModelRaw
-      : undefined;
-  const coderModelOverride =
-    requestedModel && PREMIUM_CODER_MODELS.has(requestedModel) && !isPremium
-      ? "auto"
-      : requestedModel;
-  const languageOverride =
-    typeof languageRaw === "string" && ALLOWED_LANGUAGES.has(languageRaw as GenLanguage)
-      ? (languageRaw as GenLanguage)
-      : undefined;
-  // Build the final prompt: prepend the kind's intent directive only for new
-  // generations. Edits skip it because they reuse the existing app context.
-  const intent = !editAppId ? KIND_INTENTS[kind] : null;
-  const finalPrompt = intent ? `${intent}\n\n${cleanedPrompt}` : cleanedPrompt;
-  // For initial generations, we don't persist a chat message here (apps.ts
-  // seeds the conversation transactionally inside runJob's success path), but
-  // attachments still need to flow through so the AI sees them. Pass them via
-  // the same `extras` channel.
-  await enqueueGeneration(
-    req,
-    res,
-    finalPrompt,
-    editAppId,
-    editAppId
-      ? { chatMessage: { appId: editAppId, content: cleanedPrompt }, attachmentIds }
-      : { attachmentIds },
-    coderModelOverride,
-    languageOverride,
-    kind,
-  );
-});
-
 /**
- * Replace placeholder image URLs (Unsplash/picsum) in the app's frontend bundle
- * with real images generated by the Nano Banana Pro image agent. Synchronous —
- * the front end shows a spinner while we wait. Capped at 4 images per call.
+ * Backend Engineer — Gemini 2.5 Flash.
  */
-router.post(
-  "/apps/:id/generate-images",
-  async (req: Request, res: Response, next) => {
-    // Allow an internal-admin bypass via the SESSION_SECRET so the running
-    // server can be triggered from the shell to repair an app without going
-    // through Clerk auth. Used only for one-shot fixes.
-    const adminKey = req.header("x-admin-key");
-    if (adminKey && adminKey === process.env.SESSION_SECRET) {
-      return next();
-    }
-    return requireAuth(req, res, next);
-  },
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const adminKey = req.header("x-admin-key");
-    const isAdmin = adminKey != null && adminKey === process.env.SESSION_SECRET;
-    if (!isAdmin) {
-      const userId = req.userId!;
-      const [owned] = await db
-        .select({ id: generatedApps.id })
-        .from(generatedApps)
-        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-        .limit(1);
-      if (!owned) {
-        res.status(404).json({ error: "App not found" });
-        return;
-      }
-    }
-    try {
-      const result = await generateAppImages(id);
-      res.json(result);
-    } catch (err) {
-      req.log.error({ err, appId: id }, "Image generation failed");
-      res.status(500).json({
-        error:
-          "No pudimos generar imágenes: " +
-          (err instanceof Error ? err.message : "error desconocido"),
-      });
-    }
-  },
-);
-
-/**
- * Update the per-app Coder model preference. Subsequent edits will use it.
- */
-router.patch("/apps/:id/model", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
+async function generateBackendCode(
+  plan: ProjectPlan,
+  prompt: string,
+): Promise<CodeGenResult> {
+  if (!plan.backendNeeded) {
+    return { code: "No backend required for this app.", truncated: false };
   }
-  const model: unknown = req.body?.coderModel;
-  if (typeof model !== "string" || !ALLOWED_CODER_MODELS.has(model)) {
-    res.status(400).json({ error: "Modelo no soportado." });
-    return;
-  }
-  const userId = req.userId!;
-  const result = await db
-    .update(generatedApps)
-    .set({ coderModel: model })
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .returning();
-  if (result.length === 0) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  res.json(serializeApp(result[0]));
-});
-
-/**
- * Toggle the per-app auto-publish flag. When ON, the autonomous evaluator
- * will deploy the app to /p/<slug> automatically as soon as it gives it the
- * visto bueno (and email the owner). When OFF, the evaluator still runs but
- * leaves publishing to the user.
- */
-router.patch(
-  "/apps/:id/auto-publish",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const value: unknown = req.body?.autoPublish;
-    if (typeof value !== "boolean") {
-      res.status(400).json({ error: "autoPublish debe ser boolean." });
-      return;
-    }
-    const userId = req.userId!;
-    const result = await db
-      .update(generatedApps)
-      .set({ autoPublish: value })
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .returning();
-    if (result.length === 0) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    res.json(serializeApp(result[0]));
-  },
-);
-
-/**
- * Re-trigger the generation pipeline for an app stuck in `needs_review`.
- * Resets the status to `ready`, clears the evaluator summary, and enqueues a
- * fresh edit-mode job using the original prompt. The dashboard wires this
- * to the red "Reintentar generación" button.
- */
-router.post(
-  "/apps/:id/retry-generation",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const [row] = await db
-      .select()
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .limit(1);
-    if (!row) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    if (row.status !== "needs_review") {
-      res.status(409).json({
-        error: "Esta app no está marcada para revisión; usa el chat normal para editarla.",
-      });
-      return;
-    }
-    // Build a self-explanatory retry prompt using the evaluator summary as
-    // context. The patcher will see the original intent + what the evaluator
-    // didn't like, so the next pass has a real shot at converging.
-    const retryPrompt =
-      `Reintenta esta app. La evaluación visual rechazó la versión anterior.\n\n` +
-      `INTENCIÓN ORIGINAL:\n${row.prompt}\n\n` +
-      `RAZONES DEL RECHAZO:\n${row.evaluatorSummary ?? "(sin detalle)"}\n\n` +
-      `Aplica los cambios necesarios para que pase la evaluación.`;
-    // Snapshot the prior needs_review state so we can restore it if the
-    // enqueue fails — otherwise a 402/409/etc would leave the app stuck in
-    // "ready" with `evaluatorSummary` wiped, and the next call to this
-    // endpoint would 409 (status !== "needs_review").
-    const previousStatus = row.status;
-    const previousSummary = row.evaluatorSummary;
-    // Clear the needs_review state up front so the dashboard reflects the
-    // retry immediately (the worker will set status back to ready on success).
-    await db
-      .update(generatedApps)
-      .set({ status: "ready", evaluatorSummary: null })
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
-    // Reuse the same enqueue path the chat /messages endpoint takes — that
-    // way credit accounting, in-flight protection, and chat-message
-    // persistence behave identically to a normal user-initiated edit.
-    try {
-      await enqueueGeneration(req, res, retryPrompt, id, {
-        chatMessage: { appId: id, content: retryPrompt },
-        attachmentIds: [],
-      });
-    } catch (err) {
-      // enqueueGeneration normally responds via res; an unexpected throw is
-      // truly exceptional. Restore state and rethrow so the user can retry.
-      await db
-        .update(generatedApps)
-        .set({ status: previousStatus, evaluatorSummary: previousSummary })
-        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-        .catch(() => undefined);
-      throw err;
-    }
-    // enqueueGeneration writes its own response. If it short-circuited with
-    // a 4xx/5xx (out of credits, in-flight job, etc.), restore the prior
-    // needs_review state so the user can retry from the same UI.
-    if (res.statusCode >= 400) {
-      await db
-        .update(generatedApps)
-        .set({ status: previousStatus, evaluatorSummary: previousSummary })
-        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-        .catch((err) => {
-          req.log.warn({ err, appId: id }, "Failed to restore needs_review after retry rejection");
-        });
-    }
-  },
-);
-
-/**
- * Stream a ZIP of the generated app (frontend/, optional backend/, README.md).
- * Content-Disposition uses a sanitized title slug as the filename.
- */
-router.get("/apps/:id/export", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  const safeName = row.title.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").slice(0, 60) || "app";
-  res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", `attachment; filename="${safeName}.zip"`);
-  streamAppZip(res, {
-    title: row.title,
-    description: row.description,
-    frontendBundle: row.frontendCode,
-    backendBundle: row.backendCode,
-    onError: (err) => {
-      req.log.error({ err, appId: id }, "ZIP export failed");
-      // If headers already went out we can't change the status — just end.
-      try {
-        if (!res.headersSent) {
-          res.status(500).json({ error: "No pudimos generar el ZIP." });
-        } else {
-          res.end();
-        }
-      } catch {
-        // ignore
-      }
-    },
+  const planSummary = JSON.stringify({
+    title: plan.title,
+    dataModels: plan.dataModels,
+    requiredFiles: plan.backendFiles,
   });
-});
+  const userContent = `User request: ${prompt}
+
+Backend plan (implement every listed file with real Express handlers):
+${planSummary}
+
+Now produce the JSON object with backendCode.`;
+
+  try {
+    const response = await withTimeoutOrThrow(
+      gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: userContent }] }],
+        config: {
+          systemInstruction: BACKEND_SYSTEM_PROMPT,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
+      }),
+      45_000,
+      "backend-engineer",
+    );
+    const raw = response.text ?? "";
+    const parsed = extractJsonObject<{ backendCode?: string }>(raw);
+    if (!parsed || typeof parsed.backendCode !== "string") {
+      return {
+        code: `// Backend agent did not return valid output. Files planned: ${plan.backendFiles.join(", ")}`,
+        truncated: false,
+        error: "backend-agent-invalid-json",
+      };
+    }
+    return { code: parsed.backendCode, truncated: false };
+  } catch (err) {
+    return {
+      code: `// Backend agent failed (${(err as Error).message}). Files planned: ${plan.backendFiles.join(", ")}`,
+      truncated: false,
+      error: (err as Error).message,
+    };
+  }
+}
 
 /**
- * Run the validate→patch→revalidate loop on the stored frontend bundle.
- * Persists any patched bundle so future previews use the fixed version.
- *
- * Response: { ok, fixed, before: {ok, issuesCount}, after: {ok, issuesCount} }
+ * Integration Architect — Gemini 2.0 Flash.
  */
-router.post("/apps/:id/healthcheck", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  try {
-    const before = await validateBundle(row.frontendCode);
-    if (before.ok) {
-      res.json({
-        ok: true,
-        fixed: false,
-        before: { ok: true, issuesCount: 0 },
-        after: { ok: true, issuesCount: 0 },
-      });
-      return;
+async function specifyIntegrations(
+  plan: ProjectPlan,
+  prompt: string,
+): Promise<IntegrationSpec> {
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `App: ${plan.title}
+Description: ${plan.description}
+User prompt: ${prompt}
+Pages: ${plan.pages.map((p) => p.name).join(", ")}
+Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
+Backend needed: ${plan.backendNeeded}`,
+                },
+              ],
+            },
+          ],
+          config: {
+            systemInstruction: INTEGRATION_SYSTEM_PROMPT,
+            maxOutputTokens: 800,
+            responseMimeType: "application/json",
+          },
+        });
+        const raw = response.text ?? "";
+        const parsed = extractJsonObject<IntegrationSpec>(raw);
+        if (!parsed || !Array.isArray(parsed.services)) return { services: [] };
+        return {
+          services: parsed.services
+            .filter((s): s is IntegrationService => !!s && typeof s.name === "string")
+            .slice(0, 4)
+            .map((s) => ({
+              name: String(s.name).slice(0, 40),
+              why: String(s.why ?? "").slice(0, 200),
+              envVars: Array.isArray(s.envVars) ? s.envVars.slice(0, 3).map(String) : [],
+              setupSteps: Array.isArray(s.setupSteps)
+                ? s.setupSteps.slice(0, 4).map((x) => String(x).slice(0, 200))
+                : [],
+            })),
+        };
+      } catch {
+        return { services: [] };
+      }
+    })(),
+    8000,
+    { services: [] },
+  );
+}
+
+/**
+ * QA Reviewer — Gemini 2.0 Flash.
+ */
+async function reviewBundle(
+  frontendCode: string,
+  plan: ProjectPlan,
+): Promise<QAReport> {
+  return withTimeout(
+    (async () => {
+      try {
+        const expected = plan.frontendFiles.join(", ");
+        const sample = frontendCode.slice(0, 12000);
+        const response = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.
+
+Expected files: ${expected}
+
+First 12KB of generated bundle:
+${sample}
+
+Return STRICT JSON ONLY:
+{"ok":true} when everything looks fine,
+OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}
+
+Max 5 issues. Output ONLY the JSON object.`,
+                },
+              ],
+            },
+          ],
+          config: {
+            maxOutputTokens: 700,
+            responseMimeType: "application/json",
+          },
+        });
+        const raw = response.text ?? "";
+        const parsed = extractJsonObject<QAReport>(raw);
+        if (!parsed) return { ok: true, issues: [] };
+        return {
+          ok: parsed.ok !== false,
+          issues: Array.isArray(parsed.issues)
+            ? parsed.issues
+                .filter((i): i is QAIssue => !!i && typeof i.file === "string")
+                .slice(0, 5)
+            : [],
+        };
+      } catch {
+        return { ok: true, issues: [] };
+      }
+    })(),
+    8000,
+    { ok: true, issues: [] },
+  );
+}
+
+/**
+ * Test Engineer — Gemini 2.0 Flash.
+ */
+async function generateTests(
+  plan: ProjectPlan,
+  frontendCode: string,
+): Promise<string> {
+  return withTimeout(
+    (async () => {
+      try {
+        const sample = frontendCode.slice(0, 6000);
+        const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
+        const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
+        const response = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `Generate tests for "${plan.title}".
+Main components to test: ${componentNames}
+Main utils to test: ${utilNames}
+Pages: ${plan.pages.map((p) => `${p.name} (${p.route})`).join(", ")}
+
+First 6KB of the frontend bundle (so you know real symbol names and import paths):
+${sample}
+
+Return the JSON object with testCode.`,
+                },
+              ],
+            },
+          ],
+          config: {
+            systemInstruction: TEST_SYSTEM_PROMPT,
+            maxOutputTokens: 3000,
+            responseMimeType: "application/json",
+          },
+        });
+        const raw = response.text ?? "";
+        const parsed = extractJsonObject<{ testCode?: string }>(raw);
+        if (!parsed || typeof parsed.testCode !== "string") return "";
+        if (!parsed.testCode.includes("// === FILE:")) return "";
+        return parsed.testCode;
+      } catch {
+        return "";
+      }
+    })(),
+    12_000,
+    "",
+  );
+}
+
+/**
+ * Patcher — Gemini 2.0 Flash.
+ */
+export async function patchBundle(
+  frontendCode: string,
+  issues: QAIssue[],
+  language: GenLanguage = "typescript",
+  memoryContext: string = "",
+): Promise<string | null> {
+  if (issues.length === 0) return null;
+  const issueList = issues
+    .map((i, idx) => `${idx + 1}. [${i.file}] Problem: ${i.problem}\n   Fix: ${i.fix}`)
+    .join("\n");
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await gemini.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: `ISSUES TO FIX:
+${issueList}
+${memoryContext}
+CURRENT FRONTEND BUNDLE:
+${frontendCode}
+
+Return the FULL patched bundle as JSON.`,
+                },
+              ],
+            },
+          ],
+          config: {
+            systemInstruction: buildPatcherSystemPrompt(language),
+            maxOutputTokens: 16000,
+            responseMimeType: "application/json",
+          },
+        });
+        const raw = response.text ?? "";
+        const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
+        if (!parsed || typeof parsed.frontendCode !== "string") return null;
+        if (parsed.frontendCode.length < frontendCode.length / 2) return null;
+        return parsed.frontendCode;
+      } catch {
+        return null;
+      }
+    })(),
+    35_000,
+    null,
+  );
+}
+
+function buildSetupNotes(spec: IntegrationSpec): string {
+  if (spec.services.length === 0) return "";
+  const lines: string[] = [
+    "# Setup",
+    "",
+    "Esta app usa los siguientes servicios externos. Configúralos antes de desplegar.",
+    "",
+  ];
+  for (const svc of spec.services) {
+    lines.push(`## ${svc.name}`);
+    lines.push("");
+    if (svc.why) lines.push(`**Para qué**: ${svc.why}`);
+    if (svc.envVars.length > 0) {
+      lines.push("");
+      lines.push("**Variables de entorno:**");
+      for (const v of svc.envVars) lines.push(`- \`${v}\``);
     }
-    // Try one auto-patch round. The patcher expects { file, problem, fix }
-    // tuples, so we adapt our richer BuildIssue shape — message becomes
-    // "problem" and we suggest a generic "fix the build error" instruction.
-    const qaIssues = before.issues.map((i: BuildIssue) => ({
-      file: i.file,
-      problem: i.line ? `${i.message} (line ${i.line})` : i.message,
-      fix: "Resuelve el error del build sin romper otras partes del archivo.",
-    }));
+    if (svc.setupSteps.length > 0) {
+      lines.push("");
+      lines.push("**Pasos:**");
+      svc.setupSteps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    }
+    lines.push("");
+  }
+  return `\n\n// === FILE: SETUP.md ===\n${lines.join("\n")}`;
+}
+
+/* ------------------------ E2B real-build validation ----------------------- */
+
+function e2bResultToIssue(stderr: string, reason: string): BuildIssue {
+  const truncated = stderr.length > 4000
+    ? `${stderr.slice(0, 2000)}\n…(truncated)…\n${stderr.slice(-1500)}`
+    : stderr;
+  const trimmed = truncated.trim();
+  return {
+    file: "package.json",
+    message: trimmed.length > 0
+      ? `E2B real build failed (${reason}):\n${trimmed}`
+      : `E2B real build failed (${reason})`,
+  };
+}
+
+/* ------------------------ validate → patch loop --------------------------- */
+
+async function runValidatePatchLoop(
+  initialBundle: string,
+  qaReport: QAReport,
+  onProgress: ((p: GenerateProgress) => void) | undefined,
+  baseProgressStart: number,
+  language: GenLanguage,
+  log?: AgentLog,
+  phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
+): Promise<string> {
+  const MAX_ITERATIONS = 2;
+  let finalFrontend = initialBundle;
+  const noop: AgentLog = () => {};
+  const emit = log ?? noop;
+
+  if (!phaseGates.validate) {
+    emit("validator", "Plan dice saltar validación (alcance reducido). Bundle entregado sin verificar.", "warn");
+    return finalFrontend;
+  }
+
+  let pendingIssues: BuildIssue[] = qaReport.ok
+    ? []
+    : qaReport.issues.map((i) => ({ file: i.file, message: `${i.problem} → ${i.fix}` }));
+
+  let lastErrorMessage: string | null = null;
+  let lastPatchedBundle: string | null = null;
+
+  for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
+    const baseProgress = baseProgressStart + iter * 3;
+    onProgress?.({
+      phase: "validating",
+      progress: Math.min(baseProgress, 92),
+      note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
+    });
+    emit("validator", iter === 1 ? "🔍 build" : `🔍 build · intento ${iter}`);
+    const validation = await validateBundle(finalFrontend);
+
+    const combined: BuildIssue[] = iter === 1
+      ? [...validation.issues, ...pendingIssues].slice(0, 6)
+      : validation.issues.slice(0, 6);
+    pendingIssues = [];
+
+    if (validation.ok && combined.length === 0) {
+      onProgress?.({
+        phase: "validating",
+        progress: Math.min(baseProgress + 1, 93),
+        note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
+      });
+      emit("validator", `✓ build OK · ${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"}`);
+      if (lastErrorMessage && lastPatchedBundle) {
+        const fixHint = extractFixHint(lastPatchedBundle, lastErrorMessage);
+        rememberPatch({
+          errorMessage: redactSecrets(lastErrorMessage).slice(0, 1000),
+          errorContext: `iter=${iter} bundleLen=${lastPatchedBundle.length}`,
+          patch: fixHint,
+          language,
+        }).then((entry) => {
+          if (entry) emit("memory", `🧠 aprendí esta solución (id ${entry.id})`);
+        }).catch(() => {});
+      }
+      break;
+    }
+
+    if (iter === MAX_ITERATIONS) {
+      onProgress?.({
+        phase: "validating",
+        progress: 92,
+        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
+      });
+      emit("validator", `△ ${combined.length} detalle${combined.length === 1 ? "" : "s"} pendiente${combined.length === 1 ? "" : "s"}`, "warn");
+      break;
+    }
+
+    onProgress?.({
+      phase: "fixing",
+      progress: Math.min(baseProgress + 2, 92),
+      note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
+    });
+    emit("patcher", `🔧 patch · ${combined.length}`);
+    const primaryError = `${combined[0].message}${combined[0].file ? ` (in ${combined[0].file})` : ""}`;
+    let memoryBlock = "";
+    try {
+      const matches = await recallSimilar(primaryError, { limit: 3, threshold: 0.7, language });
+      if (matches.length > 0) {
+        emit("memory", `🧠 recall · ${matches.length} fix(es) similar(es)`);
+        memoryBlock = buildRecallExamplesBlock(matches);
+      }
+    } catch {
+      /* recall is best-effort */
+    }
+    lastErrorMessage = primaryError;
+    if (!phaseGates.patch) {
+      emit("patcher", "Plan dice saltar parcheo. Errores reportados pero no corregidos.", "warn");
+      break;
+    }
     const patched = await patchBundle(
-      row.frontendCode,
-      qaIssues,
-      (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage,
+      finalFrontend,
+      combined.map((i) => ({
+        file: i.file,
+        problem: `Build error${i.line ? ` at line ${i.line}` : ""}: ${i.message}`,
+        fix: "Fix the import / symbol / syntax so the file compiles.",
+      })),
+      language,
+      memoryBlock,
     );
     if (!patched) {
-      // Patcher refused or timed out — return the original before-state so the
-      // user knows nothing was changed.
-      res.json({
-        ok: false,
-        fixed: false,
-        before: { ok: false, issuesCount: before.issues.length },
-        after: { ok: false, issuesCount: before.issues.length },
+      onProgress?.({
+        phase: "fixing",
+        progress: Math.min(baseProgress + 2, 92),
+        note: `⚠️ El reparador no pudo aplicar el cambio. Empaquetando bundle anterior…`,
       });
-      return;
+      emit("patcher", "△ patch sin cambios", "warn");
+      break;
     }
-    const after = await validateBundle(patched);
-    if (after.ok || after.issues.length < before.issues.length) {
-      // Save the improved bundle even if it's not fully clean — strictly better.
-      await db
-        .update(generatedApps)
-        .set({ frontendCode: patched })
-        .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
-      // Capture the post-fix bundle in revision history. We use snapshotCurrentApp
-      // (re-reads the row) to keep this lightweight and to never block the
-      // user-facing response on a snapshot failure.
-      const { snapshotCurrentApp } = await import("../lib/appRevisions");
-      void snapshotCurrentApp({
-        appId: id,
-        source: "health-fix",
-        summary: `Reparación automática del build (${before.issues.length} → ${after.issues.length} errores)`,
+    if (patched === finalFrontend) {
+      onProgress?.({
+        phase: "fixing",
+        progress: Math.min(baseProgress + 2, 92),
+        note: `⚠️ El reparador devolvió el mismo bundle (sin cambios). Cortando bucle.`,
       });
+      emit("patcher", "△ patch idempotente", "warn");
+      break;
     }
-    res.json({
-      ok: after.ok,
-      fixed: after.ok || after.issues.length < before.issues.length,
-      before: { ok: false, issuesCount: before.issues.length },
-      after: { ok: after.ok, issuesCount: after.issues.length },
+    emit("patcher", "✓ patch aplicado");
+    finalFrontend = patched;
+    lastPatchedBundle = patched;
+  }
+
+  // E2B real-build verification (opt-in)
+  if (shouldValidateInE2B() && phaseGates.patch) {
+    onProgress?.({
+      phase: "validating",
+      progress: 93,
+      note: "⚙️ Build real en sandbox E2B (npm install + build)…",
     });
-  } catch (err) {
-    req.log.error({ err, appId: id }, "Health check failed");
-    res.status(500).json({ error: "El chequeo falló: " + (err instanceof Error ? err.message : "error desconocido") });
-  }
-});
-
-/**
- * Bundle the frontend into a self-contained HTML page and assign a public
- * slug. The actual HTML is built on demand by GET /p/:slug rather than stored
- * here — keeps the row small and lets the user re-deploy after edits without
- * any extra step. Returns the canonical public URL.
- */
-router.post("/apps/:id/deploy", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  try {
-    const result = await runDeployForApp({ appId: id, userId, log: req.log });
-    res.json(result);
-  } catch (err) {
-    if (err instanceof Error && err.message === "App not found") {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    if (err instanceof Error && err.message === "Could not assign public slug") {
-      res.status(500).json({ error: "No pudimos asignar una URL pública." });
-      return;
-    }
-    req.log.warn({ err, appId: id }, "Deploy pre-build failed");
-    res.status(400).json({
-      error:
-        "No pudimos empaquetar la app: " +
-        (err instanceof Error ? err.message : "error desconocido"),
-    });
-  }
-});
-
-/**
- * POST /apps/:id/fork — clone an existing app into a new one owned by the
- * current user. The fork copies the working bundle (frontend + backend), the
- * coder model preference, and the language choice, but resets the public slug
- * and any GitHub repo link — those are deploy-target specific. Title gets a
- * "(copia)" suffix so the user can tell the two apart in the dashboard.
- *
- * Free of charge: forking is a UX convenience, not a generation. The new app
- * starts with a single seed assistant message explaining where it came from.
- */
-router.post("/apps/:id/fork", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const [source] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!source) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  // Refuse to fork an app that's mid-generation/edit — we'd snapshot a stale
-  // pre-edit bundle and the user would think the fork "lost" their changes.
-  // Also refuse failed apps (the bundle may not even compile).
-  if (source.status !== "ready") {
-    res.status(409).json({
-      error:
-        source.status === "failed"
-          ? "No se puede clonar una app que falló al generarse."
-          : "Espera a que termine el cambio actual antes de clonar.",
-    });
-    return;
-  }
-  const forkedTitle = source.title.endsWith("(copia)")
-    ? source.title
-    : `${source.title} (copia)`;
-  const [inserted] = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(generatedApps)
-      .values({
-        userId,
-        title: forkedTitle,
-        prompt: source.prompt,
-        description: source.description,
-        techStack: source.techStack,
-        frontendCode: source.frontendCode,
-        backendCode: source.backendCode,
-        status: "ready",
-        coderModel: source.coderModel,
-        language: source.language,
-      })
-      .returning();
-    await tx.insert(appMessages).values({
-      appId: row.id,
-      role: "assistant",
-      content: `Esta app es una copia de "${source.title}". Pídeme cambios sin miedo a romper la versión original.`,
-    });
-    return [row];
-  });
-  req.log.info({ srcAppId: id, newAppId: inserted.id, userId }, "App forked");
-  res.json(inserted);
-});
-
-/**
- * POST /apps/:id/visual-test — Visual Testing Agent.
- *
- * Captures screenshots of the app's public deploy URL at three viewports,
- * scores them with Claude Sonnet vision, and (when issues are found) auto-
- * patches the bundle up to MAX_FIX_CYCLES=3 times. Charges 30 credits per run
- * silently — admins are exempt.
- *
- * If the app has no `publicSlug`, one is created on the fly so the agent has
- * a URL to screenshot. The deploy route renders the latest bundle on every
- * request, so no separate "publish" step is required.
- */
-router.post(
-  "/apps/:id/visual-test",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const isAdmin = req.dbUser?.email ? isAdminEmail(req.dbUser.email) : false;
-
-    const [row] = await db
-      .select()
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .limit(1);
-    if (!row) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-
-    // Ensure deploy URL exists.
-    const slug = await ensurePublicSlug(id, userId, req.log, row.publicSlug);
-    if (!slug) {
-      res
-        .status(500)
-        .json({ error: "No pudimos preparar la URL pública para los screenshots." });
-      return;
-    }
-
-    // Sanity-build so puppeteer doesn't screenshot a server-error page.
+    emit("validator", "⚙️ E2B real build · arrancando microVM");
     try {
-      await buildDeployHtml({
-        bundle: row.frontendCode,
-        title: row.title,
-        kind: row.kind,
-      });
-    } catch (err) {
-      req.log.warn({ err, appId: id }, "Visual test pre-build failed");
-      res.status(400).json({
-        error:
-          "El bundle actual no compila, así que no podemos analizarlo visualmente: " +
-          (err instanceof Error ? err.message : "error desconocido"),
-      });
-      return;
+      const e2b = await validateBundleInE2B({ bundle: finalFrontend, log: logger });
+      if (e2b.ok) {
+        onProgress?.({
+          phase: "validating",
+          progress: 94,
+          note: `✅ E2B build OK (${Math.round(e2b.durationMs / 1000)}s).`,
+        });
+        emit("validator", `✓ E2B build OK · ${Math.round(e2b.durationMs / 1000)}s`);
+      } else if (e2b.reason === "install_failed" || e2b.reason === "build_failed") {
+        emit("validator", `△ E2B ${e2b.reason} · ${Math.round(e2b.durationMs / 1000)}s — intentando reparar`, "warn");
+        onProgress?.({ phase: "fixing", progress: 94, note: `🔧 E2B detectó ${e2b.reason}. Auto-reparando con error real…` });
+        const stderr = e2b.reason === "install_failed" ? e2b.installStderr : e2b.buildStderr;
+        const issue = e2bResultToIssue(stderr, e2b.reason);
+        try {
+          const repaired = await patchBundle(
+            finalFrontend,
+            [{ file: "package.json", problem: issue.message, fix: "Fix the package name(s), version(s), build config or imports so `npm install && npm run build` succeeds in a clean Linux microVM." }],
+            language,
+            "",
+          );
+          if (repaired && repaired !== finalFrontend) {
+            try {
+              const reReport = await validateBundle(repaired);
+              if (reReport.ok) {
+                emit("patcher", "✓ patch tras E2B aplicado y revalidado");
+                finalFrontend = repaired;
+              } else {
+                emit("patcher", `△ patch tras E2B introdujo ${reReport.issues.length} issue(s) — descartando`, "warn");
+              }
+            } catch (revErr) {
+              logger.warn({ err: revErr }, "post-E2B patch revalidation threw");
+              emit("patcher", "△ revalidación tras E2B falló — descartando patch", "warn");
+            }
+          } else {
+            emit("patcher", "△ patch tras E2B sin cambios — dejando bundle previo", "warn");
+          }
+        } catch (patchErr) {
+          logger.warn({ err: patchErr }, "patcher failed after E2B build error");
+          emit("patcher", "△ reparador falló tras E2B — dejando bundle previo", "warn");
+        }
+      } else {
+        emit("validator", `△ E2B saltado · ${e2b.reason ?? "unknown"}`, "warn");
+      }
+    } catch (e2bErr) {
+      logger.warn({ err: e2bErr }, "E2B validation threw — continuing without it");
+      emit("validator", "△ E2B falló (excepción) — continuando", "warn");
     }
+  }
 
-    // Charge silently. The cost is intentionally not surfaced in the response —
-    // the user is told about it once in the product description, not per-run.
-    const charge = await chargeCredits({
-      userId,
-      isAdmin,
-      amount: VISUAL_TEST_COST,
-      description: `Visual Testing Agent — app #${id}`,
-    });
-    if (!charge.ok) {
-      res
-        .status(402)
-        .json({ error: "Créditos insuficientes para el análisis visual." });
-      return;
-    }
+  return finalFrontend;
+}
 
-    try {
-      const report = await runVisualTester({
-        app: {
-          id: row.id,
-          title: row.title,
-          description: row.description,
-          frontendCode: row.frontendCode,
-          publicSlug: slug,
-        },
-        baseUrl: VISUAL_TEST_BASE_URL,
-        prompt: row.title + (row.description ? `: ${row.description}` : ""),
-        autoFix: true,
-        log: req.log,
-      });
-      res.json({
-        cycles: report.cycles,
-        fixesApplied: report.fixesApplied,
-        analysis: {
-          ...report.finalAnalysis,
-          // Map internal `cssfix` to the public `suggestion` field.
-          issues: report.finalAnalysis.issues.map((i) => ({
-            severity: i.severity,
-            type: i.type,
-            viewport: i.viewport,
-            description: i.description,
-            suggestion: i.cssfix,
-          })),
-        },
-        screenshots: report.screenshots.map((s) => ({
-          viewport: s.viewport,
-          mimeType: s.mimeType,
-          width: s.width,
-          height: s.height,
-          imageBase64: s.data,
-          consoleErrors: s.consoleErrors,
-        })),
-      });
-    } catch (err) {
-      req.log.error({ err, appId: id }, "Visual tester crashed");
-      // Refund the silent charge if the run failed — the user shouldn't pay
-      // for an analysis that never produced a report.
-      await refundCredits({
-        userId,
-        isAdmin,
-        amount: VISUAL_TEST_COST,
-        description: `Reembolso Visual Testing — app #${id} (falló)`,
-      }).catch((refundErr) => {
-        req.log.error({ refundErr, appId: id }, "Visual tester refund failed");
-      });
-      const code = err instanceof VisualTesterError ? err.code : "internal";
-      res.status(500).json({
-        error:
-          err instanceof Error ? err.message : "Error inesperado en el análisis visual.",
-        code,
-      });
-    }
-  },
-);
+/* ----------------------------- edit mode ---------------------------------- */
+
+function buildEditSystemPrompt(language: GenLanguage): string {
+  const isTS = language === "typescript";
+  const tsLine = isTS
+    ? "- This is a TypeScript app. Type annotations and interfaces are fine."
+    : "- This is a plain JavaScript app (.jsx/.js). Do NOT introduce ANY TypeScript syntax.";
+  return `You are Maris AI editing an existing web app. You are a careful, surgical engineer: you understand what the user is asking for, you change ONLY what's needed to deliver it, and you preserve everything else exactly.
+
+Output STRICT JSON only matching:
+{"title":"…","description":"…","techStack":[…],"frontendCode":"…","backendCode":"…"}
+
+THINK BEFORE EDITING (do this internally, do not output the reasoning):
+1. What does the user want?
+2. Which files do I need to touch? Usually 1-4 files.
+3. What MUST stay the same?
+4. After your edit, do all imports still resolve, do all routes still render?
+
+CHANGE DISCIPLINE — preserve unless asked to change:
+- Keep file count and file names as-is.
+- Keep the title, description, techStack, color palette and typography unless the user explicitly asks to change them.
+- NEVER replace a working page/component with a simpler version.
+- Preserve any \`/api/apps/<n>/images/<n>\` URLs and any \`https://\`-prefixed image URLs VERBATIM.
+- Preserve all existing \`useState\`/\`useReducer\`/\`useEffect\` logic unrelated to the request.
+
+BACKEND EDITS — backendCode IS in scope for backend requests.
+
+LANGUAGE — ALL user-visible copy MUST be in Spanish (es-ES). Identifiers stay in English.
+
+SYNTAX — code MUST parse with a strict ${isTS ? "TypeScript" : "JavaScript"} parser:
+${tsLine}
+- NEVER produce \`,,\` (double comma), \`,)\`, \`,]\` or \`,}\` patterns.
+- NO non-ASCII characters inside identifiers/keywords/punctuation.
+- Every string must be terminated with the same quote it started with.
+- Every brace, bracket, paren and JSX tag must close.
+- Every \`.map\` returns elements with a stable \`key\` prop.
+
+WOUTER v3 — never write \`<Link><a>…</a></Link>\` (nested anchors crash the preview).
+
+EXPORTS & IMPORTS — match every \`import { X }\` to a named export and every \`import X from\` to a default export.
+
+Rules:
+- Use '// === FILE: <path> ===' separators inside frontendCode/backendCode.
+- Return the FULL updated bundles (every file, not just the changed ones).
+- Do NOT regress existing features. No TODOs.
+- NO SIZE LIMIT — return the full bundle no matter how big. Close every brace and quote. Output ONLY the JSON object.`;
+}
+
+function friendlyFileLabel(rawPath: string, isBackend: boolean): string {
+  const cleaned = rawPath.replace(/^[./\\]+/, "").trim();
+  const noSrc = cleaned.replace(/^src\//i, "");
+  const noExt = noSrc.replace(/\.[a-z0-9]+$/i, "");
+  const MAX = 36;
+  const truncated = noExt.length > MAX ? noExt.slice(0, MAX - 1) + "…" : noExt;
+  const glyph = isBackend ? "🔧" : "📂";
+  return `${glyph} ${truncated}`;
+}
 
 /**
- * Push the app to a brand-new GitHub repo using the Replit GitHub connector.
- * Stores the resulting repo URL on the app row so the UI can show "View repo"
- * on subsequent loads.
+ * Single edit pass — Gemini 2.5 Flash streaming (default) o GPT-5.
  */
-router.post("/apps/:id/github", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  try {
-    const result = await pushAppToGitHub({
-      title: row.title,
-      description: row.description,
-      frontendBundle: row.frontendCode,
-      backendBundle: row.backendCode,
-      // Persisted from the previous push, if any. Lets the helper decide
-      // whether to update the existing repo or create a fresh one.
-      existingRepoFullName: row.githubRepoFullName,
-    });
-    await db
-      .update(generatedApps)
-      .set({
-        githubRepoUrl: result.url,
-        githubRepoFullName: result.repoFullName,
-      })
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
-    res.json({
-      url: result.url,
-      repoFullName: result.repoFullName,
-      updated: result.updated,
-    });
-  } catch (err) {
-    req.log.error({ err, appId: id }, "GitHub push failed");
-    res.status(500).json({
-      error: "No pudimos subir a GitHub: " + (err instanceof Error ? err.message : "error desconocido"),
-    });
-  }
-});
+async function singleEditPass(
+  prompt: string,
+  previous: PreviousApp,
+  onChars: (chars: number) => void,
+  coderModel: string | undefined,
+  language: GenLanguage,
+  log?: AgentLog,
+): Promise<GeneratedAppPayload> {
+  const emit: AgentLog = log ?? (() => {});
+  const userContent = `CURRENT APP:
+- Title: ${previous.title}
+- Description: ${previous.description}
+- Tech stack: ${previous.techStack.join(", ")}
 
-router.get("/apps/:id/messages", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const userId = req.userId!;
-  const [owned] = await db
-    .select({ id: generatedApps.id })
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!owned) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  const rows = await db
-    .select()
-    .from(appMessages)
-    .where(eq(appMessages.appId, id))
-    .orderBy(appMessages.id);
-  res.json(rows.map(serializeMessage));
-});
+CURRENT FRONTEND CODE:
+${previous.frontendCode}
 
-router.post("/apps/:id/messages", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
-  }
-  const message: unknown = req.body?.message;
-  if (typeof message !== "string" || message.trim().length < 2) {
-    res.status(400).json({ error: "El mensaje debe tener al menos 2 caracteres." });
-    return;
-  }
-  const userId = req.userId!;
-  // Load the full row so the intent classifier can reason with title +
-  // description + persistent agent notes — without that context the
-  // "question" branch can't answer "¿de qué va esta app?" sensibly.
-  const [owned] = await db
-    .select({
-      id: generatedApps.id,
-      title: generatedApps.title,
-      description: generatedApps.description,
-      agentNotes: generatedApps.agentNotes,
-    })
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!owned) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  const cleanedMessage = message.trim();
-  const attachmentIdsRaw: unknown = req.body?.attachmentIds;
-  const attachmentIds: number[] = Array.isArray(attachmentIdsRaw)
-    ? attachmentIdsRaw
-        .filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0)
-        .slice(0, 10)
-    : [];
+CURRENT BACKEND CODE:
+${previous.backendCode}
 
-  // Intent classifier — runs BEFORE we enqueue so questions and pure
-  // research requests don't waste a credit on a full regeneration. If the
-  // user attached images we always treat the message as an edit (no point
-  // running text-only classification when the user clearly wants the
-  // image baked into the app).
-  if (attachmentIds.length === 0) {
-    // Pull the last 10 chat turns so the classifier can disambiguate
-    // follow-ups like "y ahora más grande" (clearly an edit referring to
-    // the previous answer) vs "¿y por qué hiciste eso?" (a question).
-    const history = await db
-      .select({ role: appMessages.role, content: appMessages.content })
-      .from(appMessages)
-      .where(eq(appMessages.appId, id))
-      .orderBy(desc(appMessages.id))
-      .limit(10);
-    const recentMessages = history.reverse();
+USER'S CHANGE REQUEST:
+${prompt}
 
-    // Rate-limit gate BEFORE we call the classifier so an abusive user
-    // can't even spend a Haiku classification call on us once they're
-    // capped. Admins bypass. If the user is over the free quota we fall
-    // straight through to enqueueGeneration — they pay 1 credit like a
-    // normal edit, no bespoke 429 (which the chat UI doesn't know how to
-    // render anyway).
-    const isAdmin = isAdminEmail(req.dbUser!.email);
-    const limit = await tryConsumeFreeAnswer(userId, isAdmin);
-    const classified = limit.allowed
-      ? await classifyChatIntent({
-          appTitle: owned.title,
-          appDescription: owned.description ?? "",
-          agentNotes: owned.agentNotes ?? "",
-          recentMessages,
-          message: cleanedMessage,
-          log: req.log,
-        })
-      : { intent: "edit" as const, reply: "" };
-    if (!limit.allowed) {
-      req.log.info(
-        { userId, resetMs: limit.resetMs },
-        "Free-answer cap hit — routing message through paid edit path",
+Return the FULL updated app as JSON.`;
+
+  const provider = resolveCoderProvider(coderModel);
+  const systemPrompt = buildEditSystemPrompt(language);
+
+  function makeStreamObserver() {
+    let scanFrom = 0;
+    let sawFrontendKey = false;
+    let sawBackendKey = false;
+    let inBackend = false;
+    const seenFiles = new Set<string>();
+    const FILE_MARKER = /\/\/\s*===\s*FILE:\s*([^=\n]+?)\s*===/g;
+    return (buffer: string) => {
+      try {
+        const tail = buffer.slice(Math.max(0, scanFrom - 64));
+        if (!sawFrontendKey && /"frontendCode"\s*:\s*"/.test(tail)) {
+          sawFrontendKey = true;
+          emit("coder", "📁 frontend/");
+        }
+        if (!sawBackendKey && /"backendCode"\s*:\s*"/.test(tail)) {
+          sawBackendKey = true;
+          inBackend = true;
+          emit("coder", "📁 backend/");
+        }
+        FILE_MARKER.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = FILE_MARKER.exec(tail)) !== null) {
+          const file = m[1].replace(/\\\//g, "/").trim().slice(0, 120);
+          if (file && !seenFiles.has(file)) {
+            seenFiles.add(file);
+            emit("coder", friendlyFileLabel(file, inBackend));
+          }
+        }
+        scanFrom = buffer.length;
+      } catch {
+        /* observer is best-effort */
+      }
+    };
+  }
+
+  async function callModel(extraReminder: string): Promise<{ text: string; finishReason?: string }> {
+    const finalUserContent = extraReminder ? `${userContent}\n\n${extraReminder}` : userContent;
+    let accumulated = "";
+    let finishReason: string | undefined;
+    const observe = makeStreamObserver();
+    const PROGRESS_EVERY = 500;
+
+    if (provider === "gpt-5") {
+      const stream = await openai.chat.completions.create({
+        model: "gpt-5.4",
+        max_completion_tokens: 64000,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: finalUserContent },
+        ],
+        stream: true,
+      });
+      let lastReport = 0;
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          accumulated += delta;
+          observe(accumulated);
+          if (accumulated.length - lastReport >= PROGRESS_EVERY) {
+            lastReport = accumulated.length;
+            onChars(accumulated.length);
+          }
+        }
+        const fr = chunk.choices[0]?.finish_reason;
+        if (fr === "length") finishReason = "MAX_TOKENS";
+      }
+    } else {
+      // Gemini 2.5 Flash streaming (default, incluye claude-sonnet redirigido)
+      const stream = await gemini.models.generateContentStream({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: finalUserContent }] }],
+        config: {
+          systemInstruction: systemPrompt,
+          maxOutputTokens: 65536,
+          responseMimeType: "application/json",
+        },
+      });
+      let lastReport = 0;
+      for await (const chunk of stream) {
+        const text = chunk.text;
+        if (text) {
+          accumulated += text;
+          observe(accumulated);
+          if (accumulated.length - lastReport >= PROGRESS_EVERY) {
+            lastReport = accumulated.length;
+            onChars(accumulated.length);
+          }
+        }
+        const fr = chunk.candidates?.[0]?.finishReason;
+        if (fr) finishReason = fr;
+      }
+    }
+    return { text: accumulated, finishReason };
+  }
+
+  let { text: accumulated, finishReason } = await callModel("");
+
+  if (finishReason === "MAX_TOKENS") {
+    emit("coder", "△ respuesta cortada por límite de tokens", "warn");
+    throw new Error(
+      "El cambio era demasiado grande para una sola pasada. " +
+      "Pídelo en partes más pequeñas (por ejemplo: primero el backend, " +
+      "y luego conectar el frontend) o cámbialo al modelo de calidad desde el menú \"Modelo\".",
+    );
+  }
+
+  let parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
+  if (!parsed || typeof parsed.frontendCode !== "string") {
+    emit("coder", "↻ reintento estricto");
+    const retry = await callModel(
+      "RECORDATORIO ESTRICTO: tu respuesta DEBE ser exclusivamente un objeto JSON válido " +
+      "(sin texto antes ni después, sin ```json ni comentarios) con las claves " +
+      `"title", "description", "techStack", "frontendCode" y "backendCode". ` +
+      `frontendCode debe contener TODOS los archivos del frontend en el formato // === FILE: path === ` +
+      "y backendCode el server.js completo (o un placeholder si no hay backend).",
+    );
+    accumulated = retry.text;
+    finishReason = retry.finishReason;
+    if (finishReason === "MAX_TOKENS") {
+      throw new Error(
+        "El cambio era demasiado grande para una sola pasada. " +
+        "Pídelo en partes más pequeñas o cambia al modelo de calidad desde el menú \"Modelo\".",
       );
     }
+    parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
+  }
+  if (!parsed || typeof parsed.frontendCode !== "string") {
+    const preview = accumulated.slice(0, 200).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `No pudimos analizar la respuesta del modelo en modo edición. ` +
+      `Inicio de la respuesta: "${preview}…". Vuelve a intentarlo o cambia de modelo en el menú "Modelo".`,
+    );
+  }
+  return {
+    title: (parsed.title ?? previous.title).slice(0, 200),
+    description: (parsed.description ?? previous.description).slice(0, 1000),
+    techStack: Array.isArray(parsed.techStack) ? parsed.techStack : previous.techStack,
+    frontendCode: parsed.frontendCode,
+    backendCode: parsed.backendCode || "No backend required for this app.",
+  };
+}
 
-    if (classified.intent === "question" || classified.intent === "research") {
-      // Build the assistant reply. Question → use the model's reply
-      // verbatim. Research → call the existing researchTopic helper which
-      // returns a Spanish brief; if it fails (timeout, no key) fall back
-      // to a clear apology so the chat never goes silent.
-      let assistantReply = classified.reply;
-      if (classified.intent === "research") {
-        try {
-          const brief = await researchTopic(cleanedMessage);
-          assistantReply = brief && brief.length > 0
-            ? brief
-            : "No pude completar la búsqueda en este momento. Inténtalo otra vez en unos segundos o reformula la petición.";
-        } catch (err) {
-          req.log.warn({ err, appId: id }, "researchTopic failed inside chat");
-          assistantReply =
-            "No pude completar la búsqueda en este momento. Inténtalo otra vez en unos segundos.";
-        }
-      }
-      // Empty reply guard — should be rare but means the model returned
-      // intent=question with no body. Fall through to a generic line so
-      // we still close the loop with the user.
-      if (!assistantReply || assistantReply.trim().length === 0) {
-        assistantReply =
-          "No tengo suficiente información para responder. ¿Puedes reformular la pregunta?";
-      }
-      // Persist user + assistant turns in a single transaction so partial
-      // writes can never strand the chat with an unanswered user line.
-      await db.transaction(async (tx) => {
-        await tx.insert(appMessages).values({
-          appId: id,
-          role: "user",
-          content: cleanedMessage,
-          attachmentIds: "[]",
-        });
-        await tx.insert(appMessages).values({
-          appId: id,
-          role: "assistant",
-          content: assistantReply,
-          attachmentIds: "[]",
-        });
-      });
-      res.status(200).json({
-        kind: "answered",
-        intent: classified.intent,
-        reply: assistantReply,
-      });
-      return;
+/* ----------------------------- public API --------------------------------- */
+
+async function fastPatchEdit(
+  prompt: string,
+  previous: PreviousApp,
+  language: GenLanguage,
+  log: AgentLog,
+  onProgress?: (p: GenerateProgress) => void,
+): Promise<GeneratedAppPayload | null> {
+  onProgress?.({ phase: "fixing", progress: 30, note: "Aplicando parche directo…" });
+  log("patcher", "Aplicando tu cambio directamente al bundle (modo rápido).");
+
+  let memoryBlock = "";
+  try {
+    const matches = await recallSimilar(prompt, { limit: 2, threshold: 0.78, language });
+    if (matches.length > 0) {
+      log("memory", `🧠 recall · ${matches.length} cambio(s) similar(es) ya hechos`);
+      memoryBlock = buildRecallExamplesBlock(matches);
     }
+  } catch {
+    /* best-effort */
   }
 
-  // Default path: real edit → existing generation pipeline.
-  await enqueueGeneration(req, res, cleanedMessage, id, {
-    chatMessage: { appId: id, content: cleanedMessage },
-    attachmentIds,
-  });
-});
+  const issues: QAIssue[] = [
+    {
+      file: "user-request",
+      problem: prompt.slice(0, 1500),
+      fix: "Aplica EXACTAMENTE lo que pide la usuaria, modificando solo lo mínimo necesario. NO reescribas archivos enteros si no hace falta. Conserva todo el resto del bundle intacto.",
+    },
+  ];
 
-router.get(
-  "/generate/jobs/:id",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid job id" });
-      return;
-    }
-    const userId = req.userId!;
-    const [row] = await db
-      .select()
-      .from(generationJobs)
-      .where(and(eq(generationJobs.id, id), eq(generationJobs.userId, userId)))
-      .limit(1);
-    if (!row) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-    // Queue position: how many queued jobs are ahead of this one (older id,
-    // status=queued). Returns 0 if this job is no longer queued.
-    let queuePosition: number | null = null;
-    if (row.status === "queued") {
-      const [{ ahead }] = await db
-        .select({ ahead: sql<number>`count(*)::int` })
-        .from(generationJobs)
-        .where(
-          and(
-            eq(generationJobs.status, "queued"),
-            sql`${generationJobs.id} < ${id}`,
-          ),
-        );
-      queuePosition = Number(ahead) + 1;
-    }
-    res.json({ ...serializeJob(row), queuePosition });
-  },
-);
-
-/**
- * Stream live agent log lines for a job. The dashboard polls this endpoint
- * with `?afterId=N` to fetch only new lines since the last seen id, which
- * keeps the payload tiny and avoids re-rendering existing rows. Owner-only:
- * we verify the job belongs to the requester before returning anything.
- *
- * Uses sql`>` instead of gt() to keep the import surface minimal — afterId
- * is server-clamped to a non-negative int, so no injection surface.
- */
-router.get(
-  "/generate/jobs/:id/logs",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid job id" });
-      return;
-    }
-    const userId = req.userId!;
-    // Ownership check: we never return logs for someone else's job.
-    const [job] = await db
-      .select({ id: generationJobs.id })
-      .from(generationJobs)
-      .where(and(eq(generationJobs.id, id), eq(generationJobs.userId, userId)))
-      .limit(1);
-    if (!job) {
-      res.status(404).json({ error: "Job not found" });
-      return;
-    }
-    const afterRaw = Number(req.query.afterId ?? 0);
-    const afterId = Number.isFinite(afterRaw) && afterRaw > 0 ? Math.floor(afterRaw) : 0;
-    const rows = await db
-      .select()
-      .from(jobLogs)
-      .where(and(eq(jobLogs.jobId, id), sql`${jobLogs.id} > ${afterId}`))
-      .orderBy(jobLogs.id)
-      .limit(500);
-    res.json({
-      logs: rows.map((r) => ({
-        id: r.id,
-        agent: r.agent,
-        level: r.level,
-        message: r.message,
-        createdAt: r.createdAt.toISOString(),
-      })),
-    });
-  },
-);
-
-/**
- * List the most recent runtime errors reported from the published app's
- * iframe sandbox. Owner-only — we never return another user's error
- * payloads, even though the writer endpoint (`POST /p/:slug/_error`) is
- * unauthenticated by design (the iframe runs in an opaque origin).
- */
-router.get(
-  "/apps/:id/runtime-errors",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const [app] = await db
-      .select({ id: generatedApps.id })
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .limit(1);
-    if (!app) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    const rows = await db
-      .select()
-      .from(appRuntimeErrors)
-      .where(eq(appRuntimeErrors.appId, id))
-      .orderBy(desc(appRuntimeErrors.id))
-      .limit(50);
-    res.json({
-      errors: rows.map((r) => ({
-        id: r.id,
-        kind: r.kind,
-        message: r.message,
-        source: r.source,
-        lineno: r.lineno,
-        colno: r.colno,
-        stack: r.stack,
-        userAgent: r.userAgent,
-        pathname: r.pathname,
-        createdAt: r.createdAt.toISOString(),
-      })),
-    });
-  },
-);
-
-/**
- * Discard all stored runtime errors for an app. Used by the panel after
- * the user regenerates or fixes the app and wants the error notice gone.
- */
-router.delete(
-  "/apps/:id/runtime-errors",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const [app] = await db
-      .select({ id: generatedApps.id })
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .limit(1);
-    if (!app) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    await db.delete(appRuntimeErrors).where(eq(appRuntimeErrors.appId, id));
-    res.status(204).end();
-  },
-);
-
-// =============================================================================
-// Per-app agent notes (memory layer #2). Read by every edit, written by the
-// post-edit memory extractor, also editable by the user.
-// =============================================================================
-
-router.get("/apps/:id/notes", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
+  const patched = await patchBundle(previous.frontendCode, issues, language, memoryBlock);
+  if (!patched || patched.length < 100) {
+    log("patcher", "El parche directo devolvió un bundle vacío.", "warn");
+    return null;
   }
-  const userId = req.userId!;
-  const [row] = await db
-    .select({ agentNotes: generatedApps.agentNotes })
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "App not found" });
-    return;
+
+  onProgress?.({ phase: "validating", progress: 75, note: "Validando el parche…" });
+  const validation = await validateBundle(patched);
+  if (!validation.ok && validation.issues.length > 0) {
+    const repaired = await runValidatePatchLoop(patched, { ok: true, issues: [] }, onProgress, 70, language, log);
+    const finalValidation = await validateBundle(repaired);
+    if (!finalValidation.ok && finalValidation.issues.length > 0) {
+      log("patcher", `Parche directo no convergió tras auto-reparación (${finalValidation.issues.length} error(es)). Cayendo al flujo completo.`, "warn");
+      return null;
+    }
+    onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
+    return {
+      title: previous.title,
+      description: previous.description,
+      techStack: previous.techStack,
+      frontendCode: repaired,
+      backendCode: previous.backendCode,
+    };
   }
-  res.json({ notes: row.agentNotes ?? "" });
-});
 
-/**
- * List the revision history of an app — most recent first. Returns light
- * metadata only (id, source, summary, createdAt) so the dashboard can render
- * a timeline without paying the cost of shipping every bundle.
- */
-router.get(
-  "/apps/:id/revisions",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    // Ownership gate first — never leak revision metadata across users.
-    const [appRow] = await db
-      .select({ id: generatedApps.id })
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .limit(1);
-    if (!appRow) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    const rows = await db
-      .select({
-        id: appRevisions.id,
-        source: appRevisions.source,
-        summary: appRevisions.summary,
-        createdAt: appRevisions.createdAt,
-      })
-      .from(appRevisions)
-      .where(eq(appRevisions.appId, id))
-      .orderBy(desc(appRevisions.createdAt))
-      .limit(100);
-    res.json({
-      revisions: rows.map((r) => ({
-        id: r.id,
-        source: r.source,
-        sourceLabel: revisionSourceLabel(r.source),
-        summary: r.summary,
-        createdAt: r.createdAt.toISOString(),
-      })),
-    });
-  },
-);
+  rememberPatch({
+    errorMessage: redactSecrets(prompt).slice(0, 400),
+    errorContext: "fast-patch user request",
+    patch: "(fast-patch convergence; no code stored — recall by prompt only)",
+    language,
+  }).then((entry) => {
+    if (entry) log("memory", `🧠 aprendí este cambio (id ${entry.id})`);
+  }).catch(() => {});
 
-/**
- * Restore the app to a previous revision. Snapshots the current state as
- * "restore-backup" first so the user can always undo their undo.
- */
-router.post(
-  "/apps/:id/revisions/:revisionId/restore",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    const revisionId = Number(req.params.revisionId);
-    if (!Number.isInteger(id) || !Number.isInteger(revisionId)) {
-      res.status(400).json({ error: "Invalid id" });
-      return;
-    }
-    const userId = req.userId!;
+  onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
+  log("patcher", "✓ parche aplicado y validado.");
+  return {
+    title: previous.title,
+    description: previous.description,
+    techStack: previous.techStack,
+    frontendCode: patched,
+    backendCode: previous.backendCode,
+  };
+}
+
+export interface PreviousApp {
+  title: string;
+  description: string;
+  techStack: string[];
+  frontendCode: string;
+  backendCode: string;
+}
+
+export type PhaseErrorReporter = (
+  phase: string,
+  err: unknown,
+  extras?: Record<string, unknown>,
+) => void;
+
+export async function generateApp(
+  prompt: string,
+  onProgress?: (p: GenerateProgress) => void,
+  previous?: PreviousApp,
+  coderModel?: string,
+  language: GenLanguage = "typescript",
+  onAgentLog?: AgentLog,
+  attachments?: AttachmentContext[],
+  onPhaseError?: PhaseErrorReporter,
+  agentMemory?: AgentMemoryContext,
+): Promise<GeneratedAppPayload> {
+  const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
-      const result = await restoreAppRevision({ appId: id, revisionId, userId });
-      if (!result.ok) {
-        if (result.reason === "job_in_flight") {
-          // 409 Conflict — there's a generation/edit job still running for
-          // this app. Restoring now would race with its eventual write.
-          res.status(409).json({
-            error:
-              "No puedo restaurar mientras hay una generación o edición en curso. Espera a que termine e inténtalo de nuevo.",
-          });
-          return;
-        }
-        // Forbidden vs not_found are intentionally collapsed into 404 to
-        // avoid leaking which app IDs exist for other users.
-        res
-          .status(404)
-          .json({ error: result.reason === "forbidden" ? "App not found" : "Revision not found" });
-        return;
-      }
-      res.json({ ok: true });
+      return await fn();
     } catch (err) {
-      req.log.error({ err, appId: id, revisionId }, "restoreAppRevision failed");
-      res.status(500).json({ error: "No pude restaurar esa versión." });
+      try { onPhaseError?.(phase, err); } catch { /* monitoring must never crash the pipeline */ }
+      throw err;
     }
-  },
-);
+  };
 
-/**
- * Public catalog of curated starter templates the dashboard renders as
- * clickable cards. No auth required — they're just labels + seed prompts;
- * clicking one only pre-fills the prompt textarea on the client. Actual
- * generation still goes through /generate with the user's session.
- */
-router.get("/templates", (_req: Request, res: Response) => {
-  res.json({ templates: TEMPLATES });
-});
+  const memoryBlock = formatMemoryBlock(agentMemory);
+  if (memoryBlock) prompt = `${memoryBlock}\n${prompt}`;
 
-/**
- * POST /apps/:id/deploy/vercel — push the current bundle to the user's
- * Vercel account as a static deployment. Reuses the same Vercel project
- * across deploys so the production URL stays stable. Returns the URL
- * immediately once Vercel acknowledges the deployment (Vercel's edge will
- * finish building the static page within a few seconds).
- *
- * Failures map to:
- *  - 503 if VERCEL_TOKEN isn't configured (operator action required).
- *  - 404 if the app doesn't belong to the requester (info-hiding: same
- *    code as not-found).
- *  - 400 if the bundle won't compile (the user can fix it from chat).
- *  - 502 if Vercel's API rejects the request — message is forwarded so
- *    the user can see whether it was, e.g., a duplicate project name.
- */
-router.post(
-  "/apps/:id/deploy/vercel",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    try {
-      const r = await deployAppToVercel({ appId: id, userId, log: req.log });
-      if (r.ok) {
-        res.json(r.result);
-        return;
-      }
-      switch (r.failure.kind) {
-        case "missing_token":
-          res.status(503).json({
-            error:
-              "El despliegue a Vercel no está configurado en este servidor. Pide al administrador que añada VERCEL_TOKEN.",
-          });
-          return;
-        case "app_not_found":
-          res.status(404).json({ error: "App not found" });
-          return;
-        case "build_failed":
-          res.status(400).json({
-            error: `No pude empaquetar la app: ${r.failure.message}`,
-          });
-          return;
-        case "vercel_api_error":
-          res.status(502).json({
-            error: `Vercel rechazó el despliegue (${r.failure.status}): ${r.failure.message}`,
-          });
-          return;
-      }
-    } catch (err) {
-      req.log.error({ err, appId: id }, "Vercel deploy unexpected failure");
-      res.status(500).json({ error: "No pude desplegar a Vercel." });
-    }
-  },
-);
+  const attachmentBlock = buildAttachmentBlock(attachments);
+  if (attachmentBlock) prompt = `${attachmentBlock}\n${prompt}`;
 
-/**
- * Custom Vercel domain endpoints — POST/GET/DELETE /apps/:id/domain.
- *
- * Regla de producto (Mayo 2026):
- *   - Plan gratis → SOLO se puede hacer deploy con el dominio de preview que
- *     asigna Maris AI (subdominio gestionado). NO se permite dominio propio.
- *   - Cualquier plan de pago (cualquier compra > 0 €) → desbloquea dominio
- *     propio. No hay umbral mínimo de gasto.
- *   - Admin / propietario (rrhh.milchollos@gmail.com) → desbloqueado siempre,
- *     gratis e ilimitado.
- *
- * Cambia respecto a la versión anterior: se eliminó el "umbral de 50 € en
- * compras". Ahora basta una compra cualquiera para desbloquear.
- *
- * Gate server-side: `unlocked = isAdminEmail(email) || userHasAnyPurchase(userId)`.
- * El frontend también lo aplica para UX, pero re-validamos aquí para que un
- * curl manipulado no se lo salte.
- *
- * Pre-conditions:
- *  - The app must already have a Vercel deploy (vercelProjectId not null).
- *    Otherwise we'd be attaching a domain to a project that doesn't exist.
- *
- * El gate de pago se comprueba DESPUÉS del ownership check para no filtrar
- * la existencia de un appId a un usuario sin plan de pago.
- */
+  const log: AgentLog = (agent, message, level = "info") => {
+    try { onAgentLog?.(agent, message, level); } catch { /* swallow */ }
+  };
 
-function isPlausibleDomain(input: string): boolean {
-  // Conservative validator — the real check happens at Vercel. We just
-  // reject obviously broken inputs to keep noise out of the upstream call.
-  // Allows xn-- (IDN) prefix so "miweb.es" with accents post-punycoded works.
-  return /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(
-    input.trim(),
+  onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
+  let execPlan = await runPhase("planner", () =>
+    planExecution(prompt, { hasExistingApp: !!previous }),
   );
-}
+  log("planner", planSummaryEs(execPlan));
 
-async function loadAppForDomain(
-  id: number,
-  userId: string,
-): Promise<
-  | { ok: true; row: { id: number; vercelProjectId: string | null; vercelCustomDomain: string | null } }
-  | { ok: false; status: 404 }
-> {
-  const [row] = await db
-    .select({
-      id: generatedApps.id,
-      vercelProjectId: generatedApps.vercelProjectId,
-      vercelCustomDomain: generatedApps.vercelCustomDomain,
-    })
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .limit(1);
-  if (!row) return { ok: false, status: 404 };
-  return { ok: true, row };
-}
-
-router.post(
-  "/apps/:id/domain",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const domainRaw = String(req.body?.domain ?? "").trim().toLowerCase();
-    if (!isPlausibleDomain(domainRaw)) {
-      res.status(400).json({
-        error:
-          "Dominio no válido. Escribe sólo el nombre, p. ej. mitienda.com (sin https://, sin / al final).",
-      });
-      return;
+  // Edit mode
+  if (previous) {
+    if (execPlan.scope === "fast-patch") {
+      const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
+      if (fastResult) return fastResult;
+      log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
+      execPlan = { ...execPlan, scope: "feature", phases: PLAN_FEATURE.phases };
+      log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
     }
 
-    const app = await loadAppForDomain(id, userId);
-    if (!app.ok) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    if (!app.row.vercelProjectId) {
-      res.status(400).json({
-        error:
-          "Antes de conectar un dominio personalizado tienes que desplegar la app a Vercel al menos una vez.",
-      });
-      return;
-    }
-
-    // Paywall: dominio propio sólo con plan de pago. Admin pasa siempre.
-    // Comprobado después del ownership check para no filtrar la existencia
-    // del appId a usuarios sin plan.
-    const isAdmin = isAdminEmail(req.dbUser?.email);
-    const hasPurchase = isAdmin ? true : await userHasAnyPurchase(userId);
-    if (!isAdmin && !hasPurchase) {
-      res.status(402).json({
-        error:
-          "Conectar tu propio dominio requiere un plan de pago. En el plan gratis puedes desplegar tu app, pero solo con el dominio de preview que asigna Maris AI. Compra cualquier paquete de créditos para desbloquearlo.",
-        unlocked: false,
-        unlockReason: null,
-      });
-      return;
-    }
-
-    try {
-      const r = await addVercelDomainForApp({
-        appId: id,
-        userId,
-        projectId: app.row.vercelProjectId,
-        domain: domainRaw,
-        log: req.log,
-      });
-      if (r.ok) {
-        res.json(r.status);
-        return;
+    onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
+    log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
+    log("coder", "Calentando motores…");
+    const TARGET = 50_000;
+    let lastHeartbeatAt = Date.now();
+    const onChars = (chars: number) => {
+      const ratio = Math.min(1, chars / TARGET);
+      onProgress?.({ phase: "generating", progress: 20 + Math.round(ratio * 50), note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)` });
+      const now = Date.now();
+      if (now - lastHeartbeatAt > 2500) {
+        lastHeartbeatAt = now;
+        log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
-      switch (r.failure.kind) {
-        case "missing_token":
-          res.status(503).json({
-            error:
-              "El despliegue a Vercel no está configurado en este servidor. Pide al administrador que añada VERCEL_TOKEN.",
-          });
-          return;
-        case "vercel_api_error":
-          res.status(502).json({
-            error: `Vercel rechazó el dominio (${r.failure.status}): ${r.failure.message}`,
-          });
-          return;
-        default:
-          res.status(500).json({ error: "No pude conectar el dominio." });
-          return;
-      }
-    } catch (err) {
-      req.log.error({ err, appId: id }, "Vercel domain attach unexpected failure");
-      res.status(500).json({ error: "No pude conectar el dominio." });
-    }
-  },
-);
-
-router.get(
-  "/apps/:id/domain",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const app = await loadAppForDomain(id, userId);
-    if (!app.ok) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    // Calculamos `unlocked` (admin OR cualquier compra). `spentCents` y
-    // `requiredCents` se mantienen en la respuesta como legacy/informativo
-    // para no romper clientes antiguos: requiredCents=0 ahora siempre.
-    const isAdmin = isAdminEmail(req.dbUser?.email);
-    const hasPurchase = isAdmin ? true : await userHasAnyPurchase(userId);
-    const unlocked = isAdmin || hasPurchase;
-    const unlockReason: "admin" | "purchase" | null = isAdmin
-      ? "admin"
-      : hasPurchase
-        ? "purchase"
-        : null;
-    const spentCents = await getUserSpentCents(userId);
-    const baseStatus = {
-      spentCents,
-      requiredCents: 0,
-      unlocked,
-      unlockReason,
     };
 
-    if (!app.row.vercelCustomDomain || !app.row.vercelProjectId) {
-      res.json({ domain: null, ...baseStatus });
-      return;
+    if (execPlan.scope === "feature") {
+      log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
+      if (execPlan.phases.includes("architect")) log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
+      if (execPlan.phases.includes("frontend")) log("coder", "Frontend: aplicando la nueva funcionalidad…");
+    } else {
+      log("coder", "Pensando…");
     }
+    const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+    log("coder", "Código listo, comprobando que todo encaje…");
 
-    const r = await getVercelDomainStatus({
-      projectId: app.row.vercelProjectId,
-      domain: app.row.vercelCustomDomain,
-      log: req.log,
-    });
-    if (r.ok) {
-      res.json({ ...r.status, ...baseStatus });
-      return;
-    }
-    // Vercel call failed — don't 500 the whole thing; return cached domain
-    // so the UI still shows what's saved with a soft warning.
-    res.json({
-      domain: app.row.vercelCustomDomain,
-      verified: false,
-      verification: [],
-      recommendedDns: [],
-      ...baseStatus,
-      warning: r.failure.kind === "vercel_api_error" ? r.failure.message : "Vercel no está disponible.",
-    });
-  },
-);
+    const fixedFrontend = await runValidatePatchLoop(
+      result.frontendCode,
+      { ok: true, issues: [] },
+      onProgress,
+      70,
+      language,
+      log,
+      { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
+    );
 
-router.delete(
-  "/apps/:id/domain",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) {
-      res.status(400).json({ error: "Invalid app id" });
-      return;
-    }
-    const userId = req.userId!;
-    const app = await loadAppForDomain(id, userId);
-    if (!app.ok) {
-      res.status(404).json({ error: "App not found" });
-      return;
-    }
-    if (!app.row.vercelCustomDomain || !app.row.vercelProjectId) {
-      res.json({ ok: true });
-      return;
-    }
-    const r = await removeVercelDomainForApp({
-      appId: id,
-      projectId: app.row.vercelProjectId,
-      domain: app.row.vercelCustomDomain,
-      log: req.log,
-    });
-    if (r.ok) {
-      res.json({ ok: true });
-      return;
-    }
-    if (r.failure.kind === "missing_token") {
-      res.status(503).json({ error: "VERCEL_TOKEN no configurado." });
-      return;
-    }
-    res.status(502).json({
-      error: `No pude quitar el dominio en Vercel: ${r.failure.kind === "vercel_api_error" ? r.failure.message : "error desconocido"}`,
-    });
-  },
-);
-
-router.put("/apps/:id/notes", requireAuth, async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid app id" });
-    return;
+    onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
+    log("system", "Empaquetando todo…");
+    return { ...result, frontendCode: fixedFrontend };
   }
-  const notes: unknown = req.body?.notes;
-  if (typeof notes !== "string") {
-    res.status(400).json({ error: "notes debe ser una cadena" });
-    return;
-  }
-  // Hard cap at 3 KB — same limit the writer enforces on auto-extracted
-  // notes. Beyond this we silently truncate; the agent can always re-add
-  // the most relevant bits next time.
-  const trimmed = notes.slice(0, 3000);
-  const userId = req.userId!;
-  const updated = await db
-    .update(generatedApps)
-    .set({ agentNotes: trimmed })
-    .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-    .returning({ id: generatedApps.id });
-  if (updated.length === 0) {
-    res.status(404).json({ error: "App not found" });
-    return;
-  }
-  res.json({ notes: trimmed });
-});
 
-export default router;
+  // Phase gates
+  const runResearch = execPlan.phases.includes("research");
+  const runDesign = execPlan.phases.includes("design");
+  const runIntegration = execPlan.phases.includes("integration");
+  const runQa = execPlan.phases.includes("qa");
+  const runTests = execPlan.phases.includes("tests");
+
+  /* === Phase 1: research + architect === */
+  let research = "";
+  if (runResearch && shouldResearch(prompt)) {
+    onProgress?.({ phase: "researching", progress: 6, note: "🔎 Investigador buscando referencias en la web (máx 7s)…" });
+    log("researcher", "Buscando referencias en la web (máx 7s)…");
+    research = await runPhase("researcher", () => researchTopic(prompt));
+    if (research) {
+      log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
+    } else {
+      log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
+    }
+  } else if (!runResearch) {
+    log("researcher", "Plan dice saltar investigación (alcance reducido).");
+  } else {
+    log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
+  }
+
+  onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
+  log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
+  const plan = await runPhase("architect", () =>
+    withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
+  );
+
+  if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
+
+  log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
+  if (plan.pages.length > 0) {
+    log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
+  }
+
+  onProgress?.({ phase: "integrating", progress: 20, note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…` });
+  if (runIntegration) log("integration", "Analizando servicios externos necesarios…");
+  if (runDesign) log("designer", "Eligiendo paleta y tipografía…");
+
+  /* === Phase 2 (parallel): integrations + design === */
+  const integrationPromise = runIntegration
+    ? runPhase("integrations", () => specifyIntegrations(plan, prompt))
+    : Promise.resolve({ services: [], envVars: [] });
+
+  const FALLBACK_DESIGN: DesignSystem = {
+    theme: "dark",
+    vibe: "moderno y limpio",
+    palette: { primary: "#7c3aed", secondary: "#0ea5e9", background: "#0a0a0a", surface: "#111111", text: "#fafafa" },
+    typography: { sans: "Inter, system-ui, sans-serif", display: "Inter, system-ui, sans-serif" },
+    radius: "0.75rem",
+    tailwindExtend: "",
+    globalCSS: "",
+  };
+  const designPromise: Promise<DesignSystem> = runDesign
+    ? runPhase("design", () => designSystem(plan, research))
+    : Promise.resolve(FALLBACK_DESIGN);
+
+  const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
+  if (!runIntegration) log("integration", "Plan dice saltar integraciones (alcance reducido).");
+  if (!runDesign) log("designer", "Plan dice saltar diseño (uso paleta por defecto).");
+
+  const integrationsNote = integrationSpec.services.length > 0
+    ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
+    : "Sin servicios externos requeridos.";
+
+  if (integrationSpec.services.length > 0) {
+    log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
+  } else {
+    log("integration", "Sin servicios externos requeridos.");
+  }
+  log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
+
+  onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
+  log("coder", `Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
+  if (plan.backendNeeded) log("coder", "Generando backend en paralelo…");
+
+  /* === Phase 3 (parallel): frontend + backend === */
+  const TARGET_CHARS = 60_000;
+  const frontendPromise = runPhase("frontend", () =>
+    withTimeoutOrThrow(
+      generateFrontendCode(plan, design, research, prompt, (chars) => {
+        const ratio = Math.min(1, chars / TARGET_CHARS);
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+      }, coderModel, language),
+      600_000,
+      "frontend-engineer",
+    ),
+  );
+
+  const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
+  const backendPromise = runBackend
+    ? runPhase("backend", () => generateBackendCode(plan, prompt))
+    : Promise.resolve(null);
+
+  if (!execPlan.phases.includes("frontend")) {
+    throw new Error(`El planificador devolvió un alcance sin fase 'frontend' (${execPlan.scope}). No es posible generar una app sin código de frontend.`);
+  }
+
+  const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
+
+  if (!frontendResult.code) {
+    log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
+    throw new Error(
+      frontendResult.truncated
+        ? "El ingeniero de frontend se quedó sin tokens. Pide una app más pequeña o más específica."
+        : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
+    );
+  }
+  log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
+  if (plan.backendNeeded && backendResult?.code) {
+    log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
+  }
+
+  /* === Phase 4 (parallel): QA + Tests === */
+  onProgress?.({ phase: "reviewing", progress: 78, note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…" });
+  if (runQa) log("qa", "Revisando bundle en busca de bugs…");
+  if (runTests) log("qa", "Generando tests en paralelo…");
+
+  const reviewPromise = runQa
+    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))
+    : Promise.resolve({ ok: true, issues: [] } as QAReport);
+  const testsPromise = runTests
+    ? runPhase("tests", () => generateTests(plan, frontendResult.code))
+    : Promise.resolve(null);
+
+  const [report, testCode] = await Promise.all([reviewPromise, testsPromise]);
+  if (!runQa) log("qa", "Plan dice saltar QA (alcance reducido).");
+  if (!runTests) log("qa", "Plan dice saltar generación de tests.");
+
+  const issueCount = report.issues?.length ?? 0;
+  log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
+
+  /* === Phase 5: validate → patch loop === */
+  log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
+  const finalFrontend = await runPhase("validate-patch-loop", () =>
+    runValidatePatchLoop(
+      frontendResult.code,
+      report,
+      onProgress,
+      80,
+      language,
+      log,
+      { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
+    ),
+  );
+
+  const testNote = testCode ? "✅ Tests generados. " : "";
+  if (testCode) log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
+  onProgress?.({ phase: "parsing", progress: 94, note: `${testNote}📦 Empaquetando archivos…` });
+  log("system", "Empaquetando archivos finales…");
+
+  /* === Final assembly === */
+  const setupNotes = buildSetupNotes(integrationSpec);
+  const testsAppendix = testCode ? `\n\n${testCode}` : "";
+
+  return {
+    title: plan.title.slice(0, 200),
+    description: plan.description.slice(0, 1000),
+    techStack: plan.techStack,
+    frontendCode: finalFrontend + testsAppendix + setupNotes,
+    backendCode: backendResult?.code || "No backend required for this app.",
+    plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
+  };
+}
