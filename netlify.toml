@@ -1,4 +1,3 @@
 [build]
-  base = "artifacts/appforge"
-  command = "pnpm install --no-frozen-lockfile && pnpm exec vite build"
-  publish = "dist/public"
+  command = "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/appforge run build"
+  publish = "artifacts/appforge/dist/public"
