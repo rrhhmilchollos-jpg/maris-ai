@@ -6,13 +6,13 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
-import { validateBundle, type BuildIssue } from "./validate";
-import { validateBundleInE2B } from "./e2bValidator";
-import { shouldValidateInE2B } from "./e2bGate";
-import { logger } from "./logger";
-import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
-import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
-import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
+import { validateBundle, type BuildIssue } from "../lib/validate";
+import { validateBundleInE2B } from "../lib/e2bValidator";
+import { shouldValidateInE2B } from "../lib/e2bGate";
+import { logger } from "../lib/logger";
+import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
+import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
+import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
