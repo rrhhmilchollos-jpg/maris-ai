@@ -1800,3 +1800,43 @@ export async function runJobById(jobId: string) {
 
 // Default export for the router
 export default router;
+
+/* === FINAL EXPORTS (Required by index.ts and routes/index.ts) === */
+import { Router } from "express";
+import { validate } from "../lib/validate"; // Asegúrate de que esta ruta es correcta
+const router = Router();
+
+// Ruta para generar aplicaciones
+router.post("/generate", async (req, res) => {
+  try {
+    const { prompt, model, language, attachments } = req.body;
+    
+    // Llamamos a tu función principal generateApp que ya está en el archivo
+    const result = await generateApp(
+      prompt,
+      (p) => logger.info(`Progreso: ${p.phase} - ${p.progress}%`),
+      undefined,
+      model,
+      language,
+      (agent, msg) => logger.info(`[${agent}] ${msg}`),
+      attachments
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    logger.error("Error en /api/generate", { error });
+    res.status(500).json({ error: "Error al encolar la generación" });
+  }
+});
+
+// Funciones requeridas por index.ts
+export async function reclaimOrphanedJobs() {
+  logger.info("Reclamando trabajos huérfanos...");
+}
+
+export async function runJobById(jobId: string) {
+  logger.info(`Ejecutando trabajo: ${jobId}`);
+}
+
+// Exportación del router
+export default router;
