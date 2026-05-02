@@ -1788,7 +1788,6 @@ export async function generateApp(
 
 /* === FINAL EXPORTS (Required by index.ts and routes/index.ts) === */
 import { Router } from "express";
-
 const router = Router();
 
 // Ruta para generar aplicaciones
@@ -1798,19 +1797,7 @@ router.post("/generate", async (req, res) => {
     
     logger.info("Iniciando generación de app...", { prompt });
 
-    // 1. Creamos una entrada en la base de datos para la app (Estado: generating)
-    const appEntry = await createApp({
-      title: "Generando...",
-      description: prompt,
-      techStack: "React, Tailwind",
-      frontendCode: "",
-      backendCode: "",
-      plannedPages: []
-    });
-
-    // 2. Ejecutamos la generación
-    // Nota: Para apps grandes, esto podría dar timeout en el navegador, 
-    // pero el proceso seguirá corriendo en el servidor.
+    // Ejecutamos la generación directamente usando tu lógica de agentes
     const result = await generateApp(
       prompt,
       (p) => logger.info(`Progreso: ${p.phase} - ${p.progress}%`),
@@ -1821,10 +1808,10 @@ router.post("/generate", async (req, res) => {
       attachments
     );
 
-    res.status(200).json({ ...result, id: appEntry.id });
+    res.status(200).json(result);
   } catch (error) {
     logger.error("Error en /api/generate", { error: error instanceof Error ? error.message : error });
-    res.status(500).json({ error: "Error al encolar la generación. Revisa los logs de Render para más detalles." });
+    res.status(500).json({ error: "Error al generar la aplicación. Revisa los logs de Render para más detalles." });
   }
 });
 
