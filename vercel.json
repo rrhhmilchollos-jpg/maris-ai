@@ -1,8 +1,7 @@
 {
+  "outputDirectory": "artifacts/appforge/dist",
+  "buildCommand": "pnpm -r --if-present run build",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
