@@ -4,7 +4,7 @@ import {
   useListCreditPackages, 
   useCreateCheckoutSession, 
   useListTransactions 
-} from "@workspace/api-client-react";
+} from "@/lib/api-client";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
