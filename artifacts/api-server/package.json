@@ -27,6 +27,7 @@
     "@replit/connectors-sdk": "^0.4.0",
     "@sentry/node": "^10.50.0",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/db": "workspace:*",
     "@workspace/integrations-gemini-ai": "workspace:*",
     "archiver": "^7.0.1",
     "bullmq": "^5.76.4",
