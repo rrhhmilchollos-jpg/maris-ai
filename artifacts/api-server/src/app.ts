@@ -15,17 +15,15 @@ import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import { metricsMiddleware } from "./lib/metrics";
-
+ 
 initSentry();
-
+ 
 const app: Express = express();
-
-// Behind the Replit shared reverse proxy (mTLS). Without trust proxy=1,
-// req.ip is always the proxy hop and the rate-limiter buckets every user
-// into the same key. Trusting one hop is the documented setup for a single
-// upstream proxy and is what express-rate-limit expects.
+ 
+// Behind the reverse proxy — trust one hop so req.ip is the real client IP
+// and the rate-limiter buckets correctly.
 app.set("trust proxy", 1);
-
+ 
 app.use(
   pinoHttp({
     logger,
@@ -45,16 +43,16 @@ app.use(
     },
   }),
 );
-
+ 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-
+ 
 // Stripe webhook needs the raw body — mount BEFORE express.json()
 app.use("/api/billing/webhook", stripeWebhookRouter);
-
+ 
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
-
+ 
 app.use(
   clerkMiddleware((req) => ({
     publishableKey: publishableKeyFromHost(
@@ -63,12 +61,9 @@ app.use(
     ),
   })),
 );
-
-// Per-request Sentry breadcrumb. Records the incoming request (method, path,
-// status, duration) so when a downstream error is captured, the Sentry event
-// includes a timeline of the user's recent navigation. No-op if Sentry is
-// not configured. Mounted right before the API router so we capture the auth
-// context already attached by clerkMiddleware.
+ 
+// Per-request Sentry breadcrumb — records method, path, status, duration.
+// No-op if Sentry is not configured.
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (!isSentryEnabled()) {
     next();
@@ -85,33 +80,27 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   });
   next();
 });
-
-// Global API rate limit (per IP, per Clerk userId once authenticated). Mounted
-// before the API router so every /api/* request passes through it. Public
-// /p/* deploy routes and Stripe webhooks are intentionally outside this scope.
+ 
+// Global API rate limit (per IP / per Clerk userId once authenticated).
 app.use("/api", apiRateLimiter);
-
-// In-memory request/error/duration counters surfaced via /api/admin/metrics.
-// No external dependency, resets on process restart — good enough for a
-// single-instance Replit deployment.
+ 
+// In-memory request/error/duration counters for /api/admin/metrics.
 app.use("/api", metricsMiddleware);
-
+ 
 app.use("/api", router);
-
-// Public unauthenticated route for deployed Maris AI apps. Mounted on the root
-// (outside /api) so /p/<slug> resolves on the published domain directly.
+ 
+// Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
 app.use(publicDeployRouter);
-
-// Sentry error capture middleware. Must come AFTER all routes so Express
-// forwards the error here, but BEFORE the final JSON error responder.
+ 
+// Sentry error capture middleware — must come AFTER all routes.
 app.use((err: unknown, req: Request, _res: Response, next: NextFunction) => {
   if (isSentryEnabled()) {
     try {
       Sentry.withScope((scope) => {
         scope.setTag("path", req.path);
         scope.setTag("method", req.method);
-        const userId = (req as Request & { dbUser?: { id?: string } }).dbUser?.id;
-        if (userId) scope.setUser({ id: userId });
+        const userId = (req as Request & { dbUser?: { _id?: string } }).dbUser?._id;
+        if (userId) scope.setUser({ id: String(userId) });
         Sentry.captureException(err);
       });
     } catch {
@@ -120,5 +109,13 @@ app.use((err: unknown, req: Request, _res: Response, next: NextFunction) => {
   }
   next(err);
 });
-
+ 
+// Final JSON error responder
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  const message =
+    err instanceof Error ? err.message : "Internal server error";
+  res.status(500).json({ error: message });
+});
+ 
 export default app;
+ 
