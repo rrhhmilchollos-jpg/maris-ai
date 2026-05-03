@@ -1,16 +1,12 @@
 import { createHash } from "node:crypto";
 import OpenAI from "openai";
-import { db } from "./db";
-import { agentMemory, type AgentMemoryEntry } from "@workspace/db";
-import { sql, eq } from "drizzle-orm";
+import { connectDB } from "./db";
+import { AgentMemory, type IAgentMemory } from "@workspace/db/schema";
 import { logger } from "./logger";
 
+export type AgentMemoryEntry = IAgentMemory;
+
 const openai = new OpenAI({
-  // Align with the rest of the codebase (generate.ts uses these names) so the
-  // real Replit AI Integrations proxy is used for embeddings when the
-  // integration is configured. We keep the legacy var names as fallbacks for
-  // local dev, and finally fall through to the lexical-hash path if neither
-  // is set or if the proxy returns 401 (current behaviour for embeddings).
   apiKey:
     process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
     process.env.OPENAI_API_KEY ??
@@ -22,23 +18,15 @@ const openai = new OpenAI({
 const EMBED_DIMS = 1536;
 const EMBED_MODEL = "text-embedding-3-small";
 const MAX_INPUT_CHARS = 8_000;
-// Hard cap on stored patches. Memory is shared across apps/users, so storing
-// large bundles would risk leaking proprietary code or secrets to unrelated
-// jobs via recall. We instead store only a tiny snippet of the corrected
-// region (extracted near the error line) — enough for the next patcher to
-// recognise the pattern, not enough to be useful as a code dump.
 export const MAX_STORED_PATCH_CHARS = 800;
 
-// Patterns that look like secrets we never want to persist into shared
-// memory. Conservative and additive — false positives are fine, missed
-// secrets are not.
 const SECRET_PATTERNS: RegExp[] = [
-  /sk-[A-Za-z0-9_-]{16,}/g, // OpenAI / Replit AI Integrations style keys
+  /sk-[A-Za-z0-9_-]{16,}/g,
   /\b[A-Za-z0-9_-]{0,8}(?:secret|token|api[_-]?key|password|passwd|bearer)[A-Za-z0-9_-]{0,8}\s*[:=]\s*['"][^'"\n]{4,}['"]/gi,
-  /\bgh[ps]_[A-Za-z0-9]{20,}\b/g, // GitHub PAT
-  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g, // Slack
-  /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, // JWT
-  /\b[A-Fa-f0-9]{40,}\b/g, // long hex strings (private keys, hashes)
+  /\bgh[ps]_[A-Za-z0-9]{20,}\b/g,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
+  /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+  /\b[A-Fa-f0-9]{40,}\b/g,
 ];
 
 export function redactSecrets(text: string): string {
@@ -49,11 +37,6 @@ export function redactSecrets(text: string): string {
   return out;
 }
 
-// Pull the smallest possible "fix hint" out of the corrected bundle. We try
-// to find a line number reference inside the error message, then return ~12
-// lines of context around it. If we cannot parse a location, we fall back to
-// the first MAX_STORED_PATCH_CHARS of the bundle (which is much smaller than
-// the previous 8000-char dump).
 export function extractFixHint(bundle: string, errorMessage: string): string {
   const lineMatch = errorMessage.match(/(?:line|línea)\s*[:#]?\s*(\d+)/i);
   if (lineMatch) {
@@ -84,9 +67,6 @@ function rememberInCache(key: string, vec: number[]): void {
   inMemoryCache.set(key, vec);
 }
 
-// Deterministic 1536-d hashing fallback. Bag-of-trigrams projected to fixed
-// dimensions via FNV-1a hashing, then L2-normalised. Good enough for matching
-// near-duplicate error messages even if the embedding endpoint is unavailable.
 function lexicalEmbed(text: string): number[] {
   const v = new Array<number>(EMBED_DIMS).fill(0);
   const lower = text.toLowerCase();
@@ -134,7 +114,7 @@ export async function embedText(text: string): Promise<number[]> {
         openAiEmbeddingsAvailable = false;
         logger.warn(
           { err: err instanceof Error ? err.message : String(err) },
-          "OpenAI embeddings unavailable; falling back to lexical hashing for agent memory",
+          "OpenAI embeddings unavailable; falling back to lexical hashing",
         );
       }
     }
@@ -146,7 +126,7 @@ export async function embedText(text: string): Promise<number[]> {
 }
 
 export interface MemoryRecallResult {
-  id: number;
+  id: string;
   errorMessage: string;
   errorContext: string;
   patch: string;
@@ -154,21 +134,19 @@ export interface MemoryRecallResult {
   successCount: number;
 }
 
-// pgvector embeds need the literal "[a,b,c]" string form for parameterised SQL.
-function toVectorLiteral(vec: number[]): string {
-  return `[${vec.join(",")}]`;
+function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
-// Build the canonical text we hand to the embedder. Both recall and remember
-// use this so the cold-store and warm-query embeddings come from the same
-// representation. Including the (truncated) errorContext when available
-// improves retrieval precision when two errors share a message but live in
-// different files / stack frames.
 function embedInputText(errorMessage: string, errorContext?: string): string {
   const ctx = (errorContext ?? "").trim();
   if (!ctx) return errorMessage;
-  // Cap context to keep token costs bounded; the message stays ungated so
-  // exact-match recall on the message alone still works for short errors.
   return `${errorMessage}\nContext:\n${ctx.slice(0, 1500)}`;
 }
 
@@ -184,30 +162,32 @@ export async function recallSimilar(
 ): Promise<MemoryRecallResult[]> {
   const limit = Math.max(1, Math.min(10, options.limit ?? 3));
   const threshold = options.threshold ?? 0.7;
-  // Quality guardrail: only reuse fixes that have been confirmed to converge
-  // at least once. successCount is incremented whenever a near-duplicate fix
-  // succeeds again, so this floor keeps unproven entries (or future
-  // failure-tracked entries with successCount=0) out of the patcher prompt.
   const minSuccessCount = Math.max(1, options.minSuccessCount ?? 1);
-  const queryVec = await embedText(embedInputText(errorMessage, options.errorContext));
-  const lit = toVectorLiteral(queryVec);
+
   try {
-    const rows = await db.execute(sql`
-      SELECT
-        id,
-        error_message AS "errorMessage",
-        error_context AS "errorContext",
-        patch,
-        success_count AS "successCount",
-        1 - (embedding <=> ${lit}::vector) AS similarity
-      FROM agent_memory
-      WHERE success_count >= ${minSuccessCount}
-      ${options.language ? sql`AND language = ${options.language}` : sql``}
-      ORDER BY embedding <=> ${lit}::vector
-      LIMIT ${limit}
-    `);
-    const results = (rows.rows ?? []) as unknown as MemoryRecallResult[];
-    return results.filter((r) => Number(r.similarity) >= threshold);
+    await connectDB();
+    const queryVec = await embedText(embedInputText(errorMessage, options.errorContext));
+
+    const query: Record<string, unknown> = { successCount: { $gte: minSuccessCount } };
+    if (options.language) query.language = options.language;
+
+    const entries = await AgentMemory.find(query).lean();
+
+    const results: MemoryRecallResult[] = entries
+      .filter((e) => Array.isArray(e.embedding) && e.embedding.length === EMBED_DIMS)
+      .map((e) => ({
+        id: String(e._id),
+        errorMessage: e.errorMessage,
+        errorContext: e.errorContext ?? "",
+        patch: e.patch,
+        successCount: 1,
+        similarity: cosineSimilarity(queryVec, e.embedding as number[]),
+      }))
+      .filter((r) => r.similarity >= threshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+
+    return results;
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
@@ -225,42 +205,36 @@ export interface RememberInput {
   framework?: string;
 }
 
-// Save a successful patch. If a near-duplicate (similarity > 0.92) exists, just
-// bump its successCount instead of polluting the index with duplicates.
 export async function rememberPatch(input: RememberInput): Promise<AgentMemoryEntry | null> {
   if (!input.errorMessage || !input.patch) return null;
   try {
+    await connectDB();
     const vec = await embedText(embedInputText(input.errorMessage, input.errorContext));
-    const lit = toVectorLiteral(vec);
-    const dup = (await db.execute(sql`
-      SELECT id, 1 - (embedding <=> ${lit}::vector) AS similarity
-      FROM agent_memory
-      ORDER BY embedding <=> ${lit}::vector
-      LIMIT 1
-    `)).rows as unknown as Array<{ id: number; similarity: number }>;
-    if (dup[0] && Number(dup[0].similarity) > 0.92) {
-      const [updated] = await db
-        .update(agentMemory)
-        .set({
-          successCount: sql`${agentMemory.successCount} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(agentMemory.id, dup[0].id))
-        .returning();
-      return updated ?? null;
+
+    const entries = await AgentMemory.find({}).lean();
+    const dup = entries
+      .filter((e) => Array.isArray(e.embedding) && e.embedding.length === EMBED_DIMS)
+      .map((e) => ({ id: e._id, similarity: cosineSimilarity(vec, e.embedding as number[]) }))
+      .sort((a, b) => b.similarity - a.similarity)[0];
+
+    if (dup && dup.similarity > 0.92) {
+      const updated = await AgentMemory.findByIdAndUpdate(
+        dup.id,
+        { $inc: { successCount: 1 }, $set: { updatedAt: new Date() } },
+        { new: true },
+      );
+      return updated;
     }
-    const [inserted] = await db
-      .insert(agentMemory)
-      .values({
-        errorMessage: input.errorMessage.slice(0, 4000),
-        errorContext: (input.errorContext ?? "").slice(0, 4000),
-        patch: input.patch.slice(0, 8000),
-        embedding: vec,
-        language: input.language ?? "typescript",
-        framework: input.framework ?? "react",
-      })
-      .returning();
-    return inserted ?? null;
+
+    const inserted = await AgentMemory.create({
+      errorMessage: input.errorMessage.slice(0, 4000),
+      errorContext: (input.errorContext ?? "").slice(0, 4000),
+      patch: input.patch.slice(0, 8000),
+      embedding: vec,
+      language: input.language ?? "typescript",
+      framework: input.framework ?? "react",
+    });
+    return inserted;
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
