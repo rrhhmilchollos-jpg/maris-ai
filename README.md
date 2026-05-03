@@ -5,7 +5,8 @@ colorFrom: blue
 colorTo: purple
 sdk: docker
 app_port: 7860
+pinned: false
 ---
 
 # Maris AI Backend
-Este es el servidor backend de Maris AI migrado a Hugging Face Spaces.
+Servidor de inteligencia artificial para Maris AI, alojado gratuitamente en Hugging Face.
