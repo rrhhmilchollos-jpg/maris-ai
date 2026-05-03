@@ -1,27 +1,22 @@
 import type { Request, Response, NextFunction } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
-import { eq } from "drizzle-orm";
-import { db } from "./db";
-import { users } from "@workspace/db/schema";
-
-type DbUser = typeof users.$inferSelect;
-
+import { connectDB } from "./db";
+import { User, type IUser } from "@workspace/db/schema";
+ 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       userId?: string;
-      dbUser?: DbUser;
+      dbUser?: IUser;
     }
   }
 }
-
+ 
 // Email del propietario de Maris AI. Siempre es admin: créditos ilimitados,
-// sin límites de uso, dominio propio gratis. Se incluye en código (no solo en
-// env var) porque es la cuenta dueña del producto y no debería poder quedarse
-// fuera por una variable mal configurada en deploy.
+// sin límites de uso, dominio propio gratis.
 const OWNER_EMAIL = "rrhh.milchollos@gmail.com";
-
+ 
 function adminEmailSet(): Set<string> {
   const raw = process.env.ADMIN_EMAILS ?? "";
   const set = new Set(
@@ -33,54 +28,49 @@ function adminEmailSet(): Set<string> {
   set.add(OWNER_EMAIL);
   return set;
 }
-
+ 
 export function isAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return adminEmailSet().has(email.toLowerCase());
 }
-
-export async function ensureUser(clerkUserId: string): Promise<DbUser> {
-  const existing = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, clerkUserId))
-    .limit(1);
-  if (existing[0]) return existing[0];
-
+ 
+export async function ensureUser(clerkUserId: string): Promise<IUser> {
+  await connectDB();
+ 
+  // Try to find existing user
+  const existing = await User.findById(clerkUserId).lean<IUser>();
+  if (existing) return existing;
+ 
+  // Fetch from Clerk
   const clerkUser = await clerkClient.users.getUser(clerkUserId);
   const email =
     clerkUser.primaryEmailAddress?.emailAddress ??
     clerkUser.emailAddresses[0]?.emailAddress ??
     "";
   const fullName =
-    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
-    null;
-
-  const inserted = await db
-    .insert(users)
-    .values({
-      id: clerkUserId,
-      email,
-      fullName,
-      imageUrl: clerkUser.imageUrl ?? null,
-      credits: 3,
-    })
-    .onConflictDoNothing()
-    .returning();
-
-  if (inserted[0]) return inserted[0];
-
-  const refetch = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, clerkUserId))
-    .limit(1);
-  if (!refetch[0]) {
+    [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || undefined;
+ 
+  // Upsert — handles race conditions where two requests create the same user
+  const user = await User.findByIdAndUpdate(
+    clerkUserId,
+    {
+      $setOnInsert: {
+        _id: clerkUserId,
+        email,
+        fullName,
+        imageUrl: clerkUser.imageUrl ?? undefined,
+        credits: 3,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  ).lean<IUser>();
+ 
+  if (!user) {
     throw new Error("Failed to provision user");
   }
-  return refetch[0];
+  return user;
 }
-
+ 
 export const requireAuth = async (
   req: Request,
   res: Response,
@@ -88,11 +78,14 @@ export const requireAuth = async (
 ): Promise<void> => {
   const auth = getAuth(req);
   const claimUserId = auth?.sessionClaims?.userId;
-  const userId = (typeof claimUserId === "string" ? claimUserId : undefined) || auth?.userId;
+  const userId =
+    (typeof claimUserId === "string" ? claimUserId : undefined) || auth?.userId;
+ 
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+ 
   try {
     const user = await ensureUser(userId);
     req.userId = userId;
@@ -103,7 +96,7 @@ export const requireAuth = async (
     res.status(500).json({ error: "Failed to load user" });
   }
 };
-
+ 
 export const requireAdmin = (
   req: Request,
   res: Response,
