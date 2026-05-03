@@ -75,7 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@workspace/api-client-react": "workspace:*",
+
     "@clerk/localizations": "^4.5.5",
     "@clerk/react": "^6.4.5",
     "@clerk/themes": "^2.4.57",

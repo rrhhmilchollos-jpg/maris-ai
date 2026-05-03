@@ -4,7 +4,7 @@ import {
   getGenerationJobLogs,
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
-} from "@workspace/api-client-react";
+} from "@/lib/api-client";
 import { Bot } from "lucide-react";
 
 // We deliberately collapse every internal agent role (researcher, architect,

@@ -90,7 +90,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [reason, setReason] = useState("");
 
   const MEMORY_PAGE_SIZE = 25;
-  const [memory, setMemory] = useState
+  const [memory, setMemory] = useState<
     { total: number; limit: number; offset: number; q: string; entries: MemoryEntry[] } | null
   >(null);
   const [memoryLoading, setMemoryLoading] = useState(false);

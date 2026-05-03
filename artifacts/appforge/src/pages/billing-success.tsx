@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { useConfirmCheckout, getGetMeQueryKey, getGetMyStatsQueryKey, getListTransactionsQueryKey } from "@workspace/api-client-react";
+import { useConfirmCheckout, getGetMeQueryKey, getGetMyStatsQueryKey, getListTransactionsQueryKey } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";

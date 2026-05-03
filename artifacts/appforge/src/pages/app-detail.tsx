@@ -38,7 +38,7 @@ import {
   useDetachAppCustomDomain,
   type VisualTestReport,
   type AppRuntimeError,
-} from "@workspace/api-client-react";
+} from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   SandpackProvider,

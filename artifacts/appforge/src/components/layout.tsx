@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Show, useClerk, useUser } from "@clerk/react";
-import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {

@@ -160,3 +160,22 @@ export function useAttachAppCustomDomain(opts?: { mutation?: Partial<UseMutation
 export function useDetachAppCustomDomain(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/custom-domain`, { method: "DELETE" }), ...(opts?.mutation as any) });
 }
+export function useConfirmCheckout(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ data }: any) => apiFetch("/api/billing/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+
+export const getGetGenerationJobLogsQueryKey = (id: number) => ["generation-job-logs", id];
+export async function getGenerationJobLogs(id: number, params: { afterId?: number }, options?: RequestInit): Promise<any> {
+  const searchParams = new URLSearchParams();
+  if (params.afterId) searchParams.set("afterId", params.afterId.toString());
+  return apiFetch(`/api/jobs/${id}/logs?${searchParams.toString()}`, options);
+}
+
+export interface JobLogEntry {
+  id: number;
+  jobId: number;
+  agent: string;
+  level: string;
+  message: string;
+  createdAt: string;
+}
