@@ -9,7 +9,7 @@ import { esES } from "@clerk/localizations";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
 import { useUser } from "@clerk/react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
@@ -165,7 +165,6 @@ function HomeRedirect() {
   );
 }
 
-// HOC for gated routes
 function Gated({ children }: { children: React.ReactNode }) {
   return (
     <>
@@ -177,13 +176,6 @@ function Gated({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Inner guard executed only when the user is signed-in. Reads /api/me to check
-// the isAdmin flag. Renders a loader while the request is in flight, and a
-// localized "no autorizado" message instead of the underlying admin page if
-// the user is not an admin. Backend authorization is the source of truth (the
-// admin endpoints reject non-admins regardless), this guard just gives a
-// clean UX instead of letting a non-admin land on a page that immediately
-// flashes errors.
 function AdminGuardInner({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser();
   const { data: me, isLoading, isError } = useGetMe({
