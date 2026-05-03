@@ -1,4 +1,5 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
 
 // OpenAI client via Replit AI Integrations proxy.
@@ -20,15 +21,21 @@ export type GenLanguage = "typescript" | "javascript";
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
  *
- * Todos los agentes usan Gemini (sin dependencia de Anthropic):
+ * Arquitectura Híbrida de Élite:
+ *   - Si hay ANTHROPIC_API_KEY, el Architect y QA Reviewer usan Claude 3.5 para máxima precisión.
+ *   - El resto de agentes usan Gemini 2.5 Flash para velocidad y búsqueda web.
+ *
+ * Agentes:
  *   - Researcher    (gemini-2.0-flash + google_search)  — referencia web
- *   - Architect     (gemini-2.5-flash)                  — plan / estructura
+ *   - Architect     (Claude 3.5 / gemini-2.5-flash)      — plan / estructura
  *   - Designer      (gemini-2.5-flash)                  — design system
  *   - Frontend Eng  (gemini-2.5-flash, streaming)       — bundle frontend
  *   - Backend Eng   (gemini-2.5-flash)                  — bundle backend
- *   - QA Reviewer   (gemini-2.0-flash)                  — revisión
+ *   - QA Reviewer   (Claude 3.5 / gemini-2.0-flash)      — revisión
  *   - Patcher       (gemini-2.0-flash)                  — auto-fix
  * ========================================================================== */
+
+const useAnthropic = !!process.env.ANTHROPIC_API_KEY || !!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
@@ -497,28 +504,44 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
 }
 
 /**
- * Architect — Gemini 2.5 Flash.
+ * Architect — Claude 3.5 (if available) or Gemini 2.5 Flash.
  */
 async function architectPlan(prompt: string, research: string): Promise<ProjectPlan> {
   const userContent = research
     ? `Design the file structure for this app:\n\n${prompt}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
     : `Design the file structure for this app:\n\n${prompt}`;
 
-  const response = await withTimeoutOrThrow(
-    gemini.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: userContent }] }],
-      config: {
-        systemInstruction: ARCHITECT_SYSTEM_PROMPT,
-        maxOutputTokens: 8192,
-        responseMimeType: "application/json",
-      },
-    }),
-    60_000,
-    "architect",
-  );
+  let raw = "";
+  if (useAnthropic) {
+    try {
+      const response = await anthropic.messages.create({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 8192,
+        system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
+        messages: [{ role: "user", content: userContent }],
+      });
+      raw = response.content[0].type === "text" ? response.content[0].text : "";
+    } catch (err) {
+      logger.warn({ err }, "Anthropic architect failed, falling back to Gemini");
+    }
+  }
 
-  const raw = response.text ?? "";
+  if (!raw) {
+    const response = await withTimeoutOrThrow(
+      gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [{ role: "user", parts: [{ text: userContent }] }],
+        config: {
+          systemInstruction: ARCHITECT_SYSTEM_PROMPT,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
+      }),
+      60_000,
+      "architect",
+    );
+    raw = response.text ?? "";
+  }
   const plan = extractJsonObject<ProjectPlan>(raw);
   if (!plan || !plan.title || !Array.isArray(plan.frontendFiles)) {
     logger.error({ rawPreview: raw.slice(0, 600) }, "Architect returned invalid plan JSON");
@@ -814,7 +837,7 @@ Backend needed: ${plan.backendNeeded}`,
 }
 
 /**
- * QA Reviewer — Gemini 2.0 Flash.
+ * QA Reviewer — Claude 3.5 (if available) or Gemini 2.0 Flash.
  */
 async function reviewBundle(
   frontendCode: string,
@@ -825,35 +848,36 @@ async function reviewBundle(
       try {
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
-        const response = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.
+        const systemPrompt = `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.`;
+        const userContent = `Expected files: ${expected}\n\nFirst 12KB of generated bundle:\n${sample}\n\nReturn STRICT JSON ONLY:\n{"ok":true} when everything looks fine,\nOR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}\n\nMax 5 issues. Output ONLY the JSON object.`;
 
-Expected files: ${expected}
+        let raw = "";
+        if (useAnthropic) {
+          try {
+            const response = await anthropic.messages.create({
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 1024,
+              system: systemPrompt + "\nOutput JSON only.",
+              messages: [{ role: "user", content: userContent }],
+            });
+            raw = response.content[0].type === "text" ? response.content[0].text : "";
+          } catch (err) {
+            logger.warn({ err }, "Anthropic QA failed, falling back to Gemini");
+          }
+        }
 
-First 12KB of generated bundle:
-${sample}
-
-Return STRICT JSON ONLY:
-{"ok":true} when everything looks fine,
-OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}
-
-Max 5 issues. Output ONLY the JSON object.`,
-                },
-              ],
+        if (!raw) {
+          const response = await gemini.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: [{ role: "user", parts: [{ text: userContent }] }],
+            config: {
+              systemInstruction: systemPrompt,
+              maxOutputTokens: 700,
+              responseMimeType: "application/json",
             },
-          ],
-          config: {
-            maxOutputTokens: 700,
-            responseMimeType: "application/json",
-          },
-        });
-        const raw = response.text ?? "";
+          });
+          raw = response.text ?? "";
+        }
         const parsed = extractJsonObject<QAReport>(raw);
         if (!parsed) return { ok: true, issues: [] };
         return {
@@ -1033,7 +1057,7 @@ async function runValidatePatchLoop(
   log?: AgentLog,
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
 ): Promise<string> {
-  const MAX_ITERATIONS = 2;
+  const MAX_ITERATIONS = 4;
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
