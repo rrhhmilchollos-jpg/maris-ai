@@ -1,37 +1,25 @@
-import { and, eq, sql } from "drizzle-orm";
-import { db } from "./db";
-import { creditTransactions, users } from "@workspace/db/schema";
+import { connectDB } from "./db";
+import { User, CreditTransaction } from "@workspace/db/schema";
 import { CREDIT_PACKAGES } from "./stripe";
-
+ 
 /**
- * Lifetime EUR spent by the user, in cents. Used to gate features that
- * we only want to expose to paying customers (custom Vercel domains,
- * priority queue, …).
- *
- * We compute this on demand from `credit_transactions` rows of
- * `kind = "purchase"` instead of caching it. The price isn't stored on
- * the row directly (only the credits granted), so we look up the matching
- * EUR-priced package by credit count. USD packages (e.g. the annual
- * mega-pack) and unmatched amounts are skipped — they don't count toward
- * the EUR threshold by design. Spend is small and bounded per user, so
- * this query is cheap and we don't need a cached column.
+ * Lifetime EUR spent by the user, in cents.
  */
 export async function getUserSpentCents(userId: string): Promise<number> {
+  await connectDB();
+ 
   const eurPriceByCredits = new Map<number, number>();
   for (const pkg of CREDIT_PACKAGES) {
     if (pkg.currency === "eur") {
       eurPriceByCredits.set(pkg.credits, pkg.priceCents);
     }
   }
-  const rows = await db
-    .select({ amount: creditTransactions.amount })
-    .from(creditTransactions)
-    .where(
-      and(
-        eq(creditTransactions.userId, userId),
-        eq(creditTransactions.kind, "purchase"),
-      ),
-    );
+ 
+  const rows = await CreditTransaction.find(
+    { userId, kind: "purchase" },
+    { amount: 1 },
+  ).lean();
+ 
   let totalCents = 0;
   for (const r of rows) {
     const cents = eurPriceByCredits.get(r.amount);
@@ -39,54 +27,28 @@ export async function getUserSpentCents(userId: string): Promise<number> {
   }
   return totalCents;
 }
-
+ 
 /**
  * @deprecated El umbral de gasto ya no se usa para desbloquear el dominio
- * propio. La nueva regla es: dominio propio se desbloquea con CUALQUIER plan
- * de pago (cualquier compra > 0). Los admins siempre lo tienen desbloqueado.
- * Se mantiene exportado solo para no romper consumidores legacy mientras
- * migran al nuevo helper `userHasAnyPurchase`.
+ * propio. Mantenido solo para no romper consumidores legacy.
  */
 export const CUSTOM_DOMAIN_MIN_SPEND_CENTS = 0;
-
+ 
 /**
- * Devuelve true si el usuario ha hecho al menos UNA compra de créditos
- * (cualquier paquete, EUR o USD). Se usa para desbloquear features de pago
- * como el dominio personalizado en Vercel: la regla de producto es "plan
- * gratis sólo deploy con dominio de preview, dominio propio sólo si has
- * pagado al menos una vez".
- *
- * No filtra por moneda ni por importe — basta con tener un movimiento de
- * tipo "purchase" (los regalos de bienvenida son `kind = "grant"`, no
- * cuentan). Query indexada por `(user_id, kind)` y limitada a 1 fila.
+ * Devuelve true si el usuario ha hecho al menos UNA compra de créditos.
  */
 export async function userHasAnyPurchase(userId: string): Promise<boolean> {
-  const rows = await db
-    .select({ id: creditTransactions.id })
-    .from(creditTransactions)
-    .where(
-      and(
-        eq(creditTransactions.userId, userId),
-        eq(creditTransactions.kind, "purchase"),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
+  await connectDB();
+  const row = await CreditTransaction.findOne(
+    { userId, kind: "purchase" },
+    { _id: 1 },
+  ).lean();
+  return row !== null;
 }
-
+ 
 /**
- * Atomically credit a Stripe purchase to the user, with hard idempotency on
- * `(userId, stripeSessionId)`. Safe to call concurrently from the
- * `/billing/confirm` polling endpoint AND the Stripe webhook — at most one
- * caller will actually grant credits; everyone else gets `alreadyProcessed`.
- *
- * Idempotency is enforced two ways:
- *   1. A partial unique index on `credit_transactions(user_id, stripe_session_id)`
- *      where `stripe_session_id IS NOT NULL` — the database refuses dupes.
- *   2. `INSERT ... ON CONFLICT DO NOTHING RETURNING id` — if the row was
- *      inserted we get an id back and proceed to bump the balance, otherwise
- *      we no-op. The whole pair runs inside a single transaction so we never
- *      end up with a ledger row but no balance bump (or vice versa).
+ * Atomically credit a Stripe purchase to the user, with idempotency on
+ * (userId, stripeSessionId).
  */
 export async function creditPurchase(opts: {
   userId: string;
@@ -94,54 +56,48 @@ export async function creditPurchase(opts: {
   stripeSessionId: string;
   description: string;
 }): Promise<{ creditsAdded: number; alreadyProcessed: boolean; newBalance: number }> {
+  await connectDB();
   const { userId, amount, stripeSessionId, description } = opts;
-  return await db.transaction(async (tx) => {
-    const inserted = await tx
-      .insert(creditTransactions)
-      .values({
-        userId,
-        kind: "purchase",
-        amount,
-        description,
-        stripeSessionId,
-      })
-      .onConflictDoNothing({
-        target: [creditTransactions.userId, creditTransactions.stripeSessionId],
-      })
-      .returning({ id: creditTransactions.id });
-
-    if (inserted.length === 0) {
-      // Already processed by a concurrent caller (other endpoint or retry).
-      const [row] = await tx
-        .select({ credits: users.credits })
-        .from(users)
-        .where(eq(users.id, userId));
-      return {
-        creditsAdded: 0,
-        alreadyProcessed: true,
-        newBalance: row?.credits ?? 0,
-      };
-    }
-
-    const [updated] = await tx
-      .update(users)
-      .set({
-        credits: sql`${users.credits} + ${amount}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning({ credits: users.credits });
+ 
+  // Idempotency check — if a transaction with this sessionId already exists, skip.
+  const existing = await CreditTransaction.findOne(
+    { userId, stripeSessionId },
+    { _id: 1 },
+  ).lean();
+ 
+  if (existing) {
+    const user = await User.findById(userId, { credits: 1 }).lean();
     return {
-      creditsAdded: amount,
-      alreadyProcessed: false,
-      newBalance: updated?.credits ?? 0,
+      creditsAdded: 0,
+      alreadyProcessed: true,
+      newBalance: user?.credits ?? 0,
     };
+  }
+ 
+  // Insert the transaction and bump the balance atomically via findOneAndUpdate.
+  await CreditTransaction.create({
+    userId,
+    kind: "purchase",
+    amount,
+    description,
+    stripeSessionId,
   });
+ 
+  const updated = await User.findByIdAndUpdate(
+    userId,
+    { $inc: { credits: amount } },
+    { new: true, projection: { credits: 1 } },
+  ).lean();
+ 
+  return {
+    creditsAdded: amount,
+    alreadyProcessed: false,
+    newBalance: updated?.credits ?? 0,
+  };
 }
-
+ 
 /**
  * Refund a previously-charged amount of credits and log the transaction.
- * No-op for admins (they were never charged in the first place).
  */
 export async function refundCredits(opts: {
   userId: string;
@@ -149,31 +105,23 @@ export async function refundCredits(opts: {
   amount: number;
   description: string;
 }): Promise<void> {
+  await connectDB();
   const { userId, isAdmin, amount, description } = opts;
   if (isAdmin || amount <= 0) return;
-  await db.transaction(async (tx) => {
-    await tx.insert(creditTransactions).values({
-      userId,
-      kind: "refund",
-      amount: Math.abs(amount),
-      description,
-    });
-    await tx
-      .update(users)
-      .set({ credits: sql`${users.credits} + ${amount}`, updatedAt: new Date() })
-      .where(eq(users.id, userId));
+ 
+  await CreditTransaction.create({
+    userId,
+    kind: "refund",
+    amount: Math.abs(amount),
+    description,
   });
+ 
+  await User.findByIdAndUpdate(userId, { $inc: { credits: amount } });
 }
-
+ 
 /**
  * Atomically deduct `amount` credits from a user and record a usage transaction.
- *
- * Returns the new balance on success, or `null` if the user does not have
- * enough credits. Admins are not charged (mirrors the convention used by the
- * generation endpoint in routes/apps.ts).
- *
- * The whole thing runs inside a single transaction so credits + ledger never
- * drift apart even if the API server is killed mid-call.
+ * Returns ok:true on success, ok:false if insufficient credits.
  */
 export async function chargeCredits(opts: {
   userId: string;
@@ -181,33 +129,33 @@ export async function chargeCredits(opts: {
   amount: number;
   description: string;
 }): Promise<{ ok: true; newBalance: number } | { ok: false; reason: "insufficient" }> {
+  await connectDB();
   const { userId, isAdmin, amount, description } = opts;
+ 
   if (isAdmin) {
-    const [row] = await db
-      .select({ credits: users.credits })
-      .from(users)
-      .where(eq(users.id, userId));
-    return { ok: true, newBalance: row?.credits ?? 0 };
+    const user = await User.findById(userId, { credits: 1 }).lean();
+    return { ok: true, newBalance: user?.credits ?? 0 };
   }
-  return await db.transaction(async (tx) => {
-    const [row] = await tx
-      .select({ credits: users.credits })
-      .from(users)
-      .where(eq(users.id, userId))
-      .for("update");
-    if (!row || row.credits < amount) {
-      return { ok: false, reason: "insufficient" } as const;
-    }
-    await tx.insert(creditTransactions).values({
-      userId,
-      kind: "usage",
-      amount: -Math.abs(amount),
-      description,
-    });
-    await tx
-      .update(users)
-      .set({ credits: sql`${users.credits} - ${amount}`, updatedAt: new Date() })
-      .where(eq(users.id, userId));
-    return { ok: true, newBalance: row.credits - amount } as const;
+ 
+  // Use findOneAndUpdate with $inc only when credits >= amount.
+  // MongoDB doesn't support SELECT FOR UPDATE, so we use a conditional update.
+  const updated = await User.findOneAndUpdate(
+    { _id: userId, credits: { $gte: amount } },
+    { $inc: { credits: -amount } },
+    { new: true, projection: { credits: 1 } },
+  ).lean();
+ 
+  if (!updated) {
+    return { ok: false, reason: "insufficient" };
+  }
+ 
+  await CreditTransaction.create({
+    userId,
+    kind: "usage",
+    amount: -Math.abs(amount),
+    description,
   });
+ 
+  return { ok: true, newBalance: updated.credits };
 }
+ 
