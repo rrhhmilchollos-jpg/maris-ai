@@ -1,8 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc } from "drizzle-orm";
-import { db } from "../lib/db";
+import { connectDB } from "../lib/db";
 import { requireAuth } from "../lib/auth";
-import { users, creditTransactions } from "@workspace/db/schema";
+import { User, CreditTransaction } from "@workspace/db/schema";
 import {
   CREDIT_PACKAGES,
   findPackageByPriceId,
@@ -20,16 +19,16 @@ router.get(
   "/billing/transactions",
   requireAuth,
   async (req: Request, res: Response) => {
+    await connectDB();
     const userId = req.userId!;
-    const rows = await db
-      .select()
-      .from(creditTransactions)
-      .where(eq(creditTransactions.userId, userId))
-      .orderBy(desc(creditTransactions.createdAt))
-      .limit(100);
+    const rows = await CreditTransaction.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+
     res.json(
       rows.map((r) => ({
-        id: r.id,
+        id: r._id,
         userId: r.userId,
         amount: r.amount,
         kind: r.kind,
@@ -71,6 +70,7 @@ router.post(
       });
       return;
     }
+
     const origin = originFromReq(req);
     const basePath = process.env.FRONTEND_BASE_PATH ?? "";
     const successUrl = `${origin}${basePath}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
@@ -84,10 +84,10 @@ router.post(
         metadata: { clerkUserId: req.userId! },
       });
       customerId = customer.id;
-      await db
-        .update(users)
-        .set({ stripeCustomerId: customerId, updatedAt: new Date() })
-        .where(eq(users.id, req.userId!));
+      await connectDB();
+      await User.findByIdAndUpdate(req.userId!, {
+        $set: { stripeCustomerId: customerId },
+      });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -136,11 +136,10 @@ router.post(
     }
     const stripe = await getStripe();
     if (!stripe) {
-      res.status(503).json({
-        error: "Los pagos aún no están conectados.",
-      });
+      res.status(503).json({ error: "Los pagos aún no están conectados." });
       return;
     }
+
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (
       session.metadata?.clerkUserId !== req.userId ||
@@ -156,15 +155,10 @@ router.post(
 
     const credits = Number(session.metadata?.credits ?? "0");
     if (!Number.isFinite(credits) || credits <= 0) {
-      res
-        .status(400)
-        .json({ error: "Invalid credits in session metadata" });
+      res.status(400).json({ error: "Invalid credits in session metadata" });
       return;
     }
 
-    // Idempotent — racing with the webhook is fine, only one wins the
-    // INSERT and the loser sees `alreadyProcessed: true` with the same
-    // post-credit balance.
     const result = await creditPurchase({
       userId: req.userId!,
       amount: credits,
