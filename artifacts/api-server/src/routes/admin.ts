@@ -1,16 +1,15 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, count, gte, desc, and } from "drizzle-orm";
-import { db } from "../lib/db";
+import { connectDB } from "../lib/db";
 import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
 import {
-  users,
-  generatedApps,
-  generationJobs,
-  creditTransactions,
+  User,
+  GeneratedApp,
+  GenerationJob,
+  CreditTransaction,
+  AgentMemory,
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { logger } from "../lib/logger";
-import { agentMemory } from "@workspace/db";
 import { getMetricsSnapshot } from "../lib/metrics";
 import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
 import { getE2BGateEnabled, setE2BGateEnabled } from "../lib/e2bGate";
@@ -21,19 +20,19 @@ const router: IRouter = Router();
 router.use("/admin", requireAuth, requireAdmin);
 
 router.get("/admin/overview", async (_req, res) => {
+  await connectDB();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [usersTotal] = await db.select({ total: count() }).from(users);
-  const [appsTotal] = await db.select({ total: count() }).from(generatedApps);
-  const [appsWeek] = await db
-    .select({ total: count() })
-    .from(generatedApps)
-    .where(gte(generatedApps.createdAt, sevenDaysAgo));
-  const [creditsOutstanding] = await db
-    .select({ total: sql<number>`COALESCE(SUM(${users.credits}), 0)::int` })
-    .from(users);
+  const [totalUsers, totalApps, appsWeek, users] = await Promise.all([
+    User.countDocuments(),
+    GeneratedApp.countDocuments(),
+    GeneratedApp.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
+    User.find({}, { credits: 1 }).lean(),
+  ]);
 
-  const txns = await db.select().from(creditTransactions);
+  const creditsOutstanding = users.reduce((sum, u) => sum + (u.credits ?? 0), 0);
+
+  const txns = await CreditTransaction.find({}, { kind: 1, amount: 1 }).lean();
   let creditsSpentTotal = 0;
   let creditsPurchasedTotal = 0;
   for (const t of txns) {
@@ -42,10 +41,10 @@ router.get("/admin/overview", async (_req, res) => {
   }
 
   res.json({
-    totalUsers: usersTotal?.total ?? 0,
-    totalApps: appsTotal?.total ?? 0,
-    appsLast7Days: appsWeek?.total ?? 0,
-    creditsOutstanding: creditsOutstanding?.total ?? 0,
+    totalUsers,
+    totalApps,
+    appsLast7Days: appsWeek,
+    creditsOutstanding,
     creditsSpentTotal,
     creditsPurchasedTotal,
     revenueCentsTotal: 0,
@@ -53,29 +52,21 @@ router.get("/admin/overview", async (_req, res) => {
 });
 
 router.get("/admin/users", async (_req, res) => {
-  const rows = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      fullName: users.fullName,
-      imageUrl: users.imageUrl,
-      credits: users.credits,
-      createdAt: users.createdAt,
-      appsGenerated: sql<number>`COALESCE(COUNT(${generatedApps.id}), 0)::int`,
-    })
-    .from(users)
-    .leftJoin(generatedApps, eq(generatedApps.userId, users.id))
-    .groupBy(users.id)
-    .orderBy(desc(users.createdAt));
+  await connectDB();
+  const users = await User.find({}).sort({ createdAt: -1 }).lean();
+  const appCounts = await GeneratedApp.aggregate([
+    { $group: { _id: "$userId", count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(appCounts.map((a) => [a._id, a.count]));
 
   res.json(
-    rows.map((u) => ({
-      id: u.id,
+    users.map((u) => ({
+      id: u._id,
       email: u.email,
       fullName: u.fullName,
       imageUrl: u.imageUrl,
       credits: u.credits,
-      appsGenerated: u.appsGenerated,
+      appsGenerated: countMap.get(String(u._id)) ?? 0,
       isAdmin: isAdminEmail(u.email),
       createdAt: u.createdAt.toISOString(),
     })),
@@ -83,6 +74,7 @@ router.get("/admin/users", async (_req, res) => {
 });
 
 router.post("/admin/users/:id/credits", async (req, res) => {
+  await connectDB();
   const targetId = req.params.id;
   const body = req.body as { delta?: number; reason?: string };
   const delta = Number.isInteger(body?.delta) ? Number(body.delta) : 0;
@@ -91,82 +83,55 @@ router.post("/admin/users/:id/credits", async (req, res) => {
     return;
   }
 
-  const result = await db.transaction(async (tx) => {
-    // Atomic lock + update + ledger inside a single transaction to prevent
-    // lost-update races when two admins adjust the same user simultaneously.
-    const locked = await tx.execute(
-      sql`SELECT id, email, full_name, image_url, credits, created_at
-          FROM users WHERE id = ${targetId} FOR UPDATE`,
-    );
-    const row = (locked.rows ?? locked)[0] as
-      | { id: string; email: string; full_name: string | null; image_url: string | null; credits: number; created_at: Date }
-      | undefined;
-    if (!row) return null;
-
-    const newBalance = Math.max(0, row.credits + delta);
-    const actualDelta = newBalance - row.credits;
-
-    if (actualDelta !== 0) {
-      await tx
-        .update(users)
-        .set({ credits: newBalance, updatedAt: new Date() })
-        .where(eq(users.id, targetId));
-
-      await tx.insert(creditTransactions).values({
-        userId: targetId,
-        amount: actualDelta,
-        kind: actualDelta > 0 ? "bonus" : "usage",
-        description: body.reason?.trim() || "Ajuste manual del administrador",
-      });
-    }
-
-    return { row, newBalance };
-  });
-
-  if (!result) {
+  const user = await User.findById(targetId).lean();
+  if (!user) {
     res.status(404).json({ error: "Usuario no encontrado" });
     return;
   }
 
-  const [appsCount] = await db
-    .select({ total: count() })
-    .from(generatedApps)
-    .where(eq(generatedApps.userId, targetId));
+  const newBalance = Math.max(0, user.credits + delta);
+  const actualDelta = newBalance - user.credits;
+
+  if (actualDelta !== 0) {
+    await User.findByIdAndUpdate(targetId, { $set: { credits: newBalance } });
+    await CreditTransaction.create({
+      userId: targetId,
+      amount: actualDelta,
+      kind: actualDelta > 0 ? "bonus" : "usage",
+      description: body.reason?.trim() || "Ajuste manual del administrador",
+    });
+  }
+
+  const appsGenerated = await GeneratedApp.countDocuments({ userId: targetId });
 
   res.json({
-    id: result.row.id,
-    email: result.row.email,
-    fullName: result.row.full_name,
-    imageUrl: result.row.image_url,
-    credits: result.newBalance,
-    appsGenerated: appsCount?.total ?? 0,
-    isAdmin: isAdminEmail(result.row.email),
-    createdAt: new Date(result.row.created_at).toISOString(),
+    id: user._id,
+    email: user.email,
+    fullName: user.fullName,
+    imageUrl: user.imageUrl,
+    credits: newBalance,
+    appsGenerated,
+    isAdmin: isAdminEmail(user.email),
+    createdAt: new Date(user.createdAt).toISOString(),
   });
 });
 
 router.get("/admin/apps", async (_req, res) => {
-  const rows = await db
-    .select({
-      id: generatedApps.id,
-      userId: generatedApps.userId,
-      userEmail: users.email,
-      title: generatedApps.title,
-      description: generatedApps.description,
-      techStack: generatedApps.techStack,
-      status: generatedApps.status,
-      createdAt: generatedApps.createdAt,
-    })
-    .from(generatedApps)
-    .leftJoin(users, eq(users.id, generatedApps.userId))
-    .orderBy(desc(generatedApps.createdAt))
-    .limit(200);
+  await connectDB();
+  const apps = await GeneratedApp.find({})
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .lean();
+
+  const userIds = [...new Set(apps.map((a) => a.userId))];
+  const users = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
+  const emailMap = new Map(users.map((u) => [String(u._id), u.email]));
 
   res.json(
-    rows.map((r) => ({
-      id: r.id,
+    apps.map((r) => ({
+      id: r._id,
       userId: r.userId,
-      userEmail: r.userEmail,
+      userEmail: emailMap.get(r.userId) ?? null,
       title: r.title,
       description: r.description,
       techStack: Array.isArray(r.techStack) ? r.techStack : [],
@@ -176,64 +141,32 @@ router.get("/admin/apps", async (_req, res) => {
   );
 });
 
-/**
- * GET /admin/jobs
- *
- * Recent generation jobs across all users with summary counters. Used by
- * the admin "Cola" tab to monitor queue health and triage stuck jobs.
- *
- * Returns the last 100 jobs by recency. Counters look at all queued/running
- * (any age) plus a 24h window for failed/succeeded so the admin can spot
- * incident bursts.
- */
 router.get("/admin/jobs", async (_req, res) => {
+  await connectDB();
   const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [rows, queuedRow, runningRow, failed24Row, succ24Row] = await Promise.all([
-    db
-      .select({
-        id: generationJobs.id,
-        userId: generationJobs.userId,
-        userEmail: users.email,
-        appId: generationJobs.appId,
-        editAppId: generationJobs.editAppId,
-        prompt: generationJobs.prompt,
-        status: generationJobs.status,
-        phase: generationJobs.phase,
-        progress: generationJobs.progress,
-        coderModel: generationJobs.coderModel,
-        language: generationJobs.language,
-        retryCount: generationJobs.retryCount,
-        errorMessage: generationJobs.errorMessage,
-        createdAt: generationJobs.createdAt,
-        updatedAt: generationJobs.updatedAt,
-      })
-      .from(generationJobs)
-      .leftJoin(users, eq(generationJobs.userId, users.id))
-      .orderBy(desc(generationJobs.createdAt))
-      .limit(100),
-    db.select({ c: count() }).from(generationJobs).where(eq(generationJobs.status, "queued")),
-    db.select({ c: count() }).from(generationJobs).where(eq(generationJobs.status, "running")),
-    db
-      .select({ c: count() })
-      .from(generationJobs)
-      .where(sql`${generationJobs.status} = 'failed' AND ${generationJobs.updatedAt} >= ${sinceDate}`),
-    db
-      .select({ c: count() })
-      .from(generationJobs)
-      .where(sql`${generationJobs.status} = 'succeeded' AND ${generationJobs.updatedAt} >= ${sinceDate}`),
+  const [jobs, queued, running, failed24, succ24] = await Promise.all([
+    GenerationJob.find({}).sort({ createdAt: -1 }).limit(100).lean(),
+    GenerationJob.countDocuments({ status: "queued" }),
+    GenerationJob.countDocuments({ status: "running" }),
+    GenerationJob.countDocuments({ status: "failed", updatedAt: { $gte: sinceDate } }),
+    GenerationJob.countDocuments({ status: "succeeded", updatedAt: { $gte: sinceDate } }),
   ]);
+
+  const userIds = [...new Set(jobs.map((j) => j.userId))];
+  const users = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
+  const emailMap = new Map(users.map((u) => [String(u._id), u.email]));
 
   const now = Date.now();
   res.json({
-    queued: queuedRow[0]?.c ?? 0,
-    running: runningRow[0]?.c ?? 0,
-    failedLast24h: failed24Row[0]?.c ?? 0,
-    succeededLast24h: succ24Row[0]?.c ?? 0,
-    jobs: rows.map((r) => ({
-      id: r.id,
+    queued,
+    running,
+    failedLast24h: failed24,
+    succeededLast24h: succ24,
+    jobs: jobs.map((r) => ({
+      id: r._id,
       userId: r.userId,
-      userEmail: r.userEmail,
+      userEmail: emailMap.get(r.userId) ?? null,
       appId: r.appId,
       editAppId: r.editAppId,
       prompt: r.prompt,
@@ -251,25 +184,11 @@ router.get("/admin/jobs", async (_req, res) => {
   });
 });
 
-/**
- * POST /admin/jobs/:id/retry
- *
- * Manual re-enqueue. Only allowed for terminal-failure jobs and stale
- * runners — refusing to resurrect succeeded jobs (would clobber the live
- * app) and active jobs (still owned by a worker).
- */
 router.post("/admin/jobs/:id/retry", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) {
-    res.status(400).json({ error: "ID inválido" });
-    return;
-  }
+  await connectDB();
+  const id = req.params.id;
 
-  const [job] = await db
-    .select()
-    .from(generationJobs)
-    .where(eq(generationJobs.id, id))
-    .limit(1);
+  const job = await GenerationJob.findById(id).lean();
   if (!job) {
     res.status(404).json({ error: "Job no encontrado" });
     return;
@@ -283,87 +202,55 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
     (job.status === "queued" && ageMs > STALE_MS);
 
   if (!retryable) {
-    res
-      .status(409)
-      .json({ error: `Job en estado '${job.status}' no es reintentable ahora.` });
+    res.status(409).json({ error: `Job en estado '${job.status}' no es reintentable ahora.` });
     return;
   }
 
-  // Snapshot prior state for compensating rollback if queue send fails.
-  const priorStatus = job.status;
-  const priorPhase = job.phase;
-  const priorProgress = job.progress;
-  const priorErrorMessage = job.errorMessage;
-  const priorRetryCount = job.retryCount ?? 0;
-  const priorUpdatedAt = job.updatedAt;
+  const updated = await GenerationJob.findByIdAndUpdate(
+    id,
+    {
+      $set: {
+        status: "queued",
+        phase: "queued",
+        progress: 0,
+        errorMessage: null,
+        retryCount: (job.retryCount ?? 0) + 1,
+        updatedAt: new Date(),
+      },
+    },
+    { new: true },
+  ).lean();
 
-  // Concurrency-safe via status guard: two concurrent retries can't both win
-  // because the first UPDATE flips status, invalidating the second's WHERE.
-  const updatedRows = await db
-    .update(generationJobs)
-    .set({
-      status: "queued",
-      phase: "queued",
-      progress: 0,
-      errorMessage: null,
-      retryCount: priorRetryCount + 1,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(generationJobs.id, id),
-        eq(generationJobs.status, priorStatus),
-      ),
-    )
-    .returning();
-
-  if (updatedRows.length === 0) {
-    res.status(409).json({
-      error:
-        "El job cambió de estado mientras se procesaba el reintento. Recarga e inténtalo de nuevo.",
-    });
+  if (!updated) {
+    res.status(409).json({ error: "El job cambió de estado mientras se procesaba." });
     return;
   }
-  const [updated] = updatedRows;
 
   try {
-    await reenqueueGenerateJob(id);
+    await reenqueueGenerateJob(String(id));
   } catch (err) {
-    logger.error({ err, jobId: id }, "Manual retry: failed to re-enqueue — rolling back DB state");
-    // Compensating update: restore the previous state. Best-effort; we
-    // never let a rollback-error mask the original enqueue error.
-    try {
-      await db
-        .update(generationJobs)
-        .set({
-          status: priorStatus,
-          phase: priorPhase,
-          progress: priorProgress,
-          errorMessage: priorErrorMessage,
-          retryCount: priorRetryCount,
-          updatedAt: priorUpdatedAt,
-        })
-        .where(eq(generationJobs.id, id));
-    } catch (rollbackErr) {
-      logger.error(
-        { err: rollbackErr, jobId: id },
-        "Manual retry: rollback also failed — admin must fix this row manually",
-      );
-    }
+    logger.error({ err, jobId: id }, "Manual retry: failed to re-enqueue — rolling back");
+    await GenerationJob.findByIdAndUpdate(id, {
+      $set: {
+        status: job.status,
+        phase: job.phase,
+        progress: job.progress,
+        errorMessage: job.errorMessage,
+        retryCount: job.retryCount,
+        updatedAt: job.updatedAt,
+      },
+    }).catch(() => {});
     res.status(500).json({ error: "No se pudo re-encolar el job." });
     return;
   }
 
-  const u = await db
-    .select({ email: users.email })
-    .from(users)
-    .where(eq(users.id, updated.userId))
-    .limit(1);
+  const user = await User.findById(updated.userId, { email: 1 }).lean();
   const ageMsAfter = Date.now() - new Date(updated.updatedAt).getTime();
+
   res.json({
-    id: updated.id,
+    id: updated._id,
     userId: updated.userId,
-    userEmail: u[0]?.email ?? null,
+    userEmail: user?.email ?? null,
     appId: updated.appId,
     editAppId: updated.editAppId,
     prompt: updated.prompt,
@@ -381,47 +268,42 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
 });
 
 router.get("/admin/memory", async (req, res) => {
+  await connectDB();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
   const offset = Math.max(0, Number(req.query.offset) || 0);
   const q = (typeof req.query.q === "string" ? req.query.q : "").trim();
-  // Case-insensitive substring search across errorMessage + patch. Drizzle
-  // safely parameterises both bind values, so SQL injection isn't a concern.
-  const where = q
-    ? sql`(${agentMemory.errorMessage} ILIKE ${"%" + q + "%"} OR ${agentMemory.patch} ILIKE ${"%" + q + "%"})`
-    : undefined;
-  const baseRows = db
-    .select({
-      id: agentMemory.id,
-      errorMessage: agentMemory.errorMessage,
-      errorContext: agentMemory.errorContext,
-      patch: agentMemory.patch,
-      language: agentMemory.language,
-      framework: agentMemory.framework,
-      successCount: agentMemory.successCount,
-      createdAt: agentMemory.createdAt,
-      updatedAt: agentMemory.updatedAt,
-    })
-    .from(agentMemory);
-  const rows = await (where ? baseRows.where(where) : baseRows)
-    .orderBy(desc(agentMemory.updatedAt))
-    .limit(limit)
-    .offset(offset);
-  const baseCount = db.select({ value: count() }).from(agentMemory);
-  const [{ value: total } = { value: 0 }] = await (where ? baseCount.where(where) : baseCount);
+
+  const filter = q
+    ? {
+        $or: [
+          { errorMessage: { $regex: q, $options: "i" } },
+          { patch: { $regex: q, $options: "i" } },
+        ],
+      }
+    : {};
+
+  const [rows, total] = await Promise.all([
+    AgentMemory.find(filter)
+      .sort({ updatedAt: -1 })
+      .skip(offset)
+      .limit(limit)
+      .lean(),
+    AgentMemory.countDocuments(filter),
+  ]);
+
   res.json({
-    total: Number(total),
+    total,
     limit,
     offset,
     q,
     entries: rows.map((r) => ({
-      id: r.id,
+      id: r._id,
       errorMessage: r.errorMessage,
       errorContext: r.errorContext,
       patchPreview: r.patch.slice(0, 600),
       patchLength: r.patch.length,
       language: r.language,
-      framework: r.framework,
-      successCount: r.successCount,
+      successCount: 1,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     })),
@@ -429,140 +311,79 @@ router.get("/admin/memory", async (req, res) => {
 });
 
 router.delete("/admin/memory/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) {
-    res.status(400).json({ message: "id inválido" });
-    return;
-  }
-  const deleted = await db.delete(agentMemory).where(eq(agentMemory.id, id)).returning();
-  if (deleted.length === 0) {
+  await connectDB();
+  const deleted = await AgentMemory.findByIdAndDelete(req.params.id);
+  if (!deleted) {
     res.status(404).json({ message: "no encontrado" });
     return;
   }
-  res.json({ ok: true, id });
+  res.json({ ok: true, id: req.params.id });
 });
 
-/**
- * Aggregated business metrics for the admin dashboard. Single endpoint so the
- * UI can refresh every 30s with one query. All windows are computed in JS
- * from raw SQL groupings to keep the queries portable.
- */
 router.get("/admin/metrics", async (_req, res) => {
+  await connectDB();
   const now = new Date();
   const day = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // 1) Jobs in the last 24h: total / success / fail / avg duration (ms).
-  const jobs24h = await db
-    .select({
-      status: generationJobs.status,
-      total: count(),
-      avgMs: sql<
-        number | null
-      >`AVG(EXTRACT(EPOCH FROM (${generationJobs.updatedAt} - ${generationJobs.createdAt})) * 1000)::int`,
-    })
-    .from(generationJobs)
-    .where(gte(generationJobs.createdAt, day))
-    .groupBy(generationJobs.status);
+  const [jobs24h, failingPhases, creditsToday, creditsMonth, topUsers,
+    publishedTotal, publishedToday, queueByStatusRaw] = await Promise.all([
+    GenerationJob.aggregate([
+      { $match: { createdAt: { $gte: day } } },
+      { $group: {
+        _id: "$status",
+        total: { $sum: 1 },
+        avgMs: { $avg: { $subtract: ["$updatedAt", "$createdAt"] } },
+      }},
+    ]),
+    GenerationJob.aggregate([
+      { $match: { status: "failed", createdAt: { $gte: day } } },
+      { $group: { _id: "$phase", total: { $sum: 1 } } },
+      { $sort: { total: -1 } },
+      { $limit: 3 },
+    ]),
+    CreditTransaction.aggregate([
+      { $match: { kind: "usage", createdAt: { $gte: todayStart } } },
+      { $group: { _id: null, total: { $sum: { $abs: "$amount" } } } },
+    ]),
+    CreditTransaction.aggregate([
+      { $match: { kind: "usage", createdAt: { $gte: monthStart } } },
+      { $group: { _id: null, total: { $sum: { $abs: "$amount" } } } },
+    ]),
+    CreditTransaction.aggregate([
+      { $match: { kind: "usage" } },
+      { $group: { _id: "$userId", total: { $sum: { $abs: "$amount" } } } },
+      { $sort: { total: -1 } },
+      { $limit: 5 },
+    ]),
+    GeneratedApp.countDocuments({ publicSlug: { $exists: true, $ne: null } }),
+    GeneratedApp.countDocuments({ publicSlug: { $exists: true, $ne: null }, createdAt: { $gte: todayStart } }),
+    GenerationJob.aggregate([
+      { $match: { createdAt: { $gte: day } } },
+      { $group: { _id: "$status", total: { $sum: 1 } } },
+    ]),
+  ]);
 
-  let jobsTotal = 0;
-  let jobsSuccess = 0;
-  let jobsFailed = 0;
-  let avgDurationMsAccum = 0;
-  let avgDurationCount = 0;
+  let jobsTotal = 0, jobsSuccess = 0, jobsFailed = 0;
+  let avgDurationMsAccum = 0, avgDurationCount = 0;
   for (const row of jobs24h) {
     jobsTotal += row.total;
-    if (row.status === "succeeded") jobsSuccess += row.total;
-    if (row.status === "failed") jobsFailed += row.total;
-    if (row.avgMs && (row.status === "succeeded" || row.status === "failed")) {
+    if (row._id === "succeeded") jobsSuccess += row.total;
+    if (row._id === "failed") jobsFailed += row.total;
+    if (row.avgMs && (row._id === "succeeded" || row._id === "failed")) {
       avgDurationMsAccum += row.avgMs * row.total;
       avgDurationCount += row.total;
     }
   }
-  const avgDurationMs =
-    avgDurationCount > 0 ? Math.round(avgDurationMsAccum / avgDurationCount) : 0;
 
-  // 2) Top failing phases in the last 24h.
-  const failingPhases = await db
-    .select({
-      phase: generationJobs.phase,
-      total: count(),
-    })
-    .from(generationJobs)
-    .where(
-      and(eq(generationJobs.status, "failed"), gte(generationJobs.createdAt, day)),
-    )
-    .groupBy(generationJobs.phase)
-    .orderBy(desc(count()))
-    .limit(3);
+  const userIds = topUsers.map((u: { _id: string }) => u._id);
+  const userDocs = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
+  const emailMap = new Map(userDocs.map((u) => [String(u._id), u.email]));
 
-  // 3) Credits spent today and this month (usage = negative amounts).
-  const [creditsToday] = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)::int`,
-    })
-    .from(creditTransactions)
-    .where(
-      and(
-        eq(creditTransactions.kind, "usage"),
-        gte(creditTransactions.createdAt, todayStart),
-      ),
-    );
-  const [creditsMonth] = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)::int`,
-    })
-    .from(creditTransactions)
-    .where(
-      and(
-        eq(creditTransactions.kind, "usage"),
-        gte(creditTransactions.createdAt, monthStart),
-      ),
-    );
-
-  // 4) Top 5 users by credits consumed all-time.
-  const topUsers = await db
-    .select({
-      userId: creditTransactions.userId,
-      email: users.email,
-      total: sql<number>`COALESCE(SUM(ABS(${creditTransactions.amount})), 0)::int`,
-    })
-    .from(creditTransactions)
-    .leftJoin(users, eq(users.id, creditTransactions.userId))
-    .where(eq(creditTransactions.kind, "usage"))
-    .groupBy(creditTransactions.userId, users.email)
-    .orderBy(desc(sql`SUM(ABS(${creditTransactions.amount}))`))
-    .limit(5);
-
-  // 5) Apps published today + total. "Published" = has a public_slug.
-  const [publishedTotal] = await db
-    .select({ total: count() })
-    .from(generatedApps)
-    .where(sql`${generatedApps.publicSlug} IS NOT NULL`);
-  const [publishedToday] = await db
-    .select({ total: count() })
-    .from(generatedApps)
-    .where(
-      and(
-        sql`${generatedApps.publicSlug} IS NOT NULL`,
-        gte(generatedApps.createdAt, todayStart),
-      ),
-    );
-
-  // Operational add-ons: in-memory request counters, live queue state by
-  // status (last 24h), Redis health, and E2B gate. Merged into this single
-  // /admin/metrics handler so the dashboard receives everything in one
-  // payload — Express only invokes the first matching route, so a duplicate
-  // handler below would have been silently unreachable.
   const queueByStatus: Record<string, number> = {};
-  const allStatusRows = await db
-    .select({ status: generationJobs.status, total: count() })
-    .from(generationJobs)
-    .where(gte(generationJobs.createdAt, day))
-    .groupBy(generationJobs.status);
-  for (const row of allStatusRows) {
-    queueByStatus[row.status] = Number(row.total);
+  for (const row of queueByStatusRaw) {
+    queueByStatus[row._id] = row.total;
   }
 
   res.json({
@@ -572,61 +393,43 @@ router.get("/admin/metrics", async (_req, res) => {
       succeeded: jobsSuccess,
       failed: jobsFailed,
       successRate: jobsTotal > 0 ? Math.round((jobsSuccess / jobsTotal) * 100) : null,
-      avgDurationMs,
+      avgDurationMs: avgDurationCount > 0 ? Math.round(avgDurationMsAccum / avgDurationCount) : 0,
     },
-    topFailingPhases: failingPhases.map((p) => ({
-      phase: p.phase,
+    topFailingPhases: failingPhases.map((p: { _id: string; total: number }) => ({
+      phase: p._id,
       count: p.total,
     })),
     credits: {
-      today: creditsToday?.total ?? 0,
-      month: creditsMonth?.total ?? 0,
+      today: creditsToday[0]?.total ?? 0,
+      month: creditsMonth[0]?.total ?? 0,
     },
-    topUsers: topUsers.map((u) => ({
-      userId: u.userId,
-      email: u.email ?? "(usuario eliminado)",
+    topUsers: topUsers.map((u: { _id: string; total: number }) => ({
+      userId: u._id,
+      email: emailMap.get(u._id) ?? "(usuario eliminado)",
       creditsUsed: u.total,
     })),
-    publishedApps: {
-      today: publishedToday?.total ?? 0,
-      total: publishedTotal?.total ?? 0,
-    },
+    publishedApps: { today: publishedToday, total: publishedTotal },
     server: getMetricsSnapshot(),
-    queue: {
-      ready: isQueueReady(),
-      jobs24hByStatus: queueByStatus,
-    },
+    queue: { ready: isQueueReady(), jobs24hByStatus: queueByStatus },
     redis: getRedisStatus(),
     e2b: {
       configured: isE2BEnabled(),
-      // Runtime gate that controls whether the generation pipeline runs the
-      // real-build E2B step after the in-memory validator. Default seeded
-      // from the E2B_VALIDATE_ON_GENERATE env var on boot, mutable via
-      // POST /admin/e2b-toggle. Reports `effective` so the dashboard can
-      // show "ON but not configured = effectively OFF".
       validateOnGenerate: getE2BGateEnabled(),
       effective: isE2BEnabled() && getE2BGateEnabled(),
     },
   });
 });
 
-// On-demand Redis round-trip ping. Refreshes the cached status reported by
-// /admin/metrics. Safe to call repeatedly — it's just a PING.
 router.post("/admin/redis-ping", async (_req, res) => {
   const result = await pingRedis();
   res.json(result);
 });
 
-// Spin up a tiny E2B microVM, run `echo`, kill it. Verifies the API key and
-// outbound connectivity without spending the credits of a full bundle build.
 router.post("/admin/e2b-smoke", async (_req, res) => {
   const result = await e2bSmokeTest();
   res.json(result);
 });
 
-// Toggle the E2B real-build validation step on/off without restarting the
-// server. Body: { enabled: boolean }. Returns the new state. Note that the
-// state is in-memory: a server restart re-reads E2B_VALIDATE_ON_GENERATE.
 router.post("/admin/e2b-toggle", (req, res) => {
   const enabled = Boolean(req.body?.enabled);
   const next = setE2BGateEnabled(enabled);
