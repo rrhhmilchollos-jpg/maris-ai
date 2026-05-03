@@ -1,6 +1,6 @@
 {
   "outputDirectory": "artifacts/appforge/dist",
-  "buildCommand": "pnpm -r --if-present run build",
+  "buildCommand": "pnpm --filter appforge build",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
