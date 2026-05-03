@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://ivrubcan89/maris-ai-backend.hf.space/api/$1"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
