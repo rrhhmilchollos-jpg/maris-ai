@@ -3,7 +3,6 @@ import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wo
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { shadcn } from "@clerk/themes";
-import { publishableKeyFromHost } from "@clerk/react/internal";
 import { esES } from "@clerk/localizations";
 
 import { Toaster } from "@/components/ui/toaster";
@@ -34,12 +33,11 @@ const queryClient = new QueryClient({
   },
 });
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
+// ✅ CORREGIDO: usar la clave directamente sin publishableKeyFromHost
+// publishableKeyFromHost generaba un proxy automático basado en el dominio de Vercel
+const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// ✅ CORREGIDO: solo usar proxyUrl si está explícitamente definido, nunca undefined vacío
+// ✅ CORREGIDO: solo usar proxyUrl si está explícitamente definido
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL || undefined;
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -225,7 +223,6 @@ function ClerkProviderWithRoutes() {
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
-      // ✅ CORREGIDO: proxyUrl solo se pasa si existe, evitando el proxy roto de Vercel
       {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
