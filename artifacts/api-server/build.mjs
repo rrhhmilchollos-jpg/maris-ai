@@ -4,11 +4,9 @@ import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
 import { rm } from "node:fs/promises";
-
 globalThis.require = createRequire(import.meta.url);
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(artifactDir, "../..");
-
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
@@ -20,8 +18,6 @@ async function buildAll() {
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
-    // Resolve @workspace/* packages by pointing directly to their source files.
-    // This avoids the need to compile them separately before bundling.
     alias: {
       "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
       "@workspace/db": path.resolve(repoRoot, "lib/db/src/index.ts"),
@@ -30,6 +26,7 @@ async function buildAll() {
     },
     external: [
       "esbuild",
+      "drizzle-orm",
       "*.node",
       "sharp",
       "better-sqlite3",
@@ -117,7 +114,6 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     },
   });
 }
-
 buildAll().catch((err) => {
   console.error(err);
   process.exit(1);
