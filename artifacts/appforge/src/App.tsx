@@ -38,7 +38,10 @@ const clerkPubKey = publishableKeyFromHost(
   window.location.hostname,
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
 );
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+
+// ✅ CORREGIDO: solo usar proxyUrl si está explícitamente definido, nunca undefined vacío
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL || undefined;
+
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {
@@ -222,7 +225,8 @@ function ClerkProviderWithRoutes() {
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
+      // ✅ CORREGIDO: proxyUrl solo se pasa si existe, evitando el proxy roto de Vercel
+      {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
