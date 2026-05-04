@@ -3,10 +3,6 @@
   "buildCommand": "pnpm --filter @workspace/appforge build",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://maris-ai-api-server.vercel.app/api/$1"
-    },
-    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
