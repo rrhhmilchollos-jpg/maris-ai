@@ -1,6 +1,7 @@
 {
   "outputDirectory": "artifacts/appforge/dist",
-  "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/appforge build",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm --filter @workspace/appforge build",
   "rewrites": [
     {
       "source": "/((?!api/).*)",
