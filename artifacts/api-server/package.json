@@ -34,6 +34,7 @@
     "bullmq": "^5.76.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
+    "drizzle-orm": "^0.45.2",
     "e2b": "^2.19.2",
     "express": "^5",
     "express-rate-limit": "^8.4.1",
