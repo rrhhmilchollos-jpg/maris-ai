@@ -1,51 +1,13 @@
 import Stripe from "stripe";
 
-// Stripe credentials come from the Replit Stripe connector (no manual API key
-// in the environment). The connector proxy issues short-lived secrets that we
-// fetch fresh on every call — never cache the key or the Stripe client.
-async function fetchStripeSecretKey(): Promise<string | null> {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? "repl " + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-      ? "depl " + process.env.WEB_REPL_RENEWAL
-      : null;
-
-  if (!hostname || !xReplitToken) return null;
-
-  // Use the production Stripe connection on the deployed app, dev otherwise.
-  const targetEnvironment =
-    process.env.REPLIT_DEPLOYMENT === "1" ? "production" : "development";
-
-  const url = new URL(`https://${hostname}/api/v2/connection`);
-  url.searchParams.set("include_secrets", "true");
-  url.searchParams.set("connector_names", "stripe");
-  url.searchParams.set("environment", targetEnvironment);
-
-  let resp: Response;
-  try {
-    resp = await fetch(url.toString(), {
-      headers: { Accept: "application/json", X_REPLIT_TOKEN: xReplitToken },
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
+// Stripe credentials via standard environment variables (Render/production).
+// Previously used Replit connector — migrated to standard env vars.
+export async function getStripe(): Promise<Stripe | null> {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    console.warn("STRIPE_SECRET_KEY not set — Stripe disabled");
     return null;
   }
-
-  if (!resp.ok) return null;
-
-  const data = (await resp.json()) as {
-    items?: Array<{ settings?: { secret?: string; publishable?: string } }>;
-  };
-  const secret = data.items?.[0]?.settings?.secret;
-  return secret ?? null;
-}
-
-export async function getStripe(): Promise<Stripe | null> {
-  const secretKey = await fetchStripeSecretKey();
-  if (!secretKey) return null;
-  // Always build a fresh client so rotated keys are picked up.
-  // Use the SDK's default API version pinned by the installed stripe package.
   return new Stripe(secretKey);
 }
 
@@ -84,11 +46,6 @@ export const CREDIT_PACKAGES = [
     currency: "eur",
     popular: false,
   },
-  // Annual mega-pack — best per-credit price (≈58% savings vs Pro per credit).
-  // Pro:    50 credits / $80   = $1.60 per credit
-  // Annual: 600 credits / $399 = $0.665 per credit  ⇒ 58.4% off Pro
-  // Used as the headline "Plan Anual" upgrade modal on the dashboard.
-  // Per task scope ("No se toca el plan anual"), this stays in USD as before.
   {
     id: "annual",
     priceId: "annual",
