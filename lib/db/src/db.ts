@@ -23,3 +23,4 @@ async function connectDB(): Promise<typeof mongoose> {
 
 export { connectDB };
 export default connectDB;
+export const db = mongoose.connection;
