@@ -1,1 +1,1 @@
-export { connectDB } from "@workspace/db";
+export { connectDB, db } from "@workspace/db";
