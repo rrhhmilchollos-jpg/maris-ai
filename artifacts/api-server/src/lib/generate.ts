@@ -35,7 +35,7 @@ export type GenLanguage = "typescript" | "javascript";
  *   - Patcher       (gemini-2.0-flash)                  — auto-fix
  * ========================================================================== */
 
-const useAnthropic = !!process.env.ANTHROPIC_API_KEY || !!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+const useAnthropic = false; // Desactivado: sin créditos Anthropic — usando Gemini como motor principal
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
