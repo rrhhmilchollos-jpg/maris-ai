@@ -1,7 +1,6 @@
 import Stripe from "stripe";
 
 // Stripe credentials via standard environment variables (Render/production).
-// Previously used Replit connector — migrated to standard env vars.
 export async function getStripe(): Promise<Stripe | null> {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
@@ -11,17 +10,16 @@ export async function getStripe(): Promise<Stripe | null> {
   return new Stripe(secretKey);
 }
 
-// priceId here is our internal package id used as a stable identifier.
-// When real Stripe price IDs are needed, these can be mapped to them.
+// Planes de Maris AI — estructura equivalente a Emergent.sh pero en euros.
 export const CREDIT_PACKAGES = [
   {
-    id: "starter",
-    priceId: "starter",
-    name: "Starter",
+    id: "standard",
+    priceId: "standard",
+    name: "Standard",
     description:
-      "Perfecto para probar Maris AI en un par de proyectos de fin de semana.",
-    credits: 10,
-    priceCents: 2000,
+      "Construye apps web y móviles. Alojamiento privado e integración con GitHub.",
+    credits: 100,
+    priceCents: 1700,
     currency: "eur",
     popular: false,
   },
@@ -30,31 +28,32 @@ export const CREDIT_PACKAGES = [
     priceId: "pro",
     name: "Pro",
     description:
-      "Nuestro pack más popular: gasolina suficiente para un sprint de producto real.",
-    credits: 50,
-    priceCents: 8000,
+      "Ventana de contexto de 1M, crea agentes de IA personalizados y soporte prioritario.",
+    credits: 750,
+    priceCents: 16700,
     currency: "eur",
     popular: true,
   },
   {
-    id: "studio",
-    priceId: "studio",
-    name: "Studio",
-    description: "Para equipos que publican varias apps cada semana.",
-    credits: 150,
-    priceCents: 20000,
+    id: "team",
+    priceId: "team",
+    name: "Team",
+    description:
+      "Colaboración en tiempo real para hasta 5 miembros, facturación unificada.",
+    credits: 1250,
+    priceCents: 25000,
     currency: "eur",
     popular: false,
   },
   {
-    id: "annual",
-    priceId: "annual",
-    name: "Annual",
+    id: "enterprise",
+    priceId: "enterprise",
+    name: "Enterprise",
     description:
-      "12 meses de combustible al mejor precio. Ideal para creadores que envían apps cada semana.",
-    credits: 600,
-    priceCents: 39900,
-    currency: "usd",
+      "Créditos ilimitados, SSO, seguridad avanzada y soporte dedicado.",
+    credits: 999999,
+    priceCents: 0,
+    currency: "eur",
     popular: false,
   },
 ] as const;
