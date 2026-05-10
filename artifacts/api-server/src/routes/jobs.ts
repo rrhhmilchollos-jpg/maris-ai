@@ -9,7 +9,7 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
 import { GenerationJob, GeneratedApp, User } from "@workspace/db/schema";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, isAdminEmail } from "../lib/auth";
 import { enqueueGenerateJob } from "../lib/jobQueue";
 import { logger } from "../lib/logger";
 
@@ -45,7 +45,6 @@ router.post("/apps", requireAuth, async (req, res) => {
   const creditCost = KIND_COSTS[kind ?? "fullstack"] ?? 1;
 
   // Verificar créditos (excepto admins)
-  const { isAdminEmail } = await import("../lib/auth");
   const isAdmin = isAdminEmail(user.email);
   if (!isAdmin && user.credits < creditCost) {
     res.status(402).json({ error: "Créditos insuficientes." });
@@ -57,7 +56,7 @@ router.post("/apps", requireAuth, async (req, res) => {
     userId,
     prompt: prompt.trim(),
     title: "Generando…",
-    description: "",
+    description: "Generando…",
     techStack: [],
     frontendCode: "",
     backendCode: "",
@@ -108,7 +107,6 @@ router.get("/jobs/:id", requireAuth, async (req, res) => {
   }
 
   // Solo el dueño o un admin puede ver el job
-  const { isAdminEmail } = await import("../lib/auth");
   const isAdmin = isAdminEmail(req.dbUser!.email);
   if (!isAdmin && String(job.userId) !== userId) {
     res.status(403).json({ error: "Sin acceso." });
