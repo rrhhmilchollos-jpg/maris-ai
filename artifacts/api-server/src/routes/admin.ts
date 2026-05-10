@@ -14,10 +14,83 @@ import { getMetricsSnapshot } from "../lib/metrics";
 import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
 import { getE2BGateEnabled, setE2BGateEnabled } from "../lib/e2bGate";
 import { pingRedis, getRedisStatus } from "../lib/redisHealth";
+import mongoose from "mongoose";
 
 const router: IRouter = Router();
 
 router.use("/admin", requireAuth, requireAdmin);
+
+// ── TICKETS DE SOPORTE ──────────────────────────────────────────────────────
+
+const SupportTicketSchema = new mongoose.Schema(
+  {
+    userId: { type: String, required: true },
+    email: { type: String, required: true },
+    category: { type: String, required: true },
+    subject: { type: String, required: true },
+    message: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["open", "in_progress", "resolved", "closed"],
+      default: "open",
+    },
+    adminReply: { type: String, default: null },
+  },
+  { timestamps: true },
+);
+
+const SupportTicket =
+  mongoose.models.SupportTicket ||
+  mongoose.model("SupportTicket", SupportTicketSchema);
+
+// GET /api/admin/tickets — lista todos los tickets
+router.get("/admin/tickets", async (_req, res) => {
+  await connectDB();
+  const tickets = await SupportTicket.find({}).sort({ createdAt: -1 }).lean();
+  res.json(tickets);
+});
+
+// PATCH /api/admin/tickets/:id — responder y cambiar estado
+router.patch("/admin/tickets/:id", async (req, res) => {
+  await connectDB();
+  const { adminReply, status } = req.body as { adminReply?: string; status?: string };
+  const updated = await SupportTicket.findByIdAndUpdate(
+    req.params.id,
+    { $set: { adminReply, status } },
+    { new: true },
+  ).lean();
+  if (!updated) {
+    res.status(404).json({ error: "Ticket no encontrado" });
+    return;
+  }
+  res.json(updated);
+});
+
+// POST /api/tickets — crear ticket (ruta pública autenticada)
+router.post("/tickets", requireAuth, async (req, res) => {
+  await connectDB();
+  const user = (req as any).user;
+  const { category, subject, message } = req.body as {
+    category: string;
+    subject: string;
+    message: string;
+  };
+  if (!category || !subject || !message) {
+    res.status(400).json({ error: "Faltan campos obligatorios" });
+    return;
+  }
+  const ticket = await SupportTicket.create({
+    userId: user.id,
+    email: user.emailAddresses?.[0]?.emailAddress ?? user.email ?? "desconocido",
+    category,
+    subject,
+    message,
+    status: "open",
+  });
+  res.status(201).json(ticket);
+});
+
+// ── RUTAS EXISTENTES ────────────────────────────────────────────────────────
 
 router.get("/admin/overview", async (_req, res) => {
   await connectDB();
