@@ -276,7 +276,7 @@ const OverviewSection = () => {
         <MetricCard label="Apps publicadas" value={data.publishedApps.total.toLocaleString()} sub={`+${data.publishedApps.today} hoy`} icon={AppWindow} trend="up" accent="violet" />
         <MetricCard label="Jobs (24h)" value={data.jobs24h.total} sub={`${successRate}% éxito`} icon={BarChart3} trend={successRate >= 80 ? "up" : "down"} accent="cyan" />
         <MetricCard label="Créditos (mes)" value={data.credits.month.toLocaleString()} sub={`${data.credits.today} hoy`} icon={Coins} accent="amber" />
-        <MetricCard label="Peticiones servidor" value={data.server.requests.toLocaleString()} sub={`${data.server.errors} errores`} icon={Server} trend={data.server.errors === 0 ? "up" : "down"} accent="emerald" />
+        <MetricCard label="Peticiones servidor" value={(data.server.totalRequests ?? 0).toLocaleString()} sub={`${data.server.totalErrors ?? 0} errores`} icon={Server} trend={(data.server.totalErrors ?? 0) === 0 ? "up" : "down"} accent="emerald" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
