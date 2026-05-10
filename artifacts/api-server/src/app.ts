@@ -15,15 +15,16 @@ import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import { metricsMiddleware } from "./lib/metrics";
- 
+import adminExtendedRouter from "./routes/adminExtended.js";  // ← LÍNEA AÑADIDA
+
 initSentry();
- 
+
 const app: Express = express();
- 
+
 // Behind the reverse proxy — trust one hop so req.ip is the real client IP
 // and the rate-limiter buckets correctly.
 app.set("trust proxy", 1);
- 
+
 app.use(
   pinoHttp({
     logger,
@@ -43,16 +44,16 @@ app.use(
     },
   }),
 );
- 
+
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
- 
+
 // Stripe webhook needs the raw body — mount BEFORE express.json()
 app.use("/api/billing/webhook", stripeWebhookRouter);
- 
+
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
- 
+
 app.use(
   clerkMiddleware((req) => ({
     publishableKey: publishableKeyFromHost(
@@ -61,7 +62,7 @@ app.use(
     ),
   })),
 );
- 
+
 // Per-request Sentry breadcrumb — records method, path, status, duration.
 // No-op if Sentry is not configured.
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -80,18 +81,28 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   });
   next();
 });
- 
+
 // Global API rate limit (per IP / per Clerk userId once authenticated).
 app.use("/api", apiRateLimiter);
- 
+
 // In-memory request/error/duration counters for /api/admin/metrics.
 app.use("/api", metricsMiddleware);
- 
+
 app.use("/api", router);
- 
+
+// ── Admin extended dashboard endpoints ──────────────────────────────────────
+// LÍNEA AÑADIDA: monta DESPUÉS de app.use("/api", router) para que los
+// middlewares requireAuth y requireAdmin de router ya estén disponibles.
+// Si requireAuth/requireAdmin están en router/index.ts los importas aquí:
+// import { requireAuth, requireAdmin } from "./middlewares/auth.js";
+// app.use("/api/admin", requireAuth, requireAdmin, adminExtendedRouter);
+//
+// Si ya el router principal protege /api/admin, simplemente:
+app.use("/api/admin", adminExtendedRouter);                    // ← LÍNEA AÑADIDA
+
 // Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
 app.use(publicDeployRouter);
- 
+
 // Sentry error capture middleware — must come AFTER all routes.
 app.use((err: unknown, req: Request, _res: Response, next: NextFunction) => {
   if (isSentryEnabled()) {
@@ -109,13 +120,12 @@ app.use((err: unknown, req: Request, _res: Response, next: NextFunction) => {
   }
   next(err);
 });
- 
+
 // Final JSON error responder
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   const message =
     err instanceof Error ? err.message : "Internal server error";
   res.status(500).json({ error: message });
 });
- 
+
 export default app;
- 
