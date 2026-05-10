@@ -5,20 +5,26 @@ import appsRouter from "./apps";
 import imagesRouter from "./images";
 import billingRouter from "./billing";
 import adminRouter from "./admin";
+import adminExtendedRouter from "./adminExtended";
 import debugBundleRouter from "./debugBundle";
 import uploadsRouter from "./uploads";
+import { TEMPLATES } from "../lib/templates";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(meRouter);
 router.use(debugBundleRouter);
-// Mount images BEFORE apps so the public GET /apps/:appId/images/:imageId
-// route is matched without `requireAuth` middleware kicking in from apps.ts.
 router.use(imagesRouter);
 router.use(appsRouter);
 router.use(uploadsRouter);
 router.use(billingRouter);
 router.use(adminRouter);
+router.use("/admin", adminExtendedRouter);
+
+// Templates endpoint
+router.get("/templates", (_req, res) => {
+  res.json({ templates: TEMPLATES });
+});
 
 export default router;
