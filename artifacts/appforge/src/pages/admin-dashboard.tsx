@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Activity,
   AlertTriangle,
@@ -17,7 +18,40 @@ import {
   Clock,
   Cpu,
   Loader2,
+  MessageSquare,
+  Send,
+  Ticket,
 } from "lucide-react";
+
+interface SupportTicket {
+  _id: string;
+  userId: string;
+  email: string;
+  category: string;
+  subject: string;
+  message: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  adminReply?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+async function fetchTickets(): Promise<SupportTicket[]> {
+  const r = await fetch("/api/admin/tickets", { credentials: "include" });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+async function replyTicket(id: string, reply: string, status: string) {
+  const r = await fetch(`/api/admin/tickets/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adminReply: reply, status }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
 
 interface MetricsResponse {
   generatedAt: string;
@@ -80,12 +114,39 @@ export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
   const [smokeResult, setSmokeResult] = useState<{ ok: boolean; durationMs: number; output: string; reason?: string } | null>(null);
   const [smokeRunning, setSmokeRunning] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [ticketStatus, setTicketStatus] = useState("in_progress");
 
   const { data, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ["admin", "metrics"],
     queryFn: fetchMetrics,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+  });
+
+  const { data: tickets, isLoading: ticketsLoading } = useQuery({
+    queryKey: ["admin", "tickets"],
+    queryFn: fetchTickets,
+    refetchInterval: 30_000,
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: ({ id, reply, status }: { id: string; reply: string; status: string }) =>
+      replyTicket(id, reply, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "tickets"] });
+      setSelectedTicket(null);
+      setReplyText("");
+      toast({ title: "Respuesta enviada correctamente" });
+    },
+    onError: (err) => {
+      toast({
+        title: "Error al enviar respuesta",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    },
   });
 
   const e2bToggle = useMutation({
@@ -357,6 +418,109 @@ export default function AdminDashboardPage() {
             </section>
           </>
         )}
+        {/* ── TICKETS DE SOPORTE ── */}
+        <section>
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Ticket className="h-5 w-5" /> Tickets de soporte
+          </h2>
+          {ticketsLoading ? (
+            <Skeleton className="h-40" />
+          ) : !tickets || tickets.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6 text-sm text-muted-foreground">
+                No hay tickets de soporte aún.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {tickets.map((ticket) => (
+                <Card key={ticket._id} className={selectedTicket?._id === ticket._id ? "border-primary" : ""}>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant={
+                            ticket.status === "open" ? "destructive" :
+                            ticket.status === "in_progress" ? "default" :
+                            ticket.status === "resolved" ? "secondary" : "outline"
+                          }>
+                            {ticket.status === "open" ? "Abierto" :
+                             ticket.status === "in_progress" ? "En progreso" :
+                             ticket.status === "resolved" ? "Resuelto" : "Cerrado"}
+                          </Badge>
+                          <Badge variant="outline">{ticket.category}</Badge>
+                          <span className="text-xs text-muted-foreground">{ticket.email}</span>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {new Date(ticket.createdAt).toLocaleString("es-ES")}
+                          </span>
+                        </div>
+                        <p className="font-medium">{ticket.subject}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{ticket.message}</p>
+                        {ticket.adminReply && (
+                          <div className="mt-2 text-xs bg-muted rounded p-2 border-l-2 border-primary">
+                            <span className="font-medium">Tu respuesta:</span> {ticket.adminReply}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedTicket(ticket);
+                          setReplyText(ticket.adminReply ?? "");
+                          setTicketStatus(ticket.status === "open" ? "in_progress" : ticket.status);
+                        }}
+                      >
+                        <MessageSquare className="h-3 w-3 mr-1" /> Responder
+                      </Button>
+                    </div>
+
+                    {selectedTicket?._id === ticket._id && (
+                      <div className="mt-4 space-y-3 border-t pt-4">
+                        <Textarea
+                          placeholder="Escribe tu respuesta al cliente..."
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          rows={4}
+                        />
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="text-sm border rounded px-2 py-1 bg-background"
+                            value={ticketStatus}
+                            onChange={(e) => setTicketStatus(e.target.value)}
+                          >
+                            <option value="in_progress">En progreso</option>
+                            <option value="resolved">Resuelto</option>
+                            <option value="closed">Cerrado</option>
+                          </select>
+                          <Button
+                            size="sm"
+                            disabled={!replyText.trim() || replyMutation.isPending}
+                            onClick={() => replyMutation.mutate({
+                              id: ticket._id,
+                              reply: replyText,
+                              status: ticketStatus,
+                            })}
+                          >
+                            {replyMutation.isPending ? (
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                            ) : (
+                              <Send className="h-3 w-3 mr-1" />
+                            )}
+                            Enviar respuesta
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setSelectedTicket(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </Layout>
   );
