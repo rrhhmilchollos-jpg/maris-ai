@@ -1,12 +1,39 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
+import Groq from "groq-sdk";
 
-// OpenAI client via Replit AI Integrations proxy.
+// OpenAI client via standard env vars.
 const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY ?? "no-key",
 });
+
+// Groq — LLaMA 3.3 70B gratuito y ultrarrápido como agente de respaldo.
+const groq = process.env.GROQ_API_KEY
+  ? new Groq({ apiKey: process.env.GROQ_API_KEY })
+  : null;
+
+const useGroq = !!groq;
+
+async function callGroq(system: string, user: string, maxTokens = 8192): Promise<string> {
+  if (!groq) return "";
+  try {
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      temperature: 0.2,
+    });
+    return response.choices[0]?.message?.content ?? "";
+  } catch (err) {
+    logger.warn({ err }, "Groq call failed");
+    return "";
+  }
+}
 import { validateBundle, type BuildIssue } from "./validate";
 import { validateBundleInE2B } from "./e2bValidator";
 import { shouldValidateInE2B } from "./e2bGate";
