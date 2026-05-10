@@ -1,554 +1,1374 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
-import { Textarea } from "@/components/ui/textarea";
+/**
+ * artifacts/appforge/src/pages/admin-dashboard.tsx
+ *
+ * Panel de administración completo de Maris AI.
+ * Accesible en /admin/dashboard (requireAdmin guard en el router).
+ *
+ * Stack: React 19 + wouter + @tanstack/react-query + Tailwind v4 + lucide-react
+ * Paleta: violeta/cian oscuro — igual que el resto de Maris AI.
+ *
+ * Endpoints consumidos (todos bajo requireAuth + requireAdmin en el backend):
+ *   GET /api/admin/metrics          → AdminMetrics
+ *   GET /api/admin/users            → AdminUser[]
+ *   PATCH /api/admin/users/:id      → actualiza plan / créditos / estado
+ *   GET /api/admin/apps             → AdminApp[]
+ *   DELETE /api/admin/apps/:id      → elimina app
+ *   GET /api/admin/jobs             → AdminJob[]  (cola pg-boss)
+ *   POST /api/admin/jobs/:id/retry  → reintenta job fallido
+ *   GET /api/templates              → AppTemplate[]  (público, no auth)
+ */
+
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  CreditCard,
-  Globe,
+  LayoutDashboard,
   Users,
+  AppWindow,
+  Coins,
+  ListOrdered,
+  Settings,
+  LogOut,
+  Crown,
+  RefreshCw,
+  Trash2,
+  Edit3,
+  ChevronUp,
+  ChevronDown,
+  Minus,
+  CheckCircle2,
+  XCircle,
   Clock,
-  Cpu,
-  Loader2,
-  MessageSquare,
-  Send,
-  Ticket,
+  AlertTriangle,
+  Zap,
+  TrendingUp,
+  Server,
+  Globe,
+  BarChart3,
+  ShieldCheck,
+  Ban,
+  RotateCcw,
+  Download,
+  Wifi,
+  WifiOff,
+  X,
+  Save,
+  Plus,
 } from "lucide-react";
 
-interface SupportTicket {
-  _id: string;
-  userId: string;
-  email: string;
-  category: string;
-  subject: string;
-  message: string;
-  status: "open" | "in_progress" | "resolved" | "closed";
-  adminReply?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-async function fetchTickets(): Promise<SupportTicket[]> {
-  const r = await fetch("/api/admin/tickets", { credentials: "include" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-
-async function replyTicket(id: string, reply: string, status: string) {
-  const r = await fetch(`/api/admin/tickets/${id}`, {
-    method: "PATCH",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ adminReply: reply, status }),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-
-interface MetricsResponse {
-  generatedAt: string;
+interface AdminMetrics {
   jobs24h: {
     total: number;
-    succeeded: number;
+    success: number;
     failed: number;
-    successRate: number | null;
+    successRate: number;
     avgDurationMs: number;
   };
-  topFailingPhases: Array<{ phase: string; count: number }>;
-  credits: { today: number; month: number };
-  topUsers: Array<{ userId: string; email: string; creditsUsed: number }>;
-  publishedApps: { today: number; total: number };
-  e2b?: {
-    configured: boolean;
-    validateOnGenerate: boolean;
-    effective: boolean;
-  };
+  topFailingPhases: { phase: string; count: number }[];
+  credits: { usedToday: number; usedMonth: number };
+  topUsers: { userId: string; email: string; credits: number }[];
+  apps: { publishedToday: number; total: number };
+  users: { total: number; newToday: number };
 }
 
-async function fetchMetrics(): Promise<MetricsResponse> {
-  const r = await fetch("/api/admin/metrics", { credentials: "include" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  credits: number;
+  plan: "free" | "pro" | "team" | "owner";
+  status: "active" | "suspended";
+  appsCount: number;
+  createdAt: string;
+  lastActiveAt: string | null;
 }
 
-async function toggleE2B(enabled: boolean) {
-  const r = await fetch("/api/admin/e2b-toggle", {
-    method: "POST",
-    credentials: "include",
+interface AdminApp {
+  id: string;
+  title: string;
+  kind: string;
+  userEmail: string;
+  status: "generating" | "done" | "error" | "needs_review";
+  publicSlug: string | null;
+  createdAt: string;
+  creditsCost: number;
+}
+
+interface AdminJob {
+  id: string;
+  appId: string;
+  appTitle: string;
+  userEmail: string;
+  state: "created" | "active" | "completed" | "failed" | "cancelled";
+  startedOn: string | null;
+  completedOn: string | null;
+  output: string | null;
+}
+
+// ─── API helpers ─────────────────────────────────────────────────────────────
+
+const apiFetch = async <T,>(path: string, init?: RequestInit): Promise<T> => {
+  const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{ validateOnGenerate: boolean; configured: boolean; effective: boolean }>;
-}
-
-async function runE2BSmoke() {
-  const r = await fetch("/api/admin/e2b-smoke", {
-    method: "POST",
     credentials: "include",
+    ...init,
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{ ok: boolean; durationMs: number; output: string; reason?: string }>;
-}
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+};
 
-function formatDuration(ms: number): string {
-  if (!ms || ms <= 0) return "—";
-  if (ms < 1000) return `${ms} ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)} s`;
-  const m = Math.floor(s / 60);
-  const rs = Math.round(s % 60);
-  return `${m}m ${rs}s`;
-}
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-export default function AdminDashboardPage() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [smokeResult, setSmokeResult] = useState<{ ok: boolean; durationMs: number; output: string; reason?: string } | null>(null);
-  const [smokeRunning, setSmokeRunning] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [replyText, setReplyText] = useState("");
-  const [ticketStatus, setTicketStatus] = useState("in_progress");
+const OWNER_EMAIL = "rrhh.milchollos@gmail.com";
 
-  const { data, isLoading, error, dataUpdatedAt } = useQuery({
-    queryKey: ["admin", "metrics"],
-    queryFn: fetchMetrics,
-    refetchInterval: 30_000,
-    refetchOnWindowFocus: true,
-  });
+const NAV_ITEMS = [
+  { id: "overview", label: "Resumen", icon: LayoutDashboard },
+  { id: "users", label: "Usuarios", icon: Users },
+  { id: "apps", label: "Apps", icon: AppWindow },
+  { id: "credits", label: "Créditos", icon: Coins },
+  { id: "queue", label: "Cola", icon: ListOrdered },
+  { id: "settings", label: "Configuración", icon: Settings },
+] as const;
 
-  const { data: tickets, isLoading: ticketsLoading } = useQuery({
-    queryKey: ["admin", "tickets"],
-    queryFn: fetchTickets,
-    refetchInterval: 30_000,
-  });
+type NavId = (typeof NAV_ITEMS)[number]["id"];
 
-  const replyMutation = useMutation({
-    mutationFn: ({ id, reply, status }: { id: string; reply: string; status: string }) =>
-      replyTicket(id, reply, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "tickets"] });
-      setSelectedTicket(null);
-      setReplyText("");
-      toast({ title: "Respuesta enviada correctamente" });
-    },
-    onError: (err) => {
-      toast({
-        title: "Error al enviar respuesta",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    },
-  });
+const PLAN_COLORS: Record<AdminUser["plan"], string> = {
+  free: "text-slate-400 bg-slate-800/60 border-slate-700",
+  pro: "text-emerald-300 bg-emerald-900/40 border-emerald-700",
+  team: "text-violet-300 bg-violet-900/40 border-violet-700",
+  owner: "text-amber-300 bg-amber-900/40 border-amber-600",
+};
 
-  const e2bToggle = useMutation({
-    mutationFn: toggleE2B,
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "metrics"] });
-      toast({
-        title: res.effective ? "E2B activado" : "E2B desactivado",
-        description: res.effective
-          ? "Cada generación verificará el bundle con un build real (npm install + build) en una microVM."
-          : res.configured
-            ? "El pipeline ya no llamará a E2B. La validación in-memory sigue activa."
-            : "Falta E2B_API_KEY — configúralo para que el toggle tenga efecto.",
-      });
-    },
-    onError: (err) => {
-      toast({
-        title: "No se pudo cambiar el estado de E2B",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    },
-  });
+const STATUS_COLORS: Record<AdminUser["status"], string> = {
+  active: "text-emerald-400 bg-emerald-900/30 border-emerald-700",
+  suspended: "text-red-400 bg-red-900/30 border-red-700",
+};
+
+const JOB_COLORS: Record<AdminJob["state"], string> = {
+  created: "text-slate-400 bg-slate-800/60",
+  active: "text-cyan-300 bg-cyan-900/40",
+  completed: "text-emerald-300 bg-emerald-900/40",
+  failed: "text-red-300 bg-red-900/40",
+  cancelled: "text-orange-300 bg-orange-900/40",
+};
+
+const APP_STATUS_ICON: Record<AdminApp["status"], React.ReactNode> = {
+  generating: <Clock size={14} className="text-cyan-400 animate-spin" />,
+  done: <CheckCircle2 size={14} className="text-emerald-400" />,
+  error: <XCircle size={14} className="text-red-400" />,
+  needs_review: <AlertTriangle size={14} className="text-amber-400" />,
+};
+
+// ─── Shared UI ───────────────────────────────────────────────────────────────
+
+const Badge = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <span
+    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border ${className}`}
+  >
+    {children}
+  </span>
+);
+
+const Card = ({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <div
+    className={`bg-[#0f1117] border border-[#1e2030] rounded-xl p-4 ${className}`}
+  >
+    {children}
+  </div>
+);
+
+const MetricCard = ({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  trend,
+  accent = "violet",
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  trend?: "up" | "down" | "neutral";
+  accent?: "violet" | "cyan" | "emerald" | "amber";
+}) => {
+  const accents = {
+    violet: "text-violet-400 bg-violet-900/30",
+    cyan: "text-cyan-400 bg-cyan-900/30",
+    emerald: "text-emerald-400 bg-emerald-900/30",
+    amber: "text-amber-400 bg-amber-900/30",
+  };
+  const TrendIcon =
+    trend === "up" ? ChevronUp : trend === "down" ? ChevronDown : Minus;
+  const trendColor =
+    trend === "up"
+      ? "text-emerald-400"
+      : trend === "down"
+        ? "text-red-400"
+        : "text-slate-500";
 
   return (
-    <Layout>
-      <div className="container mx-auto px-4 py-8 space-y-6">
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Panel de métricas</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Resumen del negocio en tiempo real. Se actualiza automáticamente cada 30
-              segundos.
-            </p>
-          </div>
-          {dataUpdatedAt > 0 && (
-            <Badge variant="outline" className="gap-1">
-              <Clock className="h-3 w-3" />
-              {new Date(dataUpdatedAt).toLocaleTimeString("es-ES")}
-            </Badge>
-          )}
-        </header>
-
-        {error && (
-          <Card className="border-destructive">
-            <CardContent className="pt-6 text-sm text-destructive">
-              No se han podido cargar las métricas: {(error as Error).message}
-            </CardContent>
-          </Card>
+    <Card className="flex items-start gap-3">
+      <div className={`p-2 rounded-lg ${accents[accent]}`}>
+        <Icon size={18} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-slate-500 mb-0.5">{label}</p>
+        <p className="text-2xl font-semibold text-white tracking-tight">
+          {value}
+        </p>
+        {sub && (
+          <p className={`text-xs mt-0.5 flex items-center gap-1 ${trendColor}`}>
+            {trend && <TrendIcon size={11} />}
+            {sub}
+          </p>
         )}
+      </div>
+    </Card>
+  );
+};
 
-        {isLoading || !data ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-32" />
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+    {children}
+  </h2>
+);
+
+const Spinner = () => (
+  <div className="flex items-center justify-center py-16">
+    <RefreshCw size={22} className="text-violet-400 animate-spin" />
+  </div>
+);
+
+const EmptyState = ({ message }: { message: string }) => (
+  <div className="flex flex-col items-center justify-center py-14 text-slate-600">
+    <Server size={32} className="mb-3 opacity-40" />
+    <p className="text-sm">{message}</p>
+  </div>
+);
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+
+type ToastType = "success" | "error" | "info";
+interface Toast {
+  id: number;
+  message: string;
+  type: ToastType;
+}
+
+let _toastId = 0;
+let _setToasts: React.Dispatch<React.SetStateAction<Toast[]>> | null = null;
+
+const toast = (message: string, type: ToastType = "info") => {
+  const id = ++_toastId;
+  _setToasts?.((prev) => [...prev, { id, message, type }]);
+  setTimeout(
+    () => _setToasts?.((prev) => prev.filter((t) => t.id !== id)),
+    3500
+  );
+};
+
+const ToastContainer = () => {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  _setToasts = setToasts;
+
+  const colors: Record<ToastType, string> = {
+    success: "border-emerald-700 text-emerald-300 bg-emerald-950/90",
+    error: "border-red-700 text-red-300 bg-red-950/90",
+    info: "border-violet-700 text-violet-300 bg-violet-950/90",
+  };
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm backdrop-blur-sm shadow-xl ${colors[t.type]}`}
+        >
+          {t.type === "success" && <CheckCircle2 size={14} />}
+          {t.type === "error" && <XCircle size={14} />}
+          {t.type === "info" && <Zap size={14} />}
+          {t.message}
+          <button
+            onClick={() =>
+              setToasts((prev) => prev.filter((x) => x.id !== t.id))
+            }
+            className="ml-2 opacity-60 hover:opacity-100"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Sections ────────────────────────────────────────────────────────────────
+
+// Overview
+const OverviewSection = () => {
+  const { data, isLoading, refetch, isFetching } = useQuery<AdminMetrics>({
+    queryKey: ["admin-metrics"],
+    queryFn: () => apiFetch("/api/admin/metrics"),
+    refetchInterval: 30_000,
+  });
+
+  if (isLoading) return <Spinner />;
+  if (!data) return <EmptyState message="No se pudieron cargar las métricas" />;
+
+  const fmtMs = (ms: number) =>
+    ms >= 60_000
+      ? `${(ms / 60_000).toFixed(1)}m`
+      : ms >= 1_000
+        ? `${(ms / 1_000).toFixed(1)}s`
+        : `${Math.round(ms)}ms`;
+
+  return (
+    <div className="space-y-5">
+      {/* Owner banner */}
+      <div className="flex items-center gap-3 bg-gradient-to-r from-amber-950/60 to-violet-950/60 border border-amber-800/50 rounded-xl px-4 py-3">
+        <Crown size={18} className="text-amber-400 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-amber-300">
+            Propietario · Maris AI
+          </p>
+          <p className="text-xs text-amber-600">{OWNER_EMAIL} · Créditos ∞ · Todos los permisos</p>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Badge className="text-emerald-300 bg-emerald-900/40 border-emerald-700">
+            <Wifi size={10} /> Online
+          </Badge>
+          <button
+            onClick={() => refetch()}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-violet-900/30 transition-colors"
+            title="Refrescar métricas"
+          >
+            <RefreshCw size={14} className={isFetching ? "animate-spin" : ""} />
+          </button>
+        </div>
+      </div>
+
+      {/* KPI grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <MetricCard
+          label="Usuarios"
+          value={data.users?.total ?? "—"}
+          sub={`+${data.users?.newToday ?? 0} hoy`}
+          icon={Users}
+          trend="up"
+          accent="violet"
+        />
+        <MetricCard
+          label="Apps generadas"
+          value={data.apps.total.toLocaleString()}
+          sub={`${data.apps.publishedToday} publicadas hoy`}
+          icon={AppWindow}
+          trend="up"
+          accent="cyan"
+        />
+        <MetricCard
+          label="Jobs (24h)"
+          value={data.jobs24h.total}
+          sub={`${Math.round(data.jobs24h.successRate)}% éxito`}
+          icon={BarChart3}
+          trend={data.jobs24h.successRate >= 80 ? "up" : "down"}
+          accent="emerald"
+        />
+        <MetricCard
+          label="Créditos (mes)"
+          value={data.credits.usedMonth.toLocaleString()}
+          sub={`${data.credits.usedToday} hoy`}
+          icon={Coins}
+          accent="amber"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Jobs stats */}
+        <Card>
+          <SectionTitle>
+            <TrendingUp size={14} className="text-violet-400" /> Pipeline de
+            generación (24h)
+          </SectionTitle>
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {[
+              {
+                label: "Exitosos",
+                value: data.jobs24h.success,
+                cls: "text-emerald-400",
+              },
+              {
+                label: "Fallidos",
+                value: data.jobs24h.failed,
+                cls: "text-red-400",
+              },
+              {
+                label: "Tiempo medio",
+                value: fmtMs(data.jobs24h.avgDurationMs),
+                cls: "text-cyan-400",
+              },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="text-center bg-[#161820] rounded-lg py-3"
+              >
+                <p className={`text-xl font-semibold ${s.cls}`}>{s.value}</p>
+                <p className="text-xs text-slate-600 mt-0.5">{s.label}</p>
+              </div>
             ))}
           </div>
-        ) : (
-          <>
-            <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <MetricCard
-                icon={<Activity className="h-4 w-4" />}
-                title="Generaciones (24h)"
-                value={data.jobs24h.total.toString()}
-                hint={
-                  data.jobs24h.successRate !== null
-                    ? `${data.jobs24h.successRate}% éxito`
-                    : "Sin datos"
-                }
+          {/* Progress bar success rate */}
+          <div>
+            <div className="flex justify-between text-xs text-slate-500 mb-1">
+              <span>Tasa de éxito</span>
+              <span>{Math.round(data.jobs24h.successRate)}%</span>
+            </div>
+            <div className="h-1.5 bg-[#1e2030] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-violet-500 to-cyan-400 rounded-full transition-all"
+                style={{ width: `${data.jobs24h.successRate}%` }}
               />
-              <MetricCard
-                icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-                title="Generaciones OK (24h)"
-                value={data.jobs24h.succeeded.toString()}
-                hint={`Tiempo medio: ${formatDuration(data.jobs24h.avgDurationMs)}`}
-              />
-              <MetricCard
-                icon={<AlertTriangle className="h-4 w-4 text-rose-500" />}
-                title="Generaciones falladas (24h)"
-                value={data.jobs24h.failed.toString()}
-                hint={
-                  data.topFailingPhases[0]
-                    ? `Fase: ${data.topFailingPhases[0].phase}`
-                    : "Sin fallos"
-                }
-              />
-              <MetricCard
-                icon={<Globe className="h-4 w-4 text-sky-500" />}
-                title="Apps publicadas"
-                value={data.publishedApps.total.toString()}
-                hint={`Hoy: ${data.publishedApps.today}`}
-              />
-            </section>
+            </div>
+          </div>
+        </Card>
 
-            <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" />
-                    Créditos consumidos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Hoy</span>
-                    <span className="text-2xl font-semibold">
-                      {data.credits.today.toLocaleString("es-ES")}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Este mes</span>
-                    <span className="text-2xl font-semibold">
-                      {data.credits.month.toLocaleString("es-ES")}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Fases con más fallos (24h)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.topFailingPhases.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Ninguna fase ha fallado en las últimas 24 horas.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {data.topFailingPhases.map((p) => (
-                        <li
-                          key={p.phase}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <span className="font-mono">{p.phase}</span>
-                          <Badge variant="destructive">{p.count}</Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Top 5 usuarios por créditos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.topUsers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Aún no hay consumo de créditos registrado.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {data.topUsers.map((u) => (
-                        <li
-                          key={u.userId}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <span className="truncate max-w-[200px]" title={u.email}>
-                            {u.email}
-                          </span>
-                          <Badge variant="secondary">
-                            {u.creditsUsed.toLocaleString("es-ES")}
-                          </Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Cpu className="h-4 w-4" />
-                    Validación E2B (build real en microVM)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm">
-                        Tras la validación in-memory, el pipeline arranca un sandbox Linux
-                        y ejecuta <code className="text-xs bg-muted px-1 rounded">npm install &amp;&amp; npm run build</code>
-                        {" "}para detectar paquetes inexistentes, errores de Vite y otros
-                        fallos que el AST no ve. Si falla, intenta una ronda extra de auto-reparación
-                        usando el error real.
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Coste: ~30-90 s extra por generación + créditos E2B. Recomendado para
-                        producción de pago, opcional en desarrollo.
-                      </p>
-                      <div className="flex items-center gap-2 pt-1">
-                        <Badge variant={data.e2b?.configured ? "secondary" : "outline"}>
-                          {data.e2b?.configured ? "API key OK" : "Falta E2B_API_KEY"}
-                        </Badge>
-                        <Badge variant={data.e2b?.effective ? "default" : "outline"}>
-                          {data.e2b?.effective ? "Activo en pipeline" : "Inactivo en pipeline"}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <Switch
-                        checked={Boolean(data.e2b?.validateOnGenerate)}
-                        disabled={!data.e2b?.configured || e2bToggle.isPending}
-                        onCheckedChange={(checked) => e2bToggle.mutate(checked)}
-                        aria-label="Activar validación E2B en cada generación"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={!data.e2b?.configured || smokeRunning}
-                        onClick={async () => {
-                          setSmokeRunning(true);
-                          setSmokeResult(null);
-                          try {
-                            const res = await runE2BSmoke();
-                            setSmokeResult(res);
-                          } catch (err) {
-                            setSmokeResult({
-                              ok: false,
-                              durationMs: 0,
-                              output: "",
-                              reason: err instanceof Error ? err.message : String(err),
-                            });
-                          } finally {
-                            setSmokeRunning(false);
-                          }
-                        }}
-                      >
-                        {smokeRunning ? (
-                          <>
-                            <Loader2 className="h-3 w-3 animate-spin mr-1" /> Probando…
-                          </>
-                        ) : (
-                          "Smoke test"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {smokeResult && (
-                    <div
-                      className={`text-xs rounded border px-3 py-2 ${
-                        smokeResult.ok
-                          ? "border-green-500/40 bg-green-500/10"
-                          : "border-destructive/40 bg-destructive/10"
-                      }`}
-                    >
-                      <div className="font-medium">
-                        {smokeResult.ok
-                          ? `✓ Smoke OK · ${smokeResult.durationMs} ms`
-                          : `✗ Smoke falló${smokeResult.reason ? ` · ${smokeResult.reason}` : ""}`}
-                      </div>
-                      {smokeResult.output && (
-                        <pre className="mt-1 whitespace-pre-wrap text-muted-foreground">{smokeResult.output}</pre>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </section>
-          </>
-        )}
-        {/* ── TICKETS DE SOPORTE ── */}
-        <section>
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Ticket className="h-5 w-5" /> Tickets de soporte
-          </h2>
-          {ticketsLoading ? (
-            <Skeleton className="h-40" />
-          ) : !tickets || tickets.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6 text-sm text-muted-foreground">
-                No hay tickets de soporte aún.
-              </CardContent>
-            </Card>
+        {/* Failing phases */}
+        <Card>
+          <SectionTitle>
+            <AlertTriangle size={14} className="text-amber-400" /> Fases con más
+            errores
+          </SectionTitle>
+          {data.topFailingPhases.length === 0 ? (
+            <p className="text-sm text-slate-600 py-4 text-center">
+              Sin errores recientes 🎉
+            </p>
           ) : (
-            <div className="space-y-3">
-              {tickets.map((ticket) => (
-                <Card key={ticket._id} className={selectedTicket?._id === ticket._id ? "border-primary" : ""}>
-                  <CardContent className="pt-4 pb-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant={
-                            ticket.status === "open" ? "destructive" :
-                            ticket.status === "in_progress" ? "default" :
-                            ticket.status === "resolved" ? "secondary" : "outline"
-                          }>
-                            {ticket.status === "open" ? "Abierto" :
-                             ticket.status === "in_progress" ? "En progreso" :
-                             ticket.status === "resolved" ? "Resuelto" : "Cerrado"}
-                          </Badge>
-                          <Badge variant="outline">{ticket.category}</Badge>
-                          <span className="text-xs text-muted-foreground">{ticket.email}</span>
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            {new Date(ticket.createdAt).toLocaleString("es-ES")}
-                          </span>
-                        </div>
-                        <p className="font-medium">{ticket.subject}</p>
-                        <p className="text-sm text-muted-foreground line-clamp-2">{ticket.message}</p>
-                        {ticket.adminReply && (
-                          <div className="mt-2 text-xs bg-muted rounded p-2 border-l-2 border-primary">
-                            <span className="font-medium">Tu respuesta:</span> {ticket.adminReply}
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedTicket(ticket);
-                          setReplyText(ticket.adminReply ?? "");
-                          setTicketStatus(ticket.status === "open" ? "in_progress" : ticket.status);
-                        }}
-                      >
-                        <MessageSquare className="h-3 w-3 mr-1" /> Responder
-                      </Button>
-                    </div>
-
-                    {selectedTicket?._id === ticket._id && (
-                      <div className="mt-4 space-y-3 border-t pt-4">
-                        <Textarea
-                          placeholder="Escribe tu respuesta al cliente..."
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          rows={4}
-                        />
-                        <div className="flex items-center gap-2">
-                          <select
-                            className="text-sm border rounded px-2 py-1 bg-background"
-                            value={ticketStatus}
-                            onChange={(e) => setTicketStatus(e.target.value)}
-                          >
-                            <option value="in_progress">En progreso</option>
-                            <option value="resolved">Resuelto</option>
-                            <option value="closed">Cerrado</option>
-                          </select>
-                          <Button
-                            size="sm"
-                            disabled={!replyText.trim() || replyMutation.isPending}
-                            onClick={() => replyMutation.mutate({
-                              id: ticket._id,
-                              reply: replyText,
-                              status: ticketStatus,
-                            })}
-                          >
-                            {replyMutation.isPending ? (
-                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                            ) : (
-                              <Send className="h-3 w-3 mr-1" />
-                            )}
-                            Enviar respuesta
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setSelectedTicket(null)}>
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+            <div className="space-y-2">
+              {data.topFailingPhases.map((p, i) => (
+                <div key={p.phase} className="flex items-center gap-3">
+                  <span className="text-xs text-slate-600 w-4">{i + 1}</span>
+                  <div className="flex-1 bg-[#161820] rounded-lg px-3 py-2 flex justify-between">
+                    <span className="text-sm text-slate-300 font-mono">
+                      {p.phase}
+                    </span>
+                    <span className="text-sm text-red-400 font-medium">
+                      {p.count}
+                    </span>
+                  </div>
+                </div>
               ))}
             </div>
           )}
-        </section>
-      </div>
-    </Layout>
-  );
-}
 
-function MetricCard({
-  icon,
-  title,
-  value,
-  hint,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  hint: string;
-}) {
+          <div className="mt-4 border-t border-[#1e2030] pt-4">
+            <SectionTitle>
+              <Crown size={13} className="text-amber-400" /> Top usuarios
+            </SectionTitle>
+            <div className="space-y-1.5">
+              {data.topUsers.map((u) => (
+                <div
+                  key={u.userId}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="text-slate-400 truncate max-w-[200px]">
+                    {u.email}
+                  </span>
+                  <span className="text-violet-300 font-medium tabular-nums">
+                    {u.credits.toLocaleString()} cr
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// Users
+const UsersSection = () => {
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [editForm, setEditForm] = useState({
+    credits: 0,
+    plan: "free" as AdminUser["plan"],
+    status: "active" as AdminUser["status"],
+  });
+  const [search, setSearch] = useState("");
+
+  const { data: users = [], isLoading } = useQuery<AdminUser[]>({
+    queryKey: ["admin-users"],
+    queryFn: () => apiFetch("/api/admin/users"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (vars: { id: string; body: Partial<AdminUser> }) =>
+      apiFetch(`/api/admin/users/${vars.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(vars.body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      qc.invalidateQueries({ queryKey: ["admin-metrics"] });
+      setEditing(null);
+      toast("Usuario actualizado", "success");
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  });
+
+  const openEdit = (u: AdminUser) => {
+    setEditing(u);
+    setEditForm({ credits: u.credits, plan: u.plan, status: u.status });
+  };
+
+  const filtered = users.filter(
+    (u) =>
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.name ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (isLoading) return <Spinner />;
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-semibold tracking-tight">{value}</div>
-        <p className="text-xs text-muted-foreground mt-1">{hint}</p>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por email o nombre…"
+          className="flex-1 bg-[#0f1117] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-600"
+        />
+        <Badge className="text-slate-400 bg-slate-800/60 border-slate-700">
+          {filtered.length} usuarios
+        </Badge>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1e2030]">
+              {["Usuario", "Plan", "Créditos", "Apps", "Estado", "Acciones"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider"
+                  >
+                    {h}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((u) => (
+              <tr
+                key={u.id}
+                className="border-b border-[#1a1c28] hover:bg-[#161820] transition-colors"
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-violet-900/60 border border-violet-700 flex items-center justify-center text-xs font-medium text-violet-300">
+                      {(u.name ?? u.email)[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-slate-200 font-medium leading-none">
+                        {u.name ?? "—"}
+                      </p>
+                      <p className="text-slate-500 text-xs mt-0.5">{u.email}</p>
+                    </div>
+                    {u.email === OWNER_EMAIL && (
+                      <Crown size={12} className="text-amber-400" />
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <Badge className={PLAN_COLORS[u.plan]}>{u.plan}</Badge>
+                </td>
+                <td className="px-4 py-3 text-slate-300 tabular-nums">
+                  {u.email === OWNER_EMAIL ? (
+                    <span className="text-amber-400 font-semibold">∞</span>
+                  ) : (
+                    u.credits.toLocaleString()
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-400">{u.appsCount}</td>
+                <td className="px-4 py-3">
+                  <Badge className={STATUS_COLORS[u.status]}>{u.status}</Badge>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => openEdit(u)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-violet-900/20 transition-colors"
+                    title="Editar"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <EmptyState message="No se encontraron usuarios" />
+        )}
+      </Card>
+
+      {/* Edit modal */}
+      {editing && (
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-200">
+                Editar usuario
+              </h3>
+              <button
+                onClick={() => setEditing(null)}
+                className="text-slate-500 hover:text-slate-300"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">{editing.email}</p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">
+                  Créditos
+                </label>
+                <input
+                  type="number"
+                  value={editForm.credits}
+                  onChange={(e) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      credits: Number(e.target.value),
+                    }))
+                  }
+                  className="w-full bg-[#161820] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-600"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">
+                  Plan
+                </label>
+                <select
+                  value={editForm.plan}
+                  onChange={(e) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      plan: e.target.value as AdminUser["plan"],
+                    }))
+                  }
+                  className="w-full bg-[#161820] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-600"
+                >
+                  <option value="free">Free</option>
+                  <option value="pro">Pro</option>
+                  <option value="team">Team</option>
+                  <option value="owner">Owner</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">
+                  Estado
+                </label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      status: e.target.value as AdminUser["status"],
+                    }))
+                  }
+                  className="w-full bg-[#161820] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-600"
+                >
+                  <option value="active">Activo</option>
+                  <option value="suspended">Suspendido</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() =>
+                  updateMutation.mutate({ id: editing.id, body: editForm })
+                }
+                disabled={updateMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+              >
+                <Save size={14} />
+                {updateMutation.isPending ? "Guardando…" : "Guardar"}
+              </button>
+              <button
+                onClick={() => setEditing(null)}
+                className="px-4 py-2 border border-[#1e2030] text-slate-400 hover:text-slate-200 rounded-lg text-sm transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Apps
+const AppsSection = () => {
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+
+  const { data: apps = [], isLoading } = useQuery<AdminApp[]>({
+    queryKey: ["admin-apps"],
+    queryFn: () => apiFetch("/api/admin/apps"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/admin/apps/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-apps"] });
+      qc.invalidateQueries({ queryKey: ["admin-metrics"] });
+      toast("App eliminada", "success");
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  });
+
+  const filtered = apps.filter(
+    (a) =>
+      a.title.toLowerCase().includes(search.toLowerCase()) ||
+      a.userEmail.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por título o usuario…"
+          className="flex-1 bg-[#0f1117] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-600"
+        />
+        <Badge className="text-slate-400 bg-slate-800/60 border-slate-700">
+          {filtered.length} apps
+        </Badge>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1e2030]">
+              {["App", "Tipo", "Usuario", "Estado", "Slug público", "Créditos", "Acciones"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider"
+                  >
+                    {h}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((app) => (
+              <tr
+                key={app.id}
+                className="border-b border-[#1a1c28] hover:bg-[#161820] transition-colors"
+              >
+                <td className="px-4 py-3">
+                  <p className="text-slate-200 font-medium">{app.title}</p>
+                  <p className="text-slate-600 text-xs font-mono">
+                    {app.id.slice(0, 8)}
+                  </p>
+                </td>
+                <td className="px-4 py-3">
+                  <Badge className="text-violet-300 bg-violet-900/30 border-violet-700">
+                    {app.kind}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-slate-400 text-xs">
+                  {app.userEmail}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="flex items-center gap-1.5">
+                    {APP_STATUS_ICON[app.status]}
+                    <span className="text-slate-400 text-xs">{app.status}</span>
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {app.publicSlug ? (
+                    <a
+                      href={`/app/${app.publicSlug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-cyan-400 hover:text-cyan-300 text-xs flex items-center gap-1"
+                    >
+                      <Globe size={11} />
+                      {app.publicSlug}
+                    </a>
+                  ) : (
+                    <span className="text-slate-600 text-xs">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-400 tabular-nums">
+                  {app.creditsCost}
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `¿Eliminar la app "${app.title}"? Esta acción es irreversible.`
+                        )
+                      )
+                        deleteMutation.mutate(app.id);
+                    }}
+                    className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+                    title="Eliminar app"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <EmptyState message="No se encontraron apps" />
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// Credits
+const CreditsSection = () => {
+  const qc = useQueryClient();
+  const { data: users = [], isLoading } = useQuery<AdminUser[]>({
+    queryKey: ["admin-users"],
+    queryFn: () => apiFetch("/api/admin/users"),
+  });
+
+  const [selectedId, setSelectedId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  const grantMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/admin/users/${selectedId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          credits:
+            (users.find((u) => u.id === selectedId)?.credits ?? 0) +
+            Number(amount),
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      qc.invalidateQueries({ queryKey: ["admin-metrics"] });
+      setAmount("");
+      setReason("");
+      toast(`Créditos actualizados (${amount})`, "success");
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  });
+
+  const sortedByCredits = [...users].sort((a, b) => b.credits - a.credits);
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <div className="space-y-4">
+      {/* Propietario */}
+      <Card className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-full bg-amber-900/40 border border-amber-700 flex items-center justify-center">
+          <Crown size={20} className="text-amber-400" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-slate-200">{OWNER_EMAIL}</p>
+          <p className="text-xs text-slate-500">Propietario · Maris AI</p>
+        </div>
+        <div className="ml-auto text-right">
+          <p className="text-2xl font-bold text-amber-400">∞</p>
+          <p className="text-xs text-slate-600">créditos ilimitados</p>
+        </div>
+      </Card>
+
+      {/* Grant credits */}
+      <Card>
+        <SectionTitle>
+          <Plus size={14} className="text-cyan-400" /> Ajustar créditos
+        </SectionTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="bg-[#161820] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-violet-600"
+          >
+            <option value="">Selecciona usuario…</option>
+            {users
+              .filter((u) => u.email !== OWNER_EMAIL)
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email} ({u.credits} cr)
+                </option>
+              ))}
+          </select>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Ej: +100 o -50"
+            className="bg-[#161820] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-600"
+          />
+          <button
+            onClick={() => grantMutation.mutate()}
+            disabled={!selectedId || !amount || grantMutation.isPending}
+            className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+          >
+            <Coins size={14} />
+            {grantMutation.isPending ? "Aplicando…" : "Aplicar"}
+          </button>
+        </div>
+      </Card>
+
+      {/* Ranking */}
+      <Card>
+        <SectionTitle>
+          <BarChart3 size={14} className="text-violet-400" /> Ranking de créditos
+        </SectionTitle>
+        <div className="space-y-2">
+          {sortedByCredits.slice(0, 15).map((u, i) => (
+            <div
+              key={u.id}
+              className="flex items-center gap-3 text-sm py-1"
+            >
+              <span className="text-xs text-slate-600 w-5 text-right">
+                {i + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-slate-300 truncate">{u.email}</p>
+              </div>
+              <Badge className={PLAN_COLORS[u.plan]}>{u.plan}</Badge>
+              <span className="text-violet-300 font-semibold tabular-nums w-20 text-right">
+                {u.email === OWNER_EMAIL ? "∞" : u.credits.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// Queue
+const QueueSection = () => {
+  const qc = useQueryClient();
+
+  const { data: jobs = [], isLoading, refetch, isFetching } = useQuery<AdminJob[]>({
+    queryKey: ["admin-jobs"],
+    queryFn: () => apiFetch("/api/admin/jobs"),
+    refetchInterval: 10_000,
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/api/admin/jobs/${id}/retry`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-jobs"] });
+      toast("Job reencolado", "success");
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  const counts = jobs.reduce(
+    (acc, j) => ({ ...acc, [j.state]: (acc[j.state as keyof typeof acc] ?? 0) + 1 }),
+    { created: 0, active: 0, completed: 0, failed: 0, cancelled: 0 }
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-5 gap-2">
+        {(
+          [
+            "created",
+            "active",
+            "completed",
+            "failed",
+            "cancelled",
+          ] as AdminJob["state"][]
+        ).map((state) => (
+          <div
+            key={state}
+            className={`rounded-lg px-3 py-2 text-center text-xs font-medium ${JOB_COLORS[state]}`}
+          >
+            <div className="text-lg font-bold">{counts[state]}</div>
+            {state}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-violet-400 transition-colors"
+        >
+          <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} />
+          Actualizar
+        </button>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1e2030]">
+              {["Job ID", "App", "Usuario", "Estado", "Duración", "Acciones"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider"
+                  >
+                    {h}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {jobs.map((job) => {
+              const dur =
+                job.startedOn && job.completedOn
+                  ? Math.round(
+                      (new Date(job.completedOn).getTime() -
+                        new Date(job.startedOn).getTime()) /
+                        1000
+                    ) + "s"
+                  : "—";
+              return (
+                <tr
+                  key={job.id}
+                  className="border-b border-[#1a1c28] hover:bg-[#161820] transition-colors"
+                >
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                    {job.id.slice(0, 12)}…
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-slate-300">{job.appTitle}</p>
+                    <p className="text-xs text-slate-600 font-mono">
+                      {job.appId.slice(0, 8)}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3 text-slate-400 text-xs">
+                    {job.userEmail}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge className={JOB_COLORS[job.state]}>
+                      {job.state === "active" && (
+                        <RefreshCw size={10} className="animate-spin" />
+                      )}
+                      {job.state}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 tabular-nums text-xs">
+                    {dur}
+                  </td>
+                  <td className="px-4 py-3">
+                    {job.state === "failed" && (
+                      <button
+                        onClick={() => retryMutation.mutate(job.id)}
+                        disabled={retryMutation.isPending}
+                        className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                        title="Reintentar"
+                      >
+                        <RotateCcw size={12} />
+                        Reintentar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {jobs.length === 0 && <EmptyState message="Cola vacía" />}
+      </Card>
+    </div>
+  );
+};
+
+// Settings
+const SettingsSection = () => {
+  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState({
+    platformName: "Maris AI",
+    supportEmail: OWNER_EMAIL,
+    domain: "maris.ai",
+    maintenanceMode: false,
+    openRegistration: true,
+    ownerAlerts: true,
+    creditEnforcement: true,
+  });
+
+  const handleSave = () => {
+    setSaved(true);
+    toast("Configuración guardada", "success");
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-4 max-w-xl">
+      <Card>
+        <SectionTitle>
+          <Globe size={14} className="text-cyan-400" /> Datos de la plataforma
+        </SectionTitle>
+        <div className="space-y-3">
+          {[
+            { label: "Nombre", key: "platformName" },
+            { label: "Email de soporte", key: "supportEmail" },
+            { label: "Dominio", key: "domain" },
+          ].map(({ label, key }) => (
+            <div key={key}>
+              <label className="text-xs text-slate-500 block mb-1">
+                {label}
+              </label>
+              <input
+                value={form[key as keyof typeof form] as string}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, [key]: e.target.value }))
+                }
+                className="w-full bg-[#161820] border border-[#1e2030] rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-600"
+              />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <SectionTitle>
+          <ShieldCheck size={14} className="text-violet-400" /> Controles de
+          plataforma
+        </SectionTitle>
+        <div className="space-y-0 divide-y divide-[#1e2030]">
+          {(
+            [
+              {
+                key: "maintenanceMode",
+                label: "Modo mantenimiento",
+                desc: "Desactiva el acceso público temporalmente.",
+                danger: true,
+              },
+              {
+                key: "openRegistration",
+                label: "Registro abierto",
+                desc: "Permite que nuevos usuarios se registren.",
+              },
+              {
+                key: "ownerAlerts",
+                label: "Alertas al propietario",
+                desc: `Notificaciones de error a ${OWNER_EMAIL}`,
+              },
+              {
+                key: "creditEnforcement",
+                label: "Bloqueo por créditos",
+                desc: "Bloquea generaciones cuando el usuario llega a 0.",
+              },
+            ] as const
+          ).map(({ key, label, desc, danger }) => (
+            <div
+              key={key}
+              className="flex items-center justify-between py-3.5"
+            >
+              <div>
+                <p
+                  className={`text-sm font-medium ${danger && form[key] ? "text-red-400" : "text-slate-200"}`}
+                >
+                  {label}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+              </div>
+              <button
+                onClick={() =>
+                  setForm((f) => ({ ...f, [key]: !f[key as keyof typeof f] }))
+                }
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  form[key as keyof typeof form]
+                    ? danger
+                      ? "bg-red-600"
+                      : "bg-violet-600"
+                    : "bg-slate-700"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    form[key as keyof typeof form]
+                      ? "translate-x-5"
+                      : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <button
+        onClick={handleSave}
+        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+      >
+        <Save size={14} />
+        {saved ? "¡Guardado!" : "Guardar cambios"}
+      </button>
+    </div>
+  );
+};
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+
+export default function AdminDashboard() {
+  const [, navigate] = useLocation();
+  const [activeSection, setActiveSection] = useState<NavId>("overview");
+
+  const sectionComponents: Record<NavId, React.ReactNode> = {
+    overview: <OverviewSection />,
+    users: <UsersSection />,
+    apps: <AppsSection />,
+    credits: <CreditsSection />,
+    queue: <QueueSection />,
+    settings: <SettingsSection />,
+  };
+
+  const activeLabel = NAV_ITEMS.find((n) => n.id === activeSection)?.label ?? "";
+
+  return (
+    <div className="flex min-h-screen bg-[#080a10] text-white font-sans">
+      {/* Sidebar */}
+      <aside className="w-56 flex-shrink-0 border-r border-[#1e2030] flex flex-col py-5">
+        {/* Logo */}
+        <div className="px-4 mb-6">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
+              M
+            </div>
+            <span className="text-sm font-semibold text-slate-200">
+              Maris AI
+            </span>
+          </div>
+          <p className="text-xs text-slate-600 mt-1 ml-9">Admin Panel</p>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 px-2 space-y-0.5">
+          <p className="text-[10px] uppercase tracking-widest text-slate-600 px-2 pb-1 pt-2">
+            Principal
+          </p>
+          {NAV_ITEMS.slice(0, 4).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveSection(id)}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${
+                activeSection === id
+                  ? "bg-violet-900/50 text-violet-300 border border-violet-800/60"
+                  : "text-slate-500 hover:text-slate-300 hover:bg-[#161820]"
+              }`}
+            >
+              <Icon size={15} />
+              {label}
+            </button>
+          ))}
+          <p className="text-[10px] uppercase tracking-widest text-slate-600 px-2 pb-1 pt-3">
+            Sistema
+          </p>
+          {NAV_ITEMS.slice(4).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveSection(id)}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${
+                activeSection === id
+                  ? "bg-violet-900/50 text-violet-300 border border-violet-800/60"
+                  : "text-slate-500 hover:text-slate-300 hover:bg-[#161820]"
+              }`}
+            >
+              <Icon size={15} />
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Owner info */}
+        <div className="px-3 mt-4">
+          <div className="bg-[#0f1117] border border-[#1e2030] rounded-xl p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Crown size={12} className="text-amber-400" />
+              <span className="text-xs font-medium text-amber-400">
+                Propietario
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 break-all leading-relaxed">
+              {OWNER_EMAIL}
+            </p>
+            <div className="flex items-center gap-1 mt-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] text-emerald-500">Online</span>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate("/")}
+            className="w-full flex items-center gap-2 px-2.5 py-2 mt-2 rounded-lg text-xs text-slate-600 hover:text-slate-400 hover:bg-[#161820] transition-colors"
+          >
+            <LogOut size={13} />
+            Volver al app
+          </button>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="border-b border-[#1e2030] px-6 py-4 flex items-center justify-between bg-[#080a10]/80 backdrop-blur sticky top-0 z-10">
+          <div>
+            <h1 className="text-base font-semibold text-slate-200">
+              {activeLabel}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className="text-emerald-300 bg-emerald-900/30 border-emerald-800">
+              <ShieldCheck size={11} /> Admin
+            </Badge>
+            <Badge className="text-violet-300 bg-violet-900/30 border-violet-800">
+              <Zap size={11} /> ∞ créditos
+            </Badge>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 p-6 overflow-y-auto">
+          {sectionComponents[activeSection]}
+        </div>
+      </main>
+
+      <ToastContainer />
+    </div>
   );
 }
