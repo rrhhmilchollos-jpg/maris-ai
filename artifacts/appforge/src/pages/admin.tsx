@@ -7,9 +7,15 @@ import {
   useListAdminJobs,
   useAdjustUserCredits,
   useRetryAdminJob,
+  useListAdminTickets,
+  useUpdateAdminTicket,
+  useListAdminTransactions,
+  useRefundUserCredits,
   getListAdminUsersQueryKey,
   getListAdminJobsQueryKey,
   getGetAdminOverviewQueryKey,
+  getListAdminTicketsQueryKey,
+  getListAdminTransactionsQueryKey,
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
@@ -35,9 +41,11 @@ import { es } from "date-fns/locale";
 import {
   Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck,
   RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3,
+  MessageSquare, Banknote, History, Search, ArrowUpRight, ArrowDownRight,
+  LifeBuoy, Send, RotateCcw,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue" | "memory";
+type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "payments";
 
 interface MemoryEntry {
   id: number;
@@ -60,6 +68,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const { data: overview, isLoading: overviewLoading } = useGetAdminOverview();
   const { data: users, isLoading: usersLoading } = useListAdminUsers();
   const { data: apps, isLoading: appsLoading } = useListAdminApps();
+  const { data: tickets, isLoading } = useListAdminTickets();
+  const { data: transactions, isLoading: isLoadingTransactions } = useListAdminTransactions();
   const {
     data: jobsData,
     isLoading: jobsLoading,
@@ -185,7 +195,12 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard label="Créditos consumidos" value={overview?.creditsSpentTotal} loading={overviewLoading} icon={Sparkles} subtle />
           <StatCard label="Créditos comprados" value={overview?.creditsPurchasedTotal} loading={overviewLoading} icon={CreditCard} subtle />
-          <StatCard label="Ingresos totales" value={overview ? `$${(overview.revenueCentsTotal / 100).toFixed(2)}` : undefined} loading={overviewLoading} icon={CreditCard} subtle />
+          <StatCard label="Ingresos totales" value={overview ? `${(overview.revenueCentsTotal / 100).toFixed(2)}€` : undefined} loading={overviewLoading} icon={Banknote} subtle />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <StatCard label="Tickets abiertos" value={tickets?.filter((t: any) => t.status === "open").length} loading={isLoading} icon={MessageSquare} subtle />
+          <StatCard label="Transacciones recientes" value={transactions?.length} loading={isLoadingTransactions} icon={History} subtle />
         </div>
 
         <div className="flex justify-end">
@@ -212,6 +227,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="tickets"><MessageSquare className="h-4 w-4 mr-2" /> Soporte</TabsTrigger>
+            <TabsTrigger value="payments"><Banknote className="h-4 w-4 mr-2" /> Pagos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="mt-4">
@@ -371,6 +388,14 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
             </Card>
           </TabsContent>
 
+          <TabsContent value="tickets" className="mt-4 space-y-4">
+            <TicketsTabContent />
+          </TabsContent>
+
+          <TabsContent value="payments" className="mt-4 space-y-4">
+            <PaymentsTabContent />
+          </TabsContent>
+
           <TabsContent value="queue" className="mt-4 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard label="En cola" value={jobsData?.queued} loading={jobsLoading} icon={Clock} />
@@ -487,5 +512,223 @@ function StatCard({ label, value, loading, icon: Icon, subtle }: { label: string
         {loading ? <Skeleton className="h-8 w-16" /> : <div className={`text-3xl font-bold font-mono ${subtle ? "text-muted-foreground" : "text-foreground"}`}>{value ?? 0}</div>}
       </CardContent>
     </Card>
+  );
+}
+
+function TicketsTabContent() {
+  const { data: tickets, isLoading, refetch } = useListAdminTickets();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [replyText, setReplyText] = useState("");
+  const [selectedTicket, setSelectedTicket] = useState<any>(null);
+
+  const updateMutation = useUpdateAdminTicket({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAdminTicketsQueryKey() });
+        toast({ title: "Ticket actualizado", description: "La respuesta ha sido enviada con éxito." });
+        setSelectedTicket(null);
+        setReplyText("");
+      },
+    },
+  });
+
+  if (isLoading) return <div className="p-6 space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-primary" /> Tickets de Soporte ({tickets?.length ?? 0})
+        </h3>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+          <RefreshCw className="h-4 w-4" /> Actualizar
+        </Button>
+      </div>
+      <Card className="bg-card/40 border-white/5">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-black/20">
+              <TableRow className="border-white/5 hover:bg-transparent">
+                <TableHead>Estado</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead>Asunto</TableHead>
+                <TableHead>Usuario</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead className="text-right">Acción</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tickets && tickets.length > 0 ? tickets.map((t: any) => (
+                <TableRow key={t._id} className="border-white/5 hover:bg-white/[0.02]">
+                  <TableCell>
+                    <Badge className={
+                      t.status === "open" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" :
+                      t.status === "resolved" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" :
+                      "bg-muted/30 text-muted-foreground border-white/10"
+                    }>{t.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-sm font-medium">{t.category}</TableCell>
+                  <TableCell className="max-w-xs truncate">{t.subject}</TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">{t.email}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{format(new Date(t.createdAt), "d MMM HH:mm", { locale: es })}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedTicket(t)}>Gestionar</Button>
+                  </TableCell>
+                </TableRow>
+              )) : (
+                <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">No hay tickets pendientes.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!selectedTicket} onOpenChange={(open) => !open && setSelectedTicket(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LifeBuoy className="h-5 w-5 text-primary" /> Ticket #{selectedTicket?._id?.slice(-6)}
+            </DialogTitle>
+            <DialogDescription>
+              Consulta de <span className="font-semibold">{selectedTicket?.email}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-muted/30 p-4 rounded-lg border border-white/5">
+              <p className="text-xs font-semibold text-primary uppercase mb-1">{selectedTicket?.category} - {selectedTicket?.subject}</p>
+              <p className="text-sm text-foreground leading-relaxed">{selectedTicket?.message}</p>
+            </div>
+            {selectedTicket?.adminReply && (
+              <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+                <p className="text-xs font-semibold text-primary uppercase mb-1">Respuesta del Admin</p>
+                <p className="text-sm text-foreground leading-relaxed italic">{selectedTicket.adminReply}</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="reply">Responder o Actualizar</Label>
+              <textarea
+                id="reply"
+                className="w-full min-h-[100px] bg-black/20 border border-white/10 rounded-lg p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Escribe tu respuesta aquí..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex sm:justify-between gap-2">
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => updateMutation.mutate({ id: selectedTicket._id, data: { status: "resolved" } })}>Resolver</Button>
+              <Button variant="outline" size="sm" onClick={() => updateMutation.mutate({ id: selectedTicket._id, data: { status: "closed" } })}>Cerrar</Button>
+            </div>
+            <Button className="bg-primary hover:bg-primary/90 text-white" disabled={!replyText || updateMutation.isPending} onClick={() => updateMutation.mutate({ id: selectedTicket._id, data: { adminReply: replyText, status: "in_progress" } })}>
+              <Send className="h-4 w-4 mr-2" /> Enviar Respuesta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function PaymentsTabContent() {
+  const { data: transactions, isLoading, refetch } = useListAdminTransactions();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [refundData, setRefundData] = useState<any>(null);
+  const [refundReason, setRefundReason] = useState("");
+
+  const refundMutation = useRefundUserCredits({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAdminTransactionsQueryKey() });
+        toast({ title: "Reembolso procesado", description: "Los créditos han sido devueltos al usuario." });
+        setRefundData(null);
+        setRefundReason("");
+      },
+    },
+  });
+
+  if (isLoading) return <div className="p-6 space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold flex items-center gap-2">
+          <Banknote className="h-5 w-5 text-emerald-400" /> Historial de Transacciones ({transactions?.length ?? 0})
+        </h3>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="h-4 w-4 mr-2" /> Actualizar
+        </Button>
+      </div>
+      <Card className="bg-card/40 border-white/5">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader className="bg-black/20">
+              <TableRow className="border-white/5 hover:bg-transparent">
+                <TableHead>Tipo</TableHead>
+                <TableHead>Cantidad</TableHead>
+                <TableHead>Usuario</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Fecha</TableHead>
+                <TableHead className="text-right">Acción</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {transactions && transactions.length > 0 ? transactions.map((txn: any) => (
+                <TableRow key={txn.id} className="border-white/5 hover:bg-white/[0.02]">
+                  <TableCell>
+                    <Badge className={
+                      txn.kind === "purchase" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" :
+                      txn.kind === "refund" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" :
+                      "bg-muted/30 text-muted-foreground border-white/10"
+                    }>{txn.kind}</Badge>
+                  </TableCell>
+                  <TableCell className={`font-mono font-bold ${txn.amount > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {txn.amount > 0 ? "+" : ""}{txn.amount}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">{txn.userEmail}</TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground text-xs">{txn.description}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{format(new Date(txn.createdAt), "d MMM yyyy HH:mm", { locale: es })}</TableCell>
+                  <TableCell className="text-right">
+                    {txn.kind === "purchase" && (
+                      <Button variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300" onClick={() => setRefundData(txn)}>Reembolsar</Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )) : (
+                <TableRow><TableCell colSpan={6} className="text-center py-10 text-muted-foreground">No hay transacciones registradas.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!refundData} onOpenChange={(open) => !open && setRefundData(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-blue-400" /> Procesar Reembolso
+            </DialogTitle>
+            <DialogDescription>
+              Estás a punto de devolver <span className="font-bold text-white">{refundData?.amount} créditos</span> a <span className="font-mono text-primary">{refundData?.userEmail}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="refund-reason">Motivo del reembolso</Label>
+              <Input id="refund-reason" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="ej. Error en la generación de la app" />
+            </div>
+            <p className="text-xs text-muted-foreground italic">Nota: Esto solo afectará al saldo de créditos de Maris AI, no realizará una devolución automática en Stripe.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundData(null)}>Cancelar</Button>
+            <Button className="bg-blue-600 hover:bg-blue-500 text-white" disabled={refundMutation.isPending} onClick={() => refundMutation.mutate({ data: { userId: refundData.userId, amount: refundData.amount, reason: refundReason } })}>
+              Confirmar Reembolso
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

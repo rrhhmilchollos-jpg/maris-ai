@@ -386,4 +386,38 @@ export const AppRevision: Model<IAppRevision> =
   mongoose.models.AppRevision ||
   mongoose.model<IAppRevision>("AppRevision", AppRevisionSchema);
 
+// ─── Support Tickets ─────────────────────────────────────────────────────────
+export interface ISupportTicket extends Document {
+  userId: string;
+  email: string;
+  category: string;
+  subject: string;
+  message: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  adminReply?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const SupportTicketSchema = new Schema<ISupportTicket>(
+  {
+    userId: { type: String, required: true, index: true },
+    email: { type: String, required: true },
+    category: { type: String, required: true },
+    subject: { type: String, required: true },
+    message: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ["open", "in_progress", "resolved", "closed"],
+      default: "open",
+    },
+    adminReply: { type: String, default: null },
+  },
+  { timestamps: true },
+);
+
+export const SupportTicket: Model<ISupportTicket> =
+  mongoose.models.SupportTicket ||
+  mongoose.model<ISupportTicket>("SupportTicket", SupportTicketSchema);
+
 // ─── Aliases en minúscula para compatibilidad eliminados para evitar conflictos con Drizzle ───

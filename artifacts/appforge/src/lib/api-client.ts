@@ -22,6 +22,8 @@ export const getListAdminUsersQueryKey = () => ["admin-users"];
 export const getListAdminJobsQueryKey = () => ["admin-jobs"];
 export const getGetAdminOverviewQueryKey = () => ["admin-overview"];
 export const getListAdminAppsQueryKey = () => ["admin-apps"];
+export const getListAdminTicketsQueryKey = () => ["admin-tickets"];
+export const getListAdminTransactionsQueryKey = () => ["admin-transactions"];
 export const getListCreditPackagesQueryKey = () => ["credit-packages"];
 export const getListTransactionsQueryKey = () => ["transactions"];
 export const getGetAppNotesQueryKey = (id: number) => ["app-notes", id];
@@ -102,6 +104,18 @@ export function useAdjustUserCredits(opts?: { mutation?: Partial<UseMutationOpti
 }
 export function useRetryAdminJob(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/jobs/${id}/retry`, { method: "POST" }), ...(opts?.mutation as any) });
+}
+export function useListAdminTickets(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getListAdminTicketsQueryKey(), queryFn: () => apiFetch("/api/admin/tickets"), ...(opts?.query as any) });
+}
+export function useUpdateAdminTicket(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/tickets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+export function useListAdminTransactions(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getListAdminTransactionsQueryKey(), queryFn: () => apiFetch("/api/admin/transactions"), ...(opts?.query as any) });
+}
+export function useRefundUserCredits(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ data }: any) => apiFetch("/api/admin/refund", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
 export function useUpdateAppModel(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/apps/${id}/model`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });

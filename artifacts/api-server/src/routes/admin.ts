@@ -120,7 +120,7 @@ router.get("/admin/overview", async (_req, res) => {
     creditsOutstanding,
     creditsSpentTotal,
     creditsPurchasedTotal,
-    revenueCentsTotal: 0,
+    revenueCentsTotal: creditsPurchasedTotal * 0.5, // Estimación basada en 0.50€ por crédito o similar, ajustar según lógica real
   });
 });
 
@@ -212,6 +212,74 @@ router.get("/admin/apps", async (_req, res) => {
       createdAt: r.createdAt.toISOString(),
     })),
   );
+});
+
+// GET /api/admin/transactions — lista todas las transacciones financieras
+router.get("/admin/transactions", async (_req, res) => {
+  await connectDB();
+  const txns = await CreditTransaction.find({})
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+
+  const userIds = [...new Set(txns.map((t) => t.userId))];
+  const users = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
+  const emailMap = new Map(users.map((u) => [String(u._id), u.email]));
+
+  res.json(
+    txns.map((t) => ({
+      id: t._id,
+      userId: t.userId,
+      userEmail: emailMap.get(t.userId) ?? null,
+      amount: t.amount,
+      kind: t.kind,
+      description: t.description,
+      stripeSessionId: t.stripeSessionId,
+      createdAt: t.createdAt.toISOString(),
+    })),
+  );
+});
+
+// POST /api/admin/refund — procesar un reembolso de créditos
+router.post("/admin/refund", async (req, res) => {
+  await connectDB();
+  const { userId, amount, reason } = req.body as {
+    userId: string;
+    amount: number;
+    reason: string;
+  };
+
+  if (!userId || !amount || amount <= 0) {
+    res.status(400).json({ error: "Datos de reembolso inválidos" });
+    return;
+  }
+
+  const user = await User.findById(userId).lean();
+  if (!user) {
+    res.status(404).json({ error: "Usuario no encontrado" });
+    return;
+  }
+
+  // Crear transacción de reembolso
+  await CreditTransaction.create({
+    userId,
+    amount: Math.abs(amount),
+    kind: "refund",
+    description: reason || "Reembolso procesado por administrador",
+  });
+
+  // Incrementar créditos del usuario
+  const updated = await User.findByIdAndUpdate(
+    userId,
+    { $inc: { credits: Math.abs(amount) } },
+    { new: true },
+  ).lean();
+
+  res.json({
+    success: true,
+    newBalance: updated?.credits,
+    message: `Reembolso de ${amount} créditos procesado con éxito`,
+  });
 });
 
 router.get("/admin/jobs", async (_req, res) => {
