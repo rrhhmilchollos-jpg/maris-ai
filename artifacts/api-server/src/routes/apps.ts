@@ -1,3 +1,4 @@
+import { GenerationJob, GeneratedApp } from "@workspace/db/schema";
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import OpenAI from "openai";
 
@@ -1822,6 +1823,67 @@ export async function reclaimOrphanedJobs() {
 
 export async function runJobById(jobId: string) {
   logger.info(`Ejecutando trabajo: ${jobId}`);
+  
+  const job = await GenerationJob.findById(jobId);
+  if (!job) {
+    logger.error(`Trabajo no encontrado: ${jobId}`);
+    return;
+  }
+
+  try {
+    await GenerationJob.findByIdAndUpdate(jobId, { 
+      status: "running", 
+      phase: "generating", 
+      progress: 10,
+      updatedAt: new Date() 
+    });
+
+    const result = await generateApp(
+      job.prompt,
+      async (p) => {
+        await GenerationJob.findByIdAndUpdate(jobId, { 
+          phase: p.phase, 
+          progress: p.progress,
+          updatedAt: new Date() 
+        }).catch(() => {});
+      },
+      undefined,
+      job.coderModel,
+      job.language as GenLanguage,
+      async (agent, msg) => {
+        logger.info(`[${agent}] ${msg}`);
+      },
+      []
+    );
+
+    await GeneratedApp.findByIdAndUpdate(job.appId, {
+      title: result.title,
+      description: result.description,
+      techStack: result.techStack,
+      frontendCode: result.frontendCode,
+      backendCode: result.backendCode,
+      status: "ready",
+      updatedAt: new Date()
+    });
+
+    await GenerationJob.findByIdAndUpdate(jobId, { 
+      status: "succeeded", 
+      phase: "completed", 
+      progress: 100,
+      updatedAt: new Date() 
+    });
+
+    logger.info(`Trabajo completado con éxito: ${jobId}`);
+  } catch (error) {
+    logger.error(`Error ejecutando trabajo ${jobId}:`, error);
+    await GenerationJob.findByIdAndUpdate(jobId, { 
+      status: "failed", 
+      phase: "failed", 
+      errorMessage: error instanceof Error ? error.message : String(error),
+      updatedAt: new Date() 
+    });
+  }
+}
 }
 
 // Exportación del router
