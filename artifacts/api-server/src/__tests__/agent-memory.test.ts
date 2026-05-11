@@ -42,7 +42,7 @@ async function cleanup(): Promise<void> {
   if (insertedIds.length === 0) return;
   for (const id of insertedIds) {
     try {
-      await db.delete(agentMemory).where(eq(agentMemory.id, id));
+      await (db as any).delete(agentMemory).where(eq((agentMemory as any).id, id));
     } catch {
       /* best-effort cleanup */
     }
@@ -73,8 +73,8 @@ async function testRememberAndRecall(): Promise<void> {
     patch,
     language: "typescript",
   });
-  expect("rememberPatch returns an entry", saved !== null && typeof saved.id === "number");
-  if (saved) insertedIds.push(saved.id);
+    expect("rememberPatch returns an entry", saved !== null && (typeof (saved as any).id === "number" || typeof (saved as any).id === "string"));
+  if (saved) insertedIds.push((saved as any).id);
 
   const matches = await recallSimilar(errMsg, { limit: 5, threshold: 0.5, language: "typescript" });
   expect("recallSimilar finds the saved patch", matches.some((m) => m.patch === patch));
@@ -96,8 +96,8 @@ async function testRememberAndRecall(): Promise<void> {
   });
   expect(
     "near-duplicate increments successCount instead of inserting",
-    dupSaved !== null && saved !== null && dupSaved.id === saved.id && (dupSaved.successCount ?? 0) >= 2,
-    `dup.id=${dupSaved?.id} saved.id=${saved?.id} count=${dupSaved?.successCount}`,
+    dupSaved !== null && saved !== null && (dupSaved as any).id === (saved as any).id && ((dupSaved as any).successCount ?? 0) >= 2,
+    `dup.id=${(dupSaved as any)?.id} saved.id=${(saved as any)?.id} count=${(dupSaved as any)?.successCount}`,
   );
 }
 

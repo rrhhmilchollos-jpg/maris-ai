@@ -132,7 +132,7 @@ async function captureViewport(
 ): Promise<ViewportShot> {
   const page: Page = await browser.newPage();
   const consoleErrors: string[] = [];
-  page.on("console", (msg) => {
+  page.on("console", (msg: any) => {
     if (msg.type() === "error") consoleErrors.push(msg.text().slice(0, 500));
   });
   page.on("pageerror", (err: Error) => consoleErrors.push(err.message.slice(0, 500)));
@@ -523,7 +523,7 @@ export async function runVisualTester(opts: {
     // tester's "improvement" actually regressed something. Fire-and-forget.
     void import("./appRevisions").then(({ snapshotCurrentApp }) =>
       snapshotCurrentApp({
-        appId: app.id,
+        appId: String(app.id),
         source: "visual-fix",
         summary: `Reparación visual automática (ciclo ${cycle})`,
       }),

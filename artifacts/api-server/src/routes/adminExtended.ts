@@ -91,10 +91,10 @@ router.patch("/users/:id", async (req, res) => {
     if (!result.rows[0]) {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
-    res.json(result.rows[0]);
+    return res.json(result.rows[0]);
   } catch (err) {
     console.error("[admin/users PATCH]", err);
-    res.status(500).json({ error: "Error al actualizar usuario" });
+    return res.status(500).json({ error: "Error al actualizar usuario" });
   }
 });
 
@@ -138,10 +138,10 @@ router.delete("/apps/:id", async (req, res) => {
     if (!result.rows[0]) {
       return res.status(404).json({ error: "App no encontrada" });
     }
-    res.status(204).end();
+    return res.status(204).end();
   } catch (err) {
     console.error("[admin/apps DELETE]", err);
-    res.status(500).json({ error: "Error al eliminar app" });
+    return res.status(500).json({ error: "Error al eliminar app" });
   }
 });
 

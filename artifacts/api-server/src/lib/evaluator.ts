@@ -250,7 +250,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   });
 
   const text = response.content
-    .map((b) => (b.type === "text" ? b.text : ""))
+    .map((b: any) => (b.type === "text" ? b.text : ""))
     .filter(Boolean)
     .join("\n");
 
@@ -589,7 +589,7 @@ export async function runAutoEvaluator(opts: {
     let patched: string | null = null;
     try {
       const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;
-      patched = await patchFn(currentBundle, patcherIssues, language, "");
+      patched = await patchFn(currentBundle as string, patcherIssues, language, "");
     } catch (err) {
       log.warn({ err, appId, jobId, round }, "🔁 Patcher threw — stopping evaluator loop");
       break;
@@ -619,7 +619,7 @@ export async function runAutoEvaluator(opts: {
       .where(
         and(
           eq(generatedApps.id, appId),
-          eq(generatedApps.frontendCode, previousBundle),
+          eq(generatedApps.frontendCode, previousBundle as string),
         ),
       )
       .returning({ id: generatedApps.id });
@@ -636,10 +636,10 @@ export async function runAutoEvaluator(opts: {
     // strict critique made things worse than the previous, looser version.
     void import("./appRevisions").then(({ snapshotCurrentApp }) =>
       snapshotCurrentApp({
-        appId,
+        appId: String(appId),
         source: "visual-fix",
         summary: `Reparación del evaluador autónomo (ronda ${round})`,
-        jobId: jobId ?? null,
+        jobId: jobId ? String(jobId) : null,
       }),
     );
     // Tiny pause so the public deploy route reflects the new bundle for the
@@ -658,9 +658,9 @@ export async function runAutoEvaluator(opts: {
       .update(generatedApps)
       .set({ status: "ready", evaluatorSummary: null })
       .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-      .catch((err) => {
-        log.warn({ err, appId }, "Failed to clear evaluatorSummary after pass");
-      });
+      .catch((err: any) => {
+      log.error({ err, appId }, "Failed to clear evaluatorSummary after fail");
+    });
 
     // Re-read autoPublish right before deciding — the user may have toggled
     // it off via the UI while the (slow) evaluator was running. Snapshot

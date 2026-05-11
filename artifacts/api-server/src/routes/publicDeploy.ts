@@ -1,5 +1,5 @@
 import express, { Router, type IRouter, type Request, type Response } from "express";
-import { GeneratedApp, AppRuntimeError } from "@workspace/db/schema";
+import { GeneratedApp, AppRuntimeErrorModel as AppRuntimeError } from "@workspace/db/schema";
 import { buildDeployHtml, SLUG_PATTERN } from "../lib/deployBundle";
 import { connectDB } from "../lib/db";
 

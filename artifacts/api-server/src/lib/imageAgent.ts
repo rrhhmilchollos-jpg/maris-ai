@@ -200,7 +200,7 @@ export async function generateAppImages(
   if (!row) {
     throw new Error("App not found");
   }
-  const placeholders = findPlaceholders(row.frontendCode);
+  const placeholders = findPlaceholders(row.frontendCode as string);
   if (placeholders.length === 0) {
     return { found: 0, generated: 0, bundleUpdated: false };
   }
@@ -230,7 +230,7 @@ export async function generateAppImages(
     // Replace ALL occurrences of the placeholder URL — same image often shows
     // up multiple times across the bundle (different components reference it).
     const escaped = item.placeholder.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    bundle = bundle.replace(new RegExp(escaped, "g"), newUrl);
+    bundle = (bundle as string).replace(new RegExp(escaped, "g"), newUrl);
     successCount++;
   }
 

@@ -1,7 +1,19 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+export * from "./generatedApps.js";
+export * from "./appRuntimeErrors.js";
+export * from "./appImages.js";
+export * from "./agentMemory.js";
+export * from "./chatAttachments.js";
+export * from "./users.js";
+export * from "./generationJobs.js";
+export * from "./creditTransactions.js";
+export * from "./appMessages.js";
+export * from "./jobLogs.js";
+export * from "./userPreferences.js";
+export * from "./appRevisions.js";
 
 // ─── Users ───────────────────────────────────────────────────────────────────
-export interface IUser extends Document {
+export interface IUser {
   _id: string;
   email: string;
   fullName?: string;
@@ -32,7 +44,7 @@ export const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
 
 // ─── Generated Apps ──────────────────────────────────────────────────────────
-export interface IGeneratedApp extends Document {
+export interface IGeneratedApp {
   _id: string;
   userId: string;
   title: string;
@@ -91,7 +103,8 @@ export const GeneratedApp: Model<IGeneratedApp> =
   mongoose.model<IGeneratedApp>("GeneratedApp", GeneratedAppSchema);
 
 // ─── Credit Transactions ─────────────────────────────────────────────────────
-export interface ICreditTransaction extends Document {
+export interface ICreditTransaction {
+  _id: string;
   userId: string;
   kind: string;
   amount: number;
@@ -117,7 +130,8 @@ export const CreditTransaction: Model<ICreditTransaction> =
   mongoose.model<ICreditTransaction>("CreditTransaction", CreditTransactionSchema);
 
 // ─── Generation Jobs ─────────────────────────────────────────────────────────
-export interface IGenerationJob extends Document {
+export interface IGenerationJob {
+  _id: string;
   userId: string;
   prompt: string;
   status: string;
@@ -208,7 +222,7 @@ const AppImageSchema = new Schema<IAppImage>(
   { timestamps: true },
 );
 
-export const AppImage: Model<IAppImage> =
+export const AppImageModel: Model<IAppImage> =
   mongoose.models.AppImage ||
   mongoose.model<IAppImage>("AppImage", AppImageSchema);
 
@@ -260,7 +274,7 @@ const ChatAttachmentSchema = new Schema<IChatAttachment>(
   { timestamps: true },
 );
 
-export const ChatAttachment: Model<IChatAttachment> =
+export const ChatAttachmentMongooseModel: Model<IChatAttachment> =
   mongoose.models.ChatAttachment ||
   mongoose.model<IChatAttachment>("ChatAttachment", ChatAttachmentSchema);
 
@@ -320,7 +334,7 @@ const AppRuntimeErrorSchema = new Schema<IAppRuntimeError>(
   { timestamps: true },
 );
 
-export const AppRuntimeError: Model<IAppRuntimeError> =
+export const AppRuntimeErrorModel: Model<IAppRuntimeError> =
   mongoose.models.AppRuntimeError ||
   mongoose.model<IAppRuntimeError>("AppRuntimeError", AppRuntimeErrorSchema);
 
@@ -372,6 +386,4 @@ export const AppRevision: Model<IAppRevision> =
   mongoose.models.AppRevision ||
   mongoose.model<IAppRevision>("AppRevision", AppRevisionSchema);
 
-// ─── Aliases en minúscula para compatibilidad ────────────────────────────────
-export const appImages = AppImage;
-export const appRuntimeErrors = AppRuntimeError;
+// ─── Aliases en minúscula para compatibilidad eliminados para evitar conflictos con Drizzle ───

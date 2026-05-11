@@ -26,6 +26,7 @@
     "@opentelemetry/resources": "^2.7.0",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@replit/connectors-sdk": "^0.4.0",
     "@sentry/node": "^10.51.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
@@ -34,7 +35,7 @@
     "bullmq": "^5.76.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "catalog:",
     "e2b": "^2.19.2",
     "express": "^5",
     "express-rate-limit": "^8.4.1",
@@ -47,6 +48,7 @@
     "openai": "^4.100.0",
     "pino": "^9",
     "pino-http": "^10",
+    "puppeteer": "^24.43.0",
     "sharp": "^0.33.5",
     "stripe": "^17.7.0",
     "tiktoken": "^1.0.17",
@@ -63,6 +65,7 @@
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
     "thread-stream": "3.1.0",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "~5.9.3"
   }
 }

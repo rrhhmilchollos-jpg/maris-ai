@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import multer from "multer";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../lib/db";
-import { chatAttachments } from "@workspace/db";
+import { chatAttachments } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
 
 const router: Router = Router();

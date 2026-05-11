@@ -3,7 +3,15 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@workspace/db": ["../../lib/db/src/index.ts"],
+      "@workspace/db/schema": ["../../lib/db/src/schema/index.ts"],
+      "@workspace/integrations-anthropic-ai": ["../../lib/integrations-anthropic-ai/src/index.ts"],
+      "@workspace/integrations-gemini-ai": ["../../lib/integrations-gemini-ai/src/index.ts"],
+      "@workspace/api-zod": ["../../lib/api-zod/src/index.ts"]
+    }
   },
   "include": ["src"],
   "references": [
@@ -12,6 +20,12 @@
     },
     {
       "path": "../../lib/api-zod"
+    },
+    {
+      "path": "../../lib/integrations-anthropic-ai"
+    },
+    {
+      "path": "../../lib/integrations-gemini-ai"
     }
   ]
 }

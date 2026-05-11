@@ -1796,7 +1796,7 @@ router.post("/generate", async (req, res) => {
   try {
     const { prompt, model, language, attachments } = req.body;
     
-    logger.info("Iniciando generación de app...", { prompt });
+    logger.info({ prompt }, "Iniciando generación de app...");
 
     // Ejecutamos la generación directamente usando tu lógica de agentes
     const result = await generateApp(
@@ -1811,7 +1811,7 @@ router.post("/generate", async (req, res) => {
 
     res.status(200).json(result);
   } catch (error) {
-    logger.error("Error en /api/generate", { error: error instanceof Error ? error.message : error });
+    logger.error({ error: error instanceof Error ? error.message : error }, "Error en /api/generate");
     res.status(500).json({ error: "Error al generar la aplicación. Revisa los logs de Render para más detalles." });
   }
 });
@@ -1875,7 +1875,7 @@ export async function runJobById(jobId: string) {
 
     logger.info(`Trabajo completado con éxito: ${jobId}`);
   } catch (error) {
-    logger.error(`Error ejecutando trabajo ${jobId}:`, error);
+    logger.error({ error }, `Error ejecutando trabajo ${jobId}:`);
     await GenerationJob.findByIdAndUpdate(jobId, { 
       status: "failed", 
       phase: "failed", 
@@ -1884,6 +1884,28 @@ export async function runJobById(jobId: string) {
     });
   }
 }
+
+import { deployAppToVercel } from "../lib/vercelDeploy";
+
+export async function runDeployForApp(args: {
+  appId: number;
+  userId: string;
+  log: any;
+}): Promise<{ url: string; slug: string }> {
+  const result = await deployAppToVercel({
+    appId: args.appId,
+    userId: args.userId,
+    log: args.log,
+  });
+
+  if (!result.ok) {
+    throw new Error(`Vercel deploy failed: ${JSON.stringify(result.failure)}`);
+  }
+
+  return {
+    url: result.result.url,
+    slug: "", // El slug se maneja internamente en Vercel o se puede derivar
+  };
 }
 
 // Exportación del router

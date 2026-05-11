@@ -120,7 +120,7 @@ router.get("/jobs/:id", requireAuth, async (req, res) => {
     progress: job.progress ?? 0,
     appId: job.appId ? String(job.appId) : null,
     errorMessage: job.errorMessage ?? null,
-    logs: job.logs ?? [],
+    logs: (job as any).logs ?? [],
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   });

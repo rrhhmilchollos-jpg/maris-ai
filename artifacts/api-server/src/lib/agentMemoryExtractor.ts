@@ -84,7 +84,7 @@ Extrae lo que merezca recordarse.`;
     const userBullets = sanitizeBullets(parsed.userPreferences, 2);
 
     if (appBullets.length > 0) {
-      await appendAppNotes(input.appId, appBullets.join("\n"));
+      await appendAppNotes(String(input.appId), appBullets.join("\n"));
     }
     if (userBullets.length > 0) {
       await appendUserPreferences(input.userId, userBullets.join("\n"));

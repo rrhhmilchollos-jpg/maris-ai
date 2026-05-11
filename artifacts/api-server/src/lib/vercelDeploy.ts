@@ -83,7 +83,7 @@ export async function deployAppToVercel(opts: {
   //    becomes one file uploaded to Vercel. We refuse empty bundles so the
   //    UI shows "build failed" instead of silently deploying nothing (which
   //    would leave a broken white page on the user's vercel.app URL).
-  const bundleFiles = bundleToFiles(row.frontendCode);
+  const bundleFiles = bundleToFiles(row.frontendCode as string);
   if (Object.keys(bundleFiles).length === 0) {
     return {
       ok: false,
