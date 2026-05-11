@@ -273,7 +273,7 @@ function ClerkProviderWithRoutes() {
           </Route>
 
           <Route path="/admin">
-            <AdminGated><AdminPage /></AdminGated>
+            <AdminGated><AdminDashboardPage /></AdminGated>
           </Route>
 
           <Route path="/admin/jobs">
