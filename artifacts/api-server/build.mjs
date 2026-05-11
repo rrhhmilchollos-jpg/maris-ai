@@ -22,6 +22,7 @@ async function buildAll() {
       "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
       "@workspace/db": path.resolve(repoRoot, "lib/db/src/index.ts"),
       "@workspace/integrations-gemini-ai": path.resolve(repoRoot, "lib/integrations-gemini-ai/src/index.ts"),
+      "@workspace/integrations-anthropic-ai": path.resolve(repoRoot, "lib/integrations-anthropic-ai/src/index.ts"),
       "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
     },
     external: [
