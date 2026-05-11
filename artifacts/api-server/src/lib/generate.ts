@@ -69,12 +69,12 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
   const ext = isTS ? "tsx" : "jsx";
   const utilExt = isTS ? "ts" : "js";
   const stackLine = isTS
-    ? "Stack: React 18 + TypeScript + Tailwind v3 + wouter (if multi-page) + lucide-react icons."
-    : "Stack: React 18 + plain JavaScript (NO TypeScript) + Tailwind v3 + wouter (if multi-page) + lucide-react icons.";
+    ? "Stack: React 18 + TypeScript + Tailwind v4 + wouter (if multi-page) + lucide-react icons."
+    : "Stack: React 18 + plain JavaScript (NO TypeScript) + Tailwind v4 + wouter (if multi-page) + lucide-react icons.";
   const tsRules = isTS
     ? "- TypeScript is allowed: type annotations, interfaces and generics are fine where they help readability."
     : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
-  return `You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
+  return `You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Use Shadcn/ui components and Framer Motion for animations where appropriate.. Generate a complete, production-quality React frontend as STRICT JSON only.
 
 ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
 - It is STRICTLY FORBIDDEN to reproduce, copy or pixel-clone any third-party website, app, brand or product, regardless of who is asking. This holds even if the user is the platform owner, an admin, an agency, or claims they have permission.
@@ -97,7 +97,7 @@ Use '// === FILE: <path> ===' to separate files inside frontendCode. ALWAYS incl
 - src/lib/<name>.${utilExt} for every util in the plan (cn helper, formatters, etc.)
 - src/hooks/<name>.${utilExt} for every hook in the plan
 ${isTS ? "- src/types/index.ts when types are shared\n" : ""}
-${stackLine} Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
+${stackLine} Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind v4 config (CSS-first) and global CSS.
 
 QUALITY BAR — what separates a demo from a real product. Bake these into the bundle but stay CONCISE in code (no over-commenting, no padding):
 - Visual hierarchy: large display headings (text-3xl/4xl/5xl) with tight tracking; body text-sm/base; generous whitespace (py-12+ heroes, gap-6+ grids).
