@@ -1789,10 +1789,10 @@ export async function generateApp(
 
 /* === FINAL EXPORTS (Required by index.ts and routes/index.ts) === */
 import { Router } from "express";
-const router = Router();
+const appsRouter = Router();
 
 // Ruta para generar aplicaciones
-router.post("/generate", async (req, res) => {
+appsRouter.post("/generate", async (req, res) => {
   try {
     const { prompt, model, language, attachments } = req.body;
     
@@ -1909,4 +1909,4 @@ export async function runDeployForApp(args: {
 }
 
 // Exportación del router
-export default router;
+export default appsRouter;

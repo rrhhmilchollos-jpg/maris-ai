@@ -15,7 +15,7 @@ import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import { metricsMiddleware } from "./lib/metrics";
-import adminExtendedRouter from "./routes/adminExtended.js";  // ← LÍNEA AÑADIDA
+import adminExtendedRouter from "./routes/adminExtended";
 
 initSentry();
 
@@ -90,15 +90,8 @@ app.use("/api", metricsMiddleware);
 
 app.use("/api", router);
 
-// ── Admin extended dashboard endpoints ──────────────────────────────────────
-// LÍNEA AÑADIDA: monta DESPUÉS de app.use("/api", router) para que los
-// middlewares requireAuth y requireAdmin de router ya estén disponibles.
-// Si requireAuth/requireAdmin están en router/index.ts los importas aquí:
-// import { requireAuth, requireAdmin } from "./middlewares/auth.js";
-// app.use("/api/admin", requireAuth, requireAdmin, adminExtendedRouter);
-//
-// Si ya el router principal protege /api/admin, simplemente:
-app.use("/api/admin", adminExtendedRouter);                    // ← LÍNEA AÑADIDA
+// El router principal (router) ya incluye adminRouter y adminExtendedRouter bajo /api
+// No es necesario montarlos de nuevo aquí si ya están en ./routes/index.ts
 
 // Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
 app.use(publicDeployRouter);

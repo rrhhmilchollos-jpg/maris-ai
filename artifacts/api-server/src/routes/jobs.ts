@@ -3,12 +3,13 @@
  *
  * Rutas que el frontend espera:
  *   POST /api/apps       → crea job y devuelve { id }
- *   GET  /api/jobs/:id   → devuelve estado del job para polling
+ *   GET  /api/jobs/:id        → devuelve estado del job para polling
+ *   GET  /api/jobs/:id/logs   → devuelve logs incrementales del job
  */
 
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
-import { GenerationJob, GeneratedApp, User } from "@workspace/db/schema";
+import { GenerationJob, GeneratedApp, User, JobLog } from "@workspace/db/schema";
 import { requireAuth, isAdminEmail } from "../lib/auth";
 import { enqueueGenerateJob } from "../lib/jobQueue";
 import { logger } from "../lib/logger";
@@ -124,6 +125,46 @@ router.get("/jobs/:id", requireAuth, async (req, res) => {
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   });
+});
+
+// ─── GET /api/jobs/:id/logs ──────────────────────────────────────────────────
+
+router.get("/jobs/:id/logs", requireAuth, async (req, res) => {
+  await connectDB();
+  const { id } = req.params;
+  const afterId = req.query.afterId ? String(req.query.afterId) : null;
+
+  // Verificar que el job existe y el usuario tiene acceso
+  const job = await GenerationJob.findById(id).lean();
+  if (!job) {
+    res.status(404).json({ error: "Job no encontrado." });
+    return;
+  }
+
+  const isAdmin = isAdminEmail(req.dbUser!.email);
+  if (!isAdmin && String(job.userId) !== req.userId) {
+    res.status(403).json({ error: "Sin acceso." });
+    return;
+  }
+
+  // Cargar logs
+  const query: any = { jobId: id };
+  if (afterId) {
+    query._id = { $gt: afterId };
+  }
+
+  const logs = await JobLog.find(query).sort({ _id: 1 }).limit(100).lean();
+
+  res.json(
+    logs.map((l) => ({
+      id: l._id,
+      jobId: l.jobId,
+      agent: l.agent,
+      level: l.level,
+      message: l.message,
+      createdAt: l.createdAt,
+    })),
+  );
 });
 
 export default router;

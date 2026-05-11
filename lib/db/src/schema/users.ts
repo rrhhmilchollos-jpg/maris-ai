@@ -5,7 +5,7 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   fullName: text("full_name"),
   imageUrl: text("image_url"),
-  credits: integer("credits").notNull().default(3),
+  credits: integer("credits").notNull().default(70),
   stripeCustomerId: text("stripe_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
