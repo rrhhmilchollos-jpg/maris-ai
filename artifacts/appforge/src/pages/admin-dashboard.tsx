@@ -40,6 +40,8 @@ interface AdminMetrics {
   };
   redis: { connected: boolean };
   e2b: { configured: boolean; validateOnGenerate: boolean; effective: boolean };
+  revenueCentsTotal?: number;
+  openTicketsCount?: number;
 }
 
 interface AdminUser {
@@ -50,6 +52,7 @@ interface AdminUser {
   plan: "free" | "pro" | "team" | "owner";
   status: "active" | "suspended";
   appsCount: number;
+  revenueCentsTotal?: number;
   createdAt: string;
   lastActiveAt: string | null;
 }
@@ -100,6 +103,8 @@ const NAV_ITEMS = [
   { id: "users", label: "Usuarios", icon: Users },
   { id: "apps", label: "Apps", icon: AppWindow },
   { id: "credits", label: "Créditos", icon: Coins },
+  { id: "payments", label: "Pagos", icon: Zap },
+  { id: "support", label: "Soporte", icon: ShieldCheck },
   { id: "queue", label: "Cola", icon: ListOrdered },
   { id: "settings", label: "Configuración", icon: Settings },
 ] as const;
@@ -272,11 +277,19 @@ const OverviewSection = () => {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MetricCard label="Apps publicadas" value={data.publishedApps.total.toLocaleString()} sub={`+${data.publishedApps.today} hoy`} icon={AppWindow} trend="up" accent="violet" />
-        <MetricCard label="Jobs (24h)" value={data.jobs24h.total} sub={`${successRate}% éxito`} icon={BarChart3} trend={successRate >= 80 ? "up" : "down"} accent="cyan" />
-        <MetricCard label="Créditos (mes)" value={data.credits.month.toLocaleString()} sub={`${data.credits.today} hoy`} icon={Coins} accent="amber" />
-        <MetricCard label="Peticiones servidor" value={(data.server.totalRequests ?? 0).toLocaleString()} sub={`${data.server.totalErrors ?? 0} errores`} icon={Server} trend={(data.server.totalErrors ?? 0) === 0 ? "up" : "down"} accent="emerald" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <MetricCard label="Apps publicadas" value={data.publishedApps.total.toLocaleString()} sub={`+${data.publishedApps.today} hoy`} icon={AppWindow} 
+          accent="violet" />
+        <MetricCard label="Jobs (24h)" value={data.jobs24h.total} sub={`${(successRate * 100).toFixed(0)}% éxito`} icon={BarChart3} 
+          trend={successRate > 0.8 ? "up" : "down"} accent="cyan" />
+        <MetricCard label="Créditos (mes)" value={data.credits.month.toLocaleString()} sub={`${data.credits.today} hoy`} icon={Coins} 
+          accent="amber" />
+        <MetricCard label="Ingresos Totales" value={`${((data.revenueCentsTotal || 0) / 100).toFixed(2)}€`} sub="Ventas acumuladas" icon={Zap} 
+          accent="emerald" />
+        <MetricCard label="Soporte" value={data.openTicketsCount || 0} sub="Tickets abiertos" icon={ShieldCheck} 
+          accent="violet" trend={(data.openTicketsCount || 0) > 0 ? "down" : "up"} />
+        <MetricCard label="Servidor" value={data.server.requests.toLocaleString()} sub={`${data.server.errors} errores`} icon={Server} 
+          trend={data.server.errors === 0 ? "neutral" : "down"} accent="cyan" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -386,7 +399,7 @@ const UsersSection = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[#1e2030]">
-              {["Usuario", "Plan", "Créditos", "Apps", "Estado", "Acciones"].map((h) => (
+              {["Usuario", "Plan", "Créditos", "Apps", "Ingresos", "Estado", "Acciones"].map((h) => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">{h}</th>
               ))}
             </tr>
@@ -411,6 +424,9 @@ const UsersSection = () => {
                   {u.email === OWNER_EMAIL ? <span className="text-amber-400 font-semibold">∞</span> : u.credits.toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-slate-400">{u.appsCount}</td>
+                <td className="px-4 py-3 text-emerald-400 font-mono text-xs tabular-nums">
+                  {((u.revenueCentsTotal || 0) / 100).toFixed(2)}€
+                </td>
                 <td className="px-4 py-3"><Badge className={STATUS_COLORS[u.status] ?? STATUS_COLORS.active}>{u.status ?? "active"}</Badge></td>
                 <td className="px-4 py-3">
                   <button onClick={() => { setEditing(u); setEditForm({ credits: u.credits, plan: u.plan ?? "free", status: u.status ?? "active" }); }}
@@ -709,6 +725,124 @@ const QueueSection = () => {
   );
 };
 
+// ─── Payments ────────────────────────────────────────────────────────────────
+
+const PaymentsSection = () => {
+  const qc = useQueryClient();
+  const { data: txns = [], isLoading } = useQuery<any[]>({
+    queryKey: ["admin-transactions"],
+    queryFn: () => apiFetch("/api/admin/transactions"),
+  });
+
+  const refundMutation = useMutation({
+    mutationFn: (vars: { userId: string; amount: number; reason: string }) =>
+      apiFetch("/api/admin/refund", { method: "POST", body: JSON.stringify(vars) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-transactions"] }); toast("Reembolso procesado", "success"); },
+    onError: (e: Error) => toast(e.message, "error"),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1e2030]">
+              {["Usuario", "Cantidad", "Tipo", "Descripción", "Fecha", "Acciones"].map((h) => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {txns.map((t) => (
+              <tr key={t.id} className="border-b border-[#1a1c28] hover:bg-[#161820] transition-colors">
+                <td className="px-4 py-3 text-slate-400 text-xs">{t.userEmail}</td>
+                <td className={`px-4 py-3 font-mono font-medium ${t.amount > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {t.amount > 0 ? "+" : ""}{t.amount}
+                </td>
+                <td className="px-4 py-3"><Badge className="text-slate-400 border-slate-800">{t.kind}</Badge></td>
+                <td className="px-4 py-3 text-slate-500 text-xs truncate max-w-[150px]">{t.description}</td>
+                <td className="px-4 py-3 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3">
+                  {t.kind === "purchase" && (
+                    <button onClick={() => {
+                      const reason = prompt("Motivo del reembolso:");
+                      if (reason) refundMutation.mutate({ userId: t.userId, amount: t.amount, reason });
+                    }} className="text-red-400 hover:text-red-300 text-xs font-medium flex items-center gap-1">
+                      <RotateCcw size={12} /> Reembolsar
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {txns.length === 0 && <EmptyState message="No hay transacciones registradas" />}
+      </Card>
+    </div>
+  );
+};
+
+// ─── Support ─────────────────────────────────────────────────────────────────
+
+const SupportSection = () => {
+  const qc = useQueryClient();
+  const { data: tickets = [], isLoading } = useQuery<any[]>({
+    queryKey: ["admin-tickets"],
+    queryFn: () => apiFetch("/api/admin/tickets"),
+  });
+
+  const replyMutation = useMutation({
+    mutationFn: (vars: { id: string; body: any }) =>
+      apiFetch(`/api/admin/tickets/${vars.id}`, { method: "PATCH", body: JSON.stringify(vars.body) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-tickets"] }); toast("Respuesta enviada", "success"); },
+    onError: (e: Error) => toast(e.message, "error"),
+  });
+
+  if (isLoading) return <Spinner />;
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-0 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[#1e2030]">
+              {["Usuario", "Asunto", "Estado", "Creado", "Acciones"].map((h) => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tickets.map((t) => (
+              <tr key={t._id} className="border-b border-[#1a1c28] hover:bg-[#161820] transition-colors">
+                <td className="px-4 py-3 text-slate-400 text-xs">{t.email}</td>
+                <td className="px-4 py-3">
+                  <p className="text-slate-200 font-medium">{t.subject}</p>
+                  <p className="text-slate-500 text-xs truncate max-w-xs">{t.message}</p>
+                </td>
+                <td className="px-4 py-3">
+                  <Badge className={t.status === "open" ? "text-amber-400 border-amber-800" : "text-emerald-400 border-emerald-800"}>
+                    {t.status}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs">{new Date(t.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3">
+                  <button onClick={() => {
+                    const reply = prompt("Respuesta para el cliente:", t.adminReply || "");
+                    if (reply !== null) replyMutation.mutate({ id: t._id, body: { adminReply: reply, status: "resolved" } });
+                  }} className="text-violet-400 hover:text-violet-300 text-xs font-medium">Responder</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {tickets.length === 0 && <EmptyState message="No hay tickets de soporte" />}
+      </Card>
+    </div>
+  );
+};
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 const SettingsSection = () => {
@@ -773,6 +907,8 @@ export default function AdminDashboard() {
     users: <UsersSection />,
     apps: <AppsSection />,
     credits: <CreditsSection />,
+    payments: <PaymentsSection />,
+    support: <SupportSection />,
     queue: <QueueSection />,
     settings: <SettingsSection />,
   };
@@ -789,14 +925,14 @@ export default function AdminDashboard() {
         </div>
         <nav className="flex-1 px-2 space-y-0.5">
           <p className="text-[10px] uppercase tracking-widest text-slate-600 px-2 pb-1 pt-2">Principal</p>
-          {NAV_ITEMS.slice(0, 4).map(({ id, label, icon: Icon }) => (
+          {NAV_ITEMS.slice(0, 6).map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setActiveSection(id)}
               className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${activeSection === id ? "bg-violet-900/50 text-violet-300 border border-violet-800/60" : "text-slate-500 hover:text-slate-300 hover:bg-[#161820]"}`}>
               <Icon size={15} />{label}
             </button>
           ))}
           <p className="text-[10px] uppercase tracking-widest text-slate-600 px-2 pb-1 pt-3">Sistema</p>
-          {NAV_ITEMS.slice(4).map(({ id, label, icon: Icon }) => (
+          {NAV_ITEMS.slice(6).map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setActiveSection(id)}
               className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all ${activeSection === id ? "bg-violet-900/50 text-violet-300 border border-violet-800/60" : "text-slate-500 hover:text-slate-300 hover:bg-[#161820]"}`}>
               <Icon size={15} />{label}

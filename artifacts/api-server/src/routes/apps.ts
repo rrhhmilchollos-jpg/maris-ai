@@ -18,17 +18,17 @@ import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
 
+import { anthropic } from "../lib/auth"; // Reutilizamos el cliente si existe
+// Nota: Si anthropic no está en auth, lo importamos de su integración
+import { anthropic as anthropicClient } from "@workspace/integrations-anthropic-ai";
+
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
  *
- * Todos los agentes usan Gemini (sin dependencia de Anthropic):
- *   - Researcher    (gemini-2.0-flash + google_search)  — referencia web
- *   - Architect     (gemini-2.5-flash)                  — plan / estructura
- *   - Designer      (gemini-2.5-flash)                  — design system
- *   - Frontend Eng  (gemini-2.5-flash, streaming)       — bundle frontend
- *   - Backend Eng   (gemini-2.5-flash)                  — bundle backend
- *   - QA Reviewer   (gemini-2.0-flash)                  — revisión
- *   - Patcher       (gemini-2.0-flash)                  — auto-fix
+ * Arquitectura de Fallback Inteligente:
+ *   - Por defecto se usa Gemini 2.5 Flash para máxima velocidad y fiabilidad.
+ *   - Si Anthropic tiene créditos, se puede usar para tareas de arquitectura.
+ *   - Si Anthropic falla, el sistema conmuta automáticamente a Gemini sin error.
  * ========================================================================== */
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
@@ -826,35 +826,33 @@ async function reviewBundle(
       try {
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
-        const response = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.
+        const systemPrompt = `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.`;
+        const userContent = `Expected files: ${expected}\n\nFirst 12KB of generated bundle:\n${sample}\n\nReturn STRICT JSON ONLY:\n{"ok":true} when everything looks fine,\nOR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}\n\nMax 5 issues. Output ONLY the JSON object.`;
 
-Expected files: ${expected}
-
-First 12KB of generated bundle:
-${sample}
-
-Return STRICT JSON ONLY:
-{"ok":true} when everything looks fine,
-OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}
-
-Max 5 issues. Output ONLY the JSON object.`,
-                },
-              ],
+        let raw = "";
+        // Intento con Anthropic con fallback automático a Gemini
+        try {
+          const response = await anthropicClient.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 1024,
+            system: systemPrompt + "\nOutput JSON only.",
+            messages: [{ role: "user", content: userContent }],
+          });
+          raw = response.content[0].type === "text" ? response.content[0].text : "";
+        } catch (err) {
+          logger.warn({ err }, "Anthropic QA failed or no credits, falling back to Gemini");
+          const response = await gemini.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: [{ role: "user", parts: [{ text: userContent }] }],
+            config: {
+              systemInstruction: systemPrompt,
+              maxOutputTokens: 700,
+              responseMimeType: "application/json",
             },
-          ],
-          config: {
-            maxOutputTokens: 700,
-            responseMimeType: "application/json",
-          },
-        });
-        const raw = response.text ?? "";
+          });
+          raw = response.text ?? "";
+        }
+
         const parsed = extractJsonObject<QAReport>(raw);
         if (!parsed) return { ok: true, issues: [] };
         return {

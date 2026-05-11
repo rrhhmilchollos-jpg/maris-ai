@@ -82,10 +82,19 @@ export async function creditPurchase(opts: {
     description,
     stripeSessionId,
   });
- 
+
+  // Buscamos el precio en euros para actualizar el revenueCentsTotal
+  const eurPriceByCredits = new Map<number, number>();
+  for (const pkg of CREDIT_PACKAGES) {
+    if (pkg.currency === "eur") {
+      eurPriceByCredits.set(pkg.credits, pkg.priceCents);
+    }
+  }
+  const cents = eurPriceByCredits.get(amount) || 0;
+
   const updated = await User.findByIdAndUpdate(
     userId,
-    { $inc: { credits: amount } },
+    { $inc: { credits: amount, revenueCentsTotal: cents } },
     { new: true, projection: { credits: 1 } },
   ).lean();
  
@@ -115,8 +124,19 @@ export async function refundCredits(opts: {
     amount: Math.abs(amount),
     description,
   });
- 
-  await User.findByIdAndUpdate(userId, { $inc: { credits: amount } });
+
+  // Intentamos estimar los céntimos a restar del revenue si es un reembolso de compra
+  const eurPriceByCredits = new Map<number, number>();
+  for (const pkg of CREDIT_PACKAGES) {
+    if (pkg.currency === "eur") {
+      eurPriceByCredits.set(pkg.credits, pkg.priceCents);
+    }
+  }
+  // Si amount es negativo (reembolso), restamos el valor proporcional del revenue
+  const cents = eurPriceByCredits.get(Math.abs(amount)) || 0;
+  const revenueChange = amount < 0 ? -cents : 0;
+
+  await User.findByIdAndUpdate(userId, { $inc: { credits: amount, revenueCentsTotal: revenueChange } });
 }
  
 /**

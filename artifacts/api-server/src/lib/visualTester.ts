@@ -3,8 +3,9 @@ import puppeteer, { type Browser, type Page } from "puppeteer";
 import { and, eq } from "drizzle-orm";
 import type { Logger } from "pino";
 import { db } from "./db";
-import { generatedApps } from "@workspace/db/schema";
+import { GeneratedApp } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { validateBundle } from "./validate";
 
 /**
@@ -302,16 +303,39 @@ páginas en blanco, layouts rotos, contenido faltante, errores de consola
 visibles, mala responsividad. NO marques preferencias estéticas menores.`,
   });
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4000,
-    messages: [{ role: "user", content }],
-  });
+  let text = "";
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4000,
+      messages: [{ role: "user", content }],
+    });
+    text = response.content
+      .map((b) => (b.type === "text" ? b.text : ""))
+      .filter(Boolean)
+      .join("\n");
+  } catch (err) {
+    logger.warn({ err }, "Anthropic Vision failed, falling back to Gemini");
+    // Gemini 2.0 Flash supports multimodal content (images)
+    const geminiContent = content.map(block => {
+      if (block.type === "text") return { text: block.text };
+      return {
+        inlineData: {
+          mimeType: "image/png",
+          data: block.source.data
+        }
+      };
+    });
 
-  const text = response.content
-    .map((b) => (b.type === "text" ? b.text : ""))
-    .filter(Boolean)
-    .join("\n");
+    const response = await gemini.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: [{ role: "user", parts: geminiContent }],
+      config: {
+        maxOutputTokens: 2000,
+      },
+    });
+    text = response.text ?? "";
+  }
 
   const parsed = safeJsonParse<VisualAnalysis>(text);
   if (!parsed) {

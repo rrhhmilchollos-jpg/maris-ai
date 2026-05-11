@@ -22,6 +22,7 @@ export interface IUser {
   stripeCustomerId?: string;
   isPremium?: boolean;
   isAdmin?: boolean;
+  revenueCentsTotal?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +37,7 @@ const UserSchema = new Schema<IUser>(
     stripeCustomerId: { type: String },
     isPremium: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
+    revenueCentsTotal: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

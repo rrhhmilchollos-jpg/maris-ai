@@ -879,21 +879,17 @@ async function reviewBundle(
         const userContent = `Expected files: ${expected}\n\nFirst 12KB of generated bundle:\n${sample}\n\nReturn STRICT JSON ONLY:\n{"ok":true} when everything looks fine,\nOR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}\n\nMax 5 issues. Output ONLY the JSON object.`;
 
         let raw = "";
-        if (useAnthropic) {
-          try {
-            const response = await anthropic.messages.create({
-              model: "claude-3-5-sonnet-20241022",
-              max_tokens: 1024,
-              system: systemPrompt + "\nOutput JSON only.",
-              messages: [{ role: "user", content: userContent }],
-            });
-            raw = response.content[0].type === "text" ? response.content[0].text : "";
-          } catch (err) {
-            logger.warn({ err }, "Anthropic QA failed, falling back to Gemini");
-          }
-        }
-
-        if (!raw) {
+        // Fallback dinámico: si Anthropic falla (ej: sin créditos), usamos Gemini
+        try {
+          const response = await anthropic.messages.create({
+            model: "claude-3-5-sonnet-20241022",
+            max_tokens: 1024,
+            system: systemPrompt + "\nOutput JSON only.",
+            messages: [{ role: "user", content: userContent }],
+          });
+          raw = response.content[0].type === "text" ? response.content[0].text : "";
+        } catch (err) {
+          logger.warn({ err }, "Anthropic QA failed or no credits, falling back to Gemini");
           const response = await gemini.models.generateContent({
             model: "gemini-2.0-flash",
             contents: [{ role: "user", parts: [{ text: userContent }] }],

@@ -96,14 +96,15 @@ router.get("/admin/overview", async (_req, res) => {
   await connectDB();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [totalUsers, totalApps, appsWeek, users] = await Promise.all([
+  const [totalUsers, totalApps, appsWeek, usersData] = await Promise.all([
     User.countDocuments(),
     GeneratedApp.countDocuments(),
     GeneratedApp.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-    User.find({}, { credits: 1 }).lean(),
+    User.find({}, { credits: 1, revenueCentsTotal: 1 }).lean(),
   ]);
 
-  const creditsOutstanding = users.reduce((sum, u) => sum + (u.credits ?? 0), 0);
+  const creditsOutstanding = usersData.reduce((sum, u) => sum + (u.credits ?? 0), 0);
+  const revenueCentsTotal = usersData.reduce((sum, u) => sum + (u.revenueCentsTotal ?? 0), 0);
 
   const txns = await CreditTransaction.find({}, { kind: 1, amount: 1 }).lean();
   let creditsSpentTotal = 0;
@@ -120,7 +121,7 @@ router.get("/admin/overview", async (_req, res) => {
     creditsOutstanding,
     creditsSpentTotal,
     creditsPurchasedTotal,
-    revenueCentsTotal: creditsPurchasedTotal * 0.5, // Estimación basada en 0.50€ por crédito o similar, ajustar según lógica real
+    revenueCentsTotal,
   });
 });
 
@@ -140,6 +141,7 @@ router.get("/admin/users", async (_req, res) => {
       imageUrl: u.imageUrl,
       credits: u.credits,
       appsGenerated: countMap.get(String(u._id)) ?? 0,
+      revenueCentsTotal: u.revenueCentsTotal ?? 0,
       isAdmin: isAdminEmail(u.email),
       createdAt: u.createdAt.toISOString(),
     })),
@@ -184,6 +186,7 @@ router.post("/admin/users/:id/credits", async (req, res) => {
     imageUrl: user.imageUrl,
     credits: newBalance,
     appsGenerated,
+    revenueCentsTotal: user.revenueCentsTotal ?? 0,
     isAdmin: isAdminEmail(user.email),
     createdAt: new Date(user.createdAt).toISOString(),
   });

@@ -42,7 +42,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     Facturación
                   </Link>
                   {me?.isAdmin && (
-                    <Link href="/admin" className="transition-colors hover:text-primary text-primary/80 font-semibold flex items-center gap-1">
+                    <Link href="/admin/dashboard" className="transition-colors hover:text-primary text-primary/80 font-semibold flex items-center gap-1">
                       <Shield className="h-3.5 w-3.5" /> Admin
                     </Link>
                   )}
@@ -86,7 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <span>Facturación</span>
                     </DropdownMenuItem>
                     {me?.isAdmin && (
-                      <DropdownMenuItem onClick={() => setLocation("/admin")}>
+                      <DropdownMenuItem onClick={() => setLocation("/admin/dashboard")}>
                         <Shield className="mr-2 h-4 w-4 text-primary" />
                         <span>Panel admin</span>
                       </DropdownMenuItem>

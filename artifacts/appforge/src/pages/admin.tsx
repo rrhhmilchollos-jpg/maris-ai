@@ -247,7 +247,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         <TableHead>Correo</TableHead>
                         <TableHead className="text-right">Créditos</TableHead>
                         <TableHead className="text-right">Apps</TableHead>
-                        <TableHead>Registrado</TableHead>
+                            <TableHead>Creado</TableHead>
+                        <TableHead className="text-right">Ingresos</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -264,6 +265,9 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                           <TableCell className="text-right font-mono text-primary">{u.credits}</TableCell>
                           <TableCell className="text-right font-mono">{u.appsGenerated}</TableCell>
                           <TableCell className="text-muted-foreground text-xs">{format(new Date(u.createdAt), "d MMM yyyy", { locale: es })}</TableCell>
+                          <TableCell className="text-right font-mono text-emerald-400">
+                            {((u.revenueCentsTotal || 0) / 100).toFixed(2)}€
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button variant="ghost" size="sm" onClick={() => setAdjustUser({ id: u.id, email: u.email })}>Ajustar créditos</Button>
                           </TableCell>
