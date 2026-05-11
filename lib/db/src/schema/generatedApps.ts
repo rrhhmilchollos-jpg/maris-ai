@@ -17,8 +17,8 @@ export const generatedApps = pgTable("generated_apps", {
   prompt: text("prompt").notNull(),
   description: text("description").notNull(),
   techStack: jsonb("tech_stack").$type<string[]>().notNull().default([]),
-  frontendCode: text("frontend_code").notNull(),
-  backendCode: text("backend_code").notNull(),
+  frontendCode: text("frontend_code"),
+  backendCode: text("backend_code"),
   // Status values: "ready" (default, working), "failed" (generation failed),
   // "needs_review" (autonomous evaluator rejected after retries — user must
   // either retry or manually review the issues stored in evaluatorSummary).

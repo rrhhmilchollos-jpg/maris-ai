@@ -19,8 +19,8 @@ export const appRevisions = pgTable(
     jobId: integer("job_id"),
     source: text("source").notNull(),
     summary: text("summary").notNull().default(""),
-    frontendCode: text("frontend_code").notNull(),
-    backendCode: text("backend_code").notNull(),
+    frontendCode: text("frontend_code"),
+    backendCode: text("backend_code"),
     techStack: jsonb("tech_stack").$type<string[]>().notNull().default([]),
     plannedPages: jsonb("planned_pages").$type<
       Array<{ name: string; route?: string; purpose?: string }>
