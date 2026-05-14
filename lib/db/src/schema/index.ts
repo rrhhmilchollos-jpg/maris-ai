@@ -371,3 +371,8 @@ const AppRevisionSchema = new Schema<IAppRevision>(
 export const AppRevision: Model<IAppRevision> =
   mongoose.models.AppRevision ||
   mongoose.model<IAppRevision>("AppRevision", AppRevisionSchema);
+
+// ─── Aliases en minúscula para compatibilidad ────────────────────────────────
+export const appImages = AppImage;
+export const appRuntimeErrors = AppRuntimeError;
+export const generatedApps = GeneratedApp;
