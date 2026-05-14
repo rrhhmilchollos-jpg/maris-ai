@@ -26,7 +26,6 @@ async function buildAll() {
     },
     external: [
       "esbuild",
-      "drizzle-orm",
       "pg",
       "*.node",
       "sharp",
