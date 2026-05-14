@@ -16,4 +16,5 @@ RUN pnpm install --no-frozen-lockfile
 COPY . .
 RUN pnpm --filter @workspace/api-server run build
 EXPOSE 7860
-CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
+WORKDIR /app/artifacts/api-server
+CMD ["node", "--enable-source-maps", "./dist/index.mjs"]
