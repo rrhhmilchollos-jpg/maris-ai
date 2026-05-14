@@ -1,23 +1,19 @@
 FROM node:20
-
 WORKDIR /app
-
-# Copiamos los archivos de configuración
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-# Instalamos pnpm y las dependencias
+COPY artifacts/api-server/package.json ./artifacts/api-server/
+COPY artifacts/appforge/package.json ./artifacts/appforge/
+COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
+COPY scripts/package.json ./scripts/
+COPY lib/db/package.json ./lib/db/
+COPY lib/api-client-react/package.json ./lib/api-client-react/
+COPY lib/api-zod/package.json ./lib/api-zod/
+COPY lib/api-spec/package.json ./lib/api-spec/
+COPY lib/integrations-gemini-ai/package.json ./lib/integrations-gemini-ai/
+COPY lib/integrations-anthropic-ai/package.json ./lib/integrations-anthropic-ai/
 RUN npm install -g pnpm
 RUN pnpm install --no-frozen-lockfile
-
-# Copiamos todo el código
 COPY . .
-
-# Compilamos el proyecto (ajusta si el comando es distinto)
-RUN pnpm run build
-
-# Exponemos el puerto que usa Hugging Face
+RUN pnpm --filter @workspace/api-server run build
 EXPOSE 7860
-
-# Comando para arrancar el servidor
-# Asegúrate de que este comando apunta a tu archivo de inicio real
-CMD ["pnpm", "start"]
+CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
