@@ -591,9 +591,9 @@ interface CodeGenResult {
 
 type CoderProvider = "gemini-flash" | "claude-sonnet" | "gpt-5";
 function resolveCoderProvider(coderModel?: string): CoderProvider {
-  if (coderModel === "claude-sonnet-4-6") return "gemini-flash"; // Fallback a Gemini (sin key Anthropic)
+  if (coderModel === "claude-sonnet-4-6") return "claude-sonnet";
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
-  return "gemini-flash";
+  return "claude-sonnet";
 }
 
 /**
@@ -661,8 +661,25 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       if (fr === "length") finishReason = "MAX_TOKENS";
     }
     truncated = finishReason === "MAX_TOKENS";
+  } else if (provider === "claude-sonnet") {
+    const stream = anthropic!.messages.stream({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 32000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
+    });
+    let lastReport2 = 0;
+    let finishReason2: string | undefined;
+    for await (const chunk of stream) {
+      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+        accumulated += chunk.delta.text;
+        if (accumulated.length - lastReport2 >= 1500) { lastReport2 = accumulated.length; onChars(accumulated.length); }
+      }
+      if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason2 = "MAX_TOKENS";
+    }
+    truncated = finishReason2 === "MAX_TOKENS";
   } else {
-    // Gemini 2.5 Flash streaming (default para todos los modelos incluido claude-sonnet)
+    // Gemini 2.5 Flash streaming (fallback)
     const stream = await gemini.models.generateContentStream({
       model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: [{ text: userContent }] }],
@@ -1367,8 +1384,24 @@ Return the FULL updated app as JSON.`;
         const fr = chunk.choices[0]?.finish_reason;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
+    } else if (provider === "claude-sonnet") {
+      const stream = anthropic!.messages.stream({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 65536,
+        system: systemPrompt,
+        messages: [{ role: "user", content: finalUserContent }],
+      });
+      let lastReportC = 0;
+      for await (const chunk of stream) {
+        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+          accumulated += chunk.delta.text;
+          observe(accumulated);
+          if (accumulated.length - lastReportC >= PROGRESS_EVERY) { lastReportC = accumulated.length; onChars(accumulated.length); }
+        }
+        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+      }
     } else {
-      // Gemini 2.5 Flash streaming (default, incluye claude-sonnet redirigido)
+      // Gemini 2.5 Flash streaming (fallback)
       const stream = await gemini.models.generateContentStream({
         model: "gemini-2.5-flash",
         contents: [{ role: "user", parts: [{ text: finalUserContent }] }],
