@@ -515,9 +515,9 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   if (useAnthropic) {
     try {
       const response = await anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 8192,
-        system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
+        model: "claude-sonnet-4-6",
+max_tokens: 8192,
+system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
       });
       raw = response.content[0].type === "text" ? response.content[0].text : "";
