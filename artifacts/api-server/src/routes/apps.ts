@@ -1824,12 +1824,10 @@ import { Router } from "express";
 
 /* ============================================================
  * REST API — /api/apps
- * Usa lib/generate.ts (Anthropic) para todos los agentes.
+ * Usa MongoDB (Mongoose) + lib/generate.ts (Anthropic).
  * ============================================================ */
 import { Router } from "express";
-import { eq, and, desc } from "drizzle-orm";
-import { db } from "../lib/db";
-import { generatedApps, appMessages } from "@workspace/db/schema";
+import { GeneratedApp, AppMessage } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
 import {
   generateApp as generateAppFromLib,
@@ -1844,6 +1842,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     const { prompt, model, language, attachments, kind } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
+
     const result: GeneratedAppPayload = await generateAppFromLib(
       prompt,
       (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
@@ -1853,7 +1852,9 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
       (agent, msg) => logger.info(`[${agent}] ${msg}`),
       attachments,
     );
-    const [row] = await db.insert(generatedApps).values({
+
+    const app = await GeneratedApp.create({
+      _id: new (require("mongoose").Types.ObjectId)().toString(),
       userId,
       title: result.title,
       prompt,
@@ -1865,8 +1866,9 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
       language: language ?? "typescript",
       kind: kind ?? "fullstack",
       status: "ready",
-    }).returning();
-    res.status(201).json(row);
+    });
+
+    res.status(201).json(app);
   } catch (err) {
     logger.error({ err }, "POST /api/apps error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -1877,10 +1879,8 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
 router.get("/apps", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const rows = await db.select().from(generatedApps)
-      .where(eq(generatedApps.userId, userId))
-      .orderBy(desc(generatedApps.createdAt));
-    res.json(rows);
+    const apps = await GeneratedApp.find({ userId }).sort({ createdAt: -1 });
+    res.json(apps);
   } catch (err) {
     logger.error({ err }, "GET /api/apps error");
     res.status(500).json({ error: "Error interno" });
@@ -1891,12 +1891,9 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
 router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
-    const [row] = await db.select().from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
-    if (!row) return res.status(404).json({ error: "App no encontrada" });
-    res.json(row);
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    res.json(app);
   } catch (err) {
     logger.error({ err }, "GET /api/apps/:id error");
     res.status(500).json({ error: "Error interno" });
@@ -1907,12 +1904,9 @@ router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
 router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
-    const [deleted] = await db.delete(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
-      .returning();
-    if (!deleted) return res.status(404).json({ error: "App no encontrada" });
+    const app = await GeneratedApp.findOneAndDelete({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    await AppMessage.deleteMany({ appId: req.params.id });
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err }, "DELETE /api/apps/:id error");
@@ -1924,13 +1918,9 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
 router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
-    const [app] = await db.select({ id: generatedApps.id }).from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }, { _id: 1 });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
-    const messages = await db.select().from(appMessages)
-      .where(eq(appMessages.appId, id)).orderBy(appMessages.createdAt);
+    const messages = await AppMessage.find({ appId: req.params.id }).sort({ createdAt: 1 });
     res.json(messages);
   } catch (err) {
     logger.error({ err }, "GET /api/apps/:id/messages error");
@@ -1942,21 +1932,21 @@ router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
     const { content } = req.body;
     if (!content) return res.status(400).json({ error: "content es requerido" });
-    const [app] = await db.select().from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
-    await db.insert(appMessages).values({ appId: id, role: "user", content });
+
+    await AppMessage.create({ appId: req.params.id, role: "user", content });
+
     const updated: GeneratedAppPayload = await generateAppFromLib(
       content,
       (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
       {
         title: app.title,
         description: app.description,
-        techStack: (app.techStack as string[]) ?? [],
+        techStack: app.techStack ?? [],
         frontendCode: app.frontendCode,
         backendCode: app.backendCode,
       },
@@ -1964,15 +1954,20 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       (app.language as any) ?? "typescript",
       (agent, msg) => logger.info(`[${agent}] ${msg}`),
     );
-    await db.update(generatedApps).set({
+
+    await GeneratedApp.findByIdAndUpdate(req.params.id, {
       frontendCode: updated.frontendCode,
       backendCode: updated.backendCode,
       title: updated.title,
       description: updated.description,
-    }).where(eq(generatedApps.id, id));
-    const [assistantMsg] = await db.insert(appMessages)
-      .values({ appId: id, role: "assistant", content: "✅ App actualizada correctamente." })
-      .returning();
+    });
+
+    const assistantMsg = await AppMessage.create({
+      appId: req.params.id,
+      role: "assistant",
+      content: "✅ App actualizada correctamente.",
+    });
+
     res.status(201).json(assistantMsg);
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
@@ -1984,11 +1979,9 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
-    const [app] = await db.select().from(generatedApps)
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+
     const result = await generateAppFromLib(
       app.prompt,
       (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
@@ -1997,14 +1990,20 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
       (app.language as any) ?? "typescript",
       (agent, msg) => logger.info(`[${agent}] ${msg}`),
     );
-    const [updated] = await db.update(generatedApps).set({
-      frontendCode: result.frontendCode,
-      backendCode: result.backendCode,
-      title: result.title,
-      description: result.description,
-      status: "ready",
-      evaluatorSummary: null,
-    }).where(eq(generatedApps.id, id)).returning();
+
+    const updated = await GeneratedApp.findByIdAndUpdate(
+      req.params.id,
+      {
+        frontendCode: result.frontendCode,
+        backendCode: result.backendCode,
+        title: result.title,
+        description: result.description,
+        status: "ready",
+        evaluatorSummary: undefined,
+      },
+      { new: true },
+    );
+
     res.json(updated);
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/retry error");
@@ -2016,12 +2015,13 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
 router.put("/apps/:id/model", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
     const { model } = req.body;
     if (!model) return res.status(400).json({ error: "model es requerido" });
-    const [updated] = await db.update(generatedApps).set({ coderModel: model })
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId))).returning();
+    const updated = await GeneratedApp.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { coderModel: model },
+      { new: true },
+    );
     if (!updated) return res.status(404).json({ error: "App no encontrada" });
     res.json(updated);
   } catch (err) {
@@ -2034,11 +2034,12 @@ router.put("/apps/:id/model", requireAuth, async (req: any, res: any) => {
 router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
     const { enabled } = req.body;
-    const [updated] = await db.update(generatedApps).set({ autoPublish: !!enabled })
-      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId))).returning();
+    const updated = await GeneratedApp.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { autoPublish: !!enabled },
+      { new: true },
+    );
     if (!updated) return res.status(404).json({ error: "App no encontrada" });
     res.json(updated);
   } catch (err) {
