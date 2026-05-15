@@ -3,19 +3,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, rename } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(artifactDir, "../..");
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
-  await rm(distDir, { recursive: true, force: true });
+  const distTmpDir = path.resolve(artifactDir, "dist-tmp");
+
+  // Build into a temp dir so the running server is not interrupted
+  await rm(distTmpDir, { recursive: true, force: true });
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
     platform: "node",
     bundle: true,
     format: "esm",
-    outdir: distDir,
+    outdir: distTmpDir,
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
     alias: {
@@ -26,79 +29,20 @@ async function buildAll() {
       "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
     },
     external: [
-      "esbuild",
-      "pg",
-      "*.node",
-      "sharp",
-      "better-sqlite3",
-      "sqlite3",
-      "canvas",
-      "bcrypt",
-      "argon2",
-      "fsevents",
-      "re2",
-      "farmhash",
-      "xxhash-addon",
-      "bufferutil",
-      "utf-8-validate",
-      "ssh2",
-      "cpu-features",
-      "dtrace-provider",
-      "isolated-vm",
-      "lightningcss",
-      "pg-native",
-      "oracledb",
-      "mongodb-client-encryption",
-      "nodemailer",
-      "handlebars",
-      "knex",
-      "typeorm",
-      "protobufjs",
-      "onnxruntime-node",
-      "@tensorflow/*",
-      "@prisma/client",
-      "@mikro-orm/*",
-      "@grpc/*",
-      "@swc/*",
-      "@aws-sdk/*",
-      "@azure/*",
-      "@google-cloud/*",
-      "@google/*",
-      "googleapis",
-      "firebase-admin",
-      "@parcel/watcher",
-      "@sentry/profiling-node",
-      "@tree-sitter/*",
-      "aws-sdk",
-      "classic-level",
-      "dd-trace",
-      "ffi-napi",
-      "grpc",
-      "hiredis",
-      "kerberos",
-      "leveldown",
-      "miniflare",
-      "mysql2",
-      "newrelic",
-      "odbc",
-      "piscina",
-      "realm",
-      "ref-napi",
-      "rocksdb",
-      "sass-embedded",
-      "sequelize",
-      "serialport",
-      "snappy",
-      "tinypool",
-      "usb",
-      "workerd",
-      "wrangler",
-      "zeromq",
-      "zeromq-prebuilt",
-      "playwright",
-      "puppeteer",
-      "puppeteer-core",
-      "electron",
+      "esbuild", "pg", "*.node", "sharp", "better-sqlite3", "sqlite3", "canvas",
+      "bcrypt", "argon2", "fsevents", "re2", "farmhash", "xxhash-addon",
+      "bufferutil", "utf-8-validate", "ssh2", "cpu-features", "dtrace-provider",
+      "isolated-vm", "lightningcss", "pg-native", "oracledb",
+      "mongodb-client-encryption", "nodemailer", "handlebars", "knex", "typeorm",
+      "protobufjs", "onnxruntime-node", "@tensorflow/*", "@prisma/client",
+      "@mikro-orm/*", "@grpc/*", "@swc/*", "@aws-sdk/*", "@azure/*",
+      "@google-cloud/*", "@google/*", "googleapis", "firebase-admin",
+      "@parcel/watcher", "@sentry/profiling-node", "@tree-sitter/*", "aws-sdk",
+      "classic-level", "dd-trace", "ffi-napi", "grpc", "hiredis", "kerberos",
+      "leveldown", "miniflare", "mysql2", "newrelic", "odbc", "piscina", "realm",
+      "ref-napi", "rocksdb", "sass-embedded", "sequelize", "serialport", "snappy",
+      "tinypool", "usb", "workerd", "wrangler", "zeromq", "zeromq-prebuilt",
+      "playwright", "puppeteer", "puppeteer-core", "electron",
     ],
     sourcemap: "linked",
     plugins: [
@@ -114,6 +58,10 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // Swap dist-tmp → dist atomically after a successful build
+  await rm(distDir, { recursive: true, force: true });
+  await rename(distTmpDir, distDir);
 }
 buildAll().catch((err) => {
   console.error(err);
