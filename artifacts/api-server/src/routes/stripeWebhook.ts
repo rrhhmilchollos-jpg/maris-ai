@@ -1,8 +1,57 @@
 import express, { Router, type IRouter, type Request, type Response } from "express";
-import { getStripe } from "../lib/stripe";
+import { getStripe, getPlanByStripePriceId, SUBSCRIPTION_PLANS } from "../lib/stripe";
 import { creditPurchase } from "../lib/credits";
+import { connectDB } from "../lib/db";
+import { User, CreditTransaction } from "@workspace/db/schema";
 
 export const stripeWebhookRouter: IRouter = Router();
+
+/**
+ * Dar créditos del plan al usuario al inicio o renovación de suscripción.
+ * Los créditos del plan caducan al final del ciclo (se resetean en cada renovación).
+ * Los créditos comprados (top-up) NO se tocan.
+ */
+async function grantPlanCredits(opts: {
+  clerkUserId: string;
+  planId: string;
+  creditsPerMonth: number;
+  periodEnd: number; // timestamp Unix
+  stripeSubscriptionId: string;
+}): Promise<void> {
+  await connectDB();
+  const { clerkUserId, planId, creditsPerMonth, periodEnd, stripeSubscriptionId } = opts;
+
+  const planExpiresAt = new Date(periodEnd * 1000);
+
+  // 1. Obtener créditos actuales del usuario
+  const user = await User.findById(clerkUserId, { credits: 1, plan: 1, planCredits: 1 }).lean();
+  if (!user) return;
+
+  // 2. Calcular créditos a añadir:
+  //    - Resetear los créditos del plan anterior (que habrán caducado)
+  //    - Mantener los créditos top-up (no caducan)
+  const topUpCredits = Math.max(0, (user.credits ?? 0) - (user.planCredits ?? 0));
+  const newTotalCredits = topUpCredits + creditsPerMonth;
+
+  // 3. Actualizar usuario con el nuevo plan y créditos
+  await User.findByIdAndUpdate(clerkUserId, {
+    $set: {
+      plan: planId,
+      planCredits: creditsPerMonth,
+      credits: newTotalCredits,
+      planExpiresAt,
+      stripeSubscriptionId,
+    },
+  });
+
+  // 4. Registrar la transacción
+  await CreditTransaction.create({
+    userId: clerkUserId,
+    kind: "subscription",
+    amount: creditsPerMonth,
+    description: `Renovación plan ${planId}: ${creditsPerMonth} créditos (válidos hasta ${planExpiresAt.toLocaleDateString("es-ES")})`,
+  }).catch(() => { /* best-effort */ });
+}
 
 stripeWebhookRouter.post(
   "/",
@@ -15,6 +64,7 @@ stripeWebhookRouter.post(
       res.status(200).json({ received: true, ignored: true });
       return;
     }
+
     let event;
     try {
       event = stripe.webhooks.constructEvent(req.body, signature, secret);
@@ -24,39 +74,127 @@ stripeWebhookRouter.post(
       return;
     }
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data
-        .object as import("stripe").Stripe.Checkout.Session;
-      const clerkUserId = session.metadata?.clerkUserId;
-      const credits = Number(session.metadata?.credits ?? "0");
-      if (
-        clerkUserId &&
-        credits > 0 &&
-        session.payment_status === "paid"
-      ) {
-        // Idempotent — see creditPurchase docs. Racing with /billing/confirm
-        // is fine, only one INSERT wins thanks to the unique index on
-        // (user_id, stripe_session_id).
-        try {
-          await creditPurchase({
-            userId: clerkUserId,
-            amount: credits,
-            stripeSessionId: session.id,
-            description: `Purchased ${credits} credits`,
-          });
-        } catch (err) {
-          // Surface a 5xx so Stripe retries this webhook (they back off and
-          // try again for ~3 days). Swallowing it would silently drop credits
-          // on transient DB blips. The retry is safe because the operation
-          // is idempotent on (user_id, stripe_session_id).
-          req.log.error(
-            { err, sessionId: session.id, clerkUserId },
-            "creditPurchase failed in webhook — returning 500 so Stripe retries",
-          );
-          res.status(500).json({ error: "internal" });
+    try {
+      // ─── Pago único completado (top-up de créditos) ───────────────────────
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as import("stripe").Stripe.Checkout.Session;
+        const clerkUserId = session.metadata?.clerkUserId;
+        const type = session.metadata?.type;
+
+        // Top-up de créditos
+        if (type === "topup" || (!type && session.mode === "payment")) {
+          const credits = Number(session.metadata?.credits ?? "0");
+          if (clerkUserId && credits > 0 && session.payment_status === "paid") {
+            await creditPurchase({
+              userId: clerkUserId,
+              amount: credits,
+              stripeSessionId: session.id,
+              description: `Top-up de ${credits} créditos`,
+            });
+          }
+        }
+
+        // Suscripción nueva — los créditos se dan en invoice.payment_succeeded
+        // (que llega justo después), así evitamos doble crédito.
+      }
+
+      // ─── Suscripción creada o renovada ────────────────────────────────────
+      if (event.type === "invoice.payment_succeeded") {
+        const invoice = event.data.object as import("stripe").Stripe.Invoice;
+
+        // Solo procesar facturas de suscripción (no one-time)
+        if (!invoice.subscription) {
+          res.json({ received: true });
           return;
         }
+
+        const subscriptionId = typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : invoice.subscription.id;
+
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const clerkUserId = subscription.metadata?.clerkUserId;
+        const planId = subscription.metadata?.planId;
+        const creditsPerMonth = Number(subscription.metadata?.creditsPerMonth ?? "0");
+        const periodEnd = subscription.current_period_end;
+
+        if (!clerkUserId || !planId || !creditsPerMonth) {
+          req.log.warn({ subscriptionId }, "Subscription missing metadata — skipping credit grant");
+          res.json({ received: true });
+          return;
+        }
+
+        await grantPlanCredits({
+          clerkUserId,
+          planId,
+          creditsPerMonth,
+          periodEnd,
+          stripeSubscriptionId: subscriptionId,
+        });
+
+        req.log.info(
+          { clerkUserId, planId, creditsPerMonth, periodEnd },
+          "Plan credits granted on subscription payment",
+        );
       }
+
+      // ─── Suscripción cancelada ────────────────────────────────────────────
+      if (event.type === "customer.subscription.deleted") {
+        const subscription = event.data.object as import("stripe").Stripe.Subscription;
+        const clerkUserId = subscription.metadata?.clerkUserId;
+
+        if (clerkUserId) {
+          await connectDB();
+
+          // Volver al plan free y quitar los créditos del plan (mantener top-ups)
+          const user = await User.findById(clerkUserId, { credits: 1, planCredits: 1 }).lean();
+          const topUpCredits = Math.max(0, (user?.credits ?? 0) - (user?.planCredits ?? 0));
+
+          // Dar los 10 créditos gratuitos del plan free
+          const freeCredits = 10;
+
+          await User.findByIdAndUpdate(clerkUserId, {
+            $set: {
+              plan: "free",
+              planCredits: freeCredits,
+              credits: topUpCredits + freeCredits,
+              planExpiresAt: null,
+              stripeSubscriptionId: null,
+            },
+          });
+
+          await CreditTransaction.create({
+            userId: clerkUserId,
+            kind: "subscription",
+            amount: freeCredits,
+            description: "Vuelta al plan gratuito: 10 créditos mensuales",
+          }).catch(() => {});
+
+          req.log.info({ clerkUserId }, "Subscription cancelled — reverted to free plan");
+        }
+      }
+
+      // ─── Pago de suscripción fallido ──────────────────────────────────────
+      if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object as import("stripe").Stripe.Invoice;
+        if (invoice.subscription) {
+          const subscriptionId = typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : invoice.subscription.id;
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const clerkUserId = subscription.metadata?.clerkUserId;
+
+          if (clerkUserId) {
+            req.log.warn({ clerkUserId, subscriptionId }, "Subscription payment failed");
+            // No quitamos créditos — Stripe reintentará el pago automáticamente
+          }
+        }
+      }
+
+    } catch (err) {
+      req.log.error({ err, eventType: event.type }, "Error processing Stripe webhook");
+      res.status(500).json({ error: "internal" });
+      return;
     }
 
     res.json({ received: true });
