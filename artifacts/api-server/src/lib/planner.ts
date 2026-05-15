@@ -1,4 +1,4 @@
-import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { logger } from "./logger";
 
 export type Phase =
@@ -115,20 +115,17 @@ export async function planExecution(
 
   try {
     const response = await Promise.race([
-      gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `App existente: ${options.hasExistingApp ? "sí" : "no"}\nPetición: ${prompt.slice(0, 1500)}`,
-        config: {
-          systemInstruction: PLANNER_SYSTEM,
-          temperature: 0,
-          maxOutputTokens: 200,
-        },
+      anthropic!.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 200,
+        system: PLANNER_SYSTEM,
+        messages: [{ role: "user", content: `App existente: ${options.hasExistingApp ? "sí" : "no"}\nPetición: ${prompt.slice(0, 1500)}` }],
       }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("planner timeout")), 8000),
       ),
     ]);
-    const text = (response as { text?: string })?.text ?? "";
+    const text = (response as any).content?.[0]?.text ?? "";
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return heuristic;
     const parsed = JSON.parse(match[0]) as { scope?: string; reason?: string };
