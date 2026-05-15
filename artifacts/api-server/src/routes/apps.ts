@@ -1831,7 +1831,10 @@ import { eq, and, desc } from "drizzle-orm";
 import { db } from "../lib/db";
 import { generatedApps, appMessages } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
-import { generateApp, type GeneratedAppPayload } from "../lib/generate";
+import {
+  generateApp as generateAppFromLib,
+  type GeneratedAppPayload,
+} from "../lib/generate";
 
 const router = Router();
 
@@ -1841,7 +1844,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     const { prompt, model, language, attachments, kind } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
-    const result: GeneratedAppPayload = await generateApp(
+    const result: GeneratedAppPayload = await generateAppFromLib(
       prompt,
       (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
       undefined,
@@ -1947,7 +1950,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
     if (!app) return res.status(404).json({ error: "App no encontrada" });
     await db.insert(appMessages).values({ appId: id, role: "user", content });
-    const updated: GeneratedAppPayload = await generateApp(
+    const updated: GeneratedAppPayload = await generateAppFromLib(
       content,
       (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
       {
@@ -1986,7 +1989,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     const [app] = await db.select().from(generatedApps)
       .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
     if (!app) return res.status(404).json({ error: "App no encontrada" });
-    const result = await generateApp(
+    const result = await generateAppFromLib(
       app.prompt,
       (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
       undefined,
