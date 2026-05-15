@@ -1821,41 +1821,236 @@ export async function generateApp(
 
 /* === FINAL EXPORTS (Required by index.ts and routes/index.ts) === */
 import { Router } from "express";
+
+/* ============================================================
+ * REST API — /api/apps
+ * Usa lib/generate.ts (Anthropic) para todos los agentes.
+ * ============================================================ */
+import { Router } from "express";
+import { eq, and, desc } from "drizzle-orm";
+import { db } from "../lib/db";
+import { generatedApps, appMessages } from "@workspace/db/schema";
+import { requireAuth } from "../lib/auth";
+import { generateApp, type GeneratedAppPayload } from "../lib/generate";
+
 const router = Router();
 
-// Ruta para generar aplicaciones
-router.post("/generate", async (req, res) => {
+// ── POST /api/apps ── genera y persiste una nueva app ─────────────────────
+router.post("/apps", requireAuth, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments } = req.body;
-    
-    logger.info("Iniciando generación de app...", { prompt });
-
-    // Ejecutamos la generación directamente usando tu lógica de agentes
-    const result = await generateApp(
+    const { prompt, model, language, attachments, kind } = req.body;
+    if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
+    const userId = req.userId as string;
+    const result: GeneratedAppPayload = await generateApp(
       prompt,
-      (p) => logger.info(`Progreso: ${p.phase} - ${p.progress}%`),
+      (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
       undefined,
       model,
-      language,
+      language ?? "typescript",
       (agent, msg) => logger.info(`[${agent}] ${msg}`),
-      attachments
+      attachments,
     );
-
-    res.status(200).json(result);
-  } catch (error) {
-    logger.error("Error en /api/generate", { error: error instanceof Error ? error.message : error });
-    res.status(500).json({ error: "Error al generar la aplicación. Revisa los logs de Render para más detalles." });
+    const [row] = await db.insert(generatedApps).values({
+      userId,
+      title: result.title,
+      prompt,
+      description: result.description,
+      techStack: result.techStack ?? [],
+      frontendCode: result.frontendCode,
+      backendCode: result.backendCode,
+      plannedPages: result.plannedPages ?? [],
+      language: language ?? "typescript",
+      kind: kind ?? "fullstack",
+      status: "ready",
+    }).returning();
+    res.status(201).json(row);
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
   }
 });
 
-// Funciones requeridas por index.ts
-export async function reclaimOrphanedJobs() {
-  logger.info("Reclamando trabajos huérfanos...");
+// ── GET /api/apps ── lista apps del usuario ───────────────────────────────
+router.get("/apps", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const rows = await db.select().from(generatedApps)
+      .where(eq(generatedApps.userId, userId))
+      .orderBy(desc(generatedApps.createdAt));
+    res.json(rows);
+  } catch (err) {
+    logger.error({ err }, "GET /api/apps error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── GET /api/apps/:id ─────────────────────────────────────────────────────
+router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const [row] = await db.select().from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    if (!row) return res.status(404).json({ error: "App no encontrada" });
+    res.json(row);
+  } catch (err) {
+    logger.error({ err }, "GET /api/apps/:id error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── DELETE /api/apps/:id ──────────────────────────────────────────────────
+router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const [deleted] = await db.delete(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)))
+      .returning();
+    if (!deleted) return res.status(404).json({ error: "App no encontrada" });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "DELETE /api/apps/:id error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── GET /api/apps/:id/messages ────────────────────────────────────────────
+router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const [app] = await db.select({ id: generatedApps.id }).from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const messages = await db.select().from(appMessages)
+      .where(eq(appMessages.appId, id)).orderBy(appMessages.createdAt);
+    res.json(messages);
+  } catch (err) {
+    logger.error({ err }, "GET /api/apps/:id/messages error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── POST /api/apps/:id/messages ── edita la app vía chat ─────────────────
+router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ error: "content es requerido" });
+    const [app] = await db.select().from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    await db.insert(appMessages).values({ appId: id, role: "user", content });
+    const updated: GeneratedAppPayload = await generateApp(
+      content,
+      (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
+      {
+        title: app.title,
+        description: app.description,
+        techStack: (app.techStack as string[]) ?? [],
+        frontendCode: app.frontendCode,
+        backendCode: app.backendCode,
+      },
+      app.coderModel,
+      (app.language as any) ?? "typescript",
+      (agent, msg) => logger.info(`[${agent}] ${msg}`),
+    );
+    await db.update(generatedApps).set({
+      frontendCode: updated.frontendCode,
+      backendCode: updated.backendCode,
+      title: updated.title,
+      description: updated.description,
+    }).where(eq(generatedApps.id, id));
+    const [assistantMsg] = await db.insert(appMessages)
+      .values({ appId: id, role: "assistant", content: "✅ App actualizada correctamente." })
+      .returning();
+    res.status(201).json(assistantMsg);
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/messages error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
+// ── POST /api/apps/:id/retry ──────────────────────────────────────────────
+router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const [app] = await db.select().from(generatedApps)
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId)));
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const result = await generateApp(
+      app.prompt,
+      (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
+      undefined,
+      app.coderModel,
+      (app.language as any) ?? "typescript",
+      (agent, msg) => logger.info(`[${agent}] ${msg}`),
+    );
+    const [updated] = await db.update(generatedApps).set({
+      frontendCode: result.frontendCode,
+      backendCode: result.backendCode,
+      title: result.title,
+      description: result.description,
+      status: "ready",
+      evaluatorSummary: null,
+    }).where(eq(generatedApps.id, id)).returning();
+    res.json(updated);
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/retry error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
+// ── PUT /api/apps/:id/model ───────────────────────────────────────────────
+router.put("/apps/:id/model", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const { model } = req.body;
+    if (!model) return res.status(400).json({ error: "model es requerido" });
+    const [updated] = await db.update(generatedApps).set({ coderModel: model })
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId))).returning();
+    if (!updated) return res.status(404).json({ error: "App no encontrada" });
+    res.json(updated);
+  } catch (err) {
+    logger.error({ err }, "PUT /api/apps/:id/model error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── PUT /api/apps/:id/auto-publish ────────────────────────────────────────
+router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "id inválido" });
+    const { enabled } = req.body;
+    const [updated] = await db.update(generatedApps).set({ autoPublish: !!enabled })
+      .where(and(eq(generatedApps.id, id), eq(generatedApps.userId, userId))).returning();
+    if (!updated) return res.status(404).json({ error: "App no encontrada" });
+    res.json(updated);
+  } catch (err) {
+    logger.error({ err }, "PUT /api/apps/:id/auto-publish error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── Exports requeridos por index.ts ───────────────────────────────────────
+export async function reclaimOrphanedJobs(): Promise<void> {
+  logger.info("reclaimOrphanedJobs: no-op");
 }
 
-export async function runJobById(jobId: string) {
-  logger.info(`Ejecutando trabajo: ${jobId}`);
+export async function runJobById(jobId: string): Promise<void> {
+  logger.info({ jobId }, "runJobById: no-op");
 }
 
-// Exportación del router
 export default router;
