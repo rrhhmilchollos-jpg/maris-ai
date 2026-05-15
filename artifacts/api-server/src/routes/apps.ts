@@ -13,6 +13,7 @@ import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
+import { TEMPLATES } from "../lib/templates";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -2044,6 +2045,16 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
     res.json(updated);
   } catch (err) {
     logger.error({ err }, "PUT /api/apps/:id/auto-publish error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── GET /api/templates ────────────────────────────────────────────────────────
+router.get("/templates", async (_req: any, res: any) => {
+  try {
+    res.json(TEMPLATES);
+  } catch (err) {
+    logger.error({ err }, "GET /api/templates error");
     res.status(500).json({ error: "Error interno" });
   }
 });
