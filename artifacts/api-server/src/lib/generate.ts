@@ -507,16 +507,16 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
           model: "claude-haiku-4-5",
-          max_tokens: 8192,
+          max_tokens: 4096,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
         }),
-        20_000,
+        35_000,
         "architect-anthropic",
       );
       raw = response.content[0].type === "text" ? response.content[0].text : "";
     } catch (err) {
-      logger.warn({ err }, "Anthropic architect failed, falling back to Gemini");
+      logger.warn({ err }, "Anthropic architect failed, retrying");
     }
   }
 
@@ -526,11 +526,11 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
           model: "claude-haiku-4-5",
-          max_tokens: 8192,
+          max_tokens: 4096,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
         }),
-        25_000,
+        35_000,
         "architect-retry",
       );
       raw = response.content[0].type === "text" ? response.content[0].text : "";
@@ -685,7 +685,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // Claude Sonnet 4 streaming
     const stream = await anthropic.messages.stream({
       model: "claude-sonnet-4-6",
-      max_tokens: 32000,
+      max_tokens: 24000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -1347,7 +1347,7 @@ Return the FULL updated app as JSON.`;
       // Claude Sonnet 4 streaming
       const stream = await anthropic.messages.stream({
         model: "claude-sonnet-4-6",
-        max_tokens: 32000,
+        max_tokens: 24000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
