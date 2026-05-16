@@ -133,8 +133,8 @@ export async function chargeCredits(opts: {
   const { userId, isAdmin, amount, description } = opts;
  
   if (isAdmin) {
-    const user = await User.findById(userId, { credits: 1 }).lean();
-    return { ok: true, newBalance: user?.credits ?? 0 };
+    // Admin/owner: unlimited credits, never deducted
+    return { ok: true, newBalance: 999999999 };
   }
  
   // Use findOneAndUpdate with $inc only when credits >= amount.
@@ -158,4 +158,3 @@ export async function chargeCredits(opts: {
  
   return { ok: true, newBalance: updated.credits };
 }
- 
