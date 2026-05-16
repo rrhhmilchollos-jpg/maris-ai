@@ -59,7 +59,7 @@ export async function ensureUser(clerkUserId: string): Promise<IUser> {
         email,
         fullName,
         imageUrl: clerkUser.imageUrl ?? undefined,
-        credits: 3,
+        credits: isAdminEmail(email) ? 999999999 : 100,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
