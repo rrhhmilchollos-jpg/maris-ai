@@ -26,7 +26,7 @@ export type GenLanguage = "typescript" | "javascript";
  *
  * Agentes:
  *   - Researcher    (claude-haiku-4-5)   — referencia web
- *   - Architect     (claude-sonnet-4-6)  — plan / estructura
+ *   - Architect     (claude-haiku-4-5)   — plan / estructura (rápido)
  *   - Designer      (claude-haiku-4-5)   — design system
  *   - Frontend Eng  (claude-sonnet-4-6)  — bundle frontend
  *   - Backend Eng   (claude-sonnet-4-6)  — bundle backend
@@ -505,12 +505,12 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-haiku-4-5",
           max_tokens: 8192,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
         }),
-        25_000,
+        20_000,
         "architect-anthropic",
       );
       raw = response.content[0].type === "text" ? response.content[0].text : "";
@@ -524,12 +524,12 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-haiku-4-5",
           max_tokens: 8192,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
         }),
-        35_000,
+        25_000,
         "architect-retry",
       );
       raw = response.content[0].type === "text" ? response.content[0].text : "";
@@ -1613,7 +1613,7 @@ export async function generateApp(
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
   log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research), 45_000, "architect"),
+    withTimeoutOrThrow(architectPlan(prompt, research), 55_000, "architect"),
   );
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
