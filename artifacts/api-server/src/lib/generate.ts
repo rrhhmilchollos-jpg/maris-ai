@@ -516,7 +516,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5-20250929",
           max_tokens: 8192,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
@@ -859,7 +859,7 @@ async function reviewBundle(
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-3-5-sonnet-20241022",
+              model: "claude-sonnet-4-5-20250929",
               max_tokens: 1024,
               system: systemPrompt + "\nOutput JSON only.",
               messages: [{ role: "user", content: userContent }],
