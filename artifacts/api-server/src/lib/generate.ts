@@ -130,7 +130,7 @@ Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
 - Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
-- NO SIZE LIMIT — generate every file the plan needs, in full. This is a paid product; bigger apps deliver more value. Never truncate or "TODO" a file to save tokens.
+- Generate every file the plan needs, in full. Never truncate or "TODO" a file to save tokens. Stay concise: avoid redundant comments, padding, or unnecessary boilerplate.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
@@ -185,13 +185,13 @@ Output STRICT JSON only matching this schema:
 PRODUCT THINKING — be ambitious about UX:
 - Always include a Home/Landing page that's COMPELLING (hero + features + social proof + CTA + footer). Not just a navbar with text.
 - For consumer apps: think Browse + Detail + Auth/Profile + Cart/Bookmarks + Settings. For SaaS: Dashboard + List + Detail + Settings + Onboarding. For tools: Workspace + History + Settings.
-- A real product has 4-6 pages minimum (unless it's a single-page tool/calculator). Don't ship 2-page apps when the domain calls for more.
+- A real product has 3-5 pages. For landing pages: 1-2 pages is perfectly fine. Don't add pages the user didn't ask for.
 - Think about empty states, error states, loading states — they're real screens.
 
 COMPONENTS — model real reusable pieces:
 - Always include: Navbar, Footer, Button (if you need a custom button), Card variant(s), at least one Form component.
 - Include domain-specific components: ProductCard, PostItem, UserAvatar, PriceTag, FilterSidebar, SearchBar, EmptyState, etc. The names should be obvious.
-- Aim for 6-12 components. Each gets its own file.
+- Aim for 4-8 components. Each gets its own file. Only include components the plan genuinely needs.
 
 DATA MODELS — make them realistic:
 - Include the fields you'd actually use in a real schema (id, timestamps, relations, status enums).
@@ -203,9 +203,10 @@ FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
 - Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
 
-NO LIMITS — be ambitious:
-- This is a paid product. Bigger apps = more value. Do NOT artificially shrink the plan.
-- Generate as many frontendFiles as the product genuinely needs. Quality AND quantity.
+FILE LIMIT — quality over quantity:
+- Keep frontendFiles to a maximum of 15 files. A focused app with 12 well-built files beats 40 incomplete ones.
+- Prioritize the pages and components the user actually asked for. Omit speculative extras.
+- If the product genuinely needs more than 15 files, pick the 15 most critical ones.
 
 Rules:
 - NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
@@ -550,6 +551,10 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   plan.dataModels = plan.dataModels ?? [];
   plan.backendFiles = plan.backendFiles ?? [];
   plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
+  // Hard cap: never exceed 15 frontend files to avoid token truncation
+  if (plan.frontendFiles.length > 15) {
+    plan.frontendFiles = plan.frontendFiles.slice(0, 15);
+  }
   return plan;
 }
 
