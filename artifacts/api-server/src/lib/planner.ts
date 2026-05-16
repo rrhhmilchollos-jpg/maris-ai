@@ -39,8 +39,6 @@ export const PLAN_FULL: ExecutionPlan = {
     "integration",
     "frontend",
     "backend",
-    "qa",
-    "tests",
     "validate",
     "patch",
   ],
@@ -171,6 +169,6 @@ export function planSummaryEs(plan: ExecutionPlan): string {
     case "feature":
       return `🧭 Plan: re-arquitecto, regenero el frontend, valido todo el bundle y aplico parches hasta que compile sin errores. ${plan.reason}`;
     case "full-build":
-      return `🧭 Plan: app nueva — pipeline completo (investigación → arquitecto → diseño → integraciones → frontend + backend → QA → tests → validación → parches). No termino hasta que el código compile sin errores. ${plan.reason}`;
+      return `🧭 Plan: app nueva — pipeline completo (investigación → arquitecto → diseño → integraciones → frontend + backend → validación → parches). No termino hasta que el código compile sin errores. ${plan.reason}`;
   }
 }
