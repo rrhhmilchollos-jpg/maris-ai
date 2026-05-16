@@ -514,12 +514,16 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   let raw = "";
   if (useAnthropic) {
     try {
-      const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-max_tokens: 8192,
-system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
-        messages: [{ role: "user", content: userContent }],
-      });
+      const response = await withTimeoutOrThrow(
+        anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8192,
+          system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
+          messages: [{ role: "user", content: userContent }],
+        }),
+        25_000,
+        "architect-anthropic",
+      );
       raw = response.content[0].type === "text" ? response.content[0].text : "";
     } catch (err) {
       logger.warn({ err }, "Anthropic architect failed, falling back to Gemini");
@@ -537,7 +541,7 @@ system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           responseMimeType: "application/json",
         },
       }),
-      60_000,
+      30_000,
       "architect",
     );
     raw = response.text ?? "";
@@ -1670,7 +1674,7 @@ export async function generateApp(
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
   log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
+    withTimeoutOrThrow(architectPlan(prompt, research), 45_000, "architect"),
   );
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
