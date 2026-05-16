@@ -1,4 +1,3 @@
-import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
 
@@ -26,16 +25,16 @@ export type GenLanguage = "typescript" | "javascript";
  *   - El resto de agentes usan Gemini 2.5 Flash para velocidad y búsqueda web.
  *
  * Agentes:
- *   - Researcher    (gemini-2.0-flash + google_search)  — referencia web
- *   - Architect     (Claude 3.5 / gemini-2.5-flash)      — plan / estructura
- *   - Designer      (gemini-2.5-flash)                  — design system
- *   - Frontend Eng  (gemini-2.5-flash, streaming)       — bundle frontend
- *   - Backend Eng   (gemini-2.5-flash)                  — bundle backend
- *   - QA Reviewer   (Claude 3.5 / gemini-2.0-flash)      — revisión
- *   - Patcher       (gemini-2.0-flash)                  — auto-fix
+ *   - Researcher    (claude-haiku-4-5)   — referencia web
+ *   - Architect     (claude-sonnet-4-6)  — plan / estructura
+ *   - Designer      (claude-haiku-4-5)   — design system
+ *   - Frontend Eng  (claude-sonnet-4-6)  — bundle frontend
+ *   - Backend Eng   (claude-sonnet-4-6)  — bundle backend
+ *   - QA Reviewer   (claude-haiku-4-5)   — revisión
+ *   - Patcher       (claude-haiku-4-5)   — auto-fix
  * ========================================================================== */
 
-const useAnthropic = !!process.env.ANTHROPIC_API_KEY || !!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+const useAnthropic = true; // Always use Anthropic — Gemini removed
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
@@ -464,35 +463,25 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
  */
 export async function researchTopic(prompt: string): Promise<string> {
   const hasUrl = URL_LIKE.test(prompt);
-  return withTimeout(
-    (async () => {
-      try {
-        const response = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: hasUrl
-                    ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`
-                    : `Haz una búsqueda rápida sobre este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`,
-                },
-              ],
-            },
-          ],
-          config: {
-            systemInstruction: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
+  const systemPrompt = `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
 - 1 short paragraph: what the source product/site does and who it's for.
 - bullets: core sections/pages, signature features, dominant brand colors (hex if you can read them), typography family, microcopy tone.
 - 1 short paragraph: differentiation suggestions — what an inspired-by product could do better or differently.
 
-ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual; no preamble; plain text only; ≤350 words.`,
-            tools: [{ googleSearch: {} }],
-            maxOutputTokens: 1500,
-          },
+ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual; no preamble; plain text only; ≤350 words.`;
+  const userText = hasUrl
+    ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`
+    : `Haz una búsqueda rápida sobre este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`;
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 1500,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userText }],
         });
-        const text = response.text ?? "";
+        const text = response.content[0].type === "text" ? response.content[0].text : "";
         return text.trim().slice(0, 4000);
       } catch {
         return "";
@@ -516,7 +505,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-sonnet-4-5-20250929",
+          model: "claude-sonnet-4-6",
           max_tokens: 8192,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
@@ -531,20 +520,23 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   }
 
   if (!raw) {
-    const response = await withTimeoutOrThrow(
-      gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: userContent }] }],
-        config: {
-          systemInstruction: ARCHITECT_SYSTEM_PROMPT,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-        },
-      }),
-      30_000,
-      "architect",
-    );
-    raw = response.text ?? "";
+    // Fallback: retry with claude-sonnet-4-6 (same model, fresh attempt)
+    try {
+      const response = await withTimeoutOrThrow(
+        anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8192,
+          system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
+          messages: [{ role: "user", content: userContent }],
+        }),
+        35_000,
+        "architect-retry",
+      );
+      raw = response.content[0].type === "text" ? response.content[0].text : "";
+    } catch (err) {
+      logger.warn({ err }, "Anthropic architect retry also failed");
+      throw new Error("El arquitecto no pudo generar el plan tras dos intentos.");
+    }
   }
   const plan = extractJsonObject<ProjectPlan>(raw);
   if (!plan || !plan.title || !Array.isArray(plan.frontendFiles)) {
@@ -572,19 +564,16 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
   let raw = "";
   try {
     const response = await withTimeoutOrThrow(
-      gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: userContent }] }],
-        config: {
-          systemInstruction: DESIGNER_SYSTEM_PROMPT,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-        },
+      anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 2048,
+        system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
+        messages: [{ role: "user", content: userContent }],
       }),
       15_000,
       "designer",
     );
-    raw = response.text ?? "";
+    raw = response.content[0].type === "text" ? response.content[0].text : "";
   } catch (_err) {
     // Fall through to default design below.
   }
@@ -616,11 +605,10 @@ interface CodeGenResult {
   error?: string;
 }
 
-type CoderProvider = "gemini-flash" | "claude-sonnet" | "gpt-5";
+type CoderProvider = "claude-sonnet" | "gpt-5";
 function resolveCoderProvider(coderModel?: string): CoderProvider {
-  if (coderModel === "claude-sonnet-4-6") return "gemini-flash"; // Fallback a Gemini (sin key Anthropic)
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
-  return "gemini-flash";
+  return "claude-sonnet";
 }
 
 /**
@@ -689,31 +677,25 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
     truncated = finishReason === "MAX_TOKENS";
   } else {
-    // Gemini 2.5 Flash streaming (default para todos los modelos incluido claude-sonnet)
-    const stream = await gemini.models.generateContentStream({
-      model: "gemini-2.5-flash",
-      contents: [{ role: "user", parts: [{ text: userContent }] }],
-      config: {
-        systemInstruction: systemPrompt,
-        maxOutputTokens: 32768,
-        responseMimeType: "application/json",
-      },
+    // Claude Sonnet 4 streaming
+    const stream = await anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 32000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
     });
     let lastReport = 0;
-    let finishReason: string | undefined;
     for await (const chunk of stream) {
-      const text = chunk.text;
-      if (text) {
-        accumulated += text;
+      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+        accumulated += chunk.delta.text;
         if (accumulated.length - lastReport >= 1500) {
           lastReport = accumulated.length;
           onChars(accumulated.length);
         }
       }
-      const fr = chunk.candidates?.[0]?.finishReason;
-      if (fr) finishReason = fr;
     }
-    truncated = finishReason === "MAX_TOKENS";
+    const finalMsg = await stream.finalMessage();
+    truncated = finalMsg.stop_reason === "max_tokens";
   }
 
   const raw = accumulated.trim();
@@ -751,19 +733,16 @@ Now produce the JSON object with backendCode.`;
 
   try {
     const response = await withTimeoutOrThrow(
-      gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: userContent }] }],
-        config: {
-          systemInstruction: BACKEND_SYSTEM_PROMPT,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-        },
+      anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8192,
+        system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
+        messages: [{ role: "user", content: userContent }],
       }),
       45_000,
       "backend-engineer",
     );
-    const raw = response.text ?? "";
+    const raw = response.content[0].type === "text" ? response.content[0].text : "";
     const parsed = extractJsonObject<{ backendCode?: string }>(raw);
     if (!parsed || typeof parsed.backendCode !== "string") {
       return {
@@ -792,30 +771,19 @@ async function specifyIntegrations(
   return withTimeout(
     (async () => {
       try {
-        const response = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `App: ${plan.title}
+        const intUserContent = `App: ${plan.title}
 Description: ${plan.description}
 User prompt: ${prompt}
 Pages: ${plan.pages.map((p) => p.name).join(", ")}
 Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
-Backend needed: ${plan.backendNeeded}`,
-                },
-              ],
-            },
-          ],
-          config: {
-            systemInstruction: INTEGRATION_SYSTEM_PROMPT,
-            maxOutputTokens: 800,
-            responseMimeType: "application/json",
-          },
+Backend needed: ${plan.backendNeeded}`;
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 800,
+          system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
+          messages: [{ role: "user", content: intUserContent }],
         });
-        const raw = response.text ?? "";
+        const raw = response.content[0].type === "text" ? response.content[0].text : "";
         const parsed = extractJsonObject<IntegrationSpec>(raw);
         if (!parsed || !Array.isArray(parsed.services)) return { services: [] };
         return {
@@ -859,7 +827,7 @@ async function reviewBundle(
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-sonnet-4-5-20250929",
+              model: "claude-sonnet-4-6",
               max_tokens: 1024,
               system: systemPrompt + "\nOutput JSON only.",
               messages: [{ role: "user", content: userContent }],
@@ -871,16 +839,13 @@ async function reviewBundle(
         }
 
         if (!raw) {
-          const response = await gemini.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: [{ role: "user", parts: [{ text: userContent }] }],
-            config: {
-              systemInstruction: systemPrompt,
-              maxOutputTokens: 700,
-              responseMimeType: "application/json",
-            },
+          const qaResponse = await anthropic.messages.create({
+            model: "claude-haiku-4-5",
+            max_tokens: 700,
+            system: systemPrompt + "\nOutput JSON only.",
+            messages: [{ role: "user", content: userContent }],
           });
-          raw = response.text ?? "";
+          raw = qaResponse.content[0].type === "text" ? qaResponse.content[0].text : "";
         }
         const parsed = extractJsonObject<QAReport>(raw);
         if (!parsed) return { ok: true, issues: [] };
@@ -914,14 +879,7 @@ async function generateTests(
         const sample = frontendCode.slice(0, 6000);
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
-        const response = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `Generate tests for "${plan.title}".
+        const testsUserContent = `Generate tests for "${plan.title}".
 Main components to test: ${componentNames}
 Main utils to test: ${utilNames}
 Pages: ${plan.pages.map((p) => `${p.name} (${p.route})`).join(", ")}
@@ -929,18 +887,14 @@ Pages: ${plan.pages.map((p) => `${p.name} (${p.route})`).join(", ")}
 First 6KB of the frontend bundle (so you know real symbol names and import paths):
 ${sample}
 
-Return the JSON object with testCode.`,
-                },
-              ],
-            },
-          ],
-          config: {
-            systemInstruction: TEST_SYSTEM_PROMPT,
-            maxOutputTokens: 3000,
-            responseMimeType: "application/json",
-          },
+Return the JSON object with testCode.`;
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 3000,
+          system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
+          messages: [{ role: "user", content: testsUserContent }],
         });
-        const raw = response.text ?? "";
+        const raw = response.content[0].type === "text" ? response.content[0].text : "";
         const parsed = extractJsonObject<{ testCode?: string }>(raw);
         if (!parsed || typeof parsed.testCode !== "string") return "";
         if (!parsed.testCode.includes("// === FILE:")) return "";
@@ -970,31 +924,20 @@ export async function patchBundle(
   return withTimeout(
     (async () => {
       try {
-        const response = await gemini.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents: [
-            {
-              role: "user",
-              parts: [
-                {
-                  text: `ISSUES TO FIX:
+        const patcherContent = `ISSUES TO FIX:
 ${issueList}
 ${memoryContext}
 CURRENT FRONTEND BUNDLE:
 ${frontendCode}
 
-Return the FULL patched bundle as JSON.`,
-                },
-              ],
-            },
-          ],
-          config: {
-            systemInstruction: buildPatcherSystemPrompt(language),
-            maxOutputTokens: 16000,
-            responseMimeType: "application/json",
-          },
+Return the FULL patched bundle as JSON.`;
+        const response = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 16000,
+          system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
+          messages: [{ role: "user", content: patcherContent }],
         });
-        const raw = response.text ?? "";
+        const raw = response.content[0].type === "text" ? response.content[0].text : "";
         const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
         if (!parsed || typeof parsed.frontendCode !== "string") return null;
         if (parsed.frontendCode.length < frontendCode.length / 2) return null;
@@ -1396,30 +1339,26 @@ Return the FULL updated app as JSON.`;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
     } else {
-      // Gemini 2.5 Flash streaming (default, incluye claude-sonnet redirigido)
-      const stream = await gemini.models.generateContentStream({
-        model: "gemini-2.5-flash",
-        contents: [{ role: "user", parts: [{ text: finalUserContent }] }],
-        config: {
-          systemInstruction: systemPrompt,
-          maxOutputTokens: 65536,
-          responseMimeType: "application/json",
-        },
+      // Claude Sonnet 4 streaming
+      const stream = await anthropic.messages.stream({
+        model: "claude-sonnet-4-6",
+        max_tokens: 32000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: finalUserContent }],
       });
       let lastReport = 0;
       for await (const chunk of stream) {
-        const text = chunk.text;
-        if (text) {
-          accumulated += text;
+        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+          accumulated += chunk.delta.text;
           observe(accumulated);
           if (accumulated.length - lastReport >= PROGRESS_EVERY) {
             lastReport = accumulated.length;
             onChars(accumulated.length);
           }
         }
-        const fr = chunk.candidates?.[0]?.finishReason;
-        if (fr) finishReason = fr;
       }
+      const finalMsg = await stream.finalMessage();
+      if (finalMsg.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
     }
     return { text: accumulated, finishReason };
   }
