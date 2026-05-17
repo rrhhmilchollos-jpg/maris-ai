@@ -38,6 +38,53 @@ export const KIND_COSTS = {
 export const FREE_PLAN_CREDITS = 10;
 export const MONTHLY_SUBSCRIPTION_CREDITS = 100;
 
+export const SUBSCRIPTION_PLANS = [
+  {
+    id: "free",
+    name: "Gratis",
+    price: 0,
+    creditsPerMonth: FREE_PLAN_CREDITS,
+    features: ["10 créditos iniciales", "Subdominio Maris AI", "Soporte comunitario"],
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: 29,
+    creditsPerMonth: MONTHLY_SUBSCRIPTION_CREDITS,
+    stripePriceId: process.env.STRIPE_PRICE_PRO,
+    features: ["100 créditos/mes", "Dominio Personalizado", "Sin Marca de Agua", "Soporte Prioritario"],
+  },
+];
+
+export const CREDIT_PACKAGES = [
+  {
+    id: "pack-small",
+    name: "Pequeño",
+    credits: 50,
+    priceCents: 1000,
+    currency: "usd",
+    priceId: process.env.STRIPE_PRICE_PACK_SMALL,
+    description: "50 créditos extra",
+  },
+  {
+    id: "pack-large",
+    name: "Grande",
+    credits: 200,
+    priceCents: 3500,
+    currency: "usd",
+    priceId: process.env.STRIPE_PRICE_PACK_LARGE,
+    description: "200 créditos extra",
+  },
+];
+
+export function findPackageByPriceId(priceId: string) {
+  return CREDIT_PACKAGES.find((p) => p.priceId === priceId);
+}
+
+export function getPlanByStripePriceId(priceId: string) {
+  return SUBSCRIPTION_PLANS.find((p) => p.stripePriceId === priceId);
+}
+
 export async function getStripeCustomerIdForUser(userId: string): Promise<string | null> {
   // Implementar lógica para obtener el ID de cliente de Stripe desde la base de datos
   // Por ahora, retornar null

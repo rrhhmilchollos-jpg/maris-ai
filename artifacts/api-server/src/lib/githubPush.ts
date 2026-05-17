@@ -1,4 +1,6 @@
-import { Maris AIConnectors } from "@maris-ai/connectors-sdk";
+// import { Maris AIConnectors } from "@maris-ai/connectors-sdk";
+// Reemplazado por integración directa con GitHub API via Octokit para independencia total.
+import { Octokit } from "@octokit/rest";
 import { bundleToFiles } from "./exportZip";
 
 // GitHub blueprint integration — uses Maris AI's connector proxy to make
@@ -7,7 +9,12 @@ import { bundleToFiles } from "./exportZip";
 // each end-user would need their own OAuth flow; this MVP scopes pushes to
 // the workspace owner's account, which is fine for personal use.
 
-const connectors = new Maris AIConnectors();
+// Usar Octokit directamente con el token del usuario (proporcionado via env o auth)
+const getOctokit = () => {
+  const token = process.env.GITHUB_TOKEN || process.env.MARIS_AI_GITHUB_TOKEN;
+  if (!token) throw new Error("GITHUB_TOKEN no configurado");
+  return new Octokit({ auth: token });
+};
 
 interface GhUser {
   login: string;
@@ -38,37 +45,20 @@ type GhResult<T> =
 
 async function ghRaw<T>(
   path: string,
-  init: { method?: string; body?: unknown } = {},
+  init: { method?: string; body?: any } = {},
 ): Promise<GhResult<T>> {
-  const res = await connectors.proxy("github", path, {
-    method: init.method ?? "GET",
-    headers: init.body
-      ? { "content-type": "application/json", accept: "application/vnd.github+json" }
-      : { accept: "application/vnd.github+json" },
-    body: init.body ? JSON.stringify(init.body) : undefined,
-  });
-  if (!res.ok) {
-    let detail = "";
-    try {
-      const j = (await res.json()) as { message?: string };
-      detail = j.message ?? "";
-    } catch {
-      try {
-        detail = await res.text();
-      } catch {
-        // ignore
-      }
-    }
-    return { ok: false, status: res.status, message: detail };
-  }
-  // 204 No Content (e.g. DELETE) has no body — caller does not need data.
-  let data: T;
+  const octokit = getOctokit();
   try {
-    data = (await res.json()) as T;
-  } catch {
-    data = undefined as unknown as T;
+    const method = (init.method ?? "GET").toUpperCase();
+    const response = await octokit.request(`${method} ${path}`, init.body || {});
+    return { ok: true, data: response.data as T, status: response.status };
+  } catch (error: any) {
+    return { 
+      ok: false, 
+      status: error.status || 500, 
+      message: error.message || "Error en la petición a GitHub" 
+    };
   }
-  return { ok: true, data, status: res.status };
 }
 
 async function gh<T>(

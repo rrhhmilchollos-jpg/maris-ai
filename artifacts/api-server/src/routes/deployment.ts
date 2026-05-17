@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../lib/auth";
 import { db } from "../lib/db";
-import { generatedApps, users } from "@workspace/db/schema";
+import { GeneratedApp as generatedApps, User as users } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import {
