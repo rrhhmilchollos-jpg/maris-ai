@@ -54,6 +54,50 @@ export default function NewsDetailPage() {
       if (metaDescription) {
         metaDescription.setAttribute("content", data.metaDescription || data.body.substring(0, 160));
       }
+
+      // Añadir etiqueta canónica
+      let canonicalLink = document.querySelector("link[rel=\"canonical\"]");
+      if (!canonicalLink) {
+        canonicalLink = document.createElement("link");
+        canonicalLink.setAttribute("rel", "canonical");
+        document.head.appendChild(canonicalLink);
+      }
+      canonicalLink.setAttribute("href", window.location.href);
+
+      // Añadir JSON-LD para NewsArticle
+      const jsonLd = {
+        "@context": "https://schema.org",
+        "@type": "NewsArticle",
+        "mainEntityOfPage": {
+          "@type": "WebPage",
+          "@id": window.location.href
+        },
+        "headline": data.title,
+        "image": [
+          data.imageUrl
+        ],
+        "datePublished": data.publishedAt,
+        "dateModified": data.updatedAt,
+        "author": {
+          "@type": "Person",
+          "name": data.author
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Maris AI",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://maris.ai/logo.png" // TODO: Reemplazar con la URL real del logo de Maris AI
+          }
+        },
+        "description": data.metaDescription || data.body.substring(0, 160)
+      };
+
+      const script = document.createElement("script");
+      script.type = "application/ld+json";
+      script.innerHTML = JSON.stringify(jsonLd);
+      document.head.appendChild(script);
+
     } catch (error) {
       toast({
         title: "Error",

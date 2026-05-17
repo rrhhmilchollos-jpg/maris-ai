@@ -40,6 +40,16 @@ export default function NewsPage() {
     if (metaDescription) {
       metaDescription.setAttribute("content", "Últimas noticias sobre Maris AI, Live Coding y nuevas aplicaciones generadas por IA.");
     }
+
+    // Añadir etiqueta canónica
+    let canonicalLink = document.querySelector("link[rel=\"canonical\"]");
+    if (!canonicalLink) {
+      canonicalLink = document.createElement("link");
+      canonicalLink.setAttribute("rel", "canonical");
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.setAttribute("href", window.location.href);
+
   }, []);
 
   const loadNews = async () => {

@@ -14,6 +14,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
+import { AdminNewsEditor } from "@/components/admin-news-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +39,7 @@ import {
   RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3, MessageSquare,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets";
+type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news";
 
 interface MemoryEntry {
   id: number;
@@ -215,6 +216,9 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
             </TabsTrigger>
             <TabsTrigger value="tickets">
               <MessageSquare className="h-4 w-4 mr-2" /> Tickets
+            </TabsTrigger>
+            <TabsTrigger value="news">
+              <Sparkles className="h-4 w-4 mr-2" /> Noticias
             </TabsTrigger>
           </TabsList>
 
@@ -433,6 +437,10 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
           <TabsContent value="tickets" className="mt-4">
             <AdminTicketsPanel />
+          </TabsContent>
+
+          <TabsContent value="news" className="mt-4">
+            <AdminNewsEditor />
           </TabsContent>
         </Tabs>
 

@@ -12,6 +12,7 @@ import router from "./routes";
 import ticketsRouter from "./routes/tickets";
 import newsRouter from "./routes/news";
 import rssRouter from "./routes/rss";
+import newsSitemapRouter from "./routes/news-sitemap";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import { logger } from "./lib/logger";
@@ -94,6 +95,7 @@ app.use("/api", router);
 app.use("/api", ticketsRouter);
 app.use("/api", newsRouter);
 app.use("/rss", rssRouter);
+app.use("/", newsSitemapRouter);
  
 // Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
 app.use(publicDeployRouter);
