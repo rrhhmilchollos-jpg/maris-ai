@@ -16,4 +16,28 @@ router.get("/rss", async (_req, res) => {
         <link>https://maris.ai/news/${article.slug}</link>
         <guid>https://maris.ai/news/${article.slug}</guid>
         <pubDate>${new Date(article.publishedAt).toUTCString()}</pubDate>
-        <description><![CDATA[${article.metaDescription || article.body.substring(0, 200) + 
+        <description><![CDATA[${article.metaDescription || article.body.substring(0, 200) + "..."}]]></description>
+      </item>`).join("");
+
+    const rssFeed = `<?xml version="1.0" encoding="UTF-8" ?>
+      <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+        <channel>
+          <title>Maris AI News</title>
+          <link>https://maris.ai/news</link>
+          <description>Las últimas noticias sobre Live Coding y aplicaciones generadas por Maris AI</description>
+          <language>es</language>
+          <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+          <atom:link href="https://maris.ai/rss" rel="self" type="application/rss+xml" />
+          ${feedItems}
+        </channel>
+      </rss>`;
+
+    res.set("Content-Type", "application/rss+xml");
+    res.send(rssFeed);
+  } catch (err) {
+    logger.error("Error generating RSS feed", err);
+    res.status(500).send("Error generating feed");
+  }
+});
+
+export default router;
