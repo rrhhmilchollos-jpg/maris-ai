@@ -16,6 +16,7 @@ import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
+import { connectDB } from "@workspace/db";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
