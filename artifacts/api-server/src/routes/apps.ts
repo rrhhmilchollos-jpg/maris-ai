@@ -1832,11 +1832,14 @@ import { Router } from "express";
  * Usa MongoDB (Mongoose) + lib/generate.ts (Anthropic).
  * ============================================================ */
 import { Router } from "express";
-import { 
+import {
   GeneratedApp, 
   AppMessage, 
   JobLog, 
-  GenerationJob 
+  GenerationJob,
+  AppImage,
+  AppRuntimeError,
+  AppRevision
 } from "@workspace/db/schema";
 import { requireAuth, isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
@@ -1943,13 +1946,28 @@ router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
 router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const app = await GeneratedApp.findOneAndDelete({ _id: req.params.id, userId });
+    const appId = req.params.id;
+
+    // Verificar que la app existe y pertenece al usuario
+    const app = await GeneratedApp.findOne({ _id: appId, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
-    await AppMessage.deleteMany({ appId: req.params.id });
+
+    // Borrado en cascada: eliminar todos los datos relacionados
+    await Promise.all([
+      GeneratedApp.deleteOne({ _id: appId }),
+      AppMessage.deleteMany({ appId }),
+      AppImage.deleteMany({ appId }),
+      AppRuntimeError.deleteMany({ appId }),
+      AppRevision.deleteMany({ appId }),
+      GenerationJob.deleteMany({ appId }),
+      JobLog.deleteMany({ jobId: appId }),
+    ]);
+
+    logger.info({ userId, appId }, "App eliminada exitosamente");
     res.json({ ok: true });
   } catch (err) {
-    logger.error({ err }, "DELETE /api/apps/:id error");
-    res.status(500).json({ error: "Error interno" });
+    logger.error({ err, userId: req.userId, appId: req.params.id }, "DELETE /api/apps/:id error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
   }
 });
 
