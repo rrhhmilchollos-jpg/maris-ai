@@ -455,6 +455,8 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
       try {
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
           max_tokens: 1500,
           system: systemPrompt,
           messages: [{ role: "user", content: userText }],
@@ -484,6 +486,8 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
           model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
           max_tokens: 4096,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
@@ -503,6 +507,8 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
           model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
           max_tokens: 4096,
           system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: userContent }],
@@ -548,6 +554,8 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
         model: "claude-haiku-4-5",
+        headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+        cache_control: {"type": "ephemeral"},
         max_tokens: 2048,
         system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -661,8 +669,10 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else {
     // Claude Sonnet 4 streaming
     const stream = await anthropic.messages.stream({
-      model: "claude-opus-4-7",
+      model: "claude-sonnet-3-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
       max_tokens: 24000,
+      headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+      cache_control: {"type": "ephemeral"},
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -716,8 +726,10 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-opus-4-7",
+        model: "claude-sonnet-3-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
         max_tokens: 8192,
+        headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+        cache_control: {"type": "ephemeral"},
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
       }),
@@ -761,6 +773,8 @@ Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
 Backend needed: ${plan.backendNeeded}`;
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
           max_tokens: 800,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: intUserContent }],
@@ -830,8 +844,10 @@ Debes verificar estrictamente las siguientes directrices:
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-opus-4-7",
+              model: "claude-sonnet-3-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
               max_tokens: 1024,
+              headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+              cache_control: {"type": "ephemeral"},
               system: systemPrompt + "\nOutput JSON only.",
               messages: [{ role: "user", content: userContent }],
             });
@@ -844,6 +860,8 @@ Debes verificar estrictamente las siguientes directrices:
         if (!raw) {
           const qaResponse = await anthropic.messages.create({
             model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
             max_tokens: 700,
             system: systemPrompt + "\nOutput JSON only.",
             messages: [{ role: "user", content: userContent }],
@@ -893,6 +911,8 @@ ${sample}
 Return the JSON object with testCode.`;
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
           max_tokens: 3000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [{ role: "user", content: testsUserContent }],
@@ -936,6 +956,8 @@ ${frontendCode}
 Return the FULL patched bundle as JSON.`;
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
+          headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
+          cache_control: {"type": "ephemeral"},
           max_tokens: 16000,
           system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [{ role: "user", content: patcherContent }],
