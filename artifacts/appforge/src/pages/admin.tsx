@@ -396,7 +396,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {jobsData.jobs.map((j) => {
+                      {jobsData.jobs.map((j: any) => {
                         const ageMs = j.ageMs;
                         const ageStr = ageMs < 60_000 ? `${Math.round(ageMs / 1000)}s` : ageMs < 3_600_000 ? `${Math.round(ageMs / 60_000)}m` : `${Math.round(ageMs / 3_600_000)}h`;
                         const isStale = (j.status === "running" || j.status === "queued") && ageMs > 15 * 60 * 1000;

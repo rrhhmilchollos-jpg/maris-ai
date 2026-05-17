@@ -1,8 +1,8 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
 // ─── Users ───────────────────────────────────────────────────────────────────
-export interface IUser extends Document {
-  _id: string;
+export interface IUser {
+  _id?: string;
   email: string;
   fullName?: string;
   imageUrl?: string;
@@ -32,8 +32,8 @@ export const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
 
 // ─── Generated Apps ──────────────────────────────────────────────────────────
-export interface IGeneratedApp extends Document {
-  _id: string;
+export interface IGeneratedApp {
+  _id?: string;
   userId: string;
   title: string;
   prompt: string;

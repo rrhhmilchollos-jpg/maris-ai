@@ -175,7 +175,7 @@ export function AttachmentChips({
       className="flex flex-wrap gap-2 px-1"
       data-testid={`${testIdPrefix}-chips`}
     >
-      {attachments.map((a) => (
+      {attachments.map((a: any) => (
         <div
           key={a.id}
           className="group flex items-center gap-2 rounded-md border border-border/60 bg-background/50 pl-2 pr-1 py-1 text-xs"

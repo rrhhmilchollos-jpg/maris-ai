@@ -30,7 +30,7 @@ export const jobLogs = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => ({
+  (t: any) => ({
     jobIdIdx: index("job_logs_job_id_idx").on(t.jobId, t.id),
   }),
 );

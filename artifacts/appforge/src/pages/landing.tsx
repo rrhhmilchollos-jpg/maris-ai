@@ -46,7 +46,7 @@ export default function LandingPage() {
       <header className="absolute top-0 z-50 w-full border-b border-border/10 bg-transparent">
         <div className="container flex h-14 max-w-screen-2xl items-center px-4 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
-            <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
+            <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
             <span className="font-bold sm:inline-block tracking-tight text-lg text-white">Maris AI</span>
           </div>
           <div className="flex items-center space-x-4">
@@ -170,8 +170,7 @@ export default function LandingPage() {
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 to-accent/20 blur-3xl -z-10 rounded-full"></div>
               <div className="glass-card rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-                <img 
-                  src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/hero-illustration.png`} 
+                <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/hero-illustration.svg`} 
                   alt="Generación neuronal de Maris AI" 
                   className="w-full h-auto object-cover opacity-90 hover:opacity-100 transition-opacity"
                 />
@@ -200,7 +199,7 @@ export default function LandingPage() {
       <footer className="py-12 border-t border-white/5 bg-background">
         <div className="container px-4 md:px-8 mx-auto flex flex-col md:flex-row items-center justify-between">
           <div className="flex items-center space-x-2 mb-4 md:mb-0">
-            <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="Maris AI" className="h-5 w-5 grayscale opacity-50" />
+            <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo-dark.svg`} alt="Maris AI" className="h-5 w-5 grayscale opacity-50" />
             <span className="font-semibold text-muted-foreground">Maris AI</span>
           </div>
           <p className="text-sm text-muted-foreground/60">

@@ -246,7 +246,7 @@ export default function AdminDashboardPage() {
                     </p>
                   ) : (
                     <ul className="space-y-2">
-                      {data.topUsers.map((u) => (
+                      {data.topUsers.map((u: any) => (
                         <li
                           key={u.userId}
                           className="flex items-center justify-between text-sm"

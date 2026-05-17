@@ -166,7 +166,7 @@ export default function DashboardPage() {
       setLocation("/billing");
       return;
     }
-    generateMutation.mutate({ data: { prompt, coderModel, language, kind, attachmentIds: attachments.map((a) => a.id) } });
+    generateMutation.mutate({ data: { prompt, coderModel, language, kind, attachmentIds: attachments.map((a: any) => a.id) } });
   };
 
   useEffect(() => {
@@ -176,7 +176,7 @@ export default function DashboardPage() {
       const raw = localStorage.getItem("appforge_annual_modal_until");
       const until = raw ? Number(raw) : 0;
       if (Date.now() > until) {
-        const t = setTimeout(() => setAnnualOpen(true), 1200);
+        const t: any = setTimeout(() => setAnnualOpen(true), 1200);
         cleanup = () => clearTimeout(t);
       }
     } catch { /* ignore */ }
@@ -247,7 +247,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleGenerate} className="space-y-4">
-              <TemplateGallery disabled={isWorking} onPick={(t) => { setKind(t.kind as Kind); setPrompt(t.seedPrompt); }} />
+              <TemplateGallery disabled={isWorking} onPick={(t: any) => { setKind(t.kind as Kind); setPrompt(t.seedPrompt); }} />
               <div className="flex flex-wrap items-center gap-1 rounded-lg border border-white/10 bg-background/50 p-1" role="group" aria-label="Tipo de proyecto" data-testid="kind-tabs">
                 {(Object.keys(KIND_META) as Array<keyof typeof KIND_META>).map((k) => {
                   const meta = KIND_META[k];
@@ -337,14 +337,14 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}</div>
           ) : visibleApps.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleApps.map(app => (
+              {visibleApps.map((app: any) => (
                 <Card key={app.id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group hover:bg-card/60 flex flex-col" onClick={() => setLocation(`/app/${app.id}`)} data-testid={`card-app-${app.id}`}>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg truncate group-hover:text-primary transition-colors">{app.title}</CardTitle>
                     <CardDescription className="line-clamp-2 min-h-[2.5rem]">{app.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="mt-auto pt-4 pb-4">
-                    <div className="flex gap-2 mb-2 flex-wrap">{app.techStack?.slice(0, 3).map(tech => <Badge key={tech} variant="outline" className="bg-background/50 border-white/10 text-xs text-muted-foreground">{tech}</Badge>)}</div>
+                    <div className="flex gap-2 mb-2 flex-wrap">{app.techStack?.slice(0, 3).map((tech: any) => <Badge key={tech} variant="outline" className="bg-background/50 border-white/10 text-xs text-muted-foreground">{tech}</Badge>)}</div>
                   </CardContent>
                   <CardFooter className="pt-0 text-xs text-muted-foreground flex justify-between items-center border-t border-white/5 mt-auto bg-black/10 py-3">
                     <span>{formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}</span>
@@ -430,7 +430,7 @@ function TemplateGallery({ disabled, onPick }: { disabled?: boolean; onPick: (t:
         <span className="text-muted-foreground/60 font-normal">(rellena el prompt, lo puedes editar antes de generar)</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {templates.map((t) => {
+        {templates.map((t: any) => {
           const Icon = TEMPLATE_ICONS[t.icon] ?? Sparkles;
           return (
             <button key={t.id} type="button" onClick={() => onPick(t)} disabled={disabled} title={t.description} className="group flex flex-col items-start gap-1 rounded-lg border border-white/10 bg-background/40 hover:bg-primary/5 hover:border-primary/40 p-3 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed" data-testid={`template-card-${t.id}`}>

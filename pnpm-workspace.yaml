@@ -4,6 +4,14 @@ packages:
   - lib/integrations/*
   - scripts
 
+allowBuilds:
+  '@clerk/shared': true
+  es5-ext: true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+  puppeteer: true
+
 autoInstallPeers: false
 
 catalog:

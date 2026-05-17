@@ -46,7 +46,7 @@ export const appRuntimeErrors = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => ({
+  (t: any) => ({
     appIdIdx: index("app_runtime_errors_app_id_idx").on(t.appId, t.id),
   }),
 );

@@ -9,7 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { generatedApps } from "./generatedApps";
 
-export const appRevisions = pgTable(
+export const appRevisions: any = pgTable(
   "app_revisions",
   {
     id: serial("id").primaryKey(),
@@ -28,7 +28,7 @@ export const appRevisions = pgTable(
     agentNotes: text("agent_notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => ({
+  (t: any) => ({
     // Primary access pattern: list newest-first per app, and look one up
     // by id during restore. The composite covers both.
     appCreatedIdx: index("app_revisions_app_created_idx").on(

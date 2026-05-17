@@ -607,7 +607,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       id,
       data: {
         message: trimmed,
-        attachmentIds: chatAttachments.map((a) => a.id),
+        attachmentIds: chatAttachments.map((a: any) => a.id),
       },
     });
   };
@@ -1172,7 +1172,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   Pide cualquier cambio: "añade modo oscuro", "cambia los colores a verde", "añade una sección de testimonios"…
                 </div>
               ) : null}
-              {(messages ?? []).map((msg) => (
+              {(messages ?? []).map((msg: any) => (
                 <div
                   key={msg.id}
                   className={
@@ -2043,7 +2043,7 @@ function CustomDomainSection({ appId }: { appId: number }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.recommendedDns.map((rec, i) => (
+                    {data.recommendedDns.map((rec: any, i: any) => (
                       <tr key={i} className="border-t border-white/5">
                         <td className="px-2 py-1">{rec.type}</td>
                         <td className="px-2 py-1">{rec.name}</td>
@@ -2062,7 +2062,7 @@ function CustomDomainSection({ appId }: { appId: number }) {
             <div className="rounded-md border border-amber-400/20 bg-amber-500/5 p-2 text-[11px] text-amber-100">
               <div className="font-medium mb-1">Verificación pendiente:</div>
               <ul className="space-y-0.5">
-                {data.verification.map((v, i) => (
+                {data.verification.map((v: any, i: any) => (
                   <li key={i} className="font-mono break-all">
                     {v.type} {v.domain} → {v.value}
                   </li>

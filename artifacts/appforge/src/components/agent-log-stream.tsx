@@ -125,12 +125,12 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   useEffect(() => {
     if (!data?.logs?.length) return;
     setLines((prev) => {
-      const seen = new Set(prev.map((l) => l.id));
+      const seen = new Set(prev.map((l: any) => l.id));
       const fresh = data.logs.filter((l) => !seen.has(l.id));
       if (fresh.length === 0) return prev;
       return [...prev, ...fresh];
     });
-    const newest = Math.max(...data.logs.map((l) => l.id));
+    const newest = Math.max(...data.logs.map((l: any) => l.id));
     setLastId((prev) => (newest > prev ? newest : prev));
   }, [data]);
 

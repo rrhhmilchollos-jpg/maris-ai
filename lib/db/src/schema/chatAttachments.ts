@@ -29,7 +29,7 @@ export const chatAttachments = pgTable(
     dataBase64: text("data_base64").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => ({
+  (t: any) => ({
     userIdx: index("chat_attachments_user_idx").on(t.userId),
   }),
 );
