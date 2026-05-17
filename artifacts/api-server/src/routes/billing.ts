@@ -64,6 +64,85 @@ function originFromReq(req: Request): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /billing/custom-checkout — comprar monto personalizado de créditos
+// ─────────────────────────────────────────────────────────────────────────────
+router.post(
+  "/billing/custom-checkout",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    const amountEur = req.body?.amountEur;
+    if (typeof amountEur !== "number" || amountEur <= 0) {
+      res.status(400).json({ error: "Invalid amount" });
+      return;
+    }
+
+    const stripe = await getStripe();
+    if (!stripe) {
+      res.status(503).json({
+        error: "Los pagos aún no están conectados. Configura STRIPE_SECRET_KEY en las variables de entorno.",
+      });
+      return;
+    }
+
+    const origin = originFromReq(req);
+    const basePath = process.env.FRONTEND_BASE_PATH ?? "";
+    const successUrl = `${origin}${basePath}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${origin}${basePath}/billing?canceled=1`;
+
+    let customerId = req.dbUser!.stripeCustomerId ?? undefined;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: req.dbUser!.email,
+        name: req.dbUser!.fullName ?? undefined,
+        metadata: { clerkUserId: req.userId! },
+      });
+      customerId = customer.id;
+      await connectDB();
+      await User.findByIdAndUpdate(req.userId!, {
+        $set: { stripeCustomerId: customerId },
+      });
+    }
+
+    // Calcular créditos basado en tasa: 1 crédito = 0.01 EUR (ajustable)
+    const credits = Math.floor(amountEur * 100);
+    const amountCents = Math.floor(amountEur * 100);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer: customerId,
+      locale: "es",
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            unit_amount: amountCents,
+            product_data: {
+              name: `Pack ${credits} créditos Maris AI`,
+              description: `Compra personalizada de ${credits} créditos`,
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        clerkUserId: req.userId!,
+        credits: String(credits),
+        type: "topup-custom",
+      },
+    });
+
+    if (!session.url) {
+      res.status(500).json({ error: "Stripe did not return a session URL" });
+      return;
+    }
+
+    res.json({ url: session.url, sessionId: session.id });
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /billing/checkout — comprar un pack de créditos (pago único)
 // ─────────────────────────────────────────────────────────────────────────────
 router.post(
@@ -291,8 +370,8 @@ router.post(
       return;
     }
 
-    // Top-up de créditos
-    if (session.metadata?.type === "topup" || !session.metadata?.type) {
+    // Top-up de créditos (paquete fijo o personalizado)
+    if (session.metadata?.type === "topup" || session.metadata?.type === "topup-custom" || !session.metadata?.type) {
       const credits = Number(session.metadata?.credits ?? "0");
       if (!Number.isFinite(credits) || credits <= 0) {
         res.status(400).json({ error: "Invalid credits in session metadata" });
