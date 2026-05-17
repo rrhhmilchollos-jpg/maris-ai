@@ -1848,6 +1848,21 @@ const router = Router();
 const CREDIT_COST_NEW_APP = 10;
 const CREDIT_COST_EDIT = 5;
 
+// Mapa de costes por tipo de app (KIND_COSTS)
+const KIND_COSTS: Record<string, number> = {
+  fullstack:    1,
+  landing:      1,
+  vue:          1,
+  svelte:       1,
+  mobile:       2,
+  nextjs:       2,
+  "python-api": 2,
+  django:       2,
+  "hybrid-pwa": 3,
+  "game-2d":    3,
+  "game-3d":    5,
+};
+
 // ── POST /api/apps ── genera y persiste una nueva app ─────────────────────
 router.post("/apps", requireAuth, async (req: any, res: any) => {
   try {
