@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CreditCard, Zap, Info, Loader2, ArrowUpRight, ArrowDownRight, Terminal } from "lucide-react";
+import { CreditCard, Zap, Info, Loader2, ArrowUpRight, ArrowDownRight, Terminal, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -37,7 +37,6 @@ export default function BillingPage() {
       setCancelNotice(
         "Has cancelado el pago. Tu saldo no se ha modificado. Si quieres, puedes intentarlo de nuevo cuando estés listo.",
       );
-      // Clean the URL so the message doesn't reappear on refresh.
       const url = new URL(window.location.href);
       url.searchParams.delete("canceled");
       window.history.replaceState({}, "", url.toString());
@@ -79,7 +78,7 @@ export default function BillingPage() {
         maximumFractionDigits: 2,
       }).format(amountCents / 100);
     } catch {
-      return `${(amountCents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+      return `${(amountCents / 100).toFixed(2)} ${currency.toUpperCase() === 'EUR' ? '€' : currency.toUpperCase()}`;
     }
   };
 
@@ -90,22 +89,28 @@ export default function BillingPage() {
         {/* Encabezado y saldo */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Facturación y créditos</h1>
-            <p className="text-muted-foreground">Gestiona tu saldo para seguir generando aplicaciones.</p>
+            <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Facturación y créditos</h1>
+            <p className="text-muted-foreground text-lg">Gestiona tu saldo para seguir impulsando tu creatividad con IA.</p>
           </div>
           
-          <Card className="bg-card border-primary/20 shadow-[0_0_30px_-10px_rgba(var(--primary),0.3)]">
-            <CardContent className="p-6 flex items-center gap-6">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Zap className="h-6 w-6 text-primary" />
+          <Card className="bg-card border-primary/20 shadow-[0_0_40px_-15px_rgba(var(--primary),0.4)] overflow-hidden relative">
+            <div className="absolute top-0 right-0 p-1">
+              <div className="bg-primary/10 rounded-bl-xl p-1">
+                <Zap className="h-4 w-4 text-primary animate-pulse" />
+              </div>
+            </div>
+            <CardContent className="p-8 flex items-center gap-6">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                <Zap className="h-7 w-7 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Saldo disponible</p>
+                <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">Saldo disponible</p>
                 {meLoading ? (
-                  <Skeleton className="h-8 w-24" />
+                  <Skeleton className="h-10 w-32" />
                 ) : (
-                  <div className="text-3xl font-mono font-bold text-white">
-                    {isAdmin ? "∞" : me?.credits} <span className="text-lg font-sans font-normal text-muted-foreground">créditos</span>
+                  <div className="text-4xl font-mono font-bold text-white flex items-baseline gap-2">
+                    {isAdmin ? "∞" : me?.credits} 
+                    <span className="text-base font-sans font-medium text-muted-foreground uppercase tracking-tight">créditos</span>
                   </div>
                 )}
               </div>
@@ -114,10 +119,10 @@ export default function BillingPage() {
         </div>
 
         {isAdmin && (
-          <Alert className="border-primary/30 bg-primary/5">
-            <Zap className="h-4 w-4 text-primary" />
-            <AlertTitle>Modo propietario activo</AlertTitle>
-            <AlertDescription>
+          <Alert className="border-primary/30 bg-primary/5 py-6">
+            <Zap className="h-5 w-5 text-primary" />
+            <AlertTitle className="text-lg font-bold text-primary mb-1">Modo propietario activo</AlertTitle>
+            <AlertDescription className="text-muted-foreground">
               Tu cuenta tiene créditos ilimitados. Puedes generar todas las aplicaciones que quieras sin coste. Esta sección sigue disponible si quieres comprar paquetes o revisar el historial.
             </AlertDescription>
           </Alert>
@@ -141,42 +146,62 @@ export default function BillingPage() {
 
         {/* Paquetes */}
         <div>
-          <h2 className="text-xl font-semibold mb-6 flex items-center">
-            <CreditCard className="h-5 w-5 mr-2 text-muted-foreground" />
-            Comprar créditos
-          </h2>
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold mb-3">Elige tu potencia</h2>
+            <p className="text-muted-foreground">Paquetes de créditos adicionales que nunca expiran.</p>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {packagesLoading ? (
-              [1, 2, 3].map(i => <Skeleton key={i} className="h-[280px] w-full" />)
+              [1, 2, 3].map(i => <Skeleton key={i} className="h-[400px] w-full rounded-2xl" />)
             ) : packages?.map(pkg => (
-              <Card key={pkg.id} className={`relative flex flex-col ${pkg.popular ? 'border-primary shadow-lg shadow-primary/10' : 'border-white/5 bg-card/40'}`}>
+              <Card key={pkg.id} className={`relative flex flex-col transition-all duration-300 hover:scale-[1.02] ${pkg.popular ? 'border-primary ring-1 ring-primary/50 bg-primary/5 shadow-2xl shadow-primary/20' : 'border-white/10 bg-card/40'}`}>
                 {pkg.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-primary text-primary-foreground font-semibold px-3 py-0.5">Más popular</Badge>
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-10">
+                    <Badge className="bg-primary text-primary-foreground font-bold px-4 py-1 rounded-full shadow-lg">MÁS POPULAR</Badge>
                   </div>
                 )}
-                <CardHeader className="text-center pt-8">
-                  <CardTitle className="text-xl">{pkg.name}</CardTitle>
-                  <CardDescription>{pkg.description}</CardDescription>
-                  <div className="mt-4 text-4xl font-bold text-white">
-                    {formatPrice(pkg.priceCents, pkg.currency)}
+                <CardHeader className="text-center pt-10 pb-6">
+                  <CardTitle className="text-2xl font-bold mb-1">{pkg.name}</CardTitle>
+                  <CardDescription className="text-muted-foreground">{pkg.description}</CardDescription>
+                  <div className="mt-6 flex items-baseline justify-center gap-1">
+                    <span className="text-5xl font-extrabold text-white tracking-tighter">
+                      {formatPrice(pkg.priceCents, pkg.currency)}
+                    </span>
                   </div>
                 </CardHeader>
-                <CardContent className="flex-1 flex justify-center items-center pb-8">
-                  <div className="flex items-center text-lg font-mono text-primary bg-primary/10 px-4 py-2 rounded-lg">
+                <CardContent className="flex-1 px-8 pb-8">
+                  <div className="space-y-4 mb-8">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                      <span className="text-sm font-medium">+{pkg.credits} créditos instantáneos</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                      <span className="text-sm font-medium">Válido para apps Fullstack</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                      <span className="text-sm font-medium">Créditos sin caducidad</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+                      <span className="text-sm font-medium">Soporte prioritario</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-center text-sm font-mono text-primary bg-primary/10 px-4 py-3 rounded-xl border border-primary/20">
                     <Terminal className="h-4 w-4 mr-2" />
-                    +{pkg.credits} apps
+                    ~{Math.floor(pkg.credits / 1)} aplicaciones
                   </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="px-8 pb-10 pt-0">
                   <Button 
-                    className={`w-full ${pkg.popular ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'}`}
+                    className={`w-full h-12 text-lg font-bold rounded-xl transition-all ${pkg.popular ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                     onClick={() => handleBuy(pkg.priceId)}
                     disabled={checkoutMutation.isPending}
-                    data-testid={`buy-${pkg.id}`}
                   >
-                    {checkoutMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Comprar"}
+                    {checkoutMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Empezar ahora"}
                   </Button>
                 </CardFooter>
               </Card>
@@ -185,56 +210,63 @@ export default function BillingPage() {
         </div>
 
         {/* Transacciones */}
-        <div>
-          <h2 className="text-xl font-semibold mb-6 flex items-center">
-            <Terminal className="h-5 w-5 mr-2 text-muted-foreground" />
-            Historial de transacciones
-          </h2>
+        <div className="pt-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold flex items-center">
+              <Terminal className="h-6 w-6 mr-3 text-primary" />
+              Historial de transacciones
+            </h2>
+          </div>
           
-          <Card className="bg-card/30 border-white/5 overflow-hidden">
+          <Card className="bg-card/30 border-white/10 overflow-hidden rounded-2xl">
             {txLoading ? (
-              <div className="p-6 space-y-4">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              <div className="p-8 space-y-4">
+                {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
               </div>
             ) : transactions && transactions.length > 0 ? (
-              <Table>
-                <TableHeader className="bg-black/20">
-                  <TableRow className="border-white/5 hover:bg-transparent">
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map(tx => (
-                    <TableRow key={tx.id} className="border-white/5 hover:bg-white/[0.02]">
-                      <TableCell className="text-muted-foreground">
-                        {format(new Date(tx.createdAt), "d MMM yyyy HH:mm", { locale: es })}
-                      </TableCell>
-                      <TableCell className="font-medium text-foreground">{tx.description}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={`font-mono text-[10px] uppercase tracking-wider ${
-                          tx.kind === 'purchase' ? 'border-green-500/30 text-green-400 bg-green-500/10' : 
-                          'border-primary/30 text-primary bg-primary/10'
-                        }`}>
-                          {KIND_LABELS[tx.kind] ?? tx.kind}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        <div className={`flex items-center justify-end ${tx.amount > 0 ? 'text-green-400' : 'text-primary'}`}>
-                          {tx.amount > 0 ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
-                          {Math.abs(tx.amount)}
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-white/[0.03]">
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead className="py-4 px-6 font-bold uppercase tracking-wider text-[10px] text-muted-foreground">Fecha</TableHead>
+                      <TableHead className="py-4 px-6 font-bold uppercase tracking-wider text-[10px] text-muted-foreground">Descripción</TableHead>
+                      <TableHead className="py-4 px-6 font-bold uppercase tracking-wider text-[10px] text-muted-foreground">Tipo</TableHead>
+                      <TableHead className="py-4 px-6 text-right font-bold uppercase tracking-wider text-[10px] text-muted-foreground">Monto</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map(tx => (
+                      <TableRow key={tx.id} className="border-white/5 hover:bg-white/[0.02] transition-colors">
+                        <TableCell className="py-4 px-6 text-muted-foreground text-sm">
+                          {format(new Date(tx.createdAt), "d MMM yyyy HH:mm", { locale: es })}
+                        </TableCell>
+                        <TableCell className="py-4 px-6 font-semibold text-foreground">{tx.description}</TableCell>
+                        <TableCell className="py-4 px-6">
+                          <Badge variant="outline" className={`font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                            tx.kind === 'purchase' ? 'border-green-500/40 text-green-400 bg-green-500/10' : 
+                            'border-primary/40 text-primary bg-primary/10'
+                          }`}>
+                            {KIND_LABELS[tx.kind] ?? tx.kind}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-4 px-6 text-right font-mono font-bold">
+                          <div className={`flex items-center justify-end text-base ${tx.amount > 0 ? 'text-green-400' : 'text-primary'}`}>
+                            {tx.amount > 0 ? <ArrowUpRight className="h-4 w-4 mr-1" /> : <ArrowDownRight className="h-4 w-4 mr-1" />}
+                            {Math.abs(tx.amount)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
-              <div className="text-center py-12 px-4">
-                <CreditCard className="h-8 w-8 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-muted-foreground text-sm">Aún no hay transacciones.</p>
+              <div className="text-center py-20 px-4">
+                <div className="h-20 w-20 rounded-full bg-white/[0.03] flex items-center justify-center mx-auto mb-6">
+                  <CreditCard className="h-10 w-10 text-muted-foreground/20" />
+                </div>
+                <h3 className="text-xl font-semibold mb-2">Sin actividad reciente</h3>
+                <p className="text-muted-foreground max-w-xs mx-auto">Tus compras y consumos de créditos aparecerán aquí detallados.</p>
               </div>
             )}
           </Card>
