@@ -1831,7 +1831,12 @@ import { Router } from "express";
  * Usa MongoDB (Mongoose) + lib/generate.ts (Anthropic).
  * ============================================================ */
 import { Router } from "express";
-import { GeneratedApp, AppMessage } from "@workspace/db/schema";
+import { 
+  GeneratedApp, 
+  AppMessage, 
+  JobLog, 
+  GenerationJob 
+} from "@workspace/db/schema";
 import { requireAuth, isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import {
@@ -1840,7 +1845,6 @@ import {
   type GenerateProgress,
 } from "../lib/generate";
 import { enqueueGenerateJob } from "../lib/jobQueue";
-import { JobLog, GenerationJob } from "@workspace/db/schema";
 import mongoose from "mongoose";
 
 const router = Router();
