@@ -23,6 +23,8 @@ import AdminPage from "@/pages/admin";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 import DebugPreviewPage from "@/pages/debug-preview";
+import NewsPage from "@/pages/news";
+import NewsDetailPage from "@/pages/news-detail";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -286,6 +288,14 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/admin/dashboard">
             <AdminGated><AdminDashboardPage /></AdminGated>
+          </Route>
+
+          <Route path="/news">
+            <NewsPage />
+          </Route>
+
+          <Route path="/news/:slug">
+            {(params) => <NewsDetailPage params={params} />}
           </Route>
 
           <Route path="/__debug-preview/:id">

@@ -431,3 +431,40 @@ const TicketSchema = new Schema<ITicket>(
 
 export const Ticket: Model<ITicket> =
   mongoose.models.Ticket || mongoose.model<ITicket>('Ticket', TicketSchema);
+
+// ─── News Articles ───────────────────────────────────────────────────────────
+export interface INewsArticle extends Document {
+  title: string;
+  slug: string;
+  imageUrl: string;
+  imageAlt?: string;
+  body: string;
+  author: string;
+  publishedAt: Date;
+  tags: string[];
+  isFeatured: boolean;
+  metaDescription?: string;
+  relatedAppId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const NewsArticleSchema = new Schema<INewsArticle>(
+  {
+    title: { type: String, required: true },
+    slug: { type: String, required: true, unique: true },
+    imageUrl: { type: String, required: true },
+    imageAlt: { type: String },
+    body: { type: String, required: true },
+    author: { type: String, required: true, default: "Maris AI" },
+    publishedAt: { type: Date, default: Date.now },
+    tags: { type: [String], default: [] },
+    isFeatured: { type: Boolean, default: false },
+    metaDescription: { type: String },
+    relatedAppId: { type: String, ref: "GeneratedApp" },
+  },
+  { timestamps: true },
+);
+
+export const NewsArticle: Model<INewsArticle> =
+  mongoose.models.NewsArticle || mongoose.model<INewsArticle>("NewsArticle", NewsArticleSchema);
