@@ -30,8 +30,8 @@ export type GenLanguage = "typescript" | "javascript";
  *   - Researcher    (claude-haiku-4-5)   — referencia web
  *   - Architect     (claude-haiku-4-5)   — plan / estructura (rápido)
  *   - Designer      (claude-haiku-4-5)   — design system
- *   - Frontend Eng  (claude-4-7-sonnet-20260416)  — bundle frontend
- *   - Backend Eng   (claude-4-7-sonnet-20260416)  — bundle backend
+ *   - Frontend Eng  (claude-opus-4-7)  — bundle frontend
+ *   - Backend Eng   (claude-opus-4-7)  — bundle backend
  *   - QA Reviewer   (claude-haiku-4-5)   — revisión
  *   - Patcher       (claude-haiku-4-5)   — auto-fix
  * ========================================================================== */
@@ -498,7 +498,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   }
 
   if (!raw) {
-    // Fallback: retry with claude-4-7-sonnet-20260416 (same model, fresh attempt)
+    // Fallback: retry with claude-opus-4-7 (same model, fresh attempt)
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
@@ -661,7 +661,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else {
     // Claude Sonnet 4 streaming
     const stream = await anthropic.messages.stream({
-      model: "claude-4-7-sonnet-20260416",
+      model: "claude-opus-4-7",
       max_tokens: 24000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -716,7 +716,7 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-4-7-sonnet-20260416",
+        model: "claude-opus-4-7",
         max_tokens: 8192,
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -830,7 +830,7 @@ Debes verificar estrictamente las siguientes directrices:
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-4-7-sonnet-20260416",
+              model: "claude-opus-4-7",
               max_tokens: 1024,
               system: systemPrompt + "\nOutput JSON only.",
               messages: [{ role: "user", content: userContent }],
@@ -1344,7 +1344,7 @@ Return the FULL updated app as JSON.`;
     } else {
       // Claude Sonnet 4 streaming
       const stream = await anthropic.messages.stream({
-        model: "claude-4-7-sonnet-20260416",
+        model: "claude-opus-4-7",
         max_tokens: 24000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
