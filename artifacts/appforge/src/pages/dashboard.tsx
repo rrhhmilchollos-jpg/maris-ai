@@ -316,7 +316,7 @@ export default function DashboardPage() {
                       <SelectItem value="auto">Auto (Gemini Flash, rápido)</SelectItem>
                       <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
                       <SelectItem value="gpt-5" disabled={!me?.isPremium}>⚡ GPT-5 Codex {me?.isPremium ? "(Ultra Rápido)" : "(Premium)"}</SelectItem>
-                      <SelectItem value="claude-4-7-sonnet-20260416" disabled={!me?.isPremium}>Claude Sonnet 4.6 {me?.isPremium ? "(calidad)" : "(Premium)"}</SelectItem>
+                      <SelectItem value="claude-4-7-sonnet-20260416" disabled={!me?.isPremium}>Claude Sonnet 4.7 {me?.isPremium ? "(calidad)" : "(Premium)"}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={language} onValueChange={(v) => setLanguage(v as "typescript" | "javascript")} disabled={isWorking}>
