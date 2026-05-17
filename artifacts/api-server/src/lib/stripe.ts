@@ -78,10 +78,10 @@ export const SUBSCRIPTION_PLANS: PlanDef[] = [
     priceMonthCents: 0,
     currency: "eur",
     creditsPerMonth: 100,
-    popular: false,
-    stripePriceId: null,
-    features: [
-      "100 créditos mensuales",
+179	    popular: false,
+180	    stripePriceId: null,
+181	    features: [
+182	      "100 créditos mensuales",
       "Apps públicas",
       "Acceso al generador básico",
     ],

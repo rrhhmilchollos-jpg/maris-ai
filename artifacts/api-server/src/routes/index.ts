@@ -7,6 +7,7 @@ import billingRouter from "./billing";
 import adminRouter from "./admin";
 import debugBundleRouter from "./debugBundle";
 import uploadsRouter from "./uploads";
+import jobsRouter from "./jobs";
 
 const router: IRouter = Router();
 
@@ -18,6 +19,7 @@ router.use(debugBundleRouter);
 router.use(imagesRouter);
 router.use(appsRouter);
 router.use(uploadsRouter);
+router.use(jobsRouter);
 router.use(billingRouter);
 router.use(adminRouter);
 

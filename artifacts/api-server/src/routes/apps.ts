@@ -1837,7 +1837,11 @@ import { chargeCredits } from "../lib/credits";
 import {
   generateApp as generateAppFromLib,
   type GeneratedAppPayload,
+  type GenerateProgress,
 } from "../lib/generate";
+import { enqueueGenerateJob } from "../lib/jobQueue";
+import { JobLog, GenerationJob } from "@workspace/db/schema";
+import mongoose from "mongoose";
 
 const router = Router();
 
@@ -1868,32 +1872,22 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
       });
     }
 
-    const result: GeneratedAppPayload = await generateAppFromLib(
-      prompt,
-      (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
-      undefined,
-      model,
-      language ?? "typescript",
-      (agent, msg) => logger.info(`[${agent}] ${msg}`),
-      attachments,
-    );
-
-    const app = await GeneratedApp.create({
-      _id: new (require("mongoose").Types.ObjectId)().toString(),
+    const jobId = new mongoose.Types.ObjectId().toString();
+    const job = await GenerationJob.create({
+      _id: jobId,
       userId,
-      title: result.title,
       prompt,
-      description: result.description,
-      techStack: result.techStack ?? [],
-      frontendCode: result.frontendCode,
-      backendCode: result.backendCode,
-      plannedPages: result.plannedPages ?? [],
-      language: language ?? "typescript",
-      kind: kind ?? "fullstack",
-      status: "ready",
+      coderModel: model || "auto",
+      language: language || "typescript",
+      kind: kind || "fullstack",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin,
     });
 
-    res.status(201).json(app);
+    await enqueueGenerateJob(jobId);
+    res.status(201).json({ id: jobId });
   } catch (err) {
     logger.error({ err }, "POST /api/apps error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -1983,35 +1977,23 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     await AppMessage.create({ appId: req.params.id, role: "user", content });
 
-    const updated: GeneratedAppPayload = await generateAppFromLib(
-      content,
-      (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
-      {
-        title: app.title,
-        description: app.description,
-        techStack: app.techStack ?? [],
-        frontendCode: app.frontendCode,
-        backendCode: app.backendCode,
-      },
-      app.coderModel,
-      (app.language as any) ?? "typescript",
-      (agent, msg) => logger.info(`[${agent}] ${msg}`),
-    );
-
-    await GeneratedApp.findByIdAndUpdate(req.params.id, {
-      frontendCode: updated.frontendCode,
-      backendCode: updated.backendCode,
-      title: updated.title,
-      description: updated.description,
+    const jobId = new mongoose.Types.ObjectId().toString();
+    await GenerationJob.create({
+      _id: jobId,
+      userId,
+      prompt: content,
+      editAppId: req.params.id,
+      coderModel: app.coderModel || "auto",
+      language: app.language || "typescript",
+      kind: app.kind || "fullstack",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin,
     });
 
-    const assistantMsg = await AppMessage.create({
-      appId: req.params.id,
-      role: "assistant",
-      content: "✅ App actualizada correctamente.",
-    });
-
-    res.status(201).json(assistantMsg);
+    await enqueueGenerateJob(jobId);
+    res.status(201).json({ id: jobId });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -2043,29 +2025,23 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
       });
     }
 
-    const result = await generateAppFromLib(
-      app.prompt,
-      (p) => logger.info({ phase: p.phase, progress: p.progress }, p.note ?? ""),
-      undefined,
-      app.coderModel,
-      (app.language as any) ?? "typescript",
-      (agent, msg) => logger.info(`[${agent}] ${msg}`),
-    );
+    const jobId = new mongoose.Types.ObjectId().toString();
+    await GenerationJob.create({
+      _id: jobId,
+      userId,
+      prompt: app.prompt,
+      editAppId: req.params.id,
+      coderModel: app.coderModel || "auto",
+      language: app.language || "typescript",
+      kind: app.kind || "fullstack",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin,
+    });
 
-    const updated = await GeneratedApp.findByIdAndUpdate(
-      req.params.id,
-      {
-        frontendCode: result.frontendCode,
-        backendCode: result.backendCode,
-        title: result.title,
-        description: result.description,
-        status: "ready",
-        evaluatorSummary: undefined,
-      },
-      { new: true },
-    );
-
-    res.json(updated);
+    await enqueueGenerateJob(jobId);
+    res.status(201).json({ id: jobId });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/retry error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -2120,12 +2096,125 @@ router.get("/templates", async (_req: any, res: any) => {
 });
 
 // ── Exports requeridos por index.ts ───────────────────────────────────────
-export async function reclaimOrphanedJobs(): Promise<void> {
-  logger.info("reclaimOrphanedJobs: no-op");
+export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
+  await connectDB();
+  const STALE_MS = 15 * 60 * 1000;
+  const now = new Date();
+  const staleDate = new Date(now.getTime() - STALE_MS);
+
+  // 1. Re-encolar jobs que se quedaron en "queued" (crash antes de boss.send)
+  const orphanedQueued = await GenerationJob.find({
+    status: "queued",
+    updatedAt: { $lt: staleDate },
+    ...(opts.userId ? { userId: opts.userId } : {}),
+  });
+
+  for (const job of orphanedQueued) {
+    logger.info({ jobId: job._id }, "Re-enqueuing orphaned queued job");
+    await enqueueGenerateJob(String(job._id));
+  }
+
+  // 2. Marcar como fallidos los jobs que llevan en "running" > 15 min
+  const orphanedRunning = await GenerationJob.updateMany(
+    {
+      status: "running",
+      updatedAt: { $lt: staleDate },
+      ...(opts.userId ? { userId: opts.userId } : {}),
+    },
+    {
+      $set: {
+        status: "failed",
+        phase: "failed",
+        errorMessage: "La generación se detuvo inesperadamente (timeout).",
+        updatedAt: now,
+      },
+    },
+  );
+
+  if (orphanedRunning.modifiedCount > 0) {
+    logger.info({ count: orphanedRunning.modifiedCount }, "Marked stale running jobs as failed");
+  }
 }
 
 export async function runJobById(jobId: string): Promise<void> {
-  logger.info({ jobId }, "runJobById: no-op");
+  await connectDB();
+  const job = await GenerationJob.findById(jobId);
+  if (!job) return;
+
+  const log = async (agent: string, message: string, level: string = "info") => {
+    await JobLog.create({ jobId, agent, message, level });
+  };
+
+  const onProgress = async (p: GenerateProgress) => {
+    await GenerationJob.findByIdAndUpdate(jobId, {
+      $set: { phase: p.phase, progress: p.progress, updatedAt: new Date() },
+    });
+  };
+
+  try {
+    let previousApp: any = undefined;
+    if (job.editAppId) {
+      previousApp = await GeneratedApp.findById(job.editAppId).lean();
+    }
+
+    const result = await generateAppFromLib(
+      job.prompt,
+      onProgress,
+      previousApp,
+      job.coderModel,
+      (job.language as any) || "typescript",
+      log,
+      [], // attachments no implementados en job schema aún
+    );
+
+    if (job.editAppId) {
+      await GeneratedApp.findByIdAndUpdate(job.editAppId, {
+        $set: {
+          title: result.title,
+          description: result.description,
+          techStack: result.techStack,
+          frontendCode: result.frontendCode,
+          backendCode: result.backendCode,
+          status: "ready",
+        },
+      });
+      await AppMessage.create({
+        appId: job.editAppId,
+        role: "assistant",
+        content: "✅ App actualizada correctamente.",
+      });
+    } else {
+      const app = await GeneratedApp.create({
+        userId: job.userId,
+        title: result.title,
+        prompt: job.prompt,
+        description: result.description,
+        techStack: result.techStack,
+        frontendCode: result.frontendCode,
+        backendCode: result.backendCode,
+        plannedPages: result.plannedPages || [],
+        language: job.language,
+        kind: job.kind,
+        status: "ready",
+      });
+      await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
+    }
+
+    await GenerationJob.findByIdAndUpdate(jobId, {
+      $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
+    });
+  } catch (err) {
+    logger.error({ err, jobId }, "runJobById: Generation failed");
+    await GenerationJob.findByIdAndUpdate(jobId, {
+      $set: {
+        status: "failed",
+        phase: "failed",
+        errorMessage: err instanceof Error ? err.message : "Error desconocido",
+        updatedAt: new Date(),
+      },
+    });
+    await log("system", `Error: ${err instanceof Error ? err.message : "Error desconocido"}`, "error");
+  }
 }
 
 export default router;
