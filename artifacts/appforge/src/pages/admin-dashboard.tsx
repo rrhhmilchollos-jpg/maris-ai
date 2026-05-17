@@ -304,7 +304,7 @@ export default function AdminDashboardPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!data.e2b?.configured || smokeRunning}
+                        disabled={smokeRunning}
                         onClick={async () => {
                           setSmokeRunning(true);
                           setSmokeResult(null);
