@@ -52,6 +52,47 @@ router.get("/tickets", requireAuth, async (req, res) => {
   }
 });
 
+// Endpoint para que los usuarios respondan a sus propios tickets
+router.post("/tickets/:id/respond", requireAuth, async (req, res) => {
+  await connectDB();
+  const ticketId = req.params.id;
+  const { message } = req.body;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ error: "No autenticado" });
+  }
+  if (!message) {
+    return res.status(400).json({ error: "El mensaje de respuesta es obligatorio" });
+  }
+
+  try {
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket no encontrado" });
+    }
+    if (ticket.userId !== userId) {
+      return res.status(403).json({ error: "No tienes permiso para responder a este ticket" });
+    }
+
+    ticket.responses.push({
+      senderId: userId,
+      message,
+      createdAt: new Date(),
+    });
+    // Si el ticket estaba abierto, cambiarlo a en progreso cuando el usuario responde
+    if (ticket.status === 'open') {
+      ticket.status = 'in_progress';
+    }
+    await ticket.save();
+
+    res.json(ticket);
+  } catch (error) {
+    logger.error({ error }, "Error al responder ticket de usuario");
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
 // Endpoints de administración para tickets
 router.use("/admin/tickets", requireAuth, requireAdmin);
 
