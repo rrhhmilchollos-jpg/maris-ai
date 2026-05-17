@@ -14,6 +14,9 @@ import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint,
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES } from "../lib/templates";
+import { isAdminEmail } from "../lib/auth";
+import { chargeCredits } from "../lib/credits";
+import { KIND_COSTS } from "../lib/stripe";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -1848,22 +1851,22 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
+    const cost = KIND_COSTS[kind] ?? 1;
 
-    // ── Cobrar créditos antes de generar ──────────────────────────────────
-    const chargeResult = await chargeCredits({
+    const charge = await chargeCredits({
       userId,
       isAdmin,
-      amount: CREDIT_COST_NEW_APP,
-      description: `Generación de app nueva: "${prompt.slice(0, 60)}"`,
+      amount: cost,
+      description: `Generación de app ${kind || "fullstack"}: ${prompt.slice(0, 50)}...`,
     });
 
-    if (!chargeResult.ok) {
+    if (!charge.ok) {
       return res.status(402).json({
-        error: "Créditos insuficientes. Compra más créditos para continuar.",
-        code: "INSUFFICIENT_CREDITS",
+        error: "Créditos insuficientes",
+        required: cost,
+        current: req.dbUser?.credits,
       });
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     const result: GeneratedAppPayload = await generateAppFromLib(
       prompt,
@@ -1961,21 +1964,22 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    // ── Cobrar créditos antes de editar ───────────────────────────────────
-    const chargeResult = await chargeCredits({
+    const cost = 1; // Edición estándar cuesta 1 crédito
+
+    const charge = await chargeCredits({
       userId,
       isAdmin,
-      amount: CREDIT_COST_EDIT,
-      description: `Edición de app: "${content.slice(0, 60)}"`,
+      amount: cost,
+      description: `Edición de app ${app.title}: ${content.slice(0, 50)}...`,
     });
 
-    if (!chargeResult.ok) {
+    if (!charge.ok) {
       return res.status(402).json({
-        error: "Créditos insuficientes. Compra más créditos para continuar.",
-        code: "INSUFFICIENT_CREDITS",
+        error: "Créditos insuficientes",
+        required: cost,
+        current: req.dbUser?.credits,
       });
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     await AppMessage.create({ appId: req.params.id, role: "user", content });
 
@@ -2020,6 +2024,24 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     const userId = req.userId as string;
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const cost = 1; // Reintento cuesta 1 crédito
+
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: cost,
+      description: `Reintento de generación: ${app.title}`,
+    });
+
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes",
+        required: cost,
+        current: req.dbUser?.credits,
+      });
+    }
 
     const result = await generateAppFromLib(
       app.prompt,

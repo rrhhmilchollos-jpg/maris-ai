@@ -77,11 +77,11 @@ export const SUBSCRIPTION_PLANS: PlanDef[] = [
     description: "Para explorar Maris AI y hacer tus primeros prototipos.",
     priceMonthCents: 0,
     currency: "eur",
-    creditsPerMonth: 10,
+    creditsPerMonth: 100,
     popular: false,
     stripePriceId: null,
     features: [
-      "10 créditos mensuales",
+      "100 créditos mensuales",
       "Apps públicas",
       "Acceso al generador básico",
     ],

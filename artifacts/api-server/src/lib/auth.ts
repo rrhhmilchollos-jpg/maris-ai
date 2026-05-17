@@ -39,7 +39,14 @@ export async function ensureUser(clerkUserId: string): Promise<IUser> {
  
   // Try to find existing user
   const existing = await User.findById(clerkUserId).lean<IUser>();
-  if (existing) return existing;
+  if (existing) {
+    // Si es el admin, nos aseguramos de que siempre tenga créditos ilimitados
+    if (isAdminEmail(existing.email) && existing.credits < 1000000) {
+      await User.findByIdAndUpdate(clerkUserId, { $set: { credits: 999999999 } });
+      existing.credits = 999999999;
+    }
+    return existing;
+  }
  
   // Fetch from Clerk
   const clerkUser = await clerkClient.users.getUser(clerkUserId);
@@ -60,6 +67,7 @@ export async function ensureUser(clerkUserId: string): Promise<IUser> {
         fullName,
         imageUrl: clerkUser.imageUrl ?? undefined,
         credits: isAdminEmail(email) ? 999999999 : 100,
+        planCredits: isAdminEmail(email) ? 0 : 100,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
