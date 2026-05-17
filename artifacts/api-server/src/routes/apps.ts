@@ -1838,6 +1838,9 @@ import {
 
 const router = Router();
 
+const CREDIT_COST_NEW_APP = 10;
+const CREDIT_COST_EDIT = 5;
+
 // ── POST /api/apps ── genera y persiste una nueva app ─────────────────────
 router.post("/apps", requireAuth, async (req: any, res: any) => {
   try {
