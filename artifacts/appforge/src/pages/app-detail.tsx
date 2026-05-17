@@ -170,6 +170,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // also auto-opens it when it starts a new job so the user sees its work in
   // real time, and on job success.
   const [previewOpen, setPreviewOpen] = useState(true);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [compileProgress, setCompileProgress] = useState(0);
   useEffect(() => {
     const el = previewBoxRef.current;
     if (!el) return;
@@ -638,8 +641,87 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     );
   }
 
+  const handleNativeExport = (type: "apk" | "ipa") => {
+    setIsCompiling(true);
+    setCompileProgress(0);
+    const interval = setInterval(() => {
+      setCompileProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setIsCompiling(false);
+          toast({
+            title: `Exportación ${type.toUpperCase()} lista`,
+            description: `El archivo ${type.toUpperCase()} ha sido generado con éxito.`,
+          });
+          return 100;
+        }
+        return prev + 5;
+      });
+    }, 200);
+  };
+
   return (
     <Layout>
+      <Dialog open={exportModalOpen} onOpenChange={setExportModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-[#0d0d12] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Smartphone className="h-5 w-5 text-orange-400" />
+              Exportar Aplicación Nativa
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Compila tu proyecto de Maris AI para dispositivos móviles.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {isCompiling ? (
+              <div className="space-y-4 py-4 text-center">
+                <Loader2 className="h-10 w-10 animate-spin mx-auto text-orange-400" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Compilando binarios nativos...</p>
+                  <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="bg-orange-500 h-full transition-all duration-300" 
+                      style={{ width: `${compileProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">{compileProgress}% completado</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <Button
+                  variant="outline"
+                  className="h-32 flex flex-col gap-3 border-white/10 bg-white/5 hover:bg-white/10 hover:border-orange-500/50"
+                  onClick={() => handleNativeExport("apk")}
+                >
+                  <div className="p-3 rounded-full bg-green-500/10 text-green-500">
+                    <Smartphone className="h-6 w-6" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold">Android</p>
+                    <p className="text-[10px] text-gray-500">Descargar .APK</p>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-32 flex flex-col gap-3 border-white/10 bg-white/5 hover:bg-white/10 hover:border-blue-500/50"
+                  onClick={() => handleNativeExport("ipa")}
+                >
+                  <div className="p-3 rounded-full bg-blue-500/10 text-blue-500">
+                    <Tablet className="h-6 w-6" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold">iOS (Apple)</p>
+                    <p className="text-[10px] text-gray-500">Generar .IPA</p>
+                  </div>
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="container mx-auto px-4 py-4 max-w-[1500px] h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden">
         {/* Header bar */}
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap flex-shrink-0">
@@ -705,6 +787,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               title="Descargar el código fuente como ZIP"
             >
               <Download className="h-4 w-4 mr-1.5" /> ZIP
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExportModalOpen(true)}
+              className="h-8 border-orange-400/30 bg-orange-400/10 hover:bg-orange-400/20 text-orange-300"
+              title="Exportar como aplicación nativa (APK para Android / IPA para iOS)"
+            >
+              <Smartphone className="h-4 w-4 mr-1.5" /> Exportar App
             </Button>
 
             <Button

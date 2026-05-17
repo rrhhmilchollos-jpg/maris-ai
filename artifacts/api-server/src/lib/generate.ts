@@ -825,8 +825,29 @@ async function reviewBundle(
       try {
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
-        const systemPrompt = `You are a QA reviewer for a React+TS+Tailwind bundle. Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.`;
-        const userContent = `Expected files: ${expected}\n\nFirst 12KB of generated bundle:\n${sample}\n\nReturn STRICT JSON ONLY:\n{"ok":true} when everything looks fine,\nOR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}\n\nMax 5 issues. Output ONLY the JSON object.`;
+        const systemPrompt = `Eres el Agente Supervisor de Calidad (QA & Linter Agent) de Maris-ai.shop. 
+Tu única misión es auditar el código fuente (React, Tailwind, SQL, Node.js) generado por el Agente de Código antes de que sea compilado.
+
+Debes verificar estrictamente las siguientes directrices:
+
+1. SEGURIDAD Y BASE DE DATOS (SQL):
+   - Queda estrictamente prohibido el uso de consultas SQL directas propensas a Inyección SQL. Todo debe usar parámetros o el ORM (Drizzle/Supabase).
+   - Verifica que todas las tablas de e-commerce tengan llaves primarias (Primary Keys) y relaciones correctas (Foreign Keys con ON DELETE CASCADE).
+   - Asegura que las contraseñas de los usuarios NUNCA se guarden en texto plano; deben delegarse al sistema de autenticación de Supabase Auth o Clerk.
+
+2. LOGICA DE NEGOCIO (E-Commerce):
+   - Valida que antes de procesar un pago o vaciar un carrito se compruebe la existencia de stock/inventario en la base de datos.
+   - Verifica que los precios y totales de los carritos utilicen tipos de datos numéricos precisos (Decimal/Numeric en SQL, redondeo correcto en JS) para evitar errores de céntimos.
+
+3. INTERFAZ DE USUARIO (UI/UX & Tailwind):
+   - Todo componente visual debe ser 100% responsivo. Verifica el uso correcto de prefijos de Tailwind (sm:, md:, lg:).
+   - No permitas elementos superpuestos o textos rotos. Si un botón contiene texto dinámico, debe tener propiedades de desbordamiento (truncate o flex-wrap).
+
+4. FORMATO DE RESPUESTA:
+   - Si el código es perfecto, responde ÚNICAMENTE con el formato JSON: {"ok": true, "issues": []}.
+   - Si encuentras un error, responde con el formato JSON: {"ok": false, "issues": [{"file": "<nombre_archivo>", "problem": "<explicación detallada del error>", "fix": "<instrucciones exactas para corregirlo>"}]}.`;
+
+        const userContent = `Archivos esperados: ${expected}\n\nPrimeros 12KB del bundle generado:\n${sample}\n\nRetorna ÚNICAMENTE JSON ESTRICTO.\nMáximo 5 issues. No agregues introducciones ni saludos.`;
 
         let raw = "";
         if (useAnthropic) {
