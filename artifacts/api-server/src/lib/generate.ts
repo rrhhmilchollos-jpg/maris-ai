@@ -14,6 +14,7 @@ import { buildPatcherSystemPrompt, VALIDATE_PATCH_LOOP_CONFIG } from "./patcher-
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
+import { injectWatermarkToHTML, generateWatermarkReactComponent } from "./watermark";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -1745,11 +1746,15 @@ export async function generateApp(
   const setupNotes = buildSetupNotes(integrationSpec);
   const testsAppendix = testCode ? `\n\n${testCode}` : "";
 
+  // Inyectar marca de agua de Maris AI en el código frontend
+  const watermarkComponent = generateWatermarkReactComponent();
+  const frontendWithWatermark = finalFrontend + "\n\n" + watermarkComponent + testsAppendix + setupNotes;
+
   return {
     title: plan.title.slice(0, 200),
     description: plan.description.slice(0, 1000),
     techStack: plan.techStack,
-    frontendCode: finalFrontend + testsAppendix + setupNotes,
+    frontendCode: frontendWithWatermark,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
   };

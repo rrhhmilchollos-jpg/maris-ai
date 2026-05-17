@@ -9,6 +9,8 @@ import adminRouter from "./admin";
 import debugBundleRouter from "./debugBundle";
 import uploadsRouter from "./uploads";
 import jobsRouter from "./jobs";
+import watermarkRouter from "./watermark";
+import stripeWatermarkWebhookRouter from "./stripe-watermark-webhook";
 
 const router: IRouter = Router();
 
@@ -23,6 +25,8 @@ router.use(uploadsRouter);
 router.use(jobsRouter);
 router.use(billingRouter);
 router.use(billingLiveRouter);
+router.use(watermarkRouter);
+router.use(stripeWatermarkWebhookRouter);
 router.use(adminRouter);
 
 export default router;

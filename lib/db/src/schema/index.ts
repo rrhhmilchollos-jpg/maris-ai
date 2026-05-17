@@ -55,6 +55,9 @@ export interface IGeneratedApp {
   evaluatorSummary?: string;
   agentNotes?: string;
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
+  hasWatermark?: boolean;
+  watermarkRemovalPrice?: number;
+  watermarkRemovalStripeSessionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -82,6 +85,9 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     evaluatorSummary: { type: String },
     agentNotes: { type: String },
     plannedPages: [{ name: String, route: String, purpose: String }],
+    hasWatermark: { type: Boolean, default: true },
+    watermarkRemovalPrice: { type: Number, default: 9.99 },
+    watermarkRemovalStripeSessionId: { type: String },
   },
   { timestamps: true },
 );
