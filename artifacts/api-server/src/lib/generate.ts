@@ -659,7 +659,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   if (provider === "gpt-5") {
     const stream = await openai.chat.completions.create({
       model: "gpt-5.4",
-      max_completion_tokens: 32000,
+      max_completion_tokens: 24000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
@@ -1322,7 +1322,7 @@ Return the FULL updated app as JSON.`;
     if (provider === "gpt-5") {
       const stream = await openai.chat.completions.create({
         model: "gpt-5.4",
-        max_completion_tokens: 64000,
+        max_completion_tokens: 24000,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: finalUserContent },
