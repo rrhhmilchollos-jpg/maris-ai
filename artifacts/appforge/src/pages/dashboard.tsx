@@ -298,7 +298,7 @@ export default function DashboardPage() {
                       <PhaseIcon className={`h-5 w-5 text-primary flex-shrink-0 ${phaseInfo.icon === Loader2 ? "animate-spin" : ""}`} />
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-white truncate">{phaseInfo.label}</p>
-                        <p className="text-xs text-muted-foreground">La generación puede tardar entre 30 segundos y 2 minutos según la complejidad.</p>
+                        <p className="text-xs text-muted-foreground">La generación puede tardar entre 30 segundos y 1 minuto según la complejidad.</p>
                       </div>
                     </div>
                     <div className="text-sm font-mono text-primary tabular-nums">{progressValue}%</div>
@@ -317,7 +317,7 @@ export default function DashboardPage() {
                       <SelectItem value="auto">Auto (Gemini Flash, rápido)</SelectItem>
                       <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
                       <SelectItem value="gpt-5" disabled={!me?.isPremium}>⚡ GPT-5 Codex {me?.isPremium ? "(Ultra Rápido)" : "(Premium)"}</SelectItem>
-                      <SelectItem value="claude-4-7-sonnet-20260416" disabled={!me?.isPremium}>Claude Sonnet 4.7 {me?.isPremium ? "(calidad)" : "(Premium)"}</SelectItem>
+                      <SelectItem value="Claude Opus 4.7" disabled={!me?.isPremium}>Claude Opus 4.7 {me?.isPremium ? "(calidad)" : "(Premium)"}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={language} onValueChange={(v) => setLanguage(v as "typescript" | "javascript")} disabled={isWorking}>
