@@ -23,8 +23,19 @@ async function grantPlanCredits(opts: {
 
   const planExpiresAt = new Date(periodEnd * 1000);
 
-  // 1. Obtener créditos actuales del usuario
-  const user = await User.findById(clerkUserId, { credits: 1, plan: 1, planCredits: 1 }).lean();
+  // 1. Obtener créditos actuales del usuario con reintentos
+  let user;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      user = await User.findById(clerkUserId, { credits: 1, plan: 1, planCredits: 1 }).lean();
+      if (user) break;
+    } catch (err) {
+      retries--;
+      if (retries === 0) throw err;
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
   if (!user) return;
 
   // 2. Calcular créditos a añadir:
@@ -33,16 +44,26 @@ async function grantPlanCredits(opts: {
   const topUpCredits = Math.max(0, (user.credits ?? 0) - (user.planCredits ?? 0));
   const newTotalCredits = topUpCredits + creditsPerMonth;
 
-  // 3. Actualizar usuario con el nuevo plan y créditos
-  await User.findByIdAndUpdate(clerkUserId, {
-    $set: {
-      plan: planId,
-      planCredits: creditsPerMonth,
-      credits: newTotalCredits,
-      planExpiresAt,
-      stripeSubscriptionId,
-    },
-  });
+  // 3. Actualizar usuario con el nuevo plan y créditos (con reintentos)
+  retries = 3;
+  while (retries > 0) {
+    try {
+      await User.findByIdAndUpdate(clerkUserId, {
+        $set: {
+          plan: planId,
+          planCredits: creditsPerMonth,
+          credits: newTotalCredits,
+          planExpiresAt,
+          stripeSubscriptionId,
+        },
+      });
+      break;
+    } catch (err) {
+      retries--;
+      if (retries === 0) throw err;
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
 
   // 4. Registrar la transacción
   await CreditTransaction.create({

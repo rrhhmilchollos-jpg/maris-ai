@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { CreditBar } from "@/components/credit-bar";
 import { LogOut, CreditCard, LayoutDashboard, Shield } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -23,7 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 max-w-screen-2xl items-center">
+        <div className="container flex h-auto md:h-14 max-w-screen-2xl items-center flex-col md:flex-row gap-2 md:gap-0 py-2 md:py-0">
           <div className="flex px-4 md:px-8 w-full items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">
               <img src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
@@ -32,7 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </span>
             </Link>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 w-full md:w-auto">
               <Show when="signed-in">
                 <nav className="flex items-center space-x-4 text-sm font-medium">
                   <Link href="/dashboard" className="transition-colors hover:text-foreground/80 text-foreground/60">
@@ -49,13 +50,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </nav>
                 
                 {me && (
-                  <Badge
-                    variant="secondary"
-                    className={`px-3 py-1 font-mono hidden sm:flex ${me.isAdmin ? "border border-primary/40 bg-primary/10" : ""}`}
-                  >
-                    <CreditCard className="h-3 w-3 mr-2 text-primary" />
-                    {me.isAdmin ? "∞ créditos" : `${me.credits} créditos`}
-                  </Badge>
+                  <div className="hidden sm:block">
+                    <CreditBar />
+                  </div>
                 )}
 
                 <DropdownMenu>
@@ -111,6 +108,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
+        <Show when="signed-in">
+          {/* Mobile credit bar */}
+          <div className="sm:hidden w-full px-4 pb-2">
+            <CreditBar />
+          </div>
+        </Show>
       </header>
 
       <main className="flex-1">

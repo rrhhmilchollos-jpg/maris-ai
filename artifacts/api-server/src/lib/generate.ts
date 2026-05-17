@@ -10,6 +10,7 @@ import { validateBundle, type BuildIssue } from "./validate";
 import { validateBundleInE2B } from "./e2bValidator";
 import { shouldValidateInE2B } from "./e2bGate";
 import { logger } from "./logger";
+import { buildPatcherSystemPrompt, VALIDATE_PATCH_LOOP_CONFIG } from "./patcher-prompt";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "./agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
@@ -257,32 +258,7 @@ Rules:
 - Real working tests. No TODOs, no placeholders.
 - Combined output under 6 KB. Close every brace. Output ONLY the JSON object.`;
 
-function buildPatcherSystemPrompt(language: GenLanguage): string {
-  const isTS = language === "typescript";
-  const tsLine = isTS
-    ? "- This is a TypeScript bundle (.tsx/.ts). Type annotations are fine."
-    : "- This is a plain JavaScript bundle (.jsx/.js). Do NOT introduce TypeScript syntax during patching.";
-  return `You are Maris AI's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
-
-Output STRICT JSON only:
-{"frontendCode":"all frontend files as one string"}
-
-LANGUAGE — preserve Spanish copy. If new copy is added, write it in Spanish too.
-
-SYNTAX — the patched bundle must parse cleanly:
-${tsLine}
-- Remove every \`,,\` (double comma), \`,)\`, \`,]\` and \`,}\` pattern you find while patching.
-- Strip any non-ASCII garbage characters from identifiers/keywords.
-- Re-balance every brace, bracket, paren and JSX tag.
-- Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod.
-
-WOUTER v3 — \`<Link>\` already renders as \`<a>\`. If you see \`<Link …><a …>…</a></Link>\` in the bundle, FLATTEN IT.
-
-Rules:
-- Use '// === FILE: <path> ===' separators.
-- Return the FULL bundle (every file, not just patched ones).
-- Don't introduce new bugs. Close every brace and quote. Output ONLY the JSON object.`;
-}
+// Patcher system prompt is now imported from patcher-prompt.ts
 
 export interface GeneratedAppPayload {
   title: string;
@@ -1030,7 +1006,7 @@ async function runValidatePatchLoop(
   log?: AgentLog,
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
 ): Promise<string> {
-  const MAX_ITERATIONS = 4;
+  const MAX_ITERATIONS = VALIDATE_PATCH_LOOP_CONFIG.MAX_ITERATIONS;
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
   const emit = log ?? noop;

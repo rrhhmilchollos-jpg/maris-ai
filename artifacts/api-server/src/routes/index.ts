@@ -4,6 +4,7 @@ import meRouter from "./me";
 import appsRouter from "./apps";
 import imagesRouter from "./images";
 import billingRouter from "./billing";
+import billingLiveRouter from "./billing-live";
 import adminRouter from "./admin";
 import debugBundleRouter from "./debugBundle";
 import uploadsRouter from "./uploads";
@@ -21,6 +22,7 @@ router.use(appsRouter);
 router.use(uploadsRouter);
 router.use(jobsRouter);
 router.use(billingRouter);
+router.use(billingLiveRouter);
 router.use(adminRouter);
 
 export default router;
