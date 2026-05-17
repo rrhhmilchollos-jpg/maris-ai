@@ -58,6 +58,13 @@ export interface IGeneratedApp {
   hasWatermark?: boolean;
   watermarkRemovalPrice?: number;
   watermarkRemovalStripeSessionId?: string;
+  deploymentStatus?: string;
+  deploymentError?: string;
+  marisaiSubdomain?: string;
+  customDomain?: string;
+  customDomainVerified?: boolean;
+  lastDeployedAt?: Date;
+  deploymentLogs?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,6 +95,13 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     hasWatermark: { type: Boolean, default: true },
     watermarkRemovalPrice: { type: Number, default: 9.99 },
     watermarkRemovalStripeSessionId: { type: String },
+    deploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
+    deploymentError: { type: String },
+    marisaiSubdomain: { type: String, unique: true, sparse: true },
+    customDomain: { type: String },
+    customDomainVerified: { type: Boolean, default: false },
+    lastDeployedAt: { type: Date },
+    deploymentLogs: { type: String },
   },
   { timestamps: true },
 );
