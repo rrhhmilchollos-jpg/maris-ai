@@ -596,7 +596,7 @@ interface CodeGenResult {
 
 type CoderProvider = "gemini-flash" | "claude-sonnet" | "gpt-5";
 function resolveCoderProvider(coderModel?: string): CoderProvider {
-  if (coderModel === "claude-3-5-sonnet-20241022") return "claude-sonnet";
+  if (coderModel === "claude-sonnet-4-6") return "claude-sonnet";
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
   return "claude-sonnet";
 }
