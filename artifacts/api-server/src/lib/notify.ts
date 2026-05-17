@@ -7,7 +7,7 @@
  * integration, we expose a thin facade here that LOGS the email contents in
  * a structured, grep-friendly way and returns. The day a real provider lands
  * (Resend, SendGrid, SES, …) it slots in here without touching the
- * evaluator. See replit.md → "Notificaciones (pendiente de email provider)".
+ * evaluator. See maris-ai.md → "Notificaciones (pendiente de email provider)".
  *
  * Structured log shape (deliberately stable so an external pipeline can pick
  * it up without parsing free-form messages):

@@ -1,13 +1,13 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
+import { Maris AIConnectors } from "@maris-ai/connectors-sdk";
 import { bundleToFiles } from "./exportZip";
 
-// GitHub blueprint integration — uses Replit's connector proxy to make
+// GitHub blueprint integration — uses Maris AI's connector proxy to make
 // authenticated requests with the workspace owner's GitHub token (read:org,
 // read:project, read:user, repo, user:email scopes). For a multi-user SaaS
 // each end-user would need their own OAuth flow; this MVP scopes pushes to
 // the workspace owner's account, which is fine for personal use.
 
-const connectors = new ReplitConnectors();
+const connectors = new Maris AIConnectors();
 
 interface GhUser {
   login: string;

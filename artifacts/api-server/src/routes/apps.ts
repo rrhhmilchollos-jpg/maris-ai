@@ -1,7 +1,7 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import OpenAI from "openai";
 
-// OpenAI client via Replit AI Integrations proxy.
+// OpenAI client via Maris AI AI Integrations proxy.
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,

@@ -20,7 +20,7 @@ import { validateBundle } from "./validate";
  *   - the generation pipeline (auto mode), and
  *   - an on-demand HTTP endpoint (POST /api/apps/:id/visual-test).
  *
- * Chromium itself is provided by the Replit Nix package `chromium` — see
+ * Chromium itself is provided by the Maris AI Nix package `chromium` — see
  * `chromiumExecutablePath()` for resolution.
  */
 
@@ -86,7 +86,7 @@ let cachedExec: string | null | undefined;
 
 /**
  * Resolve Chromium binary path. Honors PUPPETEER_EXECUTABLE_PATH first, then
- * falls back to `which chromium` (Nix-installed package on Replit).
+ * falls back to `which chromium` (Nix-installed package on Maris AI).
  */
 export function chromiumExecutablePath(): string | null {
   if (cachedExec !== undefined) return cachedExec;

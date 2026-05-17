@@ -40,7 +40,7 @@ export function isWebContainerSupported(): boolean {
   if (typeof window === "undefined") return false;
   if (typeof SharedArrayBuffer === "undefined") return false;
   // `crossOriginIsolated` is the standard signal that COOP+COEP are in effect.
-  // Some embedded contexts (Replit dev iframe) may report false even when the
+  // Some embedded contexts (Maris AI dev iframe) may report false even when the
   // headers are present on this origin, so we still attempt boot when the
   // user explicitly clicks — this is a soft hint.
   return Boolean((window as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated);

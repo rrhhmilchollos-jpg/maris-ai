@@ -8,9 +8,9 @@ export type AgentMemoryEntry = IAgentMemory;
 
 const openai = new OpenAI({
   apiKey:
-    process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
     process.env.OPENAI_API_KEY ??
-    process.env.REPLIT_AI_INTEGRATIONS_API_KEY ??
+    process.env.MARIS_AI_OPENAI_API_KEY ??
+    process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
     "sk-noop",
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL,
 });

@@ -449,7 +449,7 @@ function sanitiseProjectName(raw: string): string {
 /**
  * Normalise a generated Vite bundle into the file shape Vercel expects:
  *   - paths must NOT start with "/" or "./"
- *   - we drop tests/, e2e/, __tests__/, and editor noise (.replit, .DS_Store)
+ *   - we drop tests/, e2e/, __tests__/, and editor noise (.maris-ai, .DS_Store)
  *   - we ensure a `package.json`, `vite.config.*` and an `index.html` exist;
  *     if any are missing we inject a minimal one so `vite build` succeeds.
  *
@@ -477,7 +477,7 @@ function prepareViteProjectForVercel(
       p.startsWith("tests/") ||
       p.startsWith("e2e/") ||
       p.startsWith("__tests__/") ||
-      p === ".replit" ||
+      p === ".maris-ai" ||
       p === ".DS_Store"
     ) {
       continue;
@@ -568,7 +568,7 @@ function preparePythonProjectForVercel(
       p.startsWith("__pycache__/") ||
       p.startsWith(".venv/") ||
       p.startsWith("venv/") ||
-      p === ".replit" ||
+      p === ".maris-ai" ||
       p === ".DS_Store"
     ) {
       continue;

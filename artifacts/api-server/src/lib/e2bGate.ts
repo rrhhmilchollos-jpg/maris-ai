@@ -8,7 +8,7 @@ import { isE2BEnabled } from "./e2bValidator";
 // app's runtime state to a new schema migration, and the env var is the
 // authoritative "default on boot" anyway. If the user wants the toggle
 // to survive restarts, they set E2B_VALIDATE_ON_GENERATE=true in
-// Replit Secrets.
+// Maris AI Secrets.
 let runtimeEnabled = process.env.E2B_VALIDATE_ON_GENERATE === "true";
 
 /**

@@ -37,7 +37,7 @@ const CONCURRENCY = 3;
  * public `/p/<slug>` deploy (same origin).
  */
 function appBaseUrl(): string {
-  const host = (process.env.REPLIT_DOMAINS ?? "").split(",")[0].trim();
+  const host = (process.env.MARIS_AI_DOMAINS ?? process.env.MARIS_AI_PUBLIC_DOMAINS ?? "").split(",")[0].trim();
   return host ? `https://${host}` : "";
 }
 

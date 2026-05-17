@@ -2,7 +2,7 @@
  * Unit tests for the autonomous evaluator's pure helpers.
  *
  * We don't try to spin up Puppeteer or hit Anthropic in this test — those
- * are exercised end-to-end against a real Replit preview. What we DO want
+ * are exercised end-to-end against a real Maris AI preview. What we DO want
  * locked in is:
  *
  *   1. `normalizeVerdict` correctly tolerates the small variations Claude

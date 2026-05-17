@@ -25,7 +25,7 @@
     "@opentelemetry/resources": "^2.7.0",
     "@opentelemetry/sdk-trace-base": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "@replit/connectors-sdk": "^0.4.1",
+    "@octokit/rest": "^21.0.0",
     "@sentry/node": "^10.50.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",

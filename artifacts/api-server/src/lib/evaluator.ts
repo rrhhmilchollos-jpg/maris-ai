@@ -358,7 +358,7 @@ async function ensurePublicSlug(
 
 /** Build the public deploy URL the email/chat link should use. */
 function publicUrlFor(slug: string): string {
-  const domains = (process.env.REPLIT_DOMAINS ?? "")
+  const domains = (process.env.MARIS_AI_DOMAINS ?? process.env.MARIS_AI_PUBLIC_DOMAINS ?? "")
     .split(",")
     .map((d) => d.trim())
     .filter(Boolean);
