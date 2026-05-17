@@ -396,3 +396,38 @@ export const AppRevision: Model<IAppRevision> =
 export const appImages = AppImage;
 export const appRuntimeErrors = AppRuntimeError;
 export const generatedApps = GeneratedApp;
+
+// ─── Support Tickets ─────────────────────────────────────────────────────────
+export interface ITicket extends Document {
+  userId: string;
+  subject: string;
+  message: string;
+  status: 'open' | 'in_progress' | 'closed';
+  responses: Array<{
+    senderId: string;
+    message: string;
+    createdAt: Date;
+  }>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const TicketSchema = new Schema<ITicket>(
+  {
+    userId: { type: String, required: true, index: true },
+    subject: { type: String, required: true },
+    message: { type: String, required: true },
+    status: { type: String, enum: ['open', 'in_progress', 'closed'], default: 'open' },
+    responses: [
+      {
+        senderId: { type: String, required: true },
+        message: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+  },
+  { timestamps: true },
+);
+
+export const Ticket: Model<ITicket> =
+  mongoose.models.Ticket || mongoose.model<ITicket>('Ticket', TicketSchema);

@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
+import { SupportPanel } from "@/components/support-panel";
 import {
   AttachmentPicker,
   AttachmentChips,
@@ -395,6 +396,8 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        <SupportPanel />
       </div>
 
       <Dialog open={annualOpen} onOpenChange={(open) => { if (!open) dismissAnnual(7); }}>

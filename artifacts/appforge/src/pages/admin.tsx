@@ -13,6 +13,7 @@ import {
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,10 +35,10 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck,
-  RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3,
+  RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3, MessageSquare,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue" | "memory";
+type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets";
 
 interface MemoryEntry {
   id: number;
@@ -211,6 +212,9 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                   {(jobsData?.queued ?? 0) + (jobsData?.running ?? 0)}
                 </Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="tickets">
+              <MessageSquare className="h-4 w-4 mr-2" /> Tickets
             </TabsTrigger>
           </TabsList>
 
@@ -425,6 +429,10 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="tickets" className="mt-4">
+            <AdminTicketsPanel />
           </TabsContent>
         </Tabs>
 

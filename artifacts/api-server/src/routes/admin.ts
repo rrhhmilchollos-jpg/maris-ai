@@ -23,14 +23,15 @@ router.get("/admin/overview", async (_req, res) => {
   await connectDB();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [totalUsers, totalApps, appsWeek, users] = await Promise.all([
+  const [totalUsers, totalApps, appsWeek, allUsers] = await Promise.all([
     User.countDocuments(),
     GeneratedApp.countDocuments(),
     GeneratedApp.countDocuments({ createdAt: { $gte: sevenDaysAgo } }),
-    User.find({}, { credits: 1 }).lean(),
+    User.find({}, { credits: 1, email: 1 }).lean(),
   ]);
 
-  const creditsOutstanding = users.reduce((sum, u) => sum + (u.credits ?? 0), 0);
+  const nonAdminUsers = allUsers.filter(u => !isAdminEmail(u.email));
+  const creditsOutstanding = nonAdminUsers.reduce((sum, u) => sum + (u.credits ?? 0), 0);
 
   const txns = await CreditTransaction.find({}, { kind: 1, amount: 1 }).lean();
   let creditsSpentTotal = 0;

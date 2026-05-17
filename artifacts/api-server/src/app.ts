@@ -9,6 +9,7 @@ import {
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
+import ticketsRouter from "./routes/tickets";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import { logger } from "./lib/logger";
@@ -88,6 +89,7 @@ app.use("/api", apiRateLimiter);
 app.use("/api", metricsMiddleware);
  
 app.use("/api", router);
+app.use("/api", ticketsRouter);
  
 // Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
 app.use(publicDeployRouter);
