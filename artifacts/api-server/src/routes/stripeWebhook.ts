@@ -171,8 +171,8 @@ stripeWebhookRouter.post(
           const user = await User.findById(clerkUserId, { credits: 1, planCredits: 1 }).lean();
           const topUpCredits = Math.max(0, (user?.credits ?? 0) - (user?.planCredits ?? 0));
 
-          // Dar los 100 créditos gratuitos del plan free
-205	          const freeCredits = 100;
+          // Dar los 10 créditos gratuitos del plan free
+          const freeCredits = 10;
 
           await User.findByIdAndUpdate(clerkUserId, {
             $set: {
