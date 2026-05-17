@@ -16,7 +16,7 @@ import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
-import { KIND_COSTS } from "../lib/stripe";
+// KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
