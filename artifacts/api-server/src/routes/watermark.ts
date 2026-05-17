@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth } from "../lib/auth";
 import { db } from "../lib/db";
 import { generatedApps } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
