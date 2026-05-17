@@ -62,7 +62,7 @@ export default function BillingPage() {
     setCheckoutError(null);
     setCancelNotice(null);
     setLoadingPackageId(packageId);
-    checkoutMutation.mutate({ data: { priceId } });
+    checkoutMutation.mutate({ priceId });
   };
 
   const handleCustomBuy = async () => {
