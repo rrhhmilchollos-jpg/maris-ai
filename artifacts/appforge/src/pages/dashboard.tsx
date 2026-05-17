@@ -10,6 +10,7 @@ import {
   useUpdateMyPreferences,
   useListTemplates,
   useCreateCheckoutSession,
+  useDeleteApp,
   getGetGenerationJobQueryKey,
   getGetMyStatsQueryKey,
   getListAppsQueryKey,
@@ -107,6 +108,25 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
+  const deleteMutation = useDeleteApp({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+        toast({ title: "App eliminada", description: "La aplicación ha sido borrada permanentemente." });
+      },
+      onError: (error: any) => {
+        toast({ title: "Error al eliminar", description: error?.message || "No se pudo eliminar la aplicación.", variant: "destructive" });
+      },
+    },
+  });
+
+  const handleDeleteApp = (e: React.MouseEvent, id: number, title: string) => {
+    e.stopPropagation();
+    if (confirm(`¿Estás seguro de que quieres eliminar permanentemente "${title}"? Esta acción no se puede deshacer.`)) {
+      deleteMutation.mutate({ id });
+    }
+  };
 
   const visibleApps = (apps ?? []).filter((a) => appsFilter === "deployed" ? !!a.publicSlug : true);
 
@@ -338,9 +358,17 @@ export default function DashboardPage() {
           ) : visibleApps.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {visibleApps.map((app: any) => (
-                <Card key={app.id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group hover:bg-card/60 flex flex-col" onClick={() => setLocation(`/app/${app.id}`)} data-testid={`card-app-${app.id}`}>
+                <Card key={app.id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group hover:bg-card/60 flex flex-col relative" onClick={() => setLocation(`/app/${app.id}`)} data-testid={`card-app-${app.id}`}>
+                  <button
+                    onClick={(e) => handleDeleteApp(e, app.id, app.title)}
+                    className="absolute top-2 right-2 p-2 rounded-full bg-black/20 text-muted-foreground hover:bg-destructive/20 hover:text-destructive opacity-0 group-hover:opacity-100 transition-all z-10"
+                    title="Eliminar app"
+                    disabled={deleteMutation.isPending}
+                  >
+                    {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                  </button>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors">{app.title}</CardTitle>
+                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-8">{app.title}</CardTitle>
                     <CardDescription className="line-clamp-2 min-h-[2.5rem]">{app.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="mt-auto pt-4 pb-4">
