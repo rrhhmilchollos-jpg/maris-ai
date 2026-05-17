@@ -114,7 +114,7 @@ export async function planExecution(
   try {
     const response = await Promise.race([
       anthropic!.messages.create({
-        model: "claude-4-7-sonnet",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 200,
         system: PLANNER_SYSTEM,
         messages: [{ role: "user", content: `App existente: ${options.hasExistingApp ? "sí" : "no"}\nPetición: ${prompt.slice(0, 1500)}` }],
