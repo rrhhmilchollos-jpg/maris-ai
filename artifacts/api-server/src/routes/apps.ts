@@ -1829,7 +1829,8 @@ import { Router } from "express";
  * ============================================================ */
 import { Router } from "express";
 import { GeneratedApp, AppMessage } from "@workspace/db/schema";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, isAdminEmail } from "../lib/auth";
+import { chargeCredits } from "../lib/credits";
 import {
   generateApp as generateAppFromLib,
   type GeneratedAppPayload,
@@ -1843,6 +1844,23 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     const { prompt, model, language, attachments, kind } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+
+    // ── Cobrar créditos antes de generar ──────────────────────────────────
+    const chargeResult = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: CREDIT_COST_NEW_APP,
+      description: `Generación de app nueva: "${prompt.slice(0, 60)}"`,
+    });
+
+    if (!chargeResult.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes. Compra más créditos para continuar.",
+        code: "INSUFFICIENT_CREDITS",
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     const result: GeneratedAppPayload = await generateAppFromLib(
       prompt,
@@ -1935,9 +1953,26 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     const userId = req.userId as string;
     const { content } = req.body;
     if (!content) return res.status(400).json({ error: "content es requerido" });
+    const isAdmin = isAdminEmail(req.dbUser?.email);
 
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    // ── Cobrar créditos antes de editar ───────────────────────────────────
+    const chargeResult = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: CREDIT_COST_EDIT,
+      description: `Edición de app: "${content.slice(0, 60)}"`,
+    });
+
+    if (!chargeResult.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes. Compra más créditos para continuar.",
+        code: "INSUFFICIENT_CREDITS",
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     await AppMessage.create({ appId: req.params.id, role: "user", content });
 
