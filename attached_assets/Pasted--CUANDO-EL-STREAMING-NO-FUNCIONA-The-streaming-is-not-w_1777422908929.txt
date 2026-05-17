@@ -6,7 +6,7 @@ Fix this specifically:
 
 1. In the backend, use Anthropic streaming like this:
 const stream = await anthropic.messages.stream({
-  model: 'claude-sonnet-4-6',
+  model: 'claude-4-7-sonnet-20260416',
   max_tokens: 8192,
   messages: [{ role: 'user', content: prompt }]
 });
@@ -141,7 +141,7 @@ socket.on('follow_up', async ({ message, projectId }) => {
 
   // 2. Mini planner call — identify which files to change
   const plannerResponse = await anthropic.messages.create({
-    model: 'claude-opus-4-6',
+    model: 'claude-4-7-opus-20260416',
     max_tokens: 1000,
     messages: [{
       role: 'user',
@@ -167,7 +167,7 @@ socket.on('follow_up', async ({ message, projectId }) => {
     });
 
     const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-4-7-sonnet-20260416',
       max_tokens: 8192,
       messages: [{
         role: 'user',

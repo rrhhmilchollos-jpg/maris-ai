@@ -23,7 +23,7 @@ export const generatedApps = pgTable("generated_apps", {
   // "needs_review" (autonomous evaluator rejected after retries — user must
   // either retry or manually review the issues stored in evaluatorSummary).
   status: text("status").notNull().default("ready"),
-  // Coder model preference: "auto" (default routing), "gemini-2.5-flash", or "claude-sonnet-4-6".
+  // Coder model preference: "auto" (default routing), "gemini-2.5-flash", or "claude-4-7-sonnet-20260416".
   // Architect/Backend always stay on Sonnet; only the Coder/Edit role obeys this.
   coderModel: text("coder_model").notNull().default("auto"),
   // Source language preference: "typescript" (default, .tsx files) or "javascript" (.jsx files).

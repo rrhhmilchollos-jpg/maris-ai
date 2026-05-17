@@ -773,7 +773,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <SelectItem value="gpt-5" disabled={!isPremium}>
                   ⚡ GPT-5 Codex {isPremium ? "(Ultra Rápido)" : "(Premium)"}
                 </SelectItem>
-                <SelectItem value="claude-sonnet-4-6" disabled={!isPremium}>
+                <SelectItem value="claude-4-7-sonnet-20260416" disabled={!isPremium}>
                   Claude Sonnet 4.6 {isPremium ? "(calidad)" : "(Premium)"}
                 </SelectItem>
               </SelectContent>

@@ -7,7 +7,7 @@ This is a max_tokens limit issue. Fix this:
 
 1. Increase max_tokens for the Coder agent:
 const stream = await anthropic.messages.stream({
-  model: 'claude-sonnet-4-6',
+  model: 'claude-4-7-sonnet-20260416',
   max_tokens: 16000,  // increase from default 1000/4096
   messages: [{ role: 'user', content: prompt }]
 });
@@ -29,7 +29,7 @@ async function generateFileWithContinuation(prompt, socket, filePath) {
         ];
 
     const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-4-7-sonnet-20260416',
       max_tokens: 16000,
       messages
     });

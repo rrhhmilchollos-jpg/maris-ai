@@ -318,7 +318,7 @@ Do NOT flag minor aesthetic preferences.`
   });
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-4-7-sonnet-20260416',
     max_tokens: 4000,
     messages: [{ role: 'user', content }]
   });
@@ -399,7 +399,7 @@ async function fixVisualIssue(issue, projectId, files, plan, socket) {
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-4-7-sonnet-20260416',
     max_tokens: 16000,
     messages: [{
       role: 'user',
@@ -484,7 +484,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
   // Regenerate App.jsx with guaranteed visible content
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-4-7-sonnet-20260416',
     max_tokens: 16000,
     messages: [{
       role: 'user',

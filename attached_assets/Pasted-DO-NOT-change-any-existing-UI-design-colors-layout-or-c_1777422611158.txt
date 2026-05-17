@@ -10,7 +10,7 @@ FUNCTIONALITY 1 — MULTI-AGENT BUILD PIPELINE
 
 When user submits a prompt, run these agents IN SEQUENCE:
 
-AGENT 1 - PLANNER (claude-opus-4-6):
+AGENT 1 - PLANNER (claude-4-7-opus-20260416):
 - Receives user prompt
 - Returns JSON plan:
   {
@@ -26,7 +26,7 @@ AGENT 1 - PLANNER (claude-opus-4-6):
     message: string
   })
 
-AGENT 2 - CODER (claude-sonnet-4-6, streaming):
+AGENT 2 - CODER (claude-4-7-sonnet-20260416, streaming):
 - Loop through every file in fileStructure
 - For each file, call Claude with streaming enabled
 - Stream each token to frontend:
@@ -43,7 +43,7 @@ AGENT 3 - DEBUGGER (claude-haiku-4-5):
 - Max 3 retry attempts
 - Emit: socket.emit('debug_update', { error, fix, attempt })
 
-AGENT 4 - DESIGNER (claude-sonnet-4-6):
+AGENT 4 - DESIGNER (claude-4-7-sonnet-20260416):
 - After app is running, review all CSS/styling files
 - Prompt: "Improve the visual design. Make it modern, 
   professional and beautiful. Return only the improved CSS."
@@ -170,8 +170,8 @@ FUNCTIONALITY 9 — MODEL SELECTOR
 =======================================================
 
 The model dropdown in the existing UI must actually work:
-- claude-sonnet-4-6  → fast, use for Coder + Designer
-- claude-opus-4-6    → smart, use for Planner + complex builds
+- claude-4-7-sonnet-20260416  → fast, use for Coder + Designer
+- claude-4-7-opus-20260416    → smart, use for Planner + complex builds
 - gemini-2.5-flash   → cheapest, use via Google AI SDK
 
 Store selected model per project in MongoDB.

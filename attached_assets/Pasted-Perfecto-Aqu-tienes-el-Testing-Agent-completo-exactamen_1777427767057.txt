@@ -515,7 +515,7 @@ async function analyzeTestResults(testResults, files, plan, socket) {
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-4-7-sonnet-20260416',
     max_tokens: 4000,
     messages: [{
       role: 'user',
@@ -612,7 +612,7 @@ async function fixIssue(issue, projectPath, files, socket) {
         .join('\n\n');
 
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-4-7-sonnet-20260416',
         max_tokens: 8000,
         messages: [{
           role: 'user',
