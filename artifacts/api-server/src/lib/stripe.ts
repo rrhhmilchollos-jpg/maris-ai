@@ -1,18 +1,13 @@
 import Stripe from "stripe";
 
 async function fetchStripeSecretKey(): Promise<string | null> {
-  // Usar STRIPE_SECRET_KEY directamente (recomendado para producción)
   if (process.env.STRIPE_SECRET_KEY) {
     return process.env.STRIPE_SECRET_KEY;
   }
-
-  // Fallback: intentar obtener de variables de entorno alternativas
   const apiKey = process.env.MARIS_AI_STRIPE_KEY || process.env.STRIPE_API_KEY;
   if (apiKey) {
     return apiKey;
   }
-
-  // Si no hay clave disponible, retornar null
   return null;
 }
 
@@ -59,49 +54,45 @@ export const SUBSCRIPTION_PLANS = [
 export const CREDIT_PACKAGES = [
   {
     id: "pack-100",
-    name: "100 créditos",
-    credits: 100,
-    priceCents: 2000,
+    name: "160 créditos",
+    credits: 160,
+    priceCents: 2000,   // 20€
     currency: "eur",
     priceId: process.env.STRIPE_PRICE_PACK_100,
-    description: "",
     popular: false,
   },
   {
     id: "pack-250",
     name: "250 créditos",
     credits: 250,
-    priceCents: 5000,
+    priceCents: 5000,   // 50€
     currency: "eur",
     priceId: process.env.STRIPE_PRICE_PACK_250,
-    description: "",
     popular: false,
   },
   {
     id: "pack-500",
     name: "500 créditos",
     credits: 500,
-    priceCents: 10000,
+    priceCents: 10000,  // 100€
     currency: "eur",
     priceId: process.env.STRIPE_PRICE_PACK_500,
-    description: "",
     popular: false,
   },
   {
     id: "pack-1250",
     name: "1250 créditos",
     credits: 1250,
-    priceCents: 25000,
+    priceCents: 25000,  // 250€
     currency: "eur",
     priceId: process.env.STRIPE_PRICE_PACK_1250,
-    description: "",
     popular: false,
   },
   {
     id: "pack-3000",
     name: "3000 créditos",
     credits: 3000,
-    priceCents: 50000,
+    priceCents: 50000,  // 500€
     currency: "eur",
     priceId: process.env.STRIPE_PRICE_PACK_3000,
     description: "20% More",
@@ -111,7 +102,7 @@ export const CREDIT_PACKAGES = [
     id: "pack-6000",
     name: "6000 créditos",
     credits: 6000,
-    priceCents: 100000,
+    priceCents: 100000, // 1000€
     currency: "eur",
     priceId: process.env.STRIPE_PRICE_PACK_6000,
     description: "20% More",
@@ -128,8 +119,6 @@ export function getPlanByStripePriceId(priceId: string) {
 }
 
 export async function getStripeCustomerIdForUser(userId: string): Promise<string | null> {
-  // Implementar lógica para obtener el ID de cliente de Stripe desde la base de datos
-  // Por ahora, retornar null
   return null;
 }
 
@@ -141,7 +130,6 @@ export async function createStripeCheckoutSession(
 ): Promise<string | null> {
   const stripe = await getStripe();
   if (!stripe) return null;
-
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -154,9 +142,8 @@ export async function createStripeCheckoutSession(
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      customer_email: undefined, // Será establecido por el cliente
+      customer_email: undefined,
     });
-
     return session.url;
   } catch (error) {
     console.error("Error creating Stripe checkout session:", error);
