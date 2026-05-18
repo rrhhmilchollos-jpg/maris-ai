@@ -101,9 +101,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Preconnect a orígenes críticos (Google Fonts + Clerk) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <!-- Google Fonts: crossorigin necesario para fuentes CORS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://clerk.maris-ai.shop" crossorigin>
+    <!-- Clerk: sin crossorigin (mismo dominio de autenticación, no CORS) -->
+    <link rel="preconnect" href="https://clerk.maris-ai.shop">
+    <!-- DNS prefetch adicional para Clerk CDN -->
+    <link rel="dns-prefetch" href="https://clerk.maris-ai.shop">
 
     <!-- Preload de la fuente Inter para evitar bloqueo de render -->
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />

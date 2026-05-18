@@ -257,7 +257,7 @@ export default function LandingPage() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="ej. Crea una app de gestión de tareas con tableros, arrastrar y soltar, y modo oscuro..."
-                  className="min-h-[60px] max-h-[200px] resize-y border-0 focus-visible:ring-0 bg-transparent text-base md:text-lg placeholder:text-muted-foreground/60 shadow-none font-sans"
+                  className="min-h-[60px] max-h-[200px] resize-y border-0 focus-visible:ring-0 bg-transparent text-base md:text-lg placeholder:text-muted-foreground/80 shadow-none font-sans"
                   data-testid="input-prompt"
                 />
                 <Button
@@ -321,14 +321,14 @@ export default function LandingPage() {
                       <h3 className="text-sm font-semibold text-white">{agent.role}</h3>
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground/60 font-mono">{agent.timeout}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{agent.timeout}</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-3">{agent.desc}</p>
                 <div className="flex items-center gap-2">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-mono ${agent.badge}`}>
                     {agent.model}
                   </span>
-                  <span className="text-xs text-muted-foreground/50">{agent.provider}</span>
+                  <span className="text-xs text-muted-foreground">{agent.provider}</span>
                 </div>
               </div>
             ))}
@@ -349,7 +349,7 @@ export default function LandingPage() {
               ].map((m) => (
                 <div key={m.model} className="p-3 rounded-lg bg-background/40 border border-white/5">
                   <p className={`text-xs font-semibold font-mono ${m.color}`}>{m.model}</p>
-                  <p className="text-xs text-muted-foreground/60 mt-0.5">{m.provider}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{m.provider}</p>
                   <p className="text-xs text-muted-foreground mt-1 leading-tight">{m.use}</p>
                 </div>
               ))}
@@ -406,7 +406,7 @@ export default function LandingPage() {
               >
                 <span className="text-2xl">{tool.icon}</span>
                 <span className="text-xs font-medium text-white leading-tight">{tool.name}</span>
-                <span className="text-xs text-muted-foreground/60">{tool.category}</span>
+                <span className="text-xs text-muted-foreground">{tool.category}</span>
               </div>
             ))}
           </div>
@@ -462,16 +462,16 @@ export default function LandingPage() {
                   { step: "09", label: "Visual Evaluator", status: "✓", model: "opus-4-7", time: "18s" },
                 ].map((row) => (
                   <div key={row.step} className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-muted-foreground/50">[{row.step}]</span>
+                    <span className="text-muted-foreground">[{row.step}]</span>
                     <span className="text-white/80 flex-1 ml-2">{row.label}</span>
-                    <span className="text-muted-foreground/50 mr-3">{row.model}</span>
-                    <span className="text-muted-foreground/50 mr-2">{row.time}</span>
+                    <span className="text-muted-foreground mr-3">{row.model}</span>
+                    <span className="text-muted-foreground mr-2">{row.time}</span>
                     <span className="text-emerald-400">{row.status}</span>
                   </div>
                 ))}
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs font-mono">
                   <span className="text-emerald-400 font-semibold">✓ App generada y desplegada</span>
-                  <span className="text-muted-foreground/50">6m 40s total</span>
+                  <span className="text-muted-foreground">6m 40s total</span>
                 </div>
               </div>
             </div>
@@ -519,7 +519,7 @@ export default function LandingPage() {
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Maris AI Inc. Todos los derechos reservados.
             </p>
-            <p className="text-xs text-muted-foreground/60 mt-2 md:mt-0">
+            <p className="text-xs text-muted-foreground mt-2 md:mt-0">
               Impulsado por Claude (Anthropic) · Gemini (Google) · GPT-5 (OpenAI)
             </p>
           </div>
