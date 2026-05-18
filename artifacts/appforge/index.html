@@ -2,7 +2,7 @@
 <html lang="es" class="dark" translate="no">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="google" content="notranslate" />
     <title>Maris AI | Generador de Apps con IA — 9 Agentes Especializados</title>
     <meta name="google-site-verification" content="h8VfglGWGGjRk29YA717Ai-ija8KvVW-l-aTXXhMQYw" />
@@ -11,7 +11,7 @@
     <meta name="author" content="Maris AI Inc.">
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
     <link rel="canonical" href="https://maris-ai.shop" />
-    
+
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://maris-ai.shop">
@@ -22,12 +22,14 @@
     <meta property="og:image:height" content="630">
     <meta property="og:locale" content="es_ES">
     <meta property="og:site_name" content="Maris AI">
+
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://maris-ai.shop">
     <meta property="twitter:title" content="Maris AI | Generador de Apps con IA — 9 Agentes Especializados">
     <meta property="twitter:description" content="Pipeline de 9 agentes IA: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator.">
     <meta property="twitter:image" content="https://maris-ai.shop/opengraph.jpg">
+
     <!-- JSON-LD Schema.org — SoftwareApplication -->
     <script type="application/ld+json">
     {
@@ -67,6 +69,7 @@
       }
     }
     </script>
+
     <!-- JSON-LD Schema.org — NewsMediaOrganization (para Google News) -->
     <script type="application/ld+json">
     {
@@ -85,18 +88,31 @@
       "masthead": "https://maris-ai.shop/news"
     }
     </script>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FLQ32B2CNW"></script>
+
+    <!-- Google tag (gtag.js) — cargado de forma diferida para no bloquear render -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-FLQ32B2CNW');
     </script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FLQ32B2CNW"></script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <!-- Preconnect a orígenes críticos (Google Fonts + Clerk) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://clerk.maris-ai.shop" crossorigin>
+
+    <!-- Preload de la fuente Inter para evitar bloqueo de render -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+
+    <!-- Fuente con font-display:swap para no bloquear FCP/LCP -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>

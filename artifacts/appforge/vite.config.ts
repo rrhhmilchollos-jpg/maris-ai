@@ -18,7 +18,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
-      // ✅ CORRECTO: apunta al paquete real en lib/api-client-react/src
       "@workspace/api-client-react": path.resolve(__dirname, "../../lib/api-client-react/src"),
     },
     dedupe: ["react", "react-dom"],
@@ -27,5 +26,36 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        // Code splitting manual para reducir JS no usado en carga inicial
+        manualChunks(id) {
+          // Clerk auth — chunk separado, se carga solo cuando se necesita
+          if (id.includes("@clerk/clerk-react") || id.includes("clerk.browser")) {
+            return "vendor-clerk";
+          }
+          // Framer Motion — chunk separado (animaciones, no crítico)
+          if (id.includes("framer-motion")) {
+            return "vendor-motion";
+          }
+          // Iconos Lucide — chunk separado
+          if (id.includes("lucide-react")) {
+            return "vendor-icons";
+          }
+          // Componentes Radix UI — chunk separado
+          if (id.includes("@radix-ui")) {
+            return "vendor-ui";
+          }
+          // React core
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "vendor-react";
+          }
+          // TanStack Query + router
+          if (id.includes("@tanstack/react-query") || id.includes("wouter")) {
+            return "vendor-router";
+          }
+        },
+      },
+    },
   },
 });

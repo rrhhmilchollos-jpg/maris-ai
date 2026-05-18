@@ -434,7 +434,7 @@ export default function LandingPage() {
                       <feature.icon className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h4 className="text-lg font-medium text-white mb-1">{feature.title}</h4>
+                      <h3 className="text-lg font-medium text-white mb-1">{feature.title}</h3>
                       <p className="text-muted-foreground leading-relaxed">{feature.desc}</p>
                     </div>
                   </div>
@@ -509,17 +509,17 @@ export default function LandingPage() {
               <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-5 w-5 opacity-70" />
               <span className="font-semibold text-muted-foreground">Maris AI</span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground/60">
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
               <a href="https://github.com" className="hover:text-white transition-colors">GitHub</a>
               <a href="mailto:hola@maris-ai.shop" className="hover:text-white transition-colors">Contacto</a>
             </div>
           </div>
           <div className="border-t border-white/5 pt-6 flex flex-col md:flex-row items-center justify-between">
-            <p className="text-sm text-muted-foreground/60">
+            <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Maris AI Inc. Todos los derechos reservados.
             </p>
-            <p className="text-xs text-muted-foreground/40 mt-2 md:mt-0">
+            <p className="text-xs text-muted-foreground/60 mt-2 md:mt-0">
               Impulsado por Claude (Anthropic) · Gemini (Google) · GPT-5 (OpenAI)
             </p>
           </div>

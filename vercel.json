@@ -1,6 +1,37 @@
 {
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm --filter @workspace/appforge build",
+  "headers": [
+    {
+      "source": "/robots.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
+      "source": "/news-sitemap.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
@@ -11,11 +42,19 @@
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml"
     },
     {
+      "source": "/sitemap.xml",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/sitemap.xml"
+    },
+    {
+      "source": "/rss",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/rss"
+    },
+    {
       "source": "/rss/:path*",
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/rss/:path*"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!robots\\.txt$|favicon\\.svg$|logo\\.svg$|logo-dark\\.svg$|hero-illustration\\.svg$|opengraph\\.jpg$|assets/).*)",
       "destination": "/index.html"
     }
   ]
