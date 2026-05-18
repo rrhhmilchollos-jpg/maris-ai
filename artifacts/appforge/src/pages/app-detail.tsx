@@ -768,13 +768,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <SelectValue placeholder="Modelo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="auto">Auto (Gemini Flash)</SelectItem>
-                <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (rápido)</SelectItem>
-                <SelectItem value="gpt-5" disabled={!isPremium}>
-                  ⚡ GPT-5 Codex {isPremium ? "(Ultra Rápido)" : "(Premium)"}
+                <SelectItem value="auto">⚡ Auto (Claude Sonnet 3.5)</SelectItem>
+                <SelectItem value="claude-haiku">🐇 Claude Haiku 4.5 (más rápido)</SelectItem>
+                <SelectItem value="claude-sonnet">✨ Claude Sonnet 3.5 (recomendado)</SelectItem>
+                <SelectItem value="claude-opus-4-7" disabled={!isPremium}>
+                  🏆 Claude Opus 4.7 {isPremium ? "(máxima calidad)" : "(Premium)"}
                 </SelectItem>
-                <SelectItem value="claude-4-7-sonnet-20260416" disabled={!isPremium}>
-                  Claude Sonnet 4.6 {isPremium ? "(calidad)" : "(Premium)"}
+                <SelectItem value="gpt-5" disabled={!isPremium}>
+                  ⚡ GPT-5.4 {isPremium ? "(OpenAI Ultra)" : "(Premium)"}
                 </SelectItem>
               </SelectContent>
             </Select>

@@ -593,7 +593,18 @@ interface CodeGenResult {
 
 type CoderProvider = "claude-sonnet" | "gpt-5";
 function resolveCoderProvider(coderModel?: string): CoderProvider {
+  // GPT-5 variants
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
+  // Claude variants (haiku, sonnet, opus) — todos usan el proveedor claude-sonnet
+  // Los valores claude-haiku y claude-sonnet son los nuevos valores del selector del dashboard
+  if (
+    coderModel === "claude-haiku" ||
+    coderModel === "claude-sonnet" ||
+    coderModel === "claude-opus-4-7" ||
+    coderModel === "claude-haiku-4-5" ||
+    coderModel === "claude-sonnet-3-5"
+  ) return "claude-sonnet";
+  // auto y cualquier otro valor — Claude Sonnet por defecto
   return "claude-sonnet";
 }
 
