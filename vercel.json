@@ -7,6 +7,14 @@
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*"
     },
     {
+      "source": "/news-sitemap.xml",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml"
+    },
+    {
+      "source": "/rss/:path*",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/rss/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
