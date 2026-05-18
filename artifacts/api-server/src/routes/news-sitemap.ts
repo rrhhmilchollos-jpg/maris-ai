@@ -17,7 +17,7 @@ router.get("/news-sitemap.xml", async (_req, res) => {
       const publicationDate = new Date(article.publishedAt).toISOString().split('T')[0];
       sitemap += `
         <url>
-          <loc>https://maris.ai/news/${article.slug}</loc>
+          <loc>https://maris-ai.shop/news/${article.slug}</loc>
           <news:news>
             <news:publication>
               <news:name>Maris AI</news:name>
