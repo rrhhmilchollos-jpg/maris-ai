@@ -5,39 +5,113 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+/**
+ * Escapa caracteres especiales XML para evitar sitemap malformado.
+ * Requerido por Google News para títulos con &, <, >, ", '
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 router.get("/news-sitemap.xml", async (_req, res) => {
   await connectDB();
   try {
-    const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(1000).lean(); // Google News sitemaps can contain up to 1,000 URLs
+    // Google News sitemaps: máximo 1000 URLs, solo artículos de los últimos 2 días
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const articles = await NewsArticle.find({
+      publishedAt: { $gte: twoDaysAgo },
+    })
+      .sort({ publishedAt: -1 })
+      .limit(1000)
+      .lean();
 
     let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-    sitemap += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">\n`;
+    sitemap += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n`;
+    sitemap += `        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">\n`;
 
     for (const article of articles) {
-      const publicationDate = new Date(article.publishedAt).toISOString().split('T')[0];
-      sitemap += `
-        <url>
-          <loc>https://maris-ai.shop/news/${article.slug}</loc>
-          <news:news>
-            <news:publication>
-              <news:name>Maris AI</news:name>
-              <news:language>es</news:language>
-            </news:publication>
-            <news:publication_date>${publicationDate}</news:publication_date>
-            <news:title>${article.title}</news:title>
-            ${article.tags.length > 0 ? `<news:keywords>${article.tags.join(', ')}</news:keywords>` : ''}
-          </news:news>
-        </url>
-      `;
+      // Google News requiere fecha ISO 8601 completa con hora (no solo YYYY-MM-DD)
+      const publicationDate = new Date(article.publishedAt).toISOString();
+      const escapedTitle = escapeXml(String(article.title));
+      const escapedKeywords = article.tags.length > 0
+        ? escapeXml(article.tags.join(", "))
+        : "";
+
+      sitemap += `  <url>\n`;
+      sitemap += `    <loc>https://maris-ai.shop/news/${article.slug}</loc>\n`;
+      sitemap += `    <news:news>\n`;
+      sitemap += `      <news:publication>\n`;
+      sitemap += `        <news:name>Maris AI</news:name>\n`;
+      sitemap += `        <news:language>es</news:language>\n`;
+      sitemap += `      </news:publication>\n`;
+      sitemap += `      <news:publication_date>${publicationDate}</news:publication_date>\n`;
+      sitemap += `      <news:title>${escapedTitle}</news:title>\n`;
+      if (escapedKeywords) {
+        sitemap += `      <news:keywords>${escapedKeywords}</news:keywords>\n`;
+      }
+      sitemap += `    </news:news>\n`;
+      sitemap += `  </url>\n`;
     }
 
     sitemap += `</urlset>`;
 
-    res.header("Content-Type", "application/xml");
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=3600"); // Cache 1 hora
     res.send(sitemap);
   } catch (error) {
     logger.error({ error }, "Error al generar el sitemap de noticias");
     res.status(500).send("Error al generar el sitemap de noticias");
+  }
+});
+
+/**
+ * Sitemap general del sitio (para Google Search Console).
+ * Incluye todas las páginas públicas estáticas.
+ */
+router.get("/sitemap.xml", async (_req, res) => {
+  await connectDB();
+  try {
+    const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(1000).lean();
+
+    const staticPages = [
+      { url: "https://maris-ai.shop/", priority: "1.0", changefreq: "daily" },
+      { url: "https://maris-ai.shop/news", priority: "0.9", changefreq: "hourly" },
+    ];
+
+    let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    sitemap += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+    for (const page of staticPages) {
+      sitemap += `  <url>\n`;
+      sitemap += `    <loc>${page.url}</loc>\n`;
+      sitemap += `    <changefreq>${page.changefreq}</changefreq>\n`;
+      sitemap += `    <priority>${page.priority}</priority>\n`;
+      sitemap += `  </url>\n`;
+    }
+
+    for (const article of articles) {
+      const lastmod = new Date(article.updatedAt || article.publishedAt).toISOString();
+      sitemap += `  <url>\n`;
+      sitemap += `    <loc>https://maris-ai.shop/news/${article.slug}</loc>\n`;
+      sitemap += `    <lastmod>${lastmod}</lastmod>\n`;
+      sitemap += `    <changefreq>never</changefreq>\n`;
+      sitemap += `    <priority>0.7</priority>\n`;
+      sitemap += `  </url>\n`;
+    }
+
+    sitemap += `</urlset>`;
+
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=3600");
+    res.send(sitemap);
+  } catch (error) {
+    logger.error({ error }, "Error al generar el sitemap general");
+    res.status(500).send("Error al generar el sitemap general");
   }
 });
 

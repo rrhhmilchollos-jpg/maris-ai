@@ -114,7 +114,7 @@ export async function planExecution(
   try {
     const response = await Promise.race([
       anthropic!.messages.create({
-        model: "claude-opus-4-7",
+        model: "claude-haiku-4-5", // Optimizado: haiku es suficiente para clasificar scope (ahorro ~95% vs opus)
         max_tokens: 200,
         system: PLANNER_SYSTEM,
         messages: [{ role: "user", content: `App existente: ${options.hasExistingApp ? "sí" : "no"}\nPetición: ${prompt.slice(0, 1500)}` }],

@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /billing
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /debug-preview
+
+# Google News crawler — acceso completo a noticias
+User-agent: Googlebot-News
+Allow: /news/
+Allow: /news-sitemap.xml
+
+# Sitemaps
+Sitemap: https://maris-ai.shop/news-sitemap.xml
+Sitemap: https://maris-ai.shop/sitemap.xml
