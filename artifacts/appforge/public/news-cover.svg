@@ -1,0 +1,140 @@
+<svg width="100%" viewBox="0 0 1200 675" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Maris AI - La nueva era del desarrollo con IA</title>
+<desc>Imagen de portada para Google News de Maris AI</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+    <stop offset="0%" stop-color="#0a0a0f"/>
+    <stop offset="100%" stop-color="#0f0b1a"/>
+  </linearGradient>
+  <linearGradient id="glow1" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#7c3aed" stop-opacity="0.5"/>
+    <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="glow2" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#10b981" stop-opacity="0.4"/>
+    <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="cardgrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1a1030"/>
+    <stop offset="100%" stop-color="#0d1a15"/>
+  </linearGradient>
+  <linearGradient id="btngrad" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#7c3aed"/>
+    <stop offset="100%" stop-color="#10b981"/>
+  </linearGradient>
+  <linearGradient id="textgrad" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#a78bfa"/>
+    <stop offset="100%" stop-color="#34d399"/>
+  </linearGradient>
+</defs>
+
+<!-- Background -->
+<rect width="1200" height="675" fill="url(#bg)"/>
+
+<!-- Grid lines subtle -->
+<g opacity="0.07" stroke="#7c3aed" stroke-width="0.5">
+  <line x1="0" y1="112" x2="1200" y2="112"/>
+  <line x1="0" y1="225" x2="1200" y2="225"/>
+  <line x1="0" y1="337" x2="1200" y2="337"/>
+  <line x1="0" y1="450" x2="1200" y2="450"/>
+  <line x1="0" y1="562" x2="1200" y2="562"/>
+  <line x1="200" y1="0" x2="200" y2="675"/>
+  <line x1="400" y1="0" x2="400" y2="675"/>
+  <line x1="600" y1="0" x2="600" y2="675"/>
+  <line x1="800" y1="0" x2="800" y2="675"/>
+  <line x1="1000" y1="0" x2="1000" y2="675"/>
+</g>
+
+<!-- Glow orb left purple -->
+<ellipse cx="180" cy="250" rx="280" ry="200" fill="url(#glow1)" opacity="0.6"/>
+<!-- Glow orb right green -->
+<ellipse cx="1050" cy="420" rx="260" ry="180" fill="url(#glow2)" opacity="0.5"/>
+
+<!-- Decorative circles top right -->
+<circle cx="980" cy="90" r="120" fill="none" stroke="#7c3aed" stroke-width="0.8" opacity="0.25"/>
+<circle cx="980" cy="90" r="80" fill="none" stroke="#7c3aed" stroke-width="0.5" opacity="0.2"/>
+<circle cx="980" cy="90" r="40" fill="#7c3aed" opacity="0.08"/>
+
+<!-- Decorative circles bottom left -->
+<circle cx="120" cy="580" r="90" fill="none" stroke="#10b981" stroke-width="0.8" opacity="0.2"/>
+<circle cx="120" cy="580" r="55" fill="none" stroke="#10b981" stroke-width="0.5" opacity="0.15"/>
+
+<!-- Left side: code card -->
+<rect x="60" y="140" width="340" height="200" rx="12" fill="url(#cardgrad)" stroke="#7c3aed" stroke-width="0.8" opacity="0.9"/>
+<rect x="60" y="140" width="340" height="28" rx="12" fill="#1a1030"/>
+<rect x="60" y="154" width="340" height="14" fill="#1a1030"/>
+<circle cx="84" cy="154" r="6" fill="#ff5f57"/>
+<circle cx="102" cy="154" r="6" fill="#febc2e"/>
+<circle cx="120" cy="154" r="6" fill="#28c840"/>
+<text x="200" y="158" text-anchor="middle" font-family="monospace" font-size="11" fill="#888">generate.ts</text>
+<text x="80" y="194" font-family="monospace" font-size="11" fill="#a78bfa">const</text>
+<text x="120" y="194" font-family="monospace" font-size="11" fill="#e2e8f0"> app = await</text>
+<text x="80" y="212" font-family="monospace" font-size="11" fill="#34d399">  marisAI</text>
+<text x="152" y="212" font-family="monospace" font-size="11" fill="#e2e8f0">.generate({</text>
+<text x="80" y="230" font-family="monospace" font-size="11" fill="#f8fafc">    prompt:</text>
+<text x="150" y="230" font-family="monospace" font-size="11" fill="#fbbf24"> "Mi app"</text>
+<text x="80" y="248" font-family="monospace" font-size="11" fill="#f8fafc">    stack:</text>
+<text x="148" y="248" font-family="monospace" font-size="11" fill="#34d399"> "fullstack"</text>
+<text x="80" y="266" font-family="monospace" font-size="11" fill="#e2e8f0">  credits:</text>
+<text x="148" y="266" font-family="monospace" font-size="11" fill="#34d399"> 1 </text>
+<text x="170" y="266" font-family="monospace" font-size="11" fill="#a78bfa">// minimo</text>
+<text x="80" y="284" font-family="monospace" font-size="11" fill="#e2e8f0">})</text>
+<text x="80" y="310" font-family="monospace" font-size="11" fill="#64748b">// Frontend listo</text>
+<text x="80" y="325" font-family="monospace" font-size="11" fill="#64748b">// Backend listo</text>
+
+<!-- Right side: stats cards -->
+<rect x="800" y="140" width="150" height="90" rx="10" fill="url(#cardgrad)" stroke="#10b981" stroke-width="0.8"/>
+<text x="875" y="172" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="700" fill="#34d399">5x</text>
+<text x="875" y="192" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#94a3b8">mas barato</text>
+<text x="875" y="208" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#64748b">vs competencia</text>
+
+<rect x="970" y="140" width="170" height="90" rx="10" fill="url(#cardgrad)" stroke="#7c3aed" stroke-width="0.8"/>
+<text x="1055" y="172" text-anchor="middle" font-family="sans-serif" font-size="28" font-weight="700" fill="#a78bfa">&lt;5min</text>
+<text x="1055" y="192" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#94a3b8">app completa</text>
+<text x="1055" y="208" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#64748b">desde idea a prod</text>
+
+<rect x="800" y="250" width="340" height="90" rx="10" fill="url(#cardgrad)" stroke="#7c3aed" stroke-width="0.5" opacity="0.8"/>
+<text x="820" y="278" font-family="sans-serif" font-size="11" fill="#34d399">+</text>
+<text x="836" y="278" font-family="sans-serif" font-size="11" fill="#94a3b8"> Export directo a GitHub</text>
+<text x="820" y="296" font-family="sans-serif" font-size="11" fill="#34d399">+</text>
+<text x="836" y="296" font-family="sans-serif" font-size="11" fill="#94a3b8"> APK + IPA nativo incluido</text>
+<text x="820" y="314" font-family="sans-serif" font-size="11" fill="#34d399">+</text>
+<text x="836" y="314" font-family="sans-serif" font-size="11" fill="#94a3b8"> Frontend + Backend + DB</text>
+<text x="820" y="332" font-family="sans-serif" font-size="11" fill="#34d399">+</text>
+<text x="836" y="332" font-family="sans-serif" font-size="11" fill="#94a3b8"> 100% tu codigo, sin ataduras</text>
+
+<!-- CENTER MAIN CONTENT -->
+<rect x="430" y="120" width="340" height="28" rx="14" fill="#1a1030" stroke="#7c3aed" stroke-width="0.8"/>
+<text x="600" y="139" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#a78bfa">LANZAMIENTO OFICIAL · maris-ai.shop</text>
+
+<text x="600" y="215" text-anchor="middle" font-family="sans-serif" font-size="52" font-weight="700" fill="url(#textgrad)">Maris AI</text>
+<text x="600" y="265" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="500" fill="#e2e8f0">La nueva era del desarrollo</text>
+<text x="600" y="293" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="500" fill="#e2e8f0">con inteligencia artificial</text>
+
+<text x="600" y="335" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#94a3b8">Genera apps completas en minutos.</text>
+<text x="600" y="355" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#94a3b8">Menos creditos. Mas potencia. Tu codigo.</text>
+
+<line x1="470" y1="378" x2="730" y2="378" stroke="url(#btngrad)" stroke-width="1" opacity="0.6"/>
+
+<rect x="470" y="398" width="260" height="48" rx="24" fill="url(#btngrad)"/>
+<text x="600" y="428" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#ffffff">Comenzar ahora</text>
+
+<rect x="510" y="462" width="180" height="26" rx="13" fill="#0f0b1a" stroke="#334155" stroke-width="0.8"/>
+<text x="600" y="479" text-anchor="middle" font-family="monospace" font-size="11" fill="#64748b">maris-ai.shop</text>
+
+<rect x="0" y="630" width="1200" height="45" fill="#0d0a1a" opacity="0.9"/>
+<text x="60" y="658" font-family="sans-serif" font-size="11" fill="#475569">2026 Maris AI · Todos los derechos reservados</text>
+<text x="1140" y="658" text-anchor="end" font-family="sans-serif" font-size="11" fill="#475569">maris-ai.shop</text>
+
+<g opacity="0.15" fill="#7c3aed">
+  <circle cx="760" cy="520" r="2"/>
+  <circle cx="780" cy="520" r="2"/>
+  <circle cx="760" cy="540" r="2"/>
+  <circle cx="780" cy="540" r="2"/>
+  <circle cx="760" cy="560" r="2"/>
+  <circle cx="780" cy="560" r="2"/>
+  <circle cx="800" cy="520" r="2"/>
+  <circle cx="800" cy="540" r="2"/>
+  <circle cx="800" cy="560" r="2"/>
+</g>
+</svg>
