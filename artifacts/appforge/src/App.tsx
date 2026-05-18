@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, lazy, Suspense } from "react";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
@@ -12,19 +12,30 @@ import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
 import { useUser } from "@clerk/react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
-// Pages
+// Pages — lazy loaded para reducir bundle inicial y mejorar LCP/FCP
 import { setSentryUser } from "@/lib/sentry";
+// La landing se carga de forma inmediata (es la primera página visible)
 import LandingPage from "@/pages/landing";
-import DashboardPage from "@/pages/dashboard";
-import AppDetailPage from "@/pages/app-detail";
-import BillingPage from "@/pages/billing";
-import BillingSuccessPage from "@/pages/billing-success";
-import AdminPage from "@/pages/admin";
-import AdminDashboardPage from "@/pages/admin-dashboard";
-import NotFound from "@/pages/not-found";
-import DebugPreviewPage from "@/pages/debug-preview";
-import NewsPage from "@/pages/news";
-import NewsDetailPage from "@/pages/news-detail";
+// El resto de páginas se cargan bajo demanda
+const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const AppDetailPage = lazy(() => import("@/pages/app-detail"));
+const BillingPage = lazy(() => import("@/pages/billing"));
+const BillingSuccessPage = lazy(() => import("@/pages/billing-success"));
+const AdminPage = lazy(() => import("@/pages/admin"));
+const AdminDashboardPage = lazy(() => import("@/pages/admin-dashboard"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const DebugPreviewPage = lazy(() => import("@/pages/debug-preview"));
+const NewsPage = lazy(() => import("@/pages/news"));
+const NewsDetailPage = lazy(() => import("@/pages/news-detail"));
+
+// Fallback de carga para Suspense
+function PageLoader() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -253,6 +264,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/sign-in/*?" component={SignInPage} />
@@ -303,6 +315,7 @@ function ClerkProviderWithRoutes() {
           </Route>
           <Route component={NotFound} />
         </Switch>
+        </Suspense>
       </QueryClientProvider>
     </ClerkProvider>
   );
