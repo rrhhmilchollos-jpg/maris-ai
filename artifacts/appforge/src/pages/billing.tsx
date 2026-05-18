@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Plus, Loader2, ArrowUpRight, ArrowDownRight, AlertCircle, X } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { useLocation } from "wouter";
 
 const KIND_LABELS: Record<string, string> = {
   purchase: "compra",
@@ -16,6 +17,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export default function BillingPage() {
+  const [, setLocation] = useLocation();
   const { data: me, isLoading: meLoading } = useGetMe();
   const { data: packages, isLoading: packagesLoading } = useListCreditPackages();
   const { data: transactions, isLoading: txLoading } = useListTransactions();
@@ -66,8 +68,9 @@ export default function BillingPage() {
   };
 
   const handleCustomBuy = async () => {
-    if (!customAmount || parseFloat(customAmount) <= 0) {
-      setCheckoutError("Por favor ingresa un monto válido.");
+    const amount = parseFloat(customAmount);
+    if (!customAmount || amount < 20) {
+      setCheckoutError("El monto mínimo es 20€.");
       return;
     }
 
@@ -79,7 +82,7 @@ export default function BillingPage() {
       const response = await fetch("/api/billing/custom-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountEur: parseFloat(customAmount) }),
+        body: JSON.stringify({ amountEur: amount }),
       });
 
       if (!response.ok) {
@@ -101,10 +104,6 @@ export default function BillingPage() {
     return `€${(amountCents / 100).toFixed(2)}`;
   };
 
-  const calculateCredits = (amountEur: number) => {
-    return Math.floor(amountEur * 100);
-  };
-
   return (
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
@@ -122,7 +121,11 @@ export default function BillingPage() {
                   </div>
                   <h1 className="text-3xl font-bold text-gray-900">Comprar créditos</h1>
                 </div>
-                <button className="text-gray-400 hover:text-gray-600 transition-colors">
+                {/* ✅ Botón X con función de cerrar */}
+                <button
+                  onClick={() => setLocation("/dashboard")}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                >
                   <X className="h-6 w-6" />
                 </button>
               </div>
@@ -172,7 +175,7 @@ export default function BillingPage() {
                         )}
 
                         {/* Precio */}
-                        <div className={`text-4xl font-bold mb-8 ${isPopular ? "text-green-600" : "text-green-600"}`}>
+                        <div className="text-4xl font-bold mb-8 text-green-600">
                           {price}
                         </div>
 
@@ -206,30 +209,32 @@ export default function BillingPage() {
                       Monto personalizado
                     </label>
                     <div className="flex gap-3">
+                      {/* ✅ Input con texto negro visible y mínimo 20€ */}
                       <div className="flex-1 relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 font-bold text-lg">€</span>
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 font-bold text-lg z-10">€</span>
                         <input
                           type="number"
-                          placeholder="Ingresa monto personalizado"
+                          placeholder="Mínimo 20€"
                           value={customAmount}
                           onChange={(e) => {
                             setCustomAmount(e.target.value);
                             setCheckoutError(null);
                           }}
-                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold"
-                          min="0.01"
-                          step="0.01"
+                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold text-gray-900 bg-white placeholder-gray-400"
+                          min="20"
+                          step="1"
                         />
                       </div>
+                      {/* ✅ Botón solo dice "Comprar ahora" */}
                       <Button
                         onClick={handleCustomBuy}
-                        disabled={!customAmount || parseFloat(customAmount) <= 0 || loadingPackageId === "custom"}
-                        className="bg-gray-400 hover:bg-gray-500 text-white font-bold px-8 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
+                        disabled={!customAmount || parseFloat(customAmount) < 20 || loadingPackageId === "custom"}
+                        className="bg-gray-900 hover:bg-gray-800 text-white font-bold px-8 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
                       >
                         {loadingPackageId === "custom" ? (
                           <Loader2 className="h-5 w-5 animate-spin" />
                         ) : (
-                          `Comprar ${customAmount ? calculateCredits(parseFloat(customAmount)).toLocaleString() : "0"} créditos`
+                          "Comprar ahora"
                         )}
                       </Button>
                     </div>
@@ -256,7 +261,7 @@ export default function BillingPage() {
             </Card>
           </div>
 
-          {/* Historial de Transacciones (debajo del modal) */}
+          {/* Historial de Transacciones */}
           <div className="mt-12 relative z-0">
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center mr-3 shadow-lg">
