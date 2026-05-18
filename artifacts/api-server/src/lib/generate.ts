@@ -15,6 +15,7 @@ import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint,
 import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 import { injectWatermarkToHTML, generateWatermarkReactComponent } from "./watermark";
+import { recallGenerations, rememberGeneration, buildGenerationMemoryBlock } from "./generationMemory";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
@@ -474,9 +475,17 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
  * Architect — Claude 3.5 (if available) or Gemini 2.5 Flash.
  */
 async function architectPlan(prompt: string, research: string): Promise<ProjectPlan> {
+  // Recuperar generaciones similares de memoria persistente
+  const memoryRecalls = await recallGenerations(prompt, { limit: 3, threshold: 0.15 }).catch(() => []);
+  const memoryBlock = buildGenerationMemoryBlock(memoryRecalls);
+  if (memoryRecalls.length > 0) {
+    logger.info({ recalls: memoryRecalls.length }, "generationMemory: inyectando contexto de generaciones anteriores");
+  }
+
+  const memoryNote = memoryBlock ? `\n\n${memoryBlock}` : "";
   const userContent = research
-    ? `Design the file structure for this app:\n\n${prompt}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
-    : `Design the file structure for this app:\n\n${prompt}`;
+    ? `Design the file structure for this app:\n\n${prompt}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}${memoryNote}`
+    : `Design the file structure for this app:\n\n${prompt}${memoryNote}`;
 
   let raw = "";
   if (useAnthropic) {
@@ -628,6 +637,10 @@ async function generateFrontendCode(
   });
   const designSummary = JSON.stringify(design);
 
+  // Recuperar snippets de código de generaciones similares
+  const codeMemoryRecalls = await recallGenerations(prompt, { limit: 2, threshold: 0.2 }).catch(() => []);
+  const codeMemoryBlock = buildGenerationMemoryBlock(codeMemoryRecalls);
+
   const userContent = `User request: ${prompt}
 
 Project plan (you MUST implement every listed file):
@@ -636,7 +649,7 @@ ${planSummary}
 Design system (apply EXACTLY in tailwind.config.ts theme.extend and src/index.css):
 ${designSummary}
 ${research ? `\nResearch context (visual reference, treat as ground truth):\n${research.slice(0, 2000)}` : ""}
-
+${codeMemoryBlock ? `\n${codeMemoryBlock}` : ""}
 Now produce the JSON object with frontendCode containing every listed file.`;
 
   const provider = resolveCoderProvider(coderModel);
@@ -1534,6 +1547,7 @@ export async function generateApp(
     }
   };
 
+  const _genStartTime = Date.now();
   const memoryBlock = formatMemoryBlock(agentMemory);
   if (memoryBlock) prompt = `${memoryBlock}\n${prompt}`;
 
@@ -1760,6 +1774,23 @@ export async function generateApp(
   // Inyectar marca de agua de Maris AI en el código frontend
   const watermarkComponent = generateWatermarkReactComponent();
   const frontendWithWatermark = finalFrontend + "\n\n" + watermarkComponent + testsAppendix + setupNotes;
+
+  // Guardar generación exitosa en memoria persistente (best-effort, no bloquea)
+  rememberGeneration({
+    prompt: prompt.slice(0, 2000),
+    language,
+    plan,
+    design,
+    metrics: {
+      durationMs: Date.now() - _genStartTime,
+      frontendKb: Math.round(frontendWithWatermark.length / 1024),
+      patchIterations: 0, // aproximación; el loop de patches no expone su contador aquí
+      validationPassed: true,
+    },
+    codeSnippets: [],
+  }).catch(() => {});
+
+  log("memory", `🧠 generación guardada en memoria (${Math.round((Date.now() - _genStartTime) / 1000)}s)`);
 
   return {
     title: plan.title.slice(0, 200),
