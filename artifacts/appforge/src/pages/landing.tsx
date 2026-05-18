@@ -36,14 +36,18 @@ export default function LandingPage() {
     }
   };
 
+  // Animaciones optimizadas para móvil:
+  // - Usar solo opacity (sin y/transform) para evitar forced reflow en Framer Motion
+  // - Reducir duración en móvil para mejorar TBT
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   const fadeIn = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.5 }
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    transition: { duration: isMobile ? 0.2 : 0.4 }
   };
 
   const stagger = {
-    animate: { transition: { staggerChildren: 0.1 } }
+    animate: { transition: { staggerChildren: isMobile ? 0.05 : 0.1 } }
   };
 
   // Pipeline de agentes actualizado con modelos reales
@@ -290,7 +294,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-background via-card/20 to-background -z-10"></div>
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
           <div className="text-center mb-16">
-            <Badge variant="outline" className="mb-4 border-primary/30 text-primary bg-primary/10">
+            <Badge variant="outline" className="mb-4 border-primary/50 text-primary-foreground bg-primary/80">
               <Bot className="mr-2 h-3 w-3" /> Pipeline Multi-Agente
             </Badge>
             <h2 className="text-4xl font-bold text-white mb-4">9 agentes especializados trabajando en paralelo</h2>
@@ -390,7 +394,7 @@ export default function LandingPage() {
       <section id="herramientas" className="py-24 relative">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
           <div className="text-center mb-16">
-            <Badge variant="outline" className="mb-4 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+            <Badge variant="outline" className="mb-4 border-emerald-500/50 text-white bg-emerald-600/70">
               <Layers className="mr-2 h-3 w-3" /> Stack Tecnológico
             </Badge>
             <h2 className="text-4xl font-bold text-white mb-4">28 herramientas y librerías integradas</h2>

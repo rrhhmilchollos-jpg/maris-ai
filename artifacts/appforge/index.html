@@ -117,6 +117,29 @@
     <noscript>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     </noscript>
+  <!-- CSS crítico inline: evita bloqueo de render del CSS externo en móvil -->
+  <!-- Solo las variables del tema oscuro y estilos base necesarios para el primer paint -->
+  <style>
+    /* Tema oscuro — variables críticas para el primer paint */
+    :root { color-scheme: dark; }
+    html.dark {
+      --background: 240 10% 4%;
+      --foreground: 0 0% 98%;
+      --primary: 272 72% 55%;
+      --primary-foreground: 0 0% 100%;
+      --muted-foreground: 240 5% 65%;
+      --card: 240 10% 6%;
+    }
+    /* Evitar FOUC (flash of unstyled content) */
+    body {
+      background-color: hsl(240 10% 4%);
+      color: hsl(0 0% 98%);
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+    }
+    /* Ocultar root hasta que React hidrate */
+    #root { min-height: 100vh; }
+  </style>
   </head>
   <body>
     <div id="root"></div>
