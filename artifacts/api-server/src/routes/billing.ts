@@ -14,23 +14,14 @@ import { creditPurchase } from "../lib/credits";
 
 const router: IRouter = Router();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /billing/packages — packs de créditos (top-ups)
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/billing/packages", (_req: Request, res: Response) => {
   res.json(CREDIT_PACKAGES.map((p) => ({ ...p })));
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /billing/plans — planes de suscripción mensual
-// ─────────────────────────────────────────────────────────────────────────────
 router.get("/billing/plans", (_req: Request, res: Response) => {
   res.json(SUBSCRIPTION_PLANS.map((p) => ({ ...p })));
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /billing/transactions
-// ─────────────────────────────────────────────────────────────────────────────
 router.get(
   "/billing/transactions",
   requireAuth,
@@ -41,7 +32,6 @@ router.get(
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();
-
     res.json(
       rows.map((r) => ({
         id: r._id,
@@ -63,9 +53,7 @@ function originFromReq(req: Request): string {
   return `${proto}://${host}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // POST /billing/custom-checkout — comprar monto personalizado de créditos
-// ─────────────────────────────────────────────────────────────────────────────
 router.post(
   "/billing/custom-checkout",
   requireAuth,
@@ -103,8 +91,8 @@ router.post(
       });
     }
 
-    // 1 crédito = 0.01 EUR → 100 créditos por euro
-    const credits = Math.floor(amountEur * 100);
+    // ✅ 1€ = 5 créditos → 20€ = 100 créditos
+    const credits = Math.floor(amountEur * 5);
     const amountCents = Math.floor(amountEur * 100);
 
     const session = await stripe.checkout.sessions.create({
@@ -142,9 +130,7 @@ router.post(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
 // POST /billing/checkout — comprar un pack de créditos (pago único)
-// ─────────────────────────────────────────────────────────────────────────────
 router.post(
   "/billing/checkout",
   requireAuth,
@@ -200,7 +186,6 @@ router.post(
             unit_amount: pkg.priceCents,
             product_data: {
               name: `Pack ${pkg.name} — ${pkg.credits} créditos Maris AI`,
-              // Solo se incluye description si no está vacío
               ...(pkg.description ? { description: pkg.description } : {}),
             },
           },
@@ -224,9 +209,7 @@ router.post(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /billing/subscribe — suscribirse a un plan mensual
-// ─────────────────────────────────────────────────────────────────────────────
+// POST /billing/subscribe
 router.post(
   "/billing/subscribe",
   requireAuth,
@@ -277,12 +260,7 @@ router.post(
       locale: "es",
       success_url: successUrl,
       cancel_url: cancelUrl,
-      line_items: [
-        {
-          price: plan.stripePriceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
       metadata: {
         clerkUserId: req.userId!,
         planId: plan.id,
@@ -307,9 +285,7 @@ router.post(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /billing/cancel-subscription — cancelar suscripción al final del ciclo
-// ─────────────────────────────────────────────────────────────────────────────
+// POST /billing/cancel-subscription
 router.post(
   "/billing/cancel-subscription",
   requireAuth,
@@ -339,9 +315,7 @@ router.post(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /billing/confirm — confirmar pago único tras checkout (top-up)
-// ─────────────────────────────────────────────────────────────────────────────
+// POST /billing/confirm
 router.post(
   "/billing/confirm",
   requireAuth,
@@ -370,7 +344,11 @@ router.post(
       return;
     }
 
-    if (session.metadata?.type === "topup" || session.metadata?.type === "topup-custom" || !session.metadata?.type) {
+    if (
+      session.metadata?.type === "topup" ||
+      session.metadata?.type === "topup-custom" ||
+      !session.metadata?.type
+    ) {
       const credits = Number(session.metadata?.credits ?? "0");
       if (!Number.isFinite(credits) || credits <= 0) {
         res.status(400).json({ error: "Invalid credits in session metadata" });
@@ -397,16 +375,16 @@ router.post(
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /billing/status — estado del plan actual del usuario
-// ─────────────────────────────────────────────────────────────────────────────
+// GET /billing/status
 router.get(
   "/billing/status",
   requireAuth,
   async (req: Request, res: Response) => {
     await connectDB();
     const user = req.dbUser!;
-    const plan = SUBSCRIPTION_PLANS.find((p) => p.id === (user.plan ?? "free")) ?? SUBSCRIPTION_PLANS[0];
+    const plan =
+      SUBSCRIPTION_PLANS.find((p) => p.id === (user.plan ?? "free")) ??
+      SUBSCRIPTION_PLANS[0];
 
     res.json({
       plan: user.plan ?? "free",
@@ -414,7 +392,10 @@ router.get(
       planCreditsPerMonth: plan.creditsPerMonth,
       planExpiresAt: user.planExpiresAt?.toISOString() ?? null,
       credits: user.credits,
-      hasActiveSubscription: !!user.stripeSubscriptionId && !!user.planExpiresAt && new Date(user.planExpiresAt) > new Date(),
+      hasActiveSubscription:
+        !!user.stripeSubscriptionId &&
+        !!user.planExpiresAt &&
+        new Date(user.planExpiresAt) > new Date(),
     });
   },
 );
