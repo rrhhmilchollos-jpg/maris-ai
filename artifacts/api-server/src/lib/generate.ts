@@ -1,11 +1,5 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
-
-// OpenAI client via Maris AI Integrations proxy.
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-});
 import { validateBundle, type BuildIssue } from "./validate";
 import { validateBundleInE2B } from "./e2bValidator";
 import { shouldValidateInE2B } from "./e2bGate";
@@ -16,6 +10,12 @@ import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 import { injectWatermarkToHTML, generateWatermarkReactComponent } from "./watermark";
 import { recallGenerations, rememberGeneration, buildGenerationMemoryBlock } from "./generationMemory";
+
+// OpenAI client via Maris AI Integrations proxy.
+const openai = new OpenAI({
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+});
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
