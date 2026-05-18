@@ -673,7 +673,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // Claude Sonnet 3.5 streaming (optimizado: antes claude-opus-4-7)
     const stream = await anthropic.messages.stream({
       model: "claude-sonnet-4-5-20250929", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
-      max_tokens: 24000,
+      max_tokens: 64000,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userContent }],
     });
