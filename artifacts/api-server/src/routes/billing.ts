@@ -71,8 +71,8 @@ router.post(
   requireAuth,
   async (req: Request, res: Response) => {
     const amountEur = req.body?.amountEur;
-    if (typeof amountEur !== "number" || amountEur <= 0) {
-      res.status(400).json({ error: "Invalid amount" });
+    if (typeof amountEur !== "number" || amountEur < 20) {
+      res.status(400).json({ error: "El monto mínimo es 20€." });
       return;
     }
 
@@ -103,7 +103,7 @@ router.post(
       });
     }
 
-    // Calcular créditos basado en tasa: 1 crédito = 0.01 EUR (ajustable)
+    // 1 crédito = 0.01 EUR → 100 créditos por euro
     const credits = Math.floor(amountEur * 100);
     const amountCents = Math.floor(amountEur * 100);
 
@@ -200,7 +200,8 @@ router.post(
             unit_amount: pkg.priceCents,
             product_data: {
               name: `Pack ${pkg.name} — ${pkg.credits} créditos Maris AI`,
-              description: pkg.description,
+              // Solo se incluye description si no está vacío
+              ...(pkg.description ? { description: pkg.description } : {}),
             },
           },
           quantity: 1,
@@ -327,7 +328,6 @@ router.post(
       return;
     }
 
-    // Cancelar al final del período — el usuario conserva acceso hasta que expire
     await stripe.subscriptions.update(user.stripeSubscriptionId, {
       cancel_at_period_end: true,
     });
@@ -370,7 +370,6 @@ router.post(
       return;
     }
 
-    // Top-up de créditos (paquete fijo o personalizado)
     if (session.metadata?.type === "topup" || session.metadata?.type === "topup-custom" || !session.metadata?.type) {
       const credits = Number(session.metadata?.credits ?? "0");
       if (!Number.isFinite(credits) || credits <= 0) {
@@ -389,7 +388,6 @@ router.post(
       return;
     }
 
-    // Suscripción — los créditos se gestionan via webhook
     res.json({
       creditsAdded: 0,
       newBalance: req.dbUser!.credits,
