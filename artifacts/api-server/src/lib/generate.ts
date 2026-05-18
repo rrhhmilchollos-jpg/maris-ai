@@ -454,7 +454,7 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
           max_tokens: 1500,
           system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -484,7 +484,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
           max_tokens: 4096,
           system: [{ type: "text", text: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -504,7 +504,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
           max_tokens: 4096,
           system: [{ type: "text", text: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -550,7 +550,7 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-4-5-20251001",
         headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
         max_tokens: 2048,
         system: [{ type: "text", text: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -601,8 +601,8 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
     coderModel === "claude-haiku" ||
     coderModel === "claude-sonnet" ||
     coderModel === "claude-opus-4-7" ||
-    coderModel === "claude-haiku-4-5" ||
-    coderModel === "claude-sonnet-3-5"
+    coderModel === "claude-haiku-4-5-20251001" ||
+    coderModel === "claude-sonnet-4-5-20250929"
   ) return "claude-sonnet";
   // auto y cualquier otro valor — Claude Sonnet por defecto
   return "claude-sonnet";
@@ -676,7 +676,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else {
     // Claude Sonnet 3.5 streaming (optimizado: antes claude-opus-4-7)
     const stream = await anthropic.messages.stream({
-      model: "claude-sonnet-3-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
+      model: "claude-sonnet-4-5-20250929", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
       max_tokens: 24000,
       headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -732,7 +732,7 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-3-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
+        model: "claude-sonnet-4-5-20250929", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
         max_tokens: 8192,
         headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
         system: [{ type: "text", text: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -777,7 +777,7 @@ Pages: ${plan.pages.map((p) => p.name).join(", ")}
 Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
 Backend needed: ${plan.backendNeeded}`;
         const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
           max_tokens: 800,
           system: [{ type: "text", text: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -848,7 +848,7 @@ Debes verificar estrictamente las siguientes directrices:
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-sonnet-3-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
+              model: "claude-sonnet-4-5-20250929", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
               max_tokens: 1024,
               headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
               system: [{ type: "text", text: systemPrompt + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -862,7 +862,7 @@ Debes verificar estrictamente las siguientes directrices:
 
         if (!raw) {
           const qaResponse = await anthropic.messages.create({
-            model: "claude-haiku-4-5",
+            model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
             max_tokens: 700,
             system: [{ type: "text", text: systemPrompt + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -912,7 +912,7 @@ ${sample}
 
 Return the JSON object with testCode.`;
         const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
           max_tokens: 3000,
           system: [{ type: "text", text: TEST_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -956,7 +956,7 @@ ${frontendCode}
 
 Return the FULL patched bundle as JSON.`;
         const response = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
+          model: "claude-haiku-4-5-20251001",
           headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
           max_tokens: 16000,
           system: [{ type: "text", text: buildPatcherSystemPrompt(language) + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
@@ -1366,7 +1366,7 @@ Return the FULL updated app as JSON.`;
     } else {
       // Claude Sonnet 3.5 streaming (optimizado: antes claude-opus-4-7)
       const stream = await anthropic.messages.stream({
-        model: "claude-sonnet-3-5",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 24000,
         headers: {"anthropic-beta": "prompt-caching-2024-07-31"},
         system: systemPrompt,

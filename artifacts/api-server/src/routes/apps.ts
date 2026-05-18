@@ -603,8 +603,8 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
     coderModel === "claude-haiku" ||
     coderModel === "claude-sonnet" ||
     coderModel === "claude-opus-4-7" ||
-    coderModel === "claude-haiku-4-5" ||
-    coderModel === "claude-sonnet-3-5" ||
+    coderModel === "claude-haiku-4-5-20251001" ||
+    coderModel === "claude-sonnet-4-5-20250929" ||
     coderModel === "claude-sonnet-4-20250514"
   ) return "claude-sonnet";
   // auto y cualquier otro valor — Claude Sonnet por defecto

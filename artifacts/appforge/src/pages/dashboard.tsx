@@ -314,9 +314,9 @@ export default function DashboardPage() {
                   <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
                     <SelectTrigger className="h-9 w-[230px] text-xs bg-background/50 border-border/50"><SelectValue placeholder="Modelo del coder" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">⚡ Auto (Claude Sonnet 3.5)</SelectItem>
+                      <SelectItem value="auto">⚡ Auto (Claude Sonnet 4.5)</SelectItem>
                       <SelectItem value="claude-haiku">🐇 Claude Haiku 4.5 (más rápido)</SelectItem>
-                      <SelectItem value="claude-sonnet">✨ Claude Sonnet 3.5 (recomendado)</SelectItem>
+                      <SelectItem value="claude-sonnet">✨ Claude Sonnet 4.5 (recomendado)</SelectItem>
                       <SelectItem value="claude-opus-4-7" disabled={!me?.isPremium}>🏆 Claude Opus 4.7 {me?.isPremium ? "(máxima calidad)" : "(Premium)"}</SelectItem>
                       <SelectItem value="gpt-5" disabled={!me?.isPremium}>⚡ GPT-5.4 {me?.isPremium ? "(OpenAI Ultra)" : "(Premium)"}</SelectItem>
                     </SelectContent>

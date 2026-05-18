@@ -2,7 +2,7 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { logger } from "./logger";
 import { appendAppNotes, appendUserPreferences } from "./agentMemoryContext";
 
-const EXTRACTOR_MODEL = "claude-haiku-4-5";
+const EXTRACTOR_MODEL = "claude-haiku-4-5-20251001";
 
 export interface MemoryExtractorInput {
   userId: string;
