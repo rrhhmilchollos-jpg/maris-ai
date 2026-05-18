@@ -87,7 +87,7 @@ export default function NewsDetailPage() {
           "name": "Maris AI",
           "logo": {
             "@type": "ImageObject",
-            "url": "https://maris.ai/logo.png" // TODO: Reemplazar con la URL real del logo de Maris AI
+            "url": "https://maris-ai.shop/logo.svg" // TODO: Reemplazar con la URL real del logo de Maris AI
           }
         },
         "description": data.metaDescription || data.body.substring(0, 160)
