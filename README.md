@@ -10,6 +10,9 @@ pinned: false
 
 # Maris AI Backend
 Servidor de inteligencia artificial para Maris AI, alojado gratuitamente en Hugging Face.
+
+---
+**Update 2026-05-19:** Implementada nueva interfaz Split Screen (clon Emergent) y sistema de generación por facetas.
  
  
 
