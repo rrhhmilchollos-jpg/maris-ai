@@ -25,6 +25,8 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
       appId: job.appId,
       errorMessage: job.errorMessage,
       updatedAt: job.updatedAt,
+      // ── preview en tiempo real ──
+      partialFrontendCode: (job as any).partialFrontendCode ?? null,
     });
   } catch (err) {
     logger.error({ err, jobId: req.params.id }, "GET /api/jobs/:id error");
