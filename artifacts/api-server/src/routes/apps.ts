@@ -468,7 +468,7 @@ export async function researchTopic(prompt: string): Promise<string> {
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5",
           max_tokens: 1500,
           system: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
 - 1 short paragraph: what the source product/site does and who it's for.
@@ -543,7 +543,7 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-5",
         max_tokens: 4096,
         system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -583,20 +583,18 @@ interface CodeGenResult {
   error?: string;
 }
 
-type CoderProvider = "gemini-flash" | "claude-sonnet" | "gpt-5";
+type CoderProvider = "claude" | "gpt-5";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-opus-4-7";
+
 function resolveCoderProvider(coderModel?: string): CoderProvider {
-  // GPT-5 variants
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
-  // Claude variants (haiku, sonnet, opus) — todos usan el proveedor claude-sonnet
-  if (
-    coderModel === "claude-haiku" ||
-    coderModel === "claude-sonnet" ||
-    coderModel === "claude-opus-4-7" ||
-    coderModel === "claude-sonnet-4-6" ||
-    coderModel === "claude-sonnet-4-6"
-  ) return "claude-sonnet";
-  // auto y cualquier otro valor — Claude Sonnet por defecto
-  return "claude-sonnet";
+  return "claude";
+}
+
+function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
+  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
+  if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
+  return "claude-sonnet-4-5";
 }
 
 /**
@@ -664,9 +662,9 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       if (fr === "length") finishReason = "MAX_TOKENS";
     }
     truncated = finishReason === "MAX_TOKENS";
-  } else if (provider === "claude-sonnet") {
+  } else if (provider === "claude") {
     const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
+      model: resolveClaudeCoderModel(coderModel),
       max_tokens: 32000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -682,9 +680,9 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
     truncated = finishReason2 === "MAX_TOKENS";
   } else {
-    // Claude 3.5 Sonnet streaming (fallback)
+    // Claude streaming según el modelo elegido en el selector.
     const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
+      model: resolveClaudeCoderModel(coderModel),
       max_tokens: 32768,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -740,7 +738,7 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-5",
         max_tokens: 8192,
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -778,7 +776,7 @@ async function specifyIntegrations(
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5",
           max_tokens: 800,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -831,7 +829,7 @@ async function reviewBundle(
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5",
           max_tokens: 700,
           system: "You are a QA reviewer for a React+TS+Tailwind bundle. Output JSON only.",
           messages: [
@@ -886,7 +884,7 @@ async function generateTests(
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5",
           max_tokens: 3000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -1352,9 +1350,9 @@ Return the FULL updated app as JSON.`;
         const fr = chunk.choices[0]?.finish_reason;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
-    } else if (provider === "claude-sonnet") {
+    } else if (provider === "claude") {
       const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-6",
+        model: resolveClaudeCoderModel(coderModel),
         max_tokens: 65536,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
@@ -1369,9 +1367,9 @@ Return the FULL updated app as JSON.`;
         if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       }
     } else {
-      // Claude 3.5 Sonnet streaming (fallback)
-      const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-6",
+// Claude streaming según el modelo elegido en el selector.
+      const stream = await anthropic.messages.stream({
+        model: resolveClaudeCoderModel(coderModel),
         max_tokens: 32768,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
