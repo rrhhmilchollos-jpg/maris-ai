@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 interface RevisionItem {
-  id: number;
+  id: string;
   source: string;
   sourceLabel: string;
   summary: string;
@@ -27,8 +27,8 @@ interface RevisionHistoryPanelProps {
   isLoading?: boolean;
   isRestoring?: boolean;
   /** Currently-pending revision id while a restore is in flight. */
-  pendingRevisionId?: number | null;
-  onRestore: (revisionId: number) => Promise<void>;
+  pendingRevisionId?: string | null;
+  onRestore: (revisionId: string) => Promise<void>;
 }
 
 /** Lucide icon picker per revision source. */
@@ -77,10 +77,10 @@ export function RevisionHistoryPanel({
   onRestore,
 }: RevisionHistoryPanelProps) {
   const [open, setOpen] = useState(false);
-  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleRestore = async (revisionId: number) => {
+  const handleRestore = async (revisionId: string) => {
     try {
       await onRestore(revisionId);
       setConfirmingId(null);

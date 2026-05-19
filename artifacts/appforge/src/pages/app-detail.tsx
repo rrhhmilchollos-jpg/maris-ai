@@ -141,7 +141,7 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 export default function AppDetailPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+  const id = params.id;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -188,7 +188,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   }, [previewOpen, previewMaximized, activeTab]);
   const [draft, setDraft] = useState("");
   const [chatAttachments, setChatAttachments] = useState<UploadedAttachment[]>([]);
-  const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: app, isLoading } = useGetApp(id, {
@@ -271,7 +271,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           return;
         }
         // Default: it's a GenerationJob. Track it.
-        const job = response as { id: number };
+        const job = response as { id: string };
         setActiveJobId(job.id);
         // Auto-open the live preview the moment the agent starts working so
         // the user can watch the changes happen instead of staring at chat.

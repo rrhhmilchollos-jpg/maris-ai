@@ -80,7 +80,7 @@ export default function DashboardPage() {
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
-  const [activeJobId, setActiveJobId] = useState<number | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django";
   const [kind, setKind] = useState<Kind>("fullstack");
@@ -121,7 +121,7 @@ export default function DashboardPage() {
     },
   });
 
-  const handleDeleteApp = (e: React.MouseEvent, id: number, title: string) => {
+  const handleDeleteApp = (e: React.MouseEvent, id: string, title: string) => {
     e.stopPropagation();
     if (confirm(`¿Estás seguro de que quieres eliminar permanentemente "${title}"? Esta acción no se puede deshacer.`)) {
       deleteMutation.mutate({ id });

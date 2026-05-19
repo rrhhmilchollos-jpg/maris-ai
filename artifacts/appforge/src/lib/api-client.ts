@@ -13,9 +13,9 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export const getGetMeQueryKey = () => ["me"];
 export const getGetMyStatsQueryKey = () => ["my-stats"];
 export const getListAppsQueryKey = () => ["apps"];
-export const getGetAppQueryKey = (id: number) => ["app", id];
-export const getListAppMessagesQueryKey = (id: number) => ["app-messages", id];
-export const getGetGenerationJobQueryKey = (id: number) => ["generation-job", id];
+export const getGetAppQueryKey = (id: string) => ["app", id];
+export const getListAppMessagesQueryKey = (id: string) => ["app-messages", id];
+export const getGetGenerationJobQueryKey = (id: string) => ["generation-job", id];
 export const getGetMyPreferencesQueryKey = () => ["my-preferences"];
 export const getListTemplatesQueryKey = () => ["templates"];
 export const getListAdminUsersQueryKey = () => ["admin-users"];
@@ -24,10 +24,10 @@ export const getGetAdminOverviewQueryKey = () => ["admin-overview"];
 export const getListAdminAppsQueryKey = () => ["admin-apps"];
 export const getListCreditPackagesQueryKey = () => ["credit-packages"];
 export const getListTransactionsQueryKey = () => ["transactions"];
-export const getGetAppNotesQueryKey = (id: number) => ["app-notes", id];
-export const getListAppRevisionsQueryKey = (id: number) => ["app-revisions", id];
-export const getGetAppCustomDomainQueryKey = (id: number) => ["app-custom-domain", id];
-export const getListAppRuntimeErrorsQueryKey = (id: number) => ["app-runtime-errors", id];
+export const getGetAppNotesQueryKey = (id: string) => ["app-notes", id];
+export const getListAppRevisionsQueryKey = (id: string) => ["app-revisions", id];
+export const getGetAppCustomDomainQueryKey = (id: string) => ["app-custom-domain", id];
+export const getListAppRuntimeErrorsQueryKey = (id: string) => ["app-runtime-errors", id];
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface VisualTestReport {
@@ -36,7 +36,7 @@ export interface VisualTestReport {
   analysis: { overallScore: number; summary: string; issues: Array<{ severity: string; description: string; suggestion?: string }> };
 }
 export interface AppRuntimeError {
-  id: number; kind: string; message: string; source?: string; lineno?: number; colno?: number; pathname?: string; stack?: string; createdAt: string;
+  id: string; kind: string; message: string; source?: string; lineno?: number; colno?: number; pathname?: string; stack?: string; createdAt: string;
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ export function useUpdateMyPreferences(opts?: { mutation?: Partial<UseMutationOp
 export function useListApps(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppsQueryKey(), queryFn: () => apiFetch("/api/apps"), ...(opts?.query as any) });
 }
-export function useGetApp(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
+export function useGetApp(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetAppQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}`), ...(opts?.query as any) });
 }
 export function useDeleteApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
@@ -64,14 +64,14 @@ export function useDeleteApp(opts?: { mutation?: Partial<UseMutationOptions<any,
 export function useGenerateApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ data }: any) => apiFetch("/api/apps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
-export function useListAppMessages(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
+export function useListAppMessages(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppMessagesQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/messages`), ...(opts?.query as any) });
 }
 export function useSendAppMessage(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/apps/${id}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
-export function useGetGenerationJob(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
-  return useQuery<any>({ queryKey: getGetGenerationJobQueryKey(id), queryFn: () => apiFetch(`/api/jobs/${id}`), enabled: id > 0, ...(opts?.query as any) });
+export function useGetGenerationJob(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getGetGenerationJobQueryKey(id), queryFn: () => apiFetch(`/api/jobs/${id}`), enabled: !!id, ...(opts?.query as any) });
 }
 export function useListTemplates(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListTemplatesQueryKey(), queryFn: () => apiFetch("/api/templates"), ...(opts?.query as any) });
@@ -133,25 +133,25 @@ export function useVisualTestApp(opts?: { mutation?: Partial<UseMutationOptions<
 export function useForkApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/fork`, { method: "POST" }), ...(opts?.mutation as any) });
 }
-export function useListAppRuntimeErrors(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
+export function useListAppRuntimeErrors(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppRuntimeErrorsQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/runtime-errors`), ...(opts?.query as any) });
 }
 export function useClearAppRuntimeErrors(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/runtime-errors`, { method: "DELETE" }), ...(opts?.mutation as any) });
 }
-export function useGetAppNotes(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
+export function useGetAppNotes(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetAppNotesQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/notes`), ...(opts?.query as any) });
 }
 export function useUpdateAppNotes(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/apps/${id}/notes`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
-export function useListAppRevisions(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
+export function useListAppRevisions(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppRevisionsQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/revisions`), ...(opts?.query as any) });
 }
 export function useRestoreAppRevision(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, revisionId }: any) => apiFetch(`/api/apps/${id}/revisions/${revisionId}/restore`, { method: "POST" }), ...(opts?.mutation as any) });
 }
-export function useGetAppCustomDomain(id: number, opts?: { query?: Partial<UseQueryOptions> }) {
+export function useGetAppCustomDomain(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetAppCustomDomainQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/custom-domain`), ...(opts?.query as any) });
 }
 export function useAttachAppCustomDomain(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
@@ -164,16 +164,16 @@ export function useConfirmCheckout(opts?: { mutation?: Partial<UseMutationOption
   return useMutation<any, any, any>({ mutationFn: ({ data }: any) => apiFetch("/api/billing/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
 
-export const getGetGenerationJobLogsQueryKey = (id: number) => ["generation-job-logs", id];
-export async function getGenerationJobLogs(id: number, params: { afterId?: number }, options?: RequestInit): Promise<any> {
+export const getGetGenerationJobLogsQueryKey = (id: string) => ["generation-job-logs", id];
+export async function getGenerationJobLogs(id: string, params: { afterId?: number }, options?: RequestInit): Promise<any> {
   const searchParams = new URLSearchParams();
   if (params.afterId) searchParams.set("afterId", params.afterId.toString());
   return apiFetch(`/api/jobs/${id}/logs?${searchParams.toString()}`, options);
 }
 
 export interface JobLogEntry {
-  id: number;
-  jobId: number;
+  id: string;
+  jobId: string;
   agent: string;
   level: string;
   message: string;
