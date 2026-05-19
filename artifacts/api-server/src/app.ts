@@ -54,6 +54,15 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use("/api/billing/webhook", stripeWebhookRouter);
  
 app.use(cors({ credentials: true, origin: true }));
+
+// Security headers for Cross-Origin Isolation (required for WebContainers)
+app.use((_req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
+
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
  
