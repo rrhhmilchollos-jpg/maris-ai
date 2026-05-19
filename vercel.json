@@ -1,4 +1,5 @@
 {
+  "_version_trigger": "2026-05-19-06-45",
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm --filter @workspace/appforge build",
   "headers": [
