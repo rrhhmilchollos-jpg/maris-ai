@@ -6,6 +6,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
+import { makeSlug } from "../lib/deployBundle";
 import { validateBundle, type BuildIssue } from "../lib/validate";
 import { validateBundleInE2B } from "../lib/e2bValidator";
 import { shouldValidateInE2B } from "../lib/e2bGate";
@@ -2244,10 +2245,9 @@ export async function runJobById(jobId: string): Promise<void> {
         language: job.language,
         kind: job.kind,
         status: "ready",
+        publicSlug: makeSlug(),
       });
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
-    }
-
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
