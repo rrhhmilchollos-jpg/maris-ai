@@ -1593,7 +1593,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 )
               ) : activeTab === "live" ? (
                 app?.frontendCode ? (
-                  <LivePreview frontendCode={app.frontendCode} />
+                  <LivePreview 
+                    appId={String(app.id)} 
+                    appName={app.title} 
+                    frontendCode={app.frontendCode} 
+                    vercelUrl={app.vercelDeployUrl}
+                    onDeploy={() => vercelDeployMutation.mutate({ id: app.id })}
+                  />
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     Aún no hay bundle para ejecutar.
