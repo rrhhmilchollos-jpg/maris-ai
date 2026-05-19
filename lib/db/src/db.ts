@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 
-if (!process.env.MONGODB_URI) {
-  throw new Error("MONGODB_URI must be set");
-}
+const MONGODB_URI = process.env.MONGODB_URI?.trim().replace(/^["']|["']$/g, "");
 
-const MONGODB_URI = process.env.MONGODB_URI.trim().replace(/^["']|["']$/g, "");
+if (!MONGODB_URI) {
+  console.warn("MONGODB_URI not set — Database connection will fail when attempted.");
+}
 
 declare global {
   var _mongooseConnection: Promise<typeof mongoose> | undefined;
@@ -13,6 +13,9 @@ declare global {
 async function connectDB(): Promise<typeof mongoose> {
   if (global._mongooseConnection) {
     return global._mongooseConnection;
+  }
+  if (!MONGODB_URI) {
+    throw new Error("Cannot connect to MongoDB: MONGODB_URI is not defined.");
   }
   global._mongooseConnection = mongoose.connect(MONGODB_URI, {
     serverSelectionTimeoutMS: 10_000,

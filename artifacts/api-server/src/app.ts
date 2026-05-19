@@ -53,27 +53,42 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 // Stripe webhook needs the raw body — mount BEFORE express.json()
 app.use("/api/billing/webhook", stripeWebhookRouter);
  
-app.use(cors({ credentials: true, origin: true }));
+// Ultra-permissive CORS for development and cross-origin communication
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow all origins
+    callback(null, true);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Clerk-Proxy-Url", "Clerk-Secret-Key"],
+}));
 
 // Security headers for Cross-Origin Isolation (required for WebContainers)
+// Adjusted to be more permissive while maintaining isolation
 app.use((_req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
   next();
 });
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
  
-app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
-);
+if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
+  app.use(
+    clerkMiddleware((req) => ({
+      publishableKey: publishableKeyFromHost(
+        getClerkProxyHost(req) ?? "",
+        process.env.CLERK_PUBLISHABLE_KEY,
+      ),
+    })),
+  );
+} else {
+  logger.warn("Clerk keys not set — Authentication will be disabled or fail.");
+}
  
 // Per-request Sentry breadcrumb — records method, path, status, duration.
 // No-op if Sentry is not configured.

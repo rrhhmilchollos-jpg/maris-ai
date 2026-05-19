@@ -6,25 +6,21 @@ import { startSelfMonitor } from "./lib/selfMonitor";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
  
-const rawPort = process.env["PORT"];
- 
-if (!rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
-}
- 
+const rawPort = process.env["PORT"] || "3000";
 const port = Number(rawPort);
- 
+
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  logger.warn(`Invalid PORT value: "${rawPort}". Defaulting to 3000.`);
 }
+const finalPort = (Number.isNaN(port) || port <= 0) ? 3000 : port;
  
-app.listen(port, async (err) => {
+app.listen(finalPort, async (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
   }
  
-  logger.info({ port }, "Server listening");
+  logger.info({ port: finalPort }, "Server listening");
  
   // 0) Connect to MongoDB before anything else.
   try {
