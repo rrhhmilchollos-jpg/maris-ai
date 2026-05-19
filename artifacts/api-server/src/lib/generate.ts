@@ -1524,6 +1524,12 @@ export type PhaseErrorReporter = (
   extras?: Record<string, unknown>,
 ) => void;
 
+export interface GenerationCheckpoint {
+  phase: string;
+  data: any;
+  approvedFacets: string[];
+}
+
 export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
@@ -1534,7 +1540,8 @@ export async function generateApp(
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
   agentMemory?: AgentMemoryContext,
-): Promise<GeneratedAppPayload> {
+  checkpoint?: GenerationCheckpoint,
+): Promise<GeneratedAppPayload | GenerationCheckpoint> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -1559,7 +1566,7 @@ export async function generateApp(
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
-  log("planner", planSummaryEs(execPlan));
+  log("planner", "🤖 " + planSummaryEs(execPlan));
 
   // Edit mode
   if (previous) {
@@ -1637,10 +1644,19 @@ export async function generateApp(
   }
 
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
-  log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
+  log("architect", research ? "📐 Diseñando estructura con contexto de la web…" : "📐 Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research), 55_000, "architect"),
+    withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
   );
+
+  // --- FACET: Landing / Structure Approval ---
+  if (!checkpoint || !checkpoint.approvedFacets.includes("structure")) {
+    return {
+      phase: "awaiting_structure_approval",
+      approvedFacets: checkpoint?.approvedFacets || [],
+      data: { plan, research }
+    };
+  }
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
 
@@ -1650,8 +1666,8 @@ export async function generateApp(
   }
 
   onProgress?.({ phase: "integrating", progress: 20, note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…` });
-  if (runIntegration) log("integration", "Analizando servicios externos necesarios…");
-  if (runDesign) log("designer", "Eligiendo paleta y tipografía…");
+  if (runIntegration) log("integration", "🔌 Analizando servicios externos necesarios…");
+  if (runDesign) log("designer", "🎨 Eligiendo paleta y tipografía…");
 
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
@@ -1687,8 +1703,8 @@ export async function generateApp(
   log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
 
   onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
-  log("coder", `Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
-  if (plan.backendNeeded) log("coder", "Generando backend en paralelo…");
+  log("coder", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
+  if (plan.backendNeeded) log("coder", "⚙️ Generando backend en paralelo…");
 
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
@@ -1729,8 +1745,8 @@ export async function generateApp(
 
   /* === Phase 4 (parallel): QA + Tests === */
   onProgress?.({ phase: "reviewing", progress: 78, note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…" });
-  if (runQa) log("qa", "Revisando bundle en busca de bugs…");
-  if (runTests) log("qa", "Generando tests en paralelo…");
+  if (runQa) log("qa", "🔍 Revisando bundle en busca de bugs…");
+  if (runTests) log("qa", "🧪 Generando tests en paralelo…");
 
   const reviewPromise = runQa
     ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))

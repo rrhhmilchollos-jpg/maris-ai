@@ -145,6 +145,10 @@ export interface IGenerationJob extends Document {
   progress: number;
   appId?: string;
   errorMessage?: string;
+  currentAgent?: string;
+  awaitingApproval?: boolean;
+  approvedFacets?: string[];
+  checkpointData?: any;
   editAppId?: string;
   coderModel: string;
   language: string;
@@ -166,6 +170,10 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     progress: { type: Number, default: 0 },
     appId: { type: String },
     errorMessage: { type: String },
+    currentAgent: { type: String },
+    awaitingApproval: { type: Boolean, default: false },
+    approvedFacets: { type: [String], default: [] },
+    checkpointData: { type: Schema.Types.Mixed },
     editAppId: { type: String },
     coderModel: { type: String, default: "auto" },
     language: { type: String, default: "typescript" },

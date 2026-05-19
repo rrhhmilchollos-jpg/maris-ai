@@ -25,6 +25,10 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
       appId: job.appId,
       errorMessage: job.errorMessage,
       updatedAt: job.updatedAt,
+      currentAgent: (job as any).currentAgent,
+      awaitingApproval: (job as any).awaitingApproval,
+      approvedFacets: (job as any).approvedFacets,
+      checkpointData: (job as any).checkpointData,
       // ── preview en tiempo real ──
       partialFrontendCode: (job as any).partialFrontendCode ?? null,
     });
@@ -64,6 +68,59 @@ router.get("/jobs/:id/logs", requireAuth, async (req: any, res: any) => {
     })));
   } catch (err) {
     logger.error({ err, jobId: req.params.id }, "GET /api/jobs/:id/logs error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
+import { enqueueGenerateJob } from "../lib/jobQueue";
+
+// ── POST /api/jobs/:id/approve ── aprobar faceta y reanudar generación ──────
+router.post("/jobs/:id/approve", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const userId = req.userId as string;
+    const { facet } = req.body;
+
+    if (!facet) return res.status(400).json({ error: "facet es requerido" });
+
+    const job = await GenerationJob.findOne({ _id: req.params.id, userId });
+    if (!job) return res.status(404).json({ error: "Trabajo no encontrado" });
+
+    if (job.status !== "awaiting_approval") {
+      return res.status(400).json({ error: "El trabajo no está esperando aprobación" });
+    }
+
+    // Actualizar facetas aprobadas en el checkpointData
+    const checkpoint = (job as any).checkpointData || {};
+    const approvedFacets = [...(checkpoint.approvedFacets || [])];
+    if (!approvedFacets.includes(facet)) {
+      approvedFacets.push(facet);
+    }
+    checkpoint.approvedFacets = approvedFacets;
+
+    await GenerationJob.findByIdAndUpdate(req.params.id, {
+      $set: {
+        status: "queued",
+        phase: "resuming",
+        awaitingApproval: false,
+        approvedFacets: approvedFacets,
+        checkpointData: checkpoint,
+        updatedAt: new Date(),
+      },
+    });
+
+    await JobLog.create({
+      jobId: req.params.id,
+      agent: "system",
+      message: `✅ Faceta '${facet}' aprobada por el usuario. Reanudando...`,
+      level: "info",
+    });
+
+    await enqueueGenerateJob(req.params.id);
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, jobId: req.params.id }, "POST /api/jobs/:id/approve error");
     res.status(500).json({ error: "Error interno" });
   }
 });

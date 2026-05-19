@@ -73,6 +73,9 @@ export function useSendAppMessage(opts?: { mutation?: Partial<UseMutationOptions
 export function useGetGenerationJob(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetGenerationJobQueryKey(id), queryFn: () => apiFetch(`/api/jobs/${id}`), enabled: !!id, ...(opts?.query as any) });
 }
+export function useApproveFacet(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/jobs/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
 export function useListTemplates(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListTemplatesQueryKey(), queryFn: () => apiFetch("/api/templates"), ...(opts?.query as any) });
 }

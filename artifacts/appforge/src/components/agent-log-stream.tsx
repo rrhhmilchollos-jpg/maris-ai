@@ -13,7 +13,22 @@ import { Bot } from "lucide-react";
 // running — they want a single friendly assistant. The original `agent` field
 // is still preserved on the data row (for analytics / debugging) but is not
 // surfaced in the UI label.
-const ROBOT_LABEL = "Robot";
+const AGENT_LABELS: Record<string, string> = {
+  researcher: "Investigador",
+  architect: "Arquitecto",
+  designer: "Diseñador",
+  integration: "Integraciones",
+  coder: "Ingeniero",
+  frontend: "Frontend",
+  backend: "Backend",
+  qa: "QA Reviewer",
+  validator: "Validador",
+  patcher: "Patcher",
+  system: "Sistema",
+  memory: "Memoria",
+  planner: "Planner",
+};
+
 const ROBOT_COLOR = "text-emerald-300";
 
 function timeOf(iso: string): string {
@@ -194,7 +209,9 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
                 <Bot
                   className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${ROBOT_COLOR} ${vibrate}`}
                 />
-                <span className={`shrink-0 ${ROBOT_COLOR}`}>{ROBOT_LABEL}</span>
+                <span className={`shrink-0 ${ROBOT_COLOR} font-bold`}>
+                  {AGENT_LABELS[line.agent] || line.agent}
+                </span>
                 <span className="text-muted-foreground/40">›</span>
                 <span className={`min-w-0 break-words ${levelClass}`}>
                   {line.message}

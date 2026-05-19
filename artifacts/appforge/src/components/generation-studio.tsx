@@ -11,6 +11,8 @@ interface JobState {
   progress?: number;
   partialFrontendCode?: string | null;
   errorMessage?: string | null;
+  awaitingApproval?: boolean;
+  checkpointData?: any;
 }
 
 interface GenerationStudioProps {
@@ -187,14 +189,28 @@ function PreviewPane({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+import { useApproveFacet } from "@/lib/api-client";
+import { useQueryClient } from "@tanstack/react-query";
+import { getGetGenerationJobQueryKey } from "@/lib/api-client";
+
 export function GenerationStudio({
   jobId,
   job,
   phaseLabel,
   PhaseIcon,
 }: GenerationStudioProps) {
+  const queryClient = useQueryClient();
+  const approveMutation = useApproveFacet({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(jobId ?? 0) });
+      }
+    }
+  });
+
   const isActive =
-    job?.status !== "succeeded" && job?.status !== "failed" && jobId !== null;
+    job?.status !== "succeeded" && job?.status !== "failed" && jobId !== null && job?.status !== "awaiting_approval";
+  const isAwaitingApproval = job?.status === "awaiting_approval";
   const isDone = job?.status === "succeeded";
   const isFailed = job?.status === "failed";
   const progressValue = job?.progress ?? 0;
@@ -254,10 +270,33 @@ export function GenerationStudio({
             <Bot className="h-3.5 w-3.5 text-emerald-400" />
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Agentes
-            </span>
+            <div className="space-y-4">
+            {isAwaitingApproval && (
+              <div className="p-4 rounded-lg border border-primary/30 bg-primary/5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Bot className="h-5 w-5 text-primary robot-vibrate" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-primary">¡He terminado la estructura!</h4>
+                    <p className="text-xs text-muted-foreground">Revisa el plan y dame el visto bueno para empezar a programar.</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    className="flex-1 gap-2" 
+                    onClick={() => approveMutation.mutate({ id: String(jobId), data: { facet: "structure" } })}
+                    disabled={approveMutation.isPending}
+                  >
+                    {approveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                    Aprobar y continuar
+                  </Button>
+                </div>
+              </div>
+            )}
+            <AgentLogStream jobId={jobId} isActive={isActive || isAwaitingApproval} />
           </div>
-          <AgentLogStream jobId={jobId} isActive={isActive} />
-        </div>
 
         {/* Right — preview */}
         <div

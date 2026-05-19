@@ -2091,6 +2091,7 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     {
       status: "running",
       updatedAt: { $lt: staleDate },
+      awaitingApproval: { $ne: true },
       ...(opts.userId ? { userId: opts.userId } : {}),
     },
     {
@@ -2137,16 +2138,36 @@ export async function runJobById(jobId: string): Promise<void> {
       (job.language as any) || "typescript",
       log,
       [],
+      undefined,
+      undefined,
+      job.checkpointData ? (job.checkpointData as any) : undefined,
     );
+
+    if ((result as any).phase?.startsWith("awaiting_")) {
+      const checkpoint = result as any;
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: {
+          status: "awaiting_approval",
+          phase: checkpoint.phase,
+          awaitingApproval: true,
+          checkpointData: checkpoint,
+          updatedAt: new Date(),
+        },
+      });
+      await log("system", "⏸️ Generación pausada: esperando aprobación del usuario.");
+      return;
+    }
+
+    const finalResult = result as any;
 
     if (job.editAppId) {
       await GeneratedApp.findByIdAndUpdate(job.editAppId, {
         $set: {
-          title: result.title,
-          description: result.description,
-          techStack: result.techStack,
-          frontendCode: result.frontendCode,
-          backendCode: result.backendCode,
+          title: finalResult.title,
+          description: finalResult.description,
+          techStack: finalResult.techStack,
+          frontendCode: finalResult.frontendCode,
+          backendCode: finalResult.backendCode,
           status: "ready",
         },
       });
@@ -2158,13 +2179,13 @@ export async function runJobById(jobId: string): Promise<void> {
     } else {
       const app = await GeneratedApp.create({
         userId: job.userId,
-        title: result.title,
+        title: finalResult.title,
         prompt: job.prompt,
-        description: result.description,
-        techStack: result.techStack,
-        frontendCode: result.frontendCode,
-        backendCode: result.backendCode,
-        plannedPages: result.plannedPages || [],
+        description: finalResult.description,
+        techStack: finalResult.techStack,
+        frontendCode: finalResult.frontendCode,
+        backendCode: finalResult.backendCode,
+        plannedPages: finalResult.plannedPages || [],
         language: job.language,
         kind: job.kind,
         status: "ready",
