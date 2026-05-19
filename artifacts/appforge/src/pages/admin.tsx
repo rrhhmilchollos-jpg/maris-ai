@@ -42,7 +42,7 @@ import {
 type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news";
 
 interface MemoryEntry {
-  id: number;
+  id: string;
   errorMessage: string;
   errorContext: string;
   patchPreview: string;
@@ -116,7 +116,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
     }
   };
 
-  const deleteMemoryEntry = async (id: number) => {
+  const deleteMemoryEntry = async (id: string) => {
     try {
       const r = await fetch(`/api/admin/memory/${id}`, { method: "DELETE", credentials: "include" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);

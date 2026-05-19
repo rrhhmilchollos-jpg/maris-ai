@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
  * enough metadata to render a chip.
  */
 export interface UploadedAttachment {
-  id: number;
+  id: string;
   filename: string;
   mimeType: string;
   sizeBytes: number;
@@ -92,7 +92,7 @@ export function AttachmentPicker({
             continue;
           }
           const body = (await res.json()) as {
-            id: number;
+            id: string;
             filename: string;
             mimeType: string;
             sizeBytes: number;
@@ -119,7 +119,7 @@ export function AttachmentPicker({
   );
 
   const removeAt = useCallback(
-    (id: number) => {
+    (id: string) => {
       const removed = attachments.find((a) => a.id === id);
       if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
       onChange(attachments.filter((a) => a.id !== id));
@@ -166,7 +166,7 @@ export function AttachmentChips({
   testIdPrefix = "attachment",
 }: {
   attachments: UploadedAttachment[];
-  onRemove: (id: number) => void;
+  onRemove: (id: string) => void;
   testIdPrefix?: string;
 }) {
   if (attachments.length === 0) return null;
