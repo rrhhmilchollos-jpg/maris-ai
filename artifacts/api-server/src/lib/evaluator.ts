@@ -244,7 +244,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   });
 
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-7",
+    model: "claude-3-opus-20240229",
     max_tokens: 2000,
     messages: [{ role: "user", content }],
   });

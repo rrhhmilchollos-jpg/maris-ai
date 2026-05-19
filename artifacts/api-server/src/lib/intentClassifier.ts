@@ -210,7 +210,7 @@ export async function classifyChatIntent(
     const userContent = buildUserMessage(ctx);
     const result: any = await (anthropic.messages.create as any)(
       {
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-3-haiku-20240307",
         max_tokens: 400,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userContent }],

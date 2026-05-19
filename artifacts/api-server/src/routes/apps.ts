@@ -468,7 +468,7 @@ export async function researchTopic(prompt: string): Promise<string> {
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-3-5-haiku-20241022",
+          model: "claude-3-haiku-20240307",
           max_tokens: 1500,
           system: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
 - 1 short paragraph: what the source product/site does and who it's for.
@@ -506,7 +506,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
 
   const response = await withTimeoutOrThrow(
     anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 8192,
       system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
       messages: [{ role: "user", content: userContent }],
@@ -543,7 +543,7 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-3-5-haiku-20241022",
+        model: "claude-3-haiku-20240307",
         max_tokens: 4096,
         system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -591,9 +591,9 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (
     coderModel === "claude-haiku" ||
     coderModel === "claude-sonnet" ||
-    coderModel === "claude-opus-4-7" ||
-    coderModel === "claude-haiku-4-5-20251001" ||
-    coderModel === "claude-sonnet-4-5-20250929"
+    coderModel === "claude-3-opus-20240229" ||
+    coderModel === "claude-3-haiku-20240307" ||
+    coderModel === "claude-3-5-sonnet-20240620"
   ) return "claude-sonnet";
   // auto y cualquier otro valor — Claude Sonnet por defecto
   return "claude-sonnet";
@@ -666,7 +666,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     truncated = finishReason === "MAX_TOKENS";
   } else if (provider === "claude-sonnet") {
     const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 32000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -684,7 +684,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else {
     // Claude 3.5 Sonnet streaming (fallback)
     const stream = anthropic.messages.stream({
-      model: "claude-3-5-sonnet-20241022",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 32768,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -740,7 +740,7 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-3-5-sonnet-20240620",
         max_tokens: 8192,
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -778,7 +778,7 @@ async function specifyIntegrations(
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-3-5-haiku-20241022",
+          model: "claude-3-haiku-20240307",
           max_tokens: 800,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -831,7 +831,7 @@ async function reviewBundle(
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
         const response = await anthropic.messages.create({
-          model: "claude-3-5-haiku-20241022",
+          model: "claude-3-haiku-20240307",
           max_tokens: 700,
           system: "You are a QA reviewer for a React+TS+Tailwind bundle. Output JSON only.",
           messages: [
@@ -886,7 +886,7 @@ async function generateTests(
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
         const response = await anthropic.messages.create({
-          model: "claude-3-5-sonnet-20241022",
+          model: "claude-3-5-sonnet-20240620",
           max_tokens: 3000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -935,7 +935,7 @@ export async function patchBundle(
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-3-5-sonnet-20241022",
+          model: "claude-3-5-sonnet-20240620",
           max_tokens: 8192,
           system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
@@ -1354,7 +1354,7 @@ Return the FULL updated app as JSON.`;
       }
     } else if (provider === "claude-sonnet") {
       const stream = anthropic.messages.stream({
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-3-5-sonnet-20240620",
         max_tokens: 65536,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
@@ -1371,7 +1371,7 @@ Return the FULL updated app as JSON.`;
     } else {
       // Claude 3.5 Sonnet streaming (fallback)
       const stream = anthropic.messages.stream({
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-3-5-sonnet-20240620",
         max_tokens: 32768,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
