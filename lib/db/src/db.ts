@@ -4,7 +4,7 @@ if (!process.env.MONGODB_URI) {
   throw new Error("MONGODB_URI must be set");
 }
 
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI.trim().replace(/^["']|["']$/g, "");
 
 declare global {
   var _mongooseConnection: Promise<typeof mongoose> | undefined;
