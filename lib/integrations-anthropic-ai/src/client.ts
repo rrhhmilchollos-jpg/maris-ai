@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
+const apiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+
+if (!apiKey) {
   throw new Error(
-    "AI_INTEGRATIONS_ANTHROPIC_API_KEY must be set. Did you forget to add the Anthropic API key?",
+    "Anthropic API key not found. Please set AI_INTEGRATIONS_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY environment variable.",
   );
 }
 
@@ -10,7 +12,7 @@ if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
 // When not set, the SDK defaults to the official Anthropic API endpoint (https://api.anthropic.com).
 // Only set this variable if you are using a custom proxy or gateway.
 const clientOptions: ConstructorParameters<typeof Anthropic>[0] = {
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  apiKey: apiKey,
 };
 if (process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL) {
   clientOptions.baseURL = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
