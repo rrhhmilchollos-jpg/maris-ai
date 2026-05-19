@@ -321,6 +321,7 @@ function ClerkProviderWithRoutes() {
   );
 }
 
+// Version: 2026-05-19-07-00 (Split Screen Update)
 function App() {
   return (
     <TooltipProvider>
