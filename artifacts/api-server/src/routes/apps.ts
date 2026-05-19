@@ -2184,7 +2184,7 @@ export async function runJobById(jobId: string): Promise<void> {
       previousApp = await GeneratedApp.findById(job.editAppId).lean();
     }
 
-    const result = await generateAppFromLib(
+    const result = await generateApp(
       job.prompt,
       onProgress,
       previousApp,
