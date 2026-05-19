@@ -222,6 +222,19 @@ export default function DashboardPage() {
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
 
+  if (activeJobId && job) {
+    return (
+      <div className="h-screen w-screen bg-[#0a0a0f] fixed inset-0 z-[100]">
+        <GenerationStudio
+          jobId={Number(activeJobId)}
+          job={job}
+          phaseLabel={phaseInfo.label}
+          PhaseIcon={PhaseIcon}
+        />
+      </div>
+    );
+  }
+
   return (
     <Layout>
       <div className="container max-w-6xl mx-auto px-4 py-8 space-y-8">
