@@ -1835,39 +1835,23 @@ export async function generateApp(
   };
 }
 
-/* === FINAL EXPORTS (Required by index.ts and routes/index.ts) === */
-import { Router } from "express";
-
-/* ============================================================
- * REST API — /api/apps
- * Usa MongoDB (Mongoose) + lib/generate.ts (Anthropic).
- * ============================================================ */
+/* === REST API — /api/apps === */
 import { Router } from "express";
 import {
-  GeneratedApp, 
-  AppMessage, 
-  JobLog, 
+  GeneratedApp,
+  AppMessage,
+  JobLog,
   GenerationJob,
   AppImage,
   AppRuntimeError,
-  AppRevision
+  AppRevision,
 } from "@workspace/db/schema";
-import { requireAuth, isAdminEmail } from "../lib/auth";
-import { chargeCredits } from "../lib/credits";
-import {
-  generateApp as generateAppFromLib,
-  type GeneratedAppPayload,
-  type GenerateProgress,
-} from "../lib/generate";
+import { requireAuth } from "../lib/auth";
 import { enqueueGenerateJob } from "../lib/jobQueue";
 import mongoose from "mongoose";
 
 const router = Router();
 
-const CREDIT_COST_NEW_APP = 10;
-const CREDIT_COST_EDIT = 5;
-
-// Mapa de costes por tipo de app (KIND_COSTS)
 const KIND_COSTS: Record<string, number> = {
   fullstack:    1,
   landing:      1,
@@ -1882,7 +1866,7 @@ const KIND_COSTS: Record<string, number> = {
   "game-3d":    5,
 };
 
-// ── POST /api/apps ── genera y persiste una nueva app ─────────────────────
+// ── POST /api/apps ────────────────────────────────────────────────────────
 router.post("/apps", requireAuth, async (req: any, res: any) => {
   try {
     const { prompt, model, language, attachments, kind } = req.body;
@@ -1907,7 +1891,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     }
 
     const jobId = new mongoose.Types.ObjectId().toString();
-    const job = await GenerationJob.create({
+    await GenerationJob.create({
       _id: jobId,
       userId,
       prompt,
@@ -1928,7 +1912,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
   }
 });
 
-// ── GET /api/apps ── lista apps del usuario ───────────────────────────────
+// ── GET /api/apps ─────────────────────────────────────────────────────────
 router.get("/apps", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
@@ -1959,11 +1943,9 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
     const userId = req.userId as string;
     const appId = req.params.id;
 
-    // Verificar que la app existe y pertenece al usuario
     const app = await GeneratedApp.findOne({ _id: appId, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    // Borrado en cascada: eliminar todos los datos relacionados
     await Promise.all([
       GeneratedApp.deleteOne({ _id: appId }),
       AppMessage.deleteMany({ appId }),
@@ -1996,7 +1978,7 @@ router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   }
 });
 
-// ── POST /api/apps/:id/messages ── edita la app vía chat ─────────────────
+// ── POST /api/apps/:id/messages ───────────────────────────────────────────
 router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
@@ -2007,8 +1989,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    const cost = 1; // Edición estándar cuesta 1 crédito
-
+    const cost = 1;
     const charge = await chargeCredits({
       userId,
       isAdmin,
@@ -2057,8 +2038,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    const cost = 1; // Reintento cuesta 1 crédito
-
+    const cost = 1;
     const charge = await chargeCredits({
       userId,
       isAdmin,
@@ -2134,7 +2114,7 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
   }
 });
 
-// ── GET /api/templates ────────────────────────────────────────────────────────
+// ── GET /api/templates ────────────────────────────────────────────────────
 router.get("/templates", async (_req: any, res: any) => {
   try {
     res.json(TEMPLATES);
@@ -2151,7 +2131,6 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
 
-  // 1. Re-encolar jobs que se quedaron en "queued" (crash antes de boss.send)
   const orphanedQueued = await GenerationJob.find({
     status: "queued",
     updatedAt: { $lt: staleDate },
@@ -2163,7 +2142,6 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     await enqueueGenerateJob(String(job._id));
   }
 
-  // 2. Marcar como fallidos los jobs que llevan en "running" > 15 min
   const orphanedRunning = await GenerationJob.updateMany(
     {
       status: "running",
@@ -2213,7 +2191,7 @@ export async function runJobById(jobId: string): Promise<void> {
       job.coderModel,
       (job.language as any) || "typescript",
       log,
-      [], // attachments no implementados en job schema aún
+      [],
     );
 
     if (job.editAppId) {
@@ -2248,6 +2226,8 @@ export async function runJobById(jobId: string): Promise<void> {
         publicSlug: makeSlug(),
       });
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
+    }
+
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
