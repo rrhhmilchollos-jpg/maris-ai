@@ -113,7 +113,7 @@ export async function planExecution(
 
   try {
     const response = await Promise.race([
-      anthropic!.messages.create({
+      anthropic.messages.create({
         model: "claude-haiku-4-5-20251001", // Optimizado: haiku es suficiente para clasificar scope (ahorro ~95% vs opus)
         max_tokens: 200,
         system: PLANNER_SYSTEM,

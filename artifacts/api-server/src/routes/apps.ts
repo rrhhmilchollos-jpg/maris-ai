@@ -1,4 +1,5 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
 
 // OpenAI client via Maris AI AI Integrations proxy.
@@ -605,8 +606,7 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
     coderModel === "claude-sonnet" ||
     coderModel === "claude-opus-4-7" ||
     coderModel === "claude-haiku-4-5-20251001" ||
-    coderModel === "claude-sonnet-4-5-20250929" ||
-    coderModel === "claude-sonnet-4-20250514"
+    coderModel === "claude-sonnet-4-5-20250929"
   ) return "claude-sonnet";
   // auto y cualquier otro valor — Claude Sonnet por defecto
   return "claude-sonnet";
@@ -678,8 +678,8 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
     truncated = finishReason === "MAX_TOKENS";
   } else if (provider === "claude-sonnet") {
-    const stream = anthropic!.messages.stream({
-      model: "claude-sonnet-4-20250514",
+    const stream = anthropic.messages.stream({
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 32000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -1401,8 +1401,8 @@ Return the FULL updated app as JSON.`;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
     } else if (provider === "claude-sonnet") {
-      const stream = anthropic!.messages.stream({
-        model: "claude-sonnet-4-20250514",
+      const stream = anthropic.messages.stream({
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 65536,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
