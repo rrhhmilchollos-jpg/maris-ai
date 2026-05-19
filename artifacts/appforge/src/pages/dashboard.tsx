@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   useGetMyStats,
@@ -20,9 +19,9 @@ import {
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { AgentLogStream } from "@/components/agent-log-stream";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import { SupportPanel } from "@/components/support-panel";
+import { GenerationStudio } from "@/components/generation-studio";
 import {
   AttachmentPicker,
   AttachmentChips,
@@ -33,7 +32,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -223,7 +221,6 @@ export default function DashboardPage() {
   const isWorking = generateMutation.isPending || activeJobId !== null;
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
-  const progressValue = job?.progress ?? (generateMutation.isPending ? 5 : 0);
 
   return (
     <Layout>
@@ -293,20 +290,12 @@ export default function DashboardPage() {
               <AttachmentChips attachments={attachments} onRemove={(id) => { const removed = attachments.find((a) => a.id === id); if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl); setAttachments((prev) => prev.filter((a) => a.id !== id)); }} testIdPrefix="dashboard-attachment" />
 
               {isWorking && (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3" data-testid="generation-progress">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <PhaseIcon className={`h-5 w-5 text-primary flex-shrink-0 ${phaseInfo.icon === Loader2 ? "animate-spin" : ""}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{phaseInfo.label}</p>
-                        <p className="text-xs text-muted-foreground">La generación puede tardar entre 30 segundos y 1 minuto según la complejidad.</p>
-                      </div>
-                    </div>
-                    <div className="text-sm font-mono text-primary tabular-nums">{progressValue}%</div>
-                  </div>
-                  <Progress value={progressValue} className="h-2" />
-                  <AgentLogStream jobId={activeJobId} isActive={job?.status !== "succeeded" && job?.status !== "failed"} />
-                </div>
+                <GenerationStudio
+                  jobId={activeJobId}
+                  job={job as any}
+                  phaseLabel={phaseInfo.label}
+                  PhaseIcon={PhaseIcon}
+                />
               )}
 
               <div className="flex flex-wrap justify-between items-center gap-3">
