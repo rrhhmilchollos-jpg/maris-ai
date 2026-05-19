@@ -159,7 +159,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
 
   return (
     <div
-      className="rounded-md border border-border/40 bg-black/40 font-mono text-[11px] leading-relaxed"
+      className="rounded-xl border border-white/5 bg-black/40 font-mono text-[11px] leading-relaxed overflow-hidden"
       data-testid="agent-log-stream"
     >
       <div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5">

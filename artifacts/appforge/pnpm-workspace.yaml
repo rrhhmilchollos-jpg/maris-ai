@@ -4,6 +4,11 @@ packages:
   - lib/integrations/*
   - scripts
 
+allowBuilds:
+  '@clerk/shared': set this to true or false
+  es5-ext: set this to true or false
+  esbuild: set this to true or false
+
 autoInstallPeers: false
 
 catalog:
