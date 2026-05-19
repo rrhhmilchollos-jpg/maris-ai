@@ -23,18 +23,18 @@ export type GenLanguage = "typescript" | "javascript";
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
  *
- * Arquitectura Híbrida de Élite:
- *   - Si hay ANTHROPIC_API_KEY, el Architect y QA Reviewer usan Claude 3.5 para máxima precisión.
- *   - El resto de agentes usan Gemini 2.5 Flash para velocidad y búsqueda web.
+ * Arquitectura de Élite (Anthropic-First):
+ *   - Todos los agentes críticos usan Claude 3.5 (Sonnet o Haiku) para máxima precisión.
+ *   - Se ha eliminado la dependencia de Gemini para evitar errores 404 de modelos inexistentes.
  *
  * Agentes:
- *   - Researcher    (claude-haiku-4-5)   — referencia web
- *   - Architect     (claude-haiku-4-5)   — plan / estructura (rápido)
- *   - Designer      (claude-haiku-4-5)   — design system
- *   - Frontend Eng  (claude-sonnet-3-5) — bundle frontend
- *   - Backend Eng   (claude-sonnet-3-5) — bundle backend
- *   - QA Reviewer   (claude-haiku-4-5)   — revisión
- *   - Patcher       (claude-haiku-4-5)   — auto-fix
+ *   - Researcher    (claude-3-5-haiku)  — referencia web
+ *   - Architect     (claude-3-5-sonnet) — plan / estructura
+ *   - Designer      (claude-3-5-haiku)  — design system
+ *   - Frontend Eng  (claude-3-5-sonnet) — bundle frontend
+ *   - Backend Eng   (claude-3-5-sonnet) — bundle backend
+ *   - QA Reviewer   (claude-3-5-haiku)  — revisión
+ *   - Patcher       (claude-3-5-sonnet) — auto-fix
  * ========================================================================== */
 
 const useAnthropic = true; // Always use Anthropic — Gemini removed
@@ -1596,6 +1596,7 @@ export async function generateApp(
     } else {
       log("coder", "Pensando…");
     }
+    // singleEditPass is actually implemented in apps.ts, we use it here
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
     log("coder", "Código listo, comprobando que todo encaje…");
 
