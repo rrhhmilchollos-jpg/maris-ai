@@ -33,9 +33,71 @@ type JobHandler = (jobId: string, ctx: AttemptContext) => Promise<void>;
  
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let activeJobs = 0;
-let registeredHandler: JobHandler | null = null;
-let triggerPollFn: (() => Promise<void>) | null = null;
-let isStarted = false;
+  let registeredHandler: JobHandler | null = null;
+  let isStarted = false;
+
+  const triggerPoll = async () => {
+    if (activeJobs >= concurrency) return;
+    if (!registeredHandler) return;
+
+    try {
+      await connectDB();
+
+      // Claim up to (concurrency - activeJobs) queued jobs atomically.
+      const slots = concurrency - activeJobs;
+      const jobs = await GenerationJob.find({ status: "queued" })
+        .sort({ createdAt: 1 })
+        .limit(slots)
+        .lean();
+
+      for (const job of jobs) {
+        // Atomic claim — only one worker wins per job.
+        const claimed = await GenerationJob.findOneAndUpdate(
+          { _id: job._id, status: "queued" },
+          { $set: { status: "running", updatedAt: new Date() } },
+          { new: true },
+        );
+        if (!claimed) continue; // another worker claimed it first
+
+        activeJobs++;
+        const jobId = String(job._id);
+        const attempt = (job.retryCount ?? 0) + 1;
+
+        // Run the handler in the background (don't await in the poll loop).
+        (async () => {
+          try {
+            await registeredHandler!(jobId, { attempt, maxAttempts: MAX_ATTEMPTS });
+          } catch (err) {
+            logger.error({ err, jobId, attempt }, "Generation job worker threw");
+
+            if (attempt < MAX_ATTEMPTS) {
+              // Re-queue for retry.
+              await GenerationJob.findByIdAndUpdate(jobId, {
+                $set: { status: "queued", phase: "queued", updatedAt: new Date() },
+                $inc: { retryCount: 1 },
+              }).catch(() => {});
+            } else {
+              // Final failure — mark as failed.
+              await GenerationJob.findByIdAndUpdate(jobId, {
+                $set: {
+                  status: "failed",
+                  phase: "failed",
+                  errorMessage: err instanceof Error ? err.message : "Error desconocido",
+                  updatedAt: new Date(),
+                },
+              }).catch(() => {});
+            }
+          } finally {
+            activeJobs--;
+          }
+        })();
+      }
+    } catch (err) {
+      logger.error({ err }, "Job queue poll loop error");
+    }
+  };
+
+  triggerPollFn = triggerPoll;
  
 // ---------------------------------------------------------------------------
 // Queue lifecycle
@@ -182,8 +244,7 @@ export async function registerGenerateWorker(
     }
   };
 
-  triggerPollFn = triggerPoll;
-  pollInterval = setInterval(triggerPoll, DEFAULT_POLL_INTERVAL_MS);
+  pollInterval = setInterval(triggerPollFn, DEFAULT_POLL_INTERVAL_MS);
 
   // Prevent the interval from keeping Node alive if nothing else is running.
   if (pollInterval.unref) pollInterval.unref();

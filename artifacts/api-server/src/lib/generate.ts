@@ -40,6 +40,9 @@ export type GenLanguage = "typescript" | "javascript";
 
 const useAnthropic = true;
 const DEFAULT_MODEL = "claude-haiku-4-5";
+const AUTO_MODEL = "claude-sonnet-4-5";
+const OPUS_MODEL = "claude-opus-4-7";
+const GPT_MODEL = "gpt-5-4-ultra";
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
@@ -1442,13 +1445,13 @@ async function fastPatchEdit(
   onProgress?: (p: GenerateProgress) => void,
 ): Promise<GeneratedAppPayload | null> {
   onProgress?.({ phase: "fixing", progress: 30, note: "Aplicando parche directo…" });
-  log("patcher", "Aplicando tu cambio directamente al bundle (modo rápido).");
+  await log("patcher", "Aplicando tu cambio directamente al bundle (modo rápido).");
 
   let memoryBlock = "";
   try {
     const matches = await recallSimilar(prompt, { limit: 2, threshold: 0.78, language });
     if (matches.length > 0) {
-      log("memory", `🧠 recall · ${matches.length} cambio(s) similar(es) ya hechos`);
+      await log("memory", `🧠 recall · ${matches.length} cambio(s) similar(es) ya hechos`);
       memoryBlock = buildRecallExamplesBlock(matches);
     }
   } catch {
@@ -1465,7 +1468,7 @@ async function fastPatchEdit(
 
   const patched = await patchBundle(previous.frontendCode, issues, language, memoryBlock);
   if (!patched || patched.length < 100) {
-    log("patcher", "El parche directo devolvió un bundle vacío.", "warn");
+    await log("patcher", "El parche directo devolvió un bundle vacío.", "warn");
     return null;
   }
 
@@ -1475,7 +1478,7 @@ async function fastPatchEdit(
     const repaired = await runValidatePatchLoop(patched, { ok: true, issues: [] }, onProgress, 70, language, log);
     const finalValidation = await validateBundle(repaired);
     if (!finalValidation.ok && finalValidation.issues.length > 0) {
-      log("patcher", `Parche directo no convergió tras auto-reparación (${finalValidation.issues.length} error(es)). Cayendo al flujo completo.`, "warn");
+      await log("patcher", `Parche directo no convergió tras auto-reparación (${finalValidation.issues.length} error(es)). Cayendo al flujo completo.`, "warn");
       return null;
     }
     onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
@@ -1498,7 +1501,7 @@ async function fastPatchEdit(
   }).catch(() => {});
 
   onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
-  log("patcher", "✓ parche aplicado y validado.");
+  await log("patcher", "✓ parche aplicado y validado.");
   return {
     title: previous.title,
     description: previous.description,
@@ -1558,10 +1561,10 @@ export async function generateApp(
           // Fallback logic: if Opus fails twice, try Sonnet
           if (attempt >= 2 && currentModel?.includes("opus")) {
             const fallback = currentModel.replace("opus-4-7", "sonnet-4-6");
-            log("system", `🔄 Cambiando a modelo de respaldo (${fallback}) por saturación...`, "warn");
+            await log("system", `🔄 Cambiando a modelo de respaldo (${fallback}) por saturación...`, "warn");
             currentModel = fallback;
           } else {
-            log("system", `⚠️ Motor saturado (Intento ${attempt}/${MAX_RETRIES}). Reintentando en ${delay/1000}s...`, "warn");
+            await log("system", `⚠️ Motor saturado (Intento ${attempt}/${MAX_RETRIES}). Reintentando en ${delay/1000}s...`, "warn");
           }
           
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -1582,32 +1585,32 @@ export async function generateApp(
   const attachmentBlock = buildAttachmentBlock(attachments);
   if (attachmentBlock) prompt = `${attachmentBlock}\n${prompt}`;
 
-  const log: AgentLog = (agent, message, level = "info") => {
-    try { onAgentLog?.(agent, message, level); } catch { /* swallow */ }
+  const log: AgentLog = async (agent, message, level = "info") => {
+    try { await onAgentLog?.(agent, message, level); } catch { /* swallow */ }
   };
 
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
-  log("system", "🚀 Orquestador de Maris AI activado. Asignando agentes de élite...");
-  log("planner", "🤖 Analizando requerimientos y diseñando estrategia de ejecución...");
+  await log("system", "🚀 Orquestador de Maris AI activado. Asignando agentes de élite...");
+  await log("planner", "🤖 Analizando requerimientos y diseñando estrategia de ejecución...");
   
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
-  log("planner", "✅ Plan de ejecución listo: " + planSummaryEs(execPlan));
+  await log("planner", "✅ Plan de ejecución listo: " + planSummaryEs(execPlan));
 
   // Edit mode
   if (previous) {
     if (execPlan.scope === "fast-patch") {
       const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
       if (fastResult) return fastResult;
-      log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
+      await log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
       execPlan = { ...execPlan, scope: "feature", phases: PLAN_FEATURE.phases };
-      log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
+      await log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
     }
 
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
-    log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
-    log("coder", "Calentando motores…");
+    await log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
+    await log("coder", "Calentando motores…");
     const TARGET = 50_000;
     let lastHeartbeatAt = Date.now();
     const onChars = (chars: number) => {
@@ -1616,20 +1619,20 @@ export async function generateApp(
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
-        log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
+        await log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
     };
 
     if (execPlan.scope === "feature") {
-      log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
+      await log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
       if (execPlan.phases.includes("architect")) log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
       if (execPlan.phases.includes("frontend")) log("coder", "Frontend: aplicando la nueva funcionalidad…");
     } else {
-      log("coder", "Pensando…");
+      await log("coder", "Pensando…");
     }
     // singleEditPass is actually implemented in apps.ts, we use it here
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
-    log("coder", "Código listo, comprobando que todo encaje…");
+    await log("coder", "Código listo, comprobando que todo encaje…");
 
     const fixedFrontend = await runValidatePatchLoop(
       result.frontendCode,
@@ -1642,7 +1645,7 @@ export async function generateApp(
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
-    log("system", "Empaquetando todo…");
+    await log("system", "Empaquetando todo…");
     return { ...result, frontendCode: fixedFrontend };
   }
 
@@ -1654,7 +1657,7 @@ export async function generateApp(
   const runTests = execPlan.phases.includes("tests");
 
   /* === Phase 1: Parallel Research + Architect === */
-  log("system", "⚡ Iniciando motores de inteligencia en paralelo...");
+  await log("system", "⚡ Iniciando motores de inteligencia en paralelo...");
   
   const researchPromise = (runResearch && shouldResearch(prompt))
     ? runPhase("researcher", (m) => researchTopic(prompt, m), "claude-haiku-4-5")
@@ -1664,21 +1667,23 @@ export async function generateApp(
   const planPromise = runPhase("architect", async (m) => {
     const res = await researchPromise;
     if (res) log("researcher", "✅ Investigación completada. Inyectando contexto al arquitecto...");
-    return withTimeoutOrThrow(architectPlan(prompt, res, m), 60_000, "architect");
-  }, "claude-opus-4-7");
+    // Si el usuario no eligió un modelo específico, usamos Haiku para el plan inicial (ahorro)
+    const modelToUse = coderModel || DEFAULT_MODEL;
+    return withTimeoutOrThrow(architectPlan(prompt, res, modelToUse), 60_000, "architect");
+  }, coderModel || DEFAULT_MODEL);
 
   const [research, plan] = await Promise.all([researchPromise, planPromise]);
 
   // --- FACET: Landing / Structure Approval (AUTO-APPROVED for speed) ---
   // Hemos desactivado la pausa obligatoria para que los agentes trabajen sin parar,
   // tal como en emergent.sh, a menos que el usuario pida explícitamente pausar.
-  log("system", "Arquitectura aprobada automáticamente. Iniciando ingeniería...");
+  await log("system", "Arquitectura aprobada automáticamente. Iniciando ingeniería...");
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
 
-  log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
+  await log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
   if (plan.pages.length > 0) {
-    log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
+    await log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
   }
 
   onProgress?.({ phase: "integrating", progress: 20, note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…` });
@@ -1712,14 +1717,14 @@ export async function generateApp(
     : "Sin servicios externos requeridos.";
 
   if (integrationSpec.services.length > 0) {
-    log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
+    await log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
   } else {
-    log("integration", "Sin servicios externos requeridos.");
+    await log("integration", "Sin servicios externos requeridos.");
   }
-  log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
+  await log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
 
   onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
-  log("coder", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
+  await log("coder", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
   if (plan.backendNeeded) log("coder", "⚙️ Generando backend en paralelo…");
 
   /* === Phase 3 (parallel): frontend + backend === */
@@ -1733,12 +1738,12 @@ export async function generateApp(
       600_000,
       "frontend-engineer",
     ),
-    coderModel || "claude-opus-4-7"
+    coderModel || DEFAULT_MODEL
   );
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
-    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, m), "claude-opus-4-7")
+    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, m), coderModel || DEFAULT_MODEL)
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
@@ -1748,16 +1753,16 @@ export async function generateApp(
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
   if (!frontendResult.code) {
-    log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
+    await log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
     throw new Error(
       frontendResult.truncated
         ? "El ingeniero de frontend se quedó sin tokens. Pide una app más pequeña o más específica."
         : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
     );
   }
-  log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
+  await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
   if (plan.backendNeeded && backendResult?.code) {
-    log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
+    await log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
   }
 
   /* === Phase 4 (parallel): QA + Tests === */
@@ -1777,10 +1782,10 @@ export async function generateApp(
   if (!runTests) log("qa", "Plan dice saltar generación de tests.");
 
   const issueCount = report.issues?.length ?? 0;
-  log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
+  await log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
 
   /* === Phase 5: validate → patch loop === */
-  log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
+  await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
   const finalFrontend = await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
       frontendResult.code,
@@ -1796,7 +1801,7 @@ export async function generateApp(
   const testNote = testCode ? "✅ Tests generados. " : "";
   if (testCode) log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
   onProgress?.({ phase: "parsing", progress: 94, note: `${testNote}📦 Empaquetando archivos…` });
-  log("system", "Empaquetando archivos finales…");
+  await log("system", "Empaquetando archivos finales…");
 
   /* === Final assembly === */
   const setupNotes = buildSetupNotes(integrationSpec);
@@ -1821,7 +1826,7 @@ export async function generateApp(
     codeSnippets: [],
   }).catch(() => {});
 
-  log("memory", `🧠 generación guardada en memoria (${Math.round((Date.now() - _genStartTime) / 1000)}s)`);
+  await log("memory", `🧠 generación guardada en memoria (${Math.round((Date.now() - _genStartTime) / 1000)}s)`);
 
   return {
     title: plan.title.slice(0, 200),

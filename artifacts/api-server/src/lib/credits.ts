@@ -156,5 +156,12 @@ export async function chargeCredits(opts: {
     description,
   });
  
+  const LOW_CREDIT_THRESHOLD = 10; // Define el umbral de créditos bajos
+  if (updated.credits < LOW_CREDIT_THRESHOLD) {
+    // Aquí se podría integrar un sistema de notificación (email, webhook, etc.)
+    // Por ahora, lo registramos en el log.
+    logger.warn({ userId, currentCredits: updated.credits }, "¡Advertencia! Créditos de usuario bajos.");
+  }
+
   return { ok: true, newBalance: updated.credits };
 }

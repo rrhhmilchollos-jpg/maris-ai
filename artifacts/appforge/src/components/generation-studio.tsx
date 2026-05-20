@@ -90,7 +90,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
   const [showCreditsWarning, setShowCreditsWarning] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-opus-4-7");
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-haiku-4-5");
   const { data: models } = useListModels();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -120,6 +120,20 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
       },
     },
   });
+
+  const handleGenerate = () => {
+    if (!message.trim()) return;
+    generateAppMutation.mutate({
+      data: {
+        prompt: message,
+        model: selectedModel,
+        language: "typescript",
+        attachments: [],
+        kind: "fullstack"
+      }
+    });
+    setMessage("");
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -326,12 +340,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                       <div className="flex items-center gap-2">
                         <button onClick={() => alert("Mic")} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Mic className="h-4 w-4" /></button>
                         <button 
-                          onClick={() => {
-                            if (message.trim()) {
-                              generateAppMutation.mutate({ prompt: message, model: selectedModel, language: "typescript", attachments: [], kind: "web-app" });
-                              setMessage("");
-                            }
-                          }}
+                          onClick={handleGenerate}
                           disabled={!message.trim()}
                           className={`p-2 rounded-lg transition-all ${message.trim() ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white/5 text-white/20'}`}
                         >

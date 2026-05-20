@@ -2069,6 +2069,23 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
   }
 });
 
+// ── GET /api/models ───────────────────────────────────────────────────────
+router.get("/models", async (_req: any, res: any) => {
+  try {
+    const models = [
+      { id: "claude-sonnet-4-5", name: "Auto (Claude Sonnet 4.5)", provider: "anthropic" },
+      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic" },
+      { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5 (recomendado)", provider: "anthropic" },
+      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", provider: "anthropic" },
+      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai" },
+    ];
+    res.json(models);
+  } catch (err) {
+    logger.error({ err }, "GET /api/models error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
 // ── GET /api/templates ────────────────────────────────────────────────────
 router.get("/templates", async (_req: any, res: any) => {
   try {

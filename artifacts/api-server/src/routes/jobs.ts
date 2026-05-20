@@ -58,14 +58,14 @@ router.get("/jobs/:id/logs", requireAuth, async (req: any, res: any) => {
 
     const logs = await JobLog.find(query).sort({ _id: 1 }).lean();
 
-    res.json(logs.map(l => ({
+    res.json({ logs: logs.map(l => ({
       id: l._id,
       jobId: l.jobId,
       agent: l.agent,
       level: l.level,
       message: l.message,
       createdAt: l.createdAt,
-    })));
+    })) });
   } catch (err) {
     logger.error({ err, jobId: req.params.id }, "GET /api/jobs/:id/logs error");
     res.status(500).json({ error: "Error interno" });
