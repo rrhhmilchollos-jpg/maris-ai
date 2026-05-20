@@ -89,15 +89,13 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const [showPreview, setShowPreview] = useState(false);
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
-  const [showCreditsWarning, setShowCreditsWarning] = useState(false); // Default to false to avoid initial overlap
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-opus-4-7"); // Default to Opus 4.7, load from localStorage
+  const [showCreditsWarning, setShowCreditsWarning] = useState(false);
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-opus-4-7");
   const { data: models } = useListModels();
-
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Forzar que la preview esté cerrada al inicio de un nuevo trabajo
   useEffect(() => {
     if (job?.status === "starting" || job?.status === "queued") {
       setShowPreview(false);
@@ -115,11 +113,9 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const generateAppMutation = useGenerateApp({
     mutation: {
       onSuccess: (data) => {
-        // Handle success, e.g., navigate to the new job
         console.log("App generated successfully:", data);
       },
       onError: (error) => {
-        // Handle error
         console.error("Error generating app:", error);
       },
     },
@@ -143,54 +139,25 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   if (!job) {
     return (
       <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0a0a0f] text-white overflow-hidden">
-        {/* Background Effects */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] animate-pulse" />
-          <div className="absolute top-1/4 left-1/4 w-[300px] h-[300px] bg-accent/5 rounded-full blur-[100px] animate-bounce duration-[10s]" />
         </div>
-
         <div className="relative flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-1000">
           <div className="relative">
-            {/* Outer Ring */}
             <div className="h-48 w-48 rounded-full border-2 border-white/5" />
-            {/* Spinning Ring */}
             <div className="absolute inset-0 h-48 w-48 rounded-full border-t-2 border-primary animate-spin duration-[1.5s]" />
-            {/* Inner Core */}
             <div className="absolute inset-4 flex items-center justify-center">
               <div className="h-32 w-32 rounded-[40px] bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_0_50px_rgba(var(--primary-rgb),0.3)] border border-white/20">
                 <Bot className="h-16 w-16 text-white animate-pulse" />
               </div>
             </div>
-            {/* Floating Particles */}
-            <div className="absolute -top-4 -right-4 h-8 w-8 rounded-lg bg-primary/20 backdrop-blur-xl border border-white/10 animate-bounce flex items-center justify-center">
-              <Zap className="h-4 w-4 text-primary" />
-            </div>
-            <div className="absolute -bottom-2 -left-6 h-10 w-10 rounded-full bg-accent/20 backdrop-blur-xl border border-white/10 animate-pulse flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-accent" />
-            </div>
           </div>
-
           <div className="text-center space-y-4 relative z-10">
-            <div className="space-y-1">
-              <h3 className="text-3xl font-black tracking-tighter uppercase italic">Iniciando Sistema</h3>
-              <div className="h-1 w-24 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto" />
-            </div>
+            <h3 className="text-3xl font-black tracking-tighter uppercase italic">Iniciando Sistema</h3>
             <p className="text-sm font-medium text-white/40 max-w-[300px] leading-relaxed">
-              Conectando con el equipo de ingenieros de Maris AI. Preparando entorno de desarrollo de alta fidelidad...
+              Conectando con el equipo de ingenieros de Maris AI.
             </p>
           </div>
-
-          {/* Loading Bar */}
-          <div className="w-64 h-1 bg-white/5 rounded-full overflow-hidden mt-4">
-            <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: `40%` }} />
-          </div>
-        </div>
-
-        {/* Bottom Branding */}
-        <div className="absolute bottom-12 flex items-center gap-3 opacity-20">
-          <div className="h-px w-12 bg-white" />
-          <span className="text-[10px] font-black tracking-[0.3em] uppercase">Maris AI Engineering</span>
-          <div className="h-px w-12 bg-white" />
         </div>
       </div>
     );
@@ -198,7 +165,6 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
   return (
     <div className="h-full w-full flex flex-col bg-[#0a0a0f] text-white overflow-hidden" data-testid="generation-studio">
-      {/* Top Bar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-[#0d0d12] z-10">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -254,13 +220,9 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 divide-y lg:divide-y-0 lg:divide-x divide-white/10">
-        {/* Left Panel: Chat/Logs */}
         <div className={`flex flex-col min-h-0 bg-[#0d0d12] transition-all duration-500 ease-in-out relative ${showPreview ? 'w-full lg:w-[480px]' : 'flex-1'}`}>
           <div ref={scrollRef} className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar pb-40 ${!showPreview ? 'max-w-3xl mx-auto w-full' : ''}`}>
-            
-            {/* User Initial Message (Prompt) */}
             <div className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="h-8 w-8 rounded-full flex items-center justify-center border border-white/10 bg-white/5 shrink-0">
                 <div className="h-4 w-4 rounded-sm bg-gradient-to-br from-white/40 to-white/10" />
@@ -275,7 +237,6 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
               </div>
             </div>
 
-            {/* Blue Notice Banner */}
             <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 relative z-10">
                <div className="flex items-center gap-3">
                  <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
@@ -289,7 +250,6 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                </div>
             </div>
 
-            {/* Awaiting Approval Card */}
             {isAwaitingApproval && (
               <div className="p-5 rounded-2xl border border-primary/40 bg-primary/5 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
                 <div className="flex items-center gap-4 mb-5">
@@ -314,16 +274,11 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
             )}
 
             <AgentLogStream jobId={jobId} isActive={isActive || isAwaitingApproval} />
-            
-            {/* Spacer for bottom bar */}
-            {!showPreview && <div className="h-32" />}
           </div>
 
-          {/* Bottom Chat Bar (Only in Chat-Only mode) */}
           {!showPreview && (
             <div className="sticky bottom-0 left-0 right-0 p-6 bg-[#0d0d12] z-30 border-t border-white/5">
               <div className="max-w-3xl mx-auto space-y-4">
-                {/* Credits Warning - Redesigned to be less intrusive and avoid overlap */}
                 {showCreditsWarning && (
                   <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 shadow-2xl animate-in fade-in slide-in-from-bottom-2 mb-2">
                     <div className="flex items-center gap-2">
@@ -331,22 +286,12 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                       <span className="text-[11px] font-bold text-primary uppercase tracking-tight">Créditos bajos</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <button 
-                        onClick={() => {
-                          if (typeof window !== 'undefined') {
-                            window.location.href = "/billing";
-                          }
-                        }}
-                        className="text-[10px] font-bold text-white bg-primary px-3 py-1 rounded-md hover:bg-primary/90 transition-all"
-                      >
-                        RECARGAR
-                      </button>
+                      <button onClick={() => window.location.href = "/billing"} className="text-[10px] font-bold text-white bg-primary px-3 py-1 rounded-md hover:bg-primary/90 transition-all">RECARGAR</button>
                       <button onClick={() => setShowCreditsWarning(false)} className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
                     </div>
                   </div>
                 )}
 
-                {/* Input Area */}
                 <div className="relative group">
                   <div className="absolute inset-0 bg-primary/5 rounded-2xl blur-xl group-focus-within:bg-primary/10 transition-all" />
                   <div className="relative flex flex-col bg-[#16161e] border border-white/10 rounded-2xl shadow-2xl focus-within:border-primary/40 transition-all overflow-hidden">
@@ -359,52 +304,20 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                     <div className="flex items-center justify-between px-4 py-3 border-t border-white/5 bg-white/[0.02]">
                       <div className="flex items-center gap-1">
                         <input type="file" ref={fileInputRef} className="hidden" multiple />
-                        <button 
-                          onClick={() => fileInputRef.current?.click()}
-                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                        >
-                          <Paperclip className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => alert("Proyecto guardado en tu biblioteca.")}
-                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"
-                        >
-                          <RefreshCcw className="h-3.5 w-3.5" /> Save
-                        </button>
-                        <button 
-                          onClick={() => alert("Clonando proyecto para una nueva versión...")}
-                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"
-                        >
-                          <GitFork className="h-3.5 w-3.5" /> Fork
-                        </button>
-                        <div 
-                          onClick={() => setIsMaxx(!isMaxx)}
-                          className={`flex items-center gap-2 ml-2 px-2 py-1 rounded-lg border cursor-pointer transition-all ${isMaxx ? 'bg-primary/20 border-primary/40' : 'bg-white/5 border-white/10'}`}
-                        >
+                        <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Paperclip className="h-4 w-4" /></button>
+                        <button onClick={() => alert("Save")} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><RefreshCcw className="h-3.5 w-3.5" /> Save</button>
+                        <button onClick={() => alert("Fork")} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><GitFork className="h-3.5 w-3.5" /> Fork</button>
+                        <div onClick={() => setIsMaxx(!isMaxx)} className={`flex items-center gap-2 ml-2 px-2 py-1 rounded-lg border cursor-pointer transition-all ${isMaxx ? 'bg-primary/20 border-primary/40' : 'bg-white/5 border-white/10'}`}>
                           <Sparkles className={`h-3 w-3 ${isMaxx ? 'text-primary animate-pulse' : 'text-white/40'}`} />
                           <span className={`text-[10px] font-bold uppercase tracking-tighter ${isMaxx ? 'text-primary' : 'text-white/60'}`}>Maxx</span>
-                          <div className={`w-6 h-3 rounded-full relative transition-colors ${isMaxx ? 'bg-primary/40' : 'bg-white/10'}`}>
-                            <div className={`absolute top-0.5 w-2 h-2 rounded-full transition-all ${isMaxx ? 'right-0.5 bg-primary' : 'left-0.5 bg-white/40'}`} />
-                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button 
-                          onClick={() => alert("Escuchando... (Función de voz próximamente)")}
-                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                        >
-                          <Mic className="h-4 w-4" />
-                        </button>
+                        <button onClick={() => alert("Mic")} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Mic className="h-4 w-4" /></button>
                         <button 
                           onClick={() => {
                             if (message.trim()) {
-                              generateAppMutation.mutate({
-                                prompt: message,
-                                model: selectedModel, // Pass the selected model
-                                language: "typescript", // Default to typescript
-                                attachments: [],
-                                kind: "web-app", // Default to web-app
-                              });
+                              generateAppMutation.mutate({ prompt: message, model: selectedModel, language: "typescript", attachments: [], kind: "web-app" });
                               setMessage("");
                             }
                           }}
@@ -418,32 +331,25 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Right Panel: Preview */}
-          {showPreview && (
-            <div className="flex-1 flex flex-col min-h-0 bg-black relative animate-in slide-in-from-right duration-500">
-              <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} />
-              
-              {/* Emergent-style Bottom Floating Bar */}
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 pointer-events-none">
-                <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] pointer-events-auto">
-                  <div className="flex items-center gap-4">
-                    <div className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
-                    <p className="text-xs text-white/80 font-semibold tracking-tight">
-                      Vista previa en tiempo real.
-                    </p>
-                  </div>
-                  <button className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-white/90 transition-all active:scale-95 shadow-lg">
-                    Ver Código
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </div>
+
+        {showPreview && (
+          <div className="flex-1 flex flex-col min-h-0 bg-black relative animate-in slide-in-from-right duration-500">
+            <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} />
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 pointer-events-none">
+              <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] pointer-events-auto">
+                <div className="flex items-center gap-4">
+                  <div className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
+                  <p className="text-xs text-white/80 font-semibold tracking-tight">Vista previa en tiempo real.</p>
+                </div>
+                <button className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-white/90 transition-all active:scale-95 shadow-lg">Ver Código</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
 }
