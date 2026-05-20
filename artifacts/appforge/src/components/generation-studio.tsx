@@ -92,7 +92,6 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [, setLocation] = import("wouter").then(m => m.useLocation());
 
   const approveMutation = useApproveFacet({
     mutation: {
@@ -277,7 +276,11 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                     </div>
                     <div className="flex items-center gap-3">
                       <button 
-                        onClick={() => window.location.href = "/billing"}
+                        onClick={() => {
+                          if (typeof window !== 'undefined') {
+                            window.location.href = "/billing";
+                          }
+                        }}
                         className="text-[11px] font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-lg border border-white/10"
                       >
                         <ShoppingBag className="h-3 w-3" /> Comprar créditos
