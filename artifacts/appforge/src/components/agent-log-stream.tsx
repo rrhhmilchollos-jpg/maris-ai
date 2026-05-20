@@ -47,7 +47,7 @@ function timeOf(iso: string): string {
 
 interface AgentLogStreamProps {
   /** Job id whose logs to stream. Pass null to render nothing. */
-  jobId: number | null;
+  jobId: string | null;
   /** Whether the job is still running — when false we stop polling. */
   isActive: boolean;
 }
@@ -68,8 +68,8 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   // Local accumulating buffer. We can't rely on react-query data as the source
   // of truth because each poll only returns NEW lines (afterId > lastSeen).
   const [lines, setLines] = useState<JobLogEntry[]>([]);
-  const [lastId, setLastId] = useState(0);
-  const lastJobIdRef = useRef<number | null>(null);
+  const [lastId, setLastId] = useState<number | string>(0);
+  const lastJobIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Reset buffer whenever the job switches.
@@ -141,12 +141,18 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     if (!data?.logs?.length) return;
     setLines((prev) => {
       const seen = new Set(prev.map((l: any) => l.id));
-      const fresh = data.logs.filter((l) => !seen.has(l.id));
+      const fresh = data.logs.filter((l: any) => !seen.has(l.id));
       if (fresh.length === 0) return prev;
       return [...prev, ...fresh];
     });
-    const newest = Math.max(...data.logs.map((l: any) => l.id));
-    setLastId((prev) => (newest > prev ? newest : prev));
+    
+    // MongoDB IDs are strings and not strictly comparable via Math.max.
+    // However, the API server handles 'afterId' by timestamp or insertion order.
+    // We just need to track the last ID we've seen to pass it back.
+    const newestLog = data.logs[data.logs.length - 1];
+    if (newestLog) {
+      setLastId(newestLog.id);
+    }
   }, [data]);
 
   // Auto-scroll to bottom on new lines.

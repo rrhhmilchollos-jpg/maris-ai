@@ -224,12 +224,12 @@ export default function DashboardPage() {
   if (activeJobId && job) {
     return (
       <div className="h-screen w-screen bg-[#0a0a0f] fixed inset-0 z-[100]">
-        <GenerationStudio
-          jobId={activeJobId}
-          job={job}
-          phaseLabel={phaseInfo.label}
-          PhaseIcon={PhaseIcon}
-        />
+          <GenerationStudio
+            jobId={activeJobId}
+            job={job}
+            phaseLabel={phaseInfo.label}
+            PhaseIcon={PhaseIcon}
+          />
       </div>
     );
   }
