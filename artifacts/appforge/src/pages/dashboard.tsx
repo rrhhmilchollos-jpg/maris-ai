@@ -187,6 +187,7 @@ export default function DashboardPage() {
       setLocation("/billing");
       return;
     }
+    localStorage.setItem("appforge_last_prompt", prompt);
     generateMutation.mutate({ data: { prompt, coderModel, language, kind, attachmentIds: attachments.map((a: any) => a.id) } });
   };
 

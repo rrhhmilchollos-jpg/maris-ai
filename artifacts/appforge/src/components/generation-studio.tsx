@@ -184,6 +184,21 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
         <div className={`flex flex-col min-h-0 bg-[#0d0d12] transition-all duration-500 ease-in-out relative ${showPreview ? 'w-full lg:w-[480px]' : 'flex-1'}`}>
           <div ref={scrollRef} className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${!showPreview ? 'max-w-3xl mx-auto w-full' : ''}`}>
             
+            {/* User Initial Message (Prompt) */}
+            <div className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="h-8 w-8 rounded-full flex items-center justify-center border border-white/10 bg-white/5 shrink-0">
+                <div className="h-4 w-4 rounded-sm bg-gradient-to-br from-white/40 to-white/10" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-tight text-white/40">Tú</span>
+                </div>
+                <div className="p-4 rounded-2xl text-sm leading-relaxed bg-white/[0.03] border border-white/5 text-white/90 shadow-sm">
+                  {localStorage.getItem("appforge_last_prompt") || "Crea una aplicación increíble para mí."}
+                </div>
+              </div>
+            </div>
+
             {/* Blue Notice Banner */}
             <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4">
                <div className="flex items-center gap-3">
