@@ -473,7 +473,7 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
       }
       }
     })(),
-    hasUrl ? 18_000 : 9_000,
+    hasUrl ? 25_000 : 20_000,
     "",
   );
 }
