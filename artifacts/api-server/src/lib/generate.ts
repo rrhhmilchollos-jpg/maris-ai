@@ -474,7 +474,6 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
         logger.error({ err }, "researchTopic: Anthropic API call failed");
         return "";
       }
-      }
     })(),
     hasUrl ? 25_000 : 20_000,
     "",

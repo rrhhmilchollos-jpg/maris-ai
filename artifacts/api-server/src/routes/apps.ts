@@ -1532,8 +1532,6 @@ export async function generateApp(
   onAgentLog?: AgentLog,
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
-  agentMemory?: AgentMemoryContext,
-  onPartialCode?: (code: string) => void,
 ): Promise<GeneratedAppPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
@@ -1579,7 +1577,6 @@ export async function generateApp(
       const chars = accumulatedCode.length;
       const ratio = Math.min(1, chars / TARGET);
       onProgress?.({ phase: "generating", progress: 20 + Math.round(ratio * 50), note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)` });
-      onPartialCode?.(accumulatedCode);
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
@@ -1693,13 +1690,12 @@ export async function generateApp(
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
   let lastLogChars = 0;
-  const frontendPromise = runPhase("frontend", () =>
+  const frontendPromise = runPhase("frontend", async () =>
     withTimeoutOrThrow(
       generateFrontendCode(plan, design, research, prompt, async (accumulatedCode) => {
         const chars = accumulatedCode.length;
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
-        onPartialCode?.(accumulatedCode);
         
         // Log cada 5KB para dar feedback visual al usuario (Mejorado de 10KB)
         if (chars - lastLogChars >= 5000) {
@@ -2225,9 +2221,7 @@ export async function runJobById(jobId: string): Promise<void> {
       log,
       [],
       undefined,
-      undefined,
       job.checkpointData ? (job.checkpointData as any) : undefined,
-      onPartialCode,
     );
 
     if ((result as any).phase?.startsWith("awaiting_")) {
