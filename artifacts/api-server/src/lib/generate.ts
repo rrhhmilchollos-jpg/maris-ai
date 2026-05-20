@@ -15,6 +15,8 @@ import { recallGenerations, rememberGeneration, buildGenerationMemoryBlock } fro
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  maxRetries: 5,
+  timeout: 60 * 1000, // 60 seconds
 });
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
@@ -1539,20 +1541,30 @@ export async function generateApp(
   agentMemory?: AgentMemoryContext,
   checkpoint?: GenerationCheckpoint,
 ): Promise<GeneratedAppPayload | GenerationCheckpoint> {
-  const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
+  const runPhase = async <T>(phase: string, fn: (currentModel?: string) => Promise<T>, modelToUse?: string): Promise<T> => {
     let lastError: any;
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 4;
+    let currentModel = modelToUse;
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        return await fn();
+        return await fn(currentModel);
       } catch (err: any) {
         lastError = err;
         const isOverloaded = err?.message?.includes("Overloaded") || err?.status === 529 || err?.status === 429;
         
         if (isOverloaded && attempt < MAX_RETRIES) {
-          const delay = attempt * 2000;
-          log("system", `⚠️ El motor de IA está saturado (Intento ${attempt}/${MAX_RETRIES}). Reintentando en ${delay/1000}s...`, "warn");
+          const delay = attempt * 3000;
+          
+          // Fallback logic: if Opus fails twice, try Sonnet
+          if (attempt >= 2 && currentModel?.includes("opus")) {
+            const fallback = currentModel.replace("opus-4-7", "sonnet-4-6");
+            log("system", `🔄 Cambiando a modelo de respaldo (${fallback}) por saturación...`, "warn");
+            currentModel = fallback;
+          } else {
+            log("system", `⚠️ Motor saturado (Intento ${attempt}/${MAX_RETRIES}). Reintentando en ${delay/1000}s...`, "warn");
+          }
+          
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -1646,15 +1658,15 @@ export async function generateApp(
   log("system", "⚡ Iniciando motores de inteligencia en paralelo...");
   
   const researchPromise = (runResearch && shouldResearch(prompt))
-    ? runPhase("researcher", () => researchTopic(prompt))
+    ? runPhase("researcher", (m) => researchTopic(prompt, m), "claude-haiku-4-5")
     : Promise.resolve("");
 
   // We start architecting immediately with the prompt, and inject research if it finishes fast
-  const planPromise = runPhase("architect", async () => {
+  const planPromise = runPhase("architect", async (m) => {
     const res = await researchPromise;
     if (res) log("researcher", "✅ Investigación completada. Inyectando contexto al arquitecto...");
-    return withTimeoutOrThrow(architectPlan(prompt, res), 60_000, "architect");
-  });
+    return withTimeoutOrThrow(architectPlan(prompt, res, m), 60_000, "architect");
+  }, "claude-opus-4-7");
 
   const [research, plan] = await Promise.all([researchPromise, planPromise]);
 
@@ -1676,7 +1688,7 @@ export async function generateApp(
 
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
-    ? runPhase("integrations", () => specifyIntegrations(plan, prompt))
+    ? runPhase("integrations", (m) => specifyIntegrations(plan, prompt, m), "claude-haiku-4-5")
     : Promise.resolve({ services: [], envVars: [] });
 
   const FALLBACK_DESIGN: DesignSystem = {
@@ -1689,7 +1701,7 @@ export async function generateApp(
     globalCSS: "",
   };
   const designPromise: Promise<DesignSystem> = runDesign
-    ? runPhase("design", () => designSystem(plan, research))
+    ? runPhase("design", (m) => designSystem(plan, research, m), "claude-sonnet-4-6")
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
@@ -1713,20 +1725,21 @@ export async function generateApp(
 
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
-  const frontendPromise = runPhase("frontend", () =>
+  const frontendPromise = runPhase("frontend", (m) =>
     withTimeoutOrThrow(
       generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(chars / 1000)} KB…` });
-      }, coderModel, language),
+      }, m || coderModel, language),
       600_000,
       "frontend-engineer",
     ),
+    coderModel || "claude-opus-4-7"
   );
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
-    ? runPhase("backend", () => generateBackendCode(plan, prompt))
+    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, m), "claude-opus-4-7")
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
