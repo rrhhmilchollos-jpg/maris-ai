@@ -164,6 +164,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           job={job}
           phaseLabel={phaseInfo.label}
           PhaseIcon={phaseInfo.icon}
+          appId={id}
         />
       </div>
     );

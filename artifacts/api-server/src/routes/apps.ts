@@ -18,6 +18,7 @@ import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
+import { pushAppToGitHub } from "../lib/githubPush";
 import { connectDB } from "@workspace/db";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
@@ -1894,6 +1895,46 @@ router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
   } catch (err) {
     logger.error({ err }, "GET /api/apps/:id error");
     res.status(500).json({ error: "Error interno" });
+  }
+});
+
+// ── POST /api/apps/:id/github ─────────────────────────────────────────────
+router.post("/apps/:id/github", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    if (!app.frontendCode || String(app.frontendCode).trim().length < 20) {
+      return res.status(400).json({ error: "La app todavía no tiene frontend listo para subir." });
+    }
+
+    const result = await pushAppToGitHub({
+      title: app.title || "Maris AI App",
+      description: app.description || app.prompt || "Proyecto generado con Maris AI",
+      frontendBundle: app.frontendCode,
+      existingRepoFullName: app.githubRepoFullName || null,
+    });
+
+    const updated = await GeneratedApp.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      {
+        githubRepoUrl: result.url,
+        githubRepoFullName: result.repoFullName,
+      },
+      { new: true },
+    );
+
+    res.json({
+      ok: true,
+      url: result.url,
+      repoFullName: result.repoFullName,
+      updated: result.updated,
+      app: updated,
+    });
+  } catch (err) {
+    logger.error({ err, appId: req.params.id, userId: req.userId }, "POST /api/apps/:id/github error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "No se pudo subir a GitHub" });
   }
 });
 

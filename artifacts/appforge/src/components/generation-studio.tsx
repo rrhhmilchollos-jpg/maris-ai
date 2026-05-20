@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, GitFork, ShoppingBag, ArrowRight, Star } from "lucide-react";
+import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ShoppingBag, ArrowRight, Star, Github } from "lucide-react";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { useApproveFacet, useListModels, useGenerateApp, useGetMe } from "@/lib/api-client";
+import { useApproveFacet, useListModels, useGenerateApp, useGetMe, usePushAppToGitHub, useDeployApp } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetGenerationJobQueryKey } from "@/lib/api-client";
+import { useToast } from "@/hooks/use-toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ interface GenerationStudioProps {
   job: JobState | null | undefined;
   phaseLabel: string;
   PhaseIcon: React.ComponentType<{ className?: string }>;
+  appId?: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ function bundleToPreviewHtml(code: string | null | undefined): string | null {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function PreviewPane({ code, isActive, onClose }: { code: string | null | undefined; isActive: boolean; onClose: () => void }) {
+function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying }: { code: string | null | undefined; isActive: boolean; onClose: () => void; onDeploy?: () => void; isDeploying?: boolean }) {
   const html = bundleToPreviewHtml(code);
 
   return (
@@ -53,7 +55,14 @@ function PreviewPane({ code, isActive, onClose }: { code: string | null | undefi
         </div>
         <div className="flex items-center gap-2">
           <button className="p-1.5 hover:bg-white/5 rounded-md text-white/40 hover:text-white transition-colors" title="Compartir"><Share2 className="h-3.5 w-3.5" /></button>
-          <button className="p-1.5 hover:bg-white/5 rounded-md text-white/40 hover:text-white transition-colors" title="Desplegar"><Rocket className="h-3.5 w-3.5" /></button>
+          <button
+            onClick={onDeploy}
+            disabled={!onDeploy || isDeploying}
+            className="p-1.5 hover:bg-white/5 rounded-md text-white/40 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Deploy · 50 créditos"
+          >
+            {isDeploying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+          </button>
           <button className="p-1.5 hover:bg-white/5 rounded-md text-white/40 hover:text-white transition-colors" title="Refrescar"><RefreshCcw className="h-3.5 w-3.5" /></button>
           <div className="w-px h-4 bg-white/10 mx-1" />
           <button 
@@ -87,7 +96,7 @@ function PreviewPane({ code, isActive, onClose }: { code: string | null | undefi
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: GenerationStudioProps) {
+export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: GenerationStudioProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
@@ -97,6 +106,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const { data: me } = useGetMe();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -124,6 +134,48 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
       },
     },
   });
+
+  const pushToGitHubMutation = usePushAppToGitHub({
+    mutation: {
+      onSuccess: (data: any) => {
+        toast({
+          title: data?.updated ? "GitHub actualizado" : "Proyecto subido a GitHub",
+          description: "El repositorio ya está disponible para descargar o clonar.",
+        });
+        if (data?.url) window.open(data.url, "_blank", "noopener,noreferrer");
+      },
+      onError: (error: any) => {
+        toast({ title: "No se pudo subir a GitHub", description: error?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const deployAppMutation = useDeployApp({
+    mutation: {
+      onSuccess: (data: any) => {
+        toast({ title: "Deploy completado", description: data?.deploymentUrl ?? "El proyecto se ha compilado correctamente." });
+        if (data?.deploymentUrl) window.open(data.deploymentUrl, "_blank", "noopener,noreferrer");
+      },
+      onError: (error: any) => {
+        toast({ title: "No se pudo completar el Deploy", description: error?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const handlePushToGitHub = () => {
+    if (!appId || pushToGitHubMutation.isPending) return;
+    pushToGitHubMutation.mutate({ id: appId });
+  };
+
+  const handleDeploy = () => {
+    if (!appId || deployAppMutation.isPending) return;
+    if (!me?.isAdmin && (me?.credits ?? 0) < 50) {
+      toast({ title: "Créditos insuficientes", description: "El Deploy cuesta 50 créditos.", variant: "destructive" });
+      setLocation("/billing");
+      return;
+    }
+    deployAppMutation.mutate({ id: appId });
+  };
 
   const handleGenerate = () => {
     if (!message.trim()) return;
@@ -371,8 +423,15 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                       <div className="flex items-center gap-1">
                         <input type="file" ref={fileInputRef} className="hidden" multiple />
                         <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Paperclip className="h-4 w-4" /></button>
-                        <button onClick={() => alert("Save")} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><RefreshCcw className="h-3.5 w-3.5" /> Save</button>
-                        <button onClick={() => alert("Fork")} className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><GitFork className="h-3.5 w-3.5" /> Fork</button>
+                        <button
+                          onClick={handlePushToGitHub}
+                          disabled={!appId || pushToGitHubMutation.isPending}
+                          aria-label="Subir a GitHub"
+                          title="Subir a GitHub"
+                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {pushToGitHubMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+                        </button>
                         <div onClick={() => setIsMaxx(!isMaxx)} className={`flex items-center gap-2 ml-2 px-2 py-1 rounded-lg border cursor-pointer transition-all ${isMaxx ? 'bg-primary/20 border-primary/40' : 'bg-white/5 border-white/10'}`}>
                           <Sparkles className={`h-3 w-3 ${isMaxx ? 'text-primary animate-pulse' : 'text-white/40'}`} />
                           <span className={`text-[10px] font-bold uppercase tracking-tighter ${isMaxx ? 'text-primary' : 'text-white/60'}`}>Maxx</span>
@@ -398,7 +457,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
         {showPreview && (
           <div className="flex-1 flex flex-col min-h-0 bg-black relative animate-in slide-in-from-right duration-500">
-            <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} />
+            <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} onDeploy={appId ? handleDeploy : undefined} isDeploying={deployAppMutation.isPending} />
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 pointer-events-none">
               <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] pointer-events-auto">
                 <div className="flex items-center gap-4">

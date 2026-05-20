@@ -96,40 +96,28 @@ function repoNameFromTitle(title: string): string {
 }
 
 /**
- * Build the file map (frontend/* + optional backend/* + README.md + a
- * top-level .gitignore that keeps node_modules and Vercel build artefacts
- * out of the repo). Returned shape is deterministic: same app contents →
- * same file list. This lets a re-push produce a clean snapshot tree (no
- * stale leftovers from previous pushes).
+ * Build the file map (frontend/* + README.md + a top-level .gitignore
+ * that keeps node_modules and build artefacts out of the repo). Returned shape
+ * is deterministic: same app contents → same file list. This lets a re-push
+ * produce a clean snapshot tree (no stale leftovers from previous pushes).
  */
 function buildFileMap(opts: {
   title: string;
   description: string;
   frontendBundle: string;
-  backendBundle: string;
 }): Record<string, string> {
   const files: Record<string, string> = {};
   const frontendFiles = bundleToFiles(opts.frontendBundle);
   for (const [p, contents] of Object.entries(frontendFiles)) {
     files[`frontend/${p}`] = contents;
   }
-  const hasBackend =
-    opts.backendBundle &&
-    !/^no backend required/i.test(opts.backendBundle.trim());
-  if (hasBackend) {
-    const backendFiles = bundleToFiles(opts.backendBundle);
-    for (const [p, contents] of Object.entries(backendFiles)) {
-      files[`backend/${p}`] = contents;
-    }
-  }
   files["README.md"] =
     `# ${opts.title}\n\n${opts.description}\n\n` +
     `Generado y mantenido automáticamente por **Maris AI**. ` +
     `Cada vez que actualizas la app desde Maris AI, este repo recibe un ` +
-    `commit nuevo en \`main\` con la versión actual del código.\n\n` +
+    `commit nuevo en \`main\` con la versión actual del frontend.\n\n` +
     `## Estructura\n\n` +
     `- \`frontend/\` — React + Vite + Tailwind\n` +
-    `${hasBackend ? `- \`backend/\` — Node + Express\n` : ""}` +
     `\n## Cómo correrlo en local\n\n` +
     `\`\`\`bash\ncd frontend\nnpm install\nnpm run dev\n\`\`\`\n`;
   files[".gitignore"] =
@@ -152,7 +140,7 @@ export async function pushAppToGitHub(opts: {
   title: string;
   description: string;
   frontendBundle: string;
-  backendBundle: string;
+  backendBundle?: string;
   /** Persisted from the last successful push. Null on first push. */
   existingRepoFullName?: string | null;
 }): Promise<{ url: string; repoFullName: string; updated: boolean }> {
