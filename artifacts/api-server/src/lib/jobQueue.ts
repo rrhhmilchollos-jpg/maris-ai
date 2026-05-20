@@ -110,8 +110,7 @@ export async function registerGenerateWorker(
     return;
   }
   registeredHandler = handler;
-  triggerPollFn = triggerPoll;
- 
+
   const concurrency = (() => {
     const raw = process.env.JOB_CONCURRENCY;
     if (!raw) return DEFAULT_CONCURRENCY;
@@ -183,8 +182,9 @@ export async function registerGenerateWorker(
     }
   };
 
+  triggerPollFn = triggerPoll;
   pollInterval = setInterval(triggerPoll, DEFAULT_POLL_INTERVAL_MS);
- 
+
   // Prevent the interval from keeping Node alive if nothing else is running.
   if (pollInterval.unref) pollInterval.unref();
 }
