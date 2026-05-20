@@ -1548,47 +1548,47 @@ export async function generateApp(
   const attachmentBlock = buildAttachmentBlock(attachments);
   if (attachmentBlock) prompt = `${attachmentBlock}\n${prompt}`;
 
-  const log: AgentLog = (agent, message, level = "info") => {
-    try { onAgentLog?.(agent, message, level); } catch { /* swallow */ }
+  const log: AgentLog = async (agent, message, level = "info") => {
+    try { await onAgentLog?.(agent, message, level); } catch { /* swallow */ }
   };
 
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
-  log("planner", planSummaryEs(execPlan));
+  await log("planner", planSummaryEs(execPlan));
 
   // Edit mode
   if (previous) {
     if (execPlan.scope === "fast-patch") {
       const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
       if (fastResult) return fastResult;
-      log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
+      await log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
       execPlan = { ...execPlan, scope: "feature", phases: PLAN_FEATURE.phases };
-      log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
+      await log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
     }
 
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
-    log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
-    log("coder", "Calentando motores…");
+    await log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
+    await log("coder", "Calentando motores…");
     const TARGET = 50_000;
     let lastHeartbeatAt = Date.now();
-    const onChars = (chars: number) => {
+    const onChars = async (chars: number) => {
       const ratio = Math.min(1, chars / TARGET);
       onProgress?.({ phase: "generating", progress: 20 + Math.round(ratio * 50), note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)` });
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
-        log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
+        await log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
     };
 
     if (execPlan.scope === "feature") {
-      log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
-      if (execPlan.phases.includes("architect")) log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
-      if (execPlan.phases.includes("frontend")) log("coder", "Frontend: aplicando la nueva funcionalidad…");
+      await log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
+      if (execPlan.phases.includes("architect")) await log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
+      if (execPlan.phases.includes("frontend")) await log("coder", "Frontend: aplicando la nueva funcionalidad…");
     } else {
-      log("coder", "Pensando…");
+      await log("coder", "Pensando…");
     }
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
     log("coder", "Código listo, comprobando que todo encaje…");
@@ -1619,35 +1619,35 @@ export async function generateApp(
   let research = "";
   if (runResearch && shouldResearch(prompt)) {
     onProgress?.({ phase: "researching", progress: 6, note: "🔎 Investigador buscando referencias en la web (máx 7s)…" });
-    log("researcher", "Buscando referencias en la web (máx 7s)…");
+    await log("researcher", "Buscando referencias en la web (máx 7s)…");
     research = await runPhase("researcher", () => researchTopic(prompt));
     if (research) {
-      log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
+      await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
     } else {
-      log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
+      await log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
     }
   } else if (!runResearch) {
-    log("researcher", "Plan dice saltar investigación (alcance reducido).");
+    await log("researcher", "Plan dice saltar investigación (alcance reducido).");
   } else {
-    log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
+    await log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
   }
 
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
-  log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
+  await log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
     withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
   );
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
 
-  log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
+  await log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
   if (plan.pages.length > 0) {
-    log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
+    await log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
   }
 
   onProgress?.({ phase: "integrating", progress: 20, note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…` });
-  if (runIntegration) log("integration", "Analizando servicios externos necesarios…");
-  if (runDesign) log("designer", "Eligiendo paleta y tipografía…");
+  if (runIntegration) await log("integration", "Analizando servicios externos necesarios…");
+  if (runDesign) await log("designer", "Eligiendo paleta y tipografía…");
 
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
@@ -1668,33 +1668,40 @@ export async function generateApp(
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
-  if (!runIntegration) log("integration", "Plan dice saltar integraciones (alcance reducido).");
-  if (!runDesign) log("designer", "Plan dice saltar diseño (uso paleta por defecto).");
+  if (!runIntegration) await log("integration", "Plan dice saltar integraciones (alcance reducido).");
+  if (!runDesign) await log("designer", "Plan dice saltar diseño (uso paleta por defecto).");
 
   const integrationsNote = integrationSpec.services.length > 0
     ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
     : "Sin servicios externos requeridos.";
 
   if (integrationSpec.services.length > 0) {
-    log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
+    await log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
   } else {
-    log("integration", "Sin servicios externos requeridos.");
+    await log("integration", "Sin servicios externos requeridos.");
   }
-  log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
+  await log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
 
   onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
-  log("coder", `Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
-  if (plan.backendNeeded) log("coder", "Generando backend en paralelo…");
+  await log("coder", `Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
+  if (plan.backendNeeded) await log("coder", "Generando backend en paralelo…");
 
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
+  let lastLogChars = 0;
   const frontendPromise = runPhase("frontend", () =>
     withTimeoutOrThrow(
-      generateFrontendCode(plan, design, research, prompt, (chars) => {
+      generateFrontendCode(plan, design, research, prompt, async (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+        
+        // Log cada 5KB para dar feedback visual al usuario (Mejorado de 10KB)
+        if (chars - lastLogChars >= 5000) {
+          lastLogChars = chars;
+          await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+        }
       }, coderModel, language),
-      600_000,
+      120_000,
       "frontend-engineer",
     ),
   );
@@ -1711,22 +1718,22 @@ export async function generateApp(
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
   if (!frontendResult.code) {
-    log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
+    await log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
     throw new Error(
       frontendResult.truncated
         ? "El ingeniero de frontend se quedó sin tokens. Pide una app más pequeña o más específica."
         : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
     );
   }
-  log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
+  await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
   if (plan.backendNeeded && backendResult?.code) {
-    log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
+    await log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
   }
 
   /* === Phase 4 (parallel): QA + Tests === */
   onProgress?.({ phase: "reviewing", progress: 78, note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…" });
-  if (runQa) log("qa", "Revisando bundle en busca de bugs…");
-  if (runTests) log("qa", "Generando tests en paralelo…");
+  if (runQa) await log("qa", "Revisando bundle en busca de bugs…");
+  if (runTests) await log("qa", "Generando tests en paralelo…");
 
   const reviewPromise = runQa
     ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))
@@ -1736,14 +1743,14 @@ export async function generateApp(
     : Promise.resolve(null);
 
   const [report, testCode] = await Promise.all([reviewPromise, testsPromise]);
-  if (!runQa) log("qa", "Plan dice saltar QA (alcance reducido).");
-  if (!runTests) log("qa", "Plan dice saltar generación de tests.");
+  if (!runQa) await log("qa", "Plan dice saltar QA (alcance reducido).");
+  if (!runTests) await log("qa", "Plan dice saltar generación de tests.");
 
   const issueCount = report.issues?.length ?? 0;
-  log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
+  await log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
 
   /* === Phase 5: validate → patch loop === */
-  log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
+  await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
   const finalFrontend = await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
       frontendResult.code,
@@ -1757,9 +1764,9 @@ export async function generateApp(
   );
 
   const testNote = testCode ? "✅ Tests generados. " : "";
-  if (testCode) log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
+  if (testCode) await log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
   onProgress?.({ phase: "parsing", progress: 94, note: `${testNote}📦 Empaquetando archivos…` });
-  log("system", "Empaquetando archivos finales…");
+  await log("system", "Empaquetando archivos finales…");
 
   /* === Final assembly === */
   const setupNotes = buildSetupNotes(integrationSpec);

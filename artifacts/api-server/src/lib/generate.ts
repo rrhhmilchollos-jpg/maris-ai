@@ -1740,8 +1740,8 @@ export async function generateApp(
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(chars / 1000)} KB…` });
         
-        // Log cada 10KB para dar feedback visual al usuario
-        if (chars - lastLogChars >= 10000) {
+        // Log cada 5KB para dar feedback visual al usuario (Optimizado)
+        if (chars - lastLogChars >= 5000) {
           lastLogChars = chars;
           await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
