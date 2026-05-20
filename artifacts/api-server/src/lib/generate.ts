@@ -455,7 +455,7 @@ export async function researchTopic(prompt: string): Promise<string> {
 ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual; no preamble; plain text only; ≤350 words.`;
   const userText = hasUrl
     ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`
-    : `Haz una búsqueda rápida sobre este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`;
+    : `Sintetiza un brief de referencia conciso en español (máx 350 palabras) sobre el siguiente encargo, utilizando tu conocimiento general. Si el tema es muy específico y no tienes información relevante, indica que no se encontró contexto adicional:\n\n"${prompt}"`;
   return withTimeout(
     (async () => {
       try {
@@ -467,8 +467,10 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
         });
         const text = response.content[0].type === "text" ? response.content[0].text : "";
         return text.trim().slice(0, 4000);
-      } catch {
+      } catch (err) {
+        logger.error({ err }, "researchTopic: Anthropic API call failed");
         return "";
+      }
       }
     })(),
     hasUrl ? 18_000 : 9_000,
