@@ -85,7 +85,7 @@ function PreviewPane({ code, isActive, onClose }: { code: string | null | undefi
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: GenerationStudioProps) {
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(false);
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
   const [showCreditsWarning, setShowCreditsWarning] = useState(true);

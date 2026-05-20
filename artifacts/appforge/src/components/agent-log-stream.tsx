@@ -168,12 +168,27 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       className="space-y-4"
       data-testid="agent-log-stream"
     >
-      {lines.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 animate-pulse">
+      {lines.length === 0 && isActive ? (
+        <div className="flex items-start gap-4 group animate-in fade-in duration-500">
+          <div className="h-8 w-8 rounded-full flex items-center justify-center border border-primary/30 bg-primary/10 shrink-0">
+            <Bot className="h-4 w-4 text-primary robot-vibrate" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-tight text-primary">Sistema</span>
+              <span className="text-[10px] text-white/20 font-mono">Iniciando...</span>
+            </div>
+            <div className="p-3 rounded-2xl text-sm leading-relaxed border bg-primary/5 border-primary/20 text-white/70">
+              Conectando con el equipo de ingenieros... Preparando entorno de desarrollo para tu aplicación.
+            </div>
+          </div>
+        </div>
+      ) : lines.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
           <div className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
             <Bot className="h-6 w-6 text-white/20" />
           </div>
-          <p className="text-sm text-white/40 font-medium">Esperando primer paso del pipeline…</p>
+          <p className="text-sm text-white/40 font-medium">No hay actividad registrada todavía.</p>
         </div>
       ) : (
         <div className="space-y-4">
