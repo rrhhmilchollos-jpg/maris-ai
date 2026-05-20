@@ -1626,28 +1626,21 @@ export async function generateApp(
   const runQa = execPlan.phases.includes("qa");
   const runTests = execPlan.phases.includes("tests");
 
-  /* === Phase 1: research + architect === */
-  let research = "";
-  if (runResearch && shouldResearch(prompt)) {
-    onProgress?.({ phase: "researching", progress: 6, note: "🔎 Investigador buscando referencias en la web (máx 7s)…" });
-    log("researcher", "Buscando referencias en la web (máx 7s)…");
-    research = await runPhase("researcher", () => researchTopic(prompt));
-    if (research) {
-      log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
-    } else {
-      log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
-    }
-  } else if (!runResearch) {
-    log("researcher", "Plan dice saltar investigación (alcance reducido).");
-  } else {
-    log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
-  }
+  /* === Phase 1: Parallel Research + Architect === */
+  log("system", "⚡ Iniciando motores de inteligencia en paralelo...");
+  
+  const researchPromise = (runResearch && shouldResearch(prompt))
+    ? runPhase("researcher", () => researchTopic(prompt))
+    : Promise.resolve("");
 
-  onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
-  log("architect", research ? "📐 Diseñando estructura con contexto de la web…" : "📐 Diseñando estructura del proyecto…");
-  const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
-  );
+  // We start architecting immediately with the prompt, and inject research if it finishes fast
+  const planPromise = runPhase("architect", async () => {
+    const res = await researchPromise;
+    if (res) log("researcher", "✅ Investigación completada. Inyectando contexto al arquitecto...");
+    return withTimeoutOrThrow(architectPlan(prompt, res), 60_000, "architect");
+  });
+
+  const [research, plan] = await Promise.all([researchPromise, planPromise]);
 
   // --- FACET: Landing / Structure Approval (AUTO-APPROVED for speed) ---
   // Hemos desactivado la pausa obligatoria para que los agentes trabajen sin parar,
@@ -1708,7 +1701,7 @@ export async function generateApp(
     withTimeoutOrThrow(
       generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(chars / 1000)} KB…` });
       }, coderModel, language),
       600_000,
       "frontend-engineer",
