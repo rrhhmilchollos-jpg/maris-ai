@@ -29,7 +29,6 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
       awaitingApproval: (job as any).awaitingApproval,
       approvedFacets: (job as any).approvedFacets,
       checkpointData: (job as any).checkpointData,
-      // ── preview en tiempo real ──
       partialFrontendCode: (job as any).partialFrontendCode ?? null,
     });
   } catch (err) {

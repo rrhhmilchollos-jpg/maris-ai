@@ -628,7 +628,7 @@ async function generateFrontendCode(
   design: DesignSystem,
   research: string,
   prompt: string,
-  onChars: (chars: number) => void,
+  onProgressUpdate: (accumulatedCode: string) => void,
   coderModel: string | undefined,
   language: GenLanguage,
 ): Promise<CodeGenResult> {
@@ -681,7 +681,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
         accumulated += delta;
         if (accumulated.length - lastReport >= 1500) {
           lastReport = accumulated.length;
-          onChars(accumulated.length);
+          onProgressUpdate(accumulated);
         }
       }
       const fr = chunk.choices[0]?.finish_reason;
@@ -702,7 +702,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
         accumulated += chunk.delta.text;
         if (accumulated.length - lastReport >= 1500) {
           lastReport = accumulated.length;
-          onChars(accumulated.length);
+          onProgressUpdate(accumulated);
         }
       }
     }

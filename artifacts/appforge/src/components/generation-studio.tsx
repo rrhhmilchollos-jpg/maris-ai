@@ -111,10 +111,15 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (job?.status === "starting" || job?.status === "queued") {
+    // Solo cerrar si estamos al principio Y no hay código parcial previo
+    if ((job?.status === "starting" || job?.status === "queued") && !job?.partialFrontendCode) {
       setShowPreview(false);
     }
-  }, [job?.status]);
+    // Abrir automáticamente el preview cuando llegue el código parcial (landing page lista)
+    if (job?.partialFrontendCode && job.partialFrontendCode.length > 500 && !showPreview) {
+      setShowPreview(true);
+    }
+  }, [job?.status, job?.partialFrontendCode]);
 
   const approveMutation = useApproveFacet({
     mutation: {

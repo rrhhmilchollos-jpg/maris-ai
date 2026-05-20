@@ -1533,6 +1533,7 @@ export async function generateApp(
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
   agentMemory?: AgentMemoryContext,
+  onPartialCode?: (code: string) => void,
 ): Promise<GeneratedAppPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
@@ -1574,9 +1575,11 @@ export async function generateApp(
     await log("coder", "Calentando motores…");
     const TARGET = 50_000;
     let lastHeartbeatAt = Date.now();
-    const onChars = async (chars: number) => {
+    const onChars = async (accumulatedCode: string) => {
+      const chars = accumulatedCode.length;
       const ratio = Math.min(1, chars / TARGET);
       onProgress?.({ phase: "generating", progress: 20 + Math.round(ratio * 50), note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)` });
+      onPartialCode?.(accumulatedCode);
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
@@ -1692,9 +1695,11 @@ export async function generateApp(
   let lastLogChars = 0;
   const frontendPromise = runPhase("frontend", () =>
     withTimeoutOrThrow(
-      generateFrontendCode(plan, design, research, prompt, async (chars) => {
+      generateFrontendCode(plan, design, research, prompt, async (accumulatedCode) => {
+        const chars = accumulatedCode.length;
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+        onPartialCode?.(accumulatedCode);
         
         // Log cada 5KB para dar feedback visual al usuario (Mejorado de 10KB)
         if (chars - lastLogChars >= 5000) {
@@ -2193,11 +2198,17 @@ export async function runJobById(jobId: string): Promise<void> {
     await JobLog.create({ jobId, agent, message, level });
   };
 
-  const onProgress = async (p: GenerateProgress) => {
-    await GenerationJob.findByIdAndUpdate(jobId, {
-      $set: { phase: p.phase, progress: p.progress, updatedAt: new Date() },
-    });
-  };
+    const onProgress = async (p: GenerateProgress) => {
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: { phase: p.phase, progress: p.progress, updatedAt: new Date() },
+      });
+    };
+
+    const onPartialCode = async (code: string) => {
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: { partialFrontendCode: code, updatedAt: new Date() },
+      });
+    };
 
   try {
     let previousApp: any = undefined;
@@ -2216,6 +2227,7 @@ export async function runJobById(jobId: string): Promise<void> {
       undefined,
       undefined,
       job.checkpointData ? (job.checkpointData as any) : undefined,
+      onPartialCode,
     );
 
     if ((result as any).phase?.startsWith("awaiting_")) {

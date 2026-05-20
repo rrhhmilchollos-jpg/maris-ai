@@ -160,7 +160,8 @@ export interface IGenerationJob extends Document {
   attachmentIds: number[];
   isAdmin: boolean;
   retryCount: number;
-  workerId?: string;
+  workerId?: string | null;
+  partialFrontendCode?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -186,6 +187,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     isAdmin: { type: Boolean, default: false },
     retryCount: { type: Number, default: 0 },
     workerId: { type: String },
+    partialFrontendCode: { type: String },
   },
   { timestamps: true },
 );
