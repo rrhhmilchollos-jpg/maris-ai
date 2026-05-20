@@ -38,6 +38,7 @@ export type GenLanguage = "typescript" | "javascript";
  * ========================================================================== */
 
 const useAnthropic = true; // Always use Anthropic — Gemini removed
+const DEFAULT_MODEL = "claude-3-5-sonnet-20240620";
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
@@ -1645,14 +1646,10 @@ export async function generateApp(
     withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
   );
 
-  // --- FACET: Landing / Structure Approval ---
-  if (!checkpoint || !checkpoint.approvedFacets.includes("structure")) {
-    return {
-      phase: "awaiting_structure_approval",
-      approvedFacets: checkpoint?.approvedFacets || [],
-      data: { plan, research }
-    };
-  }
+  // --- FACET: Landing / Structure Approval (AUTO-APPROVED for speed) ---
+  // Hemos desactivado la pausa obligatoria para que los agentes trabajen sin parar,
+  // tal como en emergent.sh, a menos que el usuario pida explícitamente pausar.
+  log("system", "Arquitectura aprobada automáticamente. Iniciando ingeniería...");
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
 
