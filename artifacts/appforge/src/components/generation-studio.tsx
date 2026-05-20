@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ForkRight } from "lucide-react";
+import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, GitFork } from "lucide-react";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -288,7 +288,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                       <div className="flex items-center gap-1">
                         <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Paperclip className="h-4 w-4" /></button>
                         <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><RefreshCcw className="h-3.5 w-3.5" /> Save</button>
-                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><ForkRight className="h-3.5 w-3.5" /> Fork</button>
+                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><GitFork className="h-3.5 w-3.5" /> Fork</button>
                         <div className="flex items-center gap-2 ml-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
                           <Sparkles className="h-3 w-3 text-primary" />
                           <span className="text-[10px] font-bold text-white/60 uppercase tracking-tighter">Maxx</span>
