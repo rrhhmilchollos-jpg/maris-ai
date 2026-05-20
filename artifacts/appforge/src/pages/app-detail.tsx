@@ -160,7 +160,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     return (
       <div className="h-screen w-screen bg-[#0a0a0f] fixed inset-0 z-[100]">
         <GenerationStudio
-          jobId={Number(activeJobId)}
+          jobId={activeJobId}
           job={job}
           phaseLabel={phaseInfo.label}
           PhaseIcon={phaseInfo.icon}

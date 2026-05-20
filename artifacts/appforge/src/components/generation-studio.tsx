@@ -19,7 +19,7 @@ interface JobState {
 }
 
 interface GenerationStudioProps {
-  jobId: number | null;
+  jobId: string | null;
   job: JobState | null | undefined;
   phaseLabel: string;
   PhaseIcon: React.ComponentType<{ className?: string }>;
