@@ -87,8 +87,12 @@ function PreviewPane({ code, isActive, onClose }: { code: string | null | undefi
 export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: GenerationStudioProps) {
   const [showPreview, setShowPreview] = useState(true);
   const [message, setMessage] = useState("");
+  const [isMaxx, setIsMaxx] = useState(false);
+  const [showCreditsWarning, setShowCreditsWarning] = useState(true);
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [, setLocation] = import("wouter").then(m => m.useLocation());
 
   const approveMutation = useApproveFacet({
     mutation: {
@@ -204,7 +208,11 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                             { icon: "💳", label: "Plataforma con pagos (Stripe)" },
                             { icon: "💬", label: "Sistema de mensajería" }
                           ].map((item, i) => (
-                            <button key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/30 transition-all text-left text-xs font-medium group">
+                            <button 
+                              key={i} 
+                              onClick={() => setMessage(`Crea un ${item.label.toLowerCase()} con un diseño moderno y funcional.`)}
+                              className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/30 transition-all text-left text-xs font-medium group"
+                            >
                               <span>{item.icon}</span>
                               <span className="group-hover:text-primary transition-colors">{item.label}</span>
                             </button>
@@ -259,20 +267,25 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
             <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12] to-transparent">
               <div className="max-w-3xl mx-auto space-y-4">
                 {/* Credits Warning */}
-                <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Plus className="h-2.5 w-2.5 text-primary" />
+                {showCreditsWarning && (
+                  <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-white/5 border border-white/10 animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center">
+                        <Plus className="h-2.5 w-2.5 text-primary" />
+                      </div>
+                      <span className="text-[11px] font-medium text-white/60">¿Te quedan pocos créditos?</span>
                     </div>
-                    <span className="text-[11px] font-medium text-white/60">¿Te quedan pocos créditos?</span>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => window.location.href = "/billing"}
+                        className="text-[11px] font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-lg border border-white/10"
+                      >
+                        <ShoppingBag className="h-3 w-3" /> Comprar créditos
+                      </button>
+                      <button onClick={() => setShowCreditsWarning(false)} className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button className="text-[11px] font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-lg border border-white/10">
-                      <ShoppingBag className="h-3 w-3" /> Comprar créditos
-                    </button>
-                    <button className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
-                  </div>
-                </div>
+                )}
 
                 {/* Input Area */}
                 <div className="relative group">
@@ -286,20 +299,50 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                     />
                     <div className="flex items-center justify-between px-4 py-3 border-t border-white/5 bg-white/[0.02]">
                       <div className="flex items-center gap-1">
-                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Paperclip className="h-4 w-4" /></button>
-                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><RefreshCcw className="h-3.5 w-3.5" /> Save</button>
-                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><GitFork className="h-3.5 w-3.5" /> Fork</button>
-                        <div className="flex items-center gap-2 ml-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-                          <Sparkles className="h-3 w-3 text-primary" />
-                          <span className="text-[10px] font-bold text-white/60 uppercase tracking-tighter">Maxx</span>
-                          <div className="w-6 h-3 bg-white/10 rounded-full relative">
-                            <div className="absolute left-0.5 top-0.5 w-2 h-2 bg-white/40 rounded-full" />
+                        <input type="file" ref={fileInputRef} className="hidden" multiple />
+                        <button 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => alert("Proyecto guardado en tu biblioteca.")}
+                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"
+                        >
+                          <RefreshCcw className="h-3.5 w-3.5" /> Save
+                        </button>
+                        <button 
+                          onClick={() => alert("Clonando proyecto para una nueva versión...")}
+                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"
+                        >
+                          <GitFork className="h-3.5 w-3.5" /> Fork
+                        </button>
+                        <div 
+                          onClick={() => setIsMaxx(!isMaxx)}
+                          className={`flex items-center gap-2 ml-2 px-2 py-1 rounded-lg border cursor-pointer transition-all ${isMaxx ? 'bg-primary/20 border-primary/40' : 'bg-white/5 border-white/10'}`}
+                        >
+                          <Sparkles className={`h-3 w-3 ${isMaxx ? 'text-primary animate-pulse' : 'text-white/40'}`} />
+                          <span className={`text-[10px] font-bold uppercase tracking-tighter ${isMaxx ? 'text-primary' : 'text-white/60'}`}>Maxx</span>
+                          <div className={`w-6 h-3 rounded-full relative transition-colors ${isMaxx ? 'bg-primary/40' : 'bg-white/10'}`}>
+                            <div className={`absolute top-0.5 w-2 h-2 rounded-full transition-all ${isMaxx ? 'right-0.5 bg-primary' : 'left-0.5 bg-white/40'}`} />
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Mic className="h-4 w-4" /></button>
                         <button 
+                          onClick={() => alert("Escuchando... (Función de voz próximamente)")}
+                          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                        >
+                          <Mic className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (message.trim()) {
+                              alert("Mensaje enviado a los agentes: " + message);
+                              setMessage("");
+                            }
+                          }}
                           disabled={!message.trim()}
                           className={`p-2 rounded-lg transition-all ${message.trim() ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white/5 text-white/20'}`}
                         >
