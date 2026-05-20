@@ -3,7 +3,8 @@ import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, R
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { useApproveFacet } from "@/lib/api-client";
+import { useApproveFacet, useListModels, useGenerateApp } from "@/lib/api-client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetGenerationJobQueryKey } from "@/lib/api-client";
 
@@ -89,6 +90,9 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
   const [showCreditsWarning, setShowCreditsWarning] = useState(false); // Default to false to avoid initial overlap
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-opus-4-7"); // Default to Opus 4.7, load from localStorage
+  const { data: models } = useListModels();
+
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,6 +110,19 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
         queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(jobId ?? "") });
       }
     }
+  });
+
+  const generateAppMutation = useGenerateApp({
+    mutation: {
+      onSuccess: (data) => {
+        // Handle success, e.g., navigate to the new job
+        console.log("App generated successfully:", data);
+      },
+      onError: (error) => {
+        // Handle error
+        console.error("Error generating app:", error);
+      },
+    },
   });
 
   useEffect(() => {
@@ -165,7 +182,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
           {/* Loading Bar */}
           <div className="w-64 h-1 bg-white/5 rounded-full overflow-hidden mt-4">
-            <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: '40%' }} />
+            <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: `40%` }} />
           </div>
         </div>
 
@@ -188,6 +205,19 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
              <div className={`h-2 w-2 rounded-full ${isFailed ? 'bg-red-500' : isDone ? 'bg-emerald-500' : 'bg-primary animate-pulse'}`} />
              <span className="text-sm font-bold tracking-tight">{phaseLabel}</span>
           </div>
+          <Select value={selectedModel} onValueChange={(value) => {
+            setSelectedModel(value);
+            localStorage.setItem("maris_ai_selected_model", value);
+          }}>
+            <SelectTrigger className="w-[180px] h-8 text-xs bg-white/5 border-white/10 text-white/80 hover:border-primary/40 transition-colors">
+              <SelectValue placeholder="Seleccionar Modelo" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0d0d12] border-white/10 text-white">
+              {models?.map((model: any) => (
+                <SelectItem key={model.id} value={model.id}>{model.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {isActive && (
             <div className="px-2 py-0.5 rounded bg-primary/10 border border-primary/20 flex items-center gap-1.5">
                <Zap className="h-3 w-3 text-primary" />
@@ -368,7 +398,13 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                         <button 
                           onClick={() => {
                             if (message.trim()) {
-                              alert("Mensaje enviado a los agentes: " + message);
+                              generateAppMutation.mutate({
+                                prompt: message,
+                                model: selectedModel, // Pass the selected model
+                                language: "typescript", // Default to typescript
+                                attachments: [],
+                                kind: "web-app", // Default to web-app
+                              });
                               setMessage("");
                             }
                           }}
@@ -382,32 +418,32 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Right Panel: Preview */}
+          {showPreview && (
+            <div className="flex-1 flex flex-col min-h-0 bg-black relative animate-in slide-in-from-right duration-500">
+              <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} />
+              
+              {/* Emergent-style Bottom Floating Bar */}
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 pointer-events-none">
+                <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] pointer-events-auto">
+                  <div className="flex items-center gap-4">
+                    <div className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
+                    <p className="text-xs text-white/80 font-semibold tracking-tight">
+                      Vista previa en tiempo real.
+                    </p>
+                  </div>
+                  <button className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-white/90 transition-all active:scale-95 shadow-lg">
+                    Ver Código
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
-
-        {/* Right Panel: Preview */}
-        {showPreview && (
-          <div className="flex-1 flex flex-col min-h-0 bg-black relative animate-in slide-in-from-right duration-500">
-            <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} />
-            
-            {/* Emergent-style Bottom Floating Bar */}
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 pointer-events-none">
-              <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] pointer-events-auto">
-                <div className="flex items-center gap-4">
-                  <div className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
-                  <p className="text-xs text-white/80 font-semibold tracking-tight">
-                    Vista previa en tiempo real.
-                  </p>
-                </div>
-                <button className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-white/90 transition-all active:scale-95 shadow-lg">
-                  Ver Código
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
+    );
+  }
 }

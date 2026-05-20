@@ -28,17 +28,17 @@ export type GenLanguage = "typescript" | "javascript";
  *   - Se ha eliminado la dependencia de Gemini para evitar errores 404 de modelos inexistentes.
  *
  * Agentes:
- *   - Researcher    (claude-3-5-haiku)  — referencia web
- *   - Architect     (claude-3-5-sonnet) — plan / estructura
- *   - Designer      (claude-3-5-haiku)  — design system
- *   - Frontend Eng  (claude-3-5-sonnet) — bundle frontend
- *   - Backend Eng   (claude-3-5-sonnet) — bundle backend
- *   - QA Reviewer   (claude-3-5-haiku)  — revisión
- *   - Patcher       (claude-3-5-sonnet) — auto-fix
+ *   - Researcher    (claude-haiku-4-5)  — referencia web
+ *   - Architect     (claude-opus-4-7) — plan / estructura
+ *   - Designer      (claude-sonnet-4-6) — design system
+ *   - Frontend Eng  (claude-opus-4-7) — bundle frontend
+ *   - Backend Eng   (claude-opus-4-7) — bundle backend
+ *   - QA Reviewer   (claude-sonnet-4-6)  — revisión
+ *   - Patcher       (claude-opus-4-7) — auto-fix
  * ========================================================================== */
 
 const useAnthropic = true; // Always use Anthropic — Gemini removed
-const DEFAULT_MODEL = "claude-3-5-sonnet-20240620";
+const DEFAULT_MODEL = "claude-opus-4-7";
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";

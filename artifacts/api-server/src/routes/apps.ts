@@ -1807,6 +1807,15 @@ const KIND_COSTS: Record<string, number> = {
 };
 
 // ── POST /api/apps ────────────────────────────────────────────────────────
+router.get("/models", requireAuth, async (req: any, res: any) => {
+  const availableModels = [
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7", description: "El modelo más capaz para razonamiento complejo y codificación agéntica." },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "La mejor combinación de velocidad e inteligencia." },
+    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "El modelo más rápido con inteligencia casi de frontera." },
+  ];
+  res.json(availableModels);
+});
+
 router.post("/apps", requireAuth, async (req: any, res: any) => {
   try {
     const { prompt, model, language, attachments, kind } = req.body;

@@ -23,6 +23,7 @@ export const getListAdminJobsQueryKey = () => ["admin-jobs"];
 export const getGetAdminOverviewQueryKey = () => ["admin-overview"];
 export const getListAdminAppsQueryKey = () => ["admin-apps"];
 export const getListCreditPackagesQueryKey = () => ["credit-packages"];
+export const getListModelsQueryKey = () => ["models"];
 export const getListTransactionsQueryKey = () => ["transactions"];
 export const getGetAppNotesQueryKey = (id: string) => ["app-notes", id];
 export const getListAppRevisionsQueryKey = (id: string) => ["app-revisions", id];
@@ -62,7 +63,7 @@ export function useDeleteApp(opts?: { mutation?: Partial<UseMutationOptions<any,
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}`, { method: "DELETE" }), ...(opts?.mutation as any) });
 }
 export function useGenerateApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
-  return useMutation<any, any, any>({ mutationFn: ({ data }: any) => apiFetch("/api/apps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+  return useMutation<any, any, any>({ mutationFn: ({ data }: { data: { prompt: string; model: string; language: string; attachments: any[]; kind: string } }) => apiFetch("/api/apps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
 export function useListAppMessages(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppMessagesQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/messages`), ...(opts?.query as any) });
@@ -84,6 +85,10 @@ export function useCreateCheckoutSession(opts?: { mutation?: Partial<UseMutation
 }
 export function useListCreditPackages(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListCreditPackagesQueryKey(), queryFn: () => apiFetch("/api/billing/packages"), ...(opts?.query as any) });
+}
+
+export function useListModels(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getListModelsQueryKey(), queryFn: () => apiFetch("/api/models"), ...(opts?.query as any) });
 }
 export function useListTransactions(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListTransactionsQueryKey(), queryFn: () => apiFetch("/api/billing/transactions"), ...(opts?.query as any) });
