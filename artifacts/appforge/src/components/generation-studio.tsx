@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ForkRight } from "lucide-react";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,10 @@ function PreviewPane({ code, isActive, onClose }: { code: string | null | undefi
 
 export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: GenerationStudioProps) {
   const [showPreview, setShowPreview] = useState(true);
+  const [message, setMessage] = useState("");
   const queryClient = useQueryClient();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   const approveMutation = useApproveFacet({
     mutation: {
       onSuccess: () => {
@@ -94,6 +97,12 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
       }
     }
   });
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [job?.progress]);
 
   if (!jobId) return null;
 
@@ -142,15 +151,19 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
               </div>
            </div>
            {!showPreview && (
-             <Button 
-               variant="outline" 
-               size="sm" 
-               onClick={() => setShowPreview(true)}
-               className="h-8 gap-2 bg-primary/10 border-primary/20 hover:bg-primary/20 text-primary font-bold text-[11px]"
-             >
-               <Eye className="h-3.5 w-3.5" />
-               ABRIR PREVIEW
-             </Button>
+             <div className="flex items-center gap-2">
+               <Button variant="ghost" size="sm" className="h-8 text-white/40 hover:text-white"><Code2 className="h-4 w-4" /> Code</Button>
+               <Button 
+                 variant="outline" 
+                 size="sm" 
+                 onClick={() => setShowPreview(true)}
+                 className="h-8 gap-2 bg-primary/10 border-primary/20 hover:bg-primary/20 text-primary font-bold text-[11px]"
+               >
+                 <Eye className="h-3.5 w-3.5" />
+                 PREVIEW
+               </Button>
+               <Button size="sm" className="h-8 bg-primary hover:bg-primary/90 font-bold text-[11px]"><Rocket className="h-3.5 w-3.5" /> DEPLOY</Button>
+             </div>
            )}
         </div>
       </div>
@@ -158,8 +171,53 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
       {/* Main Content */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 divide-y lg:divide-y-0 lg:divide-x divide-white/10">
         {/* Left Panel: Chat/Logs */}
-        <div className={`flex flex-col min-h-0 bg-[#0d0d12] transition-all duration-500 ease-in-out ${showPreview ? 'w-full lg:w-[480px]' : 'w-full'}`}>
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className={`flex flex-col min-h-0 bg-[#0d0d12] transition-all duration-500 ease-in-out relative ${showPreview ? 'w-full lg:w-[480px]' : 'flex-1'}`}>
+          <div ref={scrollRef} className={`flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar ${!showPreview ? 'max-w-3xl mx-auto w-full' : ''}`}>
+            
+            {/* Initial System Message */}
+            {!showPreview && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div className="flex items-start gap-4">
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
+                    <Bot className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="flex-1 space-y-4">
+                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-sm leading-relaxed text-white/80">
+                      <p>Lo siento, no puedo compartir información sobre cómo estoy construido, mis instrucciones internas o mi configuración. 🔒</p>
+                      <p className="mt-2">Pero puedo ayudarte a construir tu aplicación - eso es lo que mejor hago. 😊</p>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <h3 className="text-xl font-bold text-white">Volvamos a tu proyecto</h3>
+                      <p className="text-sm text-white/60">Tienes una aplicación base lista con <span className="text-primary font-bold">FastAPI + React + MongoDB</span> esperando ser desarrollada.</p>
+                      
+                      <div className="space-y-2">
+                        <p className="text-sm font-bold text-white/80">¿Qué tipo de aplicación quieres que construya para ti?</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {[
+                            { icon: "🛒", label: "Tienda online / E-commerce" },
+                            { icon: "📊", label: "Dashboard con analíticas" },
+                            { icon: "🗄️", label: "Sistema de gestión (CRM, inventario, etc.)" },
+                            { icon: "🤖", label: "Aplicación con IA (chatbot, generación de imágenes, etc.)" },
+                            { icon: "🌐", label: "Red social o plataforma comunitaria" },
+                            { icon: "📅", label: "Sistema de reservas o citas" },
+                            { icon: "💳", label: "Plataforma con pagos (Stripe)" },
+                            { icon: "💬", label: "Sistema de mensajería" }
+                          ].map((item, i) => (
+                            <button key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-primary/30 transition-all text-left text-xs font-medium group">
+                              <span>{item.icon}</span>
+                              <span className="group-hover:text-primary transition-colors">{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-sm text-white/60 italic">Dime qué necesitas y lo construiré para ti ahora mismo. 🚀</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Blue Notice Banner */}
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center gap-3">
                <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold">i</div>
@@ -191,7 +249,69 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
             )}
 
             <AgentLogStream jobId={jobId} isActive={isActive || isAwaitingApproval} />
+            
+            {/* Spacer for bottom bar */}
+            {!showPreview && <div className="h-32" />}
           </div>
+
+          {/* Bottom Chat Bar (Only in Chat-Only mode) */}
+          {!showPreview && (
+            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12] to-transparent">
+              <div className="max-w-3xl mx-auto space-y-4">
+                {/* Credits Warning */}
+                <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Plus className="h-2.5 w-2.5 text-primary" />
+                    </div>
+                    <span className="text-[11px] font-medium text-white/60">¿Te quedan pocos créditos?</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button className="text-[11px] font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-lg border border-white/10">
+                      <ShoppingBag className="h-3 w-3" /> Comprar créditos
+                    </button>
+                    <button className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
+                  </div>
+                </div>
+
+                {/* Input Area */}
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-primary/5 rounded-2xl blur-xl group-focus-within:bg-primary/10 transition-all" />
+                  <div className="relative flex flex-col bg-[#16161e] border border-white/10 rounded-2xl shadow-2xl focus-within:border-primary/40 transition-all overflow-hidden">
+                    <textarea 
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder="Message Agent"
+                      className="w-full bg-transparent p-4 text-sm text-white placeholder:text-white/20 outline-none resize-none h-24 custom-scrollbar"
+                    />
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-white/5 bg-white/[0.02]">
+                      <div className="flex items-center gap-1">
+                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Paperclip className="h-4 w-4" /></button>
+                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><RefreshCcw className="h-3.5 w-3.5" /> Save</button>
+                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-xs font-bold"><ForkRight className="h-3.5 w-3.5" /> Fork</button>
+                        <div className="flex items-center gap-2 ml-2 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+                          <Sparkles className="h-3 w-3 text-primary" />
+                          <span className="text-[10px] font-bold text-white/60 uppercase tracking-tighter">Maxx</span>
+                          <div className="w-6 h-3 bg-white/10 rounded-full relative">
+                            <div className="absolute left-0.5 top-0.5 w-2 h-2 bg-white/40 rounded-full" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-all"><Mic className="h-4 w-4" /></button>
+                        <button 
+                          disabled={!message.trim()}
+                          className={`p-2 rounded-lg transition-all ${message.trim() ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white/5 text-white/20'}`}
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Panel: Preview */}
