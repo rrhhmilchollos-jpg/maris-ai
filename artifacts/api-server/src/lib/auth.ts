@@ -34,7 +34,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   return adminEmailSet().has(email.toLowerCase());
 }
  
-export async function ensureUser(clerkUserId: string): Promise<IUser> {
+export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUser> {
   await connectDB();
  
   // Try to find existing user
@@ -57,6 +57,14 @@ export async function ensureUser(clerkUserId: string): Promise<IUser> {
   const fullName =
     [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || undefined;
  
+  // Lógica anti-abuso: verificar si el email o la IP ya han recibido créditos gratuitos
+  const alreadyUsed = await User.findOne({
+    $or: [{ email }, { registrationIp: ip }],
+    freeCreditsUsed: true,
+  }).lean();
+
+  const shouldGiveFreeCredits = !isAdminEmail(email) && !alreadyUsed;
+
   // Upsert — handles race conditions where two requests create the same user
   const user = await User.findByIdAndUpdate(
     clerkUserId,
@@ -66,8 +74,10 @@ export async function ensureUser(clerkUserId: string): Promise<IUser> {
         email,
         fullName,
         imageUrl: clerkUser.imageUrl ?? undefined,
-        credits: isAdminEmail(email) ? 999999999 : 10,
-        planCredits: isAdminEmail(email) ? 0 : 10,
+        credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 10 : 0),
+        planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 10 : 0),
+        freeCreditsUsed: shouldGiveFreeCredits,
+        registrationIp: ip,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -95,7 +105,7 @@ export const requireAuth = async (
   }
  
   try {
-    const user = await ensureUser(userId);
+    const user = await ensureUser(userId, req.ip);
     req.userId = userId;
     req.dbUser = user;
     next();

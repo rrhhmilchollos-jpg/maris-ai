@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, GitFork, ShoppingBag, ArrowRight } from "lucide-react";
+import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, GitFork, ShoppingBag, ArrowRight, Star } from "lucide-react";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { useApproveFacet, useListModels, useGenerateApp } from "@/lib/api-client";
+import { useApproveFacet, useListModels, useGenerateApp, useGetMe } from "@/lib/api-client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetGenerationJobQueryKey } from "@/lib/api-client";
 
@@ -92,6 +94,8 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const [showCreditsWarning, setShowCreditsWarning] = useState(false);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-haiku-4-5");
   const { data: models } = useListModels();
+  const { data: me } = useGetMe();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +127,13 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
   const handleGenerate = () => {
     if (!message.trim()) return;
+    
+    // Verificar créditos antes de generar
+    if (!me?.isAdmin && (me?.credits ?? 0) <= 0) {
+      setShowCreditsWarning(true);
+      return;
+    }
+
     generateAppMutation.mutate({
       data: {
         prompt: message,
@@ -179,6 +190,36 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
   return (
     <div className="h-full w-full flex flex-col bg-[#0a0a0f] text-white overflow-hidden" data-testid="generation-studio">
+      <Dialog open={showCreditsWarning} onOpenChange={setShowCreditsWarning}>
+        <DialogContent className="bg-[#0d0d12] border-white/10 text-white max-w-md">
+          <DialogHeader className="flex flex-col items-center text-center space-y-4">
+            <div className="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center mb-2">
+              <Star className="h-8 w-8 text-primary fill-primary animate-pulse" />
+            </div>
+            <DialogTitle className="text-2xl font-bold tracking-tight">
+              ✨ Has usado todos tus créditos gratuitos
+            </DialogTitle>
+            <DialogDescription className="text-white/60 text-base leading-relaxed">
+              Has visto lo que Maris AI puede hacer — ahora imagina todo lo que puedes construir. Compra créditos para seguir trabajando con tus agentes.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col sm:flex-row gap-3 mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCreditsWarning(false)}
+              className="flex-1 bg-white/5 border-white/10 hover:bg-white/10 text-white"
+            >
+              Cerrar
+            </Button>
+            <Button 
+              onClick={() => setLocation("/billing")}
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+            >
+              Comprar créditos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 bg-[#0d0d12] z-10">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">

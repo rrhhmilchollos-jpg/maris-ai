@@ -10,6 +10,8 @@ export interface IUser {
   stripeCustomerId?: string;
   isPremium?: boolean;
   isAdmin?: boolean;
+  freeCreditsUsed?: boolean;
+  registrationIp?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +26,8 @@ const UserSchema = new Schema<IUser>(
     stripeCustomerId: { type: String },
     isPremium: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
+    freeCreditsUsed: { type: Boolean, default: false },
+    registrationIp: { type: String },
   },
   { timestamps: true },
 );

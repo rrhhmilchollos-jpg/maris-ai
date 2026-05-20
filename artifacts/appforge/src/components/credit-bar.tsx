@@ -22,47 +22,31 @@ export function CreditBar() {
   const planCredits = me?.planCredits ?? 0;
   const topUpCredits = me?.topUpCredits ?? 0;
   const totalCredits = me?.credits ?? 0;
-  const isLowOnCredits = !isAdmin && totalCredits <= 10;
+  const isLowOnCredits = !isAdmin && totalCredits <= 3;
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
+    <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 border border-white/10">
       <div className="flex items-center gap-2">
-        <div className={`p-2 rounded-full ${isLowOnCredits ? 'bg-red-500/20' : 'bg-primary/20'}`}>
-          <Zap className={`h-5 w-5 ${isLowOnCredits ? 'text-red-400' : 'text-primary'}`} />
+        <div className={`p-1.5 rounded-full ${isLowOnCredits ? 'bg-amber-500/20' : 'bg-primary/20'}`}>
+          <Zap className={`h-4 w-4 ${isLowOnCredits ? 'text-amber-400' : 'text-primary'}`} />
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Créditos disponibles</p>
-          <p className={`text-2xl font-mono font-bold ${isLowOnCredits ? 'text-red-400' : 'text-white'} ${animating ? 'animate-pulse' : ''}`}>
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">💎 Créditos</span>
+          <span className={`text-lg font-mono font-bold leading-none ${isLowOnCredits ? 'text-amber-400' : 'text-white'} ${animating ? 'animate-pulse' : ''}`}>
             {isAdmin ? "∞" : displayCredits}
-          </p>
+          </span>
         </div>
       </div>
 
-      {!isAdmin && (
-        <div className="flex-1 min-w-0">
-          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>Plan: {planCredits}</span>
-            <span>Top-up: {topUpCredits}</span>
-          </div>
-          <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-            <div 
-              className={`h-full transition-all duration-300 ${
-                isLowOnCredits 
-                  ? 'bg-gradient-to-r from-red-500 to-red-400' 
-                  : 'bg-gradient-to-r from-primary to-primary/50'
-              }`}
-              style={{ 
-                width: `${Math.max(0, Math.min(100, (topUpCredits / Math.max(1, totalCredits + 50)) * 100))}%` 
-              }}
-            />
-          </div>
+      {isLowOnCredits && !isAdmin && totalCredits > 0 && (
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-amber-500/10 text-[10px] text-amber-400 font-bold animate-pulse">
+          Te quedan pocos créditos
         </div>
       )}
-
-      {isLowOnCredits && (
-        <div className="flex items-center gap-1 text-xs text-red-400 font-medium">
-          <TrendingDown className="h-4 w-4" />
-          Bajo
+      
+      {totalCredits === 0 && !isAdmin && (
+        <div className="flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 text-[10px] text-red-400 font-bold">
+          Sin créditos
         </div>
       )}
     </div>
