@@ -192,7 +192,7 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
   <style>html,body{margin:0;padding:0;height:100%;background:#fff;}iframe{border:0;width:100vw;height:100vh;display:block;}</style>
 </head>
 <body>
-  <iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${innerUrl}"></iframe>
+  <iframe sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerpolicy="no-referrer" src="${innerUrl}"></iframe>
 </body>
 </html>`;
     res.setHeader("Cache-Control", "no-store, max-age=0");

@@ -1,5 +1,4 @@
 {
-
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm --filter @workspace/appforge build",
   "headers": [
@@ -28,10 +27,10 @@
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+        { "key": "Cross-Origin-Embedder-Policy", "value": "unsafe-none" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" }
       ]
     }
   ],

@@ -190,17 +190,16 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    if (!me || isAdmin) return undefined;
-    let cleanup: (() => void) | undefined;
+    if (!me || isAdmin) return;
+    let t: any;
     try {
       const raw = localStorage.getItem("appforge_annual_modal_until");
       const until = raw ? Number(raw) : 0;
       if (Date.now() > until) {
-        const t: any = setTimeout(() => setAnnualOpen(true), 1200);
-        cleanup = () => clearTimeout(t);
+        t = setTimeout(() => setAnnualOpen(true), 1200);
       }
     } catch { /* ignore */ }
-    return cleanup;
+    return () => { if (t) clearTimeout(t); };
   }, [me, isAdmin]);
 
   const checkoutForAnnual = useCreateCheckoutSession({
