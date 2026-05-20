@@ -33,10 +33,59 @@ interface GenerationStudioProps {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function bundleToPreviewHtml(code: string | null | undefined): string | null {
-  if (!code || code.length < 200) return null;
+  if (!code || code.length < 100) return null;
+
+  // 1. Intentar extraer index.html (flujo normal)
   const htmlMatch = code.match(/\/\/ === FILE: index\.html ===([\s\S]*?)(?:\/\/ === FILE:|$)/);
-  if (htmlMatch) return htmlMatch[1].trim();
-  return `<!DOCTYPE html><html><body style="background:#0a0a0f;color:white;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif"><div>Escribiendo código...</div></body></html>`;
+  if (htmlMatch && htmlMatch[1].includes("<html") || htmlMatch?.[1].includes("<body")) {
+    return htmlMatch[1].trim();
+  }
+
+  // 2. Si no hay index.html completo, pero hay mucho código, intentar renderizar un esqueleto
+  // Extraemos el CSS si existe para que el preview se vea mejor
+  const cssMatch = code.match(/\/\/ === FILE: src\/index\.css ===([\s\S]*?)(?:\/\/ === FILE:|$)/);
+  const css = cssMatch ? `<style>${cssMatch[1]}</style>` : "";
+  
+  // Extraemos nombres de archivos que ya se están escribiendo para dar feedback
+  const files = Array.from(code.matchAll(/\/\/ === FILE: (.*?) ===/g)).map(m => m[1]);
+  const lastFile = files[files.length - 1] || "Iniciando...";
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <script src="https://cdn.tailwindcss.com"></script>
+      ${css}
+    </head>
+    <body class="bg-[#0a0a0f] text-white flex flex-col items-center justify-center min-h-screen font-sans p-8">
+      <div class="max-w-md w-full space-y-8 text-center animate-in fade-in zoom-in duration-700">
+        <div class="relative inline-block">
+          <div class="h-24 w-24 rounded-3xl bg-gradient-to-br from-primary to-accent animate-pulse shadow-[0_0_40px_rgba(var(--primary-rgb),0.3)]"></div>
+          <div class="absolute -top-2 -right-2 h-6 w-6 bg-emerald-500 rounded-full border-4 border-[#0a0a0f] animate-bounce"></div>
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-2xl font-black tracking-tighter uppercase italic">Construyendo Interfaz</h2>
+          <p class="text-white/40 text-sm font-medium">El ingeniero está redactando los componentes de tu aplicación.</p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-4 text-left">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="h-1.5 w-1.5 rounded-full bg-primary animate-ping"></div>
+            <span class="text-[10px] font-bold text-primary uppercase tracking-widest">Archivo Actual</span>
+          </div>
+          <code class="text-xs text-emerald-400 font-mono break-all">${lastFile}</code>
+          <div class="mt-4 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full bg-primary animate-[shimmer_2s_infinite] w-[60%]" style="background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)"></div>
+          </div>
+        </div>
+        <p class="text-[10px] text-white/20 font-bold uppercase tracking-[0.2em]">Maris AI Engine v2.5</p>
+      </div>
+      <style>
+        @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        :root { --primary-rgb: 124, 58, 237; }
+      </style>
+    </body>
+    </html>
+  `;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
