@@ -88,14 +88,29 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
     }
   });
 
-  const isActive = job?.status !== "succeeded" && job?.status !== "failed" && jobId !== null && job?.status !== "awaiting_approval";
+  // Defensive check: if jobId is missing, don't render anything to avoid network cancellations
+  if (!jobId) return null;
+
+  const isActive = job?.status !== "succeeded" && job?.status !== "failed" && job?.status !== "awaiting_approval";
   const isAwaitingApproval = job?.status === "awaiting_approval";
   const isDone = job?.status === "succeeded";
   const isFailed = job?.status === "failed";
   const progressValue = job?.progress ?? 0;
   const partialCode = job?.partialFrontendCode;
 
-  if (!jobId) return null;
+  if (!job) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center bg-[#0a0a0f] text-white">
+        <div className="relative">
+          <div className="h-24 w-24 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Bot className="h-10 w-10 text-primary animate-pulse" />
+          </div>
+        </div>
+        <p className="mt-6 text-sm font-medium text-white/40 animate-pulse">Conectando con los agentes...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full w-full flex flex-col bg-[#0a0a0f] text-white overflow-hidden" data-testid="generation-studio">
@@ -156,7 +171,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
               </div>
             )}
 
-            <AgentLogStream jobId={String(jobId)} isActive={isActive || isAwaitingApproval} />
+            <AgentLogStream jobId={jobId} isActive={isActive || isAwaitingApproval} />
           </div>
         </div>
 
