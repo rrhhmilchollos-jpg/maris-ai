@@ -231,9 +231,20 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-tight text-white/40">Tú</span>
                 </div>
-                <div className="p-4 rounded-2xl text-sm leading-relaxed bg-white/[0.03] border border-white/5 text-white/90 shadow-sm">
-                  {localStorage.getItem("appforge_last_prompt") || "Crea una aplicación increíble para mí."}
-                </div>
+                <details className="group/prompt">
+                  <summary className="list-none cursor-pointer">
+                    <div className="p-4 rounded-2xl text-sm leading-relaxed bg-white/[0.03] border border-white/5 text-white/60 shadow-sm hover:bg-white/[0.05] transition-all flex items-center justify-between">
+                      <span className="truncate max-w-[80%]">
+                        {localStorage.getItem("appforge_last_prompt")?.slice(0, 100) || "Crea una aplicación increíble para mí."}...
+                      </span>
+                      <span className="text-[10px] font-bold text-primary uppercase group-open/prompt:hidden">Ver más</span>
+                      <span className="text-[10px] font-bold text-primary uppercase hidden group-open/prompt:block">Cerrar</span>
+                    </div>
+                  </summary>
+                  <div className="mt-2 p-4 rounded-2xl text-sm leading-relaxed bg-white/[0.05] border border-primary/20 text-white/90 shadow-inner animate-in fade-in slide-in-from-top-2 duration-300">
+                    {localStorage.getItem("appforge_last_prompt") || "Crea una aplicación increíble para mí."}
+                  </div>
+                </details>
               </div>
             </div>
 

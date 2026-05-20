@@ -1540,12 +1540,28 @@ export async function generateApp(
   checkpoint?: GenerationCheckpoint,
 ): Promise<GeneratedAppPayload | GenerationCheckpoint> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
-    try {
-      return await fn();
-    } catch (err) {
-      try { onPhaseError?.(phase, err); } catch { /* monitoring must never crash the pipeline */ }
-      throw err;
+    let lastError: any;
+    const MAX_RETRIES = 3;
+    
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastError = err;
+        const isOverloaded = err?.message?.includes("Overloaded") || err?.status === 529 || err?.status === 429;
+        
+        if (isOverloaded && attempt < MAX_RETRIES) {
+          const delay = attempt * 2000;
+          log("system", `⚠️ El motor de IA está saturado (Intento ${attempt}/${MAX_RETRIES}). Reintentando en ${delay/1000}s...`, "warn");
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        try { onPhaseError?.(phase, err); } catch { /* monitoring must never crash the pipeline */ }
+        throw err;
+      }
     }
+    throw lastError;
   };
 
   const _genStartTime = Date.now();

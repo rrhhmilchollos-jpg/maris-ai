@@ -5,7 +5,7 @@ import {
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@/lib/api-client";
-import { Bot } from "lucide-react";
+import { Bot, Code2 } from "lucide-react";
 
 // We deliberately collapse every internal agent role (researcher, architect,
 // designer, integration, coder, qa, validator, patcher, system) into a single
@@ -233,7 +233,16 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
                     isWarn ? 'bg-amber-500/5 border-amber-500/20 text-amber-200' : 
                     'bg-white/[0.03] border-white/5 text-white/70 group-hover:bg-white/[0.05]'
                   }`}>
-                    {line.message}
+                    {line.message.includes("FILE:") || line.message.includes("Carpeta:") ? (
+                      <div className="flex items-center gap-2 font-mono text-[12px] text-primary">
+                        <Code2 className="h-3.5 w-3.5" />
+                        <span className="bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                          {line.message.replace("FILE:", "📄 Archivo:").replace("Carpeta:", "📁 Carpeta:")}
+                        </span>
+                      </div>
+                    ) : (
+                      line.message
+                    )}
                   </div>
                 </div>
               </div>
