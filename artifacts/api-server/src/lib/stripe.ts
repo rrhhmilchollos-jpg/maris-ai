@@ -18,16 +18,17 @@ export async function getStripe(): Promise<Stripe | null> {
 }
 
 export const KIND_COSTS = {
-  "fullstack": 1,
-  "landing": 1,
-  "game-2d": 3,
-  "game-3d": 5,
-  "pwa": 3,
-  "vue-3": 1,
-  "sveltekit": 1,
-  "nextjs": 2,
-  "fastapi": 2,
-  "django": 2,
+  fullstack:    3, // Proyecto complejo full-stack
+  landing:      1, // App simple / Landing
+  vue:          2, // App mediana
+  svelte:       2, // App mediana
+  mobile:       2, // App mediana
+  nextjs:       3, // Proyecto complejo
+  "python-api": 3, // Proyecto complejo
+  django:       3, // Proyecto complejo
+  "hybrid-pwa": 3, // Proyecto complejo
+  "game-2d":    3, // Proyecto complejo
+  "game-3d":    5, // Proyecto muy complejo
 } as const;
 
 export const FREE_PLAN_CREDITS = 10;

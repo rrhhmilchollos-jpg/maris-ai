@@ -10,7 +10,7 @@ const router: IRouter = Router();
 router.post("/tickets", requireAuth, async (req, res) => {
   await connectDB();
   const { subject, message } = req.body;
-  const userId = req.user?.id;
+  const userId = req.userId;
 
   if (!userId) {
     return res.status(401).json({ error: "No autenticado" });
@@ -37,7 +37,7 @@ router.post("/tickets", requireAuth, async (req, res) => {
 // Endpoint para que los usuarios vean sus propios tickets
 router.get("/tickets", requireAuth, async (req, res) => {
   await connectDB();
-  const userId = req.user?.id;
+  const userId = req.userId;
 
   if (!userId) {
     return res.status(401).json({ error: "No autenticado" });
@@ -57,7 +57,7 @@ router.post("/tickets/:id/respond", requireAuth, async (req, res) => {
   await connectDB();
   const ticketId = req.params.id;
   const { message } = req.body;
-  const userId = req.user?.id;
+  const userId = req.userId;
 
   if (!userId) {
     return res.status(401).json({ error: "No autenticado" });
@@ -122,7 +122,7 @@ router.post("/admin/tickets/:id/respond", async (req, res) => {
   await connectDB();
   const ticketId = req.params.id;
   const { message, newStatus } = req.body;
-  const adminId = req.user?.id;
+  const adminId = req.userId;
 
   if (!adminId) {
     return res.status(401).json({ error: "No autenticado" });

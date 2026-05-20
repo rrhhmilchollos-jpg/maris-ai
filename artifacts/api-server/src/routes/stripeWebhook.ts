@@ -188,7 +188,7 @@ stripeWebhookRouter.post(
             userId: clerkUserId,
             kind: "subscription",
             amount: freeCredits,
-            description: "Vuelta al plan gratuito: 100 créditos mensuales",
+            description: "Vuelta al plan gratuito: 10 créditos mensuales",
           }).catch(() => {});
 
           req.log.info({ clerkUserId }, "Subscription cancelled — reverted to free plan");

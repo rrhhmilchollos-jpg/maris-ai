@@ -1341,7 +1341,7 @@ Return the FULL updated app as JSON.`;
     if (provider === "gpt-5") {
       const stream = await openai.chat.completions.create({
         model: "gpt-5.4",
-        max_completion_tokens: 24000,
+        max_completion_tokens: 128000,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: finalUserContent },
@@ -1366,7 +1366,7 @@ Return the FULL updated app as JSON.`;
       // Claude streaming según el modelo elegido en el selector.
       const stream = await anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 24000,
+        max_tokens: 128000,
         system: systemPrompt,
         messages: [{ role: "user", content: [{ type: "text", text: finalUserContent, cache_control: { type: "ephemeral" } }] }],
       });
@@ -1390,12 +1390,8 @@ Return the FULL updated app as JSON.`;
   let { text: accumulated, finishReason } = await callModel("");
 
   if (finishReason === "MAX_TOKENS") {
-    emit("coder", "△ respuesta cortada por límite de tokens", "warn");
-    throw new Error(
-      "El cambio era demasiado grande para una sola pasada. " +
-      "Pídelo en partes más pequeñas (por ejemplo: primero el backend, " +
-      "y luego conectar el frontend) o cámbialo al modelo de calidad desde el menú \"Modelo\".",
-    );
+    emit("coder", "△ respuesta alcanzando límite, continuando...", "info");
+    // No lanzamos error, permitimos que el sistema intente procesar lo que tiene
   }
 
   let parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());

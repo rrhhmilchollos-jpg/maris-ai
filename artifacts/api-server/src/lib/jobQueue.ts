@@ -17,7 +17,7 @@ export const GENERATE_QUEUE =
   process.env.GENERATE_QUEUE_NAME ?? "appforge.generate-app";
  
 const DEFAULT_CONCURRENCY = 3;
-const DEFAULT_POLL_INTERVAL_MS = 1_500;
+const DEFAULT_POLL_INTERVAL_MS = 500;
 export const MAX_ATTEMPTS = 3;
  
 export interface JobPayload {

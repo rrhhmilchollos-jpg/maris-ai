@@ -101,7 +101,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     // 600 ms feels close-to-realtime in the UI without putting noticeable
     // load on the API server (the response is tiny — only NEW lines after
     // the cursor — and the route is a single indexed SELECT).
-    refetchInterval: isActive ? 600 : false,
+    refetchInterval: isActive ? 400 : false,
     refetchOnWindowFocus: false,
     // Don't dedupe — we always want the freshest cursor.
     staleTime: 0,
@@ -169,18 +169,16 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       data-testid="agent-log-stream"
     >
       {lines.length === 0 && isActive ? (
-        <div className="flex items-start gap-4 group animate-in fade-in duration-500">
-          <div className="h-8 w-8 rounded-full flex items-center justify-center border border-primary/30 bg-primary/10 shrink-0">
-            <Bot className="h-4 w-4 text-primary robot-vibrate" />
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 animate-in fade-in duration-700">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Bot className="h-8 w-8 text-primary animate-pulse" />
+            </div>
+            <div className="absolute -top-1 -right-1 h-4 w-4 bg-emerald-500 rounded-full border-4 border-[#0d0d12] animate-pulse" />
           </div>
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-tight text-primary">Sistema</span>
-              <span className="text-[10px] text-white/20 font-mono">Iniciando...</span>
-            </div>
-            <div className="p-3 rounded-2xl text-sm leading-relaxed border bg-primary/5 border-primary/20 text-white/70">
-              Conectando con el equipo de ingenieros... Preparando entorno de desarrollo para tu aplicación.
-            </div>
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-white tracking-tight">Iniciando sistema...</p>
+            <p className="text-xs text-white/40">Conectando con el equipo de ingenieros de Maris AI</p>
           </div>
         </div>
       ) : lines.length === 0 ? (

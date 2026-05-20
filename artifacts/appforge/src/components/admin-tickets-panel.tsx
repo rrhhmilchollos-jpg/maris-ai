@@ -256,7 +256,7 @@ export function AdminTicketsPanel() {
               </div>
 
               {/* Historial de mensajes */}
-              <div className="flex-1 overflow-y-auto space-y-3 min-h-[300px] max-h-[400px] pr-2">
+              <div className="flex-1 overflow-y-auto space-y-3 min-h-[300px] max-h-[500px] pr-2 custom-scrollbar">
                 {/* Mensaje inicial del usuario */}
                 <div className="flex justify-start">
                   <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 max-w-xs">

@@ -8,9 +8,9 @@
     "./schema": "./src/schema/index.ts"
   },
   "dependencies": {
-    "mongoose": "^8.7.0",
-    "drizzle-orm": "^0.35.1",
-    "pg": "^8.20.0",
+    "drizzle-orm": "^0.35.3",
+    "mongoose": "^8.24.0",
+    "pg": "^8.21.0",
     "zod": "catalog:"
   },
   "devDependencies": {

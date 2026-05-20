@@ -88,7 +88,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const [showPreview, setShowPreview] = useState(false);
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
-  const [showCreditsWarning, setShowCreditsWarning] = useState(true);
+  const [showCreditsWarning, setShowCreditsWarning] = useState(false); // Default to false to avoid initial overlap
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,13 +126,20 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   if (!job) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center bg-[#0a0a0f] text-white">
-        <div className="relative">
-          <div className="h-24 w-24 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Bot className="h-10 w-10 text-primary animate-pulse" />
+        <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-1000">
+          <div className="relative">
+            <div className="h-32 w-32 rounded-full border-4 border-primary/10 border-t-primary animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl shadow-primary/20">
+                <Bot className="h-8 w-8 text-white animate-pulse" />
+              </div>
+            </div>
+          </div>
+          <div className="text-center space-y-2">
+            <h3 className="text-xl font-bold tracking-tight">Preparando entorno</h3>
+            <p className="text-sm text-white/40 max-w-[240px]">Conectando con el equipo de ingenieros de Maris AI...</p>
           </div>
         </div>
-        <p className="mt-6 text-sm font-medium text-white/40 animate-pulse">Conectando con los agentes...</p>
       </div>
     );
   }
@@ -160,6 +167,10 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                  <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progressValue}%` }} />
               </div>
            </div>
+           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+              <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Burn Rate: 1.0/hr</span>
+           </div>
            {!showPreview && (
              <div className="flex items-center gap-2">
                <Button variant="ghost" size="sm" className="h-8 text-white/40 hover:text-white"><Code2 className="h-4 w-4" /> Code</Button>
@@ -182,7 +193,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 divide-y lg:divide-y-0 lg:divide-x divide-white/10">
         {/* Left Panel: Chat/Logs */}
         <div className={`flex flex-col min-h-0 bg-[#0d0d12] transition-all duration-500 ease-in-out relative ${showPreview ? 'w-full lg:w-[480px]' : 'flex-1'}`}>
-          <div ref={scrollRef} className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar ${!showPreview ? 'max-w-3xl mx-auto w-full' : ''}`}>
+          <div ref={scrollRef} className={`flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar pb-40 ${!showPreview ? 'max-w-3xl mx-auto w-full' : ''}`}>
             
             {/* User Initial Message (Prompt) */}
             <div className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -200,7 +211,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
             </div>
 
             {/* Blue Notice Banner */}
-            <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4">
+            <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 relative z-10">
                <div className="flex items-center gap-3">
                  <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
                    <Zap className="h-3 w-3 text-primary animate-pulse" />
@@ -245,16 +256,14 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
           {/* Bottom Chat Bar (Only in Chat-Only mode) */}
           {!showPreview && (
-            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12] to-transparent">
+            <div className="sticky bottom-0 left-0 right-0 p-6 bg-[#0d0d12] z-30 border-t border-white/5">
               <div className="max-w-3xl mx-auto space-y-4">
-                {/* Credits Warning */}
+                {/* Credits Warning - Redesigned to be less intrusive and avoid overlap */}
                 {showCreditsWarning && (
-                  <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-white/5 border border-white/10 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex items-center justify-between px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 shadow-2xl animate-in fade-in slide-in-from-bottom-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center">
-                        <Plus className="h-2.5 w-2.5 text-primary" />
-                      </div>
-                      <span className="text-[11px] font-medium text-white/60">¿Te quedan pocos créditos?</span>
+                      <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
+                      <span className="text-[11px] font-bold text-primary uppercase tracking-tight">Créditos bajos</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <button 
@@ -263,9 +272,9 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
                             window.location.href = "/billing";
                           }
                         }}
-                        className="text-[11px] font-bold text-white hover:text-primary transition-colors flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-lg border border-white/10"
+                        className="text-[10px] font-bold text-white bg-primary px-3 py-1 rounded-md hover:bg-primary/90 transition-all"
                       >
-                        <ShoppingBag className="h-3 w-3" /> Comprar créditos
+                        RECARGAR
                       </button>
                       <button onClick={() => setShowCreditsWarning(false)} className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
                     </div>

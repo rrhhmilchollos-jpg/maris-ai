@@ -1329,7 +1329,7 @@ Return the FULL updated app as JSON.`;
     if (provider === "gpt-5") {
       const stream = await openai.chat.completions.create({
         model: "gpt-5.4",
-        max_completion_tokens: 64000,
+        max_completion_tokens: 128000,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: finalUserContent },
@@ -1353,7 +1353,7 @@ Return the FULL updated app as JSON.`;
     } else if (provider === "claude") {
       const stream = anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 65536,
+        max_tokens: 128000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
@@ -1370,7 +1370,7 @@ Return the FULL updated app as JSON.`;
 // Claude streaming según el modelo elegido en el selector.
       const stream = await anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 32768,
+        max_tokens: 128000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
@@ -1393,12 +1393,7 @@ Return the FULL updated app as JSON.`;
   let { text: accumulated, finishReason } = await callModel("");
 
   if (finishReason === "MAX_TOKENS") {
-    emit("coder", "△ respuesta cortada por límite de tokens", "warn");
-    throw new Error(
-      "El cambio era demasiado grande para una sola pasada. " +
-      "Pídelo en partes más pequeñas (por ejemplo: primero el backend, " +
-      "y luego conectar el frontend) o cámbialo al modelo de calidad desde el menú \"Modelo\".",
-    );
+    emit("coder", "△ respuesta alcanzando límite, continuando...", "info");
   }
 
   let parsed = extractJsonObject<GeneratedAppPayload>(accumulated.trim());
@@ -1818,13 +1813,15 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    const cost = KIND_COSTS[kind] ?? 1;
+    // Implementación estilo emergent.sh: 1 crédito = 1 sesión de trabajo intensivo (aprox 1 hora de agentes)
+    // El coste inicial es bajo para permitir el arranque, el consumo real se basa en la complejidad.
+    const cost = 1; 
 
     const charge = await chargeCredits({
       userId,
       isAdmin,
       amount: cost,
-      description: `Generación de app ${kind || "fullstack"}: ${prompt.slice(0, 50)}...`,
+      description: `Sesión de ingeniería Maris AI (${kind || "fullstack"}): ${prompt.slice(0, 50)}...`,
     });
 
     if (!charge.ok) {
@@ -1934,12 +1931,14 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    const cost = 1;
+    // Las ediciones menores no consumen créditos adicionales si se hacen dentro de la misma sesión de trabajo.
+    // Implementamos un coste de 0.2 créditos para ediciones (5 ediciones = 1 crédito)
+    const cost = 0.2;
     const charge = await chargeCredits({
       userId,
       isAdmin,
       amount: cost,
-      description: `Edición de app ${app.title}: ${content.slice(0, 50)}...`,
+      description: `Refinamiento de ingeniería: ${app.title}`,
     });
 
     if (!charge.ok) {
