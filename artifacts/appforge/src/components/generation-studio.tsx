@@ -83,7 +83,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const approveMutation = useApproveFacet({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(String(jobId ?? 0)) });
+        queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(jobId ?? "") });
       }
     }
   });

@@ -168,7 +168,7 @@ export function useConfirmCheckout(opts?: { mutation?: Partial<UseMutationOption
 }
 
 export const getGetGenerationJobLogsQueryKey = (id: string) => ["generation-job-logs", id];
-export async function getGenerationJobLogs(id: string, params: { afterId?: number }, options?: RequestInit): Promise<any> {
+export async function getGenerationJobLogs(id: string, params: { afterId?: string | number }, options?: RequestInit): Promise<any> {
   const searchParams = new URLSearchParams();
   if (params.afterId) searchParams.set("afterId", params.afterId.toString());
   return apiFetch(`/api/jobs/${id}/logs?${searchParams.toString()}`, options);

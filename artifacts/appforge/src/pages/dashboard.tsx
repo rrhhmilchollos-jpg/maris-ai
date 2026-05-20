@@ -130,9 +130,9 @@ export default function DashboardPage() {
 
   const visibleApps = (apps ?? []).filter((a) => appsFilter === "deployed" ? !!a.publicSlug : true);
 
-  const { data: job } = useGetGenerationJob(activeJobId ?? 0, {
+  const { data: job } = useGetGenerationJob(activeJobId ?? "", {
     query: {
-      queryKey: getGetGenerationJobQueryKey(activeJobId ?? 0),
+      queryKey: getGetGenerationJobQueryKey(activeJobId ?? ""),
       enabled: activeJobId !== null,
       refetchInterval: (query) => {
         const data = query.state.data as { status?: string } | undefined;

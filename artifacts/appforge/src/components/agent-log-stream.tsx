@@ -83,7 +83,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
 
   const enabled = jobId !== null;
   const queryClient = useQueryClient();
-  const queryKey = [...getGetGenerationJobLogsQueryKey(jobId ?? 0), "stream"];
+  const queryKey = [...getGetGenerationJobLogsQueryKey(jobId ?? ""), "stream"];
   const { data } = useQuery({
     // Use only the jobId in the key so re-renders from `lastId` changes don't
     // create infinite new query keys. The afterId is passed via queryFn.
@@ -93,7 +93,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       // when the job switches or the component unmounts. Without this, the
       // tail of a long request can resolve after teardown and stamp stale
       // lines into the next job's stream.
-      getGenerationJobLogs(jobId ?? 0, { afterId: lastId }, { signal }),
+      getGenerationJobLogs(jobId ?? "", { afterId: lastId }, { signal }),
     enabled,
     // Poll fast while running; stop once the job terminates. Tail-loss (lines
     // committed by the unawaited fire-and-forget INSERT after the job is
