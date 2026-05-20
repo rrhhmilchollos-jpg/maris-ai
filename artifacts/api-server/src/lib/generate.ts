@@ -140,7 +140,8 @@ Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
 - Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
-- Generate every file the plan needs, in full. Never truncate or "TODO" a file to save tokens. Stay concise: avoid redundant comments, padding, or unnecessary boilerplate.
+  - Generate every file the plan needs, in full. Never truncate or "TODO" a file to save tokens. Stay concise: avoid redundant comments, padding, or unnecessary boilerplate.
+- IMPORTANT: If you have many files, prioritize the most important ones first and be as concise as possible in code logic to fit everything in one response.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
@@ -502,7 +503,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: [{ type: "text", text: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: userContent }],
         }),
@@ -521,7 +522,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: [{ type: "text", text: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: userContent }],
         }),
@@ -747,7 +748,7 @@ Now produce the JSON object with backendCode.`;
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
         model: "claude-sonnet-4-5",
-        max_tokens: 32768,
+        max_tokens: 64000,
         system: [{ type: "text", text: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userContent }],
       }),
