@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import { SupportPanel } from "@/components/support-panel";
+import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { GenerationStudio } from "@/components/generation-studio";
 import {
   AttachmentPicker,
@@ -400,7 +401,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <SupportPanel />
+        {isAdmin ? <AdminTicketsPanel /> : <SupportPanel />}
       </div>
 
       <Dialog open={annualOpen} onOpenChange={(open) => { if (!open) dismissAnnual(7); }}>
