@@ -34,6 +34,7 @@ type JobHandler = (jobId: string, ctx: AttemptContext) => Promise<void>;
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let activeJobs = 0;
 let registeredHandler: JobHandler | null = null;
+let triggerPollFn: (() => Promise<void>) | null = null;
 let isStarted = false;
  
 // ---------------------------------------------------------------------------
@@ -80,8 +81,11 @@ export async function enqueueGenerateJob(jobId: string): Promise<void> {
   if (registeredHandler && activeJobs < DEFAULT_CONCURRENCY) {
     logger.info({ jobId }, "Triggering immediate job poll after enqueue");
     // We don't await here to keep the response fast
-    setImmediate(() => {
-      // The pollInterval will pick it up, but we could also manually trigger a check here
+    setImmediate(async () => {
+      // Manually trigger a check to start the job in milliseconds
+      if (triggerPollFn) {
+        await triggerPollFn();
+      }
     });
   }
 }
@@ -106,6 +110,7 @@ export async function registerGenerateWorker(
     return;
   }
   registeredHandler = handler;
+  triggerPollFn = triggerPoll;
  
   const concurrency = (() => {
     const raw = process.env.JOB_CONCURRENCY;
@@ -117,20 +122,20 @@ export async function registerGenerateWorker(
  
   logger.info({ concurrency }, "Generation worker registered");
  
-  pollInterval = setInterval(async () => {
+  const triggerPoll = async () => {
     if (activeJobs >= concurrency) return;
     if (!registeredHandler) return;
- 
+
     try {
       await connectDB();
- 
+
       // Claim up to (concurrency - activeJobs) queued jobs atomically.
       const slots = concurrency - activeJobs;
       const jobs = await GenerationJob.find({ status: "queued" })
         .sort({ createdAt: 1 })
         .limit(slots)
         .lean();
- 
+
       for (const job of jobs) {
         // Atomic claim — only one worker wins per job.
         const claimed = await GenerationJob.findOneAndUpdate(
@@ -139,18 +144,18 @@ export async function registerGenerateWorker(
           { new: true },
         );
         if (!claimed) continue; // another worker claimed it first
- 
+
         activeJobs++;
         const jobId = String(job._id);
         const attempt = (job.retryCount ?? 0) + 1;
- 
+
         // Run the handler in the background (don't await in the poll loop).
         (async () => {
           try {
             await registeredHandler!(jobId, { attempt, maxAttempts: MAX_ATTEMPTS });
           } catch (err) {
             logger.error({ err, jobId, attempt }, "Generation job worker threw");
- 
+
             if (attempt < MAX_ATTEMPTS) {
               // Re-queue for retry.
               await GenerationJob.findByIdAndUpdate(jobId, {
@@ -176,7 +181,9 @@ export async function registerGenerateWorker(
     } catch (err) {
       logger.error({ err }, "Job queue poll loop error");
     }
-  }, DEFAULT_POLL_INTERVAL_MS);
+  };
+
+  pollInterval = setInterval(triggerPoll, DEFAULT_POLL_INTERVAL_MS);
  
   // Prevent the interval from keeping Node alive if nothing else is running.
   if (pollInterval.unref) pollInterval.unref();

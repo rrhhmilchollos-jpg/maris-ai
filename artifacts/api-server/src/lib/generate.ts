@@ -26,21 +26,20 @@ export type GenLanguage = "typescript" | "javascript";
  * Maris AI multi-agent generation pipeline.
  *
  * Arquitectura de Élite (Anthropic-First):
- *   - Todos los agentes críticos usan Claude 3.5 (Sonnet o Haiku) para máxima precisión.
- *   - Se ha eliminado la dependencia de Gemini para evitar errores 404 de modelos inexistentes.
+ *   - Modelos sincronizados con la interfaz del usuario para máxima eficiencia.
  *
- * Agentes:
- *   - Researcher    (claude-haiku-4-5)  — referencia web
- *   - Architect     (claude-opus-4-7) — plan / estructura
- *   - Designer      (claude-sonnet-4-6) — design system
- *   - Frontend Eng  (claude-opus-4-7) — bundle frontend
- *   - Backend Eng   (claude-opus-4-7) — bundle backend
- *   - QA Reviewer   (claude-sonnet-4-6)  — revisión
- *   - Patcher       (claude-opus-4-7) — auto-fix
+ * Agentes (Configuración por defecto - Ahorro de Créditos):
+ *   - Researcher    (claude-haiku-4-5)
+ *   - Architect     (claude-haiku-4-5)
+ *   - Designer      (claude-haiku-4-5)
+ *   - Frontend Eng  (claude-haiku-4-5)
+ *   - Backend Eng   (claude-haiku-4-5)
+ *   - QA Reviewer   (claude-haiku-4-5)
+ *   - Patcher       (claude-haiku-4-5)
  * ========================================================================== */
 
-const useAnthropic = true; // Always use Anthropic — Gemini removed
-const DEFAULT_MODEL = "claude-opus-4-7";
+const useAnthropic = true;
+const DEFAULT_MODEL = "claude-haiku-4-5";
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";

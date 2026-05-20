@@ -1809,9 +1809,11 @@ const KIND_COSTS: Record<string, number> = {
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "claude-opus-4-7", name: "Claude Opus 4.7", description: "El modelo más capaz para razonamiento complejo y codificación agéntica." },
-    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "La mejor combinación de velocidad e inteligencia." },
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "El modelo más rápido con inteligencia casi de frontera." },
+    { id: "auto", name: "Auto (Claude Sonnet 4.5)", description: "Selección inteligente según la tarea." },
+    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", description: "Máximo ahorro de créditos y velocidad instantánea." },
+    { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5 (recomendado)", description: "Equilibrio perfecto entre inteligencia y coste." },
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", description: "Para tareas de alta complejidad y razonamiento profundo." },
+    { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
   ];
   res.json(availableModels);
 });
