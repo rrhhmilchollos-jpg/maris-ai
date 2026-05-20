@@ -1731,11 +1731,18 @@ export async function generateApp(
 
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
+  let lastLogChars = 0;
   const frontendPromise = runPhase("frontend", (m) =>
     withTimeoutOrThrow(
       generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(chars / 1000)} KB…` });
+        
+        // Log cada 10KB para dar feedback visual al usuario
+        if (chars - lastLogChars >= 10000) {
+          lastLogChars = chars;
+          log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+        }
       }, m || coderModel, language),
       600_000,
       "frontend-engineer",
