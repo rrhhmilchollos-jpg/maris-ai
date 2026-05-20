@@ -93,6 +93,13 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Forzar que la preview esté cerrada al inicio de un nuevo trabajo
+  useEffect(() => {
+    if (job?.status === "starting" || job?.status === "queued") {
+      setShowPreview(false);
+    }
+  }, [job?.status]);
+
   const approveMutation = useApproveFacet({
     mutation: {
       onSuccess: () => {
