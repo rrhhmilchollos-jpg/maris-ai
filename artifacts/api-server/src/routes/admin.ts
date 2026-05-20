@@ -9,6 +9,8 @@ import {
   AgentMemory,
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
+import { bulkCreateProjectSeeds } from "../lib/projectSeeds";
+import { IProjectSeed } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import { getMetricsSnapshot } from "../lib/metrics";
 import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
@@ -183,6 +185,24 @@ router.get("/admin/jobs", async (_req, res) => {
       updatedAt: r.updatedAt.toISOString(),
     })),
   });
+});
+
+router.post("/admin/jobs/:id/retry", async (req, res) => {
+  // ... existing job retry route ...
+});
+
+router.post("/admin/project-seeds/bulk", requireAdmin, async (req, res) => {
+  const seeds: Partial<IProjectSeed>[] = req.body;
+  if (!Array.isArray(seeds)) {
+    return res.status(400).json({ message: "Request body must be an array of project seeds." });
+  }
+  try {
+    const createdSeeds = await bulkCreateProjectSeeds(seeds);
+    res.status(201).json({ message: `Successfully created ${createdSeeds.length} project seeds.`, count: createdSeeds.length });
+  } catch (err) {
+    logger.error({ err }, "Error bulk creating project seeds");
+    res.status(500).json({ message: "Error bulk creating project seeds" });
+  }
 });
 
 router.post("/admin/jobs/:id/retry", async (req, res) => {

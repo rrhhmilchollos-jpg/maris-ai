@@ -476,3 +476,6 @@ const NewsArticleSchema = new Schema<INewsArticle>(
 
 export const NewsArticle: Model<INewsArticle> =
   mongoose.models.NewsArticle || mongoose.model<INewsArticle>("NewsArticle", NewsArticleSchema);
+
+// ─── Project Seeds ───────────────────────────────────────────────────────────
+export * from "./projectSeeds";
