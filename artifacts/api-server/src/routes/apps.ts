@@ -1798,17 +1798,17 @@ import mongoose from "mongoose";
 const router = Router();
 
 const KIND_COSTS: Record<string, number> = {
-  fullstack:    1,
-  landing:      1,
-  vue:          1,
-  svelte:       1,
-  mobile:       2,
-  nextjs:       2,
-  "python-api": 2,
-  django:       2,
-  "hybrid-pwa": 3,
-  "game-2d":    3,
-  "game-3d":    5,
+  fullstack:    3, // Proyecto complejo full-stack
+  landing:      1, // App simple / Landing
+  vue:          2, // App mediana
+  svelte:       2, // App mediana
+  mobile:       2, // App mediana
+  nextjs:       3, // Proyecto complejo
+  "python-api": 3, // Proyecto complejo
+  django:       3, // Proyecto complejo
+  "hybrid-pwa": 3, // Proyecto complejo
+  "game-2d":    3, // Proyecto complejo
+  "game-3d":    5, // Proyecto muy complejo
 };
 
 // ── POST /api/apps ────────────────────────────────────────────────────────

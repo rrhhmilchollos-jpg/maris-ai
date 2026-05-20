@@ -537,9 +537,9 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
   plan.dataModels = plan.dataModels ?? [];
   plan.backendFiles = plan.backendFiles ?? [];
   plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
-  // Hard cap: never exceed 15 frontend files to avoid token truncation
-  if (plan.frontendFiles.length > 15) {
-    plan.frontendFiles = plan.frontendFiles.slice(0, 15);
+  // Hard cap: increased to 40 files to allow complex apps without truncation
+  if (plan.frontendFiles.length > 40) {
+    plan.frontendFiles = plan.frontendFiles.slice(0, 40);
   }
   return plan;
 }
@@ -657,7 +657,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   if (provider === "gpt-5") {
     const stream = await openai.chat.completions.create({
       model: "gpt-5.4",
-      max_completion_tokens: 24000,
+      max_completion_tokens: 128000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
@@ -683,7 +683,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // Claude streaming según el modelo elegido en el selector.
     const stream = await anthropic.messages.stream({
       model: resolveClaudeCoderModel(coderModel),
-      max_tokens: 64000,
+      max_tokens: 128000,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userContent }],
     });
@@ -737,8 +737,8 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
-        max_tokens: 8192,
+        model: "claude-sonnet-4-5",
+        max_tokens: 32768,
         system: [{ type: "text", text: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userContent }],
       }),
