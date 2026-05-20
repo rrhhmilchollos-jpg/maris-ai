@@ -165,68 +165,70 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
 
   return (
     <div
-      className="rounded-xl border border-white/5 bg-black/40 font-mono text-[11px] leading-relaxed overflow-hidden"
+      className="space-y-4"
       data-testid="agent-log-stream"
     >
-      <div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Logs en vivo del agente
-        </span>
-        <span
-          className="text-[10px] tabular-nums text-muted-foreground"
-          data-testid="agent-log-count"
-        >
-          {lines.length} línea{lines.length === 1 ? "" : "s"}
-        </span>
-      </div>
-      <div
-        ref={scrollRef}
-        className="max-h-56 overflow-y-auto px-3 py-2 space-y-1"
-      >
-        {lines.length === 0 ? (
-          <div className="text-muted-foreground/60 italic">
-            Esperando primer paso del pipeline…
+      {lines.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 animate-pulse">
+          <div className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Bot className="h-6 w-6 text-white/20" />
           </div>
-        ) : (
-          lines.map((line, idx) => {
-            const levelClass =
-              line.level === "error"
-                ? "text-red-300"
-                : line.level === "warn"
-                ? "text-amber-200"
-                : "text-foreground/90";
-            // Vibrate ONLY the icon on the most recent line and ONLY while
-            // the job is still active, so the user's eye is naturally drawn
-            // to "what the robot is doing right now" without a wall of
-            // moving icons.
+          <p className="text-sm text-white/40 font-medium">Esperando primer paso del pipeline…</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {lines.map((line, idx) => {
+            const isError = line.level === "error";
+            const isWarn = line.level === "warn";
             const isLatest = idx === lines.length - 1;
             const vibrate = isActive && isLatest ? "robot-vibrate" : "";
+            
             return (
               <div
                 key={line.id}
-                className="flex items-start gap-2"
-                data-testid={`agent-log-line-${line.id}`}
-                data-agent={line.agent}
-                data-level={line.level}
+                className={`flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-500`}
+                style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
               >
-                <span className="text-muted-foreground/60 tabular-nums shrink-0">
-                  {timeOf(line.createdAt)}
-                </span>
-                <Bot
-                  className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${ROBOT_COLOR} ${vibrate}`}
-                />
-                <span className={`shrink-0 ${ROBOT_COLOR} font-bold`}>
-                  {AGENT_LABELS[line.agent] || line.agent}
-                </span>
-                <span className="text-muted-foreground/40">›</span>
-                <span className={`min-w-0 break-words ${levelClass}`}>
-                  {line.message}
-                </span>
+                <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 transition-all ${
+                  isError ? 'bg-red-500/10 border-red-500/30' : 
+                  isWarn ? 'bg-amber-500/10 border-amber-500/30' : 
+                  'bg-white/5 border-white/10 group-hover:border-primary/30'
+                }`}>
+                  <Bot className={`h-4 w-4 ${
+                    isError ? 'text-red-400' : 
+                    isWarn ? 'text-amber-400' : 
+                    'text-primary'
+                  } ${vibrate}`} />
+                </div>
+                
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold uppercase tracking-tight ${
+                      isError ? 'text-red-400' : 
+                      isWarn ? 'text-amber-400' : 
+                      'text-white/80'
+                    }`}>
+                      {AGENT_LABELS[line.agent] || line.agent}
+                    </span>
+                    <span className="text-[10px] text-white/20 font-mono">
+                      {timeOf(line.createdAt)}
+                    </span>
+                  </div>
+                  
+                  <div className={`p-3 rounded-2xl text-sm leading-relaxed border transition-all ${
+                    isError ? 'bg-red-500/5 border-red-500/20 text-red-200' : 
+                    isWarn ? 'bg-amber-500/5 border-amber-500/20 text-amber-200' : 
+                    'bg-white/[0.03] border-white/5 text-white/70 group-hover:bg-white/[0.05]'
+                  }`}>
+                    {line.message}
+                  </div>
+                </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+          <div ref={scrollRef} className="h-1" />
+        </div>
+      )}
     </div>
   );
 }
