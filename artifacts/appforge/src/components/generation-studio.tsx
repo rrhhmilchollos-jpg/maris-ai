@@ -90,16 +90,26 @@ function bundleToPreviewHtml(code: string | null | undefined): string | null {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying }: { code: string | null | undefined; isActive: boolean; onClose: () => void; onDeploy?: () => void; isDeploying?: boolean }) {
+function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying, viewMode, setViewMode }: { code: string | null | undefined; isActive: boolean; onClose: () => void; onDeploy?: () => void; isDeploying?: boolean; viewMode: "preview" | "code"; setViewMode: (m: "preview" | "code") => void }) {
   const html = bundleToPreviewHtml(code);
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-black">
+    <div className="flex flex-col h-full min-h-0 bg-[#0d0d12]">
       <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-[#0d0d12] shrink-0">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-white/50">Live Preview</span>
+          <div className="flex bg-white/5 p-1 rounded-lg border border-white/10">
+            <button 
+              onClick={() => setViewMode("preview")}
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-tight transition-all ${viewMode === "preview" ? "bg-primary text-white shadow-lg" : "text-white/40 hover:text-white"}`}
+            >
+              Preview
+            </button>
+            <button 
+              onClick={() => setViewMode("code")}
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-tight transition-all ${viewMode === "code" ? "bg-primary text-white shadow-lg" : "text-white/40 hover:text-white"}`}
+            >
+              Código
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -124,8 +134,18 @@ function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying }: { code:
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 relative">
-        {!html ? (
+      <div className="flex-1 min-h-0 relative bg-[#0a0a0f]">
+        {viewMode === "code" ? (
+          <div className="w-full h-full overflow-auto p-6 font-mono text-xs text-emerald-400/80 bg-[#0a0a0f] custom-scrollbar">
+            <div className="flex items-center gap-2 mb-4 text-white/40 border-b border-white/5 pb-2">
+              <Code2 className="h-3.5 w-3.5" />
+              <span className="uppercase tracking-widest font-bold text-[10px]">Código Fuente Generado</span>
+            </div>
+            <pre className="whitespace-pre-wrap leading-relaxed">
+              {code || "// Esperando código..."}
+            </pre>
+          </div>
+        ) : !html ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#0a0a0f]">
              <div className="relative">
                 <div className="h-24 w-24 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
@@ -136,7 +156,7 @@ function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying }: { code:
              <p className="text-sm font-medium text-white/40 animate-pulse">Construyendo tu aplicación...</p>
           </div>
         ) : (
-          <iframe srcDoc={html} title="Preview" sandbox="allow-scripts allow-same-origin" className="w-full h-full border-0" />
+          <iframe srcDoc={html!} title="Preview" sandbox="allow-scripts allow-same-origin" className="w-full h-full border-0" />
         )}
       </div>
     </div>
@@ -147,6 +167,7 @@ function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying }: { code:
 
 export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: GenerationStudioProps) {
   const [showPreview, setShowPreview] = useState(false);
+  const [viewMode, setViewMode] = useState<"preview" | "code">("preview");
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
   const [showCreditsWarning, setShowCreditsWarning] = useState(false);
@@ -511,14 +532,29 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
 
         {showPreview && (
           <div className="flex-1 flex flex-col min-h-0 bg-black relative animate-in slide-in-from-right duration-500">
-            <PreviewPane code={partialCode} isActive={isActive} onClose={() => setShowPreview(false)} onDeploy={appId ? handleDeploy : undefined} isDeploying={deployAppMutation.isPending} />
+            <PreviewPane 
+              code={partialCode} 
+              isActive={isActive} 
+              onClose={() => setShowPreview(false)} 
+              onDeploy={appId ? handleDeploy : undefined} 
+              isDeploying={deployAppMutation.isPending}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+            />
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-4 pointer-events-none">
               <div className="flex items-center justify-between px-6 py-4 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-full shadow-[0_0_50px_rgba(0,0,0,0.5)] pointer-events-auto">
                 <div className="flex items-center gap-4">
                   <div className="h-2.5 w-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
-                  <p className="text-xs text-white/80 font-semibold tracking-tight">Vista previa en tiempo real.</p>
+                  <p className="text-xs text-white/80 font-semibold tracking-tight">
+                    {viewMode === "preview" ? "Vista previa en tiempo real." : "Explorando código fuente."}
+                  </p>
                 </div>
-                <button className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-white/90 transition-all active:scale-95 shadow-lg">Ver Código</button>
+                <button 
+                  onClick={() => setViewMode(viewMode === "preview" ? "code" : "preview")}
+                  className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-white/90 transition-all active:scale-95 shadow-lg pointer-events-auto"
+                >
+                  {viewMode === "preview" ? "Ver Código" : "Ver Preview"}
+                </button>
               </div>
             </div>
           </div>
