@@ -1560,10 +1560,13 @@ export async function generateApp(
   };
 
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
+  log("system", "🚀 Orquestador de Maris AI activado. Asignando agentes de élite...");
+  log("planner", "🤖 Analizando requerimientos y diseñando estrategia de ejecución...");
+  
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
-  log("planner", "🤖 " + planSummaryEs(execPlan));
+  log("planner", "✅ Plan de ejecución listo: " + planSummaryEs(execPlan));
 
   // Edit mode
   if (previous) {
