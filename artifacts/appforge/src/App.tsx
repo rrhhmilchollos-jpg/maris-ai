@@ -307,7 +307,7 @@ function ClerkProviderWithRoutes() {
           </Route>
 
           <Route path="/news/:slug">
-            {(params) => <NewsDetailPage params={params} />}
+            <NewsDetailPage />
           </Route>
 
           <Route path="/__debug-preview/:id">

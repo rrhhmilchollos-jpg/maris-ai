@@ -11,6 +11,7 @@ import { es } from "date-fns/locale";
 
 interface Ticket {
   _id: string;
+  userId: string;
   subject: string;
   message: string;
   status: 'open' | 'in_progress' | 'closed';
