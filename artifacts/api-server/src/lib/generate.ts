@@ -1,6 +1,8 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
 import { validateBundle, type BuildIssue } from "./validate";
+import { ProjectSeed, IProjectSeed } from "@workspace/db/schema";
+import { getProjectSeeds } from "./projectSeeds";
 import { validateBundleInE2B } from "./e2bValidator";
 import { shouldValidateInE2B } from "./e2bGate";
 import { logger } from "./logger";
@@ -1727,7 +1729,7 @@ export async function generateApp(
 
   onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
   await log("coder", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
-  if (plan.backendNeeded) log("coder", "⚙️ Generando backend en paralelo…");
+  if (plan.backendNeeded) await log("coder", "⚙️ Generando backend en paralelo…");
 
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
@@ -1741,10 +1743,10 @@ export async function generateApp(
         // Log cada 10KB para dar feedback visual al usuario
         if (chars - lastLogChars >= 10000) {
           lastLogChars = chars;
-          log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+          await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, m || coderModel, language),
-      600_000,
+      120_000,
       "frontend-engineer",
     ),
     coderModel || DEFAULT_MODEL

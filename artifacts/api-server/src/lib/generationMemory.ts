@@ -1,4 +1,5 @@
 import mongoose, { Schema, type Model } from "mongoose";
+import { ProjectSeed, IProjectSeed } from "@workspace/db/schema";
 import { connectDB } from "./db";
 import { embedText } from "./agentMemory";
 import { logger } from "./logger";
@@ -37,6 +38,31 @@ export interface GenerationMemoryEntry extends GenerationMemoryInput {
   id: string;
   createdAt: Date;
   similarity?: number;
+  isSeed?: boolean;
+}
+
+// New helper to convert IProjectSeed to GenerationMemoryEntry
+function _toProjectSeedEntry(seed: IProjectSeed, similarity: number): GenerationMemoryEntry {
+  return {
+    id: String(seed._id),
+    prompt: seed.description, // Use description as prompt for similarity
+    language: "typescript", // Default language for seeds
+    plan: {
+      title: seed.title,
+      description: seed.description,
+      techStack: seed.techStack,
+      frontendFiles: seed.frontendCodeSnippet ? ["<snippet>"] : [],
+      backendNeeded: !!seed.backendCodeSnippet,
+      pages: [], components: [], hooks: [], utils: [], dataModels: [], // Initialize empty
+    },
+    design: {
+      vibe: seed.kind, // Use kind as vibe for design context
+    },
+    codeSnippets: [seed.frontendCodeSnippet, seed.backendCodeSnippet].filter(Boolean) as string[],
+    createdAt: seed.createdAt,
+    similarity: similarity,
+    isSeed: true, // To distinguish from regular generations
+  };
 }
 
 export interface RecallGenerationsOptions {
@@ -157,17 +183,41 @@ export async function recallGenerations(
     await connectDB();
     const Model    = getModel();
     const queryVec = await embedText(prompt.slice(0, 4000));
-    const entries  = await Model.find({}).lean();
 
-    return (entries as any[])
+    // 1. Recall from GenerationMemory (past successful generations)
+    const memoryEntries = (await Model.find({}).lean() as any[])
       .filter((e: any) => Array.isArray(e.embedding) && e.embedding.length > 0)
       .map((e: any) => ({
         ..._toEntry(e),
         similarity: cosineSimilarity(queryVec, e.embedding),
       }))
-      .filter((e: any) => e.similarity >= threshold)
+      .filter((e: any) => e.similarity >= threshold);
+
+    // 2. Recall from ProjectSeeds (pre-defined templates)
+    const seedEntries = (await ProjectSeed.find({}).lean() as IProjectSeed[])
+      .map((seed: IProjectSeed) => {
+        // Calculate similarity based on prompt vs seed title/description/keywords
+        const seedText = `${seed.title} ${seed.description} ${seed.keywords.join(" ")}`;
+        // For simplicity, we'll use a basic text match for now, or embed seedText if embedding is available for seeds
+        // For now, we'll just assume a high similarity if keywords match, or use a simple heuristic
+        const promptLower = prompt.toLowerCase();
+        const seedLower = seedText.toLowerCase();
+        let similarity = 0;
+        if (promptLower.includes(seedLower) || seedLower.includes(promptLower)) {
+          similarity = 0.8; // High similarity if direct match
+        } else if (seed.keywords.some(kw => promptLower.includes(kw.toLowerCase()))) {
+          similarity = 0.6; // Moderate similarity if keywords match
+        }
+        return _toProjectSeedEntry(seed, similarity);
+      })
+      .filter((e: any) => e.similarity >= threshold);
+
+    // Combine and sort results, prioritizing seeds or higher similarity
+    const combinedEntries = [...memoryEntries, ...seedEntries]
       .sort((a: any, b: any) => b.similarity - a.similarity)
       .slice(0, limit);
+
+    return combinedEntries;
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
@@ -188,7 +238,8 @@ export function buildGenerationMemoryBlock(entries: GenerationMemoryEntry[]): st
     const pages = e.plan?.pages?.map((p) => p.name).join(", ") || "—";
     const files = e.plan?.frontendFiles?.length ?? 0;
     const vibe  = e.design?.vibe ?? "—";
-    return `### Generación similar ${i + 1} (similitud ${sim}%)
+    const type  = e.isSeed ? "Plantilla" : "Generación";
+    return `### ${type} ${i + 1} (similitud ${sim}%)
 Prompt: ${e.prompt.slice(0, 300)}
 Título: ${e.plan?.title ?? "—"}
 Páginas: ${pages}
