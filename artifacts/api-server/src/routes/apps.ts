@@ -1702,7 +1702,7 @@ export async function generateApp(
           await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language),
-      120_000,
+      600_000,
       "frontend-engineer",
     ),
   );
