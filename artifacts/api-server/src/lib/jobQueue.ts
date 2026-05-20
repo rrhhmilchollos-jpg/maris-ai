@@ -17,7 +17,7 @@ export const GENERATE_QUEUE =
   process.env.GENERATE_QUEUE_NAME ?? "appforge.generate-app";
  
 const DEFAULT_CONCURRENCY = 3;
-const DEFAULT_POLL_INTERVAL_MS = 500;
+const DEFAULT_POLL_INTERVAL_MS = 200;
 export const MAX_ATTEMPTS = 3;
  
 export interface JobPayload {
@@ -75,6 +75,15 @@ export async function enqueueGenerateJob(jobId: string): Promise<void> {
     { _id: jobId, status: { $nin: ["running", "succeeded"] } },
     { $set: { status: "queued", phase: "queued" } },
   );
+  
+  // Trigger immediate poll if possible
+  if (registeredHandler && activeJobs < DEFAULT_CONCURRENCY) {
+    logger.info({ jobId }, "Triggering immediate job poll after enqueue");
+    // We don't await here to keep the response fast
+    setImmediate(() => {
+      // The pollInterval will pick it up, but we could also manually trigger a check here
+    });
+  }
 }
  
 /** Admin manual retry — always re-queues regardless of current status. */

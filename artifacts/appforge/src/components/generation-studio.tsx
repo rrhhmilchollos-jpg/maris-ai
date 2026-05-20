@@ -125,20 +125,55 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon }: Generati
 
   if (!job) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center bg-[#0a0a0f] text-white">
-        <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-1000">
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0a0a0f] text-white overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] animate-pulse" />
+          <div className="absolute top-1/4 left-1/4 w-[300px] h-[300px] bg-accent/5 rounded-full blur-[100px] animate-bounce duration-[10s]" />
+        </div>
+
+        <div className="relative flex flex-col items-center gap-8 animate-in fade-in zoom-in-95 duration-1000">
           <div className="relative">
-            <div className="h-32 w-32 rounded-full border-4 border-primary/10 border-t-primary animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-2xl shadow-primary/20">
-                <Bot className="h-8 w-8 text-white animate-pulse" />
+            {/* Outer Ring */}
+            <div className="h-48 w-48 rounded-full border-2 border-white/5" />
+            {/* Spinning Ring */}
+            <div className="absolute inset-0 h-48 w-48 rounded-full border-t-2 border-primary animate-spin duration-[1.5s]" />
+            {/* Inner Core */}
+            <div className="absolute inset-4 flex items-center justify-center">
+              <div className="h-32 w-32 rounded-[40px] bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_0_50px_rgba(var(--primary-rgb),0.3)] border border-white/20">
+                <Bot className="h-16 w-16 text-white animate-pulse" />
               </div>
             </div>
+            {/* Floating Particles */}
+            <div className="absolute -top-4 -right-4 h-8 w-8 rounded-lg bg-primary/20 backdrop-blur-xl border border-white/10 animate-bounce flex items-center justify-center">
+              <Zap className="h-4 w-4 text-primary" />
+            </div>
+            <div className="absolute -bottom-2 -left-6 h-10 w-10 rounded-full bg-accent/20 backdrop-blur-xl border border-white/10 animate-pulse flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-accent" />
+            </div>
           </div>
-          <div className="text-center space-y-2">
-            <h3 className="text-xl font-bold tracking-tight">Preparando entorno</h3>
-            <p className="text-sm text-white/40 max-w-[240px]">Conectando con el equipo de ingenieros de Maris AI...</p>
+
+          <div className="text-center space-y-4 relative z-10">
+            <div className="space-y-1">
+              <h3 className="text-3xl font-black tracking-tighter uppercase italic">Iniciando Sistema</h3>
+              <div className="h-1 w-24 bg-gradient-to-r from-transparent via-primary to-transparent mx-auto" />
+            </div>
+            <p className="text-sm font-medium text-white/40 max-w-[300px] leading-relaxed">
+              Conectando con el equipo de ingenieros de Maris AI. Preparando entorno de desarrollo de alta fidelidad...
+            </p>
           </div>
+
+          {/* Loading Bar */}
+          <div className="w-64 h-1 bg-white/5 rounded-full overflow-hidden mt-4">
+            <div className="h-full bg-primary animate-[loading_2s_ease-in-out_infinite]" style={{ width: '40%' }} />
+          </div>
+        </div>
+
+        {/* Bottom Branding */}
+        <div className="absolute bottom-12 flex items-center gap-3 opacity-20">
+          <div className="h-px w-12 bg-white" />
+          <span className="text-[10px] font-black tracking-[0.3em] uppercase">Maris AI Engineering</span>
+          <div className="h-px w-12 bg-white" />
         </div>
       </div>
     );
