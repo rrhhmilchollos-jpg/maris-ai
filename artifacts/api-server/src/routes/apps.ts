@@ -1532,6 +1532,7 @@ export async function generateApp(
   onAgentLog?: AgentLog,
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
+  agentMemory?: AgentMemoryContext,
 ): Promise<GeneratedAppPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
