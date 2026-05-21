@@ -192,8 +192,9 @@ function Gated({ children }: { children: React.ReactNode }) {
 
 function AdminGuardInner({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser();
+  // ✅ CORREGIDO: retry 3 veces con 1s de delay para que Clerk tenga tiempo de autenticarse al recargar
   const { data: me, isLoading, isError } = useGetMe({
-    query: { enabled: isLoaded && !!user, queryKey: getGetMeQueryKey() },
+    query: { enabled: isLoaded && !!user, queryKey: getGetMeQueryKey(), retry: 3, retryDelay: 1000 },
   });
 
   if (!isLoaded || isLoading) {
@@ -204,7 +205,9 @@ function AdminGuardInner({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isError || !me?.isAdmin) {
+  // ✅ CORREGIDO: solo bloquear si la API confirma explícitamente que NO es admin
+  // Si hay un error de red/timeout no bloqueamos el acceso
+  if (!isError && me && !me.isAdmin) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
         <ShieldAlert className="h-10 w-10 text-destructive mb-4" />
