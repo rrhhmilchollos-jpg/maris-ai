@@ -516,7 +516,7 @@ export default function LandingPage() {
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
               <a href="https://github.com" className="hover:text-white transition-colors">GitHub</a>
-              <a href="mailto:hola@maris-ai.shop" className="hover:text-white transition-colors">Contacto</a>
+              <a href="mailto:hola@marisai.es" className="hover:text-white transition-colors">Contacto</a>
             </div>
           </div>
           <div className="flex justify-center mb-6">

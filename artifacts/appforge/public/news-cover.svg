@@ -105,7 +105,7 @@
 
 <!-- CENTER MAIN CONTENT -->
 <rect x="430" y="120" width="340" height="28" rx="14" fill="#1a1030" stroke="#7c3aed" stroke-width="0.8"/>
-<text x="600" y="139" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#a78bfa">LANZAMIENTO OFICIAL · maris-ai.shop</text>
+<text x="600" y="139" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#a78bfa">LANZAMIENTO OFICIAL · marisai.es</text>
 
 <text x="600" y="215" text-anchor="middle" font-family="sans-serif" font-size="52" font-weight="700" fill="url(#textgrad)">Maris AI</text>
 <text x="600" y="265" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="500" fill="#e2e8f0">La nueva era del desarrollo</text>
@@ -120,11 +120,11 @@
 <text x="600" y="428" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#ffffff">Comenzar ahora</text>
 
 <rect x="510" y="462" width="180" height="26" rx="13" fill="#0f0b1a" stroke="#334155" stroke-width="0.8"/>
-<text x="600" y="479" text-anchor="middle" font-family="monospace" font-size="11" fill="#64748b">maris-ai.shop</text>
+<text x="600" y="479" text-anchor="middle" font-family="monospace" font-size="11" fill="#64748b">marisai.es</text>
 
 <rect x="0" y="630" width="1200" height="45" fill="#0d0a1a" opacity="0.9"/>
 <text x="60" y="658" font-family="sans-serif" font-size="11" fill="#475569">2026 Maris AI · Todos los derechos reservados</text>
-<text x="1140" y="658" text-anchor="end" font-family="sans-serif" font-size="11" fill="#475569">maris-ai.shop</text>
+<text x="1140" y="658" text-anchor="end" font-family="sans-serif" font-size="11" fill="#475569">marisai.es</text>
 
 <g opacity="0.15" fill="#7c3aed">
   <circle cx="760" cy="520" r="2"/>
