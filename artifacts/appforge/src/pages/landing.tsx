@@ -519,6 +519,11 @@ export default function LandingPage() {
               <a href="mailto:hola@maris-ai.shop" className="hover:text-white transition-colors">Contacto</a>
             </div>
           </div>
+          <div className="flex justify-center mb-6">
+  <a href="https://www.producthunt.com/products/maris-ai?embed=true&utm_source=embed&utm_medium=post_embed" target="_blank" rel="noopener">
+    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=maris-ai&theme=dark" alt="Maris AI on Product Hunt" style={{height: "54px"}} />
+  </a>
+</div>
           <div className="border-t border-white/5 pt-6 flex flex-col md:flex-row items-center justify-between">
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Maris AI Inc. Todos los derechos reservados.
