@@ -205,7 +205,10 @@ function AdminGuardInner({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isError || !me?.isAdmin) {
+  // ✅ CORREGIDO: solo bloquear si la API confirma explícitamente que el usuario NO es admin.
+  // Si hay un error de red, timeout o Clerk aún no ha terminado de autenticarse,
+  // NO bloqueamos el acceso para evitar falsos positivos de "Acceso restringido".
+  if (!isError && me && !me.isAdmin) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
         <ShieldAlert className="h-10 w-10 text-destructive mb-4" />
