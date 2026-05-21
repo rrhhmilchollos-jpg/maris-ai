@@ -4,7 +4,7 @@ import { NewsArticle } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const BASE_URL = "https://maris-ai.shop";
+const BASE_URL = "https://marisai.es";
 
 router.get("/rss", async (_req, res) => {
   await connectDB();
@@ -31,8 +31,8 @@ router.get("/rss", async (_req, res) => {
     <description>Las últimas noticias sobre Maris AI, Live Coding y aplicaciones generadas por inteligencia artificial</description>
     <language>es</language>
     <copyright>© ${new Date().getFullYear()} Maris AI Inc.</copyright>
-    <managingEditor>hola@maris-ai.shop (Maris AI)</managingEditor>
-    <webMaster>hola@maris-ai.shop (Maris AI)</webMaster>
+    <managingEditor>hola@marisai.es (Maris AI)</managingEditor>
+    <webMaster>hola@marisai.es (Maris AI)</webMaster>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     <ttl>60</ttl>
     <image>
