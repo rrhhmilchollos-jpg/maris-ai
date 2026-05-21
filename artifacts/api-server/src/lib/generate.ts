@@ -12,6 +12,8 @@ import { formatMemoryBlock, type AgentMemoryContext } from "./agentMemoryContext
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "./planner";
 import { injectWatermarkToHTML, generateWatermarkReactComponent } from "./watermark";
 import { recallGenerations, rememberGeneration, buildGenerationMemoryBlock } from "./generationMemory";
+import { recallComponents, buildComponentCacheBlock, extractAndStoreComponents } from "./componentCache";
+import { getProactiveFixes, scheduleAutoRefactoring } from "./errorHistoryAnalyzer";
 
 // OpenAI client via Maris AI Integrations proxy.
 const openai = new OpenAI({
@@ -647,6 +649,13 @@ async function generateFrontendCode(
   const codeMemoryRecalls = await recallGenerations(prompt, { limit: 2, threshold: 0.2 }).catch(() => []);
   const codeMemoryBlock = buildGenerationMemoryBlock(codeMemoryRecalls);
 
+  // Recuperar componentes reutilizables de la caché de componentes
+  const cachedComponents = await recallComponents(prompt, language, 5).catch(() => []);
+  const componentCacheBlock = buildComponentCacheBlock(cachedComponents);
+
+  // Recuperar fixes proactivos de errores históricos
+  const proactiveFixes = await getProactiveFixes(language, 5).catch(() => "");
+
   const userContent = `User request: ${prompt}
 
 Project plan (you MUST implement every listed file):
@@ -656,6 +665,8 @@ Design system (apply EXACTLY in tailwind.config.ts theme.extend and src/index.cs
 ${designSummary}
 ${research ? `\nResearch context (visual reference, treat as ground truth):\n${research.slice(0, 2000)}` : ""}
 ${codeMemoryBlock ? `\n${codeMemoryBlock}` : ""}
+${componentCacheBlock ? `\n${componentCacheBlock}` : ""}
+${proactiveFixes ? `\n${proactiveFixes}` : ""}
 Now produce the JSON object with frontendCode containing every listed file.`;
 
   const provider = resolveCoderProvider(coderModel);
@@ -1821,6 +1832,11 @@ export async function generateApp(
   // Inyectar marca de agua de Maris AI en el código frontend
   const watermarkComponent = generateWatermarkReactComponent();
   const frontendWithWatermark = finalFrontend + "\n\n" + watermarkComponent + testsAppendix + setupNotes;
+
+  // Extraer y cachear componentes reutilizables para futuras generaciones (best-effort)
+  extractAndStoreComponents(frontendWithWatermark, language).catch(() => {});
+  // Programar análisis de auto-refactorización en background (best-effort)
+  scheduleAutoRefactoring(String(Date.now()), "system", frontendWithWatermark).catch(() => {});
 
   // Guardar generación exitosa en memoria persistente (best-effort, no bloquea)
   rememberGeneration({
