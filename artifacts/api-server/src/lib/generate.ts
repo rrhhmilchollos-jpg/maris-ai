@@ -463,8 +463,8 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
-          max_tokens: 1500,
+          model: "claude-haiku-4-5",
+max_tokens: 700,
           system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: userText }],
         });
@@ -616,7 +616,7 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  return "claude-sonnet-4-5";
+  return "claude-haiku-4-5";
 }
 
 /**
@@ -1709,7 +1709,7 @@ export async function generateApp(
     globalCSS: "",
   };
   const designPromise: Promise<DesignSystem> = runDesign
-    ? runPhase("design", (m) => designSystem(plan, research, m), "claude-sonnet-4-6")
+    runPhase("design", (m) => designSystem(plan, research, m), "claude-haiku-4-5")
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
