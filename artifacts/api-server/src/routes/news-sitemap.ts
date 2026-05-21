@@ -22,7 +22,7 @@ router.get("/news-sitemap.xml", async (_req, res) => {
   await connectDB();
   try {
     // Google News sitemaps: máximo 1000 URLs, solo artículos de los últimos 2 días
-    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+   const twoDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const articles = await NewsArticle.find({
       publishedAt: { $gte: twoDaysAgo },
     })
