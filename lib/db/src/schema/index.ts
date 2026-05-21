@@ -12,6 +12,11 @@ export interface IUser {
   isAdmin?: boolean;
   freeCreditsUsed?: boolean;
   registrationIp?: string;
+  // Suscripción y plan
+  plan?: string;
+  planCredits?: number;
+  planExpiresAt?: Date;
+  stripeSubscriptionId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +33,11 @@ const UserSchema = new Schema<IUser>(
     isAdmin: { type: Boolean, default: false },
     freeCreditsUsed: { type: Boolean, default: false },
     registrationIp: { type: String },
+    // Suscripción y plan
+    plan: { type: String, default: "free" },
+    planCredits: { type: Number, default: 0 },
+    planExpiresAt: { type: Date },
+    stripeSubscriptionId: { type: String },
   },
   { timestamps: true },
 );
