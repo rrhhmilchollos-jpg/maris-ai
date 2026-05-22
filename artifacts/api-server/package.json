@@ -29,6 +29,7 @@
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/integrations-gemini-ai": "workspace:*",
+    "@workspace/services": "workspace:*",
     "archiver": "^7.0.1",
     "bullmq": "^5.76.10",
     "cookie-parser": "^1.4.7",

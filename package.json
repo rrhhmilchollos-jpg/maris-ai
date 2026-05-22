@@ -15,6 +15,7 @@
   "private": true,
   "devDependencies": {
     "prettier": "^3.8.3",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "execa": "^9.0.0"
   }
 }
