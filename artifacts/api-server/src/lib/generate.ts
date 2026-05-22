@@ -1685,59 +1685,44 @@ export async function generateApp(
   const runQa = execPlan.phases.includes("qa");
   const runTests = execPlan.phases.includes("tests");
 
-  /* === Phase 1: Parallel Research + Architect === */
-  await log("system", "⚡ Iniciando motores de inteligencia en paralelo...");
+    /* === Phase 1 (Hyper-Parallel): Research + Architect + Design + Integrations === */
+  await log("system", "⚡ Activando orquestación paralela masiva para máxima velocidad...");
   
   const researchPromise = (runResearch && shouldResearch(prompt))
     ? runPhase("researcher", (m) => researchTopic(prompt, m), "claude-haiku-4-5")
     : Promise.resolve("");
 
-  // We start architecting immediately with the prompt, and inject research if it finishes fast
   const planPromise = runPhase("architect", async (m) => {
     const res = await researchPromise;
-    if (res) log("researcher", "✅ Investigación completada. Inyectando contexto al arquitecto...");
-    // Si el usuario no eligió un modelo específico, usamos Haiku para el plan inicial (ahorro)
     const modelToUse = coderModel || DEFAULT_MODEL;
     return withTimeoutOrThrow(architectPlan(prompt, res, modelToUse), 60_000, "architect");
   }, coderModel || DEFAULT_MODEL);
 
-  const [research, plan] = await Promise.all([researchPromise, planPromise]);
-
-  // --- FACET: Landing / Structure Approval (AUTO-APPROVED for speed) ---
-  // Hemos desactivado la pausa obligatoria para que los agentes trabajen sin parar,
-  // tal como en emergent.sh, a menos que el usuario pida explícitamente pausar.
-  await log("system", "Arquitectura aprobada automáticamente. Iniciando ingeniería...");
-
-  if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
-
-  await log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
-  if (plan.pages.length > 0) {
-    await log("architect", `Páginas: ${plan.pages.slice(0, 6).map((p) => p.name).join(", ")}${plan.pages.length > 6 ? "…" : ""}`);
-  }
-
-  onProgress?.({ phase: "integrating", progress: 20, note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…` });
-  if (runIntegration) log("integration", "🔌 Analizando servicios externos necesarios…");
-  if (runDesign) log("designer", "🎨 Eligiendo paleta y tipografía…");
-
-  /* === Phase 2 (parallel): integrations + design === */
-  const integrationPromise = runIntegration
-    ? runPhase("integrations", (m) => specifyIntegrations(plan, prompt, m), "claude-haiku-4-5")
-    : Promise.resolve({ services: [], envVars: [] });
-
+  // Design e Integrations ahora corren EN PARALELO con el Arquitecto, usando el prompt original
+  // para no esperar a que el plan de archivos esté listo (el diseño es visual, no depende de la lista de archivos)
   const FALLBACK_DESIGN: DesignSystem = {
-    theme: "dark",
-    vibe: "moderno y limpio",
+    theme: "dark", vibe: "moderno y limpio",
     palette: { primary: "#7c3aed", secondary: "#0ea5e9", background: "#0a0a0a", surface: "#111111", text: "#fafafa" },
     typography: { sans: "Inter, system-ui, sans-serif", display: "Inter, system-ui, sans-serif" },
-    radius: "0.75rem",
-    tailwindExtend: "",
-    globalCSS: "",
+    radius: "0.75rem", tailwindExtend: "", globalCSS: "",
   };
-  const designPromise: Promise<DesignSystem> = runDesign
-    ? runPhase("design", (m) => designSystem(plan, research, m), "claude-haiku-4-5")
+
+  const designPromise = runDesign
+    ? runPhase("design", (m) => designSystem({ title: "App", description: prompt, pages: [], components: [] } as any, researchPromise.then(r => r), "claude-haiku-4-5")
     : Promise.resolve(FALLBACK_DESIGN);
 
-  const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
+  const integrationPromise = runIntegration
+    ? runPhase("integrations", (m) => specifyIntegrations({ title: "App", description: prompt, pages: [], dataModels: [], backendNeeded: true } as any, prompt, m), "claude-haiku-4-5")
+    : Promise.resolve({ services: [], envVars: [] });
+
+  const [research, plan, design, integrationSpec] = await Promise.all([
+    researchPromise, planPromise, designPromise, integrationPromise
+  ]);
+
+  await log("system", "✅ Fase de análisis masivo completada. Iniciando ingeniería...");
+  if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
+  await log("architect", `Plan "${plan.title}" listo. Backend: ${plan.backendNeeded ? "sí" : "no"}.`);
+  await log("designer", `Diseño "${design.vibe}" y ${integrationSpec.services.length} integraciones listas.`);
   if (!runIntegration) log("integration", "Plan dice saltar integraciones (alcance reducido).");
   if (!runDesign) log("designer", "Plan dice saltar diseño (uso paleta por defecto).");
 
