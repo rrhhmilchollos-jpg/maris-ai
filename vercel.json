@@ -1,6 +1,7 @@
 {
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm --filter @workspace/appforge build",
+  "installCommand": "npm install -g pnpm@10.11.0 && pnpm install",
   "headers": [
     {
       "source": "/robots.txt",
