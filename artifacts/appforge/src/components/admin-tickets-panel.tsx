@@ -63,7 +63,6 @@ export function AdminTicketsPanel() {
       if (!response.ok) throw new Error("Error al cargar tickets");
       const data = await response.json();
       setTickets(data);
-      // Si hay un ticket seleccionado, actualizar su contenido
       if (selectedTicket) {
         const updated = data.find((t: Ticket) => t._id === selectedTicket._id);
         if (updated) {
@@ -143,8 +142,8 @@ export function AdminTicketsPanel() {
     }
   };
 
-  const filteredTickets = filterStatus === "all" 
-    ? tickets 
+  const filteredTickets = filterStatus === "all"
+    ? tickets
     : tickets.filter(t => t.status === filterStatus);
 
   return (
@@ -190,7 +189,6 @@ export function AdminTicketsPanel() {
                 </Select>
               </div>
 
-              {/* Lista de tickets */}
               <div className="space-y-2 max-h-96 overflow-y-auto border border-white/10 rounded-lg p-3 bg-background/50">
                 {filteredTickets.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
@@ -230,7 +228,6 @@ export function AdminTicketsPanel() {
               </div>
             </>
           ) : (
-            // Vista de conversación del ticket
             <div className="space-y-4 h-full flex flex-col">
               <div className="flex items-start justify-between gap-2 pb-3 border-b border-white/10">
                 <div className="flex-1">
@@ -255,9 +252,10 @@ export function AdminTicketsPanel() {
                 </div>
               </div>
 
-              {/* Historial de mensajes */}
+              {/* Historial de mensajes - estilo WhatsApp */}
               <div className="flex-1 overflow-y-auto space-y-3 min-h-[300px] max-h-[500px] pr-2 custom-scrollbar">
-                {/* Mensaje inicial del usuario */}
+
+                {/* Mensaje inicial del cliente — siempre a la IZQUIERDA (es del cliente) */}
                 <div className="flex justify-start">
                   <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 max-w-xs">
                     <p className="text-xs font-medium text-blue-400 mb-1">👤 {selectedTicket.userEmail}</p>
@@ -268,20 +266,21 @@ export function AdminTicketsPanel() {
                   </div>
                 </div>
 
-                {/* Respuestas */}
+                {/* Respuestas — cliente a la izquierda, soporte a la derecha */}
                 {selectedTicket.responses.map((response, idx) => {
-                  const isAdminMessage = response.senderId !== selectedTicket.userId;
+                  // Es mensaje del cliente si el senderId coincide con el userId del ticket
+                  const isClientMessage = response.senderId === selectedTicket.userId;
                   return (
-                    <div key={idx} className={`flex ${isAdminMessage ? 'justify-end' : 'justify-start'}`}>
+                    <div key={idx} className={`flex ${isClientMessage ? 'justify-start' : 'justify-end'}`}>
                       <div className={`rounded-lg p-3 max-w-xs ${
-                        isAdminMessage
-                          ? 'bg-green-500/10 border border-green-500/30'
-                          : 'bg-blue-500/10 border border-blue-500/30'
+                        isClientMessage
+                          ? 'bg-blue-500/10 border border-blue-500/30'
+                          : 'bg-green-500/10 border border-green-500/30'
                       }`}>
                         <p className={`text-xs font-medium mb-1 ${
-                          isAdminMessage ? 'text-green-400' : 'text-blue-400'
+                          isClientMessage ? 'text-blue-400' : 'text-green-400'
                         }`}>
-                          {isAdminMessage ? '🛠️ Soporte Maris AI' : `👤 ${selectedTicket.userEmail}`}
+                          {isClientMessage ? `👤 ${selectedTicket.userEmail}` : '🛠️ Soporte Maris AI'}
                         </p>
                         <p className="text-sm text-white">{response.message}</p>
                         <p className="text-xs text-muted-foreground mt-1">
