@@ -1648,7 +1648,7 @@ export async function generateApp(
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
-        await log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
+        log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
     };
 
@@ -1761,14 +1761,14 @@ export async function generateApp(
   let lastLogChars = 0;
   const frontendPromise = runPhase("frontend", (m) =>
     withTimeoutOrThrow(
-      generateFrontendCode(plan, design, research, prompt, (chars) => {
-        const ratio = Math.min(1, chars / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(chars / 1000)} KB…` });
-        
+            generateFrontendCode(plan, design, research, prompt, (chars) => {
+        const charsCount = chars.length;
+        const ratio = Math.min(1, charsCount / TARGET_CHARS);
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
         // Log cada 5KB para dar feedback visual al usuario (Optimizado)
-        if (chars - lastLogChars >= 5000) {
-          lastLogChars = chars;
-          await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+        if (charsCount - lastLogChars >= 5000) {
+          lastLogChars = charsCount;
+          log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
         }
       }, m || coderModel, language),
       600_000,
