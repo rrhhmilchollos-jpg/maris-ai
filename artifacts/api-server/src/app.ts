@@ -2,11 +2,9 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
-import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
-  getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import ticketsRouter from "./routes/tickets";
@@ -79,12 +77,13 @@ app.use(express.urlencoded({ extended: true }));
  
 if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
   app.use(
-    clerkMiddleware((req) => ({
-      publishableKey: publishableKeyFromHost(
-        getClerkProxyHost(req) ?? "",
-        process.env.CLERK_PUBLISHABLE_KEY,
-      ),
-    })),
+    clerkMiddleware({
+      // Use the configured Clerk publishable key directly. Deriving it from the
+      // proxied request host is fragile after custom-domain moves because the
+      // backend can receive www.marisai.es, marisai.es, Vercel, or Render hosts.
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+    }),
   );
 } else {
   logger.warn("Clerk keys not set — Authentication will be disabled or fail.");

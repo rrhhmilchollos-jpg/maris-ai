@@ -92,7 +92,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
             product_data: {
               name: `Eliminar Marca de Agua - ${appData.title}`,
               description: "Elimina la marca de agua de Maris AI de tu aplicación generada",
-              images: ["https://maris-ai.com/logo.png"],
+              images: ["https://marisai.es/logo.svg"],
             },
             unit_amount: Math.round((appData.watermarkRemovalPrice ?? 9.99) * 100),
           },

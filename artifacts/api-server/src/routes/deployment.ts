@@ -8,7 +8,6 @@ import {
   redeployVercelProject,
   verifyCustomDomain,
   getDeploymentStatus,
-  generateMarisaiSubdomain,
   type DeploymentConfig,
 } from "../lib/deployment";
 
@@ -96,9 +95,7 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
       });
     }
 
-    const subdomain = deploymentResult.subdomain
-      ? generateMarisaiSubdomain(appData.title, appId)
-      : undefined;
+    const subdomain = deploymentResult.subdomain;
 
     await GeneratedApp.updateOne(
       { _id: appId, userId },
@@ -255,7 +252,13 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    if (!domain) {
+    const normalizedDomain = domain
+      ?.trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/\/$/, "")
+      .toLowerCase();
+
+    if (!normalizedDomain) {
       return res.status(400).json({ error: "Domain is required" });
     }
 
@@ -269,21 +272,32 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
       return res.status(404).json({ error: "App not found" });
     }
 
-    const verificationResult = await verifyCustomDomain(domain, appData.vercelProjectId || "");
+    if (!appData.vercelProjectId) {
+      return res.status(400).json({ error: "App must be deployed before adding a custom domain" });
+    }
+
+    const verified = await verifyCustomDomain(appData.vercelProjectId, normalizedDomain);
 
     await GeneratedApp.updateOne(
       { _id: appId, userId },
       {
-        customDomain: domain,
-        customDomainVerified: verificationResult.verified,
+        customDomain: normalizedDomain,
+        customDomainVerified: verified,
       },
     );
 
     return res.json({
       success: true,
-      domain,
-      verified: verificationResult.verified,
-      instructions: verificationResult.instructions,
+      customDomain: normalizedDomain,
+      domain: normalizedDomain,
+      verified,
+      instructions: verified
+        ? []
+        : [
+            "Añade este dominio al proyecto correspondiente en Vercel si aún no aparece.",
+            "Configura los registros DNS que Vercel indique para verificar la propiedad del dominio.",
+            "Vuelve a comprobar la verificación cuando la propagación DNS haya terminado.",
+          ],
     });
   } catch (error) {
     logger.error({ error }, "Custom domain error");

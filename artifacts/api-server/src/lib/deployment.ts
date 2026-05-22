@@ -2,7 +2,7 @@
  * Maris AI Deployment Service
  *
  * Handles app deployment to Vercel with support for:
- * - Free tier: Automatic subdomain allocation (app-name.maris-ai.com)
+ * - Free tier: Automatic subdomain allocation (app-name.marisai.es)
  * - Paid tier: Custom domain support
  *
  * NOTE: appId is a MongoDB ObjectId string (e.g. "6641abc123...").
@@ -13,7 +13,7 @@ import { logger } from "./logger";
 
 const VERCEL_API_TOKEN = process.env.VERCEL_TOKEN ?? process.env.VERCEL_API_TOKEN;
 const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
-const MARIS_AI_DOMAIN = "maris-ai.com";
+export const MARIS_AI_DOMAIN = process.env.MARIS_AI_DOMAIN ?? "marisai.es";
 
 export interface DeploymentConfig {
   /** MongoDB ObjectId string of the app being deployed. */

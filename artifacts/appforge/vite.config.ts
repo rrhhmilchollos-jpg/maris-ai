@@ -5,11 +5,13 @@ import path from "path";
 
 const clerkPubKey =
   process.env.VITE_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "";
+const clerkProxyUrl = process.env.VITE_CLERK_PROXY_URL ?? "";
 
 export default defineConfig({
   base: "/",
   define: {
     "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPubKey),
+    "import.meta.env.VITE_CLERK_PROXY_URL": JSON.stringify(clerkProxyUrl),
   },
   plugins: [
     react(),
