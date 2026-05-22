@@ -485,7 +485,7 @@ max_tokens: 700,
 /**
  * Architect — Claude 3.5 (if available) or Gemini 2.5 Flash.
  */
-async function architectPlan(prompt: string, research: string): Promise<ProjectPlan> {
+async function architectPlan(prompt: string, research: string, coderModel?: string): Promise<ProjectPlan> {
   // Recuperar generaciones similares de memoria persistente
   const memoryRecalls = await recallGenerations(prompt, { limit: 3, threshold: 0.15 }).catch(() => []);
   const memoryBlock = buildGenerationMemoryBlock(memoryRecalls);
@@ -503,7 +503,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: resolveClaudeCoderModel(coderModel),
           max_tokens: 8192,
           system: [{ type: "text", text: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: userContent }],
@@ -522,7 +522,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
     try {
       const response = await withTimeoutOrThrow(
         anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: resolveClaudeCoderModel(coderModel),
           max_tokens: 8192,
           system: [{ type: "text", text: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: userContent }],
@@ -558,7 +558,7 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
 /**
  * Designer — Gemini 2.5 Flash.
  */
-async function designSystem(plan: ProjectPlan, research: string): Promise<DesignSystem> {
+async function designSystem(plan: ProjectPlan, research: string, coderModel?: string): Promise<DesignSystem> {
   const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
   const userContent = research
     ? `${summary}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
@@ -567,12 +567,12 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: resolveClaudeCoderModel(coderModel),
         max_tokens: 2048,
         system: [{ type: "text", text: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userContent }],
       }),
-      15_000,
+      25_000,
       "designer",
     );
     raw = response.content[0].type === "text" ? response.content[0].text : "";
@@ -738,6 +738,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 async function generateBackendCode(
   plan: ProjectPlan,
   prompt: string,
+  coderModel?: string,
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
@@ -757,12 +758,12 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: resolveClaudeCoderModel(coderModel),
         max_tokens: 64000,
         system: [{ type: "text", text: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userContent }],
       }),
-      45_000,
+      120_000,
       "backend-engineer",
     );
     const raw = response.content[0].type === "text" ? response.content[0].text : "";
@@ -790,6 +791,7 @@ Now produce the JSON object with backendCode.`;
 async function specifyIntegrations(
   plan: ProjectPlan,
   prompt: string,
+  coderModel?: string,
 ): Promise<IntegrationSpec> {
   return withTimeout(
     (async () => {
@@ -801,7 +803,7 @@ Pages: ${plan.pages.map((p) => p.name).join(", ")}
 Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
 Backend needed: ${plan.backendNeeded}`;
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: resolveClaudeCoderModel(coderModel),
           max_tokens: 800,
           system: [{ type: "text", text: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: intUserContent }],
@@ -1720,7 +1722,7 @@ export async function generateApp(
     globalCSS: "",
   };
   const designPromise: Promise<DesignSystem> = runDesign
-    runPhase("design", (m) => designSystem(plan, research, m), "claude-haiku-4-5")
+    ? runPhase("design", (m) => designSystem(plan, research, m), "claude-haiku-4-5")
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
