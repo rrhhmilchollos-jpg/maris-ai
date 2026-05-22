@@ -111,20 +111,20 @@ export default function BillingPage() {
           
           {/* Modal Dialog */}
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden border-0">
+            <Card className="w-full max-w-4xl bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
               
               {/* Header */}
-              <div className="flex items-center justify-between p-8 border-b border-gray-100">
+              <div className="flex items-center justify-between p-8 border-b border-slate-700">
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-lg">
                     <Plus className="h-7 w-7 text-white font-bold" strokeWidth={3} />
                   </div>
-                  <h1 className="text-3xl font-bold text-gray-900">Comprar créditos</h1>
+                  <h1 className="text-3xl font-bold text-slate-100">Comprar créditos</h1>
                 </div>
                 {/* ✅ Botón X con función de cerrar */}
                 <button
                   onClick={() => setLocation("/dashboard")}
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg hover:bg-gray-100"
+                  className="text-slate-400 hover:text-slate-300 transition-colors p-2 rounded-lg hover:bg-slate-800"
                 >
                   <X className="h-6 w-6" />
                 </button>
@@ -137,7 +137,7 @@ export default function BillingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                   {packagesLoading ? (
                     [1, 2, 3, 4, 5, 6].map(i => (
-                      <div key={i} className="h-56 bg-gray-100 rounded-xl animate-pulse" />
+                      <div key={i} className="h-56 bg-slate-800 rounded-xl animate-pulse" />
                     ))
                   ) : packages?.map(pkg => {
                     const isPopular = pkg.popular;
@@ -149,8 +149,8 @@ export default function BillingPage() {
                         key={pkg.id}
                         className={`relative rounded-2xl border-2 p-8 text-center transition-all duration-300 ${
                           isPopular
-                            ? "border-green-400 bg-gradient-to-b from-green-50 to-green-100/50 shadow-lg shadow-green-200/50 scale-105"
-                            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-md"
+                            ? "border-green-400 bg-gradient-to-b from-slate-800 to-slate-800 shadow-lg shadow-green-500/30 scale-105"
+                            : "border-slate-700 bg-slate-800 hover:border-slate-600 hover:shadow-md hover:shadow-slate-700/50"
                         }`}
                       >
                         {/* Badge "20% More" */}
@@ -163,13 +163,13 @@ export default function BillingPage() {
                         )}
 
                         {/* Créditos */}
-                        <div className={`text-2xl font-bold mb-3 ${isPopular ? "text-gray-900" : "text-gray-700"}`}>
+                        <div className={`text-2xl font-bold mb-3 ${isPopular ? "text-slate-100" : "text-slate-200"}`}>
                           {pkg.credits.toLocaleString()} créditos
                         </div>
 
                         {/* Precio Original Tachado */}
                         {originalPrice && (
-                          <div className="text-sm text-gray-400 line-through mb-2">
+                          <div className="text-sm text-slate-500 line-through mb-2">
                             {originalPrice}
                           </div>
                         )}
@@ -186,7 +186,7 @@ export default function BillingPage() {
                           className={`w-full font-bold py-3 px-4 rounded-xl transition-all text-base uppercase tracking-wider ${
                             isPopular
                               ? "bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl"
-                              : "bg-gray-900 hover:bg-gray-800 text-white"
+                              : "bg-slate-700 hover:bg-slate-600 text-white"
                           } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           {loadingPackageId === pkg.id ? (
@@ -201,17 +201,17 @@ export default function BillingPage() {
                 </div>
 
                 {/* Divider */}
-                <div className="border-t border-gray-200 my-10 pt-10">
+                <div className="border-t border-slate-700 my-10 pt-10">
                   
                   {/* Monto Personalizado */}
                   <div>
-                    <label className="text-sm font-bold text-gray-700 block mb-4 uppercase tracking-wider">
+                    <label className="text-sm font-bold text-slate-300 block mb-4 uppercase tracking-wider">
                       Monto personalizado
                     </label>
                     <div className="flex gap-3">
                       {/* ✅ Input con texto negro visible y mínimo 20€ */}
                       <div className="flex-1 relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 font-bold text-lg z-10">€</span>
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg z-10">€</span>
                         <input
                           type="number"
                           placeholder="Mínimo 20€"
@@ -220,7 +220,7 @@ export default function BillingPage() {
                             setCustomAmount(e.target.value);
                             setCheckoutError(null);
                           }}
-                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold text-gray-900 bg-white placeholder-gray-400"
+                          className="w-full pl-10 pr-4 py-3 border-2 border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold text-slate-100 bg-slate-800 placeholder-slate-500"
                           min="20"
                           step="1"
                         />
@@ -229,7 +229,7 @@ export default function BillingPage() {
                       <Button
                         onClick={handleCustomBuy}
                         disabled={!customAmount || parseFloat(customAmount) < 20 || loadingPackageId === "custom"}
-                        className="bg-gray-900 hover:bg-gray-800 text-white font-bold px-8 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
+                        className="bg-green-600 hover:bg-green-700 text-white font-bold px-8 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
                       >
                         {loadingPackageId === "custom" ? (
                           <Loader2 className="h-5 w-5 animate-spin" />
@@ -243,16 +243,16 @@ export default function BillingPage() {
 
                 {/* Alertas */}
                 {cancelNotice && (
-                  <Alert className="bg-amber-50 border-2 border-amber-200 text-amber-900 mt-6 rounded-xl">
-                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                  <Alert className="bg-amber-950 border-2 border-amber-700 text-amber-200 mt-6 rounded-xl">
+                    <AlertCircle className="h-5 w-5 text-amber-400" />
                     <AlertTitle className="font-bold">Pago cancelado</AlertTitle>
                     <AlertDescription className="text-sm">{cancelNotice}</AlertDescription>
                   </Alert>
                 )}
 
                 {checkoutError && (
-                  <Alert className="bg-red-50 border-2 border-red-200 text-red-900 mt-6 rounded-xl">
-                    <AlertCircle className="h-5 w-5 text-red-600" />
+                  <Alert className="bg-red-950 border-2 border-red-700 text-red-200 mt-6 rounded-xl">
+                    <AlertCircle className="h-5 w-5 text-red-400" />
                     <AlertTitle className="font-bold">Error</AlertTitle>
                     <AlertDescription className="text-sm">{checkoutError}</AlertDescription>
                   </Alert>
