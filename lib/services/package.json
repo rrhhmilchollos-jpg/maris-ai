@@ -1,0 +1,14 @@
+{
+  "name": "@workspace/services",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@workspace/integrations-anthropic-ai": "workspace:*",
+    "execa": "^9.0.0",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4"
+  }
+}

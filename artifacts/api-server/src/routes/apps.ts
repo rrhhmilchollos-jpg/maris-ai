@@ -1,5 +1,6 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { MarisPnpmOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
 // OpenAI client via Maris AI AI Integrations proxy.
@@ -1554,6 +1555,24 @@ export async function generateApp(
   };
 
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
+
+  // Si el prompt menciona "pnpm" o "monorepo", usamos el nuevo orquestador experimental.
+  if (prompt.toLowerCase().includes("pnpm") || prompt.toLowerCase().includes("monorepo")) {
+    await log("system", "🚀 Detectado flujo de Monorepo/pnpm. Activando MarisPnpmOrchestrator...");
+    const orchestrator = new MarisPnpmOrchestrator(process.cwd());
+    await orchestrator.executeModularPipeline(prompt, (progress: any) => {
+      onProgress?.({ phase: "generating", progress: progress.progress, note: progress.status });
+    });
+    // Retornamos un payload básico ya que el orquestador escribe directamente a disco
+    return {
+      title: "Proyecto Pnpm/Monorepo",
+      description: "Proyecto generado mediante MarisPnpmOrchestrator",
+      techStack: ["pnpm", "monorepo"],
+      frontendCode: "// Código gestionado en el monorepo",
+      backendCode: "// Código gestionado en el monorepo"
+    };
+  }
+
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
