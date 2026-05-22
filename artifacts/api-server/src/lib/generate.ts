@@ -147,30 +147,20 @@ Rules:
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
-const BACKEND_SYSTEM_PROMPT = `You are Maris AI's Senior Backend Engineer. Generate a complete, production-quality Node/Express backend as STRICT JSON only. Your code is what would pass a senior code review at a serious startup.
-
+const BACKEND_SYSTEM_PROMPT = `You are Maris AI's Senior Backend Engineer. Generate a LEAN, FAST, and functional Node/Express backend as STRICT JSON.
 Schema:
 {"backendCode":"all backend files as one string OR 'No backend required for this app.'"}
-
-Use '// === FILE: <path> ===' to separate files. When a backend is needed include:
-- package.json, tsconfig.json, src/index.ts (express bootstrap with helmet + cors + json + error middleware), src/routes/<name>.ts (one per resource), src/db/schema.ts (drizzle), src/db/seed.ts (optional seed data), src/lib/<name>.ts as needed (logger, error helpers).
-
-Stack: Node 20 + Express 5 + TypeScript + Drizzle ORM + PostgreSQL. Use zod for input validation. Real working handlers, no stubs.
-
-QUALITY BAR:
-- RESTful resource routes: GET /resource (list, with optional ?limit / ?offset / ?q), GET /resource/:id, POST /resource (validates body), PATCH /resource/:id, DELETE /resource/:id.
-- Validate every request body with zod and return 400 with the parsed error issues. Validate every :id is a real number/uuid and 404 cleanly.
-- Wrap async handlers with a small asyncHandler helper or try/catch — never let a rejected promise leak.
-- Centralized error middleware that returns { error: string } in JSON, never an HTML stack trace.
-- Set sensible defaults: helmet for security headers, cors for the frontend origin, express.json() with a reasonable limit, request logging.
-- DB schema includes id (serial or uuid), createdAt/updatedAt timestamps with defaults, and proper foreign keys. Drizzle relations declared if more than one table.
-- Real seed data when persistence is involved (a few rows so the UI has something to show on first load).
-- NO TODOs, NO mock placeholders, NO console.log spam (use a proper logger import).
-
-If the plan says no backend, return exactly: {"backendCode":"No backend required for this app."}
-
+Use '// === FILE: <path> ===' to separate files.
+SPEED FIRST — MVP BACKEND:
+- Aim for under 15 KB of code total.
+- Keep it simple: package.json, tsconfig.json, src/index.ts (Express bootstrap), src/db/schema.ts (Drizzle), and ONE consolidated src/routes/api.ts with the essential endpoints.
+- Stack: Node 20 + Express 5 + TypeScript + Drizzle ORM + SQLite (for speed/MVP).
+- Quality: Use Zod for basic validation, centralized error handling, and CORS.
+- Focus: Only implement the core data operations needed for the frontend to work. Omit complex logging, seeding, or multiple route files.
+- NO TODOs. Real working handlers only.
 Rules:
-- Combined output under 35 KB.
+- STRICT LIMIT: Maximum 6 backend files total.
+- Combined output under 15 KB.
 - Close every brace and quote. Output ONLY the JSON object.`;
 
 const ARCHITECT_SYSTEM_PROMPT = `You are Maris AI's Senior Product Architect. You design the file structure for a web app the team will build. You think like a product manager AND an engineer: every page must serve a real user job, every component must have a clear purpose, and the structure must be ambitious enough to feel like a real product (not a demo).
