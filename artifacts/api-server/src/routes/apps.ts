@@ -2164,25 +2164,22 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     await enqueueGenerateJob(String(job._id));
   }
 
-  const orphanedRunning = await GenerationJob.updateMany(
-    {
-      status: "running",
-      updatedAt: { $lt: staleDate },
-      awaitingApproval: { $ne: true },
-      ...(opts.userId ? { userId: opts.userId } : {}),
-    },
-    {
-      $set: {
-        status: "failed",
-        phase: "failed",
-        errorMessage: "La generación se detuvo inesperadamente (timeout).",
-        updatedAt: now,
-      },
-    },
-  );
-
-  if (orphanedRunning.modifiedCount > 0) {
-    logger.info({ count: orphanedRunning.modifiedCount }, "Marked stale running jobs as failed");
+  const orphanedRunningJobs = await GenerationJob.find({
+    status: "running",
+    updatedAt: { $lt: staleDate },
+    awaitingApproval: { $ne: true },
+    ...(opts.userId ? { userId: opts.userId } : {}),
+  });
+  for (const job of orphanedRunningJobs) {
+    logger.info({ jobId: job._id }, "Re-enqueuing orphaned running job");
+    await GenerationJob.updateOne(
+      { _id: job._id },
+      { $set: { status: "queued", phase: "queued", updatedAt: now } },
+    );
+    await enqueueGenerateJob(String(job._id));
+  }
+  if (orphanedRunningJobs.length > 0) {
+    logger.info({ count: orphanedRunningJobs.length }, "Re-enqueued stale running jobs");
   }
 }
 
