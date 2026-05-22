@@ -612,14 +612,10 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
   return "claude";
 }
 
-function resolveClaudeCoderModel(coderModel?: string, fileCount?: number): ClaudeCoderModel {
+function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
+  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  // Auto-routing dinámico: Sonnet para apps grandes (>20 archivos), Haiku para apps pequeñas
-  const isHeavy = fileCount !== undefined && fileCount > 20;
-  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") {
-    return isHeavy ? "claude-sonnet-4-5" : "claude-haiku-4-5";
-  }
-  return isHeavy ? "claude-sonnet-4-5" : "claude-haiku-4-5";
+  return "claude-haiku-4-5";
 }
 
 /**
@@ -703,7 +699,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else {
     // Claude streaming según el modelo elegido en el selector.
     const stream = await anthropic.messages.stream({
-      model: resolveClaudeCoderModel(coderModel, plan.frontendFiles.length),
+      model: resolveClaudeCoderModel(coderModel),
       max_tokens: 128000,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userContent }],
@@ -1379,7 +1375,6 @@ Return the FULL updated app as JSON.`;
     };
 
     const PROGRESS_EVERY = 500;
-    const PROGRESS_EVERY = 500;
 
     if (provider === "gpt-5") {
       const stream = await openai.chat.completions.create({
@@ -1698,7 +1693,7 @@ export async function generateApp(
   await log("system", "⚡ Activando orquestación paralela masiva para máxima velocidad...");
   
   const researchPromise = (runResearch && shouldResearch(prompt))
-    ? runPhase("researcher", (m) => researchTopic(prompt, m), "claude-haiku-4-5")
+    ? runPhase("researcher", () => researchTopic(prompt), "claude-haiku-4-5")
     : Promise.resolve("");
 
   const planPromise = runPhase("architect", async (m) => {
@@ -1717,7 +1712,7 @@ export async function generateApp(
   };
 
   const designPromise = runDesign
-    ? runPhase("design", (m) => designSystem({ title: "App", description: prompt, pages: [], components: [] } as any, researchPromise.then(r => r), "claude-haiku-4-5")
+    ? runPhase("design", (m) => designSystem({ title: "App", description: prompt, pages: [], components: [] } as any, "", m), "claude-haiku-4-5")
     : Promise.resolve(FALLBACK_DESIGN);
 
   const integrationPromise = runIntegration
