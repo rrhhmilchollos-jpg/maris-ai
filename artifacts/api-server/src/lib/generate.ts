@@ -216,10 +216,13 @@ FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
 - Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
 
-FILE LIMIT — quality over quantity:
-- Keep frontendFiles to a maximum of 15 files. A focused app with 12 well-built files beats 40 incomplete ones.
-- Prioritize the pages and components the user actually asked for. Omit speculative extras.
-- If the product genuinely needs more than 15 files, pick the 15 most critical ones.
+SPEED FIRST — MVP STRATEGY:
+- STRICT LIMIT: Maximum 12 frontend files total.
+- Your goal is to get a working preview in under 60 seconds.
+- Do NOT plan speculative pages or components. Stick to the core value proposition.
+- A great MVP has 2-3 pages and 4-6 components. That is plenty for a first version.
+- Fewer files = faster generation = happier user. Quality over quantity.
+- If the user prompt is complex, simplify it into the most essential 12 files.
 
 Rules:
 - NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
