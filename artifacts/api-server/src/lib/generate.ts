@@ -738,6 +738,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 async function generateBackendCode(
   plan: ProjectPlan,
   prompt: string,
+  onProgressUpdate?: (code: string) => void,
   coderModel?: string,
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
@@ -755,18 +756,29 @@ ${planSummary}
 
 Now produce the JSON object with backendCode.`;
 
+  let accumulated = "";
+  let truncated = false;
   try {
-    const response = await withTimeoutOrThrow(
-      anthropic.messages.create({
-        model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 64000,
-        system: [{ type: "text", text: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: userContent }],
-      }),
-      120_000,
-      "backend-engineer",
-    );
-    const raw = response.content[0].type === "text" ? response.content[0].text : "";
+    const stream = await anthropic.messages.stream({
+      model: resolveClaudeCoderModel(coderModel),
+      max_tokens: 64000,
+      system: [{ type: "text", text: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: userContent }],
+    });
+
+    let lastReport = 0;
+    for await (const chunk of stream) {
+      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+        accumulated += chunk.delta.text;
+        if (onProgressUpdate && accumulated.length - lastReport >= 1500) {
+          lastReport = accumulated.length;
+          onProgressUpdate(accumulated);
+        }
+      }
+    }
+    const finalMsg = await stream.finalMessage();
+    truncated = finalMsg.stop_reason === "max_tokens";
+    const raw = accumulated.trim();
     const parsed = extractJsonObject<{ backendCode?: string }>(raw);
     if (!parsed || typeof parsed.backendCode !== "string") {
       return {
@@ -1766,8 +1778,14 @@ export async function generateApp(
   );
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
+  let lastBackendLogChars = 0;
   const backendPromise = runBackend
-    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, m), coderModel || DEFAULT_MODEL)
+    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, (chars) => {
+        if (chars.length - lastBackendLogChars >= 5000) {
+          lastBackendLogChars = chars.length;
+          log("coder", `⚙️ Backend: escribiendo... ${Math.round(chars.length / 1000)} KB.`);
+        }
+      }, m), coderModel || DEFAULT_MODEL)
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
