@@ -633,7 +633,7 @@ async function generateFrontendCode(
   design: DesignSystem,
   research: string,
   prompt: string,
-  onProgressUpdate: (accumulatedCode: string) => void,
+  onProgressUpdate: (accumulatedCode: string, fileName?: string) => void,
   coderModel: string | undefined,
   language: GenLanguage,
 ): Promise<CodeGenResult> {
@@ -710,11 +710,14 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userContent }],
     });
+    
+    const observe = createStreamObserver((_, msg) => onProgressUpdate(accumulated, msg));
     let lastReport = 0;
     for await (const chunk of stream) {
       if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
         accumulated += chunk.delta.text;
-        if (accumulated.length - lastReport >= 1500) {
+        observe(accumulated);
+        if (accumulated.length - lastReport >= 2000) {
           lastReport = accumulated.length;
           onProgressUpdate(accumulated);
         }
@@ -741,7 +744,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 async function generateBackendCode(
   plan: ProjectPlan,
   prompt: string,
-  onProgressUpdate?: (code: string) => void,
+  onProgressUpdate?: (code: string, fileName?: string) => void,
   coderModel?: string,
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
@@ -769,11 +772,13 @@ Now produce the JSON object with backendCode.`;
       messages: [{ role: "user", content: userContent }],
     });
 
+    const observe = createStreamObserver((_, msg) => onProgressUpdate?.(accumulated, msg), true);
     let lastReport = 0;
     for await (const chunk of stream) {
       if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
         accumulated += chunk.delta.text;
-        if (onProgressUpdate && accumulated.length - lastReport >= 1500) {
+        observe(accumulated);
+        if (onProgressUpdate && accumulated.length - lastReport >= 2000) {
           lastReport = accumulated.length;
           onProgressUpdate(accumulated);
         }
@@ -1302,6 +1307,28 @@ function friendlyFileLabel(rawPath: string, isBackend: boolean): string {
   return `${glyph} ${truncated}`;
 }
 
+function createStreamObserver(emit: (agent: string, msg: string) => void, isBackendInitial: boolean = false) {
+  let scanFrom = 0;
+  let inBackend = isBackendInitial;
+  const seenFiles = new Set<string>();
+  const FILE_MARKER = /\/\/\s*===\s*FILE:\s*([^=\n]+?)\s*===/g;
+  return (buffer: string) => {
+    try {
+      const tail = buffer.slice(Math.max(0, scanFrom - 64));
+      FILE_MARKER.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = FILE_MARKER.exec(tail)) !== null) {
+        const file = m[1].replace(/\\\//g, "/").trim().slice(0, 120);
+        if (file && !seenFiles.has(file)) {
+          seenFiles.add(file);
+          emit("coder", friendlyFileLabel(file, inBackend));
+        }
+      }
+      scanFrom = buffer.length;
+    } catch { /* best-effort */ }
+  };
+}
+
 /**
  * Single edit pass — Gemini 2.5 Flash streaming (default) o GPT-5.
  */
@@ -1330,49 +1357,28 @@ ${prompt}
 
 Return the FULL updated app as JSON.`;
 
-  const provider = resolveCoderProvider(coderModel);
+    const provider = resolveCoderProvider(coderModel);
   const systemPrompt = buildEditSystemPrompt(language);
-
-  function makeStreamObserver() {
-    let scanFrom = 0;
-    let sawFrontendKey = false;
-    let sawBackendKey = false;
-    let inBackend = false;
-    const seenFiles = new Set<string>();
-    const FILE_MARKER = /\/\/\s*===\s*FILE:\s*([^=\n]+?)\s*===/g;
-    return (buffer: string) => {
-      try {
-        const tail = buffer.slice(Math.max(0, scanFrom - 64));
-        if (!sawFrontendKey && /"frontendCode"\s*:\s*"/.test(tail)) {
-          sawFrontendKey = true;
-          emit("coder", "📁 frontend/");
-        }
-        if (!sawBackendKey && /"backendCode"\s*:\s*"/.test(tail)) {
-          sawBackendKey = true;
-          inBackend = true;
-          emit("coder", "📁 backend/");
-        }
-        FILE_MARKER.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = FILE_MARKER.exec(tail)) !== null) {
-          const file = m[1].replace(/\\\//g, "/").trim().slice(0, 120);
-          if (file && !seenFiles.has(file)) {
-            seenFiles.add(file);
-            emit("coder", friendlyFileLabel(file, inBackend));
-          }
-        }
-        scanFrom = buffer.length;
-      } catch {
-        /* observer is best-effort */
-      }
-    };
-  }
 
   async function callModel(extraReminder: string): Promise<{ text: string; finishReason?: string }> {
     const finalUserContent = extraReminder ? `${userContent}\n\n${extraReminder}` : userContent;
     let accumulated = "";
     let finishReason: string | undefined;
-    const observe = makeStreamObserver();
+    
+    // Observer mejorado para detectar cambio de carpeta frontend -> backend en el JSON
+    let sawBackendKey = false;
+    let inBackend = false;
+    const observer = createStreamObserver((agent, msg) => emit(agent, msg));
+    const observe = (buffer: string) => {
+      if (!sawBackendKey && /"backendCode"\s*:\s*"/.test(buffer.slice(-100))) {
+        sawBackendKey = true;
+        inBackend = true;
+        emit("coder", "📁 backend/");
+      }
+      observer(buffer);
+    };
+
+    const PROGRESS_EVERY = 500;
     const PROGRESS_EVERY = 500;
 
     if (provider === "gpt-5") {
@@ -1747,16 +1753,19 @@ export async function generateApp(
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
   let lastLogChars = 0;
-  const frontendPromise = runPhase("frontend", (m) =>
+    const frontendPromise = runPhase("frontend", (m) =>
     withTimeoutOrThrow(
-            generateFrontendCode(plan, design, research, prompt, (chars) => {
-        const charsCount = chars.length;
-        const ratio = Math.min(1, charsCount / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
-        // Log cada 5KB para dar feedback visual al usuario (Optimizado)
-        if (charsCount - lastLogChars >= 5000) {
-          lastLogChars = charsCount;
-          log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
+      generateFrontendCode(plan, design, research, prompt, (chars, fileName) => {
+        if (fileName) {
+          log("coder", fileName);
+        } else {
+          const charsCount = chars.length;
+          const ratio = Math.min(1, charsCount / TARGET_CHARS);
+          onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
+          if (charsCount - lastLogChars >= 8000) {
+            lastLogChars = charsCount;
+            log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
+          }
         }
       }, m || coderModel, language),
       600_000,
@@ -1764,14 +1773,17 @@ export async function generateApp(
     ),
     coderModel || DEFAULT_MODEL
   );
-
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   let lastBackendLogChars = 0;
   const backendPromise = runBackend
-    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, (chars) => {
-        if (chars.length - lastBackendLogChars >= 5000) {
-          lastBackendLogChars = chars.length;
-          log("coder", `⚙️ Backend: escribiendo... ${Math.round(chars.length / 1000)} KB.`);
+    ? runPhase("backend", (m) => generateBackendCode(plan, prompt, (chars, fileName) => {
+        if (fileName) {
+          log("coder", fileName);
+        } else {
+          if (chars.length - lastBackendLogChars >= 8000) {
+            lastBackendLogChars = chars.length;
+            log("coder", `⚙️ Backend: escribiendo... ${Math.round(chars.length / 1000)} KB.`);
+          }
         }
       }, m), coderModel || DEFAULT_MODEL)
     : Promise.resolve(null);
