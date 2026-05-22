@@ -1754,12 +1754,17 @@ export async function generateApp(
         if (fileName) {
           log("coder", fileName);
         } else {
-          const charsCount = chars.length;
-          const ratio = Math.min(1, charsCount / TARGET_CHARS);
-          onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
-          if (charsCount - lastLogChars >= 8000) {
-            lastLogChars = charsCount;
-            log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
+          const charsCount = typeof chars === "string" ? chars.length : 0;
+          if (charsCount > 0) {
+            const ratio = Math.min(1, charsCount / TARGET_CHARS);
+            const progress = 32 + Math.round(ratio * 55);
+            if (Number.isFinite(progress)) {
+              onProgress?.({ phase: "generating", progress, note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
+            }
+            if (charsCount - lastLogChars >= 8000) {
+              lastLogChars = charsCount;
+              log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
+            }
           }
         }
       }, m || coderModel, language),
@@ -1775,9 +1780,10 @@ export async function generateApp(
         if (fileName) {
           log("coder", fileName);
         } else {
-          if (chars.length - lastBackendLogChars >= 8000) {
-            lastBackendLogChars = chars.length;
-            log("coder", `⚙️ Backend: escribiendo... ${Math.round(chars.length / 1000)} KB.`);
+          const backendChars = typeof chars === "string" ? chars.length : 0;
+          if (backendChars - lastBackendLogChars >= 8000) {
+            lastBackendLogChars = backendChars;
+            log("coder", `⚙️ Backend: escribiendo... ${Math.round(backendChars / 1000)} KB.`);
           }
         }
       }, m), coderModel || DEFAULT_MODEL)
