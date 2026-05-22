@@ -612,10 +612,14 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
   return "claude";
 }
 
-function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
-  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
+function resolveClaudeCoderModel(coderModel?: string, fileCount?: number): ClaudeCoderModel {
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  return "claude-haiku-4-5";
+  // Auto-routing dinámico: Sonnet para apps grandes (>20 archivos), Haiku para apps pequeñas
+  const isHeavy = fileCount !== undefined && fileCount > 20;
+  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") {
+    return isHeavy ? "claude-sonnet-4-5" : "claude-haiku-4-5";
+  }
+  return isHeavy ? "claude-sonnet-4-5" : "claude-haiku-4-5";
 }
 
 /**
@@ -699,7 +703,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else {
     // Claude streaming según el modelo elegido en el selector.
     const stream = await anthropic.messages.stream({
-      model: resolveClaudeCoderModel(coderModel),
+      model: resolveClaudeCoderModel(coderModel, plan.frontendFiles.length),
       max_tokens: 128000,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userContent }],
