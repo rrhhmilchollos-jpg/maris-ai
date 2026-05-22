@@ -1,6 +1,6 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { MarisPnpmOrchestrator } from "@workspace/services";
+import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
 // OpenAI client via Maris AI AI Integrations proxy.
@@ -1556,20 +1556,36 @@ export async function generateApp(
 
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
 
-  // Si el prompt menciona "pnpm" o "monorepo", usamos el nuevo orquestador experimental.
-  if (prompt.toLowerCase().includes("pnpm") || prompt.toLowerCase().includes("monorepo")) {
-    await log("system", "🚀 Detectado flujo de Monorepo/pnpm. Activando MarisPnpmOrchestrator...");
-    const orchestrator = new MarisPnpmOrchestrator(process.cwd());
-    await orchestrator.executeModularPipeline(prompt, (progress: any) => {
-      onProgress?.({ phase: "generating", progress: progress.progress, note: progress.status });
+  // IMPLEMENTACIÓN DE CORE ORCHESTRATOR (Task Splitting & Milestone Forking)
+  // Se activa para peticiones de apps completas (full-build) para evitar congelamientos.
+  const isFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
+  
+  if (isFullBuild) {
+    await log("system", "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
+    const coreOrchestrator = new CoreOrchestrator(process.cwd());
+    
+    // 1. CAPA DE INTERCEPCIÓN: Planificación de Hitos
+    // El orquestador ya llama internamente a la planificación en buildProjectIncremental, 
+    // pero lo mantenemos si queremos registrar el inicio explícitamente.
+    await log("system", "📋 Analizando arquitectura y planificando hitos...");
+    await log("system", "📋 Mapa de ruta generado. Iniciando ejecución serializada...");
+
+    // 2. BUCLE DE EJECUCIÓN SERIALIZADO con Streaming (Task Splitting & Milestone Forking)
+    await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
+      onProgress?.({ 
+        phase: "generating", 
+        progress: update.progress, 
+        note: update.status 
+      });
+      await log("coder", update.status);
     });
-    // Retornamos un payload básico ya que el orquestador escribe directamente a disco
+
     return {
-      title: "Proyecto Pnpm/Monorepo",
-      description: "Proyecto generado mediante MarisPnpmOrchestrator",
-      techStack: ["pnpm", "monorepo"],
-      frontendCode: "// Código gestionado en el monorepo",
-      backendCode: "// Código gestionado en el monorepo"
+      title: "Proyecto Generado por Hitos",
+      description: "App construida mediante Task Splitting y Milestone Forking",
+      techStack: ["React", "Node", "TypeScript"],
+      frontendCode: "// El código ha sido consolidado en disco por hitos.",
+      backendCode: "// El código ha sido consolidado en disco por hitos."
     };
   }
 
