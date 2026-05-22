@@ -551,9 +551,13 @@ async function architectPlan(prompt: string, research: string, coderModel?: stri
   plan.dataModels = plan.dataModels ?? [];
   plan.backendFiles = plan.backendFiles ?? [];
   plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
-  // Hard cap: increased to 40 files to allow complex apps without truncation
-  if (plan.frontendFiles.length > 40) {
-    plan.frontendFiles = plan.frontendFiles.slice(0, 40);
+  // Hard cap estricto: forzar máximo 12 archivos para asegurar velocidad de previsualización (MVP)
+  // Esto evita que la IA ignore el prompt y genere planes masivos que tardan demasiado.
+  if (plan.frontendFiles.length > 12) {
+    plan.frontendFiles = plan.frontendFiles.slice(0, 12);
+    // Sincronizar páginas y componentes con el recorte de archivos
+    plan.pages = plan.pages.filter(p => plan.frontendFiles.some(f => f.includes(p.name)));
+    plan.components = plan.components.filter(c => plan.frontendFiles.some(f => f.includes(c.name)));
   }
   return plan;
 }
