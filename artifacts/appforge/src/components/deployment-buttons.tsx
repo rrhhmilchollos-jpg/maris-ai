@@ -179,7 +179,7 @@ export function DeploymentButtons({ appId, onDeploymentSuccess, userPlan = "free
 
               {deploymentStatus.subdomain && userPlan === "free" && (
                 <p className="text-sm text-slate-600">
-                  Subdomain: <code className="rounded bg-slate-200 px-2 py-1">{deploymentStatus.subdomain}.maris-ai.com</code>
+                  Subdomain: <code className="rounded bg-slate-200 px-2 py-1">{deploymentStatus.subdomain}.marisai.es</code>
                 </p>
               )}
 

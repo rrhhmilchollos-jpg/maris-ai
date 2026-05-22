@@ -36,7 +36,8 @@ REDIS_URL=redis://...
 
 ### Frontend (artifacts/appforge)
 ```
-VITE_API_URL=https://api.maris-ai.com
+VITE_API_URL=https://marisai.es/api
+VITE_CLERK_PROXY_URL=/api/__clerk
 VITE_CLERK_PUBLISHABLE_KEY=pk_...
 ```
 
@@ -70,7 +71,7 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_...
 ### 2. Deployment System
 - Deploy button: One-click app deployment to Vercel
 - Re-deploy button: Update existing deployments
-- Free users: Auto-assigned maris-ai.com subdomains
+- Free users: Auto-assigned marisai.es subdomains
 - Paid users: Custom domain support with verification
 
 ### 3. Monetization
