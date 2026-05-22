@@ -76,10 +76,9 @@ Schema:
 Use '// === FILE: <path> ===' to separate files inside frontendCode. ALWAYS include:
 - index.html, package.json, vite.config.${utilExt}${isTS ? ", tsconfig.json" : ""}, tailwind.config.${utilExt}, postcss.config.js
 - src/main.${ext}, src/App.${ext}, src/index.css
-- src/pages/<Name>.${ext} for every page in the plan
-- src/components/<Name>.${ext} for every component in the plan
-- src/lib/<name>.${utilExt} for every util in the plan (cn helper, formatters, etc.)
-- src/hooks/<name>.${utilExt} for every hook in the plan
+- src/pages/<Name>.${ext} (ONLY the essential ones from the plan)
+- src/components/<Name>.${ext} (ONLY the essential ones from the plan)
+- src/lib/<name>.${utilExt} and src/hooks/<name>.${utilExt} (ONLY if strictly necessary)
 ${isTS ? "- src/types/index.ts when types are shared\n" : ""}
 ${stackLine} Apply the provided design system EXACTLY (colors, fonts, spacing) via the Tailwind config and global CSS.
 
@@ -140,7 +139,8 @@ TAILWIND — the preview uses the Tailwind Play CDN (no postcss). This means:
 
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
-- Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
+- Use the file list from the plan as a guide, but PRIORITIZE SPEED. If the plan has too many files, CONSOLIDATE them into a maximum of 12-15 files total.
+- Your priority is a working preview in under 60 seconds. Do not generate 40+ files even if the plan suggests it. 12-15 high-quality files is the goal.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
   - Generate every file the plan needs, in full. Never truncate or "TODO" a file to save tokens. Stay concise: avoid redundant comments, padding, or unnecessary boilerplate.
 - IMPORTANT: If you have many files, prioritize the most important ones first and be as concise as possible in code logic to fit everything in one response.
