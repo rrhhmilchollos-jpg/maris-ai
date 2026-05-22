@@ -11,6 +11,7 @@ COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-spec/package.json ./lib/api-spec/
 COPY lib/integrations-gemini-ai/package.json ./lib/integrations-gemini-ai/
 COPY lib/integrations-anthropic-ai/package.json ./lib/integrations-anthropic-ai/
+COPY lib/services/package.json ./lib/services/
 RUN npm install -g pnpm
 RUN pnpm install --no-frozen-lockfile
 COPY . .
