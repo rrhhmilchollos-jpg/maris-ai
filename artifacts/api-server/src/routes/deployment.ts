@@ -62,7 +62,7 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
       });
     }
 
-    const isPaidUser = !!userData.isPremium;
+
 
     await GeneratedApp.updateOne(
       { _id: appId, userId },
@@ -92,9 +92,10 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
     }
 
     const { url, projectId } = deploymentResult.result;
+    const isPaidUser = !!userData.isPremium || isAdminEmail(userData.email);
     
     // Gestión de dominios según el plan
-    const isPaidUser = !!userData.isPremium || isAdminEmail(userData.email);
+
     let finalUrl = url;
     let subdomain: string | undefined;
     let customDomain: string | undefined;
