@@ -1869,9 +1869,10 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    // Implementación estilo emergent.sh: 1 crédito = 1 sesión de trabajo intensivo (aprox 1 hora de agentes)
-    // El coste inicial es bajo para permitir el arranque, el consumo real se basa en la complejidad.
-    const cost = 1; 
+    // Usuarios Free: 1 app (6 créditos) + 20 ediciones (0.2 * 20 = 4 créditos) = 10 créditos.
+    // Usuarios Paid: Quema rápida estilo emergent.sh (10 créditos por generación).
+    const isPaid = !!req.dbUser?.isPremium;
+    const cost = isPaid ? 10 : 6; 
 
     const charge = await chargeCredits({
       userId,
@@ -2027,9 +2028,11 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    // Las ediciones menores no consumen créditos adicionales si se hacen dentro de la misma sesión de trabajo.
-    // Implementamos un coste de 0.2 créditos para ediciones (5 ediciones = 1 crédito)
-    const cost = 0.2;
+    // Usuarios Free: 0.2 créditos (para permitir 20 ediciones con los créditos restantes).
+    // Usuarios Paid: Quema rápida estilo emergent.sh (2 créditos por refinamiento).
+    const isPaid = !!req.dbUser?.isPremium;
+    const cost = isPaid ? 2 : 0.2;
+
     const charge = await chargeCredits({
       userId,
       isAdmin,
@@ -2078,12 +2081,16 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    const cost = 1;
+    // Usuarios Free: 1 app (6 créditos) + 20 ediciones (0.2 * 20 = 4 créditos) = 10 créditos.
+    // Usuarios Paid: Quema rápida estilo emergent.sh (10 créditos por generación).
+    const isPaid = !!req.dbUser?.isPremium;
+    const cost = isPaid ? 10 : 6; 
+
     const charge = await chargeCredits({
       userId,
       isAdmin,
       amount: cost,
-      description: `Reintento de generación: ${app.title}`,
+      description: `Sesión de ingeniería Maris AI (${kind || "fullstack"}): ${prompt.slice(0, 50)}...`,
     });
 
     if (!charge.ok) {
