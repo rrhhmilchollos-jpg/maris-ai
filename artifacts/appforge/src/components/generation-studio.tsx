@@ -171,7 +171,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const [message, setMessage] = useState("");
   const [isMaxx, setIsMaxx] = useState(false);
   const [showCreditsWarning, setShowCreditsWarning] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-haiku-4-5");
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("maris_ai_selected_model") || "claude-sonnet-4-6");
   const { data: models } = useListModels();
   const { data: me } = useGetMe();
   const [, setLocation] = useLocation();
