@@ -1,7 +1,6 @@
 {
-  "outputDirectory": "dist",
-  "root": "artifacts/appforge",
-  "buildCommand": "pnpm build",
+  "outputDirectory": "artifacts/appforge/dist",
+  "buildCommand": "pnpm --filter @workspace/appforge build",
   "installCommand": "npm install -g pnpm@10.11.0 && pnpm install",
   "headers": [
     {
