@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, MessageSquare, X } from "lucide-react";
+import { Loader2, Send, MessageSquare, X, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -35,12 +35,15 @@ export function AdminTicketsPanel() {
   const { toast } = useToast();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [responseMessage, setResponseMessage] = useState("");
   const [newStatus, setNewStatus] = useState<'open' | 'in_progress' | 'closed'>('open');
   const [isResponding, setIsResponding] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,6 +56,41 @@ export function AdminTicketsPanel() {
   useEffect(() => {
     scrollToBottom();
   }, [selectedTicket?.responses]);
+
+  // Auto-refresco cada 30 segundos cuando hay un ticket seleccionado
+  useEffect(() => {
+    if (selectedTicket) {
+      autoRefreshRef.current = setInterval(() => {
+        refreshCurrentTicket();
+      }, 30000);
+    }
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
+  }, [selectedTicket?._id]);
+
+  const refreshCurrentTicket = async () => {
+    if (!selectedTicket) return;
+    setIsRefreshing(true);
+    try {
+      const response = await fetch("/api/admin/tickets", {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      setTickets(data);
+      const updated = data.find((t: Ticket) => t._id === selectedTicket._id);
+      if (updated) {
+        setSelectedTicket(updated);
+        setNewStatus(updated.status);
+      }
+      setLastRefresh(new Date());
+    } catch (error) {
+      // silencioso en auto-refresco
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const loadTickets = async () => {
     setIsLoading(true);
@@ -70,6 +108,7 @@ export function AdminTicketsPanel() {
           setNewStatus(updated.status);
         }
       }
+      setLastRefresh(new Date());
     } catch (error) {
       toast({
         title: "Error",
@@ -96,29 +135,16 @@ export function AdminTicketsPanel() {
       const response = await fetch(`/api/admin/tickets/${selectedTicket._id}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: responseMessage,
-          newStatus,
-        }),
+        body: JSON.stringify({ message: responseMessage, newStatus }),
       });
       if (!response.ok) throw new Error("Error al responder ticket");
-
       const updatedTicket = await response.json();
       setSelectedTicket(updatedTicket);
       setResponseMessage("");
-
-      toast({
-        title: "Éxito",
-        description: "Respuesta enviada al usuario",
-      });
-
+      toast({ title: "Éxito", description: "Respuesta enviada al usuario" });
       await loadTickets();
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "No se pudo enviar la respuesta",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "No se pudo enviar la respuesta", variant: "destructive" });
     } finally {
       setIsResponding(false);
     }
@@ -163,12 +189,7 @@ export function AdminTicketsPanel() {
           {!selectedTicket ? (
             <>
               <div className="flex gap-2 items-center flex-wrap">
-                <Button
-                  onClick={loadTickets}
-                  variant="outline"
-                  disabled={isLoading}
-                  size="sm"
-                >
+                <Button onClick={loadTickets} variant="outline" disabled={isLoading} size="sm">
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -199,10 +220,7 @@ export function AdminTicketsPanel() {
                   filteredTickets.map((ticket) => (
                     <div
                       key={ticket._id}
-                      onClick={() => {
-                        setSelectedTicket(ticket);
-                        setNewStatus(ticket.status);
-                      }}
+                      onClick={() => { setSelectedTicket(ticket); setNewStatus(ticket.status); }}
                       className="p-3 rounded-lg border border-white/10 bg-background/30 hover:bg-background/50 cursor-pointer transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -232,17 +250,27 @@ export function AdminTicketsPanel() {
               <div className="flex items-start justify-between gap-2 pb-3 border-b border-white/10">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold">{selectedTicket.subject}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    De: {selectedTicket.userEmail}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">De: {selectedTicket.userEmail}</p>
                   <p className="text-xs text-muted-foreground">
                     Creado {formatDistanceToNow(new Date(selectedTicket.createdAt), { addSuffix: true, locale: es })}
+                  </p>
+                  <p className="text-xs text-muted-foreground/50 mt-1">
+                    Actualizado {formatDistanceToNow(lastRefresh, { addSuffix: true, locale: es })} · Auto-refresco cada 30s
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className={`border ${getStatusColor(selectedTicket.status)}`}>
                     {getStatusLabel(selectedTicket.status)}
                   </Badge>
+                  {/* Botón de recargar */}
+                  <button
+                    onClick={refreshCurrentTicket}
+                    disabled={isRefreshing}
+                    className="p-1.5 hover:bg-white/10 rounded transition-colors text-muted-foreground hover:text-white"
+                    title="Recargar mensajes"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </button>
                   <button
                     onClick={() => setSelectedTicket(null)}
                     className="p-1 hover:bg-white/10 rounded transition-colors"
@@ -254,8 +282,7 @@ export function AdminTicketsPanel() {
 
               {/* Historial de mensajes - estilo WhatsApp */}
               <div className="flex-1 overflow-y-auto space-y-3 min-h-[300px] max-h-[500px] pr-2 custom-scrollbar">
-
-                {/* Mensaje inicial del cliente — siempre a la IZQUIERDA (es del cliente) */}
+                {/* Mensaje inicial del cliente — siempre a la IZQUIERDA */}
                 <div className="flex justify-start">
                   <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 max-w-xs">
                     <p className="text-xs font-medium text-blue-400 mb-1">👤 {selectedTicket.userEmail}</p>
@@ -266,9 +293,8 @@ export function AdminTicketsPanel() {
                   </div>
                 </div>
 
-                {/* Respuestas — cliente a la izquierda, soporte a la derecha */}
+                {/* Respuestas — cliente izquierda, soporte derecha */}
                 {selectedTicket.responses.map((response, idx) => {
-                  // Es mensaje del cliente si el senderId coincide con el userId del ticket
                   const isClientMessage = response.senderId === selectedTicket.userId;
                   return (
                     <div key={idx} className={`flex ${isClientMessage ? 'justify-start' : 'justify-end'}`}>
@@ -277,9 +303,7 @@ export function AdminTicketsPanel() {
                           ? 'bg-blue-500/10 border border-blue-500/30'
                           : 'bg-green-500/10 border border-green-500/30'
                       }`}>
-                        <p className={`text-xs font-medium mb-1 ${
-                          isClientMessage ? 'text-blue-400' : 'text-green-400'
-                        }`}>
+                        <p className={`text-xs font-medium mb-1 ${isClientMessage ? 'text-blue-400' : 'text-green-400'}`}>
                           {isClientMessage ? `👤 ${selectedTicket.userEmail}` : '🛠️ Soporte Maris AI'}
                         </p>
                         <p className="text-sm text-white">{response.message}</p>
@@ -297,9 +321,7 @@ export function AdminTicketsPanel() {
               {selectedTicket.status !== 'closed' && (
                 <div className="space-y-3 pt-3 border-t border-white/10">
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                      Tu respuesta
-                    </label>
+                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Tu respuesta</label>
                     <Textarea
                       value={responseMessage}
                       onChange={(e) => setResponseMessage(e.target.value)}
@@ -308,11 +330,8 @@ export function AdminTicketsPanel() {
                       disabled={isResponding}
                     />
                   </div>
-
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                      Cambiar estado
-                    </label>
+                    <label className="text-sm font-medium text-muted-foreground mb-2 block">Cambiar estado</label>
                     <Select
                       value={newStatus}
                       onValueChange={(value) => setNewStatus(value as 'open' | 'in_progress' | 'closed')}
@@ -328,25 +347,16 @@ export function AdminTicketsPanel() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="flex gap-2">
                     <Button
                       onClick={handleRespond}
                       disabled={isResponding || !responseMessage.trim()}
                       className="flex-1 bg-primary text-white hover:bg-primary/90"
                     >
-                      {isResponding ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4 mr-2" />
-                      )}
+                      {isResponding ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
                       Enviar respuesta
                     </Button>
-                    <Button
-                      onClick={() => setSelectedTicket(null)}
-                      variant="outline"
-                      disabled={isResponding}
-                    >
+                    <Button onClick={() => setSelectedTicket(null)} variant="outline" disabled={isResponding}>
                       Volver
                     </Button>
                   </div>
