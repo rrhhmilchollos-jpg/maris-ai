@@ -163,3 +163,71 @@ export async function chargeCredits(opts: {
 
   return { ok: true, newBalance: updated.credits };
 }
+
+/**
+ * Dar créditos del plan al usuario al inicio o renovación de suscripción.
+ * Los créditos del plan caducan al final del ciclo (se resetean en cada renovación).
+ * Los créditos comprados (top-up) NO se tocan.
+ */
+export async function grantPlanCredits(opts: {
+  clerkUserId: string;
+  planId: string;
+  creditsPerMonth: number;
+  periodEnd: number; // timestamp Unix
+  stripeSubscriptionId: string;
+}): Promise<void> {
+  await connectDB();
+  const { clerkUserId, planId, creditsPerMonth, periodEnd, stripeSubscriptionId } = opts;
+
+  const planExpiresAt = new Date(periodEnd * 1000);
+
+  // 1. Obtener créditos actuales del usuario con reintentos
+  let user;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      user = await User.findById(clerkUserId, { credits: 1, plan: 1, planCredits: 1 }).lean();
+      if (user) break;
+    } catch (err) {
+      retries--;
+      if (retries === 0) throw err;
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+  if (!user) return;
+
+  // 2. Calcular créditos a añadir:
+  //    - Resetear los créditos del plan anterior (que habrán caducado)
+  //    - Mantener los créditos top-up (no caducan)
+  const topUpCredits = Math.max(0, (user.credits ?? 0) - (user.planCredits ?? 0));
+  const newTotalCredits = topUpCredits + creditsPerMonth;
+
+  // 3. Actualizar usuario con el nuevo plan y créditos (con reintentos)
+  retries = 3;
+  while (retries > 0) {
+    try {
+      await User.findByIdAndUpdate(clerkUserId, {
+        $set: {
+          plan: planId,
+          planCredits: creditsPerMonth,
+          credits: newTotalCredits,
+          planExpiresAt,
+          stripeSubscriptionId,
+        },
+      });
+      break;
+    } catch (err) {
+      retries--;
+      if (retries === 0) throw err;
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
+  // 4. Registrar la transacción
+  await CreditTransaction.create({
+    userId: clerkUserId,
+    kind: "subscription",
+    amount: creditsPerMonth,
+    description: `Renovación plan ${planId}: ${creditsPerMonth} créditos (válidos hasta ${planExpiresAt.toLocaleDateString("es-ES")})`,
+  }).catch(() => { /* best-effort */ });
+}
