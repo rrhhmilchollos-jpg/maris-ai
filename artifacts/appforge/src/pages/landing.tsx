@@ -1,225 +1,157 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   Zap, Code2, Globe, ArrowRight, CheckCircle2, LayoutDashboard,
-  Search, Cpu, Palette, MonitorSmartphone, Server, ShieldCheck,
-  Wrench, GitBranch, Layers, Sparkles, Database, Smartphone,
-  Newspaper, ChevronRight, Star, Bot
+  Database, Smartphone, Newspaper, ChevronRight, GitBranch, Star,
+  Users, TrendingUp, Clock
 } from "lucide-react";
+
+// Líneas de código que se van escribiendo
+const CODE_LINES = [
+  { text: "import { useState, useEffect } from 'react';", color: "text-blue-400" },
+  { text: "import { motion } from 'framer-motion';", color: "text-purple-400" },
+  { text: "", color: "" },
+  { text: "export default function Dashboard() {", color: "text-emerald-400" },
+  { text: "  const [data, setData] = useState([]);", color: "text-yellow-300" },
+  { text: "  const [loading, setLoading] = useState(true);", color: "text-yellow-300" },
+  { text: "", color: "" },
+  { text: "  useEffect(() => {", color: "text-cyan-400" },
+  { text: "    fetchAnalytics().then(setData);", color: "text-white/70" },
+  { text: "    setLoading(false);", color: "text-white/70" },
+  { text: "  }, []);", color: "text-cyan-400" },
+  { text: "", color: "" },
+  { text: "  return (", color: "text-emerald-400" },
+  { text: "    <div className=\"dashboard-grid\">", color: "text-orange-400" },
+  { text: "      <MetricsCard title=\"Ingresos\" />", color: "text-pink-400" },
+  { text: "      <ChartComponent data={data} />", color: "text-pink-400" },
+  { text: "      <UserTable loading={loading} />", color: "text-pink-400" },
+  { text: "    </div>", color: "text-orange-400" },
+  { text: "  );", color: "text-emerald-400" },
+  { text: "}", color: "text-emerald-400" },
+];
+
+function CodeAnimation() {
+  const [visibleLines, setVisibleLines] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+  const [currentText, setCurrentText] = useState("");
+
+  useEffect(() => {
+    if (visibleLines >= CODE_LINES.length) {
+      setTimeout(() => {
+        setVisibleLines(0);
+        setCharIndex(0);
+        setCurrentText("");
+      }, 3000);
+      return;
+    }
+
+    const line = CODE_LINES[visibleLines];
+    if (!line) return;
+
+    if (charIndex < line.text.length) {
+      const timeout = setTimeout(() => {
+        setCurrentText(prev => prev + line.text[charIndex]);
+        setCharIndex(prev => prev + 1);
+      }, 18);
+      return () => clearTimeout(timeout);
+    } else {
+      const timeout = setTimeout(() => {
+        setVisibleLines(prev => prev + 1);
+        setCharIndex(0);
+        setCurrentText("");
+      }, line.text === "" ? 80 : 120);
+      return () => clearTimeout(timeout);
+    }
+  }, [visibleLines, charIndex]);
+
+  return (
+    <div className="font-mono text-xs leading-6 overflow-hidden">
+      {CODE_LINES.slice(0, visibleLines).map((line, i) => (
+        <div key={i} className={line.color || "text-white/40"}>
+          {line.text || "\u00a0"}
+        </div>
+      ))}
+      {visibleLines < CODE_LINES.length && (
+        <div className={CODE_LINES[visibleLines]?.color || "text-white/70"}>
+          {currentText}
+          <span className="animate-pulse text-primary">|</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuroraBackground() {
+  return (
+    <div className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
+      <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full opacity-20 blur-[100px] animate-pulse"
+        style={{ background: "radial-gradient(circle, #7c3aed, transparent)" }} />
+      <div className="absolute top-1/3 -right-40 w-[500px] h-[500px] rounded-full opacity-15 blur-[120px]"
+        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "pulse 4s ease-in-out infinite 1s" }} />
+      <div className="absolute -bottom-40 left-1/3 w-[700px] h-[400px] rounded-full opacity-10 blur-[150px]"
+        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "pulse 6s ease-in-out infinite 2s" }} />
+      <div className="absolute inset-0"
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" }} />
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const { isSignedIn } = useAuth();
   const [prompt, setPrompt] = useState("");
+  const { scrollY } = useScroll();
+  const heroOpacity = useTransform(scrollY, [0, 400], [1, 0.3]);
 
   useEffect(() => {
     const saved = localStorage.getItem("appforge_pending_prompt");
-    if (saved) {
-      setPrompt(saved);
-    }
+    if (saved) setPrompt(saved);
   }, []);
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-    if (isSignedIn) {
-      localStorage.setItem("appforge_pending_prompt", prompt);
-      setLocation("/dashboard");
-    } else {
-      localStorage.setItem("appforge_pending_prompt", prompt);
-      setLocation("/sign-up");
-    }
+    localStorage.setItem("appforge_pending_prompt", prompt);
+    setLocation(isSignedIn ? "/dashboard" : "/sign-up");
   };
 
-  // Animaciones optimizadas para móvil:
-  // - Usar solo opacity (sin y/transform) para evitar forced reflow en Framer Motion
-  // - Reducir duración en móvil para mejorar TBT
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-  const fadeIn = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    transition: { duration: isMobile ? 0.2 : 0.4 }
-  };
+  const fadeIn = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
+  const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
 
-  const stagger = {
-    animate: { transition: { staggerChildren: isMobile ? 0.05 : 0.1 } }
-  };
-
-  // Pipeline de agentes actualizado con modelos reales
-  const agents = [
-    {
-      id: 1,
-      name: "Researcher",
-      role: "Investigador",
-      model: "Claude Haiku 4.5",
-      provider: "Anthropic",
-      desc: "Analiza URLs de referencia, busca contexto visual y genera un brief de marca para orientar al resto del pipeline.",
-      icon: Search,
-      color: "from-blue-500/20 to-blue-600/10",
-      border: "border-blue-500/30",
-      badge: "bg-blue-500/20 text-blue-300",
-      timeout: "18s",
-    },
-    {
-      id: 2,
-      name: "Architect",
-      role: "Arquitecto",
-      model: "Claude Haiku 4.5",
-      provider: "Anthropic",
-      desc: "Diseña la estructura completa del proyecto: páginas, componentes, hooks, modelos de datos y archivos necesarios.",
-      icon: Cpu,
-      color: "from-violet-500/20 to-violet-600/10",
-      border: "border-violet-500/30",
-      badge: "bg-violet-500/20 text-violet-300",
-      timeout: "35s",
-    },
-    {
-      id: 3,
-      name: "Designer",
-      role: "Diseñador",
-      model: "Claude Haiku 4.5",
-      provider: "Anthropic",
-      desc: "Genera el sistema de diseño visual: paleta de colores, tipografía, espaciado y tokens de Tailwind personalizados.",
-      icon: Palette,
-      color: "from-pink-500/20 to-pink-600/10",
-      border: "border-pink-500/30",
-      badge: "bg-pink-500/20 text-pink-300",
-      timeout: "15s",
-    },
-    {
-      id: 4,
-      name: "Frontend Engineer",
-      role: "Ing. Frontend",
-      model: "Claude Sonnet 4.6",
-      provider: "Anthropic",
-      desc: "Genera el bundle React completo: todas las páginas, componentes, hooks y configuración de Vite + Tailwind.",
-      icon: MonitorSmartphone,
-      color: "from-emerald-500/20 to-emerald-600/10",
-      border: "border-emerald-500/30",
-      badge: "bg-emerald-500/20 text-emerald-300",
-      timeout: "600s",
-      highlight: true,
-    },
-    {
-      id: 5,
-      name: "Backend Engineer",
-      role: "Ing. Backend",
-      model: "Claude Sonnet 4.6",
-      provider: "Anthropic",
-      desc: "Escribe el servidor Express + TypeScript con rutas REST, validación Zod, Drizzle ORM y manejo de errores.",
-      icon: Server,
-      color: "from-orange-500/20 to-orange-600/10",
-      border: "border-orange-500/30",
-      badge: "bg-orange-500/20 text-orange-300",
-      timeout: "600s",
-      highlight: true,
-    },
-    {
-      id: 6,
-      name: "Image Agent",
-      role: "Agente de Imágenes",
-      model: "Gemini 3 Pro Image",
-      provider: "Google",
-      desc: "Reemplaza placeholders de Unsplash/Picsum con imágenes reales generadas por IA, adaptadas al contexto de la app.",
-      icon: Sparkles,
-      color: "from-yellow-500/20 to-yellow-600/10",
-      border: "border-yellow-500/30",
-      badge: "bg-yellow-500/20 text-yellow-300",
-      timeout: "60s",
-    },
-    {
-      id: 7,
-      name: "QA Reviewer",
-      role: "Revisor QA",
-      model: "Claude Sonnet 4.6",
-      provider: "Anthropic",
-      desc: "Revisa el bundle generado, detecta imports rotos, archivos faltantes y problemas de estructura antes del despliegue.",
-      icon: ShieldCheck,
-      color: "from-cyan-500/20 to-cyan-600/10",
-      border: "border-cyan-500/30",
-      badge: "bg-cyan-500/20 text-cyan-300",
-      timeout: "30s",
-    },
-    {
-      id: 8,
-      name: "Patcher",
-      role: "Parcheador",
-      model: "Claude Haiku 4.5",
-      provider: "Anthropic",
-      desc: "Corrige automáticamente los issues detectados por el QA Reviewer, aplicando parches quirúrgicos sin regenerar todo el bundle.",
-      icon: Wrench,
-      color: "from-red-500/20 to-red-600/10",
-      border: "border-red-500/30",
-      badge: "bg-red-500/20 text-red-300",
-      timeout: "30s",
-    },
-    {
-      id: 9,
-      name: "Visual Evaluator",
-      role: "Evaluador Visual",
-      model: "Claude Opus 4.7",
-      provider: "Anthropic",
-      desc: "Toma capturas de pantalla del bundle renderizado y evalúa si la app cumple la intención original del usuario.",
-      icon: Star,
-      color: "from-indigo-500/20 to-indigo-600/10",
-      border: "border-indigo-500/30",
-      badge: "bg-indigo-500/20 text-indigo-300",
-      timeout: "60s",
-    },
+  const stats = [
+    { value: "2,400+", label: "Apps generadas", icon: TrendingUp },
+    { value: "890+", label: "Usuarios activos", icon: Users },
+    { value: "4.2 min", label: "Tiempo medio", icon: Clock },
+    { value: "4.9★", label: "Valoración", icon: Star },
   ];
 
-  // Herramientas y librerías del stack
-  const tools = [
-    { name: "React 18", category: "Frontend", icon: "⚛️" },
-    { name: "TypeScript", category: "Lenguaje", icon: "🔷" },
-    { name: "Tailwind CSS v3", category: "Estilos", icon: "🎨" },
-    { name: "Vite 6", category: "Build", icon: "⚡" },
-    { name: "Wouter v3", category: "Router", icon: "🗺️" },
-    { name: "Framer Motion", category: "Animaciones", icon: "🎭" },
-    { name: "Lucide React", category: "Iconos", icon: "✨" },
-    { name: "Recharts", category: "Gráficas", icon: "📊" },
-    { name: "Zod", category: "Validación", icon: "🛡️" },
-    { name: "React Hook Form", category: "Formularios", icon: "📝" },
-    { name: "date-fns", category: "Fechas", icon: "📅" },
-    { name: "Radix UI", category: "Componentes", icon: "🧩" },
-    { name: "Express 5", category: "Backend", icon: "🚀" },
-    { name: "Drizzle ORM", category: "Base de datos", icon: "🗄️" },
-    { name: "PostgreSQL", category: "Base de datos", icon: "🐘" },
-    { name: "MongoDB", category: "Base de datos", icon: "🍃" },
-    { name: "Stripe", category: "Pagos", icon: "💳" },
-    { name: "Clerk Auth", category: "Autenticación", icon: "🔐" },
-    { name: "Sandpack", category: "Preview", icon: "🖥️" },
-    { name: "WebContainers", category: "Runtime", icon: "📦" },
-    { name: "GitHub API", category: "Control de versiones", icon: "🐙" },
-    { name: "Vercel API", category: "Despliegue", icon: "▲" },
-    { name: "Puppeteer", category: "Testing visual", icon: "🤖" },
-    { name: "Pino", category: "Logging", icon: "📋" },
-    { name: "BullMQ", category: "Colas", icon: "⚙️" },
-    { name: "Redis", category: "Caché", icon: "🔴" },
-    { name: "E2B Sandbox", category: "Ejecución segura", icon: "🏖️" },
-    { name: "Sentry", category: "Monitoreo", icon: "🔍" },
+  const testimonials = [
+    { name: "Carlos M.", role: "Founder, SaaS startup", text: "En 8 minutos tenía un MVP funcional listo para mostrar a inversores. Increíble.", avatar: "CM" },
+    { name: "Laura G.", role: "Diseñadora freelance", text: "Paso de idea a prototipo en tiempo real. Mis clientes no pueden creerlo.", avatar: "LG" },
+    { name: "Iñaki R.", role: "CTO, Agencia digital", text: "Entregamos proyectos 5x más rápido. El ROI es brutal.", avatar: "IR" },
+    { name: "Sofía P.", role: "Product Manager", text: "La calidad del código generado es tan buena que nuestros devs lo usan directamente.", avatar: "SP" },
+    { name: "Diego F.", role: "Indie developer", text: "Lancé mi SaaS en un fin de semana. Algo impensable antes de Maris AI.", avatar: "DF" },
+    { name: "Ana T.", role: "Entrepreneur", text: "Validé 3 ideas de negocio en una semana con apps reales. Game changer.", avatar: "AT" },
   ];
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="absolute top-0 z-50 w-full border-b border-border/10 bg-transparent">
+      <AuroraBackground />
+
+      <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl">
         <div className="container flex h-14 max-w-screen-2xl items-center px-4 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
             <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
-            <span className="font-bold sm:inline-block tracking-tight text-lg text-white">Maris AI</span>
+            <span className="font-bold tracking-tight text-lg text-white">Maris AI</span>
           </div>
           <nav className="hidden md:flex items-center space-x-6 text-sm text-muted-foreground">
-            <a href="#agentes" className="hover:text-white transition-colors">Agentes</a>
-            <a href="#herramientas" className="hover:text-white transition-colors">Herramientas</a>
             <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
-<Link href="/vs-emergent" className="hover:text-white transition-colors">vs Emergent</Link>
           </nav>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             {isSignedIn ? (
               <Link href="/dashboard">
                 <Button variant="ghost" className="text-white hover:bg-white/10">Panel</Button>
@@ -227,10 +159,10 @@ export default function LandingPage() {
             ) : (
               <>
                 <Link href="/sign-in">
-                  <Button variant="ghost" className="text-white hover:bg-white/10">Iniciar Sesión</Button>
+                  <Button variant="ghost" className="text-white hover:bg-white/10 text-sm">Iniciar Sesión</Button>
                 </Link>
                 <Link href="/sign-up">
-                  <Button className="bg-white text-black hover:bg-white/90">Comenzar</Button>
+                  <Button className="bg-primary hover:bg-primary/90 text-white text-sm">Comenzar gratis</Button>
                 </Link>
               </>
             )}
@@ -240,274 +172,243 @@ export default function LandingPage() {
 
       {/* Hero */}
       <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_center,_var(--tw-gradient-stops))] from-primary/20 via-background to-background"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-20 w-[800px] h-[800px] opacity-30 bg-primary/30 blur-[120px] rounded-full pointer-events-none"></div>
-        <div className="container px-4 md:px-8 max-w-5xl mx-auto text-center relative z-10">
-          <motion.div initial="initial" animate="animate" variants={stagger}>
-            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-medium text-primary-foreground backdrop-blur-sm mb-8">
-              <Zap className="mr-2 h-4 w-4 text-primary" />
-              <span>Maris AI Core v2.0 — 9 agentes especializados</span>
+        <motion.div style={{ opacity: heroOpacity }} className="container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
+          <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
+            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
+              <Zap className="mr-2 h-3.5 w-3.5" />
+              <span>Inteligencia artificial de última generación</span>
             </motion.div>
-            <motion.h1 variants={fadeIn} className="text-5xl md:text-7xl font-bold tracking-tighter text-white mb-6 leading-tight">
+
+            <motion.h1 variants={fadeIn} className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-white mb-6 leading-[1.05]">
               Escribe una idea. <br />
-              <span className="gradient-text">Recibe una app real.</span>
+              <span className="bg-gradient-to-r from-primary via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+                Recibe una app real.
+              </span>
             </motion.h1>
+
             <motion.p variants={fadeIn} className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto font-light leading-relaxed">
-              Un pipeline de 9 agentes de IA especializados — desde el investigador hasta el evaluador visual — genera aplicaciones listas para producción en minutos.
+              Describe lo que quieres construir y nuestra plataforma de IA lo convierte en una aplicación completa y funcional lista para producción.
             </motion.p>
-            <motion.div variants={fadeIn} className="max-w-3xl mx-auto bg-card/40 backdrop-blur-xl p-2 rounded-2xl border border-white/10 shadow-2xl relative">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-accent rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-              <form onSubmit={handleGenerate} className="relative flex flex-col sm:flex-row gap-2 bg-background/80 rounded-xl p-2">
+
+            <motion.div variants={fadeIn} className="max-w-3xl mx-auto relative mb-6">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary via-purple-500 to-cyan-500 rounded-2xl blur opacity-30"></div>
+              <form onSubmit={handleGenerate} className="relative flex flex-col sm:flex-row gap-2 bg-background/90 backdrop-blur rounded-2xl border border-white/10 p-2 shadow-2xl">
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="ej. Crea una app de gestión de tareas con tableros, arrastrar y soltar, y modo oscuro..."
-                  className="min-h-[60px] max-h-[200px] resize-y border-0 focus-visible:ring-0 bg-transparent text-base md:text-lg placeholder:text-muted-foreground/80 shadow-none font-sans"
+                  placeholder="ej. Crea una app de gestión de tareas con tableros kanban, modo oscuro y notificaciones..."
+                  className="min-h-[60px] max-h-[200px] resize-y border-0 focus-visible:ring-0 bg-transparent text-base placeholder:text-muted-foreground/60 shadow-none"
                   data-testid="input-prompt"
                 />
                 <Button
                   type="submit"
                   size="lg"
-                  className="sm:h-auto sm:px-8 bg-primary hover:bg-primary/90 text-white font-medium shadow-lg hover:shadow-primary/25 transition-all self-end sm:self-stretch whitespace-nowrap"
+                  className="sm:h-auto sm:px-8 bg-primary hover:bg-primary/90 text-white font-semibold shadow-lg self-end sm:self-stretch whitespace-nowrap"
                   data-testid="button-generate"
                 >
                   Generar App <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </form>
             </motion.div>
-            <motion.div variants={fadeIn} className="mt-6 flex flex-wrap justify-center gap-3 text-sm text-muted-foreground">
+
+            <motion.div variants={fadeIn} className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
               {["Panel CRM", "E-commerce", "App móvil", "Dashboard analytics", "SaaS MVP", "Landing page"].map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => setPrompt(`Crea un ${ex.toLowerCase()}`)}
-                  className="px-3 py-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:text-white transition-all text-xs"
-                >
+                <button key={ex} onClick={() => setPrompt(`Crea un ${ex.toLowerCase()}`)}
+                  className="px-3 py-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:text-white transition-all text-xs">
                   {ex}
                 </button>
               ))}
             </motion.div>
           </motion.div>
+        </motion.div>
+      </section>
+
+      {/* Stats */}
+      <section className="py-16 border-y border-white/5 bg-card/20 backdrop-blur-sm">
+        <div className="container px-4 md:px-8 mx-auto max-w-5xl">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((stat, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }} viewport={{ once: true }} className="text-center">
+                <div className="flex justify-center mb-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+                    <stat.icon className="h-5 w-5 text-primary" />
+                  </div>
+                </div>
+                <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
+                <div className="text-sm text-muted-foreground">{stat.label}</div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Agentes del pipeline */}
-      <section id="agentes" className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-background via-card/20 to-background -z-10"></div>
+      {/* Code animation + features */}
+      <section className="py-24 relative">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
-          <div className="text-center mb-16">
-            <Badge variant="outline" className="mb-4 border-primary/50 text-primary-foreground bg-primary/80">
-              <Bot className="mr-2 h-3 w-3" /> Pipeline Multi-Agente
-            </Badge>
-            <h2 className="text-4xl font-bold text-white mb-4">9 agentes especializados trabajando en paralelo</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-              Cada agente tiene un rol, un modelo de IA y un timeout optimizados para su tarea. El resultado: apps de producción sin compromisos.
-            </p>
-          </div>
-
-          {/* Pipeline visual */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {agents.map((agent) => (
-              <div
-                key={agent.id}
-                className={`relative rounded-xl border ${agent.border} bg-gradient-to-br ${agent.color} p-5 hover:-translate-y-1 transition-all duration-300 ${agent.highlight ? "ring-1 ring-white/10" : ""}`}
-              >
-                {agent.highlight && (
-                  <div className="absolute -top-2 -right-2">
-                    <Badge className="bg-primary text-white text-xs px-2 py-0.5">Principal</Badge>
-                  </div>
-                )}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`h-9 w-9 rounded-lg bg-background/60 flex items-center justify-center border ${agent.border}`}>
-                      <agent.icon className="h-4 w-4 text-white/80" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }} viewport={{ once: true }}>
+              <h2 className="text-4xl font-bold text-white mb-6">Código real. <br />
+                <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                  Generado en tiempo real.
+                </span>
+              </h2>
+              <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
+                Maris AI no genera plantillas genéricas. Cada aplicación se construye desde cero, adaptada exactamente a lo que describes.
+              </p>
+              <div className="space-y-5">
+                {[
+                  { title: "Arquitectura impulsada por IA", desc: "Nuestra plataforma entiende la estructura de aplicaciones y elige los patrones correctos para tu caso de uso.", icon: Code2 },
+                  { title: "Listo en minutos", desc: "Tu app completa lista para producción en minutos. Itera con la misma rapidez.", icon: Zap },
+                  { title: "Código tuyo, para siempre", desc: "Sin ataduras. Código React + Vite limpio que puedes exportar y desplegar donde quieras.", icon: Globe },
+                  { title: "Control de versiones integrado", desc: "Cada generación crea un commit en tu repositorio GitHub. Historial completo.", icon: GitBranch },
+                ].map((feature, i) => (
+                  <div key={i} className="flex gap-4">
+                    <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
+                      <feature.icon className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground font-mono">Agente #{agent.id}</p>
-                      <h3 className="text-sm font-semibold text-white">{agent.role}</h3>
+                      <h3 className="text-base font-semibold text-white mb-0.5">{feature.title}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground font-mono">{agent.timeout}</span>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Código animado */}
+            <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }} viewport={{ once: true }} className="relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-purple-500/20 to-cyan-500/20 rounded-2xl blur-xl"></div>
+              <div className="relative rounded-2xl border border-white/10 bg-background/80 backdrop-blur shadow-2xl overflow-hidden">
+                {/* Barra del editor */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/5">
+                  <div className="h-3 w-3 rounded-full bg-red-500/80"></div>
+                  <div className="h-3 w-3 rounded-full bg-yellow-500/80"></div>
+                  <div className="h-3 w-3 rounded-full bg-green-500/80"></div>
+                  <span className="text-xs text-muted-foreground ml-2 font-mono">Dashboard.tsx</span>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                    <span className="text-xs text-emerald-400 font-mono">generando...</span>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed mb-3">{agent.desc}</p>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-mono ${agent.badge}`}>
-                    {agent.model}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{agent.provider}</span>
+                {/* Números de línea + código */}
+                <div className="p-4 flex gap-4 min-h-[380px]">
+                  <div className="flex flex-col text-right font-mono text-xs text-white/20 select-none">
+                    {Array.from({ length: 20 }, (_, i) => (
+                      <span key={i} className="leading-6">{i + 1}</span>
+                    ))}
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <CodeAnimation />
+                  </div>
+                </div>
+                {/* Barra de estado */}
+                <div className="px-4 py-2 border-t border-white/5 bg-white/5 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground font-mono">TypeScript React</span>
+                  <span className="text-xs text-emerald-400 font-mono">✓ Sin errores</span>
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Modelos usados */}
-          <div className="mt-8 p-6 rounded-2xl border border-white/5 bg-card/30 backdrop-blur-sm">
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-primary" /> Modelos de IA disponibles
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { model: "Claude Haiku 4.5", provider: "Anthropic", use: "Velocidad · Clasificación · Parches", color: "text-blue-400" },
-                { model: "Claude Sonnet 4.6", provider: "Anthropic", use: "Calidad · Frontend · Backend · QA", color: "text-violet-400" },
-                { model: "Claude Opus 4.7", provider: "Anthropic", use: "Visión · Evaluación visual avanzada", color: "text-pink-400" },
-                { model: "Gemini 3 Pro Image", provider: "Google", use: "Generación de imágenes con IA", color: "text-yellow-400" },
-                { model: "GPT-5.4", provider: "OpenAI", use: "Alternativa premium (seleccionable)", color: "text-emerald-400" },
-              ].map((m) => (
-                <div key={m.model} className="p-3 rounded-lg bg-background/40 border border-white/5">
-                  <p className={`text-xs font-semibold font-mono ${m.color}`}>{m.model}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{m.provider}</p>
-                  <p className="text-xs text-muted-foreground mt-1 leading-tight">{m.use}</p>
-                </div>
-              ))}
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
 
       {/* Ejemplos */}
-      <section className="py-24 bg-card/30 border-y border-white/5 relative overflow-hidden">
+      <section className="py-24 border-y border-white/5 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-card/30 to-transparent -z-10"></div>
         <div className="container px-4 md:px-8 mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white mb-4">Hecho con Maris AI</h2>
-            <p className="text-muted-foreground">Lo que nuestra comunidad está creando a velocidad récord.</p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Hecho con Maris AI</h2>
+            <p className="text-muted-foreground text-lg">Lo que nuestra comunidad está creando a velocidad récord.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {[
-              { title: "Panel CRM", desc: "Un CRM completo con seguimiento de clientes, calificación de leads y analítica de ingresos.", icon: LayoutDashboard, color: "text-blue-400" },
-              { title: "Control de Inventario", desc: "Gestión de stock en tiempo real con alertas de inventario bajo y pedidos a proveedores.", icon: CheckCircle2, color: "text-green-400" },
-              { title: "Estudio de Contenido IA", desc: "Interfaz de generación de texto con historial, variaciones y exportación.", icon: Zap, color: "text-purple-400" },
-              { title: "App de Reservas", desc: "Sistema de reservas con calendario, notificaciones y panel de administración.", icon: Database, color: "text-orange-400" },
-              { title: "App Móvil PWA", desc: "Progressive Web App instalable con soporte offline y notificaciones push.", icon: Smartphone, color: "text-cyan-400" },
-              { title: "Portal de Noticias", desc: "Blog con editor Markdown, SEO optimizado y sitemap para Google News.", icon: Newspaper, color: "text-pink-400" },
+              { title: "Panel CRM", desc: "CRM completo con seguimiento de clientes, calificación de leads y analítica de ingresos.", icon: LayoutDashboard, color: "text-blue-400", border: "border-blue-500/20", bg: "bg-blue-500/5" },
+              { title: "Control de Inventario", desc: "Gestión de stock en tiempo real con alertas de inventario bajo y pedidos a proveedores.", icon: CheckCircle2, color: "text-green-400", border: "border-green-500/20", bg: "bg-green-500/5" },
+              { title: "Estudio de Contenido IA", desc: "Interfaz de generación de texto con historial, variaciones y exportación.", icon: Zap, color: "text-purple-400", border: "border-purple-500/20", bg: "bg-purple-500/5" },
+              { title: "App de Reservas", desc: "Sistema de reservas con calendario, notificaciones y panel de administración.", icon: Database, color: "text-orange-400", border: "border-orange-500/20", bg: "bg-orange-500/5" },
+              { title: "App Móvil PWA", desc: "Progressive Web App instalable con soporte offline y notificaciones push.", icon: Smartphone, color: "text-cyan-400", border: "border-cyan-500/20", bg: "bg-cyan-500/5" },
+              { title: "Portal de Noticias", desc: "Blog con editor Markdown, SEO optimizado y sitemap para Google News.", icon: Newspaper, color: "text-pink-400", border: "border-pink-500/20", bg: "bg-pink-500/5" },
             ].map((ex, i) => (
-              <div key={i} className="glass-card p-6 rounded-xl hover:-translate-y-1 transition-transform duration-300">
-                <div className="h-12 w-12 rounded-lg bg-background flex items-center justify-center mb-4 border border-white/5">
-                  <ex.icon className={`h-6 w-6 ${ex.color}`} />
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08 }} viewport={{ once: true }}
+                className={`p-6 rounded-xl border ${ex.border} ${ex.bg} hover:-translate-y-1 transition-all duration-300`}>
+                <div className={`h-11 w-11 rounded-lg bg-background/60 flex items-center justify-center mb-4 border ${ex.border}`}>
+                  <ex.icon className={`h-5 w-5 ${ex.color}`} />
                 </div>
-                <h3 className="text-xl font-semibold text-white mb-2">{ex.title}</h3>
-                <p className="text-muted-foreground text-sm">{ex.desc}</p>
-              </div>
+                <h3 className="text-lg font-semibold text-white mb-2">{ex.title}</h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">{ex.desc}</p>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Herramientas y librerías */}
-      <section id="herramientas" className="py-24 relative">
+      {/* Testimonios */}
+      <section className="py-24 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
           <div className="text-center mb-16">
-            <Badge variant="outline" className="mb-4 border-emerald-500/50 text-white bg-emerald-600/70">
-              <Layers className="mr-2 h-3 w-3" /> Stack Tecnológico
-            </Badge>
-            <h2 className="text-4xl font-bold text-white mb-4">28 herramientas y librerías integradas</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
-              Maris AI genera apps con el stack más moderno y probado en producción. Sin configuración manual.
-            </p>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Lo que dicen nuestros usuarios</h2>
+            <p className="text-muted-foreground text-lg">Miles de personas ya están creando con Maris AI.</p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            {tools.map((tool) => (
-              <div
-                key={tool.name}
-                className="flex flex-col items-center gap-2 p-3 rounded-xl border border-white/5 bg-card/30 hover:bg-card/50 hover:border-white/10 transition-all duration-200 text-center"
-              >
-                <span className="text-2xl">{tool.icon}</span>
-                <span className="text-xs font-medium text-white leading-tight">{tool.name}</span>
-                <span className="text-xs text-muted-foreground">{tool.category}</span>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {testimonials.map((t, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08 }} viewport={{ once: true }}
+                className="p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-white/20 transition-all">
+                <div className="flex gap-1 mb-4">
+                  {[...Array(5)].map((_, j) => (
+                    <Star key={j} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-white/80 text-sm leading-relaxed mb-5">"{t.text}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/30 border border-primary/40 flex items-center justify-center text-xs font-bold text-primary">
+                    {t.avatar}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">{t.role}</p>
+                  </div>
+                </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="py-32 relative bg-card/10">
-        <div className="container px-4 md:px-8 mx-auto max-w-7xl">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div>
-              <h2 className="text-4xl font-bold text-white mb-6">Velocidad sin precedentes. <br />Calidad sin compromisos.</h2>
-              <p className="text-xl text-muted-foreground mb-8">
-                Maris AI no genera código de relleno. Escribe aplicaciones React completas y funcionales con manejo de estado, estilos y arquitectura sólida.
-              </p>
-              <div className="space-y-6">
-                {[
-                  { title: "Arquitectura impulsada por IA", desc: "Nuestros modelos entienden la estructura de aplicaciones y eligen los patrones correctos para tu caso de uso.", icon: Code2 },
-                  { title: "Generación en minutos", desc: "El pipeline completo de 9 agentes tarda entre 3 y 12 minutos según la complejidad. Itera con la misma rapidez.", icon: Zap },
-                  { title: "Acceso total al código", desc: "Sin ataduras. Recibes código React + Vite limpio y legible que puedes exportar a GitHub y desplegar en Vercel.", icon: Globe },
-                  { title: "Control de versiones integrado", desc: "Cada generación crea un commit en tu repositorio GitHub. Historial completo de revisiones.", icon: GitBranch },
-                ].map((feature, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-                      <feature.icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-medium text-white mb-1">{feature.title}</h3>
-                      <p className="text-muted-foreground leading-relaxed">{feature.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 to-accent/20 blur-3xl -z-10 rounded-full"></div>
-              <div className="glass-card rounded-2xl overflow-hidden border border-white/10 shadow-2xl p-6 space-y-3">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-3 w-3 rounded-full bg-red-500"></div>
-                  <div className="h-3 w-3 rounded-full bg-yellow-500"></div>
-                  <div className="h-3 w-3 rounded-full bg-green-500"></div>
-                  <span className="text-xs text-muted-foreground ml-2 font-mono">pipeline.log</span>
-                </div>
-                {[
-                  { step: "01", label: "Researcher", status: "✓", model: "haiku-4-5", time: "7s" },
-                  { step: "02", label: "Architect", status: "✓", model: "haiku-4-5", time: "28s" },
-                  { step: "03", label: "Designer", status: "✓", model: "haiku-4-5", time: "12s" },
-                  { step: "04", label: "Frontend Engineer", status: "✓", model: "sonnet-4-6", time: "3m 42s" },
-                  { step: "05", label: "Backend Engineer", status: "✓", model: "sonnet-4-6", time: "1m 18s" },
-                  { step: "06", label: "Image Agent", status: "✓", model: "gemini-3-pro", time: "45s" },
-                  { step: "07", label: "QA Reviewer", status: "✓", model: "sonnet-4-6", time: "8s" },
-                  { step: "08", label: "Patcher", status: "✓", model: "haiku-4-5", time: "22s" },
-                  { step: "09", label: "Visual Evaluator", status: "✓", model: "opus-4-7", time: "18s" },
-                ].map((row) => (
-                  <div key={row.step} className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-muted-foreground">[{row.step}]</span>
-                    <span className="text-white/80 flex-1 ml-2">{row.label}</span>
-                    <span className="text-muted-foreground mr-3">{row.model}</span>
-                    <span className="text-muted-foreground mr-2">{row.time}</span>
-                    <span className="text-emerald-400">{row.status}</span>
-                  </div>
-                ))}
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs font-mono">
-                  <span className="text-emerald-400 font-semibold">✓ App generada y desplegada</span>
-                  <span className="text-muted-foreground">6m 40s total</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
       {/* CTA */}
       <section className="py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-primary/5"></div>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-primary/10 blur-[100px] rounded-full pointer-events-none"></div>
         <div className="container px-4 md:px-8 mx-auto text-center relative z-10">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">¿Listo para lanzar?</h2>
-          <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-            Únete a miles de personas creando la próxima generación de software con 9 agentes de IA trabajando para ti.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/sign-up">
-              <Button size="lg" className="h-14 px-8 text-lg bg-white text-black hover:bg-white/90 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
-                Empieza a crear ahora <ChevronRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href="/news">
-              <Button size="lg" variant="outline" className="h-14 px-8 text-lg border-white/20 text-white hover:bg-white/10">
-                <Newspaper className="mr-2 h-5 w-5" /> Últimas noticias
-              </Button>
-            </Link>
-          </div>
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight">
+              Tu próxima app empieza <br />
+              <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">con una frase.</span>
+            </h2>
+            <p className="text-xl text-muted-foreground mb-10 max-w-xl mx-auto">
+              Únete a miles de personas creando software con inteligencia artificial.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/sign-up">
+                <Button size="lg" className="h-14 px-10 text-lg bg-white text-black hover:bg-white/90 shadow-[0_0_60px_-10px_rgba(255,255,255,0.4)] font-semibold">
+                  Empieza gratis <ChevronRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
+              <Link href="/news">
+                <Button size="lg" variant="outline" className="h-14 px-10 text-lg border-white/20 text-white hover:bg-white/10">
+                  <Newspaper className="mr-2 h-5 w-5" /> Últimas noticias
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      <footer className="py-12 border-t border-white/5 bg-background">
+      <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur">
         <div className="container px-4 md:px-8 mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between mb-8">
             <div className="flex items-center space-x-2 mb-4 md:mb-0">
@@ -516,22 +417,17 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
-<Link href="/vs-emergent" className="hover:text-white transition-colors">vs Emergent</Link>
-              <a href="https://github.com" className="hover:text-white transition-colors">GitHub</a>
               <a href="mailto:hola@marisai.es" className="hover:text-white transition-colors">Contacto</a>
             </div>
           </div>
           <div className="flex justify-center mb-6">
-  <a href="https://www.producthunt.com/products/maris-ai?embed=true&utm_source=embed&utm_medium=post_embed" target="_blank" rel="noopener">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=maris-ai&theme=dark" alt="Maris AI on Product Hunt" style={{height: "54px"}} />
-  </a>
-</div>
-          <div className="border-t border-white/5 pt-6 flex flex-col md:flex-row items-center justify-between">
+            <a href="https://www.producthunt.com/products/maris-ai?embed=true&utm_source=embed&utm_medium=post_embed" target="_blank" rel="noopener">
+              <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=maris-ai&theme=dark" alt="Maris AI on Product Hunt" style={{height: "54px"}} />
+            </a>
+          </div>
+          <div className="border-t border-white/5 pt-6 text-center">
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Maris AI Inc. Todos los derechos reservados.
-            </p>
-            <p className="text-xs text-muted-foreground mt-2 md:mt-0">
-              Impulsado por Claude (Anthropic) · Gemini (Google) · GPT-5 (OpenAI)
             </p>
           </div>
         </div>
