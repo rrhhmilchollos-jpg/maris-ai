@@ -14,7 +14,7 @@ El sistema se encuentra ahora en un estado "production-ready", con tiempos de re
 Se ha implementado una sincronización completa entre el backend y el frontend para la selección de modelos de IA.
 
 *   **Backend (`apps.ts`):** Se actualizó el endpoint `/api/models` para reflejar la nueva jerarquía de modelos, estableciendo descripciones claras para el usuario final.
-    *   `claude-sonnet-4-5` (Auto / Recomendado)
+    *   `claude-sonnet-4-6` (Auto / Recomendado)
     *   `claude-haiku-4-5` (Más rápido / Por defecto)
     *   `claude-opus-4-7` (Máxima calidad)
     *   `gpt-5-4-ultra` (OpenAI Ultra)

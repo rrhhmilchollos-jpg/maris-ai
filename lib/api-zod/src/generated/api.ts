@@ -51,7 +51,7 @@ export const GetMyStatsResponse = zod.object({
       coderModel: zod
         .string()
         .describe(
-          "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416",
+          "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
         ),
       language: zod
         .string()
@@ -124,7 +124,7 @@ export const ListAppsResponseItem = zod.object({
   coderModel: zod
     .string()
     .describe(
-      "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416",
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
     ),
   language: zod
     .string()
@@ -196,7 +196,7 @@ export const GetAppResponse = zod.object({
   coderModel: zod
     .string()
     .describe(
-      "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416",
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
     ),
   language: zod
     .string()
@@ -273,7 +273,7 @@ export const GenerateAppBody = zod.object({
     .string()
     .nullish()
     .describe(
-      "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416. Ignored on edits.",
+      "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits.",
     ),
   language: zod
     .string()
@@ -676,7 +676,7 @@ export const UpdateAppModelParams = zod.object({
 export const UpdateAppModelBody = zod.object({
   coderModel: zod
     .string()
-    .describe("auto | gemini-2.5-flash | claude-4-7-sonnet-20260416"),
+    .describe("auto | gemini-2.5-flash | claude-sonnet-4-6"),
 });
 
 export const UpdateAppModelResponse = zod.object({
@@ -692,7 +692,7 @@ export const UpdateAppModelResponse = zod.object({
   coderModel: zod
     .string()
     .describe(
-      "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416",
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
     ),
   language: zod
     .string()
@@ -767,7 +767,7 @@ export const UpdateAppAutoPublishResponse = zod.object({
   coderModel: zod
     .string()
     .describe(
-      "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416",
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
     ),
   language: zod
     .string()
@@ -909,7 +909,7 @@ export const ForkAppResponse = zod.object({
   coderModel: zod
     .string()
     .describe(
-      "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416",
+      "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6",
     ),
   language: zod
     .string()

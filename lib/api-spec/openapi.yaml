@@ -1294,7 +1294,7 @@ components:
           type: string
         coderModel:
           type: string
-          description: "Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416"
+          description: "Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6"
         language:
           type: string
           description: "Source language: typescript (.tsx) or javascript (.jsx). Locked at creation."
@@ -1362,7 +1362,7 @@ components:
         coderModel:
           type: string
           nullable: true
-          description: "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416. Ignored on edits."
+          description: "Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits."
         language:
           type: string
           nullable: true
@@ -1386,7 +1386,7 @@ components:
       properties:
         coderModel:
           type: string
-          description: "auto | gemini-2.5-flash | claude-4-7-sonnet-20260416"
+          description: "auto | gemini-2.5-flash | claude-sonnet-4-6"
       required:
         - coderModel
     UpdateAutoPublishRequest:

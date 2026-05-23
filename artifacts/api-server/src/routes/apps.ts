@@ -470,7 +470,7 @@ export async function researchTopic(prompt: string): Promise<string> {
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 1500,
           system: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
 - 1 short paragraph: what the source product/site does and who it's for.
@@ -545,7 +545,7 @@ async function designSystem(plan: ProjectPlan, research: string): Promise<Design
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-4-6",
         max_tokens: 4096,
         system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -586,7 +586,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
@@ -596,7 +596,7 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  return "claude-sonnet-4-5";
+  return "claude-sonnet-4-6";
 }
 
 /**
@@ -740,7 +740,7 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-4-6",
         max_tokens: 8192,
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -778,7 +778,7 @@ async function specifyIntegrations(
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 800,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -831,7 +831,7 @@ async function reviewBundle(
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 700,
           system: "You are a QA reviewer for a React+TS+Tailwind bundle. Output JSON only.",
           messages: [
@@ -886,7 +886,7 @@ async function generateTests(
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 3000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -1854,9 +1854,9 @@ const KIND_COSTS: Record<string, number> = {
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Claude Sonnet 4.5)", description: "Selección inteligente según la tarea." },
+    { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente según la tarea." },
     { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", description: "Máximo ahorro de créditos y velocidad instantánea." },
-    { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5 (recomendado)", description: "Equilibrio perfecto entre inteligencia y coste." },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", description: "Equilibrio perfecto entre inteligencia y coste." },
     { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", description: "Para tareas de alta complejidad y razonamiento profundo." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
   ];
@@ -2158,9 +2158,9 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "claude-sonnet-4-5", name: "Auto (Claude Sonnet 4.5)", provider: "anthropic" },
+      { id: "claude-sonnet-4-6", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic" },
       { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic" },
-      { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5 (recomendado)", provider: "anthropic" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic" },
       { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", provider: "anthropic" },
       { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai" },
     ];
