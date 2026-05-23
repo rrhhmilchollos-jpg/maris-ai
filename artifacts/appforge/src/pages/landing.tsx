@@ -217,6 +217,7 @@ export default function LandingPage() {
             <a href="#agentes" className="hover:text-white transition-colors">Agentes</a>
             <a href="#herramientas" className="hover:text-white transition-colors">Herramientas</a>
             <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
+<Link href="/vs-emergent" className="hover:text-white transition-colors">vs Emergent</Link>
           </nav>
           <div className="flex items-center space-x-4">
             {isSignedIn ? (
@@ -515,6 +516,7 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
+<Link href="/vs-emergent" className="hover:text-white transition-colors">vs Emergent</Link>
               <a href="https://github.com" className="hover:text-white transition-colors">GitHub</a>
               <a href="mailto:hola@marisai.es" className="hover:text-white transition-colors">Contacto</a>
             </div>
