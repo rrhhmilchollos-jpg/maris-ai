@@ -27,7 +27,7 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true },
     fullName: { type: String },
     imageUrl: { type: String },
-    credits: { type: Number, default: 3, required: true },
+    credits: { type: Number, default: 10, required: true },
     stripeCustomerId: { type: String },
     isPremium: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
