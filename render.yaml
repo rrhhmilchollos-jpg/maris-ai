@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: maris-ai-api-server
+    env: node
+    region: oregon # Puedes cambiar la región si lo deseas
+    plan: starter # O un plan superior si necesitas más recursos
+    buildCommand: cd artifacts/api-server && npm install && npm run build
+    startCommand: cd artifacts/api-server && npm run start
+    healthCheckPath: /api/health # Asumiendo que tienes un endpoint de health check
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000 # Render usa el puerto 10000 por defecto
+      # Variables de entorno para la base de datos MongoDB
+      - key: MONGODB_URI
+        sync: false # Sincronizar desde el dashboard de Render
+      # Variables de entorno para Stripe
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_TEAM
+        sync: false
+      # Variables de entorno para Clerk (autenticación)
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_WEBHOOK_SECRET
+        sync: false
+      # Variables de entorno para OpenAI/Gemini (LLMs)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Otras variables de entorno necesarias
+      - key: FRONTEND_BASE_PATH
+        sync: false # Por ejemplo, si tu frontend está en /app
+      - key: FRONTEND_URL
+        sync: false # URL de tu frontend en Vercel
+      - key: WEBHOOK_SECRET
+        sync: false # Si tienes webhooks internos
+      - key: REDIS_URL
+        sync: false # Si usas Redis para BullMQ
+      - key: GITHUB_TOKEN
+        sync: false # Si el agente necesita interactuar con GitHub
+      - key: E2B_API_KEY
+        sync: false # Si usas E2B para el sandbox
