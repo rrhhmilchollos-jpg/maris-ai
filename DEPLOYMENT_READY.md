@@ -48,7 +48,7 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_...
 1. Create new Web Service on Render
 2. Connect GitHub repository: `rrhhmilchollos-jpg/maris-ai`
 3. Set Build Command: `pnpm install && pnpm run build`
-4. Set Start Command: `cd artifacts/api-server && node dist/index.js`
+4. Set Start Command: `node artifacts/api-server/dist/index.mjs`
 5. Add all environment variables
 6. Deploy!
 
@@ -56,7 +56,7 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_...
 
 1. Create new Project on Vercel
 2. Connect GitHub repository
-3. Select `artifacts/appforge` as root directory
+3. Keep repository root as root directory (it uses the `vercel.json` from the root)
 4. Add environment variables
 5. Deploy!
 
