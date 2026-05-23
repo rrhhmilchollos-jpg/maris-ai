@@ -49,7 +49,7 @@ Research (7s) → Architect (55s) → Design (parallel) + Integration (parallel)
 - **Architect**: Keep Claude Haiku (fast)
 - **Designer**: Keep Claude Haiku (fast)
 - **Frontend**: Switch to Gemini 2.5 Flash (ULTRA-FAST)
-- **Backend**: Keep Claude Sonnet 4.7 (quality)
+- **Backend**: Keep Claude Sonnet 4.6 (quality)
 - **QA**: Keep Claude Haiku (fast)
 - **Patcher**: Keep Claude Haiku (fast)
 

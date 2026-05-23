@@ -7,6 +7,6 @@
  */
 
 export interface UpdateCoderModelRequest {
-  /** auto | gemini-2.5-flash | claude-4-7-sonnet-20260416 */
+  /** auto | gemini-2.5-flash | claude-sonnet-4-6 */
   coderModel: string;
 }

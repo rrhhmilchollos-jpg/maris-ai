@@ -16,7 +16,7 @@ export interface GeneratedApp {
   frontendCode: string;
   backendCode: string;
   status: string;
-  /** Coder model preference: auto | gemini-2.5-flash | claude-4-7-sonnet-20260416 */
+  /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
   coderModel: string;
   /** Source language: typescript (.tsx) or javascript (.jsx). Locked at creation. */
   language: string;

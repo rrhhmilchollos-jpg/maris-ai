@@ -44,7 +44,7 @@ export type GenLanguage = "typescript" | "javascript";
 
 const useAnthropic = true;
 const DEFAULT_MODEL = "claude-haiku-4-5";
-const AUTO_MODEL = "claude-sonnet-4-5";
+const AUTO_MODEL = "claude-sonnet-4-6";
 const OPUS_MODEL = "claude-opus-4-7";
 const GPT_MODEL = "gpt-5-4-ultra";
 
@@ -605,7 +605,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
@@ -887,7 +887,7 @@ Debes verificar estrictamente las siguientes directrices:
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-sonnet-4-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
+              model: "claude-sonnet-4-6", // Optimizado: claude-sonnet-4-6 (antes claude-opus-4-7)
               max_tokens: 1024,
               system: [{ type: "text", text: systemPrompt + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
               messages: [{ role: "user", content: userContent }],
@@ -900,7 +900,7 @@ Debes verificar estrictamente las siguientes directrices:
 
         if (!raw) {
           const qaResponse = await anthropic.messages.create({
-            model: "claude-sonnet-4-5",
+            model: "claude-sonnet-4-6",
             max_tokens: 700,
             system: [{ type: "text", text: systemPrompt + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
             messages: [{ role: "user", content: userContent }],
@@ -949,7 +949,7 @@ ${sample}
 
 Return the JSON object with testCode.`;
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 3000,
           system: [{ type: "text", text: TEST_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: testsUserContent }],
@@ -992,7 +992,7 @@ ${frontendCode}
 
 Return the FULL patched bundle as JSON.`;
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5",
+          model: "claude-sonnet-4-6",
           max_tokens: 16000,
           system: [{ type: "text", text: buildPatcherSystemPrompt(language) + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: patcherContent }],
