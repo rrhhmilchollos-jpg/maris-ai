@@ -1869,10 +1869,23 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    // Usuarios Free: 1 app (6 créditos) + 20 ediciones (0.2 * 20 = 4 créditos) = 10 créditos.
-    // Usuarios Paid: Quema rápida estilo emergent.sh (10 créditos por generación).
-    const isPaid = !!req.dbUser?.isPremium;
-    const cost = isPaid ? 10 : 6; 
+    // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) ──────────────────────────────
+    // PLAN FREE (prueba generosa de 10 créditos):
+    //   - 1 app = 6 créditos fijos (cualquier tipo de app)
+    //   - 20 modificaciones = 0.2 créditos c/u = 4 créditos
+    //   - Total: 6 + (20 × 0.2) = 10 créditos exactos
+    //
+    // PLAN PAID (verificado por Stripe — quema rápida estilo emergent.sh):
+    //   - Coste = KIND_COSTS[kind] × 10
+    //   - landing   = 1 × 10 = 10 créditos
+    //   - vue/svelte = 2 × 10 = 20 créditos
+    //   - fullstack  = 3 × 10 = 30 créditos
+    //   - game-3d    = 5 × 10 = 50 créditos
+    // ─────────────────────────────────────────────────────────────────────────
+    const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
+    const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;
+    const baseCost = KIND_COSTS[kindKey] ?? 3;
+    const cost = isPaid ? (baseCost * 10) : 6;
 
     const charge = await chargeCredits({
       userId,
@@ -1886,6 +1899,10 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
         error: "Créditos insuficientes",
         required: cost,
         current: req.dbUser?.credits,
+        isPaid,
+        hint: isPaid
+          ? `Este tipo de app (${kind || "fullstack"}) cuesta ${cost} créditos en plan de pago.`
+          : "Necesitas créditos para generar apps.",
       });
     }
 
@@ -1904,7 +1921,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     });
 
     await enqueueGenerateJob(jobId);
-    res.status(201).json({ id: jobId });
+    res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -2028,10 +2045,12 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    // Usuarios Free: 0.2 créditos (para permitir 20 ediciones con los créditos restantes).
-    // Usuarios Paid: Quema rápida estilo emergent.sh (2 créditos por refinamiento).
-    const isPaid = !!req.dbUser?.isPremium;
-    const cost = isPaid ? 2 : 0.2;
+    // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) — MODIFICACIONES ────────────
+    // PLAN FREE: 0.2 créditos por modificación → 20 modificaciones con 4 créditos restantes
+    // PLAN PAID: 5 créditos por modificación (quema rápida estilo emergent.sh)
+    // ─────────────────────────────────────────────────────────────────────────
+    const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
+    const cost = isPaid ? 5 : 0.2;
 
     const charge = await chargeCredits({
       userId,
@@ -2045,6 +2064,10 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
         error: "Créditos insuficientes",
         required: cost,
         current: req.dbUser?.credits,
+        isPaid,
+        hint: isPaid
+          ? `Cada modificación cuesta ${cost} créditos en plan de pago.`
+          : "Necesitas créditos para modificar apps.",
       });
     }
 
@@ -2066,7 +2089,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     });
 
     await enqueueGenerateJob(jobId);
-    res.status(201).json({ id: jobId });
+    res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -2081,16 +2104,19 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    // Usuarios Free: 1 app (6 créditos) + 20 ediciones (0.2 * 20 = 4 créditos) = 10 créditos.
-    // Usuarios Paid: Quema rápida estilo emergent.sh (10 créditos por generación).
-    const isPaid = !!req.dbUser?.isPremium;
-    const cost = isPaid ? 10 : 6; 
+    // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) — REINTENTAR ────────────────
+    // Mismo coste que generar la app desde cero (usa el kind de la app existente)
+    // ─────────────────────────────────────────────────────────────────────────
+    const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
+    const appKindKey = (app.kind || "fullstack") as keyof typeof KIND_COSTS;
+    const baseCostRetry = KIND_COSTS[appKindKey] ?? 3;
+    const cost = isPaid ? (baseCostRetry * 10) : 6;
 
     const charge = await chargeCredits({
       userId,
       isAdmin,
       amount: cost,
-      description: `Sesión de ingeniería Maris AI (${kind || "fullstack"}): ${prompt.slice(0, 50)}...`,
+      description: `Reintento de ingeniería Maris AI (${app.kind || "fullstack"}): ${app.title?.slice(0, 50) ?? ""}`,
     });
 
     if (!charge.ok) {
@@ -2098,6 +2124,10 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
         error: "Créditos insuficientes",
         required: cost,
         current: req.dbUser?.credits,
+        isPaid,
+        hint: isPaid
+          ? `Reintentar esta app (${app.kind || "fullstack"}) cuesta ${cost} créditos en plan de pago.`
+          : "Necesitas créditos para reintentar la generación.",
       });
     }
 
@@ -2117,7 +2147,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     });
 
     await enqueueGenerateJob(jobId);
-    res.status(201).json({ id: jobId });
+    res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/retry error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
