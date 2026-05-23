@@ -4,12 +4,14 @@ import { GeneratedApp, User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import { chargeCredits } from "../lib/credits";
 import {
-  createVercelProject,
   redeployVercelProject,
   verifyCustomDomain,
   getDeploymentStatus,
+  generateMarisaiSubdomain,
+  MARIS_AI_DOMAIN,
   type DeploymentConfig,
 } from "../lib/deployment";
+import { deployAppToVercel } from "../lib/vercelDeploy";
 
 const router = Router();
 const DEPLOY_COST_CREDITS = 50;
@@ -67,44 +69,53 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
       { deploymentStatus: "deploying", deploymentError: null },
     );
 
-    const deploymentConfig: DeploymentConfig = {
-      appId,
+    const deploymentResult = await deployAppToVercel({
+      appId: Number(appId),
       userId,
-      projectName: appData.title,
-      frontendCode: appData.frontendCode,
-      backendCode: appData.backendCode,
-      customDomain: (req.body as any)?.customDomain,
-      isPaidUser,
-    };
+      log: logger,
+    });
 
-    const deploymentResult = await createVercelProject(deploymentConfig);
-
-    if (!deploymentResult.success) {
+    if (!deploymentResult.ok) {
+      const errorMsg = "failure" in deploymentResult ? JSON.stringify(deploymentResult.failure) : "Unknown error";
       await GeneratedApp.updateOne(
         { _id: appId, userId },
         {
           deploymentStatus: "failed",
-          deploymentError: deploymentResult.error,
-          deploymentLogs: deploymentResult.logs,
+          deploymentError: errorMsg,
         },
       );
 
       return res.status(500).json({
         success: false,
-        error: deploymentResult.error,
+        error: errorMsg,
       });
     }
 
-    const subdomain = deploymentResult.subdomain;
+    const { url, projectId } = deploymentResult.result;
+    
+    // Gestión de dominios según el plan
+    const isPaidUser = !!userData.isPremium || isAdminEmail(userData.email);
+    let finalUrl = url;
+    let subdomain: string | undefined;
+    let customDomain: string | undefined;
+
+    if (isPaidUser && (req.body as any)?.customDomain) {
+      customDomain = (req.body as any).customDomain;
+      // Aquí se podría llamar a addVercelDomainForApp si se desea automatizar la vinculación
+    } else if (!isPaidUser) {
+      // Para usuarios free, intentamos usar el subdominio marisai.es si está configurado
+      subdomain = generateMarisaiSubdomain(appData.title, appId);
+      finalUrl = `https://${subdomain}.${MARIS_AI_DOMAIN}`;
+    }
 
     await GeneratedApp.updateOne(
       { _id: appId, userId },
       {
         deploymentStatus: "deployed",
-        vercelProjectId: deploymentResult.projectId,
-        vercelDeployUrl: deploymentResult.deploymentUrl,
+        vercelProjectId: projectId,
+        vercelDeployUrl: finalUrl,
         marisaiSubdomain: subdomain,
-        customDomain: isPaidUser ? deploymentResult.customDomain : undefined,
+        customDomain: customDomain,
         lastDeployedAt: new Date(),
         deploymentError: null,
       },
@@ -112,10 +123,10 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
 
     return res.json({
       success: true,
-      deploymentUrl: deploymentResult.deploymentUrl,
+      deploymentUrl: finalUrl,
       subdomain,
-      customDomain: deploymentResult.customDomain,
-      projectId: deploymentResult.projectId,
+      customDomain,
+      projectId: projectId,
       creditsCharged: DEPLOY_COST_CREDITS,
     });
   } catch (error) {
