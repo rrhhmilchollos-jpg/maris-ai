@@ -10,7 +10,7 @@ import {
   getStripe,
   KIND_COSTS,
 } from "../lib/stripe";
-import { creditPurchase } from "../lib/credits";
+import { creditPurchase, grantPlanCredits } from "../lib/credits";
 
 const router: IRouter = Router();
 
@@ -364,6 +364,57 @@ router.post(
 
       res.json(result);
       return;
+    }
+
+    // ─── VALIDACIÓN PROACTIVA DE SUSCRIPCIÓN ────────────────────────────────
+    // Si es una suscripción, no esperamos al webhook. Consultamos la suscripción
+    // en Stripe y acreditamos el plan inmediatamente si no se ha hecho ya.
+    if (session.metadata?.type === "subscription" && session.subscription) {
+      const subscriptionId = typeof session.subscription === "string" 
+        ? session.subscription 
+        : session.subscription.id;
+        
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const planId = subscription.metadata?.planId || session.metadata?.planId;
+      const creditsPerMonth = Number(subscription.metadata?.creditsPerMonth || session.metadata?.creditsPerMonth || "0");
+      const periodEnd = subscription.current_period_end;
+
+      if (planId && creditsPerMonth > 0) {
+        // Verificamos si ya se procesó (por si el webhook fue más rápido)
+        await connectDB();
+        const currentUser = await User.findById(req.userId!, { stripeSubscriptionId: 1, credits: 1 }).lean();
+        
+        if (currentUser?.stripeSubscriptionId !== subscriptionId) {
+          // Acreditamos proactivamente
+          await grantPlanCredits({
+            clerkUserId: req.userId!,
+            planId,
+            creditsPerMonth,
+            periodEnd,
+            stripeSubscriptionId: subscriptionId,
+          });
+          
+          // Volvemos a leer el usuario para devolver el balance actualizado
+          const updatedUser = await User.findById(req.userId!, { credits: 1 }).lean();
+          
+          res.json({
+            creditsAdded: creditsPerMonth,
+            newBalance: updatedUser?.credits ?? 0,
+            alreadyProcessed: false,
+            message: "Suscripción activada y créditos acreditados instantáneamente.",
+          });
+          return;
+        } else {
+          // El webhook ya lo procesó
+          res.json({
+            creditsAdded: 0,
+            newBalance: currentUser?.credits ?? 0,
+            alreadyProcessed: true,
+            message: "Suscripción ya procesada por webhook.",
+          });
+          return;
+        }
+      }
     }
 
     res.json({
