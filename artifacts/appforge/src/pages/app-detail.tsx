@@ -79,6 +79,32 @@ const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
 
 type SidebarTab = "chat" | "plan" | "data" | "integrations" | "ui-builder" | "workflows" | "settings";
 
+type ChatMessage = {
+  id?: string;
+  role?: string;
+  content?: string;
+  createdAt?: string;
+};
+
+const TECHNICAL_ASSISTANT_PREFIXES = /^(leer|buscar|revisar|aplicar|ejecutar|comprobar|abrir|expandir|desplazarse|extraer|registrar|actualizar|comparar|descargar|esperar|localizar|listar|usar búsqueda|corregir en backend)\b/i;
+const TECHNICAL_ASSISTANT_MARKERS = ["/home/ubuntu", "app-detail.tsx", "api-server", "grep", "shell", "file action", "browser_", "tool", "chunk", "diff --", "pnpm build"];
+
+function isTechnicalAssistantMessage(message: ChatMessage) {
+  const role = String(message.role ?? "");
+  const content = String(message.content ?? "").trim();
+  if (!content) return true;
+  if (role === "user") return false;
+  const lower = content.toLowerCase();
+  return TECHNICAL_ASSISTANT_PREFIXES.test(content) || TECHNICAL_ASSISTANT_MARKERS.some((marker) => lower.includes(marker.toLowerCase()));
+}
+
+function formatMessageTime(value?: string) {
+  if (!value) return "Ahora";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Ahora";
+  return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
 const NAV_ITEMS: Array<{ id: SidebarTab; label: string; glyph: string }> = [
   { id: "chat", label: "Chat", glyph: "◌" },
   { id: "plan", label: "Plan", glyph: "□" },
@@ -183,7 +209,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
-  const effectiveJobId = activeJobId ?? (activeAppJob?.id ? String(activeAppJob.id) : null);
+  const resolveJobId = (value: any): string | null => {
+    const raw = value?.id ?? value?.jobId ?? value?._id ?? value?.generationJobId ?? value?.currentJobId ?? value?.activeJobId;
+    return raw ? String(raw) : null;
+  };
+  const effectiveJobId = activeJobId ?? resolveJobId(activeAppJob) ?? resolveJobId(app);
 
   const { data: job } = useGetGenerationJob(effectiveJobId ?? "", {
     query: {
@@ -274,24 +304,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleApprove = () => {
     const approvalJobId = effectiveJobId;
-    const canApprove = approvalJobId && (job?.status === "awaiting_approval" || job?.awaitingApproval || activeAppJob?.awaitingApproval);
 
-    if (canApprove) {
+    if (approvalJobId) {
       approveMutation.mutate({ id: String(approvalJobId), data: { facet: "structure" } });
       return;
     }
 
-    if (approvalJobId) {
-      toast({
-        title: "Aprobación no disponible todavía",
-        description: `El trabajo está en estado ${job?.status || activeAppJob?.status || "desconocido"}. Maris AI activará la aprobación cuando el plan esté listo.`,
-      });
-      return;
-    }
-
     toast({
-      title: "Sin plan pendiente",
-      description: "No hay ningún trabajo esperando aprobación. Envía un mensaje a Maris AI para iniciar o continuar la generación.",
+      title: "Sin trabajo de generación activo",
+      description: "No encuentro el identificador del trabajo que debe aprobarse. Envía un mensaje a Maris AI para reactivar la generación o recarga la pantalla.",
+      variant: "destructive",
     });
   };
 
@@ -299,7 +321,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const PhaseIcon = phaseInfo.icon;
   const isWorking = effectiveJobId !== null || job?.status === "awaiting_approval" || activeAppJob?.status === "awaiting_approval";
   const firstName = me?.name?.split(" ")?.[0] || me?.firstName || user?.firstName || "Ivan";
-  const assistantMessages = (messages ?? []).filter((msg: any) => msg.role !== "user");
+  const visibleMessages = ((messages ?? []) as ChatMessage[]).filter((msg) => !isTechnicalAssistantMessage(msg));
+  const assistantMessages = visibleMessages.filter((msg) => msg.role !== "user");
   const latestAssistantMessage = assistantMessages[assistantMessages.length - 1]?.content;
   const frontendCode = String(app?.frontendCode ?? "").trim();
   const hasMilestonePlaceholder = frontendCode.includes("El código ha sido consolidado en disco por hitos");
@@ -380,7 +403,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     setIsPreviewMaximized(false);
     setIsPreviewClosed(true);
     setActiveSidebar("chat");
-    toast({ title: "Preview cerrada", description: "La vista en vivo queda oculta para que puedas seguir trabajando en el chat y la consola." });
+    toast({ title: "Preview cerrada", description: "La vista en vivo se ha retirado completamente y el chat ocupa el área de trabajo." });
   };
 
   const handleOpenPreview = () => {
@@ -581,32 +604,57 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-6 py-3.5 text-center text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
             <div className="flex items-center justify-center gap-3">
               <Info className="h-5 w-5" />
-              <span>Agent will continue working after your reply</span>
+              <span>Maris AI seguirá trabajando después de tu respuesta</span>
             </div>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
-          <div className="flex items-start gap-5">
-            <div className="relative mt-1 shrink-0">
-              <div className="absolute inset-0 rounded-full bg-[#7c3aed]/40 blur-xl" />
-              <div className="relative grid h-[74px] w-[74px] place-items-center rounded-full border border-[#8b5cf6]/30 bg-[#111827] shadow-[0_0_30px_rgba(124,58,237,0.55)]">
-                <Bot className="h-10 w-10 text-white robot-vibrate" />
+          {visibleMessages.length === 0 ? (
+            <div className="flex items-start gap-5">
+              <div className="relative mt-1 shrink-0">
+                <div className="absolute inset-0 rounded-full bg-[#7c3aed]/40 blur-xl" />
+                <div className="relative grid h-[74px] w-[74px] place-items-center rounded-full border border-[#8b5cf6]/30 bg-[#111827] shadow-[0_0_30px_rgba(124,58,237,0.55)]">
+                  <Bot className="h-10 w-10 text-white robot-vibrate" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-5 py-4 text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
+                  <p>He terminado la estructura.</p>
+                  <p className="mt-3">Revisa el plan y dame el visto bueno para continuar.</p>
+                </div>
+                <div className="pl-1">
+                  <p className="text-[17px] font-bold text-[#a78bfa]">Maris AI</p>
+                  <p className="mt-1 text-[14px] text-white/45">Ahora</p>
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-5 py-4 text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
-                <p>He terminado la estructura!</p>
-                <p className="mt-3">Revisa el plan y dame el visto bueno</p>
-              </div>
-              <div className="pl-1">
-                <p className="text-[17px] font-bold text-[#a78bfa]">Maris AI</p>
-                <p className="mt-1 text-[14px] text-white/45">10:42 AM</p>
-              </div>
-            </div>
-          </div>
-          {latestAssistantMessage && (
-            <div className="mt-8 rounded-2xl border border-white/8 bg-white/[0.035] p-4 text-sm leading-relaxed text-white/70">
-              {latestAssistantMessage}
+          ) : (
+            <div className="space-y-7">
+              {visibleMessages.map((message, index) => {
+                const isUserMessage = message.role === "user";
+                const key = message.id ?? `${message.role}-${index}`;
+                return (
+                  <div key={key} className={`flex items-start gap-4 ${isUserMessage ? "justify-end" : "justify-start"}`}>
+                    {!isUserMessage && (
+                      <div className="relative mt-1 shrink-0">
+                        <div className="absolute inset-0 rounded-full bg-[#7c3aed]/35 blur-lg" />
+                        <div className="relative grid h-12 w-12 place-items-center rounded-full border border-[#8b5cf6]/25 bg-[#111827]">
+                          <Bot className="h-6 w-6 text-white" />
+                        </div>
+                      </div>
+                    )}
+                    <div className={`max-w-[78%] space-y-2 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
+                      <div className={`whitespace-pre-wrap rounded-2xl px-5 py-4 text-[15px] leading-relaxed shadow-[0_12px_30px_rgba(0,0,0,0.18)] ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
+                        {message.content}
+                      </div>
+                      <div className={`px-1 ${isUserMessage ? "text-right" : "text-left"}`}>
+                        <p className={`text-[13px] font-bold ${isUserMessage ? "text-white/65" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
+                        <p className="mt-0.5 text-[12px] text-white/35">{formatMessageTime(message.createdAt)}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
           {isWorking && job && (
@@ -686,7 +734,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <HelpCircle className="h-[19px] w-[19px]" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 border-white/10 bg-[#0f1320] text-white">
+              <DropdownMenuContent align="end" forceMount className="z-[220] w-64 border-white/10 bg-[#0f1320] text-white">
                 <DropdownMenuLabel>Ayuda de Maris AI</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
                 <DropdownMenuItem onClick={handleOpenDocs} className="cursor-pointer focus:bg-white/10 focus:text-white">
@@ -707,7 +755,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <span className="absolute right-1 top-0 h-2 w-2 rounded-full bg-[#7c3aed]" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80 border-white/10 bg-[#0f1320] text-white">
+              <DropdownMenuContent align="end" forceMount className="z-[220] w-80 border-white/10 bg-[#0f1320] text-white">
                 <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
                 {notificationItems.map((item) => (
@@ -729,7 +777,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <ChevronDown className="h-4 w-4 text-white/45" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60 border-white/10 bg-[#0f1320] text-white">
+              <DropdownMenuContent align="end" forceMount className="z-[220] w-60 border-white/10 bg-[#0f1320] text-white">
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">{user?.fullName || me?.name || firstName}</p>
@@ -786,22 +834,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <button className="m-4 mb-5 rounded-md bg-[#4f46e5] p-3 text-base font-bold text-white shadow-[0_0_22px_rgba(79,70,229,0.35)]">P</button>
         </aside>
 
-        <section className="flex w-[590px] min-w-[430px] shrink-0 flex-col border-r border-white/[0.08] bg-[#080a12]">
+        <section className={`flex min-w-[430px] flex-col border-r border-white/[0.08] bg-[#080a12] ${isPreviewClosed ? "flex-1" : "w-[590px] shrink-0"}`}>
           {renderSidebarPanel()}
-        </section>
-
-        {isPreviewClosed ? (
-          <main className="flex min-w-0 flex-1 items-center justify-center bg-[#0a0d15] p-8">
-            <div className="max-w-md rounded-2xl border border-white/[0.09] bg-[#0b0f18]/95 p-7 text-center shadow-[0_18px_55px_rgba(0,0,0,0.45)]">
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#7c3aed]/15 text-3xl text-[#c084fc]">▱</div>
-              <h2 className="mt-5 text-xl font-extrabold text-white">Vista previa cerrada</h2>
-              <p className="mt-2 text-sm leading-relaxed text-white/55">La preview en vivo está oculta para que puedas trabajar en Chat, Plan, Data y el resto de paneles sin quedarte bloqueado.</p>
-              <Button onClick={handleOpenPreview} className="mt-6 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+          {isPreviewClosed && (
+            <div className="px-6 pb-6">
+              <Button onClick={handleOpenPreview} variant="outline" className="h-11 w-full border-[#8b5cf6]/50 bg-[#7c3aed]/10 font-bold text-[#c4b5fd] hover:bg-[#7c3aed]/20 hover:text-white">
                 Abrir App Preview
               </Button>
             </div>
-          </main>
-        ) : (
+          )}
+        </section>
+
+        {!isPreviewClosed && (
         <main className={`${isPreviewMaximized ? "fixed inset-0 z-[130]" : "flex min-w-0 flex-1"} flex-col bg-[#0a0d15]`}>
           <div className="flex h-[69px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0a0d15] px-8">
             <div className="flex items-center gap-4 text-white/90">

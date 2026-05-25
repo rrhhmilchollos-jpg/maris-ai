@@ -2134,8 +2134,12 @@ router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const { content } = req.body;
-    if (!content) return res.status(400).json({ error: "content es requerido" });
+    const { content, attachmentIds } = req.body;
+    if (!content || typeof content !== "string" || !content.trim()) return res.status(400).json({ error: "content es requerido" });
+    const trimmedContent = content.trim();
+    const safeAttachmentIds = Array.isArray(attachmentIds)
+      ? attachmentIds.filter((id: unknown) => typeof id === "string" && id.trim()).map((id: string) => id.trim())
+      : [];
     const isAdmin = isAdminEmail(req.dbUser?.email);
 
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
@@ -2167,17 +2171,18 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       });
     }
 
-    await AppMessage.create({ appId: req.params.id, role: "user", content });
+    await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent });
 
     const requestLocale = detectRequestLocale(req);
-    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${prompt}`;
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${trimmedContent}`;
 
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
       _id: jobId,
       userId,
-      prompt: content,
+      prompt: generationPrompt,
       editAppId: req.params.id,
+      attachmentIds: safeAttachmentIds,
       coderModel: app.coderModel || "auto",
       language: app.language || "typescript",
       kind: app.kind || "fullstack",
