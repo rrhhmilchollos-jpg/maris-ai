@@ -12,96 +12,93 @@ interface Milestone {
 
 export class CoreOrchestrator {
   private projectRoot: string;
-  private architectureSummary: string = "";
 
   constructor(projectRoot: string) {
     this.projectRoot = projectRoot;
   }
 
   /**
-   * Limpia el texto de respuesta del LLM eliminando bloques de código Markdown
-   * para asegurar que JSON.parse no falle.
+   * Limpieza ultra-rápida de JSON para evitar errores de sintaxis
    */
   private cleanJsonResponse(text: string): string {
-    // Busca bloques de código markdown tipo ```json ... ``` o ``` ... ```
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      return jsonMatch[1].trim();
-    }
-    // Si no hay bloques markdown, devuelve el texto original limpio
-    return text.trim();
+    return jsonMatch && jsonMatch[1] ? jsonMatch[1].trim() : text.trim();
   }
 
+  /**
+   * PLANIFICACIÓN RELÁMPAGO: Define la estructura en un solo paso
+   */
   async planMonorepoProject(userPrompt: string): Promise<Milestone[]> {
-    console.log("🤖 Agente Planificador analizando arquitectura del monorepo...");
-
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 1000,
-      system: `Eres el Diseñador de Arquitectura de Maris AI. Tu trabajo es recibir la idea de una app completa y dividir su construcción en exactamente 4 hitos secuenciales mapeados a la estructura de nuestro monorepo.
-      Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
-      {
-        "milestones": [
-          { "id": 1, "name": "Base de datos", "targetWorkspace": "packages/db", "description": "Explicación del esquema", "filePath": "src/schema.ts" },
-          { "id": 2, "name": "Rutas API Backend", "targetWorkspace": "apps/api", "description": "Explicación de endpoints", "filePath": "src/routes/app.ts" },
-          { "id": 3, "name": "Componentes de Interfaz", "targetWorkspace": "apps/web", "description": "Explicación del frontend UI", "filePath": "src/pages/index.tsx" },
-          { "id": 4, "name": "Integración y Estilos", "targetWorkspace": "apps/web", "description": "Estilos globales y layout", "filePath": "src/App.tsx" }
-        ]
-      }`,
+      max_tokens: 800,
+      system: `Eres el Arquitecto de Maris AI. Tu meta es la VELOCIDAD. 
+      Divide la app en 4 hitos independientes para ejecución PARALELA.
+      Devuelve SOLO JSON: {"milestones": [{id, name, targetWorkspace, description, filePath}]}`,
       messages: [{ role: "user", content: userPrompt }]
     });
 
     const textResponse = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    
-    // CORRECCIÓN: Limpiar el texto antes de parsear para evitar el error de SyntaxError
-    const cleanedJson = this.cleanJsonResponse(textResponse);
-    
-    try {
-      const result = JSON.parse(cleanedJson);
-      return result.milestones;
-    } catch (error) {
-      console.error("❌ Error parseando JSON de la planificación:", error);
-      console.error("Texto original:", textResponse);
-      console.error("Texto limpio intentado:", cleanedJson);
-      throw error;
-    }
+    const result = JSON.parse(this.cleanJsonResponse(textResponse));
+    return result.milestones;
   }
 
+  /**
+   * MODO EMERGENT: Ejecución Concurrente Masiva
+   * En lugar de esperar uno por uno, todos los agentes trabajan a la vez.
+   */
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
+    const startTime = Date.now();
+    
+    // 1. Planificación rápida
+    wsNotificationCallback({ status: "🧠 Planificando arquitectura instantánea...", progress: 5 });
     const milestones = await this.planMonorepoProject(userPrompt);
+    
+    wsNotificationCallback({ 
+      status: "⚡ ¡Arquitectura lista! Desplegando enjambre de agentes en paralelo...", 
+      progress: 20 
+    });
 
-    for (const milestone of milestones) {
-      wsNotificationCallback({ 
-        status: `🔨 Construyendo ${milestone.name} en ${milestone.targetWorkspace}...`, 
-        progress: (milestone.id / milestones.length) * 100,
-        step: milestone.id 
-      });
-
-      console.log(`🔨 Procesando Hito ${milestone.id}: ${milestone.name} en -> ${milestone.targetWorkspace}`);
-
+    // 2. EJECUCIÓN PARALELA (Promise.all)
+    // Lanzamos todas las peticiones a la IA simultáneamente
+    const generationTasks = milestones.map(async (milestone) => {
+      const agentStartTime = Date.now();
+      
       const agentResponse = await anthropic.messages.create({
         model: "claude-haiku-4-5",
         max_tokens: 4000,
-        system: `Eres el Agente de Código Experto en Monorepos de Maris AI. 
-        Estado actual global de la aplicación construida hasta ahora: ${this.architectureSummary}.
-        Debes generar EXCLUSIVAMENTE el código fuente limpio para el archivo indicado. No des explicaciones, solo código estructurado listo para producción.`,
-        messages: [{ role: "user", content: `Escribe el código para el hito: ${milestone.description}. Debe guardarse en el workspace: ${milestone.targetWorkspace}/${milestone.filePath}` }]
+        system: `Eres un Agente de Código de Maris AI. VELOCIDAD MÁXIMA. 
+        Genera EXCLUSIVAMENTE el código para ${milestone.filePath}. Sin explicaciones.`,
+        messages: [{ role: "user", content: `Prompt: ${userPrompt}\nTarea: ${milestone.description}` }]
       });
 
       const generatedCode = agentResponse.content[0].type === 'text' ? agentResponse.content[0].text : '';
-
+      
+      // Escritura asíncrona en disco
       await this.writeCodeToWorkspace(milestone.targetWorkspace, milestone.filePath, generatedCode);
+      
+      const duration = ((Date.now() - agentStartTime) / 1000).toFixed(1);
+      wsNotificationCallback({ 
+        status: `✅ ${milestone.filePath} listo (${duration}s)`, 
+        progress: 20 + (milestone.id * 20) 
+      });
 
-      this.architectureSummary += `\n- Hito ${milestone.id} listo: Creado código en ${milestone.targetWorkspace}/${milestone.filePath} con funcionalidades de ${milestone.name}.`;
-    }
+      return { file: milestone.filePath, duration };
+    });
 
-    wsNotificationCallback({ status: "🚀 ¡Proyecto completo generado e integrado en el Monorepo!", progress: 100, step: 100 });
+    // Esperamos a que el enjambre termine (el tiempo total será el del archivo más lento)
+    await Promise.all(generationTasks);
+    
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    wsNotificationCallback({ 
+      status: `🚀 ¡Misión cumplida! App generada en paralelo en ${totalTime} segundos.`, 
+      progress: 100 
+    });
   }
 
   private async writeCodeToWorkspace(workspace: string, filePath: string, code: string) {
     const absolutePath = path.join(this.projectRoot, workspace, filePath);
     await fs.ensureDir(path.dirname(absolutePath));
     await fs.writeFile(absolutePath, code, 'utf-8');
-    console.log(`💾 Guardado con éxito en: ${absolutePath}`);
   }
 }
