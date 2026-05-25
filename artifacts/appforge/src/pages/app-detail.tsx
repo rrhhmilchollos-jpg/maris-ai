@@ -18,6 +18,7 @@ import {
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { SandpackProvider, SandpackPreview, SandpackLayout } from "@codesandbox/sandpack-react";
+import { DeployModal } from "@/components/deploy-modal";
 import { parseBundle, buildSandpackFiles, SANDPACK_DEPENDENCIES } from "@/lib/parseBundle";
 import { Layout } from "@/components/layout";
 import {
@@ -186,6 +187,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [isPreviewClosed, setIsPreviewClosed] = useState(false);
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
+  const [showDeployModal, setShowDeployModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: app, isLoading } = useGetApp(id, {
@@ -384,7 +386,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       toast({ title: "Generación pendiente", description: "Aún no hay código frontend desplegable. Aprueba el plan o envía un mensaje para que Maris AI genere la app.", variant: "destructive" });
       return;
     }
-    deployMutation.mutate({ id });
+    setShowDeployModal(true);
   };
 
   const handleRefreshPreview = () => {
@@ -768,6 +770,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#070910] text-white" data-testid="maris-emergent-workspace">
       <header className="h-[61px] shrink-0 border-b border-white/[0.075] bg-[#070910]/95 backdrop-blur-xl">
         <div className="flex h-full items-center justify-between px-6">
@@ -996,5 +999,24 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         )}
       </div>
     </div>
+
+    {/* Deploy Modal */}
+    {showDeployModal && (
+      <DeployModal
+        appId={id}
+        appTitle={app?.title || "App"}
+        isPremium={!!(me as any)?.isPremium}
+        currentDeployUrl={deployedUrl}
+        currentCustomDomain={(app as any)?.customDomain}
+        customDomainVerified={(app as any)?.customDomainVerified}
+        onClose={() => setShowDeployModal(false)}
+        onDeploySuccess={(url) => {
+          queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+          setShowDeployModal(false);
+          toast({ title: "🚀 App desplegada", description: `Tu app está en ${url}` });
+        }}
+      />
+    )}
+    </>
   );
 }
