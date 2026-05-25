@@ -14,6 +14,7 @@ import { injectWatermarkToHTML, generateWatermarkReactComponent } from "./waterm
 import { recallGenerations, rememberGeneration, buildGenerationMemoryBlock } from "./generationMemory";
 import { recallComponents, buildComponentCacheBlock, extractAndStoreComponents } from "./componentCache";
 import { getProactiveFixes, scheduleAutoRefactoring } from "./errorHistoryAnalyzer";
+import { buildAgentTemplateContextBlock } from "./templates";
 
 // OpenAI client via Maris AI Integrations proxy.
 const openai = new OpenAI({
@@ -25,6 +26,13 @@ const openai = new OpenAI({
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
+
+export interface GenerationRequestContext {
+  kind?: string;
+  detectedLocale?: string;
+  detectedCountry?: string;
+  uiLanguage?: string;
+}
 
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
@@ -69,6 +77,10 @@ ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
   · exact layout, spacing rhythm and signature visual gimmicks of the source.
 - Never reuse the original brand's name, logo, trademarks, slogans, copyrighted images or verbatim copy. If a research brief leaks them, paraphrase or invent equivalents.
 - The output must look like an INSPIRED-BY product, not a clone. If you find yourself copying more than the high-level category convention, stop and invent something different.
+
+TEMPLATE STARTER SYSTEM — mandatory:
+- Professional base templates and agent blueprints live in `artifacts/api-server/src/lib/templates.ts`. The user must never receive a blank-canvas demo. Use the injected [MARIS AI TEMPLATE BASE] block as the starting architecture and then adapt it to the exact request.
+- The generated app must feel like a prepared product starter that the client can immediately modify: editable data arrays, clear component boundaries, sensible defaults and complete first-run UX.
 
 Schema:
 {"frontendCode":"all frontend files as one string"}
@@ -478,7 +490,7 @@ max_tokens: 700,
 /**
  * Architect — Claude 3.5 (if available) or Gemini 2.5 Flash.
  */
-async function architectPlan(prompt: string, research: string, coderModel?: string): Promise<ProjectPlan> {
+async function architectPlan(prompt: string, research: string, coderModel?: string, templateContext = ""): Promise<ProjectPlan> {
   // Recuperar generaciones similares de memoria persistente
   const memoryRecalls = await recallGenerations(prompt, { limit: 3, threshold: 0.15 }).catch(() => []);
   const memoryBlock = buildGenerationMemoryBlock(memoryRecalls);
@@ -557,11 +569,11 @@ async function architectPlan(prompt: string, research: string, coderModel?: stri
 /**
  * Designer — Gemini 2.5 Flash.
  */
-async function designSystem(plan: ProjectPlan, research: string, coderModel?: string): Promise<DesignSystem> {
+async function designSystem(plan: ProjectPlan, research: string, coderModel?: string, templateContext = ""): Promise<DesignSystem> {
   const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
   const userContent = research
-    ? `${summary}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
-    : summary;
+    ? `${summary}\n\n${templateContext}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
+    : `${summary}\n\n${templateContext}`;
   let raw = "";
   try {
     const response = await withTimeoutOrThrow(
@@ -716,6 +728,7 @@ async function generateFrontendCode(
   onProgressUpdate: (accumulatedCode: string, fileName?: string) => void,
   coderModel: string | undefined,
   language: GenLanguage,
+  templateContext = "",
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -746,6 +759,7 @@ ${planSummary}
 
 Design system (apply EXACTLY in tailwind.config.ts theme.extend and src/index.css):
 ${designSummary}
+${templateContext ? `\n${templateContext}` : ""}
 ${research ? `\nResearch context (visual reference, treat as ground truth):\n${research.slice(0, 2000)}` : ""}
 ${codeMemoryBlock ? `\n${codeMemoryBlock}` : ""}
 ${componentCacheBlock ? `\n${componentCacheBlock}` : ""}
@@ -826,6 +840,7 @@ async function generateBackendCode(
   prompt: string,
   onProgressUpdate?: (code: string, fileName?: string) => void,
   coderModel?: string,
+  templateContext = "",
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
@@ -839,6 +854,7 @@ async function generateBackendCode(
 
 Backend plan (implement every listed file with real Express handlers):
 ${planSummary}
+${templateContext ? `\n${templateContext}` : ""}
 
 Now produce the JSON object with backendCode.`;
 
@@ -1703,6 +1719,14 @@ export async function generateApp(
 
   const attachmentBlock = buildAttachmentBlock(attachments);
   if (attachmentBlock) prompt = `${attachmentBlock}\n${prompt}`;
+
+  const templateContextBlock = buildAgentTemplateContextBlock({
+    prompt,
+    kind: requestContext?.kind,
+    detectedLocale: requestContext?.detectedLocale,
+    detectedCountry: requestContext?.detectedCountry,
+    uiLanguage: requestContext?.uiLanguage,
+  });
 
   const log: AgentLog = async (agent, message, level = "info") => {
     try { await onAgentLog?.(agent, message, level); } catch { /* swallow */ }

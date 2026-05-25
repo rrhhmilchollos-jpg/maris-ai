@@ -275,3 +275,176 @@ export const TEMPLATES: AppTemplate[] = [
       "Una app instalable (PWA) de notas personales con funcionamiento offline. Lista de notas en una columna, editor de markdown a la derecha (en móvil se conmutan). Crear, editar y eliminar notas. Sistema de etiquetas (cada nota puede tener varias etiquetas de colores). Búsqueda por texto y filtro por etiqueta. Persistencia en IndexedDB para offline. Manifest + service worker para instalación. Bottom navigation en móvil con 3 secciones: Notas, Etiquetas, Ajustes. Modo oscuro por defecto, paleta amarillo papel sobre gris oscuro.",
   },
 ];
+
+/**
+ * Professional generation blueprints used by backend agents as production-ready
+ * starting points. Agents MUST read this file when planning a new product:
+ * artifacts/api-server/src/lib/templates.ts
+ *
+ * These blueprints are deliberately broader than the public gallery templates.
+ * They give Architect, Designer, Frontend, Backend, QA and Patcher a shared base
+ * so a client never starts from a blank canvas; the client can then refine copy,
+ * sections, business rules, palette, integrations and data model as needed.
+ */
+export interface AgentGenerationBlueprint {
+  id: string;
+  name: string;
+  appliesToKinds: TemplateKind[];
+  detectionKeywords: string[];
+  productPattern: string;
+  recommendedStructure: string[];
+  starterFeatures: string[];
+  editableByClient: string[];
+  qualityChecklist: string[];
+}
+
+export const AGENT_GENERATION_BLUEPRINTS: AgentGenerationBlueprint[] = [
+  {
+    id: "premium-saas-dashboard",
+    name: "SaaS dashboard profesional",
+    appliesToKinds: ["fullstack", "nextjs"],
+    detectionKeywords: ["saas", "dashboard", "panel", "crm", "analytics", "métricas", "admin", "gestión"],
+    productPattern: "Aplicación SaaS con navegación lateral, onboarding, métricas, entidades editables, estados vacíos, filtros y acciones principales claras.",
+    recommendedStructure: ["Auth/onboarding", "Dashboard", "Listado con filtros", "Detalle editable", "Ajustes", "Componentes compartidos", "API CRUD si procede"],
+    starterFeatures: ["sidebar responsive", "tarjetas KPI", "tablas con búsqueda", "formularios con validación", "notificaciones toast", "estados loading/error/empty"],
+    editableByClient: ["módulos del menú", "nombres de métricas", "roles", "campos de entidad", "colores de marca", "copys de onboarding"],
+    qualityChecklist: ["cada métrica debe derivar de datos mock o reales", "ninguna tabla sin filtros", "cada acción crítica debe confirmar o dar feedback", "mobile-first con menú compacto"]
+  },
+  {
+    id: "marketplace-commerce",
+    name: "Marketplace / e-commerce completo",
+    appliesToKinds: ["fullstack", "nextjs", "hybrid-pwa"],
+    detectionKeywords: ["tienda", "ecommerce", "marketplace", "catálogo", "carrito", "checkout", "producto", "pedido", "reserva"],
+    productPattern: "Experiencia comercial con catálogo explorable, búsqueda, filtros, detalle de producto/servicio, carrito o solicitud, checkout simulado y panel de gestión.",
+    recommendedStructure: ["Home comercial", "Catálogo", "Detalle", "Carrito o reserva", "Checkout", "Cuenta/pedidos", "Admin de catálogo"],
+    starterFeatures: ["filtros por categoría/precio", "favoritos", "galería", "reviews", "resumen de pedido", "badges de stock/estado"],
+    editableByClient: ["categorías", "precios", "impuestos", "métodos de pago", "política de envío", "estilo visual"],
+    qualityChecklist: ["productos realistas con imágenes y alt descriptivo", "checkout nunca debe pedir datos reales de pago", "carrito persistente", "empty state de catálogo"]
+  },
+  {
+    id: "ai-product-studio",
+    name: "Herramienta con IA protegida",
+    appliesToKinds: ["fullstack", "nextjs"],
+    detectionKeywords: ["ia", "ai", "chatbot", "openai", "generador", "resumidor", "agente", "transcribir", "imagen"],
+    productPattern: "Producto IA con frontend pulido y backend que protege claves, soporta historial, streaming o progreso, y deja instrucciones de variables de entorno.",
+    recommendedStructure: ["Panel de entrada", "Resultados", "Historial", "Ajustes de modelo", "API segura", "Persistencia", "README de env vars"],
+    starterFeatures: ["prompt textarea", "acciones rápidas", "historial", "estado generando", "errores legibles", "límite de tokens/tamaño"],
+    editableByClient: ["proveedor IA", "system prompt", "acciones", "tono", "límites", "campos guardados"],
+    qualityChecklist: ["nunca exponer API keys en cliente", "todas las llamadas IA pasan por /api", "mostrar loading y errores", "README con variables obligatorias"]
+  },
+  {
+    id: "booking-services",
+    name: "Reservas y servicios locales",
+    appliesToKinds: ["fullstack", "mobile", "hybrid-pwa"],
+    detectionKeywords: ["citas", "reservas", "agenda", "servicios", "peluquería", "clínica", "restaurante", "turnos", "calendario"],
+    productPattern: "Sistema de reservas con catálogo de servicios, calendario, disponibilidad, formulario de cliente, confirmación y panel para gestionar citas.",
+    recommendedStructure: ["Landing", "Servicios", "Calendario", "Reserva", "Confirmación", "Mis citas", "Admin agenda"],
+    starterFeatures: ["slots horarios", "selector de servicio", "resumen de reserva", "estado confirmado/pendiente", "recordatorios simulados"],
+    editableByClient: ["horarios", "duraciones", "profesionales", "políticas de cancelación", "idioma de mensajes"],
+    qualityChecklist: ["no permitir reservar sin servicio y horario", "calendario usable en móvil", "confirmación clara", "datos mock suficientes"]
+  },
+  {
+    id: "learning-platform",
+    name: "Academia / cursos online",
+    appliesToKinds: ["fullstack", "mobile", "nextjs"],
+    detectionKeywords: ["curso", "academia", "elearning", "formación", "lecciones", "estudiantes", "quiz", "clases"],
+    productPattern: "Plataforma educativa con catálogo de cursos, lecciones, progreso, evaluaciones y panel de alumno/docente.",
+    recommendedStructure: ["Catálogo", "Curso", "Lección", "Progreso", "Quiz", "Certificado simulado", "Admin contenidos"],
+    starterFeatures: ["barra de progreso", "lecciones bloqueadas/desbloqueadas", "quiz interactivo", "notas", "marcadores"],
+    editableByClient: ["temario", "niveles", "criterios de evaluación", "branding académico", "mensajes de feedback"],
+    qualityChecklist: ["cada curso con módulos y duración", "quiz con resultado", "estado vacío de aprendizaje", "mobile-first para lecciones"]
+  },
+  {
+    id: "content-community",
+    name: "Comunidad / red social / contenidos",
+    appliesToKinds: ["fullstack", "mobile", "hybrid-pwa"],
+    detectionKeywords: ["red social", "comunidad", "foro", "posts", "feed", "comentarios", "mensajes", "perfiles"],
+    productPattern: "Producto social con feed, perfiles, creación de contenido, comentarios, likes y moderación básica.",
+    recommendedStructure: ["Feed", "Crear publicación", "Perfil", "Detalle de post", "Mensajes/notificaciones", "Moderación"],
+    starterFeatures: ["composer", "reacciones", "comentarios", "búsqueda", "notificaciones mock", "privacidad básica"],
+    editableByClient: ["tipos de contenido", "roles", "normas", "categorías", "tono de comunidad"],
+    qualityChecklist: ["contenido mock no genérico", "empty states", "perfiles completos", "acciones con feedback"]
+  },
+  {
+    id: "finance-operations",
+    name: "Finanzas / operaciones",
+    appliesToKinds: ["fullstack", "nextjs"],
+    detectionKeywords: ["finanzas", "facturas", "presupuesto", "gastos", "contabilidad", "invoices", "pagos", "tesorería"],
+    productPattern: "Herramienta operativa con registros, importes, estados, resúmenes, gráficos y exportación simulada.",
+    recommendedStructure: ["Resumen financiero", "Ingresos/gastos", "Facturas", "Clientes/proveedores", "Reportes", "Ajustes"],
+    starterFeatures: ["KPI cards", "gráficos", "filtros por fecha", "estado pagado/pendiente", "exportar CSV simulado"],
+    editableByClient: ["moneda", "impuestos", "categorías", "plantillas de factura", "umbrales"],
+    qualityChecklist: ["formato de moneda coherente", "datos agregados reales", "no prometer pagos reales", "tablas responsive"]
+  },
+  {
+    id: "game-starter-kit",
+    name: "Juego completo con loop jugable",
+    appliesToKinds: ["game-2d", "game-3d"],
+    detectionKeywords: ["juego", "game", "arcade", "runner", "3d", "2d", "phaser", "three", "pixi", "babylon"],
+    productPattern: "Juego con menú, instrucciones, loop principal, puntuación, dificultad progresiva, game over y persistencia de récord.",
+    recommendedStructure: ["Menú", "Escena de juego", "HUD", "Sistema de colisiones", "Game over", "Persistencia local", "Controles"],
+    starterFeatures: ["score", "best score", "pausa", "reinicio", "dificultad incremental", "controles teclado/móvil si aplica"],
+    editableByClient: ["personajes", "velocidad", "niveles", "paleta", "mecánica principal", "sonidos futuros"],
+    qualityChecklist: ["debe ser jugable desde el primer render", "cleanup de canvas/engine", "sin assets externos obligatorios", "FPS estable"]
+  }
+];
+
+function normalizeForTemplateSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+export function selectAgentGenerationBlueprint(prompt: string, kind?: string): AgentGenerationBlueprint {
+  const normalizedPrompt = normalizeForTemplateSearch(prompt);
+  const normalizedKind = (kind || "fullstack") as TemplateKind;
+  const scored = AGENT_GENERATION_BLUEPRINTS.map((blueprint) => {
+    const keywordScore = blueprint.detectionKeywords.reduce((score, keyword) => {
+      return score + (normalizedPrompt.includes(normalizeForTemplateSearch(keyword)) ? 3 : 0);
+    }, 0);
+    const kindScore = blueprint.appliesToKinds.includes(normalizedKind) ? 4 : 0;
+    return { blueprint, score: keywordScore + kindScore };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0]?.blueprint ?? AGENT_GENERATION_BLUEPRINTS[0];
+}
+
+export interface TemplateContextOptions {
+  prompt: string;
+  kind?: string;
+  detectedLocale?: string;
+  detectedCountry?: string;
+  uiLanguage?: string;
+}
+
+export function buildAgentTemplateContextBlock(options: TemplateContextOptions): string {
+  const blueprint = selectAgentGenerationBlueprint(options.prompt, options.kind);
+  const publicTemplateIds = TEMPLATES
+    .filter((template) => template.kind === (options.kind as TemplateKind))
+    .slice(0, 4)
+    .map((template) => template.id)
+    .join(", ") || "usar la plantilla pública más cercana del catálogo";
+
+  return `[MARIS AI TEMPLATE BASE — OBLIGATORIO]
+Archivo oficial de plantillas para los agentes: artifacts/api-server/src/lib/templates.ts
+Plantilla profesional seleccionada: ${blueprint.name} (${blueprint.id})
+Tipo solicitado: ${options.kind || "fullstack"}
+Plantillas públicas relacionadas: ${publicTemplateIds}
+Idioma de interfaz detectado por IP/cabeceras: ${options.uiLanguage || "es"}${options.detectedLocale ? ` (${options.detectedLocale})` : ""}${options.detectedCountry ? ` · país=${options.detectedCountry}` : ""}
+
+Cómo deben usarla los agentes:
+- Architect: NO empezar desde cero. Usa esta plantilla como esqueleto inicial y adapta páginas, modelos, componentes y backend al encargo exacto.
+- Designer: toma la estructura base, pero personaliza marca, paleta, jerarquía visual y microinteracciones para que el resultado parezca premium, no genérico.
+- Frontend: implementa la base completa con datos mock realistas, responsive, estados vacíos/loading/error y componentes editables por el cliente.
+- Backend: si aplica, crea endpoints y modelos coherentes con la plantilla; evita stubs sin lógica cuando el producto requiere persistencia.
+- QA/Patcher: valida contra el checklist de la plantilla y bloquea entregas incompletas.
+
+Patrón de producto base: ${blueprint.productPattern}
+Estructura recomendada: ${blueprint.recommendedStructure.join(" → ")}
+Features iniciales: ${blueprint.starterFeatures.join("; ")}
+Partes que el cliente debe poder modificar después: ${blueprint.editableByClient.join("; ")}
+Checklist mínimo de calidad: ${blueprint.qualityChecklist.join("; ")}
+
+Regla de calidad Maris AI: entregar una base lista para que el cliente empiece a editar, nunca una pantalla vacía, nunca una maqueta sin interacción y nunca una app que parezca generada con prisa.`;
+}
+
