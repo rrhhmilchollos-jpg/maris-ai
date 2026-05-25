@@ -1591,7 +1591,7 @@ export async function generateApp(
     await log("system", "📋 Mapa de ruta generado. Iniciando ejecución serializada...");
 
     // 2. BUCLE DE EJECUCIÓN SERIALIZADO con Streaming (Task Splitting & Milestone Forking)
-    await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
+    const milestoneResult = await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
       onProgress?.({ 
         phase: "generating", 
         progress: update.progress, 
@@ -1604,8 +1604,8 @@ export async function generateApp(
       title: "Proyecto Generado por Hitos",
       description: "App construida mediante Task Splitting y Milestone Forking",
       techStack: ["React", "Node", "TypeScript"],
-      frontendCode: "// El código ha sido consolidado en disco por hitos.",
-      backendCode: "// El código ha sido consolidado en disco por hitos."
+      frontendCode: milestoneResult.frontendCode || "export default function App(){ return <div style={{padding:24}}>Proyecto generado, pero sin archivos frontend renderizables.</div>; }",
+      backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
     };
   }
 
