@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ShoppingBag, ArrowRight, Star, Github } from "lucide-react";
+import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ShoppingBag, ArrowRight, Star, Github, Globe } from "lucide-react";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -121,6 +121,14 @@ function PreviewPane({ code, isActive, onClose, onDeploy, isDeploying, viewMode,
             title="Deploy · 50 créditos"
           >
             {isDeploying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            onClick={() => window.open("https://play.google.com/console", "_blank")}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white/50 hover:text-white hover:bg-white/5 transition-colors border border-white/[0.07] hover:border-white/20"
+            title="Publicar en Google Play"
+          >
+            <Globe className="h-3.5 w-3.5" />
+            Publicar en Google
           </button>
           <button className="p-1.5 hover:bg-white/5 rounded-md text-white/40 hover:text-white transition-colors" title="Refrescar"><RefreshCcw className="h-3.5 w-3.5" /></button>
           <div className="w-px h-4 bg-white/10 mx-1" />

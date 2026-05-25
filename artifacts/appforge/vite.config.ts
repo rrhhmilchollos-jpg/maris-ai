@@ -7,8 +7,25 @@ const clerkPubKey =
   process.env.VITE_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "";
 const clerkProxyUrl = process.env.VITE_CLERK_PROXY_URL ?? "";
 
+// WebContainer requires cross-origin isolation (SharedArrayBuffer).
+// These headers must be present on EVERY response from the dev server and
+// the production Vercel deployment (vercel.json handles the latter).
+const ISOLATION_HEADERS = {
+  // same-origin-allow-popups: allows Clerk OAuth popups while still isolating
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  // credentialless: looser than require-corp but still enables SharedArrayBuffer
+  // in Chrome 96+ and Edge 96+. Needed for WebContainer.boot() to succeed.
+  "Cross-Origin-Embedder-Policy": "credentialless",
+};
+
 export default defineConfig({
   base: "/",
+  server: {
+    headers: ISOLATION_HEADERS,
+  },
+  preview: {
+    headers: ISOLATION_HEADERS,
+  },
   define: {
     "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPubKey),
     "import.meta.env.VITE_CLERK_PROXY_URL": JSON.stringify(clerkProxyUrl),
