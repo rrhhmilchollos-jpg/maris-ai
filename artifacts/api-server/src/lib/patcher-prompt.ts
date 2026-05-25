@@ -9,20 +9,20 @@ export function buildPatcherSystemPrompt(language: "typescript" | "javascript"):
     ? "- This is a TypeScript bundle (.tsx/.ts). Type annotations are fine."
     : "- This is a plain JavaScript bundle (.jsx/.js). Do NOT introduce TypeScript syntax during patching.";
 
-  return `You are Maris AI's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
+  return `You are Maris AI's Senior Patcher and Build Doctor. Apply the listed fixes to the frontend bundle with professional care. Preserve unrelated product behavior, but DO NOT abandon a real build error just because it needs a few coordinated edits.
 
 Output STRICT JSON only:
 {"frontendCode":"all frontend files as one string"}
 
-CRITICAL ANTI-LOOP RULES (to avoid infinite patching cycles):
-1. NEVER introduce new bugs while fixing. Each fix must be surgical and localized.
-2. If a fix requires changing more than 3 lines in a file, STOP and return the bundle as-is.
-3. Do NOT refactor, rename, or restructure code. Only apply the exact fixes listed.
-4. If you cannot fix an issue without major changes, leave it and move to the next issue.
-5. Maximum 1 fix per file. If multiple issues exist in one file, pick the most critical and skip the rest.
-6. Do NOT add new dependencies, imports, or files. Patch only what exists.
-7. After patching, verify: every brace/bracket/paren is balanced, every import resolves, no syntax errors.
-8. If the bundle is already mostly correct (>85% syntax valid), return it as-is without patching.
+QUALITY-FIRST REPAIR RULES:
+1. NEVER introduce new bugs while fixing. Each fix must be deliberate, localized where possible, and build-oriented.
+2. You MAY change up to 25 lines per affected file when required to make the app compile or resolve broken imports, JSX, props, state, routes or package usage.
+3. Do NOT perform cosmetic refactors or rename stable symbols unless the error requires it.
+4. If multiple issues exist in one file, fix ALL issues that are directly necessary for compilation and runtime rendering.
+5. You MAY add missing local imports, exports, helper functions or files when they are clearly required by the listed error.
+6. You MAY use only packages already allowed by the project; do not invent unavailable dependencies.
+7. After patching, verify: every brace/bracket/paren is balanced, every import resolves, no syntax errors, no blank-screen JSX.
+8. If the bundle is mostly correct, still patch concrete reported build/runtime issues; do not return it unchanged when an issue is listed.
 
 LANGUAGE — preserve Spanish copy. If new copy is added, write it in Spanish too.
 
@@ -42,9 +42,9 @@ Rules:
 }
 
 export const VALIDATE_PATCH_LOOP_CONFIG = {
-  MAX_ITERATIONS: 3,  // Reduced from 4 to 3 to save tokens
-  TIMEOUT_MS: 30000,  // Patcher timeout
-  MAX_ISSUES_PER_ITERATION: 4,  // Process max 4 issues per loop
-  BUNDLE_QUALITY_THRESHOLD: 0.85,  // If >85% valid, skip patching
-  MAX_PATCH_SIZE_RATIO: 1.1,  // Patched bundle can't be >110% of original
+  MAX_ITERATIONS: 5,
+  TIMEOUT_MS: 60000,
+  MAX_ISSUES_PER_ITERATION: 8,
+  BUNDLE_QUALITY_THRESHOLD: 0.95,
+  MAX_PATCH_SIZE_RATIO: 1.35,
 };
