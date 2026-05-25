@@ -2439,7 +2439,7 @@ export async function runJobById(jobId: string): Promise<void> {
       log,
       [],
       undefined,
-      job.checkpointData ? (job.checkpointData as any) : undefined,
+      undefined, // agentMemory — checkpointData NO es AgentMemoryContext (causaba TypeError en formatMemoryBlock)
       {
         kind: job.kind,
         detectedLocale: extractPromptContext(job.prompt, "locale"),
