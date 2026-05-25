@@ -2080,6 +2080,39 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
   }
 });
 
+// ── GET /api/apps/:id/active-job ─────────────────────────────────────────────
+router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const job = await GenerationJob.findOne({
+      appId: req.params.id,
+      userId,
+      status: { $nin: ["succeeded", "failed"] },
+    }).sort({ updatedAt: -1, createdAt: -1 });
+
+    if (!job) return res.json(null);
+
+    res.json({
+      id: String(job._id),
+      status: job.status,
+      phase: job.phase,
+      progress: job.progress,
+      appId: job.appId,
+      errorMessage: job.errorMessage,
+      updatedAt: job.updatedAt,
+      currentAgent: job.currentAgent,
+      awaitingApproval: job.awaitingApproval,
+      approvedFacets: job.checkpointData?.approvedFacets ?? [],
+    });
+  } catch (err) {
+    logger.error({ err, appId: req.params.id }, "GET /api/apps/:id/active-job error");
+    res.status(500).json({ error: "Error interno" });
+  }
+});
+
 // ── GET /api/apps/:id/messages ────────────────────────────────────────────
 router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {

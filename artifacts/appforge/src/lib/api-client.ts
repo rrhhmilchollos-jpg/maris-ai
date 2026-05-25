@@ -16,6 +16,7 @@ export const getListAppsQueryKey = () => ["apps"];
 export const getGetAppQueryKey = (id: string) => ["app", id];
 export const getListAppMessagesQueryKey = (id: string) => ["app-messages", id];
 export const getGetGenerationJobQueryKey = (id: string) => ["generation-job", id];
+export const getGetActiveAppJobQueryKey = (id: string) => ["app-active-job", id];
 export const getGetMyPreferencesQueryKey = () => ["my-preferences"];
 export const getListTemplatesQueryKey = () => ["templates"];
 export const getListAdminUsersQueryKey = () => ["admin-users"];
@@ -73,6 +74,9 @@ export function useSendAppMessage(opts?: { mutation?: Partial<UseMutationOptions
 }
 export function useGetGenerationJob(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetGenerationJobQueryKey(id), queryFn: () => apiFetch(`/api/jobs/${id}`), enabled: !!id, ...(opts?.query as any) });
+}
+export function useGetActiveAppJob(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getGetActiveAppJobQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/active-job`), enabled: !!id, ...(opts?.query as any) });
 }
 export function useApproveFacet(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/jobs/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
