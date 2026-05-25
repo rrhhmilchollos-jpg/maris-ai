@@ -139,28 +139,28 @@ TAILWIND — the preview uses the Tailwind Play CDN (no postcss). This means:
 
 Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
-- Use the file list from the plan as a guide, but PRIORITIZE SPEED. If the plan has too many files, CONSOLIDATE them into a maximum of 12-15 files total.
-- Your priority is a working preview in under 60 seconds. Do not generate 40+ files even if the plan suggests it. 12-15 high-quality files is the goal.
+- Use the file list from the plan as the source of truth and PRIORITIZE QUALITY. Consolidate only when it preserves the complete core journey.
+- Your priority is a polished, working preview. Avoid 40+ files, but do not omit essential screens, state or components just to be fast. 12-24 high-quality files is acceptable when the product needs them.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
   - Generate every file the plan needs, in full. Never truncate or "TODO" a file to save tokens. Stay concise: avoid redundant comments, padding, or unnecessary boilerplate.
 - IMPORTANT: If you have many files, prioritize the most important ones first and be as concise as possible in code logic to fit everything in one response.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
-const BACKEND_SYSTEM_PROMPT = `You are Maris AI's Senior Backend Engineer. Generate a LEAN, FAST, and functional Node/Express backend as STRICT JSON.
+const BACKEND_SYSTEM_PROMPT = `You are Maris AI's Senior Backend Engineer. Generate a reliable, production-minded and functional Node/Express backend as STRICT JSON.
 Schema:
 {"backendCode":"all backend files as one string OR 'No backend required for this app.'"}
 Use '// === FILE: <path> ===' to separate files.
-SPEED FIRST — MVP BACKEND:
-- Aim for under 15 KB of code total.
-- Keep it simple: package.json, tsconfig.json, src/index.ts (Express bootstrap), src/db/schema.ts (Drizzle), and ONE consolidated src/routes/api.ts with the essential endpoints.
+QUALITY FIRST — MVP BACKEND:
+- Aim for focused code, but include the files/endpoints needed for the frontend to work correctly.
+- Keep it simple: package.json, tsconfig.json, src/index.ts (Express bootstrap), src/db/schema.ts (Drizzle), and route files for the essential endpoints.
 - Stack: Node 20 + Express 5 + TypeScript + Drizzle ORM + SQLite (for speed/MVP).
 - Quality: Use Zod for basic validation, centralized error handling, and CORS.
-- Focus: Only implement the core data operations needed for the frontend to work. Omit complex logging, seeding, or multiple route files.
+- Focus: Implement the core data operations needed for the frontend to work, including realistic validation and clear error responses.
 - NO TODOs. Real working handlers only.
 Rules:
-- STRICT LIMIT: Maximum 6 backend files total.
-- Combined output under 15 KB.
+- SOFT LIMIT: 6-10 backend files total when useful for clarity.
+- Combined output should stay concise, but correctness beats arbitrary byte limits.
 - Close every brace and quote. Output ONLY the JSON object.`;
 
 const ARCHITECT_SYSTEM_PROMPT = `You are Maris AI's Senior Product Architect. You design the file structure for a web app the team will build. You think like a product manager AND an engineer: every page must serve a real user job, every component must have a clear purpose, and the structure must be ambitious enough to feel like a real product (not a demo).
@@ -206,13 +206,13 @@ FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
 - Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
 
-SPEED FIRST — MVP STRATEGY:
-- STRICT LIMIT: Maximum 12 frontend files total.
-- Your goal is to get a working preview in under 60 seconds.
-- Do NOT plan speculative pages or components. Stick to the core value proposition.
-- A great MVP has 2-3 pages and 4-6 components. That is plenty for a first version.
-- Fewer files = faster generation = happier user. Quality over quantity.
-- If the user prompt is complex, simplify it into the most essential 12 files.
+QUALITY FIRST — PROFESSIONAL MVP STRATEGY:
+- SOFT LIMIT: Aim for 12-18 frontend files; absolute maximum 24 when the requested product genuinely needs it.
+- Your goal is a reliable, polished preview, not the fastest possible partial result.
+- Do NOT plan speculative pages or components, but do include every page/component needed for the core user journey to feel complete.
+- A strong MVP usually has 3-5 pages and 5-10 reusable components. Landing pages may be smaller.
+- Fewer files are good only when they preserve quality; do not collapse or omit important UX just to be fast.
+- If the user prompt is complex, decompose it into the most essential complete product slice within 24 files.
 
 Rules:
 - NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
@@ -541,13 +541,15 @@ async function architectPlan(prompt: string, research: string, coderModel?: stri
   plan.dataModels = plan.dataModels ?? [];
   plan.backendFiles = plan.backendFiles ?? [];
   plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
-  // Hard cap estricto: forzar máximo 12 archivos para asegurar velocidad de previsualización (MVP)
-  // Esto evita que la IA ignore el prompt y genere planes masivos que tardan demasiado.
-  if (plan.frontendFiles.length > 12) {
-    plan.frontendFiles = plan.frontendFiles.slice(0, 12);
-    // Sincronizar páginas y componentes con el recorte de archivos
-    plan.pages = plan.pages.filter(p => plan.frontendFiles.some(f => f.includes(p.name)));
-    plan.components = plan.components.filter(c => plan.frontendFiles.some(f => f.includes(c.name)));
+  // Cap de calidad: evita planes enormes, pero ya no fuerza recortes agresivos
+  // que dejaban apps incompletas. El arquitecto puede usar hasta 24 archivos para
+  // cubrir el flujo principal con páginas, componentes y estados reales.
+  const MAX_FRONTEND_FILES = 24;
+  if (plan.frontendFiles.length > MAX_FRONTEND_FILES) {
+    plan.frontendFiles = plan.frontendFiles.slice(0, MAX_FRONTEND_FILES);
+    const normalizedFiles = plan.frontendFiles.map((f) => f.toLowerCase());
+    plan.pages = plan.pages.filter((p) => normalizedFiles.some((f) => f.includes(p.name.toLowerCase()) || f.includes((p.route ?? "").replace(/^\//, "").toLowerCase())));
+    plan.components = plan.components.filter((c) => normalizedFiles.some((f) => f.includes(c.name.toLowerCase())));
   }
   return plan;
 }
@@ -1205,9 +1207,9 @@ async function runValidatePatchLoop(
       onProgress?.({
         phase: "validating",
         progress: 92,
-        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
+        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. No se entrega como final válido; se conserva el mejor bundle para revisión…`,
       });
-      emit("validator", `△ ${combined.length} detalle${combined.length === 1 ? "" : "s"} pendiente${combined.length === 1 ? "" : "s"}`, "warn");
+      emit("validator", `△ ${combined.length} detalle${combined.length === 1 ? "" : "s"} pendiente${combined.length === 1 ? "" : "s"} tras el máximo de reparaciones`, "warn");
       break;
     }
 
@@ -1751,9 +1753,31 @@ export async function generateApp(
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
     await log("coder", "Código listo, comprobando que todo encaje…");
 
+    let editQaReport: QAReport = { ok: true, issues: [] };
+    if (execPlan.phases.includes("qa")) {
+      onProgress?.({ phase: "reviewing", progress: 68, note: "Revisor QA comprobando la edición antes de validar…" });
+      await log("qa", "🔍 Revisando la edición antes del build...");
+      const syntheticPlan: ProjectPlan = {
+        title: result.title,
+        description: result.description,
+        techStack: result.techStack,
+        pages: [],
+        components: [],
+        hooks: [],
+        utils: [],
+        dataModels: [],
+        frontendFiles: [],
+        backendNeeded: false,
+        backendFiles: [],
+      };
+      editQaReport = await runPhase("qa", () => reviewBundle(result.frontendCode, syntheticPlan), resolveModelForAgent("qa", 12, coderModel));
+      const editIssueCount = editQaReport.issues?.length ?? 0;
+      await log("qa", editIssueCount > 0 ? `${editIssueCount} issue(s) detectada(s) en la edición.` : "QA de edición sin issues detectadas.", editIssueCount > 0 ? "warn" : "info");
+    }
+
     const fixedFrontend = await runValidatePatchLoop(
       result.frontendCode,
-      { ok: true, issues: [] },
+      editQaReport,
       onProgress,
       70,
       language,
@@ -1773,43 +1797,36 @@ export async function generateApp(
   const runQa = execPlan.phases.includes("qa");
   const runTests = execPlan.phases.includes("tests");
 
-    /* === Phase 1 (Hyper-Parallel): Research + Architect + Design + Integrations === */
-  await log("system", "⚡ Activando orquestación paralela masiva para máxima velocidad...");
-  
-  const researchPromise = (runResearch && shouldResearch(prompt))
-    ? runPhase("researcher", () => researchTopic(prompt), resolveModelForAgent("researcher", 0))
-    : Promise.resolve("");
+    /* === Phase 1: Research → Architect, then quality-aware Design + Integrations === */
+  await log("system", "🧭 Activando orquestación de calidad: primero contexto y arquitectura, después diseño e integraciones...");
 
-  const planPromise = runPhase("architect", async (m) => {
-    const res = await researchPromise;
-    // El arquitecto usa Sonnet para apps medias/complejas — estimamos complejidad por longitud del prompt
-    const estimatedFiles = prompt.length > 200 ? 12 : 6;
-    const architectModel = resolveModelForAgent("architect", estimatedFiles, coderModel);
-    return withTimeoutOrThrow(architectPlan(prompt, res, architectModel), 60_000, "architect");
-  }, resolveModelForAgent("architect", prompt.length > 200 ? 12 : 6, coderModel));
+  const research = (runResearch && shouldResearch(prompt))
+    ? await runPhase("researcher", () => researchTopic(prompt), resolveModelForAgent("researcher", 0))
+    : "";
 
-  // Design e Integrations ahora corren EN PARALELO con el Arquitecto, usando el prompt original
-  // para no esperar a que el plan de archivos esté listo (el diseño es visual, no depende de la lista de archivos)
+  const estimatedFiles = prompt.length > 200 ? 18 : 10;
+  const plan = await runPhase("architect", (m) =>
+    withTimeoutOrThrow(architectPlan(prompt, research, m), 90_000, "architect"),
+    resolveModelForAgent("architect", estimatedFiles, coderModel),
+  );
+
   const FALLBACK_DESIGN: DesignSystem = {
-    theme: "dark", vibe: "moderno y limpio",
+    theme: "dark", vibe: "moderno, pulido y orientado a producto real",
     palette: { primary: "#7c3aed", secondary: "#0ea5e9", background: "#0a0a0a", surface: "#111111", text: "#fafafa" },
     typography: { sans: "Inter, system-ui, sans-serif", display: "Inter, system-ui, sans-serif" },
     radius: "0.75rem", tailwindExtend: "", globalCSS: "",
   };
 
-  const designPromise = runDesign
-    ? runPhase("design", (m) => designSystem({ title: "App", description: prompt, pages: [], components: [] } as any, "", m), resolveModelForAgent("designer", 0))
-    : Promise.resolve(FALLBACK_DESIGN);
-
-  const integrationPromise = runIntegration
-    ? runPhase("integrations", (m) => specifyIntegrations({ title: "App", description: prompt, pages: [], dataModels: [], backendNeeded: true } as any, prompt, m), resolveModelForAgent("integrations", 0))
-    : Promise.resolve({ services: [], envVars: [] });
-
-  const [research, plan, design, integrationSpec] = await Promise.all([
-    researchPromise, planPromise, designPromise, integrationPromise
+  const [design, integrationSpec] = await Promise.all([
+    runDesign
+      ? runPhase("design", (m) => designSystem(plan, research, m), resolveModelForAgent("designer", plan.frontendFiles.length, coderModel))
+      : Promise.resolve(FALLBACK_DESIGN),
+    runIntegration
+      ? runPhase("integrations", (m) => specifyIntegrations(plan, prompt, m), resolveModelForAgent("integrations", plan.frontendFiles.length, coderModel))
+      : Promise.resolve({ services: [], envVars: [] }),
   ]);
 
-  await log("system", "✅ Fase de análisis masivo completada. Iniciando ingeniería...");
+  await log("system", "✅ Fase de análisis de calidad completada. Iniciando ingeniería...");
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
   await log("architect", `Plan "${plan.title}" listo. Backend: ${plan.backendNeeded ? "sí" : "no"}.`);
   await log("designer", `Diseño "${design.vibe}" y ${integrationSpec.services.length} integraciones listas.`);
@@ -1831,8 +1848,8 @@ export async function generateApp(
   await log("coder", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
   if (plan.backendNeeded) await log("coder", "⚙️ Generando backend en paralelo…");
 
-  /* === Phase 3 (parallel): frontend + backend === */
-  const TARGET_CHARS = 60_000;
+  /* === Phase 3: frontend + backend (paralelo solo cuando ya existe arquitectura y diseño reales) === */
+  const TARGET_CHARS = 90_000;
   let lastLogChars = 0;
     const frontendPromise = runPhase("frontend", (m) =>
     withTimeoutOrThrow(
@@ -1888,7 +1905,7 @@ export async function generateApp(
     await log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
   }
 
-  /* === Phase 4 (parallel): QA + Tests === */
+  /* === Phase 4: QA + Tests obligatorios cuando el plan los requiere === */
   onProgress?.({ phase: "reviewing", progress: 78, note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…" });
   if (runQa) log("qa", "🔍 Revisando bundle en busca de bugs…");
   if (runTests) log("qa", "🧪 Generando tests en paralelo…");

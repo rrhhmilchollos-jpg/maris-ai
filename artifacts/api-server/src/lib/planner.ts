@@ -20,14 +20,14 @@ export interface ExecutionPlan {
 }
 
 export const PLAN_FAST_PATCH: ExecutionPlan = {
-  phases: ["patch"],
-  reason: "Cambio pequeño sobre la app existente.",
+  phases: ["patch", "validate"],
+  reason: "Cambio mínimo sobre una app existente que ya funciona.",
   scope: "fast-patch",
 };
 
 export const PLAN_FEATURE: ExecutionPlan = {
-  phases: ["architect", "frontend", "validate", "patch"],
-  reason: "Nueva pantalla o feature sobre la app existente.",
+  phases: ["architect", "design", "frontend", "qa", "tests", "validate", "patch"],
+  reason: "Nueva pantalla, bug o feature sobre la app existente con control de calidad completo.",
   scope: "feature",
 };
 
@@ -39,10 +39,12 @@ export const PLAN_FULL: ExecutionPlan = {
     "integration",
     "frontend",
     "backend",
+    "qa",
+    "tests",
     "validate",
     "patch",
   ],
-  reason: "App nueva desde cero.",
+  reason: "App nueva desde cero con pipeline completo y revisión de calidad.",
   scope: "full-build",
 };
 
@@ -82,10 +84,13 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   if (FEATURE_RX.test(trimmed) && hasExistingApp) {
     return PLAN_FEATURE;
   }
-  if (COSMETIC_RX.test(trimmed) && hasExistingApp && wordCount < 25) {
+  if (COSMETIC_RX.test(trimmed) && hasExistingApp && wordCount <= 10 && !FEATURE_RX.test(trimmed)) {
     return PLAN_FAST_PATCH;
   }
-  if (hasExistingApp && wordCount < 15) {
+  // Antes cualquier petición corta entraba en fast-patch. Eso hacía que mensajes
+  // ambiguos como "arregla esto" o "mejóralo" fueran demasiado rápidos y pobres.
+  // Ahora, si no es un cambio cosmético inequívoco, escalamos a feature.
+  if (hasExistingApp && wordCount <= 6 && COSMETIC_RX.test(trimmed) && !BUG_RX.test(trimmed)) {
     return PLAN_FAST_PATCH;
   }
   return PLAN_FEATURE;
@@ -167,8 +172,8 @@ export function planSummaryEs(plan: ExecutionPlan): string {
       // completo (architect + frontend + validate + patch).
       return `🧭 Plan: cambio pequeño — aplico el parche, lo valido en memoria y, si algo falla, escalo automáticamente al flujo completo. ${plan.reason}`;
     case "feature":
-      return `🧭 Plan: re-arquitecto, regenero el frontend, valido todo el bundle y aplico parches hasta que compile sin errores. ${plan.reason}`;
+      return `🧭 Plan: re-arquitecto, reviso diseño, regenero el frontend, paso QA/tests, valido todo el bundle y aplico parches hasta que compile sin errores. ${plan.reason}`;
     case "full-build":
-      return `🧭 Plan: app nueva — pipeline completo (investigación → arquitecto → diseño → integraciones → frontend + backend → validación → parches). No termino hasta que el código compile sin errores. ${plan.reason}`;
+      return `🧭 Plan: app nueva — pipeline completo (investigación → arquitecto → diseño → integraciones → frontend + backend → QA/tests → validación → parches). No termino hasta que el código compile sin errores. ${plan.reason}`;
   }
 }
