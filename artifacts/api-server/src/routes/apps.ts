@@ -653,7 +653,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   if (provider === "gpt-5") {
     const stream = await openai.chat.completions.create({
       model: "gpt-5.4",
-      max_completion_tokens: 32000,
+      max_completion_tokens: 128000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
@@ -678,7 +678,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   } else if (provider === "claude") {
     const stream = anthropic.messages.stream({
       model: resolveClaudeCoderModel(coderModel),
-      max_tokens: 32000,
+      max_tokens: 128000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -696,7 +696,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // Claude streaming según el modelo elegido en el selector.
     const stream = anthropic.messages.stream({
       model: resolveClaudeCoderModel(coderModel),
-      max_tokens: 32768,
+      max_tokens: 128000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -1785,13 +1785,30 @@ export async function generateApp(
 
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
-  if (!frontendResult.code) {
-    await log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
-    throw new Error(
-      frontendResult.truncated
-        ? "La app es demasiado compleja para generarla de una vez. Prueba describiendo menos funcionalidades, por ejemplo: primero el login, luego el dashboard. O selecciona el modelo Opus para apps más grandes."
-        : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
+  if (!frontendResult.code && frontendResult.truncated) {
+    await log("coder", "Frontend truncado por tokens, reintentando con plan reducido…", "warn");
+    const reducedPlan = {
+      ...plan,
+      frontendFiles: plan.frontendFiles.slice(0, Math.ceil(plan.frontendFiles.length / 2)),
+      pages: plan.pages.slice(0, 2),
+      components: plan.components.slice(0, 6),
+    };
+    const retryResult = await generateFrontendCode(
+      reducedPlan, design, research, prompt,
+      (chars) => {
+        onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
+      },
+      coderModel, language, templateContextBlock,
     );
+    if (!retryResult.code) {
+      await log("coder", "Reintento con plan reducido también falló.", "error");
+      throw new Error("La app es demasiado compleja incluso con plan reducido. Prueba describiendo menos funcionalidades o selecciona el modelo Opus.");
+    }
+    await log("coder", `Frontend listo (plan reducido): ${Math.round(retryResult.code.length / 1000)} KB.`);
+    frontendResult.code = retryResult.code;
+  } else if (!frontendResult.code) {
+    await log("coder", `Frontend falló: ${frontendResult.error ?? "desconocido"}`, "error");
+    throw new Error(`No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`);
   }
   await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
   if (plan.backendNeeded && backendResult?.code) {
