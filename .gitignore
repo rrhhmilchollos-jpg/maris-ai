@@ -50,3 +50,6 @@ Thumbs.db
 
 # Environment variables
 .env
+.vercel
+.env*
+artifacts/appforge/.env.production
