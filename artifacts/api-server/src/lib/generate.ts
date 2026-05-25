@@ -44,7 +44,7 @@ export type GenLanguage = "typescript" | "javascript";
 
 const useAnthropic = true;
 const DEFAULT_MODEL = "claude-haiku-4-5";
-const AUTO_MODEL = "claude-sonnet-4-6";
+const AUTO_MODEL = "claude-sonnet-4-5";
 const OPUS_MODEL = "claude-opus-4-7";
 const GPT_MODEL = "gpt-5-4-ultra";
 
@@ -605,17 +605,101 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-opus-4-7";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
   return "claude";
 }
 
-function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
-  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
+/**
+ * Routing dinámico de modelos por complejidad de la app.
+ * 
+ * SIMPLE  (≤8 archivos):   todo Haiku — rápido y eficiente
+ * MEDIO   (9-20 archivos): Sonnet para agentes críticos (Frontend, Backend, Architect)
+ * COMPLEJO (>20 archivos): Sonnet para todo excepto Research/Design/Patcher que usan Haiku
+ */
+type ComplexityTier = "simple" | "medium" | "complex";
+
+function getComplexityTier(fileCount: number): ComplexityTier {
+  if (fileCount <= 8) return "simple";
+  if (fileCount <= 20) return "medium";
+  return "complex";
+}
+
+function resolveModelForAgent(
+  agent: "researcher" | "architect" | "designer" | "integrations" | "frontend" | "backend" | "qa" | "patcher" | "tests" | "edit",
+  fileCount: number,
+  userSelectedModel?: string,
+): ClaudeCoderModel {
+  // Si el usuario eligió Opus explícitamente, respetarlo siempre
+  if (userSelectedModel === "claude-opus-4-7") return "claude-opus-4-7";
+  
+  // Si el usuario eligió GPT-5, no aplica (se maneja aparte)
+  // Si el usuario eligió Haiku explícitamente, usarlo salvo en apps complejas con agentes críticos
+  const tier = getComplexityTier(fileCount);
+  
+  // Tabla de routing por agente y complejidad
+  const routing: Record<ComplexityTier, Record<typeof agent, ClaudeCoderModel>> = {
+    simple: {
+      researcher:   "claude-haiku-4-5",
+      architect:    "claude-haiku-4-5",
+      designer:     "claude-haiku-4-5",
+      integrations: "claude-haiku-4-5",
+      frontend:     "claude-haiku-4-5",
+      backend:      "claude-haiku-4-5",
+      qa:           "claude-haiku-4-5",
+      patcher:      "claude-haiku-4-5",
+      tests:        "claude-haiku-4-5",
+      edit:         "claude-haiku-4-5",
+    },
+    medium: {
+      researcher:   "claude-haiku-4-5",
+      architect:    "claude-sonnet-4-6",
+      designer:     "claude-haiku-4-5",
+      integrations: "claude-haiku-4-5",
+      frontend:     "claude-sonnet-4-6",
+      backend:      "claude-sonnet-4-6",
+      qa:           "claude-haiku-4-5",
+      patcher:      "claude-haiku-4-5",
+      tests:        "claude-haiku-4-5",
+      edit:         "claude-sonnet-4-6",
+    },
+    complex: {
+      researcher:   "claude-haiku-4-5",
+      architect:    "claude-sonnet-4-6",
+      designer:     "claude-haiku-4-5",
+      integrations: "claude-haiku-4-5",
+      frontend:     "claude-sonnet-4-6",
+      backend:      "claude-sonnet-4-6",
+      qa:           "claude-sonnet-4-6",
+      patcher:      "claude-haiku-4-5",
+      tests:        "claude-haiku-4-5",
+      edit:         "claude-sonnet-4-6",
+    },
+  };
+
+  const selected = routing[tier][agent];
+  
+  // Si el usuario eligió Haiku pero la complejidad requiere Sonnet en agentes críticos, respetar el routing
+  // (evita que apps de 30 archivos se generen con Haiku y fallen)
+  if (userSelectedModel === "claude-haiku-4-5" || userSelectedModel === "claude-haiku") {
+    const criticalAgents: (typeof agent)[] = ["frontend", "backend", "architect", "edit"];
+    if (criticalAgents.includes(agent) && tier !== "simple") {
+      return selected; // Usar Sonnet para agentes críticos aunque el usuario haya elegido Haiku
+    }
+    return "claude-haiku-4-5";
+  }
+  
+  return selected;
+}
+
+function resolveClaudeCoderModel(coderModel?: string, fileCount?: number): ClaudeCoderModel {
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  return "claude-haiku-4-5";
+  // Fallback sin fileCount: usar Haiku por defecto
+  if (fileCount === undefined) return "claude-haiku-4-5";
+  // Con fileCount: routing automático basado en complejidad
+  return resolveModelForAgent("frontend", fileCount, coderModel);
 }
 
 /**
@@ -887,7 +971,7 @@ Debes verificar estrictamente las siguientes directrices:
         if (useAnthropic) {
           try {
             const response = await anthropic.messages.create({
-              model: "claude-sonnet-4-6", // Optimizado: claude-sonnet-4-6 (antes claude-opus-4-7)
+              model: "claude-sonnet-4-5", // Optimizado: claude-sonnet-3-5 (antes claude-opus-4-7)
               max_tokens: 1024,
               system: [{ type: "text", text: systemPrompt + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
               messages: [{ role: "user", content: userContent }],
@@ -900,7 +984,7 @@ Debes verificar estrictamente las siguientes directrices:
 
         if (!raw) {
           const qaResponse = await anthropic.messages.create({
-            model: "claude-sonnet-4-6",
+            model: "claude-sonnet-4-5",
             max_tokens: 700,
             system: [{ type: "text", text: systemPrompt + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
             messages: [{ role: "user", content: userContent }],
@@ -949,7 +1033,7 @@ ${sample}
 
 Return the JSON object with testCode.`;
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5",
           max_tokens: 3000,
           system: [{ type: "text", text: TEST_SYSTEM_PROMPT + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: testsUserContent }],
@@ -992,7 +1076,7 @@ ${frontendCode}
 
 Return the FULL patched bundle as JSON.`;
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-5",
           max_tokens: 16000,
           system: [{ type: "text", text: buildPatcherSystemPrompt(language) + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: patcherContent }],
@@ -1693,14 +1777,16 @@ export async function generateApp(
   await log("system", "⚡ Activando orquestación paralela masiva para máxima velocidad...");
   
   const researchPromise = (runResearch && shouldResearch(prompt))
-    ? runPhase("researcher", () => researchTopic(prompt), "claude-haiku-4-5")
+    ? runPhase("researcher", () => researchTopic(prompt), resolveModelForAgent("researcher", 0))
     : Promise.resolve("");
 
   const planPromise = runPhase("architect", async (m) => {
     const res = await researchPromise;
-    const modelToUse = coderModel || DEFAULT_MODEL;
-    return withTimeoutOrThrow(architectPlan(prompt, res, modelToUse), 60_000, "architect");
-  }, coderModel || DEFAULT_MODEL);
+    // El arquitecto usa Sonnet para apps medias/complejas — estimamos complejidad por longitud del prompt
+    const estimatedFiles = prompt.length > 200 ? 12 : 6;
+    const architectModel = resolveModelForAgent("architect", estimatedFiles, coderModel);
+    return withTimeoutOrThrow(architectPlan(prompt, res, architectModel), 60_000, "architect");
+  }, resolveModelForAgent("architect", prompt.length > 200 ? 12 : 6, coderModel));
 
   // Design e Integrations ahora corren EN PARALELO con el Arquitecto, usando el prompt original
   // para no esperar a que el plan de archivos esté listo (el diseño es visual, no depende de la lista de archivos)
@@ -1712,11 +1798,11 @@ export async function generateApp(
   };
 
   const designPromise = runDesign
-    ? runPhase("design", (m) => designSystem({ title: "App", description: prompt, pages: [], components: [] } as any, "", m), "claude-haiku-4-5")
+    ? runPhase("design", (m) => designSystem({ title: "App", description: prompt, pages: [], components: [] } as any, "", m), resolveModelForAgent("designer", 0))
     : Promise.resolve(FALLBACK_DESIGN);
 
   const integrationPromise = runIntegration
-    ? runPhase("integrations", (m) => specifyIntegrations({ title: "App", description: prompt, pages: [], dataModels: [], backendNeeded: true } as any, prompt, m), "claude-haiku-4-5")
+    ? runPhase("integrations", (m) => specifyIntegrations({ title: "App", description: prompt, pages: [], dataModels: [], backendNeeded: true } as any, prompt, m), resolveModelForAgent("integrations", 0))
     : Promise.resolve({ services: [], envVars: [] });
 
   const [research, plan, design, integrationSpec] = await Promise.all([
@@ -1754,20 +1840,15 @@ export async function generateApp(
         if (fileName) {
           log("coder", fileName);
         } else {
-          const charsCount = typeof chars === "string" ? chars.length : 0;
-          if (charsCount > 0) {
-            const ratio = Math.min(1, charsCount / TARGET_CHARS);
-            const progress = 32 + Math.round(ratio * 55);
-            if (Number.isFinite(progress)) {
-              onProgress?.({ phase: "generating", progress, note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
-            }
-            if (charsCount - lastLogChars >= 8000) {
-              lastLogChars = charsCount;
-              log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
-            }
+          const charsCount = chars.length;
+          const ratio = Math.min(1, charsCount / TARGET_CHARS);
+          onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
+          if (charsCount - lastLogChars >= 8000) {
+            lastLogChars = charsCount;
+            log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
           }
         }
-      }, m || coderModel, language),
+      }, resolveModelForAgent("frontend", plan.frontendFiles.length, coderModel), language),
       600_000,
       "frontend-engineer",
     ),
@@ -1780,13 +1861,12 @@ export async function generateApp(
         if (fileName) {
           log("coder", fileName);
         } else {
-          const backendChars = typeof chars === "string" ? chars.length : 0;
-          if (backendChars - lastBackendLogChars >= 8000) {
-            lastBackendLogChars = backendChars;
-            log("coder", `⚙️ Backend: escribiendo... ${Math.round(backendChars / 1000)} KB.`);
+          if (chars.length - lastBackendLogChars >= 8000) {
+            lastBackendLogChars = chars.length;
+            log("coder", `⚙️ Backend: escribiendo... ${Math.round(chars.length / 1000)} KB.`);
           }
         }
-      }, m), coderModel || DEFAULT_MODEL)
+      }, resolveModelForAgent("backend", plan.frontendFiles.length, coderModel)), resolveModelForAgent("backend", plan.frontendFiles.length, coderModel))
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
@@ -1814,7 +1894,7 @@ export async function generateApp(
   if (runTests) log("qa", "🧪 Generando tests en paralelo…");
 
   const reviewPromise = runQa
-    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))
+    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan), resolveModelForAgent("qa", plan.frontendFiles.length, coderModel))
     : Promise.resolve({ ok: true, issues: [] } as QAReport);
   const testsPromise = runTests
     ? runPhase("tests", () => generateTests(plan, frontendResult.code))
