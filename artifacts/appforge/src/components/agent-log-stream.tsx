@@ -5,14 +5,8 @@ import {
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@/lib/api-client";
-import { Bot, Code2 } from "lucide-react";
+import { Bot, Code2, FlaskConical } from "lucide-react";
 
-// We deliberately collapse every internal agent role (researcher, architect,
-// designer, integration, coder, qa, validator, patcher, system) into a single
-// user-facing "Robot" persona. The end user doesn't care which sub-agent is
-// running — they want a single friendly assistant. The original `agent` field
-// is still preserved on the data row (for analytics / debugging) but is not
-// surfaced in the UI label.
 const AGENT_LABELS: Record<string, string> = {
   researcher: "Investigador",
   architect: "Arquitecto",
@@ -24,12 +18,14 @@ const AGENT_LABELS: Record<string, string> = {
   qa: "QA Reviewer",
   validator: "Validador",
   patcher: "Patcher",
+  testing: "Testing Agent",
   system: "Sistema",
   memory: "Memoria",
   planner: "Planner",
 };
 
-const ROBOT_COLOR = "text-emerald-300";
+/** Agentes que usan el color rosa fucsia del Testing Agent */
+const TESTING_AGENTS = new Set(["testing"]);
 
 function timeOf(iso: string): string {
   try {
@@ -55,18 +51,13 @@ interface AgentLogStreamProps {
 /**
  * Live, terminal-style log of every agent step for a single generation job.
  *
- * Polls `/api/generate/jobs/:id/logs?afterId=N` every ~1.2s while the job
- * is active, accumulates the lines locally (so the user keeps seeing the
- * full history even after the job finishes), and auto-scrolls to the bottom
- * when new lines arrive. Stops polling once `isActive` is false.
+ * Polls `/api/generate/jobs/:id/logs?afterId=N` every ~400ms while the job
+ * is active, accumulates las líneas localmente y auto-scrollea al fondo.
+ * Detiene el polling cuando `isActive` es false.
  *
- * The component owns its own line buffer keyed by jobId — switching to a
- * different jobId resets the buffer, so opening a fresh generation never
- * shows stale lines from the previous one.
+ * El Testing Agent se muestra con letras ROSA FUCSIA y un icono de tubo de ensayo.
  */
 export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
-  // Local accumulating buffer. We can't rely on react-query data as the source
-  // of truth because each poll only returns NEW lines (afterId > lastSeen).
   const [lines, setLines] = useState<JobLogEntry[]>([]);
   const [lastId, setLastId] = useState<number | string>(0);
   const [streamPaused, setStreamPaused] = useState(false);
@@ -88,15 +79,10 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   const enabled = jobId !== null && !streamPaused;
   const queryClient = useQueryClient();
   const queryKey = [...getGetGenerationJobLogsQueryKey(jobId ?? ""), "stream"];
+
   const { data } = useQuery({
-    // Use only the jobId in the key so re-renders from `lastId` changes don't
-    // create infinite new query keys. The afterId is passed via queryFn.
     queryKey,
     queryFn: async ({ signal }) => {
-      // Forward React Query's AbortSignal so an in-flight poll is cancelled
-      // when the job switches or the component unmounts. Without this, the
-      // tail of a long request can resolve after teardown and stamp stale
-      // lines into the next job's stream.
       try {
         const result = await getGenerationJobLogs(jobId ?? "", { afterId: lastId }, { signal });
         consecutiveErrorsRef.current = 0;
@@ -110,56 +96,30 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
           /HTTP\s*40[13]/i.test(message) ||
           /HTTP\s*50[0234]/i.test(message) ||
           consecutiveErrorsRef.current >= 3;
-        if (shouldPause) {
-          setStreamPaused(true);
-        }
+        if (shouldPause) setStreamPaused(true);
         throw error;
       }
     },
     enabled,
-    // Poll fast while running; stop once the job terminates. Tail-loss (lines
-    // committed by the unawaited fire-and-forget INSERT after the job is
-    // marked succeeded) is mitigated by the explicit final fetch effect below.
-    // 600 ms feels close-to-realtime in the UI without putting noticeable
-    // load on the API server (the response is tiny — only NEW lines after
-    // the cursor — and the route is a single indexed SELECT).
     refetchInterval: isActive ? 400 : false,
     refetchOnWindowFocus: false,
-    // Don't dedupe — we always want the freshest cursor.
     staleTime: 0,
     gcTime: 60_000,
     retry: 1,
   });
 
-  // Tail-loss mitigation: when the job transitions from active → terminal,
-  // do TWO extra fetches ~1.5s and ~3s after, since the pipeline's logging is
-  // fire-and-forget — a final "Generación completada" line can land in the DB
-  // a few ms after the job row flips to "succeeded". Without these we'd often
-  // truncate the very last line the user sees. We invalidate the query rather
-  // than calling getGenerationJobLogs directly so the queryFn — which closes
-  // over the latest `lastId` — is the single source of fetching truth.
+  // Tail-loss mitigation: dos fetches extra tras finalizar el job.
   const wasActiveRef = useRef(isActive);
   useEffect(() => {
     const justFinished = wasActiveRef.current && !isActive && enabled;
     wasActiveRef.current = isActive;
     if (!justFinished) return undefined;
-    const t1 = window.setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey });
-    }, 1500);
-    const t2 = window.setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey });
-    }, 3000);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-    // queryKey is recreated each render but stable per (jobId), and we only
-    // care that it points at the right job; it's fine to omit from deps.
+    const t1 = window.setTimeout(() => queryClient.invalidateQueries({ queryKey }), 1500);
+    const t2 = window.setTimeout(() => queryClient.invalidateQueries({ queryKey }), 3000);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, enabled, jobId, queryClient]);
 
-  // Append new lines whenever a poll returns. Defensive: dedupe by id in case
-  // a slow request returns lines a faster one already appended.
   useEffect(() => {
     if (!data?.logs?.length) return;
     setLines((prev) => {
@@ -168,17 +128,11 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       if (fresh.length === 0) return prev;
       return [...prev, ...fresh];
     });
-    
-    // MongoDB IDs are strings and not strictly comparable via Math.max.
-    // However, the API server handles 'afterId' by timestamp or insertion order.
-    // We just need to track the last ID we've seen to pass it back.
     const newestLog = data.logs[data.logs.length - 1];
-    if (newestLog) {
-      setLastId(newestLog.id);
-    }
+    if (newestLog) setLastId(newestLog.id);
   }, [data]);
 
-  // Auto-scroll to bottom on new lines.
+  // Auto-scroll al fondo cuando llegan nuevas líneas.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -187,10 +141,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   if (jobId === null) return null;
 
   return (
-    <div
-      className="space-y-4"
-      data-testid="agent-log-stream"
-    >
+    <div className="space-y-4" data-testid="agent-log-stream">
       {streamPaused && lines.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
           <div className="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
@@ -224,35 +175,89 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       ) : (
         <div className="space-y-4">
           {lines.map((line, idx) => {
+            const isTesting = TESTING_AGENTS.has(line.agent);
             const isError = line.level === "error";
             const isWarn = line.level === "warn";
             const isLatest = idx === lines.length - 1;
             const vibrate = isActive && isLatest ? "robot-vibrate" : "";
-            
+
+            // ── Testing Agent: estilos rosa fucsia ──────────────────────
+            if (isTesting) {
+              return (
+                <div
+                  key={line.id}
+                  className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-500"
+                  style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
+                >
+                  {/* Icono rosa fucsia con brillo */}
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 transition-all ${
+                    isError
+                      ? "bg-red-500/10 border-red-500/30"
+                      : "bg-fuchsia-500/15 border-fuchsia-500/40 shadow-[0_0_8px_rgba(217,70,239,0.3)]"
+                  }`}>
+                    <FlaskConical className={`h-4 w-4 ${
+                      isError ? "text-red-400" : `text-fuchsia-400 ${vibrate}`
+                    }`} />
+                  </div>
+
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      {/* Etiqueta rosa fucsia en negrita */}
+                      <span className={`text-[11px] font-black uppercase tracking-tight ${
+                        isError ? "text-red-400" : isWarn ? "text-amber-400" : "text-fuchsia-400"
+                      }`}>
+                        {AGENT_LABELS[line.agent] || line.agent}
+                      </span>
+                      {/* Badge "TESTING" */}
+                      {!isError && !isWarn && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+                          LIVE
+                        </span>
+                      )}
+                      <span className="text-[10px] text-white/20 font-mono">
+                        {timeOf(line.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className={`p-3 rounded-2xl text-sm leading-relaxed border transition-all ${
+                      isError
+                        ? "bg-red-500/5 border-red-500/20 text-red-200"
+                        : isWarn
+                        ? "bg-amber-500/5 border-amber-500/20 text-amber-200"
+                        : "bg-fuchsia-500/5 border-fuchsia-500/20 text-fuchsia-100 group-hover:bg-fuchsia-500/10"
+                    }`}>
+                      {line.message}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // ── Agentes normales ─────────────────────────────────────────
             return (
               <div
                 key={line.id}
-                className={`flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-500`}
+                className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-500"
                 style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
               >
                 <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 transition-all ${
-                  isError ? 'bg-red-500/10 border-red-500/30' : 
-                  isWarn ? 'bg-amber-500/10 border-amber-500/30' : 
-                  'bg-white/5 border-white/10 group-hover:border-primary/30'
+                  isError ? "bg-red-500/10 border-red-500/30" :
+                  isWarn ? "bg-amber-500/10 border-amber-500/30" :
+                  "bg-white/5 border-white/10 group-hover:border-primary/30"
                 }`}>
                   <Bot className={`h-4 w-4 ${
-                    isError ? 'text-red-400' : 
-                    isWarn ? 'text-amber-400' : 
-                    'text-primary'
+                    isError ? "text-red-400" :
+                    isWarn ? "text-amber-400" :
+                    "text-primary"
                   } ${vibrate}`} />
                 </div>
-                
+
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className={`text-[11px] font-bold uppercase tracking-tight ${
-                      isError ? 'text-red-400' : 
-                      isWarn ? 'text-amber-400' : 
-                      'text-white/80'
+                      isError ? "text-red-400" :
+                      isWarn ? "text-amber-400" :
+                      "text-white/80"
                     }`}>
                       {AGENT_LABELS[line.agent] || line.agent}
                     </span>
@@ -260,11 +265,11 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
                       {timeOf(line.createdAt)}
                     </span>
                   </div>
-                  
+
                   <div className={`p-3 rounded-2xl text-sm leading-relaxed border transition-all ${
-                    isError ? 'bg-red-500/5 border-red-500/20 text-red-200' : 
-                    isWarn ? 'bg-amber-500/5 border-amber-500/20 text-amber-200' : 
-                    'bg-white/[0.03] border-white/5 text-white/70 group-hover:bg-white/[0.05]'
+                    isError ? "bg-red-500/5 border-red-500/20 text-red-200" :
+                    isWarn ? "bg-amber-500/5 border-amber-500/20 text-amber-200" :
+                    "bg-white/[0.03] border-white/5 text-white/70 group-hover:bg-white/[0.05]"
                   }`}>
                     {line.message.includes("FILE:") || line.message.includes("Carpeta:") ? (
                       <div className="flex items-center gap-2 font-mono text-[12px] text-primary">

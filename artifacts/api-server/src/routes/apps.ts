@@ -310,6 +310,7 @@ export type GeneratePhase =
   | "generating"
   | "reviewing"
   | "validating"
+  | "testing"
   | "fixing"
   | "parsing";
 
@@ -1030,12 +1031,21 @@ async function runValidatePatchLoop(
   log?: AgentLog,
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
 ): Promise<string> {
-  const MAX_ITERATIONS = 2;
+  const MAX_ITERATIONS = 3; // Testing Agent: aumentado a 3 intentos
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
 
+  // ── Testing Agent: inicio ────────────────────────────────────────────
+  emit("testing", "🧪 Testing Agent activo — escaneando bundle en busca de errores…");
+  onProgress?.({
+    phase: "testing",
+    progress: Math.min(baseProgressStart, 80),
+    note: "🧪 Testing Agent: analizando código generado…",
+  });
+
   if (!phaseGates.validate) {
+    emit("testing", "△ Testing Agent: validación omitida por plan reducido.", "warn");
     emit("validator", "Plan dice saltar validación (alcance reducido). Bundle entregado sin verificar.", "warn");
     return finalFrontend;
   }
@@ -1054,6 +1064,7 @@ async function runValidatePatchLoop(
       progress: Math.min(baseProgress, 92),
       note: `🔍 Validación en memoria (intento ${iter}/${MAX_ITERATIONS})…`,
     });
+    emit("testing", iter === 1 ? "🔍 Ejecutando análisis estático del bundle…" : `🔍 Re-análisis tras reparación (intento ${iter}/${MAX_ITERATIONS})…`);
     emit("validator", iter === 1 ? "🔍 build" : `🔍 build · intento ${iter}`);
     const validation = await validateBundle(finalFrontend);
 
@@ -1064,10 +1075,11 @@ async function runValidatePatchLoop(
 
     if (validation.ok && combined.length === 0) {
       onProgress?.({
-        phase: "validating",
+        phase: "testing",
         progress: Math.min(baseProgress + 1, 93),
-        note: `✅ Build OK en memoria (${validation.filesAnalyzed} archivo(s), ${validation.durationMs} ms).`,
+        note: `✅ Testing Agent: sin errores detectados (${validation.filesAnalyzed} archivo(s)).`,
       });
+      emit("testing", `✅ Sin errores — ${validation.filesAnalyzed} archivo(s) validado(s) correctamente.`);
       emit("validator", `✓ build OK · ${validation.filesAnalyzed} archivo${validation.filesAnalyzed === 1 ? "" : "s"}`);
       if (lastErrorMessage && lastPatchedBundle) {
         const fixHint = extractFixHint(lastPatchedBundle, lastErrorMessage);
@@ -1085,19 +1097,21 @@ async function runValidatePatchLoop(
 
     if (iter === MAX_ITERATIONS) {
       onProgress?.({
-        phase: "validating",
+        phase: "testing",
         progress: 92,
-        note: `⚠️ Quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Empaquetando lo que hay…`,
+        note: `⚠️ Testing Agent: quedan ${combined.length} problema(s) tras ${MAX_ITERATIONS} intentos. Entregando mejor versión disponible…`,
       });
+      emit("testing", `△ ${combined.length} problema(s) residual(es) tras ${MAX_ITERATIONS} intentos de reparación.`, "warn");
       emit("validator", `△ ${combined.length} detalle${combined.length === 1 ? "" : "s"} pendiente${combined.length === 1 ? "" : "s"}`, "warn");
       break;
     }
 
     onProgress?.({
-      phase: "fixing",
+      phase: "testing",
       progress: Math.min(baseProgress + 2, 92),
-      note: `🔧 Auto-reparación ${iter}/${MAX_ITERATIONS}: corrigiendo ${combined.length} problema(s)…`,
+      note: `🔧 Testing Agent reparando ${combined.length} error(es) (intento ${iter}/${MAX_ITERATIONS})…`,
     });
+    emit("testing", `🔧 Reparando ${combined.length} error(es): ${combined.slice(0, 2).map(i => i.file).join(", ")}${combined.length > 2 ? "…" : ""}`);
     emit("patcher", `🔧 patch · ${combined.length}`);
     const primaryError = `${combined[0].message}${combined[0].file ? ` (in ${combined[0].file})` : ""}`;
     let memoryBlock = "";
@@ -1112,6 +1126,7 @@ async function runValidatePatchLoop(
     }
     lastErrorMessage = primaryError;
     if (!phaseGates.patch) {
+      emit("testing", "△ Reparación omitida por plan reducido.", "warn");
       emit("patcher", "Plan dice saltar parcheo. Errores reportados pero no corregidos.", "warn");
       break;
     }
@@ -1143,6 +1158,7 @@ async function runValidatePatchLoop(
       emit("patcher", "△ patch idempotente", "warn");
       break;
     }
+    emit("testing", "✓ Reparación aplicada — re-validando…");
     emit("patcher", "✓ patch aplicado");
     finalFrontend = patched;
     lastPatchedBundle = patched;
@@ -1151,10 +1167,11 @@ async function runValidatePatchLoop(
   // E2B real-build verification (opt-in)
   if (shouldValidateInE2B() && phaseGates.patch) {
     onProgress?.({
-      phase: "validating",
+      phase: "testing",
       progress: 93,
-      note: "⚙️ Build real en sandbox E2B (npm install + build)…",
+      note: "⚙️ Testing Agent: build real en sandbox E2B (npm install + build)…",
     });
+    emit("testing", "⚙️ Ejecutando build real en microVM E2B…");
     emit("validator", "⚙️ E2B real build · arrancando microVM");
     try {
       const e2b = await validateBundleInE2B({ bundle: finalFrontend, log: logger });
