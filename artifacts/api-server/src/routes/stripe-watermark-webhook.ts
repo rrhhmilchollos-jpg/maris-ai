@@ -5,9 +5,16 @@ import { logger } from "../lib/logger";
 import { raw } from "express";
 
 const router = Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2026-04-22.dahlia" as any,
-});
+
+// Lazy Stripe initialization — do not throw at import time if key is missing.
+let _stripe: Stripe | null = null;
+function getStripeClient(): Stripe {
+  if (_stripe) return _stripe;
+  const key = process.env.STRIPE_SECRET_KEY || "";
+  _stripe = new Stripe(key, { apiVersion: "2026-04-22.dahlia" as any });
+  return _stripe;
+}
+
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
 /**
@@ -26,7 +33,7 @@ router.post(
 
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
+      event = getStripeClient().webhooks.constructEvent(req.body, signature, webhookSecret);
     } catch (err) {
       logger.error({ err }, "Error verificando firma de webhook:");
       return res.status(400).json({ error: "Invalid signature" });

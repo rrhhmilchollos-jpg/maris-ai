@@ -67,6 +67,7 @@ const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   generating: { label: "⚡ Ingenieros escribiendo el código…", icon: Wand2 },
   reviewing: { label: "✅ QA revisando + 🧪 generando tests…", icon: ShieldCheck },
   validating: { label: "🔍 Compilando el código en memoria…", icon: Bug },
+  testing: { label: "🧪 Testing Agent verificando errores…", icon: Wrench },
   fixing: { label: "🔧 Auto-reparando errores detectados…", icon: Wrench },
   parsing: { label: "📦 Empaquetando archivos…", icon: FileCheck2 },
   ready: { label: "¡Listo!", icon: FileCheck2 },

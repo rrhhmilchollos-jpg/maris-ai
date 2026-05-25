@@ -8,6 +8,7 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "start:worker": "node --enable-source-maps ./dist/worker.mjs",
     "typecheck": "echo 'typecheck skipped'",
     "test:queue": "tsx ./src/__tests__/queue-recovery.test.ts",
     "test:agent-memory": "tsx ./src/__tests__/agent-memory.test.ts",
