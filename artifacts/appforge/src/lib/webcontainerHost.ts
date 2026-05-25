@@ -189,3 +189,40 @@ export function ensureDevScript(rawPackageJson: string | undefined): string {
     return FALLBACK;
   }
 }
+
+/**
+ * Patch a vite.config.ts/js string to disable the HMR error overlay.
+ * This prevents the red Vite error overlay from appearing inside the
+ * WebContainer iframe — errors are already shown in the console panel below.
+ *
+ * Strategy: text injection rather than AST parsing to stay dependency-free
+ * and robust against any vite config shape the model may emit.
+ */
+export function patchViteConfig(raw: string | undefined): string {
+  const FALLBACK = `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+export default defineConfig({
+  plugins: [react()],
+  server: { host: '0.0.0.0', port: 5173, hmr: { overlay: false } },
+});
+`;
+  if (!raw || !raw.trim()) return FALLBACK;
+  // Already patched — leave it alone
+  if (/hmr\s*:\s*\{[^}]*overlay/.test(raw)) return raw;
+  // Inject into existing server block
+  if (/server\s*:\s*\{/.test(raw)) {
+    return raw.replace(
+      /(server\s*:\s*\{)/,
+      "$1\n    hmr: { overlay: false },"
+    );
+  }
+  // Inject a server block before the closing of defineConfig({...})
+  if (/defineConfig\s*\(/.test(raw)) {
+    return raw.replace(
+      /(defineConfig\s*\(\s*\{)/,
+      "$1\n  server: { host: '0.0.0.0', port: 5173, hmr: { overlay: false } },"
+    );
+  }
+  // Fallback: return as-is (better than breaking the config)
+  return raw;
+}
