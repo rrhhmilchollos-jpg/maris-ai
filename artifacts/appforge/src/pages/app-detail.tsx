@@ -747,24 +747,32 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <div ref={messagesEndRef} />
         </div>
         <div className="space-y-3 px-6 pb-6">
-          <Button
-            size="lg"
-            onClick={handleApprove}
-            disabled={approveMutation.isPending}
-            className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white shadow-[0_0_22px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
-          >
-            {approveMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5 fill-current" />}
-            Aprobar y continuar
-          </Button>
-          <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
-          <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
-          <div className="flex items-center gap-3">
-            <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || isActivelyProcessing} />
-            <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
-              {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Enviar
+          {/* Botón Aprobar y continuar: SOLO visible cuando el job está en awaiting_approval */}
+          {isAwaitingApproval && (
+            <Button
+              size="lg"
+              onClick={handleApprove}
+              disabled={approveMutation.isPending}
+              className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white shadow-[0_0_22px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
+            >
+              {approveMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5 fill-current" />}
+              Aprobar y continuar
             </Button>
-          </div>
+          )}
+          {/* Input de mensajes: SOLO visible cuando NO está en awaiting_approval */}
+          {!isAwaitingApproval && (
+            <>
+              <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
+              <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
+              <div className="flex items-center gap-3">
+                <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || isActivelyProcessing} />
+                <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+                  {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  Enviar
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </>
     );
@@ -958,28 +966,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 Publicar en Google
               </button>
               <TopActionButton icon={Maximize2} label={isPreviewMaximized ? "Restore" : "Maximize"} onClick={handleMaximizePreview} active={isPreviewMaximized} />
-              <button
-                type="button"
-                onClick={handleClosePreview}
-                aria-label="Cerrar vista previa"
-                title="Cerrar vista previa"
-                className="grid h-[42px] min-w-[42px] place-items-center rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 text-2xl font-bold leading-none text-white/70 transition hover:border-red-400/45 hover:bg-red-500/10 hover:text-white"
-              >
-                ×
-              </button>
             </div>
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
-            <button
-              type="button"
-              onClick={handleClosePreview}
-              aria-label="Cerrar vista previa en vivo"
-              title="Cerrar vista previa en vivo"
-              className="absolute right-5 top-5 z-20 grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-2xl font-bold leading-none text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
-            >
-              ×
-            </button>
             {showStaticBuildState ? (
               <AppPreviewWaitingState />
             ) : deployedUrl ? (
