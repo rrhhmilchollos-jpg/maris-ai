@@ -60,14 +60,16 @@ const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   failed: { label: "Error", icon: Sparkles },
 };
 
-const NAV_ITEMS = [
-  { label: "Chat", active: true, glyph: "◌" },
-  { label: "Plan", active: false, glyph: "□" },
-  { label: "Data", active: false, glyph: "▣" },
-  { label: "Integrations", active: false, glyph: "✦" },
-  { label: "UI Builder", active: false, glyph: "◇" },
-  { label: "Workflows", active: false, glyph: "⌘" },
-  { label: "Settings", active: false, glyph: "⚙" },
+type SidebarTab = "chat" | "plan" | "data" | "integrations" | "ui-builder" | "workflows" | "settings";
+
+const NAV_ITEMS: Array<{ id: SidebarTab; label: string; glyph: string }> = [
+  { id: "chat", label: "Chat", glyph: "◌" },
+  { id: "plan", label: "Plan", glyph: "□" },
+  { id: "data", label: "Data", glyph: "▣" },
+  { id: "integrations", label: "Integrations", glyph: "✦" },
+  { id: "ui-builder", label: "UI Builder", glyph: "◇" },
+  { id: "workflows", label: "Workflows", glyph: "⌘" },
+  { id: "settings", label: "Settings", glyph: "⚙" },
 ];
 
 function MarisLogo({ compact = false }: { compact?: boolean }) {
@@ -134,6 +136,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
+  const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: app, isLoading } = useGetApp(id, {
@@ -260,6 +263,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     return buildSandpackFiles(parseBundle(frontendCode));
   }, [frontendCode, hasRenderableCode]);
   const showStaticBuildState = !hasRenderableCode || !sandpackFiles;
+  const renderedFileCount = sandpackFiles ? Object.keys(sandpackFiles).length : 0;
+  const createdAtLabel = app?.createdAt ? new Date(app.createdAt).toLocaleString("es-ES") : "Sin fecha";
+  const updatedAtLabel = app?.updatedAt ? new Date(app.updatedAt).toLocaleString("es-ES") : "Sin fecha";
+  const appStatusLabel = deployedUrl ? "Desplegada" : hasRenderableCode ? "Preview lista" : isWorking ? "Construyendo" : "Pendiente";
+  const workflowSteps = [
+    { label: "Plan", done: !!app?.plan || !!frontendCode || !!latestAssistantMessage },
+    { label: "Generación", done: hasRenderableCode },
+    { label: "Preview", done: hasRenderableCode && !showStaticBuildState },
+    { label: "Deploy", done: !!deployedUrl },
+  ];
 
   const handleShare = async () => {
     const shareUrl = deployedUrl || (typeof window !== "undefined" ? window.location.href : "");
@@ -290,6 +303,220 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   };
 
   const handleMaximizePreview = () => setIsPreviewMaximized((value) => !value);
+
+  const handleSidebarClick = (tab: SidebarTab) => {
+    setActiveSidebar(tab);
+    if (tab === "ui-builder") {
+      toast({ title: "UI Builder activo", description: "Usa los controles del panel para refrescar, maximizar o desplegar la preview." });
+    }
+  };
+
+  const renderSidebarPanel = () => {
+    const panelTitle = NAV_ITEMS.find((item) => item.id === activeSidebar)?.label ?? "Chat";
+    const PanelHeader = ({ title, description }: { title: string; description: string }) => (
+      <div className="px-6 pt-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#a78bfa]">{panelTitle}</p>
+        <h2 className="mt-2 text-2xl font-extrabold text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/55">{description}</p>
+      </div>
+    );
+
+    if (activeSidebar === "plan") {
+      return (
+        <>
+          <PanelHeader title="Plan de construcción" description="Revisa la estructura que debe seguir Maris AI antes de continuar con la generación o los cambios." />
+          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5 text-sm leading-relaxed text-white/75">
+              {app?.plan || latestAssistantMessage || "Todavía no hay un plan detallado guardado. Cuando Maris AI termine la estructura, aparecerá aquí para revisión."}
+            </div>
+            <div className="mt-5 grid gap-3">
+              {workflowSteps.map((step, index) => (
+                <div key={step.label} className="flex items-center justify-between rounded-xl border border-white/8 bg-[#111827]/70 px-4 py-3">
+                  <span className="text-sm text-white/70">{index + 1}. {step.label}</span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${step.done ? "bg-emerald-500/15 text-emerald-300" : "bg-white/8 text-white/45"}`}>{step.done ? "Listo" : "Pendiente"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-6 pb-6">
+            <Button size="lg" onClick={handleApprove} disabled={approveMutation.isPending} className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+              {approveMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
+              Aprobar plan
+            </Button>
+          </div>
+        </>
+      );
+    }
+
+    if (activeSidebar === "data") {
+      return (
+        <>
+          <PanelHeader title="Datos de la app" description="Consulta el estado técnico y los datos disponibles para la vista previa y el despliegue." />
+          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+            <div className="grid gap-3">
+              {[
+                ["Estado", appStatusLabel],
+                ["Archivos preview", String(renderedFileCount)],
+                ["Código frontend", `${frontendCode.length.toLocaleString("es-ES")} caracteres`],
+                ["Creada", createdAtLabel],
+                ["Actualizada", updatedAtLabel],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-white/8 bg-white/[0.035] p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/35">{label}</p>
+                  <p className="mt-2 break-words text-sm font-semibold text-white/80">{value}</p>
+                </div>
+              ))}
+            </div>
+            <Button onClick={handleRefreshPreview} disabled={!hasRenderableCode} variant="outline" className="mt-5 w-full border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]">
+              <RefreshCcw className="mr-2 h-4 w-4" /> Recargar datos y preview
+            </Button>
+          </div>
+        </>
+      );
+    }
+
+    if (activeSidebar === "integrations") {
+      return (
+        <>
+          <PanelHeader title="Integraciones" description="Gestiona la URL pública, compartir y despliegue conectado de la aplicación." />
+          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-white/35">URL pública</p>
+              <p className="mt-3 break-all text-sm text-white/75">{deployedUrl || "Aún no hay URL pública. Pulsa Deploy cuando la preview esté lista."}</p>
+            </div>
+            <div className="mt-5 grid gap-3">
+              <Button onClick={handleShare} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><Share2 className="mr-2 h-4 w-4" /> Compartir enlace</Button>
+              <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+                {deployMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                {deployMutation.isPending ? "Desplegando" : "Deploy app"}
+              </Button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (activeSidebar === "ui-builder") {
+      return (
+        <>
+          <PanelHeader title="UI Builder" description="Controla la preview en vivo de la interfaz generada y abre la vista de trabajo ampliada." />
+          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+            <div className="rounded-2xl border border-[#7c3aed]/25 bg-[#7c3aed]/10 p-5 text-sm text-white/75">
+              {showStaticBuildState ? "La preview aún espera código renderizable." : "La preview en vivo está disponible y conectada al último bundle guardado."}
+            </div>
+            <div className="mt-5 grid gap-3">
+              <Button onClick={handleRefreshPreview} disabled={!hasRenderableCode} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><RefreshCcw className="mr-2 h-4 w-4" /> Refrescar preview</Button>
+              <Button onClick={handleMaximizePreview} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><Maximize2 className="mr-2 h-4 w-4" /> {isPreviewMaximized ? "Restaurar preview" : "Maximizar preview"}</Button>
+              <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white"><Rocket className="mr-2 h-4 w-4" /> Deploy desde UI Builder</Button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (activeSidebar === "workflows") {
+      return (
+        <>
+          <PanelHeader title="Workflows" description="Sigue el flujo de trabajo del agente y las fases activas de generación." />
+          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <div className="flex items-center gap-3 text-white/80">
+                <PhaseIcon className={`h-5 w-5 text-[#a78bfa] ${isWorking ? "animate-pulse" : ""}`} />
+                <span className="font-semibold">{isWorking ? phaseInfo.label : "Sin trabajos activos"}</span>
+              </div>
+              {job?.error && <p className="mt-3 text-sm text-red-300">{job.error}</p>}
+            </div>
+            <div className="mt-5 grid gap-3">
+              {workflowSteps.map((step) => (
+                <div key={step.label} className="flex items-center justify-between rounded-xl border border-white/8 bg-[#111827]/70 px-4 py-3">
+                  <span className="text-sm text-white/70">{step.label}</span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${step.done ? "bg-emerald-400" : "bg-white/20"}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (activeSidebar === "settings") {
+      return (
+        <>
+          <PanelHeader title="Settings" description="Accesos y acciones de configuración de esta app y de tu cuenta." />
+          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <p className="text-sm font-semibold text-white">{app?.title || "App sin título"}</p>
+              <p className="mt-2 text-sm text-white/55">{app?.description || "Sin descripción guardada."}</p>
+              <p className="mt-4 text-xs text-white/35">ID: {id}</p>
+            </div>
+            <div className="mt-5 grid gap-3">
+              <Button onClick={() => setLocation("/dashboard")} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><ArrowLeft className="mr-2 h-4 w-4" /> Volver al panel</Button>
+              <Button onClick={() => setLocation("/billing")} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]">Créditos: {isAdmin ? "Admin" : credits}</Button>
+              {isAdmin && <Button onClick={() => setLocation("/admin")} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]">Abrir panel admin</Button>}
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="px-6 pt-6">
+          <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-6 py-3.5 text-center text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="flex items-center justify-center gap-3">
+              <Info className="h-5 w-5" />
+              <span>Agent will continue working after your reply</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
+          <div className="flex items-start gap-5">
+            <div className="relative mt-1 shrink-0">
+              <div className="absolute inset-0 rounded-full bg-[#7c3aed]/40 blur-xl" />
+              <div className="relative grid h-[74px] w-[74px] place-items-center rounded-full border border-[#8b5cf6]/30 bg-[#111827] shadow-[0_0_30px_rgba(124,58,237,0.55)]">
+                <Bot className="h-10 w-10 text-white robot-vibrate" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-5 py-4 text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
+                <p>He terminado la estructura!</p>
+                <p className="mt-3">Revisa el plan y dame el visto bueno</p>
+              </div>
+              <div className="pl-1">
+                <p className="text-[17px] font-bold text-[#a78bfa]">Maris AI</p>
+                <p className="mt-1 text-[14px] text-white/45">10:42 AM</p>
+              </div>
+            </div>
+          </div>
+          {latestAssistantMessage && (
+            <div className="mt-8 rounded-2xl border border-white/8 bg-white/[0.035] p-4 text-sm leading-relaxed text-white/70">
+              {latestAssistantMessage}
+            </div>
+          )}
+          {isWorking && job && (
+            <div className="mt-8 rounded-2xl border border-[#7c3aed]/25 bg-[#7c3aed]/8 p-4 text-sm text-white/80">
+              <div className="flex items-center gap-3">
+                <PhaseIcon className="h-4 w-4 animate-pulse text-[#a78bfa]" />
+                <span className="font-semibold">{phaseInfo.label}</span>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        <div className="space-y-3 px-6 pb-6">
+          <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
+          <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
+          <div className="flex items-center gap-3">
+            <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || activeJobId !== null} />
+            <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || activeJobId !== null} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+              {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Enviar
+            </Button>
+          </div>
+        </div>
+      </>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -344,75 +571,29 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[102px] shrink-0 flex-col border-r border-white/[0.07] bg-[#070910]">
           <nav className="flex flex-1 flex-col items-center gap-7 pt-9">
-            {NAV_ITEMS.map((item) => (
-              <button key={item.label} className={`group relative flex w-full flex-col items-center gap-2 text-[13px] font-medium transition ${item.active ? "text-[#c084fc]" : "text-white/55 hover:text-white/80"}`}>
-                {item.active && <span className="absolute left-0 top-[-8px] h-[62px] w-1 rounded-r-full bg-[#7c3aed] shadow-[0_0_18px_rgba(124,58,237,0.8)]" />}
-                <span className={`grid h-8 w-8 place-items-center rounded-xl text-[22px] ${item.active ? "bg-[#7c3aed]/10 text-[#c084fc] shadow-[0_0_22px_rgba(124,58,237,0.7)]" : "text-white/50"}`}>{item.glyph}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
+            {NAV_ITEMS.map((item) => {
+              const active = activeSidebar === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleSidebarClick(item.id)}
+                  aria-pressed={active}
+                  title={item.label}
+                  className={`group relative flex w-full flex-col items-center gap-2 text-[13px] font-medium transition ${active ? "text-[#c084fc]" : "text-white/55 hover:text-white/80"}`}
+                >
+                  {active && <span className="absolute left-0 top-[-8px] h-[62px] w-1 rounded-r-full bg-[#7c3aed] shadow-[0_0_18px_rgba(124,58,237,0.8)]" />}
+                  <span className={`grid h-8 w-8 place-items-center rounded-xl text-[22px] ${active ? "bg-[#7c3aed]/10 text-[#c084fc] shadow-[0_0_22px_rgba(124,58,237,0.7)]" : "text-white/50"}`}>{item.glyph}</span>
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
           </nav>
           <button className="m-4 mb-5 rounded-md bg-[#4f46e5] p-3 text-base font-bold text-white shadow-[0_0_22px_rgba(79,70,229,0.35)]">P</button>
         </aside>
 
         <section className="flex w-[590px] min-w-[430px] shrink-0 flex-col border-r border-white/[0.08] bg-[#080a12]">
-          <div className="px-6 pt-6">
-            <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-24 py-3.5 text-center text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-              <div className="flex items-center justify-center gap-3">
-                <Info className="h-5 w-5" />
-                <span>Agent will continue working after your reply</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
-            <div className="flex items-start gap-5">
-              <div className="relative mt-1 shrink-0">
-                <div className="absolute inset-0 rounded-full bg-[#7c3aed]/40 blur-xl" />
-                <div className="relative grid h-[74px] w-[74px] place-items-center rounded-full border border-[#8b5cf6]/30 bg-[#111827] shadow-[0_0_30px_rgba(124,58,237,0.55)]">
-                  <Bot className="h-10 w-10 text-white robot-vibrate" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-5 py-4 text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
-                  <p>He terminado la estructura!</p>
-                  <p className="mt-3">Revisa el plan y dame el visto bueno</p>
-                </div>
-                <div className="pl-1">
-                  <p className="text-[17px] font-bold text-[#a78bfa]">Maris AI</p>
-                  <p className="mt-1 text-[14px] text-white/45">10:42 AM</p>
-                </div>
-              </div>
-            </div>
-
-            {latestAssistantMessage && (
-              <div className="mt-8 rounded-2xl border border-white/8 bg-white/[0.035] p-4 text-sm leading-relaxed text-white/70">
-                {latestAssistantMessage}
-              </div>
-            )}
-
-            {isWorking && job && (
-              <div className="mt-8 rounded-2xl border border-[#7c3aed]/25 bg-[#7c3aed]/8 p-4 text-sm text-white/80">
-                <div className="flex items-center gap-3">
-                  <PhaseIcon className="h-4 w-4 animate-pulse text-[#a78bfa]" />
-                  <span className="font-semibold">{phaseInfo.label}</span>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <div className="px-6 pb-6">
-            <Button
-              size="lg"
-              onClick={handleApprove}
-              disabled={approveMutation.isPending}
-              className="h-[64px] w-full rounded-lg bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-[17px] font-bold text-white shadow-[0_0_28px_rgba(124,58,237,0.55)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
-            >
-              {approveMutation.isPending ? <Loader2 className="mr-4 h-6 w-6 animate-spin" /> : <Zap className="mr-4 h-7 w-7 fill-current" />}
-              Aprobar y continuar
-            </Button>
-          </div>
+          {renderSidebarPanel()}
         </section>
 
         <main className={`${isPreviewMaximized ? "fixed inset-0 z-[130]" : "flex min-w-0 flex-1"} flex-col bg-[#0a0d15]`}>
