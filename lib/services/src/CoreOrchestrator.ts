@@ -18,6 +18,20 @@ export class CoreOrchestrator {
     this.projectRoot = projectRoot;
   }
 
+  /**
+   * Limpia el texto de respuesta del LLM eliminando bloques de código Markdown
+   * para asegurar que JSON.parse no falle.
+   */
+  private cleanJsonResponse(text: string): string {
+    // Busca bloques de código markdown tipo ```json ... ``` o ``` ... ```
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      return jsonMatch[1].trim();
+    }
+    // Si no hay bloques markdown, devuelve el texto original limpio
+    return text.trim();
+  }
+
   async planMonorepoProject(userPrompt: string): Promise<Milestone[]> {
     console.log("🤖 Agente Planificador analizando arquitectura del monorepo...");
 
@@ -38,8 +52,19 @@ export class CoreOrchestrator {
     });
 
     const textResponse = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    const result = JSON.parse(textResponse);
-    return result.milestones;
+    
+    // CORRECCIÓN: Limpiar el texto antes de parsear para evitar el error de SyntaxError
+    const cleanedJson = this.cleanJsonResponse(textResponse);
+    
+    try {
+      const result = JSON.parse(cleanedJson);
+      return result.milestones;
+    } catch (error) {
+      console.error("❌ Error parseando JSON de la planificación:", error);
+      console.error("Texto original:", textResponse);
+      console.error("Texto limpio intentado:", cleanedJson);
+      throw error;
+    }
   }
 
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
