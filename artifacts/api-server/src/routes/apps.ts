@@ -150,9 +150,9 @@ Schema:
 {"backendCode":"all backend files as one string OR 'No backend required for this app.'"}
 
 Use '// === FILE: <path> ===' to separate files. When a backend is needed include:
-- package.json, tsconfig.json, src/index.ts (express bootstrap with helmet + cors + json + error middleware), src/routes/<name>.ts (one per resource), src/db/schema.ts (drizzle), src/db/seed.ts (optional seed data), src/lib/<name>.ts as needed (logger, error helpers).
+- package.json, tsconfig.json, src/index.ts (express bootstrap with helmet + cors + json + error middleware), src/routes/<name>.ts (one per resource), src/models/<Name>.ts (Mongoose model), src/db/seed.ts (optional seed data), src/lib/<name>.ts as needed (logger, error helpers).
 
-Stack: Node 20 + Express 5 + TypeScript + Drizzle ORM + PostgreSQL. Use zod for input validation. Real working handlers, no stubs.
+Stack: Node 20 + Express 5 + TypeScript + Mongoose + MongoDB. Use zod for input validation. Real working handlers, no stubs.
 
 QUALITY BAR:
 - RESTful resource routes: GET /resource (list, with optional ?limit / ?offset / ?q), GET /resource/:id, POST /resource (validates body), PATCH /resource/:id, DELETE /resource/:id.
@@ -160,7 +160,7 @@ QUALITY BAR:
 - Wrap async handlers with a small asyncHandler helper or try/catch — never let a rejected promise leak.
 - Centralized error middleware that returns { error: string } in JSON, never an HTML stack trace.
 - Set sensible defaults: helmet for security headers, cors for the frontend origin, express.json() with a reasonable limit, request logging.
-- DB schema includes id (serial or uuid), createdAt/updatedAt timestamps with defaults, and proper foreign keys. Drizzle relations declared if more than one table.
+- Mongoose schemas include _id (auto), createdAt/updatedAt timestamps (timestamps: true), and proper refs for relations. Mongoose populate() for joins if more than one model.
 - Real seed data when persistence is involved (a few rows so the UI has something to show on first load).
 - NO TODOs, NO mock placeholders, NO console.log spam (use a proper logger import).
 
@@ -428,11 +428,12 @@ const RESEARCH_TRIGGER_PHRASES = [
 const URL_LIKE = /\b(?:https?:\/\/[^\s)]+|(?:[a-z0-9-]+\.)+[a-z]{2,})\b/i;
 
 function shouldResearch(prompt: string): boolean {
-  const lower = prompt.toLowerCase();
-  if (CLONE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
-  if (RESEARCH_TRIGGER_PHRASES.some((p) => lower.includes(p))) return true;
-  if (URL_LIKE.test(prompt)) return true;
-  return false;
+  // Siempre investigar para TODOS los prompts de apps nuevas.
+  // El investigador busca en internet real (DuckDuckGo/Serper/Brave) para
+  // obtener contexto del mercado antes de diseñar la arquitectura.
+  // Solo se omite si el prompt es muy corto (edición menor < 20 chars).
+  if (prompt.trim().length < 20) return false;
+  return true;
 }
 
 /* ----------------------------- helpers ------------------------------------ */
