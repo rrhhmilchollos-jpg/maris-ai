@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   useGetApp,
@@ -11,8 +11,11 @@ import {
   getGetGenerationJobQueryKey,
   useGetMe,
   useApproveFacet,
+  useDeployApp,
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
+import { SandpackProvider, SandpackPreview, SandpackLayout } from "@codesandbox/sandpack-react";
+import { parseBundle, buildSandpackFiles, SANDPACK_DEPENDENCIES } from "@/lib/parseBundle";
 import { Layout } from "@/components/layout";
 import {
   AttachmentPicker,
@@ -80,10 +83,15 @@ function MarisLogo({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function TopActionButton({ icon: Icon, label }: { icon: any; label: string }) {
+function TopActionButton({ icon: Icon, label, onClick, disabled = false, active = false }: { icon: any; label: string; onClick?: () => void; disabled?: boolean; active?: boolean }) {
   return (
-    <button className="inline-flex h-10 items-center gap-2 rounded-md border border-white/8 bg-white/[0.055] px-5 text-[14px] font-semibold text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:bg-white/[0.085] hover:text-white">
-      <Icon className="h-4 w-4" />
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex h-10 items-center gap-2 rounded-md border px-5 text-[14px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition ${active ? "border-[#8b5cf6]/70 bg-[#7c3aed]/20 text-white" : "border-white/8 bg-white/[0.055] text-white/75 hover:bg-white/[0.085] hover:text-white"} disabled:cursor-not-allowed disabled:opacity-45`}
+    >
+      <Icon className={`h-4 w-4 ${disabled ? "animate-pulse" : ""}`} />
       {label}
     </button>
   );
@@ -124,6 +132,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [draft, setDraft] = useState("");
   const [chatAttachments, setChatAttachments] = useState<UploadedAttachment[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [previewKey, setPreviewKey] = useState(0);
+  const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: app, isLoading } = useGetApp(id, {
@@ -157,6 +167,25 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
       onError: (err: any) => {
         toast({ title: "No se pudo aprobar", description: err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+
+  const deployMutation = useDeployApp({
+    mutation: {
+      onSuccess: (result: any) => {
+        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        const deploymentUrl = result?.deploymentUrl || result?.url;
+        toast({
+          title: "Deploy iniciado",
+          description: deploymentUrl ? `La app está disponible en ${deploymentUrl}` : "El despliegue se ha lanzado correctamente.",
+        });
+        if (deploymentUrl && typeof window !== "undefined") {
+          window.open(deploymentUrl, "_blank", "noopener,noreferrer");
+        }
+      },
+      onError: (err: any) => {
+        toast({ title: "No se pudo desplegar", description: err?.message ?? "Error", variant: "destructive" });
       },
     },
   });
@@ -222,7 +251,45 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const firstName = me?.name?.split(" ")?.[0] || me?.firstName || "Ivan";
   const assistantMessages = (messages ?? []).filter((msg: any) => msg.role !== "user");
   const latestAssistantMessage = assistantMessages[assistantMessages.length - 1]?.content;
-  const showStaticBuildState = !app?.frontendCode || String(app.frontendCode).trim().length < 80 || String(app.frontendCode).includes("El código ha sido consolidado en disco por hitos");
+  const frontendCode = String(app?.frontendCode ?? "").trim();
+  const hasMilestonePlaceholder = frontendCode.includes("El código ha sido consolidado en disco por hitos");
+  const hasRenderableCode = frontendCode.length >= 20 && !hasMilestonePlaceholder;
+  const deployedUrl = app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "");
+  const sandpackFiles = useMemo(() => {
+    if (!hasRenderableCode) return null;
+    return buildSandpackFiles(parseBundle(frontendCode));
+  }, [frontendCode, hasRenderableCode]);
+  const showStaticBuildState = !hasRenderableCode || !sandpackFiles;
+
+  const handleShare = async () => {
+    const shareUrl = deployedUrl || (typeof window !== "undefined" ? window.location.href : "");
+    try {
+      if (typeof navigator !== "undefined" && navigator.share && deployedUrl) {
+        await navigator.share({ title: app?.title || "Maris AI App", text: app?.description || "App generada con Maris AI", url: shareUrl });
+      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({ title: "Enlace copiado", description: deployedUrl ? "Se copió la URL pública de la app." : "Se copió el enlace de esta vista previa." });
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast({ title: "No se pudo compartir", description: err?.message ?? "Error", variant: "destructive" });
+    }
+  };
+
+  const handleDeploy = () => {
+    if (!hasRenderableCode) {
+      toast({ title: "Preview no lista", description: "La app todavía no tiene código frontend renderizable para desplegar.", variant: "destructive" });
+      return;
+    }
+    deployMutation.mutate({ id });
+  };
+
+  const handleRefreshPreview = () => {
+    queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+    setPreviewKey((value) => value + 1);
+    toast({ title: "Preview actualizado", description: "La vista previa se ha recargado con el último código guardado." });
+  };
+
+  const handleMaximizePreview = () => setIsPreviewMaximized((value) => !value);
 
   if (isLoading) {
     return (
@@ -348,7 +415,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
         </section>
 
-        <main className="flex min-w-0 flex-1 flex-col bg-[#0a0d15]">
+        <main className={`${isPreviewMaximized ? "fixed inset-0 z-[130]" : "flex min-w-0 flex-1"} flex-col bg-[#0a0d15]`}>
           <div className="flex h-[69px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0a0d15] px-8">
             <div className="flex items-center gap-4 text-white/90">
               <div className="grid h-7 w-7 place-items-center text-white/65">
@@ -357,32 +424,51 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <h1 className="text-[20px] font-bold tracking-tight">App Preview</h1>
             </div>
             <div className="flex items-center gap-3">
-              <TopActionButton icon={Share2} label="Share" />
-              <TopActionButton icon={Rocket} label="Deploy" />
-              <TopActionButton icon={RefreshCcw} label="Refresh" />
-              <TopActionButton icon={Maximize2} label="Maximize" />
+              <TopActionButton icon={Share2} label="Share" onClick={handleShare} />
+              <TopActionButton icon={Rocket} label={deployMutation.isPending ? "Deploying" : "Deploy"} onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} />
+              <TopActionButton icon={RefreshCcw} label="Refresh" onClick={handleRefreshPreview} disabled={!hasRenderableCode} />
+              <TopActionButton icon={Maximize2} label={isPreviewMaximized ? "Restore" : "Maximize"} onClick={handleMaximizePreview} active={isPreviewMaximized} />
             </div>
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {showStaticBuildState ? (
               <AppPreviewWaitingState />
-            ) : (
+            ) : deployedUrl ? (
               <iframe
-                srcDoc={String(app.frontendCode).includes("<!DOCTYPE html>") ? app.frontendCode : `<!DOCTYPE html><html><head><style>html,body{margin:0;min-height:100%;}</style></head><body>${app.frontendCode}</body></html>`}
+                key={`deployed-${previewKey}`}
+                src={deployedUrl}
                 title="App Preview"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
                 className="h-full w-full border-0 bg-white"
               />
+            ) : (
+              <SandpackProvider
+                key={`sandpack-${previewKey}`}
+                template="react-ts"
+                files={sandpackFiles ?? {}}
+                customSetup={{ entry: "/index.tsx", dependencies: SANDPACK_DEPENDENCIES }}
+                options={{ recompileMode: "delayed", recompileDelay: 400 }}
+                theme="light"
+              >
+                <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
+                  <SandpackPreview
+                    showNavigator={false}
+                    showOpenInCodeSandbox={false}
+                    showRefreshButton={false}
+                    style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
+                  />
+                </SandpackLayout>
+              </SandpackProvider>
             )}
 
             <div className="pointer-events-none absolute bottom-9 left-1/2 w-[720px] max-w-[calc(100%-6rem)] -translate-x-1/2">
               <div className="pointer-events-auto flex h-[69px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-6 shadow-[0_18px_55px_rgba(0,0,0,0.45)] backdrop-blur-xl">
                 <div className="flex items-center gap-4 text-[15px] text-white/65">
                   <Info className="h-5 w-5 text-white/60" />
-                  <span>You're viewing a static preview. Resume to interact with the app.</span>
+                  <span>{showStaticBuildState ? "La app todavía no tiene código frontend renderizable." : "You're viewing a live preview. Use Refresh to reload the latest build."}</span>
                 </div>
-                <button className="rounded-md border border-[#8b5cf6]/70 px-5 py-2.5 text-[15px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
+                <button onClick={handleRefreshPreview} disabled={!hasRenderableCode} className="rounded-md border border-[#8b5cf6]/70 px-5 py-2.5 text-[15px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45">
                   Resume Preview
                 </button>
               </div>

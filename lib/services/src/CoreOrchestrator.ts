@@ -10,6 +10,10 @@ interface Milestone {
   filePath: string;
 }
 
+interface GeneratedMilestone extends Milestone {
+  code: string;
+}
+
 export class CoreOrchestrator {
   private projectRoot: string;
   private architectureSummary: string = "";
@@ -105,17 +109,28 @@ export class CoreOrchestrator {
         previewAvailable: true // Esto le dice a la UI que refresque la App Preview
       });
 
-      return { id: milestone.id, success: true };
+      return { ...milestone, code: generatedCode } as GeneratedMilestone;
     });
 
     // Esperamos a que todos los agentes terminen sus tareas
-    await Promise.all(generationPromises);
+    const generatedMilestones = await Promise.all(generationPromises);
 
     wsNotificationCallback({ 
       status: "🚀 ¡Proyecto completo generado e integrado en el Monorepo!", 
       progress: 100, 
       step: 100 
     });
+
+    const toBundle = (items: GeneratedMilestone[]) => items
+      .sort((a, b) => a.id - b.id)
+      .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
+      .join("\n");
+
+    return {
+      frontendCode: toBundle(generatedMilestones.filter((item) => item.targetWorkspace === 'apps/web')),
+      backendCode: toBundle(generatedMilestones.filter((item) => item.targetWorkspace !== 'apps/web')),
+      milestones: generatedMilestones,
+    };
   }
 
   private async writeCodeToWorkspace(workspace: string, filePath: string, code: string) {
