@@ -136,6 +136,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
+  const [isPreviewClosed, setIsPreviewClosed] = useState(false);
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -302,11 +303,36 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     toast({ title: "Preview actualizado", description: "La vista previa se ha recargado con el último código guardado." });
   };
 
-  const handleMaximizePreview = () => setIsPreviewMaximized((value) => !value);
+  const handleMaximizePreview = () => {
+    setIsPreviewClosed(false);
+    setIsPreviewMaximized((value) => !value);
+  };
+
+  const handleClosePreview = () => {
+    setIsPreviewMaximized(false);
+    setIsPreviewClosed(true);
+  };
+
+  const handleOpenPreview = () => {
+    setIsPreviewClosed(false);
+    setIsPreviewMaximized(false);
+  };
+
+  const handleResumePreview = () => {
+    if (hasRenderableCode) {
+      handleRefreshPreview();
+      return;
+    }
+    setIsPreviewMaximized(false);
+    setIsPreviewClosed(true);
+    setActiveSidebar("chat");
+    toast({ title: "Preview cerrada", description: "La app aún no tiene frontend renderizable. Revisa el plan o pide cambios en el chat." });
+  };
 
   const handleSidebarClick = (tab: SidebarTab) => {
     setActiveSidebar(tab);
     if (tab === "ui-builder") {
+      setIsPreviewClosed(false);
       toast({ title: "UI Builder activo", description: "Usa los controles del panel para refrescar, maximizar o desplegar la preview." });
     }
   };
@@ -504,6 +530,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <div ref={messagesEndRef} />
         </div>
         <div className="space-y-3 px-6 pb-6">
+          <Button
+            size="lg"
+            onClick={handleApprove}
+            disabled={approveMutation.isPending}
+            className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white shadow-[0_0_22px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
+          >
+            {approveMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5 fill-current" />}
+            Aprobar y continuar
+          </Button>
           <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
           <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
           <div className="flex items-center gap-3">
@@ -596,6 +631,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           {renderSidebarPanel()}
         </section>
 
+        {isPreviewClosed ? (
+          <main className="flex min-w-0 flex-1 items-center justify-center bg-[#0a0d15] p-8">
+            <div className="max-w-md rounded-2xl border border-white/[0.09] bg-[#0b0f18]/95 p-7 text-center shadow-[0_18px_55px_rgba(0,0,0,0.45)]">
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#7c3aed]/15 text-3xl text-[#c084fc]">▱</div>
+              <h2 className="mt-5 text-xl font-extrabold text-white">Vista previa cerrada</h2>
+              <p className="mt-2 text-sm leading-relaxed text-white/55">La preview en vivo está oculta para que puedas trabajar en Chat, Plan, Data y el resto de paneles sin quedarte bloqueado.</p>
+              <Button onClick={handleOpenPreview} className="mt-6 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+                Abrir App Preview
+              </Button>
+            </div>
+          </main>
+        ) : (
         <main className={`${isPreviewMaximized ? "fixed inset-0 z-[130]" : "flex min-w-0 flex-1"} flex-col bg-[#0a0d15]`}>
           <div className="flex h-[69px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0a0d15] px-8">
             <div className="flex items-center gap-4 text-white/90">
@@ -609,10 +656,28 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <TopActionButton icon={Rocket} label={deployMutation.isPending ? "Deploying" : "Deploy"} onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} />
               <TopActionButton icon={RefreshCcw} label="Refresh" onClick={handleRefreshPreview} disabled={!hasRenderableCode} />
               <TopActionButton icon={Maximize2} label={isPreviewMaximized ? "Restore" : "Maximize"} onClick={handleMaximizePreview} active={isPreviewMaximized} />
+              <button
+                type="button"
+                onClick={handleClosePreview}
+                aria-label="Cerrar vista previa"
+                title="Cerrar vista previa"
+                className="grid h-[42px] min-w-[42px] place-items-center rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 text-2xl font-bold leading-none text-white/70 transition hover:border-red-400/45 hover:bg-red-500/10 hover:text-white"
+              >
+                ×
+              </button>
             </div>
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
+            <button
+              type="button"
+              onClick={handleClosePreview}
+              aria-label="Cerrar vista previa en vivo"
+              title="Cerrar vista previa en vivo"
+              className="absolute right-5 top-5 z-20 grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-2xl font-bold leading-none text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
+            >
+              ×
+            </button>
             {showStaticBuildState ? (
               <AppPreviewWaitingState />
             ) : deployedUrl ? (
@@ -649,13 +714,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <Info className="h-5 w-5 text-white/60" />
                   <span>{showStaticBuildState ? "La app todavía no tiene código frontend renderizable." : "You're viewing a live preview. Use Refresh to reload the latest build."}</span>
                 </div>
-                <button onClick={handleRefreshPreview} disabled={!hasRenderableCode} className="rounded-md border border-[#8b5cf6]/70 px-5 py-2.5 text-[15px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45">
-                  Resume Preview
+                <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/70 px-5 py-2.5 text-[15px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
+                  {hasRenderableCode ? "Resume Preview" : "Cerrar preview"}
                 </button>
               </div>
             </div>
           </div>
         </main>
+        )}
       </div>
     </div>
   );
