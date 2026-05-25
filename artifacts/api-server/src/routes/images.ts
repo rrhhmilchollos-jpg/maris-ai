@@ -1,7 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, and } from "drizzle-orm";
 import { db } from "../lib/db";
-import { appImages } from "@workspace/db/schema";
+import { appImages as _appImages } from "@workspace/db/schema";
+const appImages = _appImages as any;
 
 const router: IRouter = Router();
 

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../lib/auth";
 import { db } from "../lib/db";
-import { generatedApps } from "@workspace/db/schema";
+import {generatedApps as _generatedApps} from "@workspace/db/schema";
+const generatedApps = _generatedApps as any;
 import { eq, and } from "drizzle-orm";
 import Stripe from "stripe";
 import { logger } from "../lib/logger";
@@ -15,7 +16,7 @@ const router = Router();
 router.get("/watermark/:appId", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = req.auth?.userId;
+    const userId = (req as any).auth?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
@@ -25,7 +26,7 @@ router.get("/watermark/:appId", requireAuth, async (req: Request, res: Response)
     const app = await db
       .select()
       .from(generatedApps)
-      .where(and(eq(generatedApps.id, parseInt(appId)), eq(generatedApps.userId, userId)))
+      .where(and(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)), eq(generatedApps.userId, userId)))
       .limit(1);
 
     if (app.length === 0) {
@@ -41,7 +42,7 @@ router.get("/watermark/:appId", requireAuth, async (req: Request, res: Response)
       watermarkRemovalStripeSessionId: appData.watermarkRemovalStripeSessionId || null,
     });
   } catch (error) {
-    logger.error("Error fetching watermark status:", error);
+    logger.error({ err: error }, "Error fetching watermark status:");
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 });
@@ -53,7 +54,7 @@ router.get("/watermark/:appId", requireAuth, async (req: Request, res: Response)
 router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = req.auth?.userId;
+    const userId = (req as any).auth?.userId;
 
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
@@ -63,7 +64,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
     const app = await db
       .select()
       .from(generatedApps)
-      .where(and(eq(generatedApps.id, parseInt(appId)), eq(generatedApps.userId, userId)))
+      .where(and(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)), eq(generatedApps.userId, userId)))
       .limit(1);
 
     if (app.length === 0) {
@@ -79,7 +80,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
 
     // Crear sesión de Stripe
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-      apiVersion: "2024-06-20",
+      apiVersion: "2026-04-22.dahlia",
     });
 
     const session = await stripe.checkout.sessions.create({
@@ -112,7 +113,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
     await db
       .update(generatedApps)
       .set({ watermarkRemovalStripeSessionId: session.id })
-      .where(eq(generatedApps.id, parseInt(appId)));
+      .where(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)));
 
     return res.json({
       sessionId: session.id,
@@ -120,7 +121,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
       price: appData.watermarkRemovalPrice ?? 9.99,
     });
   } catch (error) {
-    logger.error("Error creating watermark removal session:", error);
+    logger.error({ err: error }, "Error creating watermark removal session:");
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 });
@@ -132,7 +133,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
 router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = req.auth?.userId;
+    const userId = (req as any).auth?.userId;
     const { sessionId } = req.body;
 
     if (!userId) {
@@ -145,7 +146,7 @@ router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request
 
     // Verificar la sesión con Stripe
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-      apiVersion: "2024-06-20",
+      apiVersion: "2026-04-22.dahlia",
     });
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -155,7 +156,7 @@ router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request
       await db
         .update(generatedApps)
         .set({ hasWatermark: false, watermarkRemovalStripeSessionId: null })
-        .where(and(eq(generatedApps.id, parseInt(appId)), eq(generatedApps.userId, userId)));
+        .where(and(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)), eq(generatedApps.userId, userId)));
 
       return res.json({
         success: true,
@@ -170,7 +171,7 @@ router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request
       });
     }
   } catch (error) {
-    logger.error("Error verifying watermark removal:", error);
+    logger.error({ err: error }, "Error verifying watermark removal:");
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 });

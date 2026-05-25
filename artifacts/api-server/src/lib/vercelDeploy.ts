@@ -32,7 +32,8 @@
 
 import type { Logger } from "pino";
 import { and, eq } from "drizzle-orm";
-import { generatedApps } from "@workspace/db/schema";
+import {generatedApps as _generatedApps} from "@workspace/db/schema";
+const generatedApps = _generatedApps as any;
 import { db } from "./db";
 import { bundleToFiles } from "./exportZip";
 

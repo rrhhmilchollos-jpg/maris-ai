@@ -105,7 +105,7 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
       // Aquí se podría llamar a addVercelDomainForApp si se desea automatizar la vinculación
     } else if (!isPaidUser) {
       // Para usuarios free, intentamos usar el subdominio marisai.es si está configurado
-      subdomain = generateMarisaiSubdomain(appData.title, appId);
+      subdomain = generateMarisaiSubdomain(appData.title, Array.isArray(appId) ? appId[0] : appId);
       finalUrl = `https://${subdomain}.${MARIS_AI_DOMAIN}`;
     }
 

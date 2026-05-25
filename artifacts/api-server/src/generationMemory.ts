@@ -2,9 +2,9 @@
 // Memoria persistente de generaciones exitosas.
 // Permite al Arquitecto recordar estructuras y patrones de apps previas similares.
 
-import { connectDB } from "./db";
-import { embedText } from "./agentMemory";
-import { logger } from "./logger";
+import { connectDB } from "./lib/db";
+import { embedText } from "./lib/agentMemory";
+import { logger } from "./lib/logger";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 

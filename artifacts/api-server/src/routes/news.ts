@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 
 // Endpoint para crear una nueva noticia (solo admin)
-router.post("/admin/news", requireAuth, requireAdmin, async (req, res) => {
+router.post("/admin/news", requireAuth, requireAdmin, async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { title, slug, imageUrl, imageAlt, body, author, tags, isFeatured, metaDescription, relatedAppId } = req.body;
 
@@ -48,7 +48,7 @@ router.get("/news", async (_req, res) => {
 });
 
 // Endpoint para obtener una noticia por slug (público)
-router.get("/news/:slug", async (req, res) => {
+router.get("/news/:slug", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { slug } = req.params;
 
@@ -65,7 +65,7 @@ router.get("/news/:slug", async (req, res) => {
 });
 
 // Endpoint para actualizar una noticia (solo admin)
-router.put("/admin/news/:id", requireAuth, requireAdmin, async (req, res) => {
+router.put("/admin/news/:id", requireAuth, requireAdmin, async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { id } = req.params;
   const { title, slug, imageUrl, imageAlt, body, author, tags, isFeatured, metaDescription, relatedAppId } = req.body;
@@ -88,7 +88,7 @@ router.put("/admin/news/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 // Endpoint para eliminar una noticia (solo admin)
-router.delete("/admin/news/:id", requireAuth, requireAdmin, async (req, res) => {
+router.delete("/admin/news/:id", requireAuth, requireAdmin, async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { id } = req.params;
 

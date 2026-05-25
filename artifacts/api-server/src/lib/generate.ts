@@ -79,7 +79,7 @@ ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
 - The output must look like an INSPIRED-BY product, not a clone. If you find yourself copying more than the high-level category convention, stop and invent something different.
 
 TEMPLATE STARTER SYSTEM — mandatory:
-- Professional base templates and agent blueprints live in `artifacts/api-server/src/lib/templates.ts`. The user must never receive a blank-canvas demo. Use the injected [MARIS AI TEMPLATE BASE] block as the starting architecture and then adapt it to the exact request.
+- Professional base templates and agent blueprints live in \`artifacts/api-server/src/lib/templates.ts\`. The user must never receive a blank-canvas demo. Use the injected [MARIS AI TEMPLATE BASE] block as the starting architecture and then adapt it to the exact request.
 - The generated app must feel like a prepared product starter that the client can immediately modify: editable data arrays, clear component boundaries, sensible defaults and complete first-run UX.
 
 Schema:
@@ -619,7 +619,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
@@ -746,7 +746,7 @@ async function generateFrontendCode(
   const codeMemoryBlock = buildGenerationMemoryBlock(codeMemoryRecalls);
 
   // Recuperar componentes reutilizables de la caché de componentes
-  const cachedComponents = await recallComponents(prompt, language, 5).catch(() => []);
+  const cachedComponents = await recallComponents(prompt, { language, limit: 5 }).catch(() => []);
   const componentCacheBlock = buildComponentCacheBlock(cachedComponents);
 
   // Recuperar fixes proactivos de errores históricos
@@ -1677,6 +1677,7 @@ export async function generateApp(
   onPhaseError?: PhaseErrorReporter,
   agentMemory?: AgentMemoryContext,
   checkpoint?: GenerationCheckpoint,
+  requestContext?: GenerationRequestContext,
 ): Promise<GeneratedAppPayload | GenerationCheckpoint> {
   const runPhase = async <T>(phase: string, fn: (currentModel?: string) => Promise<T>, modelToUse?: string): Promise<T> => {
     let lastError: any;

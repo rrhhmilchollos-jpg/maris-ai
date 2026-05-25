@@ -27,7 +27,11 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { db } from "./db";
-import { generatedApps, users, appMessages, jobLogs } from "@workspace/db/schema";
+import {generatedApps as _generatedApps, users as _users, appMessages as _appMessages, jobLogs as _jobLogs} from "@workspace/db/schema";
+const generatedApps = _generatedApps as any;
+const users = _users as any;
+const appMessages = _appMessages as any;
+const jobLogs = _jobLogs as any;
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { patchBundle, type GenLanguage } from "./generate";
 import { validateBundle } from "./validate";
@@ -429,7 +433,7 @@ export async function runAutoEvaluator(opts: {
     const trimmed = message.length > 280 ? message.slice(0, 277) + "…" : message;
     db.insert(jobLogs)
       .values({ jobId, agent: "evaluator", level, message: trimmed })
-      .catch((err) => {
+      .catch((err: unknown) => {
         log.warn({ err, jobId, appId }, "Failed to write evaluator job log line");
       });
   };
@@ -636,10 +640,10 @@ export async function runAutoEvaluator(opts: {
     // strict critique made things worse than the previous, looser version.
     void import("./appRevisions").then(({ snapshotCurrentApp }) =>
       snapshotCurrentApp({
-        appId,
+        appId: String(appId),
         source: "visual-fix",
         summary: `Reparación del evaluador autónomo (ronda ${round})`,
-        jobId: jobId ?? null,
+        jobId: jobId != null ? String(jobId) : null,
       }),
     );
     // Tiny pause so the public deploy route reflects the new bundle for the
@@ -658,7 +662,7 @@ export async function runAutoEvaluator(opts: {
       .update(generatedApps)
       .set({ status: "ready", evaluatorSummary: null })
       .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-      .catch((err) => {
+      .catch((err: unknown) => {
         log.warn({ err, appId }, "Failed to clear evaluatorSummary after pass");
       });
 
@@ -783,7 +787,7 @@ export async function runAutoEvaluator(opts: {
     .update(generatedApps)
     .set({ status: "needs_review", evaluatorSummary })
     .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .catch((err) => {
+    .catch((err: unknown) => {
       log.warn({ err, appId }, "Failed to mark app as needs_review");
     });
 

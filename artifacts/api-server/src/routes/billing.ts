@@ -194,7 +194,7 @@ router.post(
       ],
       metadata: {
         clerkUserId: req.userId!,
-        priceId: pkg.priceId,
+        priceId: pkg.priceId ?? null,
         credits: String(pkg.credits),
         type: "topup",
       },
@@ -377,7 +377,7 @@ router.post(
       const subscription = await stripe.subscriptions.retrieve(subscriptionId);
       const planId = subscription.metadata?.planId || session.metadata?.planId;
       const creditsPerMonth = Number(subscription.metadata?.creditsPerMonth || session.metadata?.creditsPerMonth || "0");
-      const periodEnd = subscription.current_period_end;
+      const periodEnd = (subscription as any).current_period_end ?? 0;
 
       if (planId && creditsPerMonth > 0) {
         // Verificamos si ya se procesó (por si el webhook fue más rápido)

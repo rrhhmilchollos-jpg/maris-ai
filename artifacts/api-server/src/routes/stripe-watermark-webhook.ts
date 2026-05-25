@@ -8,7 +8,7 @@ import { raw } from "express";
 
 const router = Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-06-20",
+  apiVersion: "2026-04-22.dahlia",
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
@@ -37,7 +37,7 @@ router.post(
         webhookSecret,
       );
     } catch (err) {
-      logger.error("Error verificando firma de webhook:", err);
+      logger.error({ err: err }, "Error verificando firma de webhook:");
       return res.status(400).json({ error: "Invalid signature" });
     }
 
@@ -91,10 +91,7 @@ router.post(
 
         case "payment_intent.payment_failed": {
           const paymentIntent = event.data.object as Stripe.PaymentIntent;
-          logger.warn(
-            `Pago fallido: ${paymentIntent.id}`,
-            paymentIntent.last_payment_error,
-          );
+          logger.warn({ lastError: paymentIntent.last_payment_error }, `Pago fallido: ${paymentIntent.id}`);
           break;
         }
 
@@ -104,7 +101,7 @@ router.post(
 
       return res.json({ received: true });
     } catch (error) {
-      logger.error("Error procesando webhook de Stripe:", error);
+      logger.error({ err: error }, "Error procesando webhook de Stripe:");
       return res.status(500).json({ error: "Internal server error" });
     }
   },
