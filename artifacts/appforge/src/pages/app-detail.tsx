@@ -215,9 +215,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: 3000 },
   });
 
+  // ✅ activeAppJob siempre habilitado — necesario para detectar jobs en awaiting_approval
+  // aunque el localStorage tenga un jobId anterior (que puede haber terminado ya)
   const { data: activeAppJob } = useGetActiveAppJob(id, {
     query: {
-      enabled: !!id && !activeJobId,
+      enabled: !!id,
       queryKey: getGetActiveAppJobQueryKey(id),
       refetchInterval: (data: any) => {
         const status = data?.status;
@@ -225,11 +227,25 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
-  // effectiveJobId: solo puede venir del estado local (activeJobId) o del
-  // endpoint active-job (activeAppJob.id). NUNCA del objeto app, cuyo _id
-  // es el ID de la app y causaba que el frontend llamara a /api/jobs/:appId
-  // obteniendo siempre 404 y bloqueando el botón Enviar permanentemente.
-  const effectiveJobId: string | null = activeJobId ?? (activeAppJob?.id ? String(activeAppJob.id) : null);
+
+  // Si activeAppJob devuelve un job activo diferente al del localStorage, sincronizar
+  useEffect(() => {
+    if (activeAppJob?.id && String(activeAppJob.id) !== activeJobId) {
+      // El servidor tiene un job activo que no conocemos localmente → actualizar
+      setActiveJobId(String(activeAppJob.id));
+    }
+    if (!activeAppJob && activeJobId) {
+      // El servidor no tiene ningún job activo → limpiar el localStorage
+      // Solo limpiar si el job local ya terminó (succeeded/failed)
+      // Esto se maneja en el useEffect de job.status
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAppJob?.id]);
+
+  // effectiveJobId: prioridad → activeAppJob del servidor (siempre fresco) > localStorage
+  // NUNCA del objeto app, cuyo _id es el ID de la app (causaba 404 en /api/jobs/:appId)
+  const effectiveJobId: string | null =
+    (activeAppJob?.id ? String(activeAppJob.id) : null) ?? activeJobId;
 
   const { data: job } = useGetGenerationJob(effectiveJobId ?? "", {
     query: {
