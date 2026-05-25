@@ -1928,15 +1928,28 @@ export async function generateApp(
     throw new Error(`El planificador devolvió un alcance sin fase 'frontend' (${execPlan.scope}). No es posible generar una app sin código de frontend.`);
   }
 
-  const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
-
-  if (!frontendResult.code) {
-    await log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
-    throw new Error(
-      frontendResult.truncated
-        ? "La app es demasiado compleja para generarla de una vez. Prueba describiendo menos funcionalidades, por ejemplo: primero el login, luego el dashboard. O selecciona el modelo Opus para apps más grandes."
-        : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
+const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
+  if (!frontendResult.code && frontendResult.truncated) {
+    await log("coder", "Frontend truncado, reintentando con plan reducido…", "warn");
+    const reducedPlan = {
+      ...plan,
+      frontendFiles: plan.frontendFiles.slice(0, Math.ceil(plan.frontendFiles.length / 2)),
+      pages: plan.pages.slice(0, 2),
+      components: plan.components.slice(0, 6),
+    };
+    const retryResult = await generateFrontendCode(
+      reducedPlan, design, research, prompt,
+      (chars, fileName) => { if (fileName) log("coder", fileName); },
+      resolveModelForAgent("frontend", reducedPlan.frontendFiles.length, coderModel),
+      language
     );
+    if (!retryResult.code) {
+      throw new Error("La app es demasiado compleja. Prueba describiendo menos funcionalidades o divídela en partes más pequeñas.");
+    }
+    frontendResult.code = retryResult.code;
+  } else if (!frontendResult.code) {
+    await log("coder", `Frontend falló: ${frontendResult.error ?? "desconocido"}`, "error");
+    throw new Error(`No pudimos generar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`);
   }
   await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
   if (plan.backendNeeded && backendResult?.code) {
