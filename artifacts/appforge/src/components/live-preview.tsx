@@ -23,6 +23,7 @@ import { parseBundle } from "@/lib/parseBundle";
 import {
   buildFileTree,
   ensureDevScript,
+  patchViteConfig,
   getWebContainer,
   isWebContainerSupported,
 } from "@/lib/webcontainerHost";
@@ -122,6 +123,17 @@ export function LivePreview({
       setPhase("mounting");
       const parsed = parseBundle(frontendCode);
       parsed["package.json"] = ensureDevScript(parsed["package.json"]);
+      // Desactivar el overlay de error de Vite HMR — los errores se muestran en la consola inferior
+      const viteConfigKey = parsed["vite.config.ts"] !== undefined
+        ? "vite.config.ts"
+        : parsed["vite.config.js"] !== undefined
+        ? "vite.config.js"
+        : null;
+      if (viteConfigKey) {
+        parsed[viteConfigKey] = patchViteConfig(parsed[viteConfigKey]);
+      } else {
+        parsed["vite.config.ts"] = patchViteConfig(undefined);
+      }
       const tree = buildFileTree(parsed);
       appendLog(`📁 Montando ${Object.keys(parsed).length} archivos en el container…`);
       await wc.mount(tree);
