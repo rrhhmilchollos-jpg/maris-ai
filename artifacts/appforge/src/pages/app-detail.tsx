@@ -214,19 +214,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
-  // resolveJobId extrae el ID de un JOB (no de una app). Solo busca campos
-  // específicos de job para evitar que app.id (el ID de la propia app) sea
-  // confundido con un jobId, lo que bloqueaba el botón Enviar permanentemente.
-  const resolveJobId = (value: any): string | null => {
-    const raw = value?.jobId ?? value?._id ?? value?.generationJobId ?? value?.currentJobId ?? value?.activeJobId;
-    return raw ? String(raw) : null;
-  };
-  // Para activeAppJob usamos su campo id (que sí es un jobId)
-  const resolveActiveJobId = (value: any): string | null => {
-    const raw = value?.id ?? value?.jobId ?? value?._id ?? value?.generationJobId ?? value?.currentJobId ?? value?.activeJobId;
-    return raw ? String(raw) : null;
-  };
-  const effectiveJobId = activeJobId ?? resolveActiveJobId(activeAppJob) ?? resolveJobId(app);
+  // effectiveJobId: solo puede venir del estado local (activeJobId) o del
+  // endpoint active-job (activeAppJob.id). NUNCA del objeto app, cuyo _id
+  // es el ID de la app y causaba que el frontend llamara a /api/jobs/:appId
+  // obteniendo siempre 404 y bloqueando el botón Enviar permanentemente.
+  const effectiveJobId: string | null = activeJobId ?? (activeAppJob?.id ? String(activeAppJob.id) : null);
 
   const { data: job } = useGetGenerationJob(effectiveJobId ?? "", {
     query: {
