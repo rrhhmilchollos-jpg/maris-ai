@@ -49,7 +49,7 @@ router.get("/rss", async (_req, res) => {
     res.set("Cache-Control", "public, max-age=3600");
     res.send(rssFeed);
   } catch (err) {
-    logger.error("Error generating RSS feed", err);
+    logger.error({ err: err }, "Error generating RSS feed");
     res.status(500).send("Error generating feed");
   }
 });

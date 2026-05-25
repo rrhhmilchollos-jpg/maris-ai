@@ -121,7 +121,8 @@ stripeWebhookRouter.post(
 
       // ─── Suscripción creada o renovada ────────────────────────────────────
       if (event.type === "invoice.payment_succeeded") {
-        const invoice = event.data.object as import("stripe").Stripe.Invoice;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const invoice = event.data.object as any;
 
         // Solo procesar facturas de suscripción (no one-time)
         if (!invoice.subscription) {
@@ -137,7 +138,7 @@ stripeWebhookRouter.post(
         const clerkUserId = subscription.metadata?.clerkUserId;
         const planId = subscription.metadata?.planId;
         const creditsPerMonth = Number(subscription.metadata?.creditsPerMonth ?? "0");
-        const periodEnd = subscription.current_period_end;
+        const periodEnd = (subscription as any).current_period_end ?? 0;
 
         if (!clerkUserId || !planId || !creditsPerMonth) {
           req.log.warn({ subscriptionId }, "Subscription missing metadata — skipping credit grant");
@@ -197,7 +198,8 @@ stripeWebhookRouter.post(
 
       // ─── Pago de suscripción fallido ──────────────────────────────────────
       if (event.type === "invoice.payment_failed") {
-        const invoice = event.data.object as import("stripe").Stripe.Invoice;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const invoice = event.data.object as any;
         if (invoice.subscription) {
           const subscriptionId = typeof invoice.subscription === "string"
             ? invoice.subscription

@@ -76,7 +76,7 @@ router.get("/admin/users", async (_req, res) => {
   );
 });
 
-router.post("/admin/users/:id/credits", async (req, res) => {
+router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const targetId = req.params.id;
   const body = req.body as { delta?: number; reason?: string };
@@ -187,11 +187,11 @@ router.get("/admin/jobs", async (_req, res) => {
   });
 });
 
-router.post("/admin/jobs/:id/retry", async (req, res) => {
+router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> => {
   // ... existing job retry route ...
 });
 
-router.post("/admin/project-seeds/bulk", requireAdmin, async (req, res) => {
+router.post("/admin/project-seeds/bulk", requireAdmin, async (req: any, res: any): Promise<void> => {
   const seeds: Partial<IProjectSeed>[] = req.body;
   if (!Array.isArray(seeds)) {
     return res.status(400).json({ message: "Request body must be an array of project seeds." });
@@ -205,7 +205,7 @@ router.post("/admin/project-seeds/bulk", requireAdmin, async (req, res) => {
   }
 });
 
-router.post("/admin/jobs/:id/retry", async (req, res) => {
+router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const id = req.params.id;
 
@@ -288,7 +288,7 @@ router.post("/admin/jobs/:id/retry", async (req, res) => {
   });
 });
 
-router.get("/admin/memory", async (req, res) => {
+router.get("/admin/memory", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
   const offset = Math.max(0, Number(req.query.offset) || 0);
@@ -331,7 +331,7 @@ router.get("/admin/memory", async (req, res) => {
   });
 });
 
-router.delete("/admin/memory/:id", async (req, res) => {
+router.delete("/admin/memory/:id", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const deleted = await AgentMemory.findByIdAndDelete(req.params.id);
   if (!deleted) {

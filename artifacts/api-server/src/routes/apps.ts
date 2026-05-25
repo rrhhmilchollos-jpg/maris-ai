@@ -1632,14 +1632,13 @@ export async function generateApp(
     await log("coder", "Calentando motores…");
     const TARGET = 50_000;
     let lastHeartbeatAt = Date.now();
-    const onChars = async (accumulatedCode: string) => {
-      const chars = accumulatedCode.length;
+    const onChars = (chars: number) => {
       const ratio = Math.min(1, chars / TARGET);
       onProgress?.({ phase: "generating", progress: 20 + Math.round(ratio * 50), note: `Aplicando cambios… (${Math.round(chars / 1000)} KB)` });
       const now = Date.now();
       if (now - lastHeartbeatAt > 2500) {
         lastHeartbeatAt = now;
-        await log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
+        void log("coder", `Construyendo… ${Math.round(chars / 1000)} KB y subiendo.`);
       }
     };
 
@@ -1751,15 +1750,14 @@ export async function generateApp(
   let lastLogChars = 0;
   const frontendPromise = runPhase("frontend", async () =>
     withTimeoutOrThrow(
-      generateFrontendCode(plan, design, research, prompt, async (accumulatedCode) => {
-        const chars = accumulatedCode.length;
+      generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
         
         // Log cada 5KB para dar feedback visual al usuario (Mejorado de 10KB)
         if (chars - lastLogChars >= 5000) {
           lastLogChars = chars;
-          await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+          void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language, templateContextBlock),
       600_000,
@@ -2236,7 +2234,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     }
 
     const requestLocale = detectRequestLocale(req);
-    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${prompt}`;
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${app.prompt}`;
 
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
@@ -2473,6 +2471,27 @@ export async function runJobById(jobId: string): Promise<void> {
     });
     await log("system", `Error: ${err instanceof Error ? err.message : "Error desconocido"}`, "error");
   }
+}
+
+
+/**
+ * runDeployForApp - Wrapper for deployAppToVercel used by the auto-evaluator.
+ * Exported so evaluator.ts can call it via lazy import to avoid circular deps.
+ */
+export async function runDeployForApp(args: {
+  appId: number;
+  userId: string;
+  log: import("pino").Logger;
+}): Promise<{ url: string; slug: string }> {
+  const { deployAppToVercel } = await import("../lib/vercelDeploy");
+  const result = await deployAppToVercel(args);
+  if (!result.ok) {
+    throw new Error(`Deploy failed: ${JSON.stringify(result.failure)}`);
+  }
+  return {
+    url: result.result.url,
+    slug: (result.result as any).slug ?? "",
+  };
 }
 
 export default router;

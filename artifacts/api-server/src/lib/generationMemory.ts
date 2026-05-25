@@ -50,7 +50,7 @@ function _toProjectSeedEntry(seed: IProjectSeed, similarity: number): Generation
     plan: {
       title: seed.title,
       description: seed.description,
-      techStack: seed.techStack,
+      // techStack: seed.techStack, // removed: not in type
       frontendFiles: seed.frontendCodeSnippet ? ["<snippet>"] : [],
       backendNeeded: !!seed.backendCodeSnippet,
       pages: [], components: [], hooks: [], utils: [], dataModels: [], // Initialize empty
@@ -194,7 +194,7 @@ export async function recallGenerations(
       .filter((e: any) => e.similarity >= threshold);
 
     // 2. Recall from ProjectSeeds (pre-defined templates)
-    const seedEntries = (await ProjectSeed.find({}).lean() as IProjectSeed[])
+    const seedEntries = (await ProjectSeed.find({}).lean() as unknown as IProjectSeed[])
       .map((seed: IProjectSeed) => {
         // Calculate similarity based on prompt vs seed title/description/keywords
         const seedText = `${seed.title} ${seed.description} ${seed.keywords.join(" ")}`;

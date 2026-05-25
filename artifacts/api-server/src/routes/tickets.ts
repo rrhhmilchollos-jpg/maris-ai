@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 
 // Endpoint para que los usuarios creen un nuevo ticket
-router.post("/tickets", requireAuth, async (req, res) => {
+router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { subject, message } = req.body;
   const userId = req.userId;
@@ -35,7 +35,7 @@ router.post("/tickets", requireAuth, async (req, res) => {
 });
 
 // Endpoint para que los usuarios vean sus propios tickets
-router.get("/tickets", requireAuth, async (req, res) => {
+router.get("/tickets", requireAuth, async (req: any, res: any): Promise<void> => {
   await connectDB();
   const userId = req.userId;
 
@@ -53,7 +53,7 @@ router.get("/tickets", requireAuth, async (req, res) => {
 });
 
 // Endpoint para que los usuarios respondan a sus propios tickets
-router.post("/tickets/:id/respond", requireAuth, async (req, res) => {
+router.post("/tickets/:id/respond", requireAuth, async (req: any, res: any): Promise<void> => {
   await connectDB();
   const ticketId = req.params.id;
   const { message } = req.body;
@@ -118,7 +118,7 @@ router.get("/admin/tickets", async (_req, res) => {
 });
 
 // Endpoint para que los administradores respondan a un ticket
-router.post("/admin/tickets/:id/respond", async (req, res) => {
+router.post("/admin/tickets/:id/respond", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const ticketId = req.params.id;
   const { message, newStatus } = req.body;
@@ -155,7 +155,7 @@ router.post("/admin/tickets/:id/respond", async (req, res) => {
 });
 
 // Endpoint para que los administradores cambien el estado de un ticket
-router.post("/admin/tickets/:id/status", async (req, res) => {
+router.post("/admin/tickets/:id/status", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const ticketId = req.params.id;
   const { status } = req.body;

@@ -1,7 +1,9 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { appImages, generatedApps } from "@workspace/db/schema";
+import {appImages as _appImages, generatedApps as _generatedApps} from "@workspace/db/schema";
+const appImages = _appImages as any;
+const generatedApps = _generatedApps as any;
 import { logger } from "./logger";
 
 /* ============================================================================

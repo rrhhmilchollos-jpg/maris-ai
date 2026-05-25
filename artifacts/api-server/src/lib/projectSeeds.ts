@@ -22,5 +22,5 @@ export async function deleteProjectSeed(id: string): Promise<IProjectSeed | null
 }
 
 export async function bulkCreateProjectSeeds(seeds: Partial<IProjectSeed>[]): Promise<IProjectSeed[]> {
-  return ProjectSeed.insertMany(seeds);
+  return ProjectSeed.insertMany(seeds) as unknown as Promise<IProjectSeed[]>;
 }

@@ -459,7 +459,7 @@ export async function runVisualTester(opts: {
 
     log?.info(
       {
-        appId: app.id,
+        appId: String(app.id),
         cycle,
         score: lastAnalysis.overallScore,
         issues: lastAnalysis.issues.length,
@@ -523,7 +523,7 @@ export async function runVisualTester(opts: {
     // tester's "improvement" actually regressed something. Fire-and-forget.
     void import("./appRevisions").then(({ snapshotCurrentApp }) =>
       snapshotCurrentApp({
-        appId: app.id,
+        appId: String(app.id),
         source: "visual-fix",
         summary: `Reparación visual automática (ciclo ${cycle})`,
       }),

@@ -265,12 +265,7 @@ export async function registerGenerateWorker(
     {
       connection: redis,
       concurrency: DEFAULT_CONCURRENCY, // Parallel workers on this instance
-      settings: {
-        lockDuration: 30000, // 30s lock per job
-        lockRenewTime: 15000, // Renew lock every 15s
-        maxStalledCount: 2,
-        stalledInterval: 5000,
-      },
+      // settings removed: lockDuration, lockRenewTime, maxStalledCount, stalledInterval not in AdvancedOptions
     }
   );
   
