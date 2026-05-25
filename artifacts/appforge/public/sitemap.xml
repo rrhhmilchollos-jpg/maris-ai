@@ -1,21 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Página principal -->
   <url>
-    <loc>https://marisai.es/</loc>
-    <lastmod>2026-05-23</lastmod>
+    <loc>https://www.marisai.es/</loc>
+    <lastmod>2026-05-26</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
+  <!-- Comparativas -->
   <url>
-    <loc>https://marisai.es/news</loc>
-    <lastmod>2026-05-23</lastmod>
-    <changefreq>weekly</changefreq>
+    <loc>https://www.marisai.es/vs-emergent</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <!-- Noticias / Blog -->
   <url>
-    <loc>https://marisai.es/vs-emergent</loc>
-    <lastmod>2026-05-23</lastmod>
-    <changefreq>monthly</changefreq>
+    <loc>https://www.marisai.es/news</loc>
+    <lastmod>2026-05-26</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
 </urlset>

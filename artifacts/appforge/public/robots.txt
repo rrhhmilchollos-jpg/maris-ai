@@ -13,5 +13,8 @@ Allow: /news/
 Allow: /news-sitemap.xml
 
 # Sitemaps
-Sitemap: https://marisai.es/news-sitemap.xml
-Sitemap: https://marisai.es/sitemap.xml
+Sitemap: https://www.marisai.es/sitemap.xml
+Sitemap: https://www.marisai.es/news-sitemap.xml
+
+# Dominio canónico (www)
+Host: https://www.marisai.es
