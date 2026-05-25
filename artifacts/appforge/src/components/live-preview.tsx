@@ -324,11 +324,6 @@ export function LivePreview({
           <Play className="w-3.5 h-3.5 mr-1.5" />
           Desplegar
         </Button>
-        {onClose && (
-          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        )}
       </div>
     </div>
   );
