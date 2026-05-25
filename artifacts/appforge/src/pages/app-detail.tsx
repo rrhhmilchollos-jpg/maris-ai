@@ -966,17 +966,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             ) : (
               <SandpackProvider
                 key={`sandpack-${previewKey}`}
-                template="react-ts"
+                template="vite-react-ts"
                 files={sandpackFiles ?? {}}
                 customSetup={{ entry: "/index.tsx", dependencies: SANDPACK_DEPENDENCIES }}
-                options={{ recompileMode: "delayed", recompileDelay: 400 }}
-                theme="light"
+                options={{ recompileMode: "delayed", recompileDelay: 300, externalResources: ["https://cdn.tailwindcss.com"] }}
+                theme="dark"
               >
                 <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
                   <SandpackPreview
                     showNavigator={false}
                     showOpenInCodeSandbox={false}
                     showRefreshButton={false}
+                    showSandpackErrorOverlay={false}
                     style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
                   />
                 </SandpackLayout>
@@ -987,7 +988,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <div className="pointer-events-auto flex h-[69px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-6 shadow-[0_18px_55px_rgba(0,0,0,0.45)] backdrop-blur-xl">
                 <div className="flex items-center gap-4 text-[15px] text-white/65">
                   <Info className="h-5 w-5 text-white/60" />
-                  <span>{showStaticBuildState ? "La app todavía no tiene código frontend renderizable." : "You're viewing a live preview. Use Refresh to reload the latest build."}</span>
+                  <span>{showStaticBuildState ? "La app todavía no tiene código frontend renderizable." : "Vista en vivo activa. Usa Refrescar para recargar el último build."}</span>
                 </div>
                 <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/70 px-5 py-2.5 text-[15px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
                   {hasRenderableCode ? "Resume Preview" : "Cerrar preview"}

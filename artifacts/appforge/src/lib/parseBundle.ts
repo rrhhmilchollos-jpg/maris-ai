@@ -26,12 +26,11 @@ export function parseBundle(bundle: string): Record<string, string> {
   return out;
 }
 
-// IMPORTANT: Sandpack's `react-ts` template is Vite-based and reads /index.html
-// from the project root (NOT /public/index.html, that's the CRA convention).
-// The script tag must point at /index.tsx as a module so the React entry runs.
-// Without injecting Tailwind via CDN here, every utility class (flex, grid,
-// w-full, p-4, …) silently no-ops and the preview looks like raw browser
-// defaults — links underlined in purple, blocks stacked, no layout.
+// IMPORTANT: Sandpack's `vite-react-ts` template reads /index.html from the
+// project root. The script tag must point at /index.tsx as a module so the
+// React entry runs. Without injecting Tailwind via CDN here, every utility
+// class (flex, grid, w-full, p-4, …) silently no-ops and the preview looks
+// like raw browser defaults — links underlined in purple, blocks stacked, no layout.
 const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -50,14 +49,11 @@ const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
   </body>
 </html>`;
 
-// Sandpack's react-ts template ships a minimal index.html that we cannot
-// reliably override (different versions look at /index.html vs
-// /public/index.html, and the classic bundler regenerates parts of it). The
-// only place we fully control is the React entry — so inject the Tailwind
-// Play CDN script at runtime, before mounting the app, and reset the body so
-// the app actually fills the viewport. Without this every utility class is a
-// no-op and the preview renders with default browser styles (links underlined
-// in purple, blocks stacked, no layout).
+// The vite-react-ts template uses /index.html at the root. We inject Tailwind
+// CDN at runtime via the index.tsx entry so the app fills the viewport and all
+// utility classes work. Without this every utility class is a no-op and the
+// preview renders with default browser styles (links underlined in purple,
+// blocks stacked, no layout).
 // __EXTRA_CSS_IMPORTS__ is a placeholder we substitute at runtime with one
 // `import "./styles/<file>.css";` line per custom CSS file the model emitted.
 // Without this, files like src/styles/animations.css are silently dropped (the
@@ -199,6 +195,10 @@ function normalizeForSandpack(path: string): string | null {
  * SandpackProvider.
  */
 export const SANDPACK_DEPENDENCIES: Record<string, string> = {
+  // React is already in the vite-react-ts template but we pin it explicitly
+  // so customSetup.dependencies doesn't accidentally override with an older version.
+  react: "^18.3.1",
+  "react-dom": "^18.3.1",
   "lucide-react": "^0.460.0",
   clsx: "^2.1.1",
   "tailwind-merge": "^2.5.4",
@@ -261,11 +261,14 @@ export function buildSandpackFiles(parsed: Record<string, string>): SandpackFile
   }
 
   // Always inject the tailwind CDN via our preview index.html (Sandpack cannot
-  // run a real postcss/tailwind build pipeline). The Vite-based react-ts
-  // template uses /index.html at the root — writing /public/index.html is a
-  // no-op there. We write both paths defensively in case Sandpack ever
-  // switches templates.
+  // run a real postcss/tailwind build pipeline). The vite-react-ts template
+  // uses /index.html at the root. We also write /public/index.html defensively.
   files["/index.html"] = PREVIEW_INDEX_HTML;
   files["/public/index.html"] = PREVIEW_INDEX_HTML;
+  // Ensure vite.config.ts is NOT included (it was already in SKIP_PATHS but
+  // some generators emit it under different paths). Sandpack's vite-react-ts
+  // template ships its own vite config; a user-supplied one can break the build.
+  delete files["/vite.config.ts"];
+  delete files["/vite.config.js"];
   return files;
 }
