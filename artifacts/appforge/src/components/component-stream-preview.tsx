@@ -7,7 +7,7 @@
  * file paths, and a progress indicator per component.
  *
  * This creates the "magic" feeling of watching the AI build your app live,
- * similar to emergent.sh but with richer per-component metadata.
+ * with rich per-component metadata.
  */
 
 import React, { useEffect, useState, useRef } from "react";

@@ -1,5 +1,5 @@
 /**
- * Live Preview Component (Emergent.sh Clone)
+ * Live Preview Component
  * 
  * Displays a real-time preview of the app being built.
  * Supports both Vercel deployment URL and local WebContainer execution.
@@ -179,7 +179,7 @@ export function LivePreview({
     setIsExpanded(!isExpanded);
   };
 
-  // Render the header (Emergent style)
+  // Render the header
   const renderHeader = () => (
     <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-[#0d0d12]">
       <h3 className="text-sm font-medium text-white">App Preview</h3>
@@ -298,7 +298,7 @@ export function LivePreview({
         {renderContent()}
       </div>
       
-      {/* Footer (Emergent style) */}
+      {/* Footer */}
       <div className="px-4 py-2.5 border-t border-white/10 bg-[#0d0d12]/80 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${phase === 'ready' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />

@@ -11,7 +11,7 @@ Maris AI es una plataforma innovadora que permite generar aplicaciones web y mó
 
 Nuestro pipeline incluye agentes como Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator. Cada agente está optimizado con modelos de IA de última generación (Claude Haiku 4.5, Claude Sonnet 4.6, Claude Opus 4.7, Gemini 3 Pro Image, GPT-5.4) para realizar su tarea específica, garantizando un resultado de alta calidad y sin compromisos.
 
-Maris AI soporta la generación de código React + TypeScript + Tailwind para el frontend, y un backend robusto con Express + Drizzle ORM + PostgreSQL. Además, ofrece funcionalidades avanzadas como la exportación a GitHub, despliegue directo en Vercel, generación de imágenes con IA y evaluación visual automática. Es la alternativa perfecta en español a plataformas como Emergent.sh y Base44, ofreciendo una solución integral para desarrolladores y emprendedores que buscan acelerar la creación de sus productos digitales.
+Maris AI soporta la generación de código React + TypeScript + Tailwind para el frontend, y un backend robusto con Express + MongoDB. Además, ofrece funcionalidades avanzadas como la exportación a GitHub, despliegue directo en Vercel, generación de imágenes con IA y evaluación visual automática. Es la Plataforma líder de generación de apps con IA para el mercado hispanohablante.
 
 ### 4. Logo
 PNG en 512x512 px (URL: `https://marisai.es/logo.svg`)
@@ -30,7 +30,7 @@ Se necesitan 2-3 capturas de pantalla de alta calidad de la plataforma en funcio
 `rrhh.milchollos@gmail.com`
 
 ### 8. Descripción para There's An AI For That (TAAFT)
-Maris AI genera aplicaciones web y móviles completas usando un pipeline de 9 agentes de IA especializados: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator. De la idea al código React full-stack desplegado en minutos. Alternativa en español a Emergent.sh y Base44.
+Maris AI genera aplicaciones web y móviles completas usando un pipeline de 9 agentes de IA especializados: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator. De la idea al código React full-stack desplegado en minutos. Plataforma líder de generación de apps con IA para el mercado hispanohablante.
 
 ### Directorios Gratuitos Recomendados
 *   **Futurepedia:** `futurepedia.io/submit-tool`
