@@ -16,7 +16,7 @@ import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
-import { TEMPLATES } from "../lib/templates";
+import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import { pushAppToGitHub } from "../lib/githubPush";
@@ -25,6 +25,13 @@ import { connectDB } from "@workspace/db";
 
 /** Source language the generated app uses. Affects file extensions + prompt rules. */
 export type GenLanguage = "typescript" | "javascript";
+
+interface RouteGenerationRequestContext {
+  kind?: string;
+  detectedLocale?: string;
+  detectedCountry?: string;
+  uiLanguage?: string;
+}
 
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
@@ -501,10 +508,11 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
 /**
  * Architect — Gemini 2.5 Flash.
  */
-async function architectPlan(prompt: string, research: string): Promise<ProjectPlan> {
+async function architectPlan(prompt: string, research: string, templateContext = ""): Promise<ProjectPlan> {
+  const templateNote = templateContext ? `\n\n${templateContext}` : "";
   const userContent = research
-    ? `Design the file structure for this app:\n\n${prompt}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
-    : `Design the file structure for this app:\n\n${prompt}`;
+    ? `Design the file structure for this app:\n\n${prompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
+    : `Design the file structure for this app:\n\n${prompt}${templateNote}`;
 
   const response = await withTimeoutOrThrow(
     anthropic.messages.create({
@@ -536,11 +544,12 @@ async function architectPlan(prompt: string, research: string): Promise<ProjectP
 /**
  * Designer — Gemini 2.5 Flash.
  */
-async function designSystem(plan: ProjectPlan, research: string): Promise<DesignSystem> {
+async function designSystem(plan: ProjectPlan, research: string, templateContext = ""): Promise<DesignSystem> {
   const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
+  const templateNote = templateContext ? `\n\n${templateContext}` : "";
   const userContent = research
-    ? `${summary}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
-    : summary;
+    ? `${summary}${templateNote}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
+    : `${summary}${templateNote}`;
   let raw = "";
   try {
     const response = await withTimeoutOrThrow(
@@ -611,6 +620,7 @@ async function generateFrontendCode(
   onChars: (chars: number) => void,
   coderModel: string | undefined,
   language: GenLanguage,
+  templateContext = "",
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -624,7 +634,7 @@ async function generateFrontendCode(
   const designSummary = JSON.stringify(design);
 
   const userContent = `User request: ${prompt}
-
+${templateContext ? `\n${templateContext}\n` : ""}
 Project plan (you MUST implement every listed file):
 ${planSummary}
 
@@ -721,6 +731,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 async function generateBackendCode(
   plan: ProjectPlan,
   prompt: string,
+  templateContext = "",
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
@@ -731,7 +742,7 @@ async function generateBackendCode(
     requiredFiles: plan.backendFiles,
   });
   const userContent = `User request: ${prompt}
-
+${templateContext ? `\n${templateContext}\n` : ""}
 Backend plan (implement every listed file with real Express handlers):
 ${planSummary}
 
@@ -1534,6 +1545,7 @@ export async function generateApp(
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
   agentMemory?: AgentMemoryContext,
+  requestContext?: RouteGenerationRequestContext,
 ): Promise<GeneratedAppPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
@@ -1549,6 +1561,14 @@ export async function generateApp(
 
   const attachmentBlock = buildAttachmentBlock(attachments);
   if (attachmentBlock) prompt = `${attachmentBlock}\n${prompt}`;
+
+  const templateContextBlock = buildAgentTemplateContextBlock({
+    prompt,
+    kind: requestContext?.kind,
+    detectedLocale: requestContext?.detectedLocale ?? extractPromptContext(prompt, "locale"),
+    detectedCountry: requestContext?.detectedCountry ?? extractPromptContext(prompt, "country"),
+    uiLanguage: requestContext?.uiLanguage ?? extractPromptContext(prompt, "uiLanguage"),
+  });
 
   const log: AgentLog = async (agent, message, level = "info") => {
     try { await onAgentLog?.(agent, message, level); } catch { /* swallow */ }
@@ -1672,7 +1692,7 @@ export async function generateApp(
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
   await log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research), 60_000, "architect"),
+    withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock), 60_000, "architect"),
   );
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
@@ -1701,7 +1721,7 @@ export async function generateApp(
     globalCSS: "",
   };
   const designPromise: Promise<DesignSystem> = runDesign
-    ? runPhase("design", () => designSystem(plan, research))
+    ? runPhase("design", () => designSystem(plan, research, templateContextBlock))
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
@@ -1738,7 +1758,7 @@ export async function generateApp(
           lastLogChars = chars;
           await log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
-      }, coderModel, language),
+      }, coderModel, language, templateContextBlock),
       600_000,
       "frontend-engineer",
     ),
@@ -1746,7 +1766,7 @@ export async function generateApp(
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
-    ? runPhase("backend", () => generateBackendCode(plan, prompt))
+    ? runPhase("backend", () => generateBackendCode(plan, prompt, templateContextBlock))
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
@@ -1851,6 +1871,43 @@ const KIND_COSTS: Record<string, number> = {
   "game-3d":    5, // Proyecto muy complejo
 };
 
+
+
+const COUNTRY_TO_UI_LANGUAGE: Record<string, string> = {
+  ES: "es", MX: "es", AR: "es", CO: "es", CL: "es", PE: "es", VE: "es", EC: "es", UY: "es", PY: "es", BO: "es", CR: "es", PA: "es", DO: "es", GT: "es", HN: "es", NI: "es", SV: "es", PR: "es",
+  US: "en", GB: "en", IE: "en", CA: "en", AU: "en", NZ: "en",
+  FR: "fr", BE: "fr", CH: "de", DE: "de", AT: "de", IT: "it", PT: "pt", BR: "pt", NL: "nl", PL: "pl"
+};
+
+function firstHeaderValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+function extractPromptContext(prompt: string | undefined, key: string): string | undefined {
+  if (!prompt) return undefined;
+  const match = prompt.match(new RegExp(`${key}=([^;\n]+)`));
+  const value = match?.[1]?.trim();
+  return value && value !== "unknown" ? value : undefined;
+}
+
+function detectRequestLocale(req: any): { country?: string; uiLanguage: string; locale: string; source: string } {
+  const country = (
+    firstHeaderValue(req.headers?.["cf-ipcountry"]) ||
+    firstHeaderValue(req.headers?.["x-vercel-ip-country"]) ||
+    firstHeaderValue(req.headers?.["x-country-code"]) ||
+    firstHeaderValue(req.headers?.["x-appengine-country"])
+  )?.toUpperCase();
+
+  const acceptLanguage = firstHeaderValue(req.headers?.["accept-language"]);
+  const acceptedLocale = acceptLanguage?.split(",")[0]?.trim();
+  const acceptedLanguage = acceptedLocale?.split("-")[0]?.toLowerCase();
+  const countryLanguage = country ? COUNTRY_TO_UI_LANGUAGE[country] : undefined;
+  const uiLanguage = countryLanguage || acceptedLanguage || "es";
+  const locale = acceptedLocale || (country ? `${uiLanguage}-${country}` : uiLanguage);
+  return { country, uiLanguage, locale, source: countryLanguage ? "ip-country-header" : acceptedLanguage ? "accept-language" : "fallback" };
+}
+
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
@@ -1906,11 +1963,14 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
       });
     }
 
+    const requestLocale = detectRequestLocale(req);
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${prompt}`;
+
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
       _id: jobId,
       userId,
-      prompt,
+      prompt: generationPrompt,
       coderModel: model || "auto",
       language: language || "typescript",
       kind: kind || "fullstack",
@@ -2073,6 +2133,9 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     await AppMessage.create({ appId: req.params.id, role: "user", content });
 
+    const requestLocale = detectRequestLocale(req);
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${prompt}`;
+
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
       _id: jobId,
@@ -2130,6 +2193,9 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
           : "Necesitas créditos para reintentar la generación.",
       });
     }
+
+    const requestLocale = detectRequestLocale(req);
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${prompt}`;
 
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
@@ -2292,6 +2358,12 @@ export async function runJobById(jobId: string): Promise<void> {
       [],
       undefined,
       job.checkpointData ? (job.checkpointData as any) : undefined,
+      {
+        kind: job.kind,
+        detectedLocale: extractPromptContext(job.prompt, "locale"),
+        detectedCountry: extractPromptContext(job.prompt, "country"),
+        uiLanguage: extractPromptContext(job.prompt, "uiLanguage"),
+      },
     );
 
     if ((result as any).phase?.startsWith("awaiting_")) {
