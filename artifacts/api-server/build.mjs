@@ -7,61 +7,69 @@ import { rm, rename } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(artifactDir, "../..");
-async function buildAll() {
-  const distDir = path.resolve(artifactDir, "dist");
-  const distTmpDir = path.resolve(artifactDir, "dist-tmp");
 
-  // Build into a temp dir so the running server is not interrupted
-  await rm(distTmpDir, { recursive: true, force: true });
-  await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
-    platform: "node",
-    bundle: true,
-    format: "esm",
-    outdir: distTmpDir,
-    outExtension: { ".js": ".mjs" },
-    logLevel: "info",
-    alias: {
-      "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
-      "@workspace/db": path.resolve(repoRoot, "lib/db/src/index.ts"),
-      "@workspace/integrations-gemini-ai": path.resolve(repoRoot, "lib/integrations-gemini-ai/src/index.ts"),
-      "@workspace/integrations-anthropic-ai": path.resolve(repoRoot, "lib/integrations-anthropic-ai/src/index.ts"),
-      "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
-    },
-    external: [
-      "esbuild", "pg", "*.node", "sharp", "better-sqlite3", "sqlite3", "canvas",
-      "bcrypt", "argon2", "fsevents", "re2", "farmhash", "xxhash-addon",
-      "bufferutil", "utf-8-validate", "ssh2", "cpu-features", "dtrace-provider",
-      "isolated-vm", "lightningcss", "pg-native", "oracledb",
-      "mongodb-client-encryption", "nodemailer", "handlebars", "knex", "typeorm",
-      "protobufjs", "onnxruntime-node", "@tensorflow/*", "@prisma/client",
-      "@mikro-orm/*", "@grpc/*", "@swc/*", "@aws-sdk/*", "@azure/*",
-      "@google-cloud/*", "@google/*", "googleapis", "firebase-admin",
-      "@parcel/watcher", "@sentry/profiling-node", "@tree-sitter/*", "aws-sdk",
-      "classic-level", "dd-trace", "ffi-napi", "grpc", "hiredis", "kerberos",
-      "leveldown", "miniflare", "mysql2", "newrelic", "odbc", "piscina", "realm",
-      "ref-napi", "rocksdb", "sass-embedded", "sequelize", "serialport", "snappy",
-      "tinypool", "usb", "workerd", "wrangler", "zeromq", "zeromq-prebuilt",
-      "playwright", "puppeteer", "puppeteer-core", "electron",
-    ],
-    sourcemap: "linked",
-    plugins: [
-      esbuildPluginPino({ transports: ["pino-pretty"] }),
-    ],
-    banner: {
-      js: `import { createRequire as __bannerCrReq } from 'node:module';
+const SHARED_CONFIG = {
+  platform: "node",
+  bundle: true,
+  format: "esm",
+  outExtension: { ".js": ".mjs" },
+  logLevel: "info",
+  alias: {
+    "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
+    "@workspace/db": path.resolve(repoRoot, "lib/db/src/index.ts"),
+    "@workspace/integrations-gemini-ai": path.resolve(repoRoot, "lib/integrations-gemini-ai/src/index.ts"),
+    "@workspace/integrations-anthropic-ai": path.resolve(repoRoot, "lib/integrations-anthropic-ai/src/index.ts"),
+    "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
+  },
+  external: [
+    "esbuild", "pg", "*.node", "sharp", "better-sqlite3", "sqlite3", "canvas",
+    "bcrypt", "argon2", "fsevents", "re2", "farmhash", "xxhash-addon",
+    "bufferutil", "utf-8-validate", "ssh2", "cpu-features", "dtrace-provider",
+    "isolated-vm", "lightningcss", "pg-native", "oracledb",
+    "mongodb-client-encryption", "nodemailer", "handlebars", "knex", "typeorm",
+    "protobufjs", "onnxruntime-node", "@tensorflow/*", "@prisma/client",
+    "@mikro-orm/*", "@grpc/*", "@swc/*", "@aws-sdk/*", "@azure/*",
+    "@google-cloud/*", "@google/*", "googleapis", "firebase-admin",
+    "@parcel/watcher", "@sentry/profiling-node", "@tree-sitter/*", "aws-sdk",
+    "classic-level", "dd-trace", "ffi-napi", "grpc", "hiredis", "kerberos",
+    "leveldown", "miniflare", "mysql2", "newrelic", "odbc", "piscina", "realm",
+    "ref-napi", "rocksdb", "sass-embedded", "sequelize", "serialport", "snappy",
+    "tinypool", "usb", "workerd", "wrangler", "zeromq", "zeromq-prebuilt",
+    "playwright", "puppeteer", "puppeteer-core", "electron",
+  ],
+  sourcemap: "linked",
+  plugins: [
+    esbuildPluginPino({ transports: ["pino-pretty"] }),
+  ],
+  banner: {
+    js: `import { createRequire as __bannerCrReq } from 'node:module';
 import __bannerPath from 'node:path';
 import __bannerUrl from 'node:url';
 globalThis.require = __bannerCrReq(import.meta.url);
 globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
 globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
-    },
-  });
+  },
+};
 
-  // Swap dist-tmp → dist atomically after a successful build
+async function buildAll() {
+  const distDir = path.resolve(artifactDir, "dist");
+
+  // Build directly into dist.
+  // NOTE: pino-plugin embeds the absolute outdir path into the bundle so
+  // building into a temp dir and renaming causes "Cannot find module dist-tmp/…"
+  // at runtime. We clear dist first to avoid stale artefacts.
   await rm(distDir, { recursive: true, force: true });
-  await rename(distTmpDir, distDir);
+
+  // Build API server (index.ts) and Worker (worker.ts)
+  await esbuild({
+    ...SHARED_CONFIG,
+    entryPoints: [
+      path.resolve(artifactDir, "src/index.ts"),
+      path.resolve(artifactDir, "src/worker.ts"),
+    ],
+    outdir: distDir,
+  });
 }
 buildAll().catch((err) => {
   console.error(err);

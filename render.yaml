@@ -7,8 +7,8 @@ services:
     env: node
     region: oregon
     plan: starter # Escalar según demanda
-    buildCommand: cd artifacts/api-server && npm install && npm run build
-    startCommand: cd artifacts/api-server && npm run start
+    buildCommand: npm install -g pnpm@10.11.0 && pnpm install --no-frozen-lockfile && cd artifacts/api-server && pnpm run build
+    startCommand: cd artifacts/api-server && pnpm run start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -27,9 +27,13 @@ services:
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
       - key: CLERK_WEBHOOK_SECRET
         sync: false
       - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
@@ -47,9 +51,13 @@ services:
         sync: false
       - key: JOB_CONCURRENCY
         value: "3" # Concurrencia en el API server
+      - key: VERCEL_TOKEN
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
 
   # ============================================================================
-  # BullMQ Worker Service (Background Job Processing)
+  # Worker Service (Background Job Processing)
   # ============================================================================
   # Este servicio procesa trabajos de generación de apps en paralelo.
   # Puedes escalar horizontalmente agregando más instancias de este worker.
@@ -59,8 +67,8 @@ services:
     env: node
     region: oregon
     plan: starter # Escalar según demanda
-    buildCommand: cd artifacts/api-server && npm install && npm run build
-    startCommand: cd artifacts/api-server && npm run start:worker
+    buildCommand: npm install -g pnpm@10.11.0 && pnpm install --no-frozen-lockfile && cd artifacts/api-server && pnpm run build
+    startCommand: cd artifacts/api-server && pnpm run start:worker
     envVars:
       - key: NODE_ENV
         value: production
@@ -69,6 +77,8 @@ services:
       - key: REDIS_URL
         sync: false # URL de Redis para BullMQ (debe ser la misma que en el API)
       - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
@@ -80,3 +90,5 @@ services:
         value: "10" # Concurrencia en el worker (aumenta para más paralelismo)
       - key: LOG_LEVEL
         value: info
+      - key: SENTRY_DSN
+        sync: false

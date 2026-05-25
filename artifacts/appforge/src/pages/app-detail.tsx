@@ -71,6 +71,7 @@ const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   generating: { label: "Aplicando cambios al código…", icon: Zap },
   reviewing: { label: "Revisión de calidad…", icon: Sparkles },
   validating: { label: "Compilando en memoria…", icon: Sparkles },
+  testing: { label: "🧪 Testing Agent verificando errores…", icon: Sparkles },
   fixing: { label: "Auto-reparación…", icon: Sparkles },
   parsing: { label: "Empaquetando archivos…", icon: Sparkles },
   ready: { label: "Listo", icon: Sparkles },
