@@ -305,7 +305,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleSend = () => {
     const trimmed = draft.trim();
-    if (trimmed.length < 2 || sendMutation.isPending || effectiveJobId !== null) return;
+    if (trimmed.length < 2 || sendMutation.isPending || isActivelyProcessing) return;
     sendMutation.mutate({
       id,
       data: {
@@ -332,7 +332,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const phaseInfo = PHASE_LABELS[job?.phase ?? "queued"] ?? PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
-  const isWorking = effectiveJobId !== null || job?.status === "awaiting_approval" || activeAppJob?.status === "awaiting_approval";
+  // isWorking = hay un job activo procesando (no en awaiting_approval, que es cuando el usuario puede enviar mensajes)
+  const jobStatus = job?.status ?? activeAppJob?.status;
+  const isAwaitingApproval = jobStatus === "awaiting_approval";
+  const isActivelyProcessing = effectiveJobId !== null && !isAwaitingApproval;
+  const isWorking = isActivelyProcessing || isAwaitingApproval;
   const firstName = me?.name?.split(" ")?.[0] || me?.firstName || user?.firstName || "Ivan";
   const visibleMessages = ((messages ?? []) as ChatMessage[]).filter((msg) => !isTechnicalAssistantMessage(msg));
   const assistantMessages = visibleMessages.filter((msg) => msg.role !== "user");
@@ -736,8 +740,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
           <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
           <div className="flex items-center gap-3">
-            <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || effectiveJobId !== null} />
-            <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || effectiveJobId !== null} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+            <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || isActivelyProcessing} />
+            <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
               {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Enviar
             </Button>
