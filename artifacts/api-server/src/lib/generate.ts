@@ -1934,7 +1934,7 @@ export async function generateApp(
     await log("coder", `Frontend falló: ${frontendResult.truncated ? "truncado por tokens" : (frontendResult.error ?? "desconocido")}`, "error");
     throw new Error(
       frontendResult.truncated
-        ? "El ingeniero de frontend se quedó sin tokens. Pide una app más pequeña o más específica."
+        ? "La app es demasiado compleja para generarla de una vez. Prueba describiendo menos funcionalidades, por ejemplo: primero el login, luego el dashboard. O selecciona el modelo Opus para apps más grandes."
         : `No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`,
     );
   }
