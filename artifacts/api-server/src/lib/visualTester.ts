@@ -1,9 +1,7 @@
 import { execSync } from "node:child_process";
 import puppeteer, { type Browser, type Page } from "puppeteer";
-import { and, eq } from "drizzle-orm";
 import type { Logger } from "pino";
-import { db } from "./db";
-import { generatedApps } from "@workspace/db/schema";
+import { GeneratedApp } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { validateBundle } from "./validate";
 
@@ -498,17 +496,12 @@ export async function runVisualTester(opts: {
     // the WHERE matches 0 rows and we abort (better stale screenshot than
     // clobbered user edits).
     const previousBundle = currentBundle;
-    const updated = await db
-      .update(generatedApps)
-      .set({ frontendCode: patched })
-      .where(
-        and(
-          eq(generatedApps.id, app.id),
-          eq(generatedApps.frontendCode, previousBundle),
-        ),
-      )
-      .returning({ id: generatedApps.id });
-    if (updated.length === 0) {
+    const updated = await GeneratedApp.findOneAndUpdate(
+      { _id: String(app.id), frontendCode: previousBundle },
+      { frontendCode: patched },
+      { new: false },
+    );
+    if (!updated) {
       log?.warn(
         { appId: app.id, cycle },
         "VisualTester aborted — bundle changed concurrently (chat edit?)",

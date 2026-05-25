@@ -1,8 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, and } from "drizzle-orm";
-import { db } from "../lib/db";
-import { appImages as _appImages } from "@workspace/db/schema";
-const appImages = _appImages as any;
+import { AppImage } from "@workspace/db/schema";
 
 const router: IRouter = Router();
 
@@ -19,29 +16,24 @@ const router: IRouter = Router();
 router.get(
   "/apps/:appId/images/:imageId",
   async (req: Request, res: Response) => {
-    const appId = Number(req.params.appId);
-    const imageId = Number(req.params.imageId);
-    if (!Number.isInteger(appId) || !Number.isInteger(imageId)) {
-      res.status(400).json({ error: "Invalid id" });
-      return;
-    }
-    const [row] = await db
-      .select()
-      .from(appImages)
-      .where(and(eq(appImages.id, imageId), eq(appImages.appId, appId)))
-      .limit(1);
+    const appId = req.params.appId;
+    const imageId = req.params.imageId;
+
+    const row = await AppImage.findOne({ _id: imageId, appId }).lean();
     if (!row) {
       res.status(404).json({ error: "Image not found" });
       return;
     }
+
     let buffer: Buffer;
     try {
-      buffer = Buffer.from(row.data, "base64");
+      buffer = Buffer.from((row as any).data, "base64");
     } catch {
       res.status(500).json({ error: "Corrupt image data" });
       return;
     }
-    res.setHeader("Content-Type", row.mimeType || "image/png");
+
+    res.setHeader("Content-Type", (row as any).mimeType || "image/png");
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     res.setHeader("Content-Length", buffer.length.toString());
     // Public images are referenced from the Sandpack live-preview iframe,

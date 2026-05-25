@@ -12,9 +12,7 @@
  *
  * Self-cleanup: every row inserted by this test is deleted at the end.
  */
-import { db } from "../lib/db";
-import { agentMemory } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { AgentMemory } from "@workspace/db/schema";
 import {
   embedText,
   rememberPatch,
@@ -42,7 +40,7 @@ async function cleanup(): Promise<void> {
   if (insertedIds.length === 0) return;
   for (const id of insertedIds) {
     try {
-      await db.delete(agentMemory).where(eq(agentMemory.id, id));
+      await AgentMemory.deleteOne({ _id: id });
     } catch {
       /* best-effort cleanup */
     }

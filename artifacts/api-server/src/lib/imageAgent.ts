@@ -1,9 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
-import { eq } from "drizzle-orm";
-import { db } from "./db";
-import {appImages as _appImages, generatedApps as _generatedApps} from "@workspace/db/schema";
-const appImages = _appImages as any;
-const generatedApps = _generatedApps as any;
+import { AppImage, GeneratedApp } from "@workspace/db/schema";
 import { logger } from "./logger";
 
 /* ============================================================================
@@ -194,11 +190,7 @@ export interface GenerateAppImagesResult {
 export async function generateAppImages(
   appId: number,
 ): Promise<GenerateAppImagesResult> {
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(eq(generatedApps.id, appId))
-    .limit(1);
+  const row = await GeneratedApp.findById(appId).lean();
   if (!row) {
     throw new Error("App not found");
   }
@@ -218,17 +210,14 @@ export async function generateAppImages(
   let successCount = 0;
   for (const item of generated) {
     if (!item) continue;
-    const [inserted] = await db
-      .insert(appImages)
-      .values({
-        appId,
-        mimeType: item.mimeType,
-        data: item.b64_json,
-        altText: item.placeholder.altText,
-        originalUrl: item.placeholder.url,
-      })
-      .returning({ id: appImages.id });
-    const newUrl = `${appBaseUrl()}/api/apps/${appId}/images/${inserted.id}`;
+    const inserted = await AppImage.create({
+      appId: String(appId),
+      mimeType: item.mimeType,
+      data: item.b64_json,
+      altText: item.placeholder.altText,
+      originalUrl: item.placeholder.url,
+    });
+    const newUrl = `${appBaseUrl()}/api/apps/${appId}/images/${inserted._id}`;
     // Replace ALL occurrences of the placeholder URL — same image often shows
     // up multiple times across the bundle (different components reference it).
     const escaped = item.placeholder.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -238,10 +227,7 @@ export async function generateAppImages(
 
   const bundleUpdated = bundle !== row.frontendCode;
   if (bundleUpdated) {
-    await db
-      .update(generatedApps)
-      .set({ frontendCode: bundle })
-      .where(eq(generatedApps.id, appId));
+    await GeneratedApp.updateOne({ _id: appId }, { frontendCode: bundle });
   }
 
   return {
