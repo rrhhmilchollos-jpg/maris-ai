@@ -1,12 +1,23 @@
 /**
  * Live Preview Component
- * 
- * Displays a real-time preview of the app being built.
- * Supports both Vercel deployment URL and local WebContainer execution.
+ *
+ * Muestra una vista previa en tiempo real de la app generada.
+ * Soporta URL de Vercel y ejecución local con WebContainer.
+ * Incluye consola de PC estilo Manus (terminal integrada).
  */
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { RefreshCw, Share2, Maximize2, X, Play, Loader2, AlertTriangle, ExternalLink } from "lucide-react";
+import {
+  RefreshCw,
+  Share2,
+  Maximize2,
+  X,
+  Play,
+  AlertTriangle,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { parseBundle } from "@/lib/parseBundle";
 import {
@@ -36,6 +47,15 @@ interface LivePreviewProps {
   onClose?: () => void;
 }
 
+/** Colorea una línea de log según su contenido */
+function logLineColor(line: string): string {
+  if (/✗|error|Error|FAILED|failed/i.test(line)) return "text-red-400";
+  if (/warn|warning/i.test(line)) return "text-amber-400";
+  if (/✓|ready|OK|listo|success/i.test(line)) return "text-emerald-400";
+  if (/^📦|^📁|^🚀|^⏳/.test(line)) return "text-blue-400";
+  return "text-slate-300";
+}
+
 export function LivePreview({
   appId,
   appName,
@@ -52,9 +72,11 @@ export function LivePreview({
   const [logs, setLogs] = useState<string[]>([]);
   const [supported] = useState(() => isWebContainerSupported());
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showConsole, setShowConsole] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const devProcRef = useRef<{ kill: () => void } | null>(null);
   const startingRef = useRef(false);
+  const consoleEndRef = useRef<HTMLDivElement | null>(null);
 
   const appendLog = useCallback((line: string) => {
     setLogs((prev) => {
@@ -63,12 +85,34 @@ export function LivePreview({
     });
   }, []);
 
+  // Auto-scroll de la consola al fondo cuando llegan nuevas líneas
+  useEffect(() => {
+    if (showConsole && consoleEndRef.current) {
+      consoleEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs, showConsole]);
+
+  // Mostrar consola automáticamente cuando arranca el WebContainer
+  useEffect(() => {
+    if (phase !== "idle" && phase !== "ready") {
+      setShowConsole(true);
+    }
+    if (phase === "ready") {
+      // Ocultar consola cuando el preview está listo (pero permitir reabrirla)
+      setTimeout(() => setShowConsole(false), 2000);
+    }
+    if (phase === "error") {
+      setShowConsole(true);
+    }
+  }, [phase]);
+
   const startWebContainer = useCallback(async () => {
     if (startingRef.current) return;
     startingRef.current = true;
     setErrorMsg(null);
     setLogs([]);
     setServerUrl(null);
+    setShowConsole(true);
     try {
       setPhase("booting");
       appendLog("⏳ Arrancando WebContainer (Node.js en el navegador)…");
@@ -79,11 +123,12 @@ export function LivePreview({
       const parsed = parseBundle(frontendCode);
       parsed["package.json"] = ensureDevScript(parsed["package.json"]);
       const tree = buildFileTree(parsed);
-      appendLog(`📁 Montando archivos en el container…`);
+      appendLog(`📁 Montando ${Object.keys(parsed).length} archivos en el container…`);
       await wc.mount(tree);
+      appendLog("✓ Archivos montados");
 
       setPhase("installing");
-      appendLog("📦 Ejecutando `npm install`…");
+      appendLog("📦 Ejecutando npm install…");
       const install = await wc.spawn("npm", ["install", "--no-audit", "--no-fund"]);
       install.output.pipeTo(
         new WritableStream({
@@ -98,7 +143,7 @@ export function LivePreview({
       appendLog("✓ Instalación OK");
 
       setPhase("starting");
-      appendLog("🚀 Iniciando `npm run dev`…");
+      appendLog("🚀 Iniciando npm run dev…");
       if (devProcRef.current) {
         try { devProcRef.current.kill(); } catch {}
       }
@@ -117,7 +162,7 @@ export function LivePreview({
         let settled = false;
         let offReady: (() => void) | undefined;
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        
+
         const cleanup = () => {
           if (offReady) { try { offReady(); } catch {} offReady = undefined; }
           if (timeoutId !== undefined) { clearTimeout(timeoutId); timeoutId = undefined; }
@@ -141,7 +186,7 @@ export function LivePreview({
 
       setServerUrl(url);
       setPhase("ready");
-      appendLog(`✓ Listo en ${url}`);
+      appendLog(`✓ Servidor listo en ${url}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMsg(msg);
@@ -153,7 +198,6 @@ export function LivePreview({
   }, [frontendCode, appendLog]);
 
   useEffect(() => {
-    // If we have a Vercel URL, use it immediately
     if (vercelUrl) {
       setServerUrl(vercelUrl);
       setPhase("ready");
@@ -175,15 +219,85 @@ export function LivePreview({
     }
   };
 
-  const handleExpand = () => {
-    setIsExpanded(!isExpanded);
-  };
+  const handleExpand = () => setIsExpanded(!isExpanded);
 
-  // Render the header
+  // ── Consola de PC estilo Manus ──────────────────────────────────────────
+  const renderConsole = () => (
+    <div className="border-t border-white/10 bg-[#0a0a0f] flex flex-col" style={{ height: showConsole ? "200px" : "36px" }}>
+      {/* Barra de título de la consola */}
+      <button
+        onClick={() => setShowConsole((v) => !v)}
+        className="flex items-center justify-between px-4 py-2 w-full hover:bg-white/5 transition-colors shrink-0"
+      >
+        <div className="flex items-center gap-2">
+          {/* Tres círculos estilo macOS */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/80" />
+            <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+            <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+          </div>
+          <Terminal className="w-3.5 h-3.5 text-white/40" />
+          <span className="text-[11px] font-mono font-bold text-white/50 uppercase tracking-widest">
+            Consola — WebContainer
+          </span>
+          {phase !== "idle" && phase !== "ready" && (
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
+              <span className="text-[10px] text-blue-400 font-mono">{phase}…</span>
+            </span>
+          )}
+          {phase === "ready" && (
+            <span className="text-[10px] text-emerald-400 font-mono">● listo</span>
+          )}
+          {phase === "error" && (
+            <span className="text-[10px] text-red-400 font-mono">✗ error</span>
+          )}
+        </div>
+        {showConsole ? (
+          <ChevronDown className="w-3.5 h-3.5 text-white/30" />
+        ) : (
+          <ChevronUp className="w-3.5 h-3.5 text-white/30" />
+        )}
+      </button>
+
+      {/* Cuerpo de la consola */}
+      {showConsole && (
+        <div className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] leading-relaxed space-y-0.5 custom-scrollbar">
+          {logs.length === 0 ? (
+            <span className="text-white/20">Esperando actividad del container…</span>
+          ) : (
+            logs.map((line, i) => (
+              <div key={i} className={`whitespace-pre-wrap break-all ${logLineColor(line)}`}>
+                <span className="text-white/20 select-none mr-2">$</span>{line}
+              </div>
+            ))
+          )}
+          <div ref={consoleEndRef} />
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Header ──────────────────────────────────────────────────────────────
   const renderHeader = () => (
     <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-[#0d0d12]">
-      <h3 className="text-sm font-medium text-white">App Preview</h3>
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${
+          phase === "ready" ? "bg-emerald-500 animate-pulse" :
+          phase === "error" ? "bg-red-500" :
+          phase === "idle" ? "bg-slate-600" :
+          "bg-blue-500 animate-pulse"
+        }`} />
+        <h3 className="text-sm font-medium text-white">{appName || "App Preview"}</h3>
+      </div>
       <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setShowConsole((v) => !v)}
+          title="Consola"
+          className={`p-1.5 rounded transition-colors ${showConsole ? "bg-white/10 text-white" : "hover:bg-white/10 text-slate-400 hover:text-white"}`}
+        >
+          <Terminal className="w-4 h-4" />
+        </button>
         <button onClick={handleExpand} className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors">
           <Maximize2 className="w-4 h-4" />
         </button>
@@ -207,7 +321,7 @@ export function LivePreview({
     </div>
   );
 
-  // Render the main content
+  // ── Contenido principal ─────────────────────────────────────────────────
   const renderContent = () => {
     if (phase === "ready" && serverUrl) {
       return (
@@ -229,9 +343,9 @@ export function LivePreview({
             <Play className="h-6 w-6 text-blue-400" />
           </div>
           <div className="space-y-2">
-            <h4 className="text-white font-semibold">Ready to preview</h4>
+            <h4 className="text-white font-semibold">Live Preview</h4>
             <p className="text-xs text-slate-400 max-w-xs">
-              Start a real Node.js environment to preview your app with full fidelity.
+              Arranca un entorno Node.js real en el navegador para ver tu app con máxima fidelidad.
             </p>
           </div>
           <Button onClick={startWebContainer} className="bg-blue-600 hover:bg-blue-500 text-white">
@@ -241,7 +355,6 @@ export function LivePreview({
       );
     }
 
-    // Loading / Error states
     return (
       <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
         {phase === "error" ? (
@@ -266,12 +379,12 @@ export function LivePreview({
               </div>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg text-white font-medium">Building something incredible ~!</h4>
+              <h4 className="text-lg text-white font-medium">Construyendo tu app…</h4>
               <p className="text-xs text-slate-500 font-mono">
-                {phase === "booting" && "Booting Node.js container..."}
-                {phase === "mounting" && "Mounting source files..."}
-                {phase === "installing" && "Installing dependencies..."}
-                {phase === "starting" && "Starting dev server..."}
+                {phase === "booting" && "Iniciando Node.js container…"}
+                {phase === "mounting" && "Montando archivos fuente…"}
+                {phase === "installing" && "Instalando dependencias (npm install)…"}
+                {phase === "starting" && "Iniciando servidor de desarrollo…"}
               </p>
             </div>
           </div>
@@ -287,6 +400,7 @@ export function LivePreview({
         <div className="flex-1 overflow-hidden">
           {renderContent()}
         </div>
+        {renderConsole()}
       </div>
     );
   }
@@ -294,28 +408,10 @@ export function LivePreview({
   return (
     <div className="flex flex-col h-full bg-[#0d0d12] border-l border-white/10 overflow-hidden">
       {renderHeader()}
-      <div className="flex-1 overflow-hidden bg-black relative">
+      <div className="flex-1 overflow-hidden bg-black relative min-h-0">
         {renderContent()}
       </div>
-      
-      {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-white/10 bg-[#0d0d12]/80 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${phase === 'ready' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
-          <p className="text-[11px] text-slate-400">
-            {phase === 'ready' ? "You're viewing a live preview. Resume to interact with the app." : "Preview status: " + phase}
-          </p>
-        </div>
-        {phase !== 'ready' && phase !== 'idle' && (
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/10">
-            Resume Preview
-          </Button>
-        )}
-        <div className="text-[10px] text-slate-600 font-medium flex items-center gap-1">
-          <div className="w-3 h-3 bg-white/10 rounded-full flex items-center justify-center text-[8px]">M</div>
-          Made with Maris AI
-        </div>
-      </div>
+      {renderConsole()}
     </div>
   );
 }
