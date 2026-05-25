@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
+import { useClerk, useUser } from "@clerk/react";
 import {
   useGetApp,
   useListAppMessages,
   useSendAppMessage,
   useGetGenerationJob,
+  useGetActiveAppJob,
+  getGetActiveAppJobQueryKey,
   useGetMyStats,
   getGetAppQueryKey,
   getListAppMessagesQueryKey,
@@ -25,6 +28,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
@@ -42,6 +54,11 @@ import {
   HelpCircle,
   Bell,
   ChevronDown,
+  CreditCard,
+  LayoutDashboard,
+  LogOut,
+  Shield,
+  ExternalLink,
 } from "lucide-react";
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
@@ -128,6 +145,8 @@ function AppPreviewWaitingState() {
 export default function AppDetailPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const [, setLocation] = useLocation();
+  const { signOut } = useClerk();
+  const { user } = useUser();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -154,10 +173,22 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: 3000 },
   });
 
-  const { data: job } = useGetGenerationJob(activeJobId ?? "", {
+  const { data: activeAppJob } = useGetActiveAppJob(id, {
     query: {
-      enabled: !!activeJobId,
-      queryKey: getGetGenerationJobQueryKey(activeJobId ?? ""),
+      enabled: !!id && !activeJobId,
+      queryKey: getGetActiveAppJobQueryKey(id),
+      refetchInterval: (data: any) => {
+        const status = data?.status;
+        return status && status !== "succeeded" && status !== "failed" ? 2000 : 5000;
+      },
+    },
+  });
+  const effectiveJobId = activeJobId ?? (activeAppJob?.id ? String(activeAppJob.id) : null);
+
+  const { data: job } = useGetGenerationJob(effectiveJobId ?? "", {
+    query: {
+      enabled: !!effectiveJobId,
+      queryKey: getGetGenerationJobQueryKey(effectiveJobId ?? ""),
       refetchInterval: (data: any) =>
         data?.status === "succeeded" || data?.status === "failed" ? false : 1000,
     },
@@ -166,7 +197,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const approveMutation = useApproveFacet({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(activeJobId ?? "") });
+        if (effectiveJobId) queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(effectiveJobId) });
+        queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
         toast({ title: "Aprobado", description: "Maris AI continúa construyendo la aplicación." });
       },
       onError: (err: any) => {
@@ -198,9 +230,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     if (job?.status === "succeeded") {
       queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
       toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha actualizado." });
     } else if (job?.status === "failed") {
+      queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
       toast({ title: "Error en la generación", description: job.error || "Algo salió mal", variant: "destructive" });
     }
@@ -228,31 +262,43 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleSend = () => {
     const trimmed = draft.trim();
-    if (trimmed.length < 2 || sendMutation.isPending || activeJobId !== null) return;
+    if (trimmed.length < 2 || sendMutation.isPending || effectiveJobId !== null) return;
     sendMutation.mutate({
       id,
       data: {
-        message: trimmed,
+        content: trimmed,
         attachmentIds: chatAttachments.map((a: any) => a.id),
       },
     });
   };
 
   const handleApprove = () => {
-    if (activeJobId && job?.status === "awaiting_approval") {
-      approveMutation.mutate({ id: String(activeJobId), data: { facet: "structure" } });
+    const approvalJobId = effectiveJobId;
+    const canApprove = approvalJobId && (job?.status === "awaiting_approval" || job?.awaitingApproval || activeAppJob?.awaitingApproval);
+
+    if (canApprove) {
+      approveMutation.mutate({ id: String(approvalJobId), data: { facet: "structure" } });
       return;
     }
+
+    if (approvalJobId) {
+      toast({
+        title: "Aprobación no disponible todavía",
+        description: `El trabajo está en estado ${job?.status || activeAppJob?.status || "desconocido"}. Maris AI activará la aprobación cuando el plan esté listo.`,
+      });
+      return;
+    }
+
     toast({
-      title: "Estructura lista",
-      description: "La interfaz mantiene el estado visual de aprobación mientras Maris AI prepara la vista previa.",
+      title: "Sin plan pendiente",
+      description: "No hay ningún trabajo esperando aprobación. Envía un mensaje a Maris AI para iniciar o continuar la generación.",
     });
   };
 
   const phaseInfo = PHASE_LABELS[job?.phase ?? "queued"] ?? PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
-  const isWorking = activeJobId !== null || job?.status === "awaiting_approval";
-  const firstName = me?.name?.split(" ")?.[0] || me?.firstName || "Ivan";
+  const isWorking = effectiveJobId !== null || job?.status === "awaiting_approval" || activeAppJob?.status === "awaiting_approval";
+  const firstName = me?.name?.split(" ")?.[0] || me?.firstName || user?.firstName || "Ivan";
   const assistantMessages = (messages ?? []).filter((msg: any) => msg.role !== "user");
   const latestAssistantMessage = assistantMessages[assistantMessages.length - 1]?.content;
   const frontendCode = String(app?.frontendCode ?? "").trim();
@@ -336,6 +382,25 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       toast({ title: "UI Builder activo", description: "Usa los controles del panel para refrescar, maximizar o desplegar la preview." });
     }
   };
+
+  const handleOpenHelp = () => {
+    if (typeof window !== "undefined") {
+      window.open("mailto:soporte@marisai.es?subject=Ayuda%20Maris%20AI", "_blank", "noopener,noreferrer");
+    }
+    toast({ title: "Ayuda abierta", description: "Se ha abierto un mensaje para contactar con soporte de Maris AI." });
+  };
+
+  const handleOpenDocs = () => {
+    if (typeof window !== "undefined") {
+      window.open("https://docs.marisai.es", "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const notificationItems = [
+    { title: appStatusLabel, description: hasRenderableCode ? "La preview tiene código renderizable." : "Maris AI sigue esperando código renderizable." },
+    { title: isWorking ? "Trabajo activo" : "Sin trabajo activo", description: isWorking ? phaseInfo.label : "No hay generación en curso ahora mismo." },
+    { title: deployedUrl ? "Deploy disponible" : "Deploy pendiente", description: deployedUrl || "Despliega cuando la preview esté lista." },
+  ];
 
   const renderSidebarPanel = () => {
     const panelTitle = NAV_ITEMS.find((item) => item.id === activeSidebar)?.label ?? "Chat";
@@ -542,8 +607,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
           <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
           <div className="flex items-center gap-3">
-            <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || activeJobId !== null} />
-            <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || activeJobId !== null} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+            <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || effectiveJobId !== null} />
+            <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || effectiveJobId !== null} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
               {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
               Enviar
             </Button>
@@ -590,15 +655,84 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </button>
           </div>
           <div className="flex items-center gap-5 text-white/70">
-            <button className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white"><HelpCircle className="h-[19px] w-[19px]" /></button>
-            <button className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
-              <Bell className="h-[19px] w-[19px]" />
-              <span className="absolute right-1 top-0 h-2 w-2 rounded-full bg-[#7c3aed]" />
-            </button>
-            <button className="flex items-center gap-2 rounded-full pl-1 pr-1.5 hover:bg-white/5">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-sm font-bold text-white">M</span>
-              <ChevronDown className="h-4 w-4 text-white/45" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Abrir ayuda" className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
+                  <HelpCircle className="h-[19px] w-[19px]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 border-white/10 bg-[#0f1320] text-white">
+                <DropdownMenuLabel>Ayuda de Maris AI</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem onClick={handleOpenDocs} className="cursor-pointer focus:bg-white/10 focus:text-white">
+                  <ExternalLink className="mr-2 h-4 w-4 text-white/55" />
+                  Abrir documentación
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleOpenHelp} className="cursor-pointer focus:bg-white/10 focus:text-white">
+                  <HelpCircle className="mr-2 h-4 w-4 text-white/55" />
+                  Contactar soporte
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Abrir notificaciones" className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
+                  <Bell className="h-[19px] w-[19px]" />
+                  <span className="absolute right-1 top-0 h-2 w-2 rounded-full bg-[#7c3aed]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 border-white/10 bg-[#0f1320] text-white">
+                <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                {notificationItems.map((item) => (
+                  <DropdownMenuItem key={item.title} onSelect={(event) => event.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
+                    <span className="text-sm font-semibold text-white">{item.title}</span>
+                    <span className="text-xs leading-relaxed text-white/55">{item.description}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Abrir menú de perfil" className="flex items-center gap-2 rounded-full pl-1 pr-1.5 hover:bg-white/5">
+                  <Avatar className="h-9 w-9 border border-white/10">
+                    <AvatarImage src={user?.imageUrl} alt={user?.fullName || firstName} />
+                    <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-sm font-bold text-white">{user?.firstName?.charAt(0) || firstName.charAt(0) || "M"}</AvatarFallback>
+                  </Avatar>
+                  <ChevronDown className="h-4 w-4 text-white/45" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60 border-white/10 bg-[#0f1320] text-white">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user?.fullName || me?.name || firstName}</p>
+                    <p className="text-xs leading-none text-white/45">{user?.primaryEmailAddress?.emailAddress || me?.email || "Cuenta Maris AI"}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem onClick={() => setLocation("/dashboard")} className="cursor-pointer focus:bg-white/10 focus:text-white">
+                  <LayoutDashboard className="mr-2 h-4 w-4 text-white/55" />
+                  Panel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLocation("/billing")} className="cursor-pointer focus:bg-white/10 focus:text-white">
+                  <CreditCard className="mr-2 h-4 w-4 text-white/55" />
+                  Facturación
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem onClick={() => setLocation("/admin")} className="cursor-pointer focus:bg-white/10 focus:text-white">
+                    <Shield className="mr-2 h-4 w-4 text-[#a78bfa]" />
+                    Panel admin
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))} className="cursor-pointer focus:bg-white/10 focus:text-white">
+                  <LogOut className="mr-2 h-4 w-4 text-white/55" />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
