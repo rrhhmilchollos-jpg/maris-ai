@@ -17,9 +17,9 @@ import {
   useDeployApp,
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { SandpackProvider, SandpackPreview, SandpackLayout } from "@codesandbox/sandpack-react";
 import { DeployModal } from "@/components/deploy-modal";
-import { parseBundle, buildSandpackFiles, SANDPACK_DEPENDENCIES } from "@/lib/parseBundle";
+import { LivePreview } from "@/components/live-preview";
+import { parseBundle } from "@/lib/parseBundle";
 import { Layout } from "@/components/layout";
 import {
   AttachmentPicker,
@@ -214,11 +214,19 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
+  // resolveJobId extrae el ID de un JOB (no de una app). Solo busca campos
+  // específicos de job para evitar que app.id (el ID de la propia app) sea
+  // confundido con un jobId, lo que bloqueaba el botón Enviar permanentemente.
   const resolveJobId = (value: any): string | null => {
+    const raw = value?.jobId ?? value?._id ?? value?.generationJobId ?? value?.currentJobId ?? value?.activeJobId;
+    return raw ? String(raw) : null;
+  };
+  // Para activeAppJob usamos su campo id (que sí es un jobId)
+  const resolveActiveJobId = (value: any): string | null => {
     const raw = value?.id ?? value?.jobId ?? value?._id ?? value?.generationJobId ?? value?.currentJobId ?? value?.activeJobId;
     return raw ? String(raw) : null;
   };
-  const effectiveJobId = activeJobId ?? resolveJobId(activeAppJob) ?? resolveJobId(app);
+  const effectiveJobId = activeJobId ?? resolveActiveJobId(activeAppJob) ?? resolveJobId(app);
 
   const { data: job } = useGetGenerationJob(effectiveJobId ?? "", {
     query: {
@@ -333,12 +341,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const hasMilestonePlaceholder = frontendCode.includes("El código ha sido consolidado en disco por hitos");
   const hasRenderableCode = frontendCode.length >= 20 && !hasMilestonePlaceholder;
   const deployedUrl = app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "");
-  const sandpackFiles = useMemo(() => {
-    if (!hasRenderableCode) return null;
-    return buildSandpackFiles(parseBundle(frontendCode));
-  }, [frontendCode, hasRenderableCode]);
-  const showStaticBuildState = !hasRenderableCode || !sandpackFiles;
-  const renderedFileCount = sandpackFiles ? Object.keys(sandpackFiles).length : 0;
+  const showStaticBuildState = !hasRenderableCode;
+  const renderedFileCount = hasRenderableCode ? parseBundle(frontendCode) ? Object.keys(parseBundle(frontendCode)).length : 0 : 0;
   const createdAtLabel = app?.createdAt ? new Date(app.createdAt).toLocaleString("es-ES") : "Sin fecha";
   const updatedAtLabel = app?.updatedAt ? new Date(app.updatedAt).toLocaleString("es-ES") : "Sin fecha";
   const appStatusLabel = deployedUrl ? "Desplegada" : hasRenderableCode ? "Preview lista" : isWorking ? "Construyendo" : "Pendiente";
@@ -964,24 +968,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 className="h-full w-full border-0 bg-white"
               />
             ) : (
-              <SandpackProvider
-                key={`sandpack-${previewKey}`}
-                template="vite-react-ts"
-                files={sandpackFiles ?? {}}
-                customSetup={{ entry: "/index.tsx", dependencies: SANDPACK_DEPENDENCIES }}
-                options={{ recompileMode: "delayed", recompileDelay: 300, externalResources: ["https://cdn.tailwindcss.com"] }}
-                theme="dark"
-              >
-                <SandpackLayout style={{ height: "100%", width: "100%", border: "none", borderRadius: 0 }}>
-                  <SandpackPreview
-                    showNavigator={false}
-                    showOpenInCodeSandbox={false}
-                    showRefreshButton={false}
-                    showSandpackErrorOverlay={false}
-                    style={{ height: "100%", width: "100%", flex: 1, minWidth: 0 }}
-                  />
-                </SandpackLayout>
-              </SandpackProvider>
+              <LivePreview
+                key={`live-${previewKey}`}
+                appId={id}
+                appName={app?.title ?? "App"}
+                frontendCode={frontendCode}
+                vercelUrl={deployedUrl || undefined}
+                isBuilding={isWorking}
+                onShare={handleShare}
+                onDeploy={() => setShowDeployModal(true)}
+                onClose={handleClosePreview}
+              />
             )}
 
             <div className="pointer-events-none absolute bottom-9 left-1/2 w-[720px] max-w-[calc(100%-6rem)] -translate-x-1/2">
