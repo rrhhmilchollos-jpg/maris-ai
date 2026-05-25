@@ -15,6 +15,7 @@ import { recallGenerations, rememberGeneration, buildGenerationMemoryBlock } fro
 import { recallComponents, buildComponentCacheBlock, extractAndStoreComponents } from "./componentCache";
 import { getProactiveFixes, scheduleAutoRefactoring } from "./errorHistoryAnalyzer";
 import { buildAgentTemplateContextBlock } from "./templates";
+import { performWebResearch, formatWebResearchForLLM } from "./webResearcher";
 
 // OpenAI client via Maris AI Integrations proxy.
 const openai = new OpenAI({
@@ -412,11 +413,11 @@ const RESEARCH_TRIGGER_PHRASES = [
 const URL_LIKE = /\b(?:https?:\/\/[^\s)]+|(?:[a-z0-9-]+\.)+[a-z]{2,})\b/i;
 
 function shouldResearch(prompt: string): boolean {
-  const lower = prompt.toLowerCase();
-  if (CLONE_KEYWORDS.some((kw) => lower.includes(kw))) return true;
-  if (RESEARCH_TRIGGER_PHRASES.some((p) => lower.includes(p))) return true;
-  if (URL_LIKE.test(prompt)) return true;
-  return false;
+  // Siempre investigar: el agente Investigador busca en internet para TODOS los prompts.
+  // Esto garantiza que el arquitecto siempre tenga contexto real del mercado.
+  // Solo se omite si el prompt es muy corto (< 20 chars) o es una edición menor.
+  if (prompt.trim().length < 20) return false;
+  return true;
 }
 
 /* ----------------------------- helpers ------------------------------------ */
@@ -451,41 +452,53 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
 }
 
 /* ----------------------------- agents ------------------------------------- */
-
 /**
- * Researcher — Gemini 2.0 Flash con google_search tool.
+ * Researcher — Búsqueda web real (Serper/Brave/DuckDuckGo) + scraping de páginas con Puppeteer.
+ * Siempre investiga: busca en internet, entra en las páginas y extrae contenido real.
+ * Luego sintetiza el brief con Claude Haiku.
  */
 export async function researchTopic(prompt: string): Promise<string> {
-  const hasUrl = URL_LIKE.test(prompt);
-  const systemPrompt = `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
-- 1 short paragraph: what the source product/site does and who it's for.
-- bullets: core sections/pages, signature features, dominant brand colors (hex if you can read them), typography family, microcopy tone.
-- 1 short paragraph: differentiation suggestions — what an inspired-by product could do better or differently.
+  const systemPrompt = `Eres el agente Investigador de Maris AI. Tu misión es producir un brief de referencia conciso para el arquitecto y diseñador que va a construir una app NUEVA e ORIGINAL.
 
-ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual; no preamble; plain text only; ≤350 words.`;
-  const userText = hasUrl
-    ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`
-    : `Sintetiza un brief de referencia conciso en español (máx 350 palabras) sobre el siguiente encargo, utilizando tu conocimiento general. Si el tema es muy específico y no tienes información relevante, indica que no se encontró contexto adicional:\n\n"${prompt}"`;
+A partir del contexto web que se te proporciona, extrae:
+- 1 párrafo: qué hace el producto/sector y para quién es.
+- Bullets: secciones/páginas clave, funcionalidades destacadas, colores de marca (hex si los ves), tipografía, tono del copy.
+- 1 párrafo: sugerencias de diferenciación — qué podría hacer mejor o diferente la app nueva.
+
+ANTI-CLON: NO animes a copiar. Parafrasea slogans. Solo hechos. Sin preámbulo. Solo texto plano. Máx 400 palabras.`;
+
   return withTimeout(
     (async () => {
       try {
+        // 1. Realizar búsqueda web real con Puppeteer + Serper/Brave/DuckDuckGo
+        const webData = await performWebResearch(prompt, 3, 22_000);
+        const webContext = formatWebResearchForLLM(webData);
+
+        const userText = webContext
+          ? `Aquí tienes el contexto web real obtenido mediante búsqueda y scraping de páginas:\n\n${webContext}\n\n---\nEncargo del usuario:\n"${prompt}"\n\nProduce el brief de referencia en español (máx 400 palabras).`
+          : `Sintetiza un brief de referencia conciso en español (máx 400 palabras) sobre el siguiente encargo, usando tu conocimiento general:\n\n"${prompt}"`;
+
         const response = await anthropic.messages.create({
           model: "claude-haiku-4-5",
-max_tokens: 700,
+          max_tokens: 800,
           system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: userText }],
         });
         const text = response.content[0].type === "text" ? response.content[0].text : "";
-        return text.trim().slice(0, 4000);
+        const source = webData.source !== "none"
+          ? ` [fuente: ${webData.source}, ${webData.pages.length} páginas visitadas]`
+          : "";
+        return (text.trim() + source).slice(0, 5000);
       } catch (err) {
-        logger.error({ err }, "researchTopic: Anthropic API call failed");
+        logger.error({ err }, "researchTopic: error en investigación web");
         return "";
       }
     })(),
-    hasUrl ? 25_000 : 20_000,
+    32_000,
     "",
   );
 }
+
 
 /**
  * Architect — Claude 3.5 (if available) or Gemini 2.5 Flash.

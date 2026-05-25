@@ -1677,18 +1677,26 @@ export async function generateApp(
   /* === Phase 1: research + architect === */
   let research = "";
   if (runResearch && shouldResearch(prompt)) {
-    onProgress?.({ phase: "researching", progress: 6, note: "🔎 Investigador buscando referencias en la web (máx 7s)…" });
-    await log("researcher", "Buscando referencias en la web (máx 7s)…");
+    onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando en internet y visitando páginas…" });
+    await log("researcher", "🔍 Buscando en internet (Google/DuckDuckGo) y visitando páginas relevantes…");
     research = await runPhase("researcher", () => researchTopic(prompt));
     if (research) {
       await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
     } else {
-      await log("researcher", "Sin resultados útiles, sigo sin contexto extra.", "warn");
+      await log("researcher", "Sin resultados web, usando conocimiento general del modelo.", "warn");
     }
   } else if (!runResearch) {
     await log("researcher", "Plan dice saltar investigación (alcance reducido).");
   } else {
-    await log("researcher", "Prompt suficientemente concreto, salto la búsqueda web.");
+    // shouldResearch devolvió false (prompt muy corto) - investigar igualmente
+    onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando contexto del mercado…" });
+    await log("researcher", "🔍 Buscando en internet y visitando páginas relevantes…");
+    research = await runPhase("researcher", () => researchTopic(prompt));
+    if (research) {
+      await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
+    } else {
+      await log("researcher", "Sin resultados web, usando conocimiento general.", "warn");
+    }
   }
 
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
