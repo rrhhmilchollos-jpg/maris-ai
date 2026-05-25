@@ -69,6 +69,8 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   // of truth because each poll only returns NEW lines (afterId > lastSeen).
   const [lines, setLines] = useState<JobLogEntry[]>([]);
   const [lastId, setLastId] = useState<number | string>(0);
+  const [streamPaused, setStreamPaused] = useState(false);
+  const consecutiveErrorsRef = useRef(0);
   const lastJobIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -78,22 +80,42 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       lastJobIdRef.current = jobId;
       setLines([]);
       setLastId(0);
+      setStreamPaused(false);
+      consecutiveErrorsRef.current = 0;
     }
   }, [jobId]);
 
-  const enabled = jobId !== null;
+  const enabled = jobId !== null && !streamPaused;
   const queryClient = useQueryClient();
   const queryKey = [...getGetGenerationJobLogsQueryKey(jobId ?? ""), "stream"];
   const { data } = useQuery({
     // Use only the jobId in the key so re-renders from `lastId` changes don't
     // create infinite new query keys. The afterId is passed via queryFn.
     queryKey,
-    queryFn: ({ signal }) =>
+    queryFn: async ({ signal }) => {
       // Forward React Query's AbortSignal so an in-flight poll is cancelled
       // when the job switches or the component unmounts. Without this, the
       // tail of a long request can resolve after teardown and stamp stale
       // lines into the next job's stream.
-      getGenerationJobLogs(jobId ?? "", { afterId: lastId }, { signal }),
+      try {
+        const result = await getGenerationJobLogs(jobId ?? "", { afterId: lastId }, { signal });
+        consecutiveErrorsRef.current = 0;
+        return result;
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        consecutiveErrorsRef.current += 1;
+        const message = error instanceof Error ? error.message : String(error);
+        const shouldPause =
+          /unauthorized/i.test(message) ||
+          /HTTP\s*40[13]/i.test(message) ||
+          /HTTP\s*50[0234]/i.test(message) ||
+          consecutiveErrorsRef.current >= 3;
+        if (shouldPause) {
+          setStreamPaused(true);
+        }
+        throw error;
+      }
+    },
     enabled,
     // Poll fast while running; stop once the job terminates. Tail-loss (lines
     // committed by the unawaited fire-and-forget INSERT after the job is
@@ -106,6 +128,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     // Don't dedupe — we always want the freshest cursor.
     staleTime: 0,
     gcTime: 60_000,
+    retry: 1,
   });
 
   // Tail-loss mitigation: when the job transitions from active → terminal,
@@ -161,14 +184,24 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines.length]);
 
-  if (!enabled) return null;
+  if (jobId === null) return null;
 
   return (
     <div
       className="space-y-4"
       data-testid="agent-log-stream"
     >
-      {lines.length === 0 && isActive ? (
+      {streamPaused && lines.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
+          <div className="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <Bot className="h-6 w-6 text-amber-300" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm text-white/70 font-semibold">Reconectando con el agente...</p>
+            <p className="text-xs text-white/40">La generación sigue protegida; se reintentará al actualizar la vista.</p>
+          </div>
+        </div>
+      ) : lines.length === 0 && isActive ? (
         <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 animate-in fade-in duration-700">
           <div className="relative">
             <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
