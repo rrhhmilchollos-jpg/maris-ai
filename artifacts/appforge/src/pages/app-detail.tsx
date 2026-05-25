@@ -181,7 +181,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const [draft, setDraft] = useState("");
   const [chatAttachments, setChatAttachments] = useState<UploadedAttachment[]>([]);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  // ✅ Persistir activeJobId en localStorage para sobrevivir recargas de página
+  const localStorageKey = `maris_active_job_${id}`;
+  const [activeJobId, setActiveJobIdRaw] = useState<string | null>(() => {
+    try { return localStorage.getItem(localStorageKey) || null; } catch { return null; }
+  });
+  const setActiveJobId = (jobId: string | null) => {
+    setActiveJobIdRaw(jobId);
+    try {
+      if (jobId) { localStorage.setItem(localStorageKey, jobId); }
+      else { localStorage.removeItem(localStorageKey); }
+    } catch {}
+  };
   const [previewKey, setPreviewKey] = useState(0);
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
   const [isPreviewClosed, setIsPreviewClosed] = useState(false);
