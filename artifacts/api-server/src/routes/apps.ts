@@ -1576,37 +1576,40 @@ export async function generateApp(
 
   onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
 
-  // IMPLEMENTACIÓN DE CORE ORCHESTRATOR (Task Splitting & Milestone Forking)
-  // Se activa para peticiones de apps completas (full-build) para evitar congelamientos.
-  const isFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
-  
-  if (isFullBuild) {
-    await log("system", "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
-    const coreOrchestrator = new CoreOrchestrator(process.cwd());
-    
-    // 1. CAPA DE INTERCEPCIÓN: Planificación de Hitos
-    // El orquestador ya llama internamente a la planificación en buildProjectIncremental, 
-    // pero lo mantenemos si queremos registrar el inicio explícitamente.
-    await log("system", "📋 Analizando arquitectura y planificando hitos...");
-    await log("system", "📋 Mapa de ruta generado. Iniciando ejecución serializada...");
+  // El Core Orchestrator por hitos queda detrás de una feature flag porque su salida
+  // sólo empaqueta archivos parciales y puede dejar la preview sin un App React completo.
+  // Para producción usamos por defecto el pipeline robusto de generación, validación y
+  // parcheo que devuelve un bundle renderizable persistido en GeneratedApp.frontendCode.
+  const wantsFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
+  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true";
 
-    // 2. BUCLE DE EJECUCIÓN SERIALIZADO con Streaming (Task Splitting & Milestone Forking)
+  if (wantsFullBuild && useMilestoneOrchestrator) {
+    await log("system", "🚀 Activando Core Orchestrator experimental (Estrategia de Hitos)...");
+    const coreOrchestrator = new CoreOrchestrator(process.cwd());
+    await log("system", "📋 Analizando arquitectura y planificando hitos...");
+    await log("system", "📋 Mapa de ruta generado. Iniciando ejecución por hitos...");
+
     const milestoneResult = await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
-      onProgress?.({ 
-        phase: "generating", 
-        progress: update.progress, 
-        note: update.status 
+      onProgress?.({
+        phase: "generating",
+        progress: update.progress,
+        note: update.status
       });
       await log("coder", update.status);
     });
 
-    return {
-      title: "Proyecto Generado por Hitos",
-      description: "App construida mediante Task Splitting y Milestone Forking",
-      techStack: ["React", "Node", "TypeScript"],
-      frontendCode: milestoneResult.frontendCode || "export default function App(){ return <div style={{padding:24}}>Proyecto generado, pero sin archivos frontend renderizables.</div>; }",
-      backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
-    };
+    const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
+    if (milestoneFrontend.length >= 200 && /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/.test(milestoneFrontend)) {
+      return {
+        title: "Proyecto Generado por Hitos",
+        description: "App construida mediante Task Splitting y Milestone Forking",
+        techStack: ["React", "Node", "TypeScript"],
+        frontendCode: milestoneFrontend,
+        backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
+      };
+    }
+
+    await log("system", "El orquestador experimental produjo un bundle incompleto; continúo con el pipeline robusto de generación.", "warn");
   }
 
   let execPlan = await runPhase("planner", () =>

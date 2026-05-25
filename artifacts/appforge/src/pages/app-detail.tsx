@@ -323,12 +323,27 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleShare = async () => {
     const shareUrl = deployedUrl || (typeof window !== "undefined" ? window.location.href : "");
+    if (!shareUrl) {
+      toast({ title: "Sin enlace disponible", description: "Todavía no hay una URL para compartir.", variant: "destructive" });
+      return;
+    }
+
     try {
       if (typeof navigator !== "undefined" && navigator.share && deployedUrl) {
         await navigator.share({ title: app?.title || "Maris AI App", text: app?.description || "App generada con Maris AI", url: shareUrl });
-      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+        toast({ title: "Compartido", description: "Se abrió el panel nativo para compartir la app." });
+        return;
+      }
+
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
-        toast({ title: "Enlace copiado", description: deployedUrl ? "Se copió la URL pública de la app." : "Se copió el enlace de esta vista previa." });
+        toast({ title: "Enlace copiado", description: deployedUrl ? "Se copió la URL pública de la app." : "Se copió el enlace de esta pantalla de trabajo." });
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        window.prompt("Copia este enlace", shareUrl);
+        toast({ title: "Enlace preparado", description: "Copia el enlace mostrado para compartirlo." });
       }
     } catch (err: any) {
       if (err?.name !== "AbortError") toast({ title: "No se pudo compartir", description: err?.message ?? "Error", variant: "destructive" });
@@ -337,7 +352,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleDeploy = () => {
     if (!hasRenderableCode) {
-      toast({ title: "Preview no lista", description: "La app todavía no tiene código frontend renderizable para desplegar.", variant: "destructive" });
+      setIsPreviewMaximized(false);
+      setIsPreviewClosed(true);
+      setActiveSidebar("chat");
+      toast({ title: "Generación pendiente", description: "Aún no hay código frontend desplegable. Aprueba el plan o envía un mensaje para que Maris AI genere la app.", variant: "destructive" });
       return;
     }
     deployMutation.mutate({ id });
@@ -345,23 +363,30 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleRefreshPreview = () => {
     queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+    queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
+    if (effectiveJobId) queryClient.invalidateQueries({ queryKey: getGetGenerationJobQueryKey(effectiveJobId) });
+    queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
     setPreviewKey((value) => value + 1);
-    toast({ title: "Preview actualizado", description: "La vista previa se ha recargado con el último código guardado." });
+    toast({ title: "Preview recargada", description: hasRenderableCode ? "La vista previa se ha recompilado con el último código guardado." : "Se actualizó el estado del trabajo. Si la generación terminó, la preview aparecerá automáticamente." });
   };
 
   const handleMaximizePreview = () => {
-    setIsPreviewClosed(false);
+    if (isPreviewClosed) setIsPreviewClosed(false);
     setIsPreviewMaximized((value) => !value);
+    toast({ title: isPreviewMaximized ? "Preview restaurada" : "Preview maximizada", description: isPreviewMaximized ? "Vuelves a ver el chat y los paneles junto a la app." : "La app ocupa toda la pantalla. Usa Restore o × para volver." });
   };
 
   const handleClosePreview = () => {
     setIsPreviewMaximized(false);
     setIsPreviewClosed(true);
+    setActiveSidebar("chat");
+    toast({ title: "Preview cerrada", description: "La vista en vivo queda oculta para que puedas seguir trabajando en el chat y la consola." });
   };
 
   const handleOpenPreview = () => {
     setIsPreviewClosed(false);
     setIsPreviewMaximized(false);
+    toast({ title: "Preview abierta", description: hasRenderableCode ? "La vista en vivo se ha restaurado." : "Todavía no hay frontend renderizable; verás el estado de construcción." });
   };
 
   const handleResumePreview = () => {
@@ -787,8 +812,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
             <div className="flex items-center gap-3">
               <TopActionButton icon={Share2} label="Share" onClick={handleShare} />
-              <TopActionButton icon={Rocket} label={deployMutation.isPending ? "Deploying" : "Deploy"} onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} />
-              <TopActionButton icon={RefreshCcw} label="Refresh" onClick={handleRefreshPreview} disabled={!hasRenderableCode} />
+              <TopActionButton icon={Rocket} label={deployMutation.isPending ? "Deploying" : "Deploy"} onClick={handleDeploy} disabled={deployMutation.isPending} />
+              <TopActionButton icon={RefreshCcw} label="Refresh" onClick={handleRefreshPreview} />
               <TopActionButton icon={Maximize2} label={isPreviewMaximized ? "Restore" : "Maximize"} onClick={handleMaximizePreview} active={isPreviewMaximized} />
               <button
                 type="button"
