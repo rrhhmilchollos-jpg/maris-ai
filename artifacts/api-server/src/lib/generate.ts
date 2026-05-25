@@ -1108,7 +1108,7 @@ ${frontendCode}
 Return the FULL patched bundle as JSON.`;
         const response = await anthropic.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 16000,
+          max_tokens: 64000,
           system: [{ type: "text", text: buildPatcherSystemPrompt(language) + "\nOutput JSON only.", cache_control: { type: "ephemeral" } }],
           messages: [{ role: "user", content: patcherContent }],
         });
