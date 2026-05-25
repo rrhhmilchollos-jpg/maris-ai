@@ -1933,7 +1933,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
     //   - 20 modificaciones = 0.2 créditos c/u = 4 créditos
     //   - Total: 6 + (20 × 0.2) = 10 créditos exactos
     //
-    // PLAN PAID (verificado por Stripe — quema rápida estilo emergent.sh):
+    // PLAN PAID (verificado por Stripe — quema rápida):
     //   - Coste = KIND_COSTS[kind] × 10
     //   - landing   = 1 × 10 = 10 créditos
     //   - vue/svelte = 2 × 10 = 20 créditos
@@ -2145,7 +2145,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) — MODIFICACIONES ────────────
     // PLAN FREE: 0.2 créditos por modificación → 20 modificaciones con 4 créditos restantes
-    // PLAN PAID: 5 créditos por modificación (quema rápida estilo emergent.sh)
+    // PLAN PAID: 5 créditos por modificación
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const cost = isPaid ? 5 : 0.2;

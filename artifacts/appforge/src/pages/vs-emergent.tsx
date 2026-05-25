@@ -1,63 +1,48 @@
-import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { Check, X, ArrowRight, Zap, Code2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Check, X, ArrowRight, ShieldCheck, Zap, Code2, Globe } from "lucide-react";
+import { Link } from "wouter";
 
-export default function VsEmergentPage() {
+export default function VsCompetidoresPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30">
-      {/* Hero Section */}
-      <section className="pt-24 pb-16 relative overflow-hidden">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-[radial-gradient(circle_at_center,rgba(124,58,237,0.08)_0%,transparent_70%)] -z-10"></div>
-        <div className="container px-4 mx-auto max-w-5xl text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-medium mb-6"
-          >
-            <ShieldCheck className="h-3.5 w-3.5" /> Comparativa de Plataformas
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-4xl md:text-6xl font-bold tracking-tight text-white mb-6"
-          >
-            Maris AI vs Emergent.sh
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
-          >
-            Descubre por qué Maris AI es la alternativa preferida para desarrolladores que buscan control total, 
-            calidad de código de nivel senior y un pipeline de agentes más robusto.
-          </motion.p>
+    <div className="min-h-screen bg-background">
+      {/* Hero */}
+      <section className="py-24 border-b border-white/5">
+        <div className="container px-4 mx-auto max-w-4xl text-center">
+          <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
+            ¿Por qué elegir{" "}
+            <span className="text-primary">Maris AI</span>?
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            El primer generador de apps con IA diseñado para el mercado hispanohablante.
+            Pipeline completo de 9 agentes especializados, desplegado en Vercel + Render + MongoDB.
+          </p>
         </div>
       </section>
 
       {/* Comparison Table */}
-      <section className="py-12 relative">
-        <div className="container px-4 mx-auto max-w-4xl">
-          <div className="rounded-2xl border border-white/10 bg-card/50 overflow-hidden shadow-2xl">
-            <table className="w-full text-left border-collapse">
+      <section className="py-24">
+        <div className="container px-4 mx-auto max-w-5xl">
+          <h2 className="text-3xl font-bold text-white text-center mb-16">
+            Maris AI vs otras plataformas
+          </h2>
+          <div className="overflow-x-auto rounded-2xl border border-white/10">
+            <table className="w-full">
               <thead>
-                <tr className="border-b border-white/10 bg-white/5">
-                  <th className="p-6 text-sm font-semibold text-muted-foreground uppercase tracking-wider">Característica</th>
-                  <th className="p-6 text-sm font-bold text-white text-center bg-primary/10">Maris AI</th>
-                  <th className="p-6 text-sm font-semibold text-muted-foreground text-center">Emergent.sh</th>
+                <tr className="border-b border-white/10 bg-card/50">
+                  <th className="p-6 text-left text-sm font-semibold text-muted-foreground">Característica</th>
+                  <th className="p-6 text-sm font-semibold text-primary text-center bg-primary/10">Maris AI</th>
+                  <th className="p-6 text-sm font-semibold text-muted-foreground text-center">Otras plataformas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {[
-                  { feature: "Agentes Especializados", maris: "9 Agentes (Pipeline Completo)", emergent: "Agente Único / Generalista" },
-                  { feature: "Modelos Utilizados", maris: "Claude 4.6 + Gemini 3 + GPT-5", emergent: "Modelos Propios / Limitados" },
-                  { feature: "Calidad del Código", maris: "Arquitectura Senior (Vite + Tailwind)", emergent: "Código Estándar" },
-                  { feature: "Backend e Infraestructura", maris: "Express + Drizzle + PostgreSQL", emergent: "Enfoque Principal Frontend" },
-                  { feature: "Soporte en Español", maris: "Completo (Nativo)", emergent: "Limitado / Inglés" },
-                  { feature: "Exportación a GitHub", maris: "Integración Directa", emergent: "Sujeto a Plan" },
-                  { feature: "Revisión de QA", maris: "Agente QA dedicado", emergent: "Manual / No disponible" },
+                  { feature: "Agentes Especializados", maris: "9 Agentes (Pipeline Completo)", other: "Agente Único / Generalista" },
+                  { feature: "Modelos de IA", maris: "Claude + Gemini + GPT (Multi-modelo)", other: "Modelo único / Limitado" },
+                  { feature: "Calidad del Código", maris: "Arquitectura Senior (Vite + Tailwind)", other: "Código Estándar" },
+                  { feature: "Backend e Infraestructura", maris: "Express + MongoDB + Render", other: "Enfoque Principal Frontend" },
+                  { feature: "Soporte en Español", maris: "Completo (Nativo)", other: "Limitado / Inglés" },
+                  { feature: "Exportación a GitHub", maris: "Integración Directa", other: "Sujeto a Plan" },
+                  { feature: "Revisión de QA", maris: "Agente QA dedicado", other: "Manual / No disponible" },
                 ].map((row, i) => (
                   <tr key={i} className="hover:bg-white/5 transition-colors">
                     <td className="p-6 text-sm text-white/80 font-medium">{row.feature}</td>
@@ -70,7 +55,7 @@ export default function VsEmergentPage() {
                     <td className="p-6 text-center">
                       <div className="flex flex-col items-center gap-1">
                         <X className="h-5 w-5 text-red-400/60" />
-                        <span className="text-xs text-muted-foreground">{row.emergent}</span>
+                        <span className="text-xs text-muted-foreground">{row.other}</span>
                       </div>
                     </td>
                   </tr>
@@ -109,7 +94,7 @@ export default function VsEmergentPage() {
         <div className="container px-4 mx-auto max-w-3xl text-center">
           <h2 className="text-3xl font-bold text-white mb-6">Prueba la diferencia hoy mismo</h2>
           <p className="text-lg text-muted-foreground mb-10">
-            Únete a los desarrolladores que han dejado atrás las herramientas limitadas por un pipeline de agentes real.
+            Únete a los desarrolladores que han elegido un pipeline de agentes real para crear sus productos.
           </p>
           <Link href="/sign-up">
             <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
@@ -123,7 +108,7 @@ export default function VsEmergentPage() {
       <footer className="py-12 border-t border-white/5 bg-background/50">
         <div className="container px-4 mx-auto text-center">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Maris AI. Las marcas comerciales mencionadas pertenecen a sus respectivos propietarios.
+            © {new Date().getFullYear()} Maris AI. Todos los derechos reservados.
           </p>
         </div>
       </footer>

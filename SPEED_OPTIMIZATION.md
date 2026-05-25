@@ -92,7 +92,7 @@ Research (7s) → Architect (55s) → Design (parallel) + Integration (parallel)
 - **Perceived Wait**: 60-90s (streaming preview)
 
 ### Competitive Comparison
-- **Emergent.sh**: 2-3 minutes
+- **Otras plataformas**: 2-3 minutos
 - **Maris AI Target**: 3-4 minutes
 - **Quality**: Pro-grade (superior to Emergent)
 

@@ -1,7 +1,7 @@
-# Análisis del Sistema de Créditos: Emergent.sh vs Maris AI
+# Análisis del Sistema de Créditos: plataformas de referencia vs Maris AI
 
-## Hallazgos en Emergent.sh
-Tras investigar el modelo de **emergent.sh**, he identificado los siguientes puntos clave sobre su sistema de créditos:
+## Hallazgos en plataformas de referencia
+Tras investigar el modelo de **plataformas de referencia**, he identificado los siguientes puntos clave sobre su sistema de créditos:
 
 1.  **Modelo de Suscripción:**
     *   **Free:** 10 créditos/mes.
@@ -17,7 +17,7 @@ Tras investigar el modelo de **emergent.sh**, he identificado los siguientes pun
     *   No hay un límite de tokens explícito para el usuario, sino que el coste se traslada al crédito.
 
 ## Propuesta para Maris AI (Modelo Optimizado)
-Para Maris AI, aplicaremos un modelo inspirado en emergent.sh pero **más justo y eficiente**, evitando la frustración de los usuarios por "quema" inesperada:
+Para Maris AI, aplicaremos un modelo inspirado en plataformas de referencia pero **más justo y eficiente**, evitando la frustración de los usuarios por "quema" inesperada:
 
 | Concepto | Coste Maris AI (Propuesto) | Notas |
 | :--- | :--- | :--- |

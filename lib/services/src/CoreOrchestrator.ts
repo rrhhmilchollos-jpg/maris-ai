@@ -81,7 +81,7 @@ export class CoreOrchestrator {
       progress: 10 
     });
 
-    // Ejecución paralela para máxima velocidad (estilo emergent.sh)
+    // Ejecución paralela para máxima velocidad
     const generationPromises = milestones.map(async (milestone) => {
       
       const agentResponse = await anthropic.messages.create({

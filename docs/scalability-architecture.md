@@ -2,7 +2,7 @@
 
 ## Visión General
 
-Maris AI ha sido diseñado para soportar **millones de usuarios concurrentes** sin colas de espera compartidas, garantizando que cada usuario pueda trabajar en sus proyectos de forma independiente y aislada, exactamente como lo hace **emergent.sh**.
+Maris AI ha sido diseñado para soportar **millones de usuarios concurrentes** sin colas de espera compartidas, garantizando que cada usuario pueda trabajar en sus proyectos de forma independiente y aislada, exactamente como lo hace **plataformas de referencia**.
 
 ## Problemas Resueltos
 
@@ -284,4 +284,4 @@ Cada evento se registra con contexto completo:
 
 Con esta arquitectura, **Maris AI puede escalar a millones de usuarios** sin que ninguno experimente colas de espera. Cada usuario trabaja en sus proyectos de forma independiente, con datos completamente aislados y garantizado.
 
-Esto es exactamente lo que hace **emergent.sh** a escala, y ahora **Maris AI** tiene la misma capacidad. 🚀
+Esto es exactamente lo que hace **plataformas de referencia** a escala, y ahora **Maris AI** tiene la misma capacidad. 🚀

@@ -2,9 +2,9 @@
 
 ## 1. Contexto y Objetivos
 
-El objetivo es rediseñar el sistema de créditos de Maris AI inspirándose en el modelo de `emergent.sh`. Se requiere un enfoque dual:
+El objetivo es rediseñar el sistema de créditos de Maris AI inspirándose en el modelo de `plataformas de referencia`. Se requiere un enfoque dual:
 1. **Usuarios Free (Prueba):** 10 créditos que rinden de forma generosa. Permiten generar 1 app y hacer hasta 20 modificaciones.
-2. **Usuarios Paid (Verificados por Stripe):** Los créditos se queman de forma rápida y realista (estilo emergent.sh), donde cada acción compleja cuesta más créditos.
+2. **Usuarios Paid (Verificados por Stripe):** Los créditos se queman de forma rápida y realista (estilo plataformas de referencia), donde cada acción compleja cuesta más créditos.
 
 ## 2. Análisis del Código Actual
 
@@ -22,14 +22,14 @@ const cost = isPaid ? 2 : 0.2;
 
 ## 3. Nuevo Diseño de Costes
 
-Para alinear el sistema con el modelo de emergent.sh (donde las acciones complejas cuestan más y se queman rápido), la lógica debe ser:
+Para alinear el sistema con el modelo de plataformas de referencia (donde las acciones complejas cuestan más y se queman rápido), la lógica debe ser:
 
 ### 3.1. Usuarios Free (Prueba Generosa)
 - **Generar App:** Coste fijo de **6 créditos**. (Sobran 4 de los 10 iniciales).
 - **Modificación (Mensaje/Refinamiento):** Coste fijo de **0.2 créditos**. (Con 4 créditos se pueden hacer 20 modificaciones).
 - **Reintentar App:** Coste fijo de **6 créditos**.
 
-### 3.2. Usuarios Paid (Quema Rápida Estilo emergent.sh)
+### 3.2. Usuarios Paid (Quema Rápida Estilo plataformas de referencia)
 - **Generar App:** El coste debe basarse en la complejidad del proyecto, utilizando la tabla `KIND_COSTS` ya definida, multiplicada por un factor de quema rápida.
   - Coste base = `KIND_COSTS[kind || "fullstack"] || 3`
   - Coste final Paid = `Coste base * 10` (ej. fullstack = 30 créditos, landing = 10 créditos).

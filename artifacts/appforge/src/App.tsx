@@ -27,7 +27,7 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 const DebugPreviewPage = lazy(() => import("@/pages/debug-preview"));
 const NewsPage = lazy(() => import("@/pages/news"));
 const NewsDetailPage = lazy(() => import("@/pages/news-detail"));
-const VsEmergentPage = lazy(() => import("@/pages/vs-emergent"));
+const VsCompetidoresPage = lazy(() => import("@/pages/vs-emergent"));
 
 // Fallback de carga para Suspense
 function PageLoader() {
@@ -316,7 +316,7 @@ function ClerkProviderWithRoutes() {
           </Route>
 
           <Route path="/vs-emergent">
-            <VsEmergentPage />
+            <VsCompetidoresPage />
           </Route>
 
           <Route path="/__debug-preview/:id">

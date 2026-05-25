@@ -43,7 +43,7 @@ Se ha fortalecido el sistema contra fallos externos, específicamente los errore
     *   Se configuró el cliente de OpenAI/Anthropic con `maxRetries: 5` y un timeout de 60 segundos.
     *   Se manejan explícitamente las interrupciones por `MAX_TOKENS`, permitiendo que el sistema intente recuperar el JSON parcial o solicite al usuario que divida la tarea.
 
-## 4. Mejoras de UI/UX (Estilo Emergent.sh)
+## 4. Mejoras de UI/UX (Estilo Maris AI)
 
 La interfaz de usuario fue rediseñada para ofrecer una experiencia inmersiva y profesional.
 
