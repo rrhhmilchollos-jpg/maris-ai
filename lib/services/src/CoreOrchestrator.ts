@@ -15,15 +15,14 @@ export class CoreOrchestrator {
   private architectureSummary: string = "";
 
   constructor(projectRoot: string) {
-    this.projectRoot = projectRoot; // Ruta raíz del monorepo Maris AI
+    this.projectRoot = projectRoot;
   }
 
-  // 1. INTERCEPCIÓN: Convierte la app masiva del cliente en hitos distribuidos en el Monorepo
   async planMonorepoProject(userPrompt: string): Promise<Milestone[]> {
     console.log("🤖 Agente Planificador analizando arquitectura del monorepo...");
 
     const response = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307",
+      model: "claude-haiku-4-5",
       max_tokens: 1000,
       system: `Eres el Diseñador de Arquitectura de Maris AI. Tu trabajo es recibir la idea de una app completa y dividir su construcción en exactamente 4 hitos secuenciales mapeados a la estructura de nuestro monorepo.
       Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
@@ -43,12 +42,10 @@ export class CoreOrchestrator {
     return result.milestones;
   }
 
-  // 2. BUCLE SERIALIZADO CON "FORKING" DE CONTEXTO (Evita el congelamiento)
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
     const milestones = await this.planMonorepoProject(userPrompt);
 
     for (const milestone of milestones) {
-      // Mantener viva la conexión para que la web del cliente no haga Timeout
       wsNotificationCallback({ 
         status: `🔨 Construyendo ${milestone.name} en ${milestone.targetWorkspace}...`, 
         progress: (milestone.id / milestones.length) * 100,
@@ -57,9 +54,8 @@ export class CoreOrchestrator {
 
       console.log(`🔨 Procesando Hito ${milestone.id}: ${milestone.name} en -> ${milestone.targetWorkspace}`);
 
-      // FORKING: Purgamos la memoria vieja. Enviamos SOLO el mapa actual de la app y la tarea del hito
       const agentResponse = await anthropic.messages.create({
-        model: "claude-3-haiku-20240307",
+        model: "claude-haiku-4-5",
         max_tokens: 4000,
         system: `Eres el Agente de Código Experto en Monorepos de Maris AI. 
         Estado actual global de la aplicación construida hasta ahora: ${this.architectureSummary}.
@@ -69,10 +65,8 @@ export class CoreOrchestrator {
 
       const generatedCode = agentResponse.content[0].type === 'text' ? agentResponse.content[0].text : '';
 
-      // 3. CONSOLIDACIÓN INCREMENTAL EN EL DISCO DEL MONOREPO
       await this.writeCodeToWorkspace(milestone.targetWorkspace, milestone.filePath, generatedCode);
 
-      // Compactamos el conocimiento para el siguiente hito (Evitamos acumular miles de tokens redundantes)
       this.architectureSummary += `\n- Hito ${milestone.id} listo: Creado código en ${milestone.targetWorkspace}/${milestone.filePath} con funcionalidades de ${milestone.name}.`;
     }
 
@@ -80,13 +74,9 @@ export class CoreOrchestrator {
   }
 
   private async writeCodeToWorkspace(workspace: string, filePath: string, code: string) {
-    // Reconstruye la ruta absoluta exacta dentro de la arquitectura del monorepo
     const absolutePath = path.join(this.projectRoot, workspace, filePath);
-    
-    // Crea las carpetas internas si no existen (ej: src/routes/) e inyecta el código de forma limpia
     await fs.ensureDir(path.dirname(absolutePath));
     await fs.writeFile(absolutePath, code, 'utf-8');
-    
     console.log(`💾 Guardado con éxito en: ${absolutePath}`);
   }
 }
