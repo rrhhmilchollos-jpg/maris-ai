@@ -1,45 +1,33 @@
-import { Router, Request, Response } from "express";
-import { requireAuth } from "../lib/auth";
-import { db } from "../lib/db";
-import {generatedApps as _generatedApps} from "@workspace/db/schema";
-const generatedApps = _generatedApps as any;
-import { eq, and } from "drizzle-orm";
+import { Router, type Request, type Response } from "express";
 import Stripe from "stripe";
+import { GeneratedApp } from "@workspace/db/schema";
+import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
 
 const router = Router();
 
 /**
- * GET /api/watermark/:appId
+ * GET /api/watermark/:appId/status
  * Obtener el estado de la marca de agua de una app
  */
-router.get("/watermark/:appId", requireAuth, async (req: Request, res: Response) => {
+router.get("/watermark/:appId/status", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
     const userId = (req as any).auth?.userId;
-
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
     }
 
-    // Obtener la app desde la base de datos
-    const app = await db
-      .select()
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)), eq(generatedApps.userId, userId)))
-      .limit(1);
-
-    if (app.length === 0) {
+    const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
+    if (!appData) {
       return res.status(404).json({ error: "App no encontrada" });
     }
 
-    const appData = app[0];
-
     return res.json({
-      appId: appData.id,
-      hasWatermark: appData.hasWatermark ?? true,
-      watermarkRemovalPrice: appData.watermarkRemovalPrice ?? 9.99,
-      watermarkRemovalStripeSessionId: appData.watermarkRemovalStripeSessionId || null,
+      appId: (appData as any)._id,
+      hasWatermark: (appData as any).hasWatermark ?? true,
+      watermarkRemovalPrice: (appData as any).watermarkRemovalPrice ?? 9.99,
+      watermarkRemovalStripeSessionId: (appData as any).watermarkRemovalStripeSessionId || null,
     });
   } catch (error) {
     logger.error({ err: error }, "Error fetching watermark status:");
@@ -55,32 +43,21 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
   try {
     const { appId } = req.params;
     const userId = (req as any).auth?.userId;
-
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
     }
 
-    // Obtener la app desde la base de datos
-    const app = await db
-      .select()
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)), eq(generatedApps.userId, userId)))
-      .limit(1);
-
-    if (app.length === 0) {
+    const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
+    if (!appData) {
       return res.status(404).json({ error: "App no encontrada" });
     }
 
-    const appData = app[0];
-
-    // Si ya no tiene marca de agua, retornar error
-    if (!appData.hasWatermark) {
+    if (!(appData as any).hasWatermark) {
       return res.status(400).json({ error: "Esta app ya no tiene marca de agua" });
     }
 
-    // Crear sesión de Stripe
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-      apiVersion: "2026-04-22.dahlia",
+      apiVersion: "2026-04-22.dahlia" as any,
     });
 
     const session = await stripe.checkout.sessions.create({
@@ -91,11 +68,11 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
           price_data: {
             currency: "usd",
             product_data: {
-              name: `Eliminar Marca de Agua - ${appData.title}`,
+              name: `Eliminar Marca de Agua - ${(appData as any).title}`,
               description: "Elimina la marca de agua de Maris AI de tu aplicación generada",
               images: ["https://marisai.es/logo.svg"],
             },
-            unit_amount: Math.round((appData.watermarkRemovalPrice ?? 9.99) * 100),
+            unit_amount: Math.round(((appData as any).watermarkRemovalPrice ?? 9.99) * 100),
           },
           quantity: 1,
         },
@@ -104,21 +81,17 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
       cancel_url: `${process.env.MARIS_AI_PUBLIC_URL}/app/${appId}?watermark_cancelled=true`,
       metadata: {
         appId: appId.toString(),
-        userId: userId,
+        userId,
         type: "watermark_removal",
       },
     });
 
-    // Guardar el ID de sesión en la base de datos
-    await db
-      .update(generatedApps)
-      .set({ watermarkRemovalStripeSessionId: session.id })
-      .where(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)));
+    await GeneratedApp.updateOne({ _id: appId }, { watermarkRemovalStripeSessionId: session.id });
 
     return res.json({
       sessionId: session.id,
       sessionUrl: session.url,
-      price: appData.watermarkRemovalPrice ?? 9.99,
+      price: (appData as any).watermarkRemovalPrice ?? 9.99,
     });
   } catch (error) {
     logger.error({ err: error }, "Error creating watermark removal session:");
@@ -139,25 +112,21 @@ router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
     }
-
     if (!sessionId) {
       return res.status(400).json({ error: "sessionId es requerido" });
     }
 
-    // Verificar la sesión con Stripe
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-      apiVersion: "2026-04-22.dahlia",
+      apiVersion: "2026-04-22.dahlia" as any,
     });
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     if (session.payment_status === "paid") {
-      // Actualizar la app para eliminar la marca de agua
-      await db
-        .update(generatedApps)
-        .set({ hasWatermark: false, watermarkRemovalStripeSessionId: null })
-        .where(and(eq(generatedApps.id, parseInt(Array.isArray(appId) ? appId[0] : appId)), eq(generatedApps.userId, userId)));
-
+      await GeneratedApp.updateOne(
+        { _id: appId, userId },
+        { hasWatermark: false, watermarkRemovalStripeSessionId: null },
+      );
       return res.json({
         success: true,
         message: "Marca de agua eliminada exitosamente",

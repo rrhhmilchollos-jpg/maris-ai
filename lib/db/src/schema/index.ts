@@ -417,7 +417,7 @@ export const AppRevision: Model<IAppRevision> =
   mongoose.model<IAppRevision>("AppRevision", AppRevisionSchema);
 
 // ─── Aliases en minúscula para compatibilidad ────────────────────────────────
-export const AppImages = AppImage; // Mongoose alias (use Drizzle appImages for ORM queries)
+export const AppImages = AppImage; // Mongoose alias
 export const AppRuntimeErrors = AppRuntimeError; // Mongoose alias (use Drizzle appRuntimeErrors for ORM queries)
 // generatedApps is exported as Drizzle table below (Mongoose model is GeneratedApp)
 
@@ -496,12 +496,4 @@ export const NewsArticle: Model<INewsArticle> =
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 
-// ─── Drizzle ORM schemas (re-exported for evaluator and other modules) ────────
-export { generatedApps } from "./generatedApps.js";
-export { users } from "./users.js";
-export { appMessages } from "./appMessages.js";
-export { jobLogs } from "./jobLogs.js";
-export { agentMemory as agentMemoryTable } from "./agentMemory.js";
-export { appImages } from "./appImages.js";
-export { appRuntimeErrors } from "./appRuntimeErrors.js";
-export { generationJobs } from "./generationJobs.js";
+// Drizzle ORM schemas removed — using MongoDB/Mongoose exclusively

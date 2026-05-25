@@ -31,10 +31,7 @@
  */
 
 import type { Logger } from "pino";
-import { and, eq } from "drizzle-orm";
-import {generatedApps as _generatedApps} from "@workspace/db/schema";
-const generatedApps = _generatedApps as any;
-import { db } from "./db";
+import { GeneratedApp } from "@workspace/db/schema";
 import { bundleToFiles } from "./exportZip";
 
 const VERCEL_API = "https://api.vercel.com";
@@ -71,11 +68,7 @@ export async function deployAppToVercel(opts: {
 
   // 1. Load and authorize the app row in one shot. Same ownership pattern
   //    used by every other /apps/:id endpoint.
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .limit(1);
+  const row = await GeneratedApp.findOne({ _id: appId, userId }).lean();
   if (!row) {
     return { ok: false, failure: { kind: "app_not_found" } };
   }
@@ -132,10 +125,7 @@ export async function deployAppToVercel(opts: {
 
     // Persist the new project id immediately so a crash between project
     // creation and deployment doesn't strand an orphan project.
-    await db
-      .update(generatedApps)
-      .set({ vercelProjectId: projectId })
-      .where(eq(generatedApps.id, appId));
+    await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: projectId });
   }
 
   // 4. Create a production deployment with the FULL project tree. Vercel
@@ -179,10 +169,7 @@ export async function deployAppToVercel(opts: {
     ? deploy.data.url
     : `https://${deploy.data.url}`;
 
-  await db
-    .update(generatedApps)
-    .set({ vercelDeployUrl: publicUrl })
-    .where(eq(generatedApps.id, appId));
+  await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl });
 
   return {
     ok: true,
@@ -339,10 +326,7 @@ export async function addVercelDomainForApp(opts: {
   });
   if (!added.ok) return { ok: false, failure: added.failure };
 
-  await db
-    .update(generatedApps)
-    .set({ vercelCustomDomain: domain })
-    .where(eq(generatedApps.id, appId));
+  await GeneratedApp.updateOne({ _id: appId }, { vercelCustomDomain: domain });
 
   return {
     ok: true,
@@ -420,10 +404,7 @@ export async function removeVercelDomainForApp(opts: {
     return { ok: false, failure: removed.failure };
   }
 
-  await db
-    .update(generatedApps)
-    .set({ vercelCustomDomain: null })
-    .where(eq(generatedApps.id, appId));
+  await GeneratedApp.updateOne({ _id: appId }, { vercelCustomDomain: null });
 
   return { ok: true };
 }

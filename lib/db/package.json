@@ -8,13 +8,10 @@
     "./schema": "./src/schema/index.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.35.3",
     "mongoose": "^8.24.0",
-    "pg": "^8.21.0",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
-    "@types/pg": "^8.20.0"
+    "@types/node": "catalog:"
   }
 }

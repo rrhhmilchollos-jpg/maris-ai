@@ -24,14 +24,8 @@
  * Reuses `takeScreenshots`, `chromiumExecutablePath`, and the visual tester's
  * Puppeteer infrastructure to avoid double-launching Chromium.
  */
-import { and, eq, sql } from "drizzle-orm";
 import type { Logger } from "pino";
-import { db } from "./db";
-import {generatedApps as _generatedApps, users as _users, appMessages as _appMessages, jobLogs as _jobLogs} from "@workspace/db/schema";
-const generatedApps = _generatedApps as any;
-const users = _users as any;
-const appMessages = _appMessages as any;
-const jobLogs = _jobLogs as any;
+import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { patchBundle, type GenLanguage } from "./generate";
 import { validateBundle } from "./validate";
@@ -332,27 +326,15 @@ async function ensurePublicSlug(
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = makeSlug();
     try {
-      // Idempotent + race-safe: only assign when no slug exists yet. If the
-      // route's manual publish already set one between our SELECT and this
-      // UPDATE, we lose the race and re-read the winner instead of clobbering.
-      const updated = await db
-        .update(generatedApps)
-        .set({ publicSlug: candidate })
-        .where(
-          and(
-            eq(generatedApps.id, appId),
-            eq(generatedApps.userId, userId),
-            sql`${generatedApps.publicSlug} IS NULL`,
-          ),
-        )
-        .returning({ publicSlug: generatedApps.publicSlug });
-      if (updated.length > 0) return updated[0].publicSlug;
-      const [row] = await db
-        .select({ publicSlug: generatedApps.publicSlug })
-        .from(generatedApps)
-        .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-        .limit(1);
-      return row?.publicSlug ?? null;
+      // Idempotent + race-safe: only assign when no slug exists yet.
+      const updated = await GeneratedApp.findOneAndUpdate(
+        { _id: String(appId), userId, publicSlug: { $in: [null, undefined, ""] } },
+        { publicSlug: candidate },
+        { new: true },
+      ).lean();
+      if (updated) return (updated as any).publicSlug ?? null;
+      const row = await GeneratedApp.findOne({ _id: String(appId), userId }, { publicSlug: 1 }).lean();
+      return (row as any)?.publicSlug ?? null;
     } catch (err) {
       log.warn({ err, attempt }, "Slug collision while assigning auto-publish slug, retrying");
     }
@@ -431,8 +413,7 @@ export async function runAutoEvaluator(opts: {
     level: "info" | "warn" | "error" = "info",
   ): void => {
     const trimmed = message.length > 280 ? message.slice(0, 277) + "…" : message;
-    db.insert(jobLogs)
-      .values({ jobId, agent: "evaluator", level, message: trimmed })
+    JobLog.create({ jobId: String(jobId), agent: "evaluator", level, message: trimmed })
       .catch((err: unknown) => {
         log.warn({ err, jobId, appId }, "Failed to write evaluator job log line");
       });
@@ -456,11 +437,7 @@ export async function runAutoEvaluator(opts: {
 
   // Re-read the app row so we have the latest bundle (the visual tester or
   // image agent may have run in between).
-  const [row] = await db
-    .select()
-    .from(generatedApps)
-    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .limit(1);
+  const row = await GeneratedApp.findOne({ _id: String(appId), userId }).lean();
   if (!row) {
     log.warn({ appId, jobId }, "Evaluator: app row missing");
     return {
@@ -476,7 +453,7 @@ export async function runAutoEvaluator(opts: {
 
   // Need a slug to render /p/<slug> in puppeteer. Assign one if missing,
   // even if autoPublish is off — it's how the evaluator reaches the app.
-  const slug = await ensurePublicSlug(appId, userId, log, row.publicSlug);
+  const slug = await ensurePublicSlug(appId, userId, log, (row as any).publicSlug ?? null);
   if (!slug) {
     log.warn({ appId, jobId }, "Evaluator: could not assign slug for screenshot");
     return {
@@ -495,7 +472,7 @@ export async function runAutoEvaluator(opts: {
   // ALWAYS feeds the architect's screen list to the vision model when one is
   // available — even when called from contexts that don't have it in scope
   // (e.g., a future "re-evaluate" admin button).
-  const effectivePlannedPages = opts.plannedPages ?? row.plannedPages ?? undefined;
+  const effectivePlannedPages = opts.plannedPages ?? (row as any).plannedPages ?? undefined;
 
   log.info(
     {
@@ -514,7 +491,7 @@ export async function runAutoEvaluator(opts: {
     }…`,
   );
 
-  let currentBundle = row.frontendCode;
+  let currentBundle = (row as any).frontendCode;
   let lastReport: EvaluatorReport | null = null;
   let fixesApplied = 0;
   let round = 0;
@@ -526,9 +503,9 @@ export async function runAutoEvaluator(opts: {
     try {
       report = await evalFn({
         app: {
-          id: row.id,
-          title: row.title,
-          description: row.description,
+          id: (row as any)._id,
+          title: (row as any).title,
+          description: (row as any).description,
           publicSlug: slug,
         },
         baseUrl,
@@ -617,17 +594,12 @@ export async function runAutoEvaluator(opts: {
     // Optimistic concurrency: only overwrite if the bundle still matches
     // what we patched against. A racing chat edit must always win.
     const previousBundle = currentBundle;
-    const updated = await db
-      .update(generatedApps)
-      .set({ frontendCode: patched })
-      .where(
-        and(
-          eq(generatedApps.id, appId),
-          eq(generatedApps.frontendCode, previousBundle),
-        ),
-      )
-      .returning({ id: generatedApps.id });
-    if (updated.length === 0) {
+    const updated = await GeneratedApp.findOneAndUpdate(
+      { _id: String(appId), frontendCode: previousBundle },
+      { frontendCode: patched },
+      { new: false },
+    );
+    if (!updated) {
       log.warn(
         { appId, jobId, round },
         "🔁 Bundle changed concurrently — stopping evaluator loop",
@@ -658,23 +630,18 @@ export async function runAutoEvaluator(opts: {
   // Decide outcomes.
   if (finalVerdict === "pass") {
     // Always clear any prior needs_review state on a successful pass.
-    await db
-      .update(generatedApps)
-      .set({ status: "ready", evaluatorSummary: null })
-      .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-      .catch((err: unknown) => {
-        log.warn({ err, appId }, "Failed to clear evaluatorSummary after pass");
-      });
+    await GeneratedApp.updateOne(
+      { _id: String(appId), userId },
+      { status: "ready", evaluatorSummary: null },
+    ).catch((err: unknown) => {
+      log.warn({ err, appId }, "Failed to clear evaluatorSummary after pass");
+    });
 
     // Re-read autoPublish right before deciding — the user may have toggled
     // it off via the UI while the (slow) evaluator was running. Snapshot
     // captured at the start of runAutoEvaluator can be minutes old.
-    const [fresh] = await db
-      .select({ autoPublish: generatedApps.autoPublish })
-      .from(generatedApps)
-      .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-      .limit(1);
-    const shouldAutoPublish = fresh?.autoPublish === true;
+    const fresh = await GeneratedApp.findOne({ _id: String(appId), userId }, { autoPublish: 1 }).lean();
+    const shouldAutoPublish = (fresh as any)?.autoPublish === true;
     if (shouldAutoPublish) {
       // Run the SAME deploy path the manual "Publicar" button uses. This
       // guarantees the auto-publish flow gets the bundle sanity-build, slug
@@ -692,8 +659,8 @@ export async function runAutoEvaluator(opts: {
         // deploy itself blew up (e.g., bundle stopped compiling between
         // evaluation and deploy). They can hit "Publicar" manually to retry.
         try {
-          await db.insert(appMessages).values({
-            appId,
+          await AppMessage.create({
+            appId: String(appId),
             role: "assistant",
             content:
               `👁 Evaluación visual: aprobada. Pero no pude publicar la app automáticamente: ${
@@ -721,15 +688,11 @@ export async function runAutoEvaluator(opts: {
       recordEvalLog(`🚀 He publicado tu app automáticamente: ${finalUrl}`);
       // Email + chat hint.
       try {
-        const [user] = await db
-          .select({ email: users.email, fullName: users.fullName })
-          .from(users)
-          .where(eq(users.id, userId))
-          .limit(1);
+        const user = await User.findOne({ clerkId: userId }, { email: 1, fullName: 1 }).lean();
         await notifyFn({
           to: user?.email ?? null,
           recipientName: user?.fullName ?? null,
-          appTitle: row.title,
+          appTitle: (row as any).title,
           url: finalUrl,
           log,
         });
@@ -737,8 +700,8 @@ export async function runAutoEvaluator(opts: {
         log.warn({ err, appId, jobId }, "Auto-publish email failed (non-fatal)");
       }
       try {
-        await db.insert(appMessages).values({
-          appId,
+        await AppMessage.create({
+          appId: String(appId),
           role: "assistant",
           content: `🚀 He publicado tu app automáticamente: ${finalUrl}\n\nLa evaluación visual dio el visto bueno.`,
         });
@@ -757,8 +720,8 @@ export async function runAutoEvaluator(opts: {
     }
     // Pass without auto-publish: just leave a chat note so the user knows.
     try {
-      await db.insert(appMessages).values({
-        appId,
+      await AppMessage.create({
+        appId: String(appId),
         role: "assistant",
         content: `👁 Evaluación visual: aprobada. ${finalSummary}\n\nActiva "Auto-publicar" en el panel si quieres que la próxima vez se despliegue sola.`,
       });
@@ -783,17 +746,16 @@ export async function runAutoEvaluator(opts: {
     .join("\n");
   const evaluatorSummary = `${finalSummary}${issuesBlock ? `\n\n${issuesBlock}` : ""}`.slice(0, 1500);
 
-  await db
-    .update(generatedApps)
-    .set({ status: "needs_review", evaluatorSummary })
-    .where(and(eq(generatedApps.id, appId), eq(generatedApps.userId, userId)))
-    .catch((err: unknown) => {
-      log.warn({ err, appId }, "Failed to mark app as needs_review");
-    });
+  await GeneratedApp.updateOne(
+    { _id: String(appId), userId },
+    { status: "needs_review", evaluatorSummary },
+  ).catch((err: unknown) => {
+    log.warn({ err, appId }, "Failed to mark app as needs_review");
+  });
 
   try {
-    await db.insert(appMessages).values({
-      appId,
+    await AppMessage.create({
+      appId: String(appId),
       role: "assistant",
       content:
         `⚠️ La evaluación visual rechazó la app después de ${round} ronda${round === 1 ? "" : "s"}.\n\n` +
@@ -806,15 +768,11 @@ export async function runAutoEvaluator(opts: {
 
   // Best-effort heads-up email so the user knows their app is waiting for them.
   try {
-    const [user] = await db
-      .select({ email: users.email, fullName: users.fullName })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
+    const user = await User.findOne({ clerkId: userId }, { email: 1, fullName: 1 }).lean();
     await sendNeedsReviewEmail({
       to: user?.email ?? null,
       recipientName: user?.fullName ?? null,
-      appTitle: row.title,
+      appTitle: (row as any).title,
       summary: finalSummary,
       log,
     });

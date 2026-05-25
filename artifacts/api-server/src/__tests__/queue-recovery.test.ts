@@ -2,8 +2,7 @@
 // Run: pnpm --filter @workspace/api-server run test:queue
 // Set GENERATE_QUEUE_NAME to use an isolated queue (recommended for CI).
 
-import { db, generationJobs, users, generatedApps } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { GeneratedApp, GenerationJob, User } from "@workspace/db/schema";
 import {
   startQueue,
   stopQueue,

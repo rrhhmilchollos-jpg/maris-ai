@@ -21,9 +21,7 @@ import {
   type EvaluatorReport,
 } from "../lib/evaluator.js";
 import pino from "pino";
-import { db } from "../lib/db.js";
 import { generatedApps, users } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
 
 let failed = 0;
 function check(label: string, cond: boolean, detail?: unknown): void {
