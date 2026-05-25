@@ -970,6 +970,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
+            <button
+              type="button"
+              onClick={handleClosePreview}
+              aria-label="Cerrar vista previa en vivo"
+              title="Cerrar vista previa en vivo"
+              className="absolute right-5 top-5 z-20 grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-2xl font-bold leading-none text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
+            >
+              ×
+            </button>
             {showStaticBuildState ? (
               <AppPreviewWaitingState />
             ) : deployedUrl ? (
