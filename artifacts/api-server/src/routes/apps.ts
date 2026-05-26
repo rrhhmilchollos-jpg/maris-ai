@@ -2473,6 +2473,8 @@ export async function runJobById(jobId: string): Promise<void> {
           techStack: finalResult.techStack,
           frontendCode: finalResult.frontendCode,
           backendCode: finalResult.backendCode,
+          plannedPages: finalResult.plannedPages || [],
+          requiredEnvVars: finalResult.requiredEnvVars || [],
           status: "ready",
         },
       });
@@ -2491,6 +2493,7 @@ export async function runJobById(jobId: string): Promise<void> {
         frontendCode: finalResult.frontendCode,
         backendCode: finalResult.backendCode,
         plannedPages: finalResult.plannedPages || [],
+        requiredEnvVars: finalResult.requiredEnvVars || [],
         language: job.language,
         kind: job.kind,
         status: "ready",

@@ -49,6 +49,13 @@ export type VercelDeployFailure =
   | { kind: "build_failed"; message: string }
   | { kind: "vercel_api_error"; status: number; message: string };
 
+export type VercelEnvVar = {
+  key: string;
+  value: string;
+  type: "plain" | "secret" | "encrypted";
+  target: ("production" | "preview" | "development")[];
+};
+
 /**
  * Deploy the given app to Vercel. Returns the public URL or a typed failure
  * for the route handler to translate to an HTTP response. Never throws on
@@ -237,6 +244,72 @@ async function callVercel<T>(opts: {
   }
 
   return { ok: true, data: (await res.json()) as T };
+}
+
+/**
+ * Sync environment variables to the Vercel project. This ensures that third-party
+ * integrations (Clerk, Stripe, etc.) work immediately after deploy without
+ * manual configuration, matching the Emergent.sh experience.
+ */
+export async function syncVercelEnvironmentVariables(opts: {
+  projectId: string;
+  envVars: Array<{ name: string; value: string }>;
+  log: Logger;
+}): Promise<{ ok: true } | { ok: false; failure: VercelDeployFailure }> {
+  const { projectId, envVars, log } = opts;
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) return { ok: false, failure: { kind: "missing_token" } };
+
+  log.info({ projectId, count: envVars.length }, "Syncing environment variables to Vercel");
+
+  for (const env of envVars) {
+    // 1. Check if the variable already exists to avoid duplicates
+    const existing = await callVercel<any>({
+      token,
+      method: "GET",
+      path: `/v9/projects/${projectId}/env`,
+      log,
+    });
+
+    if (existing.ok) {
+      const alreadyExists = existing.data.envs?.find((e: any) => e.key === env.name);
+      if (alreadyExists) {
+        // Update existing variable
+        const updated = await callVercel<any>({
+          token,
+          method: "PATCH",
+          path: `/v9/projects/${projectId}/env/${alreadyExists.id}`,
+          body: {
+            value: env.value,
+            target: ["production", "preview", "development"],
+          },
+          log,
+        });
+        if (!updated.ok) log.warn({ key: env.name }, "Failed to update env var");
+        continue;
+      }
+    }
+
+    // 2. Create new variable
+    const created = await callVercel<any>({
+      token,
+      method: "POST",
+      path: `/v10/projects/${projectId}/env`,
+      body: {
+        key: env.name,
+        value: env.value,
+        type: "plain",
+        target: ["production", "preview", "development"],
+      },
+      log,
+    });
+
+    if (!created.ok) {
+      log.warn({ key: env.name, failure: created.failure }, "Failed to create env var");
+    }
+  }
+
+  return { ok: true };
 }
 
 /* ----------------------- custom domain helpers ----------------------------- */

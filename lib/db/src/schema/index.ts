@@ -79,6 +79,7 @@ export interface IGeneratedApp {
   customDomainVerified?: boolean;
   lastDeployedAt?: Date;
   deploymentLogs?: string;
+  requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -116,6 +117,13 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     customDomainVerified: { type: Boolean, default: false },
     lastDeployedAt: { type: Date },
     deploymentLogs: { type: String },
+    requiredEnvVars: [
+      {
+        name: { type: String, required: true },
+        why: { type: String },
+        value: { type: String }, // Opcional: para cuando Maris pueda proveer valores por defecto o el usuario los ingrese
+      },
+    ],
   },
   { timestamps: true },
 );
