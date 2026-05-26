@@ -55,7 +55,7 @@ export type VercelDeployFailure =
  * expected error paths — only on truly unexpected runtime errors.
  */
 export async function deployAppToVercel(opts: {
-  appId: number;
+  appId: string;
   userId: string;
   log: Logger;
 }): Promise<{ ok: true; result: VercelDeployResult } | { ok: false; failure: VercelDeployFailure }> {
@@ -300,7 +300,7 @@ export function recommendedDnsFor(domain: string): VercelDomainRecord[] {
  * failure verbatim so the route handler can surface Vercel's error message.
  */
 export async function addVercelDomainForApp(opts: {
-  appId: number;
+  appId: string;
   userId: string;
   projectId: string;
   domain: string;
@@ -385,7 +385,7 @@ export async function getVercelDomainStatus(opts: {
  * doesn't error out — we still want the local column cleared in that case.
  */
 export async function removeVercelDomainForApp(opts: {
-  appId: number;
+  appId: string;
   projectId: string;
   domain: string;
   log: Logger;

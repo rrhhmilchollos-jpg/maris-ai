@@ -70,7 +70,7 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
     );
 
     const deploymentResult = await deployAppToVercel({
-      appId: Number(appId),
+      appId,
       userId,
       log: logger,
     });
