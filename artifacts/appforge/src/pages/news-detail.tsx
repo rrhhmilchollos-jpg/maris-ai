@@ -55,46 +55,96 @@ export default function NewsDetailPage() {
         metaDescription.setAttribute("content", data.metaDescription || data.body.substring(0, 160));
       }
 
-      // Añadir etiqueta canónica
-      let canonicalLink = document.querySelector("link[rel=\"canonical\"]");
+      // Construir URL canónica con www
+      const canonicalUrl = `https://www.marisai.es/news/${data.slug}`;
+
+      // Actualizar canonical
+      let canonicalLink = document.getElementById('canonical-tag') as HTMLLinkElement | null;
       if (!canonicalLink) {
-        canonicalLink = document.createElement("link");
-        canonicalLink.setAttribute("rel", "canonical");
+        canonicalLink = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+      }
+      if (!canonicalLink) {
+        canonicalLink = document.createElement("link") as HTMLLinkElement;
+        (canonicalLink as HTMLLinkElement).setAttribute("rel", "canonical");
         document.head.appendChild(canonicalLink);
       }
-      canonicalLink.setAttribute("href", window.location.href);
+      (canonicalLink as HTMLLinkElement).setAttribute("href", canonicalUrl);
 
-      // Añadir JSON-LD para NewsArticle
+      // Actualizar og:url y twitter:url
+      const ogUrl = document.querySelector('meta[property="og:url"]');
+      if (ogUrl) ogUrl.setAttribute('content', canonicalUrl);
+      const twUrl = document.querySelector('meta[property="twitter:url"]');
+      if (twUrl) twUrl.setAttribute('content', canonicalUrl);
+
+      // Actualizar og:type a article
+      const ogType = document.querySelector('meta[property="og:type"]');
+      if (ogType) ogType.setAttribute('content', 'article');
+
+      // Actualizar og:image y twitter:image con la imagen del artículo
+      if (data.imageUrl) {
+        const ogImg = document.querySelector('meta[property="og:image"]');
+        if (ogImg) ogImg.setAttribute('content', data.imageUrl);
+        const twImg = document.querySelector('meta[property="twitter:image"]');
+        if (twImg) twImg.setAttribute('content', data.imageUrl);
+      }
+
+      // Actualizar og:title y twitter:title
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) ogTitle.setAttribute('content', `${data.title} - Maris AI`);
+      const twTitle = document.querySelector('meta[property="twitter:title"]');
+      if (twTitle) twTitle.setAttribute('content', `${data.title} - Maris AI`);
+
+      // Actualizar og:description y twitter:description
+      const desc = data.metaDescription || data.body.substring(0, 160);
+      const ogDesc = document.querySelector('meta[property="og:description"]');
+      if (ogDesc) ogDesc.setAttribute('content', desc);
+      const twDesc = document.querySelector('meta[property="twitter:description"]');
+      if (twDesc) twDesc.setAttribute('content', desc);
+
+      // Eliminar JSON-LD anterior si existe (evitar duplicados en navegación SPA)
+      const existingJsonLd = document.querySelector('script[data-news-article]');
+      if (existingJsonLd) existingJsonLd.remove();
+
+      // Añadir JSON-LD NewsArticle completo para Google News
       const jsonLd = {
         "@context": "https://schema.org",
         "@type": "NewsArticle",
         "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": window.location.href
+          "@id": canonicalUrl
         },
         "headline": data.title,
         "image": [
-          data.imageUrl
+          data.imageUrl || "https://www.marisai.es/opengraph.jpg"
         ],
         "datePublished": data.publishedAt,
-        "dateModified": data.updatedAt,
+        "dateModified": data.updatedAt || data.publishedAt,
         "author": {
           "@type": "Person",
-          "name": data.author
+          "name": data.author,
+          "url": "https://www.marisai.es/"
         },
         "publisher": {
-          "@type": "Organization",
+          "@type": "NewsMediaOrganization",
           "name": "Maris AI",
+          "url": "https://www.marisai.es/",
           "logo": {
             "@type": "ImageObject",
-            "url": "https://marisai.es/logo.svg" // TODO: Reemplazar con la URL real del logo de Maris AI
+            "url": "https://www.marisai.es/logo.svg",
+            "width": 512,
+            "height": 512
           }
         },
-        "description": data.metaDescription || data.body.substring(0, 160)
+        "description": desc,
+        "keywords": data.tags?.join(", ") || "inteligencia artificial, IA, tecnología",
+        "articleSection": "Inteligencia Artificial",
+        "inLanguage": "es",
+        "isAccessibleForFree": true
       };
 
       const script = document.createElement("script");
       script.type = "application/ld+json";
+      script.setAttribute('data-news-article', 'true');
       script.innerHTML = JSON.stringify(jsonLd);
       document.head.appendChild(script);
 
