@@ -11,7 +11,7 @@ import {
   MARIS_AI_DOMAIN,
   type DeploymentConfig,
 } from "../lib/deployment";
-import { deployAppToVercel } from "../lib/vercelDeploy";
+import { deployAppToVercel, syncVercelEnvironmentVariables } from "../lib/vercelDeploy";
 
 const router = Router();
 const DEPLOY_COST_CREDITS = 50;
@@ -92,6 +92,25 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
     }
 
     const { url, projectId } = deploymentResult.result;
+
+    // --- AUTOMATIZACIÓN ESTILO EMERGENT.SH ---
+    // Si la app tiene variables de entorno requeridas y valores configurados, las sincronizamos con Vercel.
+    if (appData.requiredEnvVars && appData.requiredEnvVars.length > 0) {
+      const envVarsToSync = appData.requiredEnvVars
+        .filter((ev: any) => ev.value) // Solo las que tienen valor
+        .map((ev: any) => ({ name: ev.name, value: ev.value }));
+
+      if (envVarsToSync.length > 0) {
+        logger.info({ appId, projectId, count: envVarsToSync.length }, "Automating Vercel env vars sync");
+        await syncVercelEnvironmentVariables({
+          projectId,
+          envVars: envVarsToSync,
+          log: logger,
+        });
+      }
+    }
+    // ----------------------------------------
+
     const isPaidUser = !!userData.isPremium || isAdminEmail(userData.email);
     
     // Gestión de dominios según el plan

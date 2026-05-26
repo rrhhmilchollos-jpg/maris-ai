@@ -285,6 +285,7 @@ export interface GeneratedAppPayload {
   frontendCode: string;
   backendCode: string;
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
+  requiredEnvVars?: Array<{ name: string; why: string }>;
 }
 
 export type GeneratePhase =
@@ -2031,5 +2032,8 @@ const [frontendResult, backendResult] = await Promise.all([frontendPromise, back
     frontendCode: frontendWithWatermark,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
+    requiredEnvVars: integrationSpec.services.flatMap((s) =>
+      s.envVars.map((v) => ({ name: v, why: s.why })),
+    ),
   };
 }
