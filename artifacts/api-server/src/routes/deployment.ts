@@ -93,15 +93,28 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
 
     const { url, projectId } = deploymentResult.result;
 
-    // --- AUTOMATIZACIÓN ESTILO EMERGENT.SH ---
-    // Si la app tiene variables de entorno requeridas y valores configurados, las sincronizamos con Vercel.
+    // --- AUTOMATIZACIÓN ESTILO EMERGENT.SH (ZERO-CONFIG) ---
+    // Sincronizamos las variables de entorno requeridas con Vercel.
+    // Si la app no tiene un valor específico, usamos las claves globales de la plataforma Maris AI
+    // para que la app funcione instantáneamente ("Out of the box").
     if (appData.requiredEnvVars && appData.requiredEnvVars.length > 0) {
-      const envVarsToSync = appData.requiredEnvVars
-        .filter((ev: any) => ev.value) // Solo las que tienen valor
-        .map((ev: any) => ({ name: ev.name, value: ev.value }));
+      const envVarsToSync = appData.requiredEnvVars.map((ev: any) => {
+        let value = ev.value;
+        
+        // Si no hay valor del usuario, inyectamos las de la plataforma según el nombre
+        if (!value) {
+          if (ev.name.includes("CLERK_PUBLISHABLE_KEY")) value = process.env.CLERK_PUBLISHABLE_KEY;
+          if (ev.name.includes("CLERK_SECRET_KEY")) value = process.env.CLERK_SECRET_KEY;
+          if (ev.name.includes("STRIPE_SECRET_KEY")) value = process.env.STRIPE_SECRET_KEY;
+          if (ev.name.includes("OPENAI_API_KEY")) value = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+          if (ev.name.includes("ANTHROPIC_API_KEY")) value = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
+        }
+
+        return { name: ev.name, value };
+      }).filter(ev => ev.value); // Solo sincronizamos si tenemos un valor (usuario o plataforma)
 
       if (envVarsToSync.length > 0) {
-        logger.info({ appId, projectId, count: envVarsToSync.length }, "Automating Vercel env vars sync");
+        logger.info({ appId, projectId, count: envVarsToSync.length }, "Automating Vercel env vars sync with Platform Defaults");
         await syncVercelEnvironmentVariables({
           projectId,
           envVars: envVarsToSync,
@@ -109,7 +122,7 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
         });
       }
     }
-    // ----------------------------------------
+    // -------------------------------------------------------
 
     const isPaidUser = !!userData.isPremium || isAdminEmail(userData.email);
     
