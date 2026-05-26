@@ -10,7 +10,70 @@
     <meta name="keywords" content="maris ai, marisai.es, generador de apps con ia, vibe coding, no-code ia, agentes ia, claude anthropic, gemini google, emergent alternativa, base44 alternativa, react typescript tailwind, full-stack ia">
     <meta name="author" content="Maris AI Inc.">
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
-    <link rel="canonical" href="https://www.marisai.es/" />
+    <link rel="canonical" href="https://www.marisai.es/" id="canonical-tag" />
+
+    <!-- Script de canonical dinámico por ruta — evita Soft 404 en SPAs -->
+    <script>
+      (function() {
+        var routeMeta = {
+          '/': {
+            title: 'Maris AI | Generador de Apps con IA — 9 Agentes Especializados',
+            description: 'Maris AI genera aplicaciones web y móviles completas con un pipeline de 9 agentes de IA especializados. De la idea al código desplegado en minutos.',
+            canonical: 'https://www.marisai.es/'
+          },
+          '/pricing': {
+            title: 'Precios — Maris AI | Planes desde 0€',
+            description: 'Elige el plan de Maris AI que mejor se adapte a ti. Plan gratuito con 3 apps, Pro desde 20€/mes con apps ilimitadas y acceso a todos los agentes IA.',
+            canonical: 'https://www.marisai.es/pricing'
+          },
+          '/news': {
+            title: 'Noticias de IA — Maris AI | Últimas novedades en inteligencia artificial',
+            description: 'Últimas noticias y tendencias en inteligencia artificial, generación de código con IA, y novedades de Maris AI.',
+            canonical: 'https://www.marisai.es/news'
+          },
+          '/vs-emergent': {
+            title: 'Maris AI vs Emergent.sh — Comparativa de generadores de apps con IA',
+            description: 'Compara Maris AI con Emergent.sh: precio, velocidad, calidad del código, agentes especializados y soporte. Descubre por qué Maris AI es la mejor alternativa.',
+            canonical: 'https://www.marisai.es/vs-emergent'
+          },
+          '/sign-in': {
+            title: 'Iniciar sesión — Maris AI',
+            description: 'Accede a tu cuenta de Maris AI para generar y gestionar tus aplicaciones con IA.',
+            canonical: 'https://www.marisai.es/sign-in'
+          },
+          '/sign-up': {
+            title: 'Crear cuenta — Maris AI | Empieza gratis',
+            description: 'Crea tu cuenta gratuita en Maris AI y genera tu primera app con IA en minutos. Sin tarjeta de crédito.',
+            canonical: 'https://www.marisai.es/sign-up'
+          }
+        };
+        var path = window.location.pathname.replace(/\/$/, '') || '/';
+        var meta = routeMeta[path] || routeMeta['/'];
+        // Actualizar canonical
+        var canonicalEl = document.getElementById('canonical-tag');
+        if (canonicalEl) canonicalEl.setAttribute('href', meta.canonical);
+        // Actualizar title
+        document.title = meta.title;
+        // Actualizar description
+        var descEl = document.querySelector('meta[name="description"]');
+        if (descEl) descEl.setAttribute('content', meta.description);
+        // Actualizar og:url y twitter:url
+        var ogUrl = document.querySelector('meta[property="og:url"]');
+        if (ogUrl) ogUrl.setAttribute('content', meta.canonical);
+        var twUrl = document.querySelector('meta[property="twitter:url"]');
+        if (twUrl) twUrl.setAttribute('content', meta.canonical);
+        // Actualizar og:title y twitter:title
+        var ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) ogTitle.setAttribute('content', meta.title);
+        var twTitle = document.querySelector('meta[property="twitter:title"]');
+        if (twTitle) twTitle.setAttribute('content', meta.title);
+        // Actualizar og:description y twitter:description
+        var ogDesc = document.querySelector('meta[property="og:description"]');
+        if (ogDesc) ogDesc.setAttribute('content', meta.description);
+        var twDesc = document.querySelector('meta[property="twitter:description"]');
+        if (twDesc) twDesc.setAttribute('content', meta.description);
+      })();
+    </script>
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
