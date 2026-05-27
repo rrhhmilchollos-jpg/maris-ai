@@ -23,6 +23,7 @@ import {
   Terminal,
   Zap,
   CreditCard,
+  Unlink,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -103,13 +104,14 @@ export function DeployModal({
   const [showDomainPanel, setShowDomainPanel] = useState(false);
   const [domainInput, setDomainInput] = useState(currentCustomDomain || "");
   const [domainSaving, setDomainSaving] = useState(false);
+  const [domainUnlinking, setDomainUnlinking] = useState(false);
   const [domainResult, setDomainResult] = useState<{
     domain: string;
     verified: boolean;
     dnsRecords?: Array<{ type: string; name: string; value: string }>;
   } | null>(
     currentCustomDomain
-      ? { domain: currentCustomDomain, verified: !!customDomainVerified }
+      ? { domain: currentCustomDomain, verified: !!customDomainVerified, dnsRecords: [] }
       : null,
   );
 
@@ -132,7 +134,6 @@ export function DeployModal({
     addLog("Verificando archivos del bundle…", "info");
 
     try {
-      // Step 1: compile simulation logs while calling the real API
       await new Promise((r) => setTimeout(r, 400));
       addLog("✓ Bundle validado — " + Math.floor(Math.random() * 40 + 20) + " archivos", "success");
       addLog("Transpilando TypeScript → JavaScript…", "info");
@@ -148,7 +149,6 @@ export function DeployModal({
       setStep("deploying");
       addLog("Creando deployment en Vercel…", "info");
 
-      // Real API call
       const res = await fetch(`/api/apps/${appId}/deploy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,19 +221,181 @@ export function DeployModal({
     }
   }, [appId, domainInput, toast]);
 
+  /* ── Unlink domain ── */
+  const unlinkDomain = useCallback(async () => {
+    if (!domainResult?.domain) return;
+    setDomainUnlinking(true);
+    try {
+      const res = await fetch(`/api/apps/${appId}/custom-domain`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Error al desvincular dominio");
+      }
+      setDomainResult(null);
+      setDomainInput("");
+      setShowDomainPanel(false);
+      toast({ title: "Dominio desvinculado", description: "El dominio personalizado ha sido eliminado." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setDomainUnlinking(false);
+    }
+  }, [appId, domainResult, toast]);
+
   const copyUrl = useCallback(() => {
     const url = domainResult?.domain
       ? `https://${domainResult.domain}`
-      : deployUrl;
+      : deployUrl || currentDeployUrl || "";
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [deployUrl, domainResult]);
+  }, [deployUrl, currentDeployUrl, domainResult]);
+
+  /* ── Shared domain panel (used in both idle+done states) ── */
+  const renderDomainSection = (activeUrl: string) => (
+    <>
+      {/* Custom domain toggle */}
+      <button
+        onClick={() => setShowDomainPanel((v) => !v)}
+        className="flex w-full items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.05]"
+      >
+        <div className="flex items-center gap-2.5">
+          <Globe className="h-4 w-4 text-white/50" />
+          <span className="text-[13px] font-medium text-white/70">Dominio personalizado</span>
+          {!isPremium && (
+            <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+              <Lock className="h-2.5 w-2.5" /> PRO
+            </span>
+          )}
+          {domainResult?.verified && (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+              <CheckCircle2 className="h-2.5 w-2.5" /> Activo
+            </span>
+          )}
+          {domainResult && !domainResult.verified && (
+            <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
+              <AlertTriangle className="h-2.5 w-2.5" /> Pendiente DNS
+            </span>
+          )}
+        </div>
+        <ChevronRight className={`h-4 w-4 text-white/30 transition-transform ${showDomainPanel ? "rotate-90" : ""}`} />
+      </button>
+
+      {/* Domain panel */}
+      {showDomainPanel && (
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
+          {!isPremium ? (
+            <div className="flex flex-col items-center gap-3 py-2 text-center">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-500/10">
+                <CreditCard className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-white/80">Función exclusiva del plan Pro</p>
+                <p className="mt-1 text-[12px] text-white/40">
+                  Conecta tu propio dominio (miapp.com) a tu app desplegada.
+                  Disponible con un plan de pago activo verificado por Stripe.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                onClick={() => window.open("/pricing", "_blank")}
+              >
+                <Zap className="mr-1.5 h-3.5 w-3.5" /> Ver planes
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-[12px] text-white/50">
+                Introduce tu dominio y configura los registros DNS que te indicamos.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={domainInput}
+                  onChange={(e) => setDomainInput(e.target.value)}
+                  placeholder="miapp.com o app.miempresa.com"
+                  className="flex-1 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 py-2 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30"
+                />
+                <Button
+                  onClick={saveDomain}
+                  disabled={domainSaving || !domainInput.trim()}
+                  size="sm"
+                  className="bg-violet-600 text-white hover:bg-violet-500"
+                >
+                  {domainSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Guardar"}
+                </Button>
+              </div>
+
+              {domainResult && (
+                <div className={`rounded-lg border p-3 ${domainResult.verified ? "border-emerald-500/20 bg-emerald-500/5" : "border-amber-500/20 bg-amber-500/5"}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {domainResult.verified
+                        ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        : <AlertTriangle className="h-4 w-4 text-amber-400" />}
+                      <span className={`text-[12px] font-semibold ${domainResult.verified ? "text-emerald-300" : "text-amber-300"}`}>
+                        {domainResult.verified ? "Dominio verificado y activo" : "Pendiente de verificación DNS"}
+                      </span>
+                    </div>
+                    {/* Unlink button */}
+                    <button
+                      onClick={unlinkDomain}
+                      disabled={domainUnlinking}
+                      className="flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
+                    >
+                      {domainUnlinking
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <Unlink className="h-3 w-3" />}
+                      Desvincular
+                    </button>
+                  </div>
+                  {!domainResult.verified && domainResult.dnsRecords && domainResult.dnsRecords.length > 0 && (
+                    <div className="mt-2.5">
+                      <p className="mb-1.5 text-[11px] text-white/40">Configura estos registros DNS en tu proveedor:</p>
+                      <div className="overflow-x-auto rounded border border-white/[0.06] bg-[#070910]">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b border-white/[0.06]">
+                              <th className="px-2.5 py-1.5 text-left font-medium text-white/30">Tipo</th>
+                              <th className="px-2.5 py-1.5 text-left font-medium text-white/30">Nombre</th>
+                              <th className="px-2.5 py-1.5 text-left font-medium text-white/30">Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {domainResult.dnsRecords.map((r, i) => (
+                              <tr key={i} className="border-b border-white/[0.04] last:border-0">
+                                <td className="px-2.5 py-1.5 font-mono text-blue-400">{r.type}</td>
+                                <td className="px-2.5 py-1.5 font-mono text-white/60">{r.name}</td>
+                                <td className="px-2.5 py-1.5 font-mono text-white/60">{r.value}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="mt-1.5 text-[10.5px] text-white/30">
+                        La propagación DNS puede tardar hasta 48 horas. Vuelve a guardar el dominio para re-verificar.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 
   /* ── Render ── */
   const isDeploying = step === "compiling" || step === "uploading" || step === "deploying";
   const currentStepIdx = DEPLOY_STEPS.findIndex((s) => s.id === step);
+  const activeUrl = deployUrl || currentDeployUrl || "";
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -288,37 +450,45 @@ export function DeployModal({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-hidden p-6">
+        <div className="flex-1 overflow-y-auto p-6 max-h-[70vh]">
 
           {/* Idle state */}
           {step === "idle" && (
-            <div className="flex flex-col items-center gap-6 py-4 text-center">
-              <div className="grid h-16 w-16 place-items-center rounded-2xl bg-violet-600/15">
-                <Rocket className="h-8 w-8 text-violet-400" />
-              </div>
-              <div>
-                <h3 className="text-[17px] font-bold text-white">Publicar en Vercel</h3>
-                <p className="mt-1.5 max-w-sm text-[13px] text-white/50">
-                  Maris AI compilará tu proyecto, subirá los archivos y lo desplegará en Vercel.
-                  Recibirás una URL pública en segundos.
-                </p>
-              </div>
-              {currentDeployUrl && (
-                <div className="flex w-full items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  <span className="flex-1 truncate text-[12px] text-emerald-300">{currentDeployUrl}</span>
-                  <a href={currentDeployUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
-                  </a>
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col items-center gap-4 py-2 text-center">
+                <div className="grid h-16 w-16 place-items-center rounded-2xl bg-violet-600/15">
+                  <Rocket className="h-8 w-8 text-violet-400" />
                 </div>
-              )}
-              <Button
-                onClick={startDeploy}
-                className="h-11 w-full bg-gradient-to-r from-violet-600 to-purple-600 font-bold text-white hover:from-violet-500 hover:to-purple-500"
-              >
-                <Zap className="mr-2 h-4 w-4" />
-                {currentDeployUrl ? "Re-desplegar" : "Desplegar ahora"}
-              </Button>
+                <div>
+                  <h3 className="text-[17px] font-bold text-white">Publicar en Vercel</h3>
+                  <p className="mt-1.5 max-w-sm text-[13px] text-white/50">
+                    Maris AI compilará tu proyecto, subirá los archivos y lo desplegará en Vercel.
+                    Recibirás una URL pública en segundos.
+                  </p>
+                </div>
+                {currentDeployUrl && (
+                  <div className="flex w-full items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-2.5">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                    <span className="flex-1 truncate text-[12px] text-emerald-300">{currentDeployUrl}</span>
+                    <button onClick={copyUrl} className="grid h-6 w-6 place-items-center rounded text-emerald-400 hover:text-white">
+                      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                    <a href={currentDeployUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-3.5 w-3.5 text-emerald-400 hover:text-white" />
+                    </a>
+                  </div>
+                )}
+                <Button
+                  onClick={startDeploy}
+                  className="h-11 w-full bg-gradient-to-r from-violet-600 to-purple-600 font-bold text-white hover:from-violet-500 hover:to-purple-500"
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  {currentDeployUrl ? "Re-desplegar" : "Desplegar ahora"}
+                </Button>
+              </div>
+
+              {/* ── Domain panel visible en idle si ya hay deploy ── */}
+              {currentDeployUrl && renderDomainSection(currentDeployUrl)}
             </div>
           )}
 
@@ -340,144 +510,32 @@ export function DeployModal({
               </div>
 
               {/* Success state */}
-              {step === "done" && deployUrl && (
+              {step === "done" && activeUrl && (
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/8 px-4 py-3">
                     <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-semibold text-emerald-300">¡App desplegada con éxito!</p>
                       <a
-                        href={deployUrl}
+                        href={activeUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="truncate text-[11px] text-emerald-400/70 hover:text-emerald-300 hover:underline"
                       >
-                        {deployUrl}
+                        {activeUrl}
                       </a>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button onClick={copyUrl} className="grid h-7 w-7 place-items-center rounded-md border border-white/10 bg-white/[0.04] text-white/50 hover:text-white">
                         {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                       </button>
-                      <a href={deployUrl} target="_blank" rel="noopener noreferrer" className="grid h-7 w-7 place-items-center rounded-md border border-white/10 bg-white/[0.04] text-white/50 hover:text-white">
+                      <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="grid h-7 w-7 place-items-center rounded-md border border-white/10 bg-white/[0.04] text-white/50 hover:text-white">
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     </div>
                   </div>
 
-                  {/* Custom domain toggle */}
-                  <button
-                    onClick={() => setShowDomainPanel((v) => !v)}
-                    className="flex w-full items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 text-left transition hover:bg-white/[0.05]"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Globe className="h-4 w-4 text-white/50" />
-                      <span className="text-[13px] font-medium text-white/70">Dominio personalizado</span>
-                      {!isPremium && (
-                        <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-400">
-                          <Lock className="h-2.5 w-2.5" /> PRO
-                        </span>
-                      )}
-                      {domainResult?.verified && (
-                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                          <CheckCircle2 className="h-2.5 w-2.5" /> Activo
-                        </span>
-                      )}
-                    </div>
-                    <ChevronRight className={`h-4 w-4 text-white/30 transition-transform ${showDomainPanel ? "rotate-90" : ""}`} />
-                  </button>
-
-                  {/* Domain panel */}
-                  {showDomainPanel && (
-                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-4">
-                      {!isPremium ? (
-                        <div className="flex flex-col items-center gap-3 py-2 text-center">
-                          <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-500/10">
-                            <CreditCard className="h-5 w-5 text-amber-400" />
-                          </div>
-                          <div>
-                            <p className="text-[13px] font-semibold text-white/80">Función exclusiva del plan Pro</p>
-                            <p className="mt-1 text-[12px] text-white/40">
-                              Conecta tu propio dominio (miapp.com) a tu app desplegada.
-                              Disponible con un plan de pago activo verificado por Stripe.
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-                            onClick={() => window.open("/pricing", "_blank")}
-                          >
-                            <Zap className="mr-1.5 h-3.5 w-3.5" /> Ver planes
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-3">
-                          <p className="text-[12px] text-white/50">
-                            Introduce tu dominio y configura los registros DNS que te indicamos.
-                          </p>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={domainInput}
-                              onChange={(e) => setDomainInput(e.target.value)}
-                              placeholder="miapp.com o app.miempresa.com"
-                              className="flex-1 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 py-2 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30"
-                            />
-                            <Button
-                              onClick={saveDomain}
-                              disabled={domainSaving || !domainInput.trim()}
-                              size="sm"
-                              className="bg-violet-600 text-white hover:bg-violet-500"
-                            >
-                              {domainSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Guardar"}
-                            </Button>
-                          </div>
-
-                          {domainResult && (
-                            <div className={`rounded-lg border p-3 ${domainResult.verified ? "border-emerald-500/20 bg-emerald-500/5" : "border-amber-500/20 bg-amber-500/5"}`}>
-                              <div className="flex items-center gap-2">
-                                {domainResult.verified
-                                  ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                                  : <AlertTriangle className="h-4 w-4 text-amber-400" />}
-                                <span className={`text-[12px] font-semibold ${domainResult.verified ? "text-emerald-300" : "text-amber-300"}`}>
-                                  {domainResult.verified ? "Dominio verificado y activo" : "Pendiente de verificación DNS"}
-                                </span>
-                              </div>
-                              {!domainResult.verified && domainResult.dnsRecords && domainResult.dnsRecords.length > 0 && (
-                                <div className="mt-2.5">
-                                  <p className="mb-1.5 text-[11px] text-white/40">Configura estos registros DNS en tu proveedor:</p>
-                                  <div className="overflow-x-auto rounded border border-white/[0.06] bg-[#070910]">
-                                    <table className="w-full text-[11px]">
-                                      <thead>
-                                        <tr className="border-b border-white/[0.06]">
-                                          <th className="px-2.5 py-1.5 text-left font-medium text-white/30">Tipo</th>
-                                          <th className="px-2.5 py-1.5 text-left font-medium text-white/30">Nombre</th>
-                                          <th className="px-2.5 py-1.5 text-left font-medium text-white/30">Valor</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {domainResult.dnsRecords.map((r, i) => (
-                                          <tr key={i} className="border-b border-white/[0.04] last:border-0">
-                                            <td className="px-2.5 py-1.5 font-mono text-blue-400">{r.type}</td>
-                                            <td className="px-2.5 py-1.5 font-mono text-white/60">{r.name}</td>
-                                            <td className="px-2.5 py-1.5 font-mono text-white/60">{r.value}</td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                  <p className="mt-1.5 text-[10.5px] text-white/30">
-                                    La propagación DNS puede tardar hasta 48 horas. Vuelve a guardar el dominio para re-verificar.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {renderDomainSection(activeUrl)}
                 </div>
               )}
 
