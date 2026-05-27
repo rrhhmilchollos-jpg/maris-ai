@@ -57,25 +57,19 @@
         };
         var path = window.location.pathname.replace(/\/$/, '') || '/';
         var meta = routeMeta[path] || routeMeta['/'];
-        // Actualizar canonical
         var canonicalEl = document.getElementById('canonical-tag');
         if (canonicalEl) canonicalEl.setAttribute('href', meta.canonical);
-        // Actualizar title
         document.title = meta.title;
-        // Actualizar description
         var descEl = document.querySelector('meta[name="description"]');
         if (descEl) descEl.setAttribute('content', meta.description);
-        // Actualizar og:url y twitter:url
         var ogUrl = document.querySelector('meta[property="og:url"]');
         if (ogUrl) ogUrl.setAttribute('content', meta.canonical);
         var twUrl = document.querySelector('meta[property="twitter:url"]');
         if (twUrl) twUrl.setAttribute('content', meta.canonical);
-        // Actualizar og:title y twitter:title
         var ogTitle = document.querySelector('meta[property="og:title"]');
         if (ogTitle) ogTitle.setAttribute('content', meta.title);
         var twTitle = document.querySelector('meta[property="twitter:title"]');
         if (twTitle) twTitle.setAttribute('content', meta.title);
-        // Actualizar og:description y twitter:description
         var ogDesc = document.querySelector('meta[property="og:description"]');
         if (ogDesc) ogDesc.setAttribute('content', meta.description);
         var twDesc = document.querySelector('meta[property="twitter:description"]');
@@ -155,15 +149,6 @@
     }
     </script>
 
-    <!-- Google tag (gtag.js) — cargado de forma diferida para no bloquear render -->
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-FLQ32B2CNW');
-    </script>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FLQ32B2CNW"></script>
-
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Preconnect a orígenes críticos (Google Fonts + Clerk) -->
@@ -183,7 +168,6 @@
 
     <!-- CSS crítico inline: evita bloqueo de render del CSS externo en móvil -->
     <style>
-      /* Tema oscuro — variables críticas para el primer paint */
       :root { color-scheme: dark; }
       html.dark {
         --background: 240 10% 4%;
@@ -193,14 +177,12 @@
         --muted-foreground: 240 5% 65%;
         --card: 240 10% 6%;
       }
-      /* Evitar FOUC (flash of unstyled content) */
       body {
         background-color: hsl(240 10% 4%);
         color: hsl(0 0% 98%);
         margin: 0;
         font-family: Inter, system-ui, -apple-system, sans-serif;
       }
-      /* Ocultar root hasta que React hidrate */
       #root { min-height: 100vh; }
     </style>
   </head>
