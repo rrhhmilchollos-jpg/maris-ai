@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
