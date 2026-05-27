@@ -5,13 +5,19 @@ import { logger } from "../lib/logger";
 import { chargeCredits } from "../lib/credits";
 import {
   redeployVercelProject,
-  verifyCustomDomain,
   getDeploymentStatus,
   generateMarisaiSubdomain,
   MARIS_AI_DOMAIN,
   type DeploymentConfig,
 } from "../lib/deployment";
-import { deployAppToVercel, syncVercelEnvironmentVariables } from "../lib/vercelDeploy";
+import {
+  deployAppToVercel,
+  syncVercelEnvironmentVariables,
+  addVercelDomainForApp,
+  getVercelDomainStatus,
+  recommendedDnsFor,
+  removeVercelDomainForApp,
+} from "../lib/vercelDeploy";
 
 const router = Router();
 const DEPLOY_COST_CREDITS = 50;
@@ -30,78 +36,38 @@ async function chargeDeployCredits(req: Request, userId: string, appTitle: strin
   });
 }
 
-/**
- * POST /api/apps/:appId/deploy
- * Deploy an app to Vercel. Cada ejecución consume 50 créditos para usuarios no admin.
- */
 router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
-
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
     const appData = await GeneratedApp.findOne({ _id: appId, userId });
-    if (!appData) {
-      return res.status(404).json({ error: "App not found" });
-    }
+    if (!appData) return res.status(404).json({ error: "App not found" });
 
     const userData = await User.findById(userId).lean();
-    if (!userData) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    if (!userData) return res.status(404).json({ error: "User not found" });
 
     const charge = await chargeDeployCredits(req, userId, appData.title);
     if (!charge.ok) {
-      return res.status(402).json({
-        error: "Créditos insuficientes",
-        required: DEPLOY_COST_CREDITS,
-        current: userData.credits,
-      });
+      return res.status(402).json({ error: "Créditos insuficientes", required: DEPLOY_COST_CREDITS, current: userData.credits });
     }
 
+    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deploying", deploymentError: null });
 
-
-    await GeneratedApp.updateOne(
-      { _id: appId, userId },
-      { deploymentStatus: "deploying", deploymentError: null },
-    );
-
-    const deploymentResult = await deployAppToVercel({
-      appId,
-      userId,
-      log: logger,
-    });
+    const deploymentResult = await deployAppToVercel({ appId, userId, log: logger });
 
     if (!deploymentResult.ok) {
       const errorMsg = "failure" in deploymentResult ? JSON.stringify(deploymentResult.failure) : "Unknown error";
-      await GeneratedApp.updateOne(
-        { _id: appId, userId },
-        {
-          deploymentStatus: "failed",
-          deploymentError: errorMsg,
-        },
-      );
-
-      return res.status(500).json({
-        success: false,
-        error: errorMsg,
-      });
+      await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "failed", deploymentError: errorMsg });
+      return res.status(500).json({ success: false, error: errorMsg });
     }
 
     const { url, projectId } = deploymentResult.result;
 
-    // --- AUTOMATIZACIÓN ESTILO EMERGENT.SH (ZERO-CONFIG) ---
-    // Sincronizamos las variables de entorno requeridas con Vercel.
-    // Si la app no tiene un valor específico, usamos las claves globales de la plataforma Maris AI
-    // para que la app funcione instantáneamente ("Out of the box").
     if (appData.requiredEnvVars && appData.requiredEnvVars.length > 0) {
       const envVarsToSync = appData.requiredEnvVars.map((ev: any) => {
         let value = ev.value;
-        
-        // Si no hay valor del usuario, inyectamos las de la plataforma según el nombre
         if (!value) {
           if (ev.name.includes("CLERK_PUBLISHABLE_KEY")) value = process.env.CLERK_PUBLISHABLE_KEY;
           if (ev.name.includes("CLERK_SECRET_KEY")) value = process.env.CLERK_SECRET_KEY;
@@ -109,162 +75,71 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
           if (ev.name.includes("OPENAI_API_KEY")) value = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
           if (ev.name.includes("ANTHROPIC_API_KEY")) value = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
         }
-
         return { name: ev.name, value };
-      }).filter(ev => ev.value); // Solo sincronizamos si tenemos un valor (usuario o plataforma)
-
+      }).filter((ev: any) => ev.value);
       if (envVarsToSync.length > 0) {
-        logger.info({ appId, projectId, count: envVarsToSync.length }, "Automating Vercel env vars sync with Platform Defaults");
-        await syncVercelEnvironmentVariables({
-          projectId,
-          envVars: envVarsToSync,
-          log: logger,
-        });
+        logger.info({ appId, projectId, count: envVarsToSync.length }, "Automating Vercel env vars sync");
+        await syncVercelEnvironmentVariables({ projectId, envVars: envVarsToSync, log: logger });
       }
     }
-    // -------------------------------------------------------
 
     const isPaidUser = !!userData.isPremium || isAdminEmail(userData.email);
-    
-    // Gestión de dominios según el plan
-
     let finalUrl = url;
     let subdomain: string | undefined;
     let customDomain: string | undefined;
 
     if (isPaidUser && (req.body as any)?.customDomain) {
       customDomain = (req.body as any).customDomain;
-      // Aquí se podría llamar a addVercelDomainForApp si se desea automatizar la vinculación
     } else if (!isPaidUser) {
-      // Para usuarios free, intentamos usar el subdominio marisai.es si está configurado
       subdomain = generateMarisaiSubdomain(appData.title, Array.isArray(appId) ? appId[0] : appId);
       finalUrl = `https://${subdomain}.${MARIS_AI_DOMAIN}`;
     }
 
-    await GeneratedApp.updateOne(
-      { _id: appId, userId },
-      {
-        deploymentStatus: "deployed",
-        vercelProjectId: projectId,
-        vercelDeployUrl: finalUrl,
-        marisaiSubdomain: subdomain,
-        customDomain: customDomain,
-        lastDeployedAt: new Date(),
-        deploymentError: null,
-      },
-    );
-
-    return res.json({
-      success: true,
-      deploymentUrl: finalUrl,
-      subdomain,
-      customDomain,
-      projectId: projectId,
-      creditsCharged: DEPLOY_COST_CREDITS,
+    await GeneratedApp.updateOne({ _id: appId, userId }, {
+      deploymentStatus: "deployed", vercelProjectId: projectId, vercelDeployUrl: finalUrl,
+      marisaiSubdomain: subdomain, customDomain, lastDeployedAt: new Date(), deploymentError: null,
     });
+
+    return res.json({ success: true, deploymentUrl: finalUrl, subdomain, customDomain, projectId, creditsCharged: DEPLOY_COST_CREDITS });
   } catch (error) {
     logger.error({ error }, "Deployment error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-/**
- * POST /api/apps/:appId/redeploy
- * Re-deploy an existing app. Cada ejecución consume 50 créditos para usuarios no admin.
- */
 router.post("/apps/:appId/redeploy", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
-
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId });
-    if (!appData) {
-      return res.status(404).json({ error: "App not found" });
-    }
-
-    if (!appData.vercelProjectId) {
-      return res.status(400).json({ error: "App has not been deployed yet" });
-    }
-
+    if (!appData) return res.status(404).json({ error: "App not found" });
+    if (!appData.vercelProjectId) return res.status(400).json({ error: "App has not been deployed yet" });
     const userData = await User.findById(userId).lean();
-    if (!userData) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
+    if (!userData) return res.status(404).json({ error: "User not found" });
     const charge = await chargeDeployCredits(req, userId, appData.title);
-    if (!charge.ok) {
-      return res.status(402).json({
-        error: "Créditos insuficientes",
-        required: DEPLOY_COST_CREDITS,
-        current: userData.credits,
-      });
-    }
-
-    await GeneratedApp.updateOne(
-      { _id: appId, userId },
-      { deploymentStatus: "deploying", deploymentError: null },
-    );
-
+    if (!charge.ok) return res.status(402).json({ error: "Créditos insuficientes", required: DEPLOY_COST_CREDITS, current: userData.credits });
+    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deploying", deploymentError: null });
     const redeployResult = await redeployVercelProject(appData.vercelProjectId);
-
     if (!redeployResult.success) {
-      await GeneratedApp.updateOne(
-        { _id: appId, userId },
-        {
-          deploymentStatus: "failed",
-          deploymentError: redeployResult.error,
-        },
-      );
-
-      return res.status(500).json({
-        success: false,
-        error: redeployResult.error,
-      });
+      await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "failed", deploymentError: redeployResult.error });
+      return res.status(500).json({ success: false, error: redeployResult.error });
     }
-
-    await GeneratedApp.updateOne(
-      { _id: appId, userId },
-      {
-        deploymentStatus: "deployed",
-        vercelDeployUrl: redeployResult.deploymentUrl,
-        lastDeployedAt: new Date(),
-        deploymentError: null,
-      },
-    );
-
-    return res.json({
-      success: true,
-      deploymentUrl: redeployResult.deploymentUrl,
-      creditsCharged: DEPLOY_COST_CREDITS,
-    });
+    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deployed", vercelDeployUrl: redeployResult.deploymentUrl, lastDeployedAt: new Date(), deploymentError: null });
+    return res.json({ success: true, deploymentUrl: redeployResult.deploymentUrl, creditsCharged: DEPLOY_COST_CREDITS });
   } catch (error) {
     logger.error({ error }, "Redeployment error");
     return res.status(500).json({ error: "Internal server error" });
   }
 });
 
-/**
- * GET /api/apps/:appId/deployment-status
- * Get deployment status
- */
 router.get("/apps/:appId/deployment-status", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
-
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
-    if (!appData) {
-      return res.status(404).json({ error: "App not found" });
-    }
-
+    if (!appData) return res.status(404).json({ error: "App not found" });
     return res.json({
       status: appData.deploymentStatus || "not_deployed",
       deploymentUrl: appData.vercelDeployUrl,
@@ -284,64 +159,51 @@ router.get("/apps/:appId/deployment-status", requireAuth, async (req: Request, r
 
 /**
  * POST /api/apps/:appId/custom-domain
- * Add or update custom domain (paid users only)
+ * Registra el dominio en Vercel y devuelve los registros DNS al frontend.
  */
 router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
     const { domain } = req.body as { domain?: string };
     const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
+    const normalizedDomain = domain?.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
+    if (!normalizedDomain) return res.status(400).json({ error: "Domain is required" });
 
-    const normalizedDomain = domain
-      ?.trim()
-      .replace(/^https?:\/\//i, "")
-      .replace(/\/$/, "")
-      .toLowerCase();
-
-    if (!normalizedDomain) {
-      return res.status(400).json({ error: "Domain is required" });
-    }
+    const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+    if (!domainRegex.test(normalizedDomain)) return res.status(400).json({ error: "Dominio invalido. Formato: miapp.com o sub.miapp.com" });
 
     const userData = await User.findById(userId).lean();
-    if (!userData?.isPremium) {
-      return res.status(403).json({ error: "Custom domains are available for paid users only" });
-    }
+    if (!userData?.isPremium) return res.status(403).json({ error: "Los dominios personalizados son exclusivos del plan Pro", upgradeUrl: "/pricing" });
 
     const appData = await GeneratedApp.findOne({ _id: appId, userId });
-    if (!appData) {
-      return res.status(404).json({ error: "App not found" });
+    if (!appData) return res.status(404).json({ error: "App not found" });
+    if (!appData.vercelProjectId) return res.status(400).json({ error: "Despliega la app primero antes de añadir un dominio personalizado" });
+
+    const domainResult = await addVercelDomainForApp({ appId, userId, projectId: appData.vercelProjectId, domain: normalizedDomain, log: logger });
+
+    if (!domainResult.ok) {
+      const msg = "message" in domainResult.failure ? domainResult.failure.message : "Error al añadir el dominio en Vercel";
+      return res.status(500).json({ error: `Error de Vercel: ${msg}`, hint: "El dominio puede estar vinculado a otro proyecto en Vercel." });
     }
 
-    if (!appData.vercelProjectId) {
-      return res.status(400).json({ error: "App must be deployed before adding a custom domain" });
-    }
-
-    const verified = await verifyCustomDomain(appData.vercelProjectId, normalizedDomain);
-
-    await GeneratedApp.updateOne(
-      { _id: appId, userId },
-      {
-        customDomain: normalizedDomain,
-        customDomainVerified: verified,
-      },
-    );
+    const { status } = domainResult;
+    await GeneratedApp.updateOne({ _id: appId, userId }, { customDomain: normalizedDomain, customDomainVerified: status.verified });
 
     return res.json({
       success: true,
-      customDomain: normalizedDomain,
       domain: normalizedDomain,
-      verified,
-      instructions: verified
-        ? []
-        : [
-            "Añade este dominio al proyecto correspondiente en Vercel si aún no aparece.",
-            "Configura los registros DNS que Vercel indique para verificar la propiedad del dominio.",
-            "Vuelve a comprobar la verificación cuando la propagación DNS haya terminado.",
-          ],
+      customDomain: normalizedDomain,
+      verified: status.verified,
+      dnsRecords: status.recommendedDns,
+      recommendedDns: status.recommendedDns,
+      pendingVerification: status.verification,
+      instructions: status.verified ? [] : [
+        "Añade los registros DNS en tu proveedor (Arsys, GoDaddy, Cloudflare, Hostinger...)",
+        "Los cambios DNS pueden tardar entre 5 minutos y 48 horas en propagarse.",
+        "Cuando esten activos, vuelve a guardar el dominio para re-verificar.",
+      ],
     });
   } catch (error) {
     logger.error({ error }, "Custom domain error");
@@ -350,27 +212,60 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
 });
 
 /**
- * GET /api/apps/:appId/vercel-status
- * Get real-time Vercel deployment status
+ * GET /api/apps/:appId/custom-domain
+ * Refresca el estado de verificacion del dominio.
  */
+router.get("/apps/:appId/custom-domain", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { appId } = req.params;
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
+    if (!appData) return res.status(404).json({ error: "App not found" });
+    if (!appData.customDomain || !appData.vercelProjectId) return res.json({ domain: null, verified: false, dnsRecords: [] });
+
+    const statusResult = await getVercelDomainStatus({ projectId: appData.vercelProjectId, domain: appData.customDomain, log: logger });
+    if (!statusResult.ok) return res.json({ domain: appData.customDomain, verified: appData.customDomainVerified ?? false, dnsRecords: recommendedDnsFor(appData.customDomain) });
+
+    const { status } = statusResult;
+    if (status.verified !== appData.customDomainVerified) await GeneratedApp.updateOne({ _id: appId, userId }, { customDomainVerified: status.verified });
+
+    return res.json({ domain: status.domain, verified: status.verified, dnsRecords: status.recommendedDns, pendingVerification: status.verification });
+  } catch (error) {
+    logger.error({ error }, "Get custom domain error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * DELETE /api/apps/:appId/custom-domain
+ */
+router.delete("/apps/:appId/custom-domain", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { appId } = req.params;
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
+    const appData = await GeneratedApp.findOne({ _id: appId, userId });
+    if (!appData) return res.status(404).json({ error: "App not found" });
+    if (appData.vercelProjectId && appData.customDomain) {
+      await removeVercelDomainForApp({ appId, projectId: appData.vercelProjectId, domain: appData.customDomain, log: logger });
+    }
+    await GeneratedApp.updateOne({ _id: appId, userId }, { customDomain: null, customDomainVerified: false });
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error({ error }, "Delete custom domain error");
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 router.get("/apps/:appId/vercel-status", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
-
-    if (!userId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
-    if (!appData) {
-      return res.status(404).json({ error: "App not found" });
-    }
-
-    if (!appData.vercelProjectId) {
-      return res.json({ status: "not_deployed" });
-    }
-
+    if (!appData) return res.status(404).json({ error: "App not found" });
+    if (!appData.vercelProjectId) return res.json({ status: "not_deployed" });
     const status = await getDeploymentStatus(appData.vercelProjectId);
     return res.json(status);
   } catch (error) {
