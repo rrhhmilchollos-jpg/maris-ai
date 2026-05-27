@@ -4,6 +4,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/sitemap.xml",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/sitemap.xml"
+    },
+    {
+      "source": "/news-sitemap.xml",
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*"
     },
