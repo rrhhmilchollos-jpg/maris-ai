@@ -12,6 +12,14 @@
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
     <link rel="canonical" href="https://www.marisai.es/" id="canonical-tag" />
 
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-PCTZFPL3');</script>
+    <!-- End Google Tag Manager -->
+
     <!-- Script de canonical dinámico por ruta — evita Soft 404 en SPAs -->
     <script>
       (function() {
@@ -119,7 +127,6 @@
         "Evaluación visual automática con Claude Opus",
         "Soporte para apps web, móvil (PWA) y SaaS"
       ],
-      
       "publisher": {
         "@type": "Organization",
         "name": "Maris AI Inc.",
@@ -160,12 +167,9 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Preconnect a orígenes críticos (Google Fonts + Clerk) -->
-    <!-- Google Fonts: crossorigin necesario para fuentes CORS -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Clerk: sin crossorigin (mismo dominio de autenticación, no CORS) -->
     <link rel="preconnect" href="https://clerk.marisai.es">
-    <!-- DNS prefetch adicional para Clerk CDN -->
     <link rel="dns-prefetch" href="https://clerk.marisai.es">
 
     <!-- Preload de la fuente Inter para evitar bloqueo de render -->
@@ -176,31 +180,36 @@
     <noscript>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     </noscript>
-  <!-- CSS crítico inline: evita bloqueo de render del CSS externo en móvil -->
-  <!-- Solo las variables del tema oscuro y estilos base necesarios para el primer paint -->
-  <style>
-    /* Tema oscuro — variables críticas para el primer paint */
-    :root { color-scheme: dark; }
-    html.dark {
-      --background: 240 10% 4%;
-      --foreground: 0 0% 98%;
-      --primary: 272 72% 55%;
-      --primary-foreground: 0 0% 100%;
-      --muted-foreground: 240 5% 65%;
-      --card: 240 10% 6%;
-    }
-    /* Evitar FOUC (flash of unstyled content) */
-    body {
-      background-color: hsl(240 10% 4%);
-      color: hsl(0 0% 98%);
-      margin: 0;
-      font-family: Inter, system-ui, -apple-system, sans-serif;
-    }
-    /* Ocultar root hasta que React hidrate */
-    #root { min-height: 100vh; }
-  </style>
+
+    <!-- CSS crítico inline: evita bloqueo de render del CSS externo en móvil -->
+    <style>
+      /* Tema oscuro — variables críticas para el primer paint */
+      :root { color-scheme: dark; }
+      html.dark {
+        --background: 240 10% 4%;
+        --foreground: 0 0% 98%;
+        --primary: 272 72% 55%;
+        --primary-foreground: 0 0% 100%;
+        --muted-foreground: 240 5% 65%;
+        --card: 240 10% 6%;
+      }
+      /* Evitar FOUC (flash of unstyled content) */
+      body {
+        background-color: hsl(240 10% 4%);
+        color: hsl(0 0% 98%);
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+      }
+      /* Ocultar root hasta que React hidrate */
+      #root { min-height: 100vh; }
+    </style>
   </head>
   <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PCTZFPL3"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
