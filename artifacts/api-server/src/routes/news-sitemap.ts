@@ -21,8 +21,8 @@ function escapeXml(str: string): string {
 router.get("/news-sitemap.xml", async (_req, res) => {
   await connectDB();
   try {
-    // Google News sitemaps: máximo 1000 URLs, solo artículos de los últimos 2 días
-   const twoDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    // Google News sitemaps: máximo 1000 URLs, solo artículos de los últimos 30 días
+    const twoDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const articles = await NewsArticle.find({
       publishedAt: { $gte: twoDaysAgo },
     })
@@ -43,7 +43,7 @@ router.get("/news-sitemap.xml", async (_req, res) => {
         : "";
 
       sitemap += `  <url>\n`;
-      sitemap += `    <loc>https://marisai.es/news/${article.slug}</loc>\n`;
+      sitemap += `    <loc>https://www.marisai.es/news/${article.slug}</loc>\n`;
       sitemap += `    <news:news>\n`;
       sitemap += `      <news:publication>\n`;
       sitemap += `        <news:name>Maris AI</news:name>\n`;
@@ -79,8 +79,10 @@ router.get("/sitemap.xml", async (_req, res) => {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(1000).lean();
 
     const staticPages = [
-      { url: "https://marisai.es/", priority: "1.0", changefreq: "daily" },
-      { url: "https://marisai.es/news", priority: "0.9", changefreq: "hourly" },
+      { url: "https://www.marisai.es/", priority: "1.0", changefreq: "daily" },
+      { url: "https://www.marisai.es/news", priority: "0.9", changefreq: "hourly" },
+      { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly" },
+      { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly" },
     ];
 
     let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n`;
@@ -97,7 +99,7 @@ router.get("/sitemap.xml", async (_req, res) => {
     for (const article of articles) {
       const lastmod = new Date(article.updatedAt || article.publishedAt).toISOString();
       sitemap += `  <url>\n`;
-      sitemap += `    <loc>https://marisai.es/news/${article.slug}</loc>\n`;
+      sitemap += `    <loc>https://www.marisai.es/news/${article.slug}</loc>\n`;
       sitemap += `    <lastmod>${lastmod}</lastmod>\n`;
       sitemap += `    <changefreq>never</changefreq>\n`;
       sitemap += `    <priority>0.7</priority>\n`;
