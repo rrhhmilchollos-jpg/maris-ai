@@ -6,7 +6,17 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 const BASE = "https://www.marisai.es";
 
-function html(title: string, desc: string, canonical: string, body: string): string {
+function html(title: string, desc: string, canonical: string, body: string, imageUrl?: string, isArticle?: boolean): string {
+  const ogImage = imageUrl
+    ? `<meta property="og:image" content="${imageUrl}"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>`
+    : "";
+  const ogType = isArticle ? "article" : "website";
+  const ldJson = isArticle
+    ? `{"@context":"https://schema.org","@type":"NewsArticle","name":"${title}","url":"${canonical}","image":"${imageUrl || ""}","publisher":{"@type":"Organization","name":"Maris AI","url":"https://www.marisai.es"}}`
+    : `{"@context":"https://schema.org","@type":"WebSite","name":"Maris AI","url":"https://www.marisai.es"}`;
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -18,9 +28,10 @@ function html(title: string, desc: string, canonical: string, body: string): str
 <meta property="og:title" content="${title}"/>
 <meta property="og:description" content="${desc}"/>
 <meta property="og:url" content="${canonical}"/>
-<meta property="og:type" content="website"/>
+<meta property="og:type" content="${ogType}"/>
+${ogImage}
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","name":"Maris AI","url":"https://www.marisai.es"}
+${ldJson}
 </script>
 </head>
 <body>${body}</body>
@@ -135,21 +146,26 @@ router.get("/bot-render/news/:slug", async (req: Request, res: Response) => {
   try {
     const article = await NewsArticle.findOne({ slug: req.params.slug }).lean();
     if (!article) { res.status(404).send("Not found"); return; }
-    const body = `<main>
+
+    const articleBody = `<main>
 <article>
 <h1>${article.title}</h1>
 <time datetime="${new Date(article.publishedAt).toISOString()}">${new Date(article.publishedAt).toLocaleDateString("es-ES")}</time>
-<div>${article.content || article.summary || ""}</div>
+${article.imageUrl ? `<img src="${article.imageUrl}" alt="${article.imageAlt || article.title}" style="max-width:100%;height:auto;"/>` : ""}
+<div>${article.body || article.content || article.summary || ""}</div>
 <p><a href="${BASE}/news">Volver a noticias</a></p>
 </article>
 </main>`;
+
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.send(html(
       `${article.title} — Maris AI`,
-      String(article.summary || article.title).slice(0, 160),
+      String(article.metaDescription || article.summary || article.title).slice(0, 160),
       `${BASE}/news/${article.slug}`,
-      body
+      articleBody,
+      article.imageUrl,   // ← og:image para Google Discover
+      true                // ← schema NewsArticle en lugar de WebSite
     ));
   } catch (err) {
     logger.error({ err }, "bot-render /news/:slug error");
