@@ -166,7 +166,7 @@
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     </noscript>
 
-    <!-- CSS crítico inline: evita bloqueo de render del CSS externo en móvil -->
+    <!-- CSS crítico inline -->
     <style>
       :root { color-scheme: dark; }
       html.dark {
@@ -184,6 +184,7 @@
         font-family: Inter, system-ui, -apple-system, sans-serif;
       }
       #root { min-height: 100vh; }
+      #seo-content { display: none; }
     </style>
   </head>
   <body>
@@ -191,6 +192,34 @@
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PCTZFPL3"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
+
+    <!-- Contenido SEO para crawlers — invisible para usuarios, indexable por Google -->
+    <div id="seo-content" aria-hidden="true">
+      <h1>Maris AI — Generador de Apps con IA en Español</h1>
+      <p>Describe tu idea en español y 9 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.</p>
+      <h2>¿Cómo funciona Maris AI?</h2>
+      <ol>
+        <li><strong>Describe tu app</strong> — escribe en español lo que quieres construir.</li>
+        <li><strong>9 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, DevOps y Optimizer.</li>
+        <li><strong>App lista en menos de 5 minutos</strong> — React + TypeScript + Tailwind + Express + MongoDB. Código 100% tuyo, exportable a GitHub.</li>
+      </ol>
+      <h2>¿Para quién es Maris AI?</h2>
+      <ul>
+        <li>Emprendedores y autónomos que quieren digitalizar su negocio sin contratar un desarrollador.</li>
+        <li>Startups que necesitan un MVP rápido para validar su idea.</li>
+        <li>Freelancers que quieren entregar proyectos más rápido.</li>
+        <li>Cualquier persona con una idea de app y sin conocimientos de programación.</li>
+      </ul>
+      <h2>Alternativa en español a Bolt, Lovable y v0</h2>
+      <p>Maris AI es la alternativa en español a Bolt, Lovable, v0 y Base44. Interfaz en español, soporte en español, y modelos optimizados para el mercado hispanohablante.</p>
+      <h2>Empieza gratis</h2>
+      <p>Crea tu primera app gratis, sin tarjeta de crédito. <a href="https://www.marisai.es/sign-up">Regístrate en Maris AI</a>.</p>
+      <nav>
+        <a href="https://www.marisai.es/news">Noticias sobre IA</a>
+        <a href="https://www.marisai.es/vs-emergent">Maris AI vs competidores</a>
+        <a href="https://www.marisai.es/pricing">Precios</a>
+      </nav>
+    </div>
 
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
