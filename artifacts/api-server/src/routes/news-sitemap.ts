@@ -78,11 +78,15 @@ router.get("/sitemap.xml", async (_req, res) => {
   try {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(1000).lean();
 
+    const today = new Date().toISOString().split("T")[0];
     const staticPages = [
-      { url: "https://www.marisai.es/", priority: "1.0", changefreq: "daily" },
-      { url: "https://www.marisai.es/news", priority: "0.9", changefreq: "hourly" },
-      { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly" },
-      { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly" },
+      { url: "https://www.marisai.es/", priority: "1.0", changefreq: "daily", lastmod: today },
+      { url: "https://www.marisai.es/news", priority: "0.9", changefreq: "hourly", lastmod: today },
+      { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly", lastmod: today },
+      { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly", lastmod: today },
+      { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly", lastmod: "2026-05-28" },
+      { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly", lastmod: "2026-05-28" },
+      { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly", lastmod: "2026-05-28" },
     ];
 
     let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n`;
@@ -91,6 +95,7 @@ router.get("/sitemap.xml", async (_req, res) => {
     for (const page of staticPages) {
       sitemap += `  <url>\n`;
       sitemap += `    <loc>${page.url}</loc>\n`;
+      sitemap += `    <lastmod>${page.lastmod}</lastmod>\n`;
       sitemap += `    <changefreq>${page.changefreq}</changefreq>\n`;
       sitemap += `    <priority>${page.priority}</priority>\n`;
       sitemap += `  </url>\n`;
