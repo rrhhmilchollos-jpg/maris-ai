@@ -13,6 +13,7 @@ import rssRouter from "./routes/rss";
 import newsSitemapRouter from "./routes/news-sitemap";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
+import botRenderRouter from "./routes/botRender";
 import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
@@ -78,9 +79,6 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
   app.use(
     clerkMiddleware({
-      // Use the configured Clerk publishable key directly. Deriving it from the
-      // proxied request host is fragile after custom-domain moves because the
-      // backend can receive www.marisai.es, marisai.es, Vercel, or Render hosts.
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
     }),
@@ -120,6 +118,9 @@ app.use("/api", newsRouter);
 app.use("/rss", rssRouter);
 app.use("/", newsSitemapRouter);
  
+// Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
+app.use(botRenderRouter);
+ 
 // Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
 app.use(publicDeployRouter);
  
@@ -149,4 +150,3 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 });
  
 export default app;
- 
