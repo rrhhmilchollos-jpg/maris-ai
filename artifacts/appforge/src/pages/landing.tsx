@@ -123,19 +123,10 @@ export default function LandingPage() {
   const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
 
   const stats = [
-    { value: "2,400+", label: "Apps generadas", icon: TrendingUp },
-    { value: "890+", label: "Usuarios activos", icon: Users },
-    { value: "4.2 min", label: "Tiempo medio", icon: Clock },
-    { value: "4.9★", label: "Valoración", icon: Star },
-  ];
-
-  const testimonials = [
-    { name: "Carlos M.", role: "Founder, SaaS startup", text: "En 8 minutos tenía un MVP funcional listo para mostrar a inversores. Increíble.", avatar: "CM" },
-    { name: "Laura G.", role: "Diseñadora freelance", text: "Paso de idea a prototipo en tiempo real. Mis clientes no pueden creerlo.", avatar: "LG" },
-    { name: "Iñaki R.", role: "CTO, Agencia digital", text: "Entregamos proyectos 5x más rápido. El ROI es brutal.", avatar: "IR" },
-    { name: "Sofía P.", role: "Product Manager", text: "La calidad del código generado es tan buena que nuestros devs lo usan directamente.", avatar: "SP" },
-    { name: "Diego F.", role: "Indie developer", text: "Lancé mi SaaS en un fin de semana. Algo impensable antes de Maris AI.", avatar: "DF" },
-    { name: "Ana T.", role: "Entrepreneur", text: "Validé 3 ideas de negocio en una semana con apps reales. Game changer.", avatar: "AT" },
+    { value: "9", label: "Agentes IA especializados", icon: TrendingUp },
+    { value: "< 5 min", label: "De idea a app funcional", icon: Clock },
+    { value: "100%", label: "Código exportable tuyo", icon: Globe },
+    { value: "Gratis", label: "Para empezar hoy", icon: Star },
   ];
 
   return (
@@ -282,7 +273,6 @@ export default function LandingPage() {
               transition={{ duration: 0.6 }} viewport={{ once: true }} className="relative">
               <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-purple-500/20 to-cyan-500/20 rounded-2xl blur-xl"></div>
               <div className="relative rounded-2xl border border-white/10 bg-background/80 backdrop-blur shadow-2xl overflow-hidden">
-                {/* Barra del editor */}
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/5">
                   <div className="h-3 w-3 rounded-full bg-red-500/80"></div>
                   <div className="h-3 w-3 rounded-full bg-yellow-500/80"></div>
@@ -293,7 +283,6 @@ export default function LandingPage() {
                     <span className="text-xs text-emerald-400 font-mono">generando...</span>
                   </div>
                 </div>
-                {/* Números de línea + código */}
                 <div className="p-4 flex gap-4 min-h-[380px]">
                   <div className="flex flex-col text-right font-mono text-xs text-white/20 select-none">
                     {Array.from({ length: 20 }, (_, i) => (
@@ -304,7 +293,6 @@ export default function LandingPage() {
                     <CodeAnimation />
                   </div>
                 </div>
-                {/* Barra de estado */}
                 <div className="px-4 py-2 border-t border-white/5 bg-white/5 flex items-center justify-between">
                   <span className="text-xs text-muted-foreground font-mono">TypeScript React</span>
                   <span className="text-xs text-emerald-400 font-mono">✓ Sin errores</span>
@@ -321,7 +309,7 @@ export default function LandingPage() {
         <div className="container px-4 md:px-8 mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Hecho con Maris AI</h2>
-            <p className="text-muted-foreground text-lg">Lo que nuestra comunidad está creando a velocidad récord.</p>
+            <p className="text-muted-foreground text-lg">Ejemplos de lo que puedes construir en minutos.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {[
@@ -346,35 +334,53 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonios */}
+      {/* Early Adopters — sección honesta */}
       <section className="py-24 relative overflow-hidden">
-        <div className="container px-4 md:px-8 mx-auto max-w-7xl">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Lo que dicen nuestros usuarios</h2>
-            <p className="text-muted-foreground text-lg">Miles de personas ya están creando con Maris AI.</p>
+        <div className="container px-4 md:px-8 mx-auto max-w-4xl">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Recién lanzado. Sé el primero.</h2>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              Maris AI acaba de lanzarse al público. Sin números inventados, sin testimonios de relleno.
+              Solo una herramienta real que funciona — y la oportunidad de ser early adopter con acceso directo al creador.
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {testimonials.map((t, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            {[
+              {
+                icon: Zap,
+                title: "Pruébalo gratis ahora",
+                desc: "Genera tu primera app sin tarjeta de crédito. Sin límite de tiempo para explorar la plataforma.",
+              },
+              {
+                icon: Users,
+                title: "Acceso directo al creador",
+                desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día.",
+              },
+              {
+                icon: Star,
+                title: "Precio de lanzamiento",
+                desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube.",
+              },
+            ].map((item, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.08 }} viewport={{ once: true }}
-                className="p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-white/20 transition-all">
-                <div className="flex gap-1 mb-4">
-                  {[...Array(5)].map((_, j) => (
-                    <Star key={j} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  ))}
+                transition={{ delay: i * 0.1 }} viewport={{ once: true }}
+                className="p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-primary/30 transition-all text-center">
+                <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto mb-4">
+                  <item.icon className="h-5 w-5 text-primary" />
                 </div>
-                <p className="text-white/80 text-sm leading-relaxed mb-5">"{t.text}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/30 border border-primary/40 flex items-center justify-center text-xs font-bold text-primary">
-                    {t.avatar}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.role}</p>
-                  </div>
-                </div>
+                <h3 className="text-base font-semibold text-white mb-2">{item.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
               </motion.div>
             ))}
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              ¿Tienes dudas antes de registrarte?{" "}
+              <a href="mailto:hola@marisai.es" className="text-primary hover:underline">
+                Escríbenos directamente
+              </a>{" "}
+              — respondemos en menos de 24 horas.
+            </p>
           </div>
         </div>
       </section>
@@ -390,7 +396,7 @@ export default function LandingPage() {
               <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">con una frase.</span>
             </h2>
             <p className="text-xl text-muted-foreground mb-10 max-w-xl mx-auto">
-              Únete a miles de personas creando software con inteligencia artificial.
+              Sin programar. Sin contratar. Sin esperar semanas.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/sign-up">
