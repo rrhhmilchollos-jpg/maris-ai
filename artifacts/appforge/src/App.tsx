@@ -28,6 +28,10 @@ const DebugPreviewPage = lazy(() => import("@/pages/debug-preview"));
 const NewsPage = lazy(() => import("@/pages/news"));
 const NewsDetailPage = lazy(() => import("@/pages/news-detail"));
 const VsCompetidoresPage = lazy(() => import("@/pages/vs-emergent"));
+const PricingPage = lazy(() => import("@/pages/pricing"));
+const PrivacidadPage = lazy(() => import("@/pages/legal/privacidad"));
+const AvisoLegalPage = lazy(() => import("@/pages/legal/aviso-legal"));
+const CookiesPage = lazy(() => import("@/pages/legal/cookies"));
 
 // Fallback de carga para Suspense
 function PageLoader() {
@@ -317,6 +321,22 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/vs-emergent">
             <VsCompetidoresPage />
+          </Route>
+
+          <Route path="/pricing">
+            <PricingPage />
+          </Route>
+
+          <Route path="/legal/privacidad">
+            <PrivacidadPage />
+          </Route>
+
+          <Route path="/legal/aviso-legal">
+            <AvisoLegalPage />
+          </Route>
+
+          <Route path="/legal/cookies">
+            <CookiesPage />
           </Route>
 
           <Route path="/__debug-preview/:id">

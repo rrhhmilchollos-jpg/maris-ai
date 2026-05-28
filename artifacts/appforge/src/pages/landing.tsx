@@ -414,19 +414,41 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur">
+            <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur">
         <div className="container px-4 md:px-8 mx-auto">
-          <div className="flex flex-col md:flex-row items-center justify-between mb-8">
-            <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-5 w-5 opacity-70" />
-              <span className="font-semibold text-muted-foreground">Maris AI</span>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+            <div>
+              <div className="flex items-center space-x-2 mb-4">
+                <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-5 w-5 opacity-70" />
+                <span className="font-semibold text-muted-foreground">Maris AI</span>
+              </div>
+              <p className="text-xs text-muted-foreground/60">Generador de apps con IA. Describe tu idea, recibe una app real.</p>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
-              <a href="mailto:hola@marisai.es" className="hover:text-white transition-colors">Contacto</a>
+            <div>
+              <h4 className="font-semibold text-white mb-3 text-sm">Producto</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="/pricing" className="hover:text-white transition-colors">Precios</Link></li>
+                <li><Link href="/vs-emergent" className="hover:text-white transition-colors">vs Competidores</Link></li>
+                <li><Link href="/news" className="hover:text-white transition-colors">Noticias</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-white mb-3 text-sm">Compañía</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><a href="mailto:hola@marisai.es" className="hover:text-white transition-colors">Contacto</a></li>
+                <li><a href="mailto:soporte@marisai.es" className="hover:text-white transition-colors">Soporte</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-white mb-3 text-sm">Legal</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li><Link href="/legal/privacidad" className="hover:text-white transition-colors">Privacidad</Link></li>
+                <li><Link href="/legal/aviso-legal" className="hover:text-white transition-colors">Aviso Legal</Link></li>
+                <li><Link href="/legal/cookies" className="hover:text-white transition-colors">Cookies</Link></li>
+              </ul>
             </div>
           </div>
-          <div className="flex justify-center mb-6">
+          <div className="border-t border-white/5 pt-8 mb-6">
             <a href="https://www.producthunt.com/products/maris-ai?embed=true&utm_source=embed&utm_medium=post_embed" target="_blank" rel="noopener">
               <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=maris-ai&theme=dark" alt="Maris AI on Product Hunt" style={{height: "54px"}} />
             </a>
