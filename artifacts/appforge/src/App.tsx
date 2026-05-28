@@ -6,6 +6,7 @@ import { shadcn } from "@clerk/themes";
 import { esES } from "@clerk/localizations";
 
 import { Toaster } from "@/components/ui/toaster";
+import { CookieBanner } from "@/components/cookie-banner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
@@ -358,6 +359,7 @@ function App() {
         <ClerkProviderWithRoutes />
       </WouterRouter>
       <Toaster />
+      <CookieBanner />
     </TooltipProvider>
   );
 }

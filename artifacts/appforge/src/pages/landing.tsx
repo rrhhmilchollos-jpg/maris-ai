@@ -214,6 +214,92 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
+      {/* ¿Qué puedes construir? */}
+      <section className="py-24 relative overflow-hidden">
+        <div className="container px-4 md:px-8 mx-auto max-w-7xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">¿Qué puedes construir?</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Desde MVPs rápidos hasta herramientas internas complejas. Maris AI genera aplicaciones completas listas para producción.
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[
+              {
+                title: "SaaS de Gestión de Tareas",
+                desc: "Tableros Kanban, asignación de usuarios, fechas límite y notificaciones en tiempo real.",
+                image: "https://images.unsplash.com/photo-1540350394557-8d14678e7f91?q=80&w=800&auto=format&fit=crop",
+                tags: ["React", "Express", "MongoDB"]
+              },
+              {
+                title: "E-commerce Moderno",
+                desc: "Catálogo de productos, carrito de compras, pasarela de pagos con Stripe y panel de admin.",
+                image: "https://images.unsplash.com/photo-1472851294608-062f824d29cc?q=80&w=800&auto=format&fit=crop",
+                tags: ["Stripe", "Tailwind", "Vite"]
+              },
+              {
+                title: "Dashboard de Analytics",
+                desc: "Visualización de datos con gráficos interactivos, filtros avanzados y exportación de informes.",
+                image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800&auto=format&fit=crop",
+                tags: ["Recharts", "Lucide", "Framer Motion"]
+              },
+              {
+                title: "CRM para Ventas",
+                desc: "Gestión de clientes, pipeline de ventas, recordatorios y seguimiento de actividad.",
+                image: "https://images.unsplash.com/photo-1552581234-26160f608093?q=80&w=800&auto=format&fit=crop",
+                tags: ["CRM", "Full-stack", "IA"]
+              },
+              {
+                title: "Plataforma de Educación",
+                desc: "Gestión de cursos, lecciones en vídeo, cuestionarios y seguimiento de progreso.",
+                image: "https://images.unsplash.com/photo-1501504905252-473c47e087f8?q=80&w=800&auto=format&fit=crop",
+                tags: ["EdTech", "PWA", "Node.js"]
+              },
+              {
+                title: "Herramienta de RRHH",
+                desc: "Portal del empleado, gestión de vacaciones, nóminas y evaluación del desempeño.",
+                image: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?q=80&w=800&auto=format&fit=crop",
+                tags: ["Internal Tools", "Auth", "Clerk"]
+              }
+            ].map((app, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                viewport={{ once: true }}
+                className="group relative overflow-hidden rounded-2xl border border-white/10 bg-card/30 hover:border-primary/30 transition-all"
+              >
+                <div className="aspect-video overflow-hidden">
+                  <img
+                    src={app.image}
+                    alt={app.title}
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                </div>
+                <div className="p-6">
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {app.tags.map((tag, j) => (
+                      <span key={j} className="px-2 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary border border-primary/20">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">{app.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{app.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Stats */}
       <section className="py-16 border-y border-white/5 bg-card/20 backdrop-blur-sm">
         <div className="container px-4 md:px-8 mx-auto max-w-5xl">
