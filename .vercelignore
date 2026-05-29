@@ -1,0 +1,8 @@
+node_modules
+.git
+artifacts/api-server
+artifacts/appforge/node_modules
+lib/*/node_modules
+dist
+.pnpm-store
+.cache
