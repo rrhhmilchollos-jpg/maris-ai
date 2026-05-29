@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { motion } from "framer-motion";
 
-export function PrivacidadPage() {
+export default function PrivacidadPage() {
   return (
     <Layout>
       <div className="min-h-screen bg-background pt-24 pb-12">
