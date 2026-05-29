@@ -1842,15 +1842,28 @@ export async function generateApp(
     /* === Phase 1: Research → Architect, then quality-aware Design + Integrations === */
   await log("system", "🧭 Activando orquestación de calidad: primero contexto y arquitectura, después diseño e integraciones...");
 
+  onProgress?.({ phase: "researching", progress: 10, note: "Researcher investigando el mercado y competencia…" });
+  await log("researcher", "🔍 Investigando el nicho de mercado y analizando la competencia...");
   const research = (runResearch && shouldResearch(prompt))
     ? await runPhase("researcher", () => researchTopic(prompt), resolveModelForAgent("researcher", 0))
     : "";
+  if (research) await log("researcher", "✅ Reporte de investigación completado y entregado al Arquitecto.");
 
+  onProgress?.({ phase: "architecting", progress: 20, note: "Architect diseñando la estructura técnica…" });
+  await log("architect", "📐 Diseñando la arquitectura técnica basada en el reporte de investigación...");
   const estimatedFiles = prompt.length > 200 ? 18 : 10;
   const plan = await runPhase("architect", (m) =>
     withTimeoutOrThrow(architectPlan(prompt, research, m), 90_000, "architect"),
     resolveModelForAgent("architect", estimatedFiles, coderModel),
   );
+  await log("architect", `✅ Estructura definida: ${plan.frontendFiles.length} archivos frontend y ${plan.backendFiles.length} backend.`);
+
+  onProgress?.({ phase: "designing", progress: 30, note: "Designer creando el sistema visual…" });
+  await log("designer", "🎨 Creando el sistema de diseño y tokens visuales...");
+  const design = runDesign
+    ? await runPhase("designer", (m) => designSystem(plan, research, m), resolveModelForAgent("designer", plan.frontendFiles.length, coderModel))
+    : { theme: "light", palette: { primary: "#7c3aed" } } as any;
+  await log("designer", "✅ Sistema de diseño (paleta, tipografía y sombras) listo para los ingenieros.");
 
   const FALLBACK_DESIGN: DesignSystem = {
     theme: "dark", vibe: "moderno, pulido y orientado a producto real",
@@ -1886,9 +1899,9 @@ export async function generateApp(
   }
   await log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
 
-  onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
-  await log("coder", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
-  if (plan.backendNeeded) await log("coder", "⚙️ Generando backend en paralelo…");
+  onProgress?.({ phase: "frontend", progress: 40, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
+  await log("frontend", `💻 Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s) con React y Tailwind...`);
+  if (plan.backendNeeded) await log("backend", "⚙️ Generando backend y esquemas de base de datos en paralelo…");
 
   /* === Phase 3: frontend + backend (paralelo solo cuando ya existe arquitectura y diseño reales) === */
   const TARGET_CHARS = 90_000;
@@ -1897,14 +1910,14 @@ export async function generateApp(
     withTimeoutOrThrow(
       generateFrontendCode(plan, design, research, prompt, (chars, fileName) => {
         if (fileName) {
-          log("coder", fileName);
+          log("frontend", fileName);
         } else {
           const charsCount = chars.length;
           const ratio = Math.min(1, charsCount / TARGET_CHARS);
-          onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 55), note: `🚀 Escribiendo código: ${Math.round(charsCount / 1000)} KB…` });
+          onProgress?.({ phase: "frontend", progress: 40 + Math.round(ratio * 30), note: `🚀 Escribiendo código frontend: ${Math.round(charsCount / 1000)} KB…` });
           if (charsCount - lastLogChars >= 8000) {
             lastLogChars = charsCount;
-            log("coder", `Construyendo... ${Math.round(charsCount / 1000)} KB y subiendo.`);
+            log("frontend", `Construyendo frontend... ${Math.round(charsCount / 1000)} KB.`);
           }
         }
       }, resolveModelForAgent("frontend", plan.frontendFiles.length, coderModel), language),
@@ -1918,11 +1931,11 @@ export async function generateApp(
   const backendPromise = runBackend
     ? runPhase("backend", (m) => generateBackendCode(plan, prompt, (chars, fileName) => {
         if (fileName) {
-          log("coder", fileName);
+          log("backend", fileName);
         } else {
           if (chars.length - lastBackendLogChars >= 8000) {
             lastBackendLogChars = chars.length;
-            log("coder", `⚙️ Backend: escribiendo... ${Math.round(chars.length / 1000)} KB.`);
+            log("backend", `⚙️ Backend: escribiendo lógica de servidor... ${Math.round(chars.length / 1000)} KB.`);
           }
         }
       }, resolveModelForAgent("backend", plan.frontendFiles.length, coderModel)), resolveModelForAgent("backend", plan.frontendFiles.length, coderModel))
@@ -1961,9 +1974,9 @@ const [frontendResult, backendResult] = await Promise.all([frontendPromise, back
   }
 
   /* === Phase 4: QA + Tests obligatorios cuando el plan los requiere === */
-  onProgress?.({ phase: "reviewing", progress: 78, note: "✅ Revisor de calidad y 🧪 Test Engineer trabajando en paralelo…" });
-  if (runQa) log("qa", "🔍 Revisando bundle en busca de bugs…");
-  if (runTests) log("qa", "🧪 Generando tests en paralelo…");
+  onProgress?.({ phase: "testing", progress: 80, note: "✅ QA Specialist y 🧪 Test Engineer auditando el código…" });
+  if (runQa) log("qa", "🔍 Ejecutando auditoría de calidad y buscando errores de lógica…");
+  if (runTests) log("qa", "🧪 Generando suite de pruebas unitarias y de integración…");
 
   const reviewPromise = runQa
     ? runPhase("qa", () => reviewBundle(frontendResult.code, plan), resolveModelForAgent("qa", plan.frontendFiles.length, coderModel))
@@ -1995,8 +2008,8 @@ const [frontendResult, backendResult] = await Promise.all([frontendPromise, back
 
   const testNote = testCode ? "✅ Tests generados. " : "";
   if (testCode) log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
-  onProgress?.({ phase: "parsing", progress: 94, note: `${testNote}📦 Empaquetando archivos…` });
-  await log("system", "Empaquetando archivos finales…");
+  onProgress?.({ phase: "deploying", progress: 94, note: `${testNote}🚀 DevOps Patcher optimizando y empaquetando para despliegue…` });
+  await log("devops", "📦 Optimizando bundle final y preparando scripts de despliegue...");
 
   /* === Final assembly === */
   const setupNotes = buildSetupNotes(integrationSpec);
