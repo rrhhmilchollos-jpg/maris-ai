@@ -319,13 +319,13 @@ export default function DashboardPage() {
                   <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
                     <SelectTrigger className="h-9 w-[230px] text-xs bg-background/50 border-border/50"><SelectValue placeholder="Modelo del coder" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">⚡ Auto (Claude 4.8 Sonnet)</SelectItem>
-                      <SelectItem value="claude-4-8-sonnet">✨ Claude 4.8 Sonnet (recomendado)</SelectItem>
-                      <SelectItem value="claude-mithos">🎨 Claude Mithos (diseño disruptivo)</SelectItem>
-                      <SelectItem value="gemini-3">💎 Gemini 3 (última generación)</SelectItem>
-                      <SelectItem value="gemini-2-5-flash">🚀 Gemini 2.5 Flash (ultra rápido)</SelectItem>
-                      <SelectItem value="claude-opus-4-8" disabled={!me?.isPremium}>🏆 Claude Opus 4.8 {me?.isPremium ? "(máxima calidad)" : "(Premium)"}</SelectItem>
-                      <SelectItem value="gpt-5-4" disabled={!me?.isPremium}>⚡ GPT-5.4 {me?.isPremium ? "(OpenAI Ultra)" : "(Premium)"}</SelectItem>
+                      <SelectItem value="auto">⚡ Auto (Orquestación de 9 Agentes)</SelectItem>
+                      <SelectItem value="claude-4-8-sonnet">✨ Claude 4.8 Sonnet (Líder de Ingeniería)</SelectItem>
+                      <SelectItem value="claude-mithos">🎨 Claude Mithos (Especialista UI/UX)</SelectItem>
+                      <SelectItem value="gemini-3">💎 Gemini 3 (Investigación & QA)</SelectItem>
+                      <SelectItem value="gemini-2-5-flash">🚀 Gemini 2.5 Flash (Parches rápidos)</SelectItem>
+                      <SelectItem value="claude-opus-4-8" disabled={!me?.isPremium}>🏆 Claude 4.8 Opus {me?.isPremium ? "(Máxima Inteligencia)" : "(Premium)"}</SelectItem>
+                      <SelectItem value="gpt-5-4" disabled={!me?.isPremium}>⚡ GPT-5.4 Ultra {me?.isPremium ? "(Razonamiento Complejo)" : "(Premium)"}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={language} onValueChange={(v) => setLanguage(v as "typescript" | "javascript")} disabled={isWorking}>
@@ -344,7 +344,7 @@ export default function DashboardPage() {
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground/70">Tip: si pides clonar una app existente (Wallapop, Vinted, Twitter…), nuestro investigador buscará en la web su diseño y funciones antes de generar.</p>
+              <p className="text-xs text-muted-foreground/70">Tip: Maris AI coordina a 9 agentes especializados (Researcher, Architect, Designer, etc.) para construir tu app con calidad profesional.</p>
             </form>
           </CardContent>
         </Card>
