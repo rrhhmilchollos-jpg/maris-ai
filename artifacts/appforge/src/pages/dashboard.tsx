@@ -22,6 +22,7 @@ import { Layout } from "@/components/layout";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import { SupportPanel } from "@/components/support-panel";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
+import { RefundPanel } from "@/components/refund-panel";
 import { GenerationStudio } from "@/components/generation-studio";
 import {
   AttachmentPicker,
@@ -103,6 +104,7 @@ export default function DashboardPage() {
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
+  const [orchestrationMode, setOrchestrationMode] = useState<"auto" | "manual">("auto");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django";
@@ -203,7 +205,7 @@ export default function DashboardPage() {
       return;
     }
     localStorage.setItem("appforge_last_prompt", prompt);
-    generateMutation.mutate({ data: { prompt, coderModel, language, kind, attachmentIds: attachments.map((a: any) => a.id) } });
+    generateMutation.mutate({ data: { userId: me?.id, prompt, coderModel, language, kind, attachmentIds: attachments.map((a: any) => a.id), orchestrationMode } });
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
@@ -226,6 +228,11 @@ export default function DashboardPage() {
   return (
     <Layout>
       <div className="container max-w-6xl mx-auto px-4 py-8 space-y-8">
+        {isAdmin && (
+          <div className="mb-8">
+            <RefundPanel />
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -313,26 +320,37 @@ export default function DashboardPage() {
                           <span>Auto (Orquestación de 9 Agentes)</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="claude-4-8-sonnet">
+                      <SelectItem value="claude-mythos">
+                        <div className="flex items-center">
+                          <Flame className="h-4 w-4 mr-2 text-orange-500" />
+                          <span className="font-bold">Claude Mythos Preview (Ciberseguridad & Agentes)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="claude-opus-4-8">
                         <div className="flex items-center">
                           <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
-                          <span>Claude 4.8 Sonnet (Líder de Ingeniería)</span>
+                          <span>Claude Opus 4.8 (Razonamiento Complejo)</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="claude-mithos">
-                        <div className="flex items-center">
-                          <Palette className="h-4 w-4 mr-2 text-pink-400" />
-                          <span>Claude Mithos (Especialista UI/UX)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="gemini-3">
+                      <SelectItem value="gemini-3-pro-preview">
                         <div className="flex items-center">
                           <Brain className="h-4 w-4 mr-2 text-blue-400" />
-                          <span>Gemini 3 (Investigación & QA)</span>
+                          <span>Gemini 3 Pro (Investigación & QA)</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                  <Select value={orchestrationMode} onValueChange={setOrchestrationMode} disabled={isWorking}>
+                    <SelectTrigger className="h-10 w-[280px] bg-background/50 border-white/10">
+                      <SelectValue placeholder="Modo de Orquestación" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Automático (Maris AI)</SelectItem>
+                      <SelectItem value="manual">Manual (Control por Fase)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+
                 </div>
 
                 <Button type="submit" disabled={isWorking || !prompt.trim()} size="lg" className="min-w-[180px] bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">

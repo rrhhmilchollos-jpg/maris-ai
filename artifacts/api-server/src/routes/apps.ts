@@ -14,6 +14,7 @@ import { validateBundleInE2B } from "../lib/e2bValidator";
 import { shouldValidateInE2B } from "../lib/e2bGate";
 import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
+import { rememberConversation, recallConversations } from "../lib/agentConversationMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
 import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
@@ -36,14 +37,16 @@ interface RouteGenerationRequestContext {
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
  *
- * Todos los agentes usan Gemini (sin dependencia de Anthropic):
- *   - Researcher    (gemini-2.0-flash + google_search)  — referencia web
- *   - Architect     (gemini-2.5-flash)                  — plan / estructura
- *   - Designer      (gemini-2.5-flash)                  — design system
- *   - Frontend Eng  (gemini-2.5-flash, streaming)       — bundle frontend
- *   - Backend Eng   (gemini-2.5-flash)                  — bundle backend
- *   - QA Reviewer   (gemini-2.0-flash)                  — revisión
- *   - Patcher       (gemini-2.0-flash)                  — auto-fix
+ * Orquestación de 9 Agentes de Alto Rendimiento (Mayo 2026):
+ *   - Researcher    (Gemini 3 Pro + Search)             — referencia web y mercado
+ *   - Architect     (Claude Opus 4.8)                   — plan / estructura técnica
+ *   - Integrator    (Claude Opus 4.8)                   — auth, pagos (Stripe), APIs
+ *   - Designer      (Claude 4.8 Sonnet)                 — design system y UI/UX
+ *   - Frontend Eng  (Claude/Gemini 3, streaming)         — bundle frontend react
+ *   - Backend Eng   (Claude 4.8 Sonnet)                 — bundle backend node/js
+ *   - Database Eng  (Claude 4.8 Sonnet)                 — schema y migraciones
+ *   - QA Auditor    (Claude Opus 4.8)                   — revisión de código y lógica
+ *   - DevOps Eng    (Claude 4.8 Sonnet)                 — testing y despliegue Vercel
  * ========================================================================== */
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
@@ -516,16 +519,16 @@ async function architectPlan(prompt: string, research: string, templateContext =
     ? `Design the file structure for this app:\n\n${prompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
     : `Design the file structure for this app:\n\n${prompt}${templateNote}`;
 
-  const response = await withTimeoutOrThrow(
-    anthropic.messages.create({
-      model: "claude-opus-4-7",
-      max_tokens: 8192,
-      system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
-      messages: [{ role: "user", content: userContent }],
-    }),
-    60_000,
-    "architect",
-  );
+    const response = await withTimeoutOrThrow(
+      anthropic.messages.create({
+        model: "claude-opus-4-8",
+        max_tokens: 8192,
+        system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
+        messages: [{ role: "user", content: userContent }],
+      }),
+      60_000,
+      "architect",
+    );
 
   const raw = (response.content[0] as any).text ?? "";
   const plan = extractJsonObject<ProjectPlan>(raw);
@@ -554,9 +557,9 @@ async function designSystem(plan: ProjectPlan, research: string, templateContext
     : `${summary}${templateNote}`;
   let raw = "";
   try {
-    const response = await withTimeoutOrThrow(
+      const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-8",
         max_tokens: 4096,
         system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -596,18 +599,22 @@ interface CodeGenResult {
   error?: string;
 }
 
-type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-opus-4-8" | "claude-mythos-preview";
+type ClaudeCoderModels = ClaudeCoderModel[];
+type GeminiCoderModel = "gemini-2.5-flash" | "gemini-3-pro-preview";
+type CoderProvider = "claude" | "gpt-5" | "gemini";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
-  if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
+  if (coderModel?.startsWith("gpt-5")) return "gpt-5";
+  if (coderModel?.startsWith("gemini-3") || coderModel === "gemini-2.5-flash") return "gemini";
   return "claude";
 }
 
-function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
-  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
-  if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  return "claude-sonnet-4-6";
+function resolveClaudeCoderModelss(coderModel?: string): string[] {
+  if (coderModel === "claude-mythos-v1" || coderModel === "claude-mythos") return ["claude-mythos-preview", "claude-opus-4-8", "claude-sonnet-4-6"];
+  if (coderModel === "claude-4-8-pro" || coderModel === "claude-opus-4-8") return ["claude-opus-4-8", "claude-sonnet-4-6"];
+  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return ["claude-haiku-4-5-20251001", "claude-sonnet-4-6"];
+  return ["claude-sonnet-4-6"];
 }
 
 /**
@@ -615,6 +622,7 @@ function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
  * Claude Sonnet redirigido a Gemini Flash (sin key Anthropic disponible).
  */
 async function generateFrontendCode(
+  userId: string,
   plan: ProjectPlan,
   design: DesignSystem,
   research: string,
@@ -624,6 +632,9 @@ async function generateFrontendCode(
   language: GenLanguage,
   templateContext = "",
 ): Promise<CodeGenResult> {
+  const agentName = "Frontend Engineer";
+  const recalledMemories = await recallConversations(userId, agentName, prompt);
+  const conversationContext = recalledMemories.length > 0 ? `\n\nConversaciones anteriores relevantes:\n${recalledMemories.map(m => `Prompt: ${m.prompt}\nRespuesta: ${m.response}`).join('\n---\n')}` : '';
   const planSummary = JSON.stringify({
     title: plan.title,
     pages: plan.pages,
@@ -637,6 +648,7 @@ async function generateFrontendCode(
 
   const userContent = `User request: ${prompt}
 ${templateContext ? `\n${templateContext}\n` : ""}
+${conversationContext}
 Project plan (you MUST implement every listed file):
 ${planSummary}
 
@@ -676,34 +688,55 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       if (fr === "length") finishReason = "MAX_TOKENS";
     }
     truncated = finishReason === "MAX_TOKENS";
-  } else if (provider === "claude") {
-    const stream = anthropic.messages.stream({
-      model: resolveClaudeCoderModel(coderModel),
-      max_tokens: 128000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
-    });
-    let lastReport2 = 0;
-    let finishReason2: string | undefined;
-    for await (const chunk of stream) {
-      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-        accumulated += chunk.delta.text;
-        if (accumulated.length - lastReport2 >= 1500) { lastReport2 = accumulated.length; onChars(accumulated.length); }
-      }
-      if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason2 = "MAX_TOKENS";
-    }
-    truncated = finishReason2 === "MAX_TOKENS";
-  } else {
-    // Claude streaming según el modelo elegido en el selector.
-    const stream = anthropic.messages.stream({
-      model: resolveClaudeCoderModel(coderModel),
-      max_tokens: 128000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
+  } else if (provider === "gemini") {
+    const modelId = coderModel === "gemini-3-pro-preview" ? "gemini-3-pro-preview" : "gemini-2.5-flash";
+    const result = await gemini.generateContentStream({
+      model: modelId,
+      contents: [
+        { role: "user", parts: [{ text: systemPrompt + "\n\n" + userContent }] }
+      ],
     });
     let lastReport = 0;
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      accumulated += text;
+      if (accumulated.length - lastReport >= 1500) {
+        lastReport = accumulated.length;
+        onChars(accumulated.length);
+      }
+    }
+  } else {
+    // Default to Claude (Sonnet 4.8 or selected) with fallback
+    const claudeModels = resolveClaudeCoderModels(coderModel);
+    let claudeStream;
+    let currentClaudeModelId: string | undefined;
+    for (const modelId of claudeModels) {
+      try {
+        currentClaudeModelId = modelId;
+        claudeStream = anthropic.messages.stream({
+          model: modelId,
+          max_tokens: 128000,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userContent }],
+        });
+        break; // Si tiene éxito, sal del bucle
+      } catch (error) {
+        logger.warn({ error: error instanceof Error ? error.message : String(error), modelId }, "Claude model failed, trying next one");
+        if (modelId === claudeModels[claudeModels.length - 1]) {
+          // Si es el último modelo y falla, relanza el error
+          throw error;
+        }
+      }
+    }
+
+
+
+    let lastReport = 0;
     let finishReason: string | undefined;
-    for await (const chunk of stream) {
+    if (!claudeStream) {
+      throw new Error("Todos los modelos Claude fallaron o no están disponibles.");
+    }
+    for await (const chunk of claudeStream) {
       if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
         accumulated += chunk.delta.text;
         if (accumulated.length - lastReport >= 1500) {
@@ -712,6 +745,9 @@ Now produce the JSON object with frontendCode containing every listed file.`;
         }
       }
       if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+    }
+    if (currentClaudeModelId) {
+      logger.info({ model: currentClaudeModelId }, "Frontend Engineer used Claude model");
     }
     truncated = finishReason === "MAX_TOKENS";
   }
@@ -722,8 +758,10 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   }
   const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
   if (!parsed || typeof parsed.frontendCode !== "string") {
+    await rememberConversation(userId, agentName, prompt, "JSON inválido del Frontend Engineer.");
     return { code: "", truncated, error: "JSON inválido del Frontend Engineer." };
   }
+  await rememberConversation(userId, agentName, prompt, parsed.frontendCode);
   return { code: parsed.frontendCode, truncated };
 }
 
@@ -731,10 +769,14 @@ Now produce the JSON object with frontendCode containing every listed file.`;
  * Backend Engineer — Gemini 2.5 Flash.
  */
 async function generateBackendCode(
+  userId: string,
   plan: ProjectPlan,
   prompt: string,
   templateContext = "",
 ): Promise<CodeGenResult> {
+  const agentName = "Backend Engineer";
+  const recalledMemories = await recallConversations(userId, agentName, prompt);
+  const conversationContext = recalledMemories.length > 0 ? `\n\nConversaciones anteriores relevantes:\n${recalledMemories.map(m => `Prompt: ${m.prompt}\nRespuesta: ${m.response}`).join("\n---\n")}` : "";
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
   }
@@ -745,6 +787,7 @@ async function generateBackendCode(
   });
   const userContent = `User request: ${prompt}
 ${templateContext ? `\n${templateContext}\n` : ""}
+${conversationContext}
 Backend plan (implement every listed file with real Express handlers):
 ${planSummary}
 
@@ -753,7 +796,7 @@ Now produce the JSON object with backendCode.`;
   try {
     const response = await withTimeoutOrThrow(
       anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-8",
         max_tokens: 8192,
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -764,12 +807,14 @@ Now produce the JSON object with backendCode.`;
     const raw = (response.content[0] as any).text ?? "";
     const parsed = extractJsonObject<{ backendCode?: string }>(raw);
     if (!parsed || typeof parsed.backendCode !== "string") {
+      await rememberConversation(userId, agentName, prompt, "JSON inválido del Backend Engineer.");
       return {
         code: `// Backend agent did not return valid output. Files planned: ${plan.backendFiles.join(", ")}`,
         truncated: false,
         error: "backend-agent-invalid-json",
       };
     }
+    await rememberConversation(userId, agentName, prompt, parsed.backendCode);
     return { code: parsed.backendCode, truncated: false };
   } catch (err) {
     return {
@@ -784,14 +829,18 @@ Now produce the JSON object with backendCode.`;
  * Integration Architect — Gemini 2.0 Flash.
  */
 async function specifyIntegrations(
+  userId: string,
   plan: ProjectPlan,
   prompt: string,
 ): Promise<IntegrationSpec> {
+  const agentName = "Integrator";
+  const recalledMemories = await recallConversations(userId, agentName, prompt);
+  const conversationContext = recalledMemories.length > 0 ? `\n\nConversaciones anteriores relevantes:\n${recalledMemories.map(m => `Prompt: ${m.prompt}\nRespuesta: ${m.response}`).join("\n---\n")}` : "";
   return withTimeout(
     (async () => {
       try {
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-8",
           max_tokens: 800,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -800,12 +849,14 @@ async function specifyIntegrations(
               content: `App: ${plan.title}
 Description: ${plan.description}
 User prompt: ${prompt}
+${conversationContext}
 Pages: ${plan.pages.map((p) => p.name).join(", ")}
 Data models: ${plan.dataModels.map((m) => m.name).join(", ") || "none"}
 Backend needed: ${plan.backendNeeded}`,
             },
           ],
         });
+        await rememberConversation(userId, agentName, prompt, raw);
         const raw = (response.content[0] as any).text ?? "";
         const parsed = extractJsonObject<IntegrationSpec>(raw);
         if (!parsed || !Array.isArray(parsed.services)) return { services: [] };
@@ -835,16 +886,21 @@ Backend needed: ${plan.backendNeeded}`,
  * QA Reviewer — Gemini 2.0 Flash.
  */
 async function reviewBundle(
+  userId: string,
   frontendCode: string,
   plan: ProjectPlan,
 ): Promise<QAReport> {
+  const agentName = "QA Auditor";
+  const queryText = `Review the following frontend code for bugs: ${frontendCode.slice(0, 1000)}`
+  const recalledMemories = await recallConversations(userId, agentName, queryText);
+  const conversationContext = recalledMemories.length > 0 ? `\n\nConversaciones anteriores relevantes:\n${recalledMemories.map(m => `Prompt: ${m.prompt}\nRespuesta: ${m.response}`).join("\n---\n")}` : "";
   return withTimeout(
     (async () => {
       try {
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-opus-4-8",
           max_tokens: 700,
           system: "You are a QA reviewer for a React+TS+Tailwind bundle. Output JSON only.",
           messages: [
@@ -852,6 +908,7 @@ async function reviewBundle(
               role: "user",
               content: `Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.
 
+${conversationContext}
 Expected files: ${expected}
 
 First 12KB of generated bundle:
@@ -859,7 +916,7 @@ ${sample}
 
 Return STRICT JSON ONLY:
 {"ok":true} when everything looks fine,
-OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}
+OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to \'./components/Button\' or remove the import"}]}
 
 Max 5 issues.`,
             },
@@ -867,7 +924,11 @@ Max 5 issues.`,
         });
         const raw = (response.content[0] as any).text ?? "";
         const parsed = extractJsonObject<QAReport>(raw);
-        if (!parsed) return { ok: true, issues: [] };
+        if (!parsed) {
+          await rememberConversation(userId, agentName, queryText, "JSON inválido del QA Auditor.");
+          return { ok: true, issues: [] };
+        }
+        await rememberConversation(userId, agentName, queryText, raw);
         return {
           ok: parsed.ok !== false,
           issues: Array.isArray(parsed.issues)
@@ -889,9 +950,14 @@ Max 5 issues.`,
  * Test Engineer — Gemini 2.0 Flash.
  */
 async function generateTests(
+  userId: string,
   plan: ProjectPlan,
   frontendCode: string,
 ): Promise<string> {
+  const agentName = "Test Engineer";
+  const queryText = `Generate tests for the following frontend code: ${frontendCode.slice(0, 1000)}`
+  const recalledMemories = await recallConversations(userId, agentName, queryText);
+  const conversationContext = recalledMemories.length > 0 ? `\n\nConversaciones anteriores relevantes:\n${recalledMemories.map(m => `Prompt: ${m.prompt}\nRespuesta: ${m.response}`).join("\n---\n")}` : "";
   return withTimeout(
     (async () => {
       try {
@@ -899,13 +965,14 @@ async function generateTests(
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-8",
           max_tokens: 3000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
             {
               role: "user",
               content: `Generate tests for "${plan.title}".
+${conversationContext}
 Main components to test: ${componentNames}
 Main utils to test: ${utilNames}
 Pages: ${plan.pages.map((p) => `${p.name} (${p.route})`).join(", ")}
@@ -919,9 +986,14 @@ Return the JSON object with testCode.`,
         });
         const raw = (response.content[0] as any).text ?? "";
         const parsed = extractJsonObject<{ testCode?: string }>(raw);
-        if (!parsed || typeof parsed.testCode !== "string") return "";
+        if (!parsed || typeof parsed.testCode !== "string") {
+          await rememberConversation(userId, agentName, queryText, "JSON inválido del Test Engineer.");
+          return "";
+        }
+        await rememberConversation(userId, agentName, queryText, raw);
         if (!parsed.testCode.includes("// === FILE:")) return "";
         return parsed.testCode;
+
       } catch {
         return "";
       }
@@ -1382,31 +1454,75 @@ Return the FULL updated app as JSON.`;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
     } else if (provider === "claude") {
-      const stream = anthropic.messages.stream({
-        model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 128000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: finalUserContent }],
-      });
+      const claudeModels = resolveClaudeCoderModels(coderModel);
+      let claudeStream;
+      let currentClaudeModelId: string | undefined;
+      for (const modelId of claudeModels) {
+        try {
+          currentClaudeModelId = modelId;
+          claudeStream = anthropic.messages.stream({
+            model: modelId,
+            max_tokens: 128000,
+            system: systemPrompt,
+            messages: [{ role: "user", content: finalUserContent }],
+          });
+          break; // Si tiene éxito, sal del bucle
+        } catch (error) {
+          logger.warn({ error: error instanceof Error ? error.message : String(error), modelId }, "Claude model failed in singleEditPass, trying next one");
+          if (modelId === claudeModels[claudeModels.length - 1]) {
+            // Si es el último modelo y falla, relanza el error
+            throw error;
+          }
+        }
+      }
+
+      if (!claudeStream) {
+        throw new Error("Todos los modelos Claude fallaron o no están disponibles en singleEditPass.");
+      }
+
       let lastReportC = 0;
-      for await (const chunk of stream) {
+      let finishReasonC: string | undefined;
+      for await (const chunk of claudeStream) {
         if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
           accumulated += chunk.delta.text;
           observe(accumulated);
-          if (accumulated.length - lastReportC >= PROGRESS_EVERY) { lastReportC = accumulated.length; onChars(accumulated.length); }
+          if (accumulated.length - lastReportC >= PROGRESS_EVERY) {
+            lastReportC = accumulated.length;
+            onChars(accumulated.length);
+          }
         }
-        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReasonC = "MAX_TOKENS";
       }
+      if (currentClaudeModelId) {
+        logger.info({ model: currentClaudeModelId }, "Coder used Claude model in singleEditPass");
+      }
+      finishReason = finishReasonC;
     } else {
-// Claude streaming según el modelo elegido en el selector.
-      const stream = await anthropic.messages.stream({
-        model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 128000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: finalUserContent }],
-      });
+      const claudeModels = resolveClaudeCoderModels(coderModel);
+      let claudeStream;
+      let currentClaudeModelId: string | undefined;
+      for (const modelId of claudeModels) {
+        try {
+          currentClaudeModelId = modelId;
+          claudeStream = anthropic.messages.stream({
+            model: modelId,
+            max_tokens: 128000,
+            system: systemPrompt,
+            messages: [{ role: "user", content: finalUserContent }],
+          });
+          break; // If successful, break and use this model
+        } catch (err) {
+          logger.warn({ err: err instanceof Error ? err.message : String(err), modelId }, "Claude model failed in singleEditPass (second block), trying next one");
+          claudeStream = undefined; // Reset stream if it failed
+        }
+      }
+
+      if (!claudeStream) {
+        throw new Error("Todos los modelos Claude fallaron o no están disponibles en singleEditPass (segundo bloque).");
+      }
+
       let lastReport = 0;
-      for await (const chunk of stream) {
+      for await (const chunk of claudeStream) {
         if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
           accumulated += chunk.delta.text;
           observe(accumulated);
@@ -1416,6 +1532,9 @@ Return the FULL updated app as JSON.`;
           }
         }
         if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+      }
+      if (currentClaudeModelId) {
+        logger.info({ model: currentClaudeModelId }, "Coder used Claude model in singleEditPass (second block)");
       }
     }
     return { text: accumulated, finishReason };
@@ -1554,12 +1673,14 @@ export type PhaseErrorReporter = (
 ) => void;
 
 export async function generateApp(
+  userId: string,
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
   previous?: PreviousApp,
   coderModel?: string,
   language: GenLanguage = "typescript",
   onAgentLog?: AgentLog,
+  orchestrationMode: "auto" | "manual" = "auto",
   attachments?: AttachmentContext[],
   onPhaseError?: PhaseErrorReporter,
   agentMemory?: AgentMemoryContext,
@@ -1599,7 +1720,11 @@ export async function generateApp(
   // Para producción usamos por defecto el pipeline robusto de generación, validación y
   // parcheo que devuelve un bundle renderizable persistido en GeneratedApp.frontendCode.
   const wantsFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
-  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true";
+  let useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true";
+  if (orchestrationMode === "manual") {
+    useMilestoneOrchestrator = false; // Desactivar el orquestador de hitos en modo manual
+    await log("system", "Modo de orquestación manual activado. Se omitirá el orquestador de hitos.");
+  }
 
   if (wantsFullBuild && useMilestoneOrchestrator) {
     await log("system", "🚀 Activando Core Orchestrator experimental (Estrategia de Hitos)...");
@@ -1631,7 +1756,7 @@ export async function generateApp(
   }
 
   let execPlan = await runPhase("planner", () =>
-    planExecution(prompt, { hasExistingApp: !!previous }),
+    planExecution(prompt, { hasExistingApp: !!previous, orchestrationMode }),
   );
   await log("planner", planSummaryEs(execPlan));
 
@@ -1776,7 +1901,7 @@ export async function generateApp(
   let lastLogChars = 0;
   const frontendPromise = runPhase("frontend", async () =>
     withTimeoutOrThrow(
-      generateFrontendCode(plan, design, research, prompt, (chars) => {
+      generateFrontendCode(userId, plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
         
@@ -1793,7 +1918,7 @@ export async function generateApp(
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
-    ? runPhase("backend", () => generateBackendCode(plan, prompt, templateContextBlock))
+    ? runPhase("backend", () => generateBackendCode(userId, plan, prompt, templateContextBlock))
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
@@ -1838,10 +1963,10 @@ export async function generateApp(
   if (runTests) await log("qa", "Generando tests en paralelo…");
 
   const reviewPromise = runQa
-    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))
+    ? runPhase("qa", () => reviewBundle(userId, frontendResult.code, plan))
     : Promise.resolve({ ok: true, issues: [] } as QAReport);
   const testsPromise = runTests
-    ? runPhase("tests", () => generateTests(plan, frontendResult.code))
+    ? runPhase("tests", () => generateTests(userId, plan, frontendResult.code))
     : Promise.resolve(null);
 
   const [report, testCode] = await Promise.all([reviewPromise, testsPromise]);
@@ -1955,17 +2080,46 @@ function detectRequestLocale(req: any): { country?: string; uiLanguage: string; 
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps Saas." },
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "Velocidad extrema para prototipado rápido." },
-    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería de software." },
-    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas." },
-    { id: "claude-mithos-v1", name: "Claude Mithos", description: "Modelo experimental optimizado para creatividad y UI." },
-    { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
+    { id: "auto", name: "Auto (Orquestación de 9 Agentes)", description: "Selección inteligente optimizada para apps SaaS." },
+    { id: "claude-mythos", name: "Claude Mythos Preview", description: "Inteligencia superior para ciberseguridad y agentes autónomos." },
+    { id: "claude-opus-4-8", name: "Claude Opus 4.8", description: "Razonamiento profundo para arquitecturas complejas y código crítico." },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "El estándar de oro para ingeniería de software rápida." },
+    { id: "gemini-3-pro-preview", name: "Gemini 3 Pro", description: "La nueva generación de Google con razonamiento avanzado." },
   ];
   res.json(availableModels);
 });
 
 router.post("/apps", requireAuth, async (req: any, res: any) => {
+  // Admin-only refund route
+  router.post("/admin/refund", requireAuth, async (req, res) => {
+    if (!req.user?.isAdmin) {
+      return res.status(403).json({ error: "Acceso denegado. Solo administradores." });
+    }
+    const { userId, amount, reason } = req.body;
+    if (!userId || !amount || !reason) {
+      return res.status(400).json({ error: "Faltan parámetros: userId, amount, reason." });
+    }
+    try {
+      // Aquí iría la lógica real para procesar el reembolso a través de Stripe o el proveedor de pagos.
+      // Por ahora, simularemos el reembolso y actualizaremos los créditos del usuario.
+      // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2020-08-27' });
+      // const refund = await stripe.refunds.create({ payment_intent: 'pi_...', amount: amount * 100 });
+
+      // Actualizar créditos del usuario (simulado)
+      const User = mongoose.model("User");
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: "Usuario no encontrado." });
+      }
+      user.credits += amount; // Asumimos que el reembolso añade créditos
+      await user.save();
+
+      res.status(200).json({ message: `Reembolso de ${amount} créditos procesado para el usuario ${userId}. Razón: ${reason}.`, newCredits: user.credits });
+    } catch (error: any) {
+      res.status(500).json({ error: `Error al procesar el reembolso: ${error.message}` });
+    }
+  });
+
   try {
     const { prompt, model, language, attachments, kind } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
@@ -2344,11 +2498,11 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "claude-sonnet-4-6", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic" },
-      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic" },
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", provider: "anthropic" },
-      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai" },
+      { id: "auto", name: "Auto (Orquestación de 9 Agentes)", provider: "anthropic" },
+      { id: "claude-mythos", name: "Claude Mythos Preview (Ciberseguridad & Agentes)", provider: "anthropic" },
+      { id: "claude-opus-4-8", name: "Claude Opus 4.8 (Razonamiento Complejo)", provider: "anthropic" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (Líder de Ingeniería)", provider: "anthropic" },
+      { id: "gemini-3-pro-preview", name: "Gemini 3 Pro (Investigación & QA)", provider: "google" },
     ];
     res.json(models);
   } catch (err) {

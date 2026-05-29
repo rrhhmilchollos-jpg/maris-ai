@@ -317,6 +317,32 @@ export const ChatAttachment: Model<IChatAttachment> =
   mongoose.model<IChatAttachment>("ChatAttachment", ChatAttachmentSchema);
 
 // ─── Agent Memory ────────────────────────────────────────────────────────────
+export interface IAgentConversationMemory extends Document {
+  userId: string;
+  agent: string;
+  timestamp: Date;
+  prompt: string;
+  response: string;
+  embedding?: number[];
+}
+
+const AgentConversationMemorySchema = new Schema<IAgentConversationMemory>(
+  {
+    userId: { type: String, required: true, index: true },
+    agent: { type: String, required: true },
+    timestamp: { type: Date, required: true, default: Date.now },
+    prompt: { type: String, required: true },
+    response: { type: String, required: true },
+    embedding: { type: [Number] },
+  },
+  { timestamps: true },
+);
+
+export const AgentConversationMemory: Model<IAgentConversationMemory> =
+  mongoose.models.AgentConversationMemory ||
+  mongoose.model<IAgentConversationMemory>("AgentConversationMemory", AgentConversationMemorySchema);
+
+
 export interface IAgentMemory extends Document {
   errorMessage: string;
   errorContext?: string;

@@ -10,13 +10,13 @@ import { Bot, Code2, FlaskConical, Search, Layout, Sparkles, Database, Server, Z
 const AGENT_CONFIG: Record<string, { label: string, icon: any, color: string }> = {
   researcher: { label: "Product Researcher", icon: Search, color: "text-blue-400" },
   architect: { label: "System Architect", icon: Layout, color: "text-purple-400" },
+  integrator: { label: "API Integrator", icon: Zap, color: "text-yellow-400" },
   designer: { label: "UI/UX Designer", icon: Sparkles, color: "text-pink-400" },
-  database: { label: "Database Engineer", icon: Database, color: "text-amber-400" },
   frontend: { label: "Frontend Engineer", icon: Code2, color: "text-emerald-400" },
   backend: { label: "Backend Engineer", icon: Server, color: "text-indigo-400" },
-  integration: { label: "API Integrator", icon: Zap, color: "text-yellow-400" },
-  qa: { label: "QA Specialist", icon: CheckCircle2, color: "text-cyan-400" },
-  patcher: { label: "DevOps Patcher", icon: Rocket, color: "text-rose-400" },
+  database: { label: "Database Engineer", icon: Database, color: "text-amber-400" },
+  qa: { label: "QA Auditor", icon: CheckCircle2, color: "text-cyan-400" },
+  devops: { label: "DevOps Engineer", icon: Rocket, color: "text-rose-400" },
   system: { label: "Core System", icon: Bot, color: "text-white" },
 };
 

@@ -112,8 +112,11 @@ NUNCA pongas comentarios, prosa, ni markdown alrededor del JSON.`;
 
 export async function planExecution(
   prompt: string,
-  options: { hasExistingApp: boolean } = { hasExistingApp: false },
+  options: { hasExistingApp: boolean; orchestrationMode?: "auto" | "manual" } = { hasExistingApp: false },
 ): Promise<ExecutionPlan> {
+  if (options.orchestrationMode === "manual") {
+    return { ...PLAN_FEATURE, reason: "Modo manual seleccionado: se ejecutará el plan completo con posibilidad de intervención." };
+  }
   const heuristic = heuristicPlan(prompt, options.hasExistingApp);
 
   try {

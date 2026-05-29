@@ -64,7 +64,7 @@ export function useDeleteApp(opts?: { mutation?: Partial<UseMutationOptions<any,
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}`, { method: "DELETE" }), ...(opts?.mutation as any) });
 }
 export function useGenerateApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
-  return useMutation<any, any, any>({ mutationFn: ({ data }: { data: { prompt: string; model: string; language: string; attachments: any[]; kind: string } }) => apiFetch("/api/apps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+  return useMutation<any, any, any>({ mutationFn: ({ data }: { data: { userId: string; prompt: string; coderModel: string; language: string; kind: string; attachmentIds: string[]; orchestrationMode: "auto" | "manual" } }) => apiFetch("/api/apps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
 export function useListAppMessages(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppMessagesQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}/messages`), ...(opts?.query as any) });
@@ -96,6 +96,10 @@ export function useListModels(opts?: { query?: Partial<UseQueryOptions> }) {
 }
 export function useListTransactions(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListTransactionsQueryKey(), queryFn: () => apiFetch("/api/billing/transactions"), ...(opts?.query as any) });
+}
+
+export function useAdminRefund(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ userId, amount, reason }: { userId: string; amount: number; reason: string }) => apiFetch("/api/admin/refund", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, amount, reason }) }), ...(opts?.mutation as any) });
 }
 export function useGetAdminOverview(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetAdminOverviewQueryKey(), queryFn: () => apiFetch("/api/admin/overview"), ...(opts?.query as any) });
