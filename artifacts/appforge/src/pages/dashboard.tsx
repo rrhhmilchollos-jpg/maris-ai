@@ -36,7 +36,15 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
-import { Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, FileText, Brain, Mic, Webhook, Library, type LucideIcon } from "lucide-react";
+import { 
+  Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, 
+  FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, 
+  Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, 
+  ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, 
+  Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
+  FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
+  Settings2, ShieldAlert, TestTube2, HardDrive
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -52,10 +60,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard, Rocket, ShoppingBag, Smartphone, Gamepad2, Notebook, Layers, Globe, Box, Joystick, Cat, Zap, Atom, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, FileText, Brain, Mic, Webhook, Library,
 };
+
+const AGENTS = [
+  { name: "Researcher", icon: Search, color: "text-blue-400" },
+  { name: "Architect", icon: Compass, color: "text-purple-400" },
+  { name: "Designer", icon: Palette, color: "text-pink-400" },
+  { name: "Frontend", icon: Code2, color: "text-cyan-400" },
+  { name: "Backend", icon: Server, color: "text-orange-400" },
+  { name: "Database", icon: HardDrive, color: "text-emerald-400" },
+  { name: "Integrator", icon: Plug, color: "text-yellow-400" },
+  { name: "QA Auditor", icon: ShieldCheck, color: "text-red-400" },
+  { name: "DevOps", icon: Rocket, color: "text-indigo-400" },
+];
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   queued: { label: "En cola…", icon: Loader2 },
@@ -105,7 +126,7 @@ export default function DashboardPage() {
 
   const { data: me } = useGetMe();
   useEffect(() => {
-    if (me?.isPremium && coderModel === "auto") setCoderModel("claude-sonnet");
+    if (me?.isPremium && coderModel === "auto") setCoderModel("auto");
   }, [me?.isPremium, coderModel]);
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
@@ -161,24 +182,17 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
       const appId = job.appId;
-      const id = activeJobId;
       setActiveJobId(null);
       setPrompt("");
       attachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
       setAttachments([]);
       toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
       setLocation(`/app/${appId}`);
-      void id;
     } else if (job.status === "failed") {
       toast({ title: "Falló la generación", description: job.errorMessage || "Inténtalo otra vez o ajusta el prompt.", variant: "destructive" });
       setActiveJobId(null);
     }
   }, [job, queryClient, setLocation, toast, activeJobId]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("appforge_pending_prompt");
-    if (saved) { setPrompt(saved); localStorage.removeItem("appforge_pending_prompt"); }
-  }, []);
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,34 +204,6 @@ export default function DashboardPage() {
     }
     localStorage.setItem("appforge_last_prompt", prompt);
     generateMutation.mutate({ data: { prompt, coderModel, language, kind, attachmentIds: attachments.map((a: any) => a.id) } });
-  };
-
-  useEffect(() => {
-    if (!me || isAdmin) return;
-    let t: any;
-    try {
-      const raw = localStorage.getItem("appforge_annual_modal_until");
-      const until = raw ? Number(raw) : 0;
-      if (Date.now() > until) {
-        t = setTimeout(() => setAnnualOpen(true), 1200);
-      }
-    } catch { /* ignore */ }
-    return () => { if (t) clearTimeout(t); };
-  }, [me, isAdmin]);
-
-  const checkoutForAnnual = useCreateCheckoutSession({
-    mutation: {
-      onSuccess: (data) => { window.location.href = data.url; },
-      onError: () => { setLocation("/billing"); },
-    },
-  });
-
-  const dismissAnnual = (snoozeDays: number) => {
-    try {
-      const until = Date.now() + snoozeDays * 24 * 60 * 60 * 1000;
-      localStorage.setItem("appforge_annual_modal_until", String(until));
-    } catch { /* ignore */ }
-    setAnnualOpen(false);
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
@@ -271,215 +257,124 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <UserPreferencesSection />
-
         <Card className="border-primary/20 bg-card/60 backdrop-blur shadow-lg overflow-hidden relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
           <CardHeader>
             <CardTitle className="text-xl flex items-center"><Sparkles className="h-5 w-5 text-primary mr-2" />Generar nueva aplicación</CardTitle>
-            <CardDescription>Describe con detalle lo que quieres construir. Sé específico con las funciones, el diseño y el estilo.</CardDescription>
+            <CardDescription>Describe con detalle lo que quieres construir. Maris AI coordinará a su equipo de agentes de élite.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleGenerate} className="space-y-4">
-              <TemplateGallery disabled={isWorking} onPick={(t: any) => { setKind(t.kind as Kind); setPrompt(t.seedPrompt); }} />
-              <div className="flex flex-wrap items-center gap-1 rounded-lg border border-white/10 bg-background/50 p-1" role="group" aria-label="Tipo de proyecto" data-testid="kind-tabs">
-                {(Object.keys(KIND_META) as Array<keyof typeof KIND_META>).map((k) => {
-                  const meta = KIND_META[k];
-                  const Icon = meta.icon;
-                  const active = kind === k;
-                  return (
-                    <button key={k} type="button" aria-pressed={active} onClick={() => setKind(k)} disabled={isWorking} title={`${meta.label} — ${meta.cost} ${meta.cost === 1 ? "crédito" : "créditos"}`} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-white hover:bg-white/5"}`} data-testid={`kind-tab-${k}`}>
-                      <Icon className="h-3.5 w-3.5" />
-                      {meta.label}
-                      <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-mono leading-none ${active ? "bg-primary/25 text-primary" : "bg-white/5 text-muted-foreground/70"}`} data-testid={`kind-cost-${k}`}>{meta.cost}cr</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="relative">
-                <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={KIND_META[kind].placeholder} className="min-h-[120px] bg-background/50 border-border/50 font-sans text-base focus-visible:ring-primary/50 pl-12" disabled={isWorking} data-testid="input-prompt" />
-                <div className="absolute left-2 bottom-2">
-                  <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={isWorking} testIdPrefix="dashboard-attachment" />
-                </div>
-              </div>
-              <AttachmentChips attachments={attachments} onRemove={(id) => { const removed = attachments.find((a) => a.id === id); if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl); setAttachments((prev) => prev.filter((a) => a.id !== id)); }} testIdPrefix="dashboard-attachment" />
-
-              {isWorking && (
-                <GenerationStudio
-                  jobId={activeJobId}
-                  job={job as any}
-                  phaseLabel={phaseInfo.label}
-                  PhaseIcon={PhaseIcon}
+            <form onSubmit={handleGenerate} className="space-y-6">
+              <div className="relative group">
+                <Textarea
+                  placeholder={kindMeta.placeholder}
+                  className="min-h-[160px] bg-background/50 border-white/10 focus:border-primary/50 transition-all resize-none text-base p-4 pb-12"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled={isWorking}
                 />
-              )}
+                <div className="absolute left-2 bottom-2">
+                  <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={isWorking} />
+                </div>
+              </div>
 
-              <div className="flex flex-wrap justify-between items-center gap-3">
+              {/* Cuadrícula de Agentes — Estilo Emergent */}
+              <div className="bg-black/20 rounded-xl p-4 border border-white/5">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3 font-bold">Equipo de Agentes Activos</p>
+                <div className="grid grid-cols-3 md:grid-cols-9 gap-4">
+                  {AGENTS.map((agent) => (
+                    <Tooltip key={agent.name}>
+                      <TooltipTrigger asChild>
+                        <div className="flex flex-col items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity cursor-help">
+                          <div className={`p-2 rounded-lg bg-white/5 ${agent.color}`}>
+                            <agent.icon className="h-4 w-4" />
+                          </div>
+                          <span className="text-[10px] font-medium text-muted-foreground">{agent.name}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Agente especialista: {agent.name}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
-                  <p className="text-sm text-muted-foreground font-mono bg-background/50 px-2 py-1 rounded">{isAdmin ? "Costo: gratis (admin)" : `Costo: ${kindCost} ${kindCost === 1 ? "crédito" : "créditos"}`}</p>
                   <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
-                    <SelectTrigger className="h-9 w-[230px] text-xs bg-background/50 border-border/50"><SelectValue placeholder="Modelo del coder" /></SelectTrigger>
+                    <SelectTrigger className="h-10 w-[280px] bg-background/50 border-white/10">
+                      <SelectValue placeholder="Modelo de orquestación" />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">⚡ Auto (Orquestación de 9 Agentes)</SelectItem>
-                      <SelectItem value="claude-4-8-sonnet">✨ Claude 4.8 Sonnet (Líder de Ingeniería)</SelectItem>
-                      <SelectItem value="claude-mithos">🎨 Claude Mithos (Especialista UI/UX)</SelectItem>
-                      <SelectItem value="gemini-3">💎 Gemini 3 (Investigación & QA)</SelectItem>
-                      <SelectItem value="gemini-2-5-flash">🚀 Gemini 2.5 Flash (Parches rápidos)</SelectItem>
-                      <SelectItem value="claude-opus-4-8" disabled={!me?.isPremium}>🏆 Claude 4.8 Opus {me?.isPremium ? "(Máxima Inteligencia)" : "(Premium)"}</SelectItem>
-                      <SelectItem value="gpt-5-4" disabled={!me?.isPremium}>⚡ GPT-5.4 Ultra {me?.isPremium ? "(Razonamiento Complejo)" : "(Premium)"}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={language} onValueChange={(v) => setLanguage(v as "typescript" | "javascript")} disabled={isWorking}>
-                    <SelectTrigger className="h-9 w-[160px] text-xs bg-background/50 border-border/50"><SelectValue placeholder="Lenguaje" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="typescript">TypeScript (.tsx)</SelectItem>
-                      <SelectItem value="javascript">JavaScript (.jsx)</SelectItem>
+                      <SelectItem value="auto">
+                        <div className="flex items-center">
+                          <Zap className="h-4 w-4 mr-2 text-yellow-400" />
+                          <span>Auto (Orquestación de 9 Agentes)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="claude-4-8-sonnet">
+                        <div className="flex items-center">
+                          <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
+                          <span>Claude 4.8 Sonnet (Líder de Ingeniería)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="claude-mithos">
+                        <div className="flex items-center">
+                          <Palette className="h-4 w-4 mr-2 text-pink-400" />
+                          <span>Claude Mithos (Especialista UI/UX)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="gemini-3">
+                        <div className="flex items-center">
+                          <Brain className="h-4 w-4 mr-2 text-blue-400" />
+                          <span>Gemini 3 (Investigación & QA)</span>
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                {!isAdmin && stats && stats.credits <= 0 ? (
-                  <Button type="button" onClick={() => setLocation("/billing")} variant="destructive" data-testid="button-out-of-credits">Sin créditos <ArrowRight className="ml-2 h-4 w-4" /></Button>
-                ) : (
-                  <Button type="submit" disabled={isWorking || !prompt.trim()} className="min-w-[140px] bg-primary text-white hover:bg-primary/90" data-testid="button-generate">
-                    {isWorking ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generando…</>) : (<>Generar {!isAdmin && <span className="ml-1.5 rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-mono leading-none">{kindCost}cr</span>}<Plus className="ml-2 h-4 w-4" /></>)}
-                  </Button>
-                )}
+
+                <Button type="submit" disabled={isWorking || !prompt.trim()} size="lg" className="min-w-[180px] bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
+                  {isWorking ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Iniciando equipo…</>
+                  ) : (
+                    <>Generar Aplicación <Plus className="ml-2 h-4 w-4" /></>
+                  )}
+                </Button>
               </div>
-              <p className="text-xs text-muted-foreground/70">Tip: Maris AI coordina a 9 agentes especializados (Researcher, Architect, Designer, etc.) para construir tu app con calidad profesional.</p>
+              <p className="text-xs text-muted-foreground/60 text-center italic">
+                Tip: Al pulsar generar, los 9 agentes analizarán tu petición para construir una app completa y optimizada.
+              </p>
             </form>
           </CardContent>
         </Card>
 
         <div>
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h3 className="text-xl font-semibold flex items-center"><Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes</h3>
-            <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-card/40 p-1" role="group" aria-label="Filtrar apps recientes">
-              <Button variant="ghost" size="sm" onClick={() => setAppsFilter("all")} aria-pressed={appsFilter === "all"} className={`h-7 px-3 text-xs rounded-md ${appsFilter === "all" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`} data-testid="filter-apps-all">
-                Todas{apps && <span className="ml-1.5 text-[10px] opacity-70 font-mono">{apps.length}</span>}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setAppsFilter("deployed")} aria-pressed={appsFilter === "deployed"} className={`h-7 px-3 text-xs rounded-md ${appsFilter === "deployed" ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"}`} data-testid="filter-apps-deployed">
-                Desplegadas{apps && <span className="ml-1.5 text-[10px] opacity-70 font-mono">{apps.filter((a) => !!a.publicSlug).length}</span>}
-              </Button>
-            </div>
-          </div>
-
+          <h3 className="text-xl font-semibold flex items-center mb-4">
+            <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes
+          </h3>
           {appsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}</div>
-          ) : visibleApps.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {visibleApps.map((app: any) => (
-                <Card key={(app._id || app.id)} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group hover:bg-card/60 flex flex-col relative" onClick={() => setLocation(`/app/${(app._id || app.id)}`)} data-testid={`card-app-${(app._id || app.id)}`}>
-                  <button
-                    onClick={(e) => handleDeleteApp(e, (app._id || app.id), app.title)}
-                    className="absolute top-2 right-2 p-2 rounded-full bg-black/20 text-muted-foreground hover:bg-destructive/20 hover:text-destructive opacity-0 group-hover:opacity-100 transition-all z-10"
-                    title="Eliminar app"
-                    disabled={deleteMutation.isPending}
-                  >
-                    {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                  </button>
+                <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-8">{app.title}</CardTitle>
-                    <CardDescription className="line-clamp-2 min-h-[2.5rem]">{app.description}</CardDescription>
+                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors">{app.title}</CardTitle>
+                    <CardDescription className="line-clamp-2">{app.description}</CardDescription>
                   </CardHeader>
-                  <CardContent className="mt-auto pt-4 pb-4">
-                    <div className="flex gap-2 mb-2 flex-wrap">{app.techStack?.slice(0, 3).map((tech: any) => <Badge key={tech} variant="outline" className="bg-background/50 border-white/10 text-xs text-muted-foreground">{tech}</Badge>)}</div>
-                  </CardContent>
-                  <CardFooter className="pt-0 text-xs text-muted-foreground flex justify-between items-center border-t border-white/5 mt-auto bg-black/10 py-3">
-                    <span>{formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}</span>
-                    <span className="text-primary/70 group-hover:text-primary transition-colors font-medium">Ver código →</span>
+                  <CardFooter className="text-xs text-muted-foreground border-t border-white/5 pt-3">
+                    {formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}
                   </CardFooter>
                 </Card>
               ))}
             </div>
-          ) : appsFilter === "deployed" && apps && apps.length > 0 ? (
-            <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-xl bg-card/20">
-              <Code2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <h4 className="text-lg font-medium text-foreground mb-1">No tienes apps desplegadas todavía</h4>
-              <p className="text-muted-foreground text-sm max-w-sm mx-auto">Abre cualquier app y pulsa "Publicar" para conseguirle una URL pública. Cambia a "Todas" para ver el resto.</p>
-            </div>
-          ) : (
-            <div className="text-center py-16 px-4 border border-dashed border-white/10 rounded-xl bg-card/20">
-              <Code2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <h4 className="text-lg font-medium text-foreground mb-1">Aún no has generado apps</h4>
-              <p className="text-muted-foreground text-sm max-w-sm mx-auto">Usa el cuadro de arriba para darle instrucciones al motor neuronal y crear tu primera aplicación.</p>
-            </div>
           )}
         </div>
-
-        {isAdmin ? <AdminTicketsPanel /> : <SupportPanel />}
       </div>
-
-      <Dialog open={annualOpen} onOpenChange={(open) => { if (!open) dismissAnnual(7); }}>
-        <DialogContent className="max-w-md border-primary/30 bg-card" data-testid="modal-annual">
-          <DialogHeader>
-            <div className="flex items-center justify-between mb-2">
-              <Badge className="bg-primary text-primary-foreground font-semibold tracking-wide">AHORRA 58%</Badge>
-              <button type="button" onClick={() => dismissAnnual(7)} className="text-muted-foreground hover:text-white transition-colors" aria-label="Cerrar" data-testid="button-annual-close"><X className="h-4 w-4" /></button>
-            </div>
-            <DialogTitle className="text-2xl">Plan Anual de Maris AI</DialogTitle>
-            <DialogDescription className="text-base text-muted-foreground pt-2">600 créditos por <span className="font-bold text-white">$399</span> en lugar de $960. Suficiente combustible para 12 meses de generación intensiva al mejor precio por crédito.</DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border border-white/10 bg-background/50 p-4 my-2 space-y-2">
-            <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Créditos incluidos</span><span className="font-mono text-white">600</span></div>
-            <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Precio por crédito</span><span className="font-mono text-primary">$0.67</span></div>
-            <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Vs. plan Pro</span><span className="font-mono text-green-400">−58%</span></div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button variant="ghost" onClick={() => dismissAnnual(7)} className="text-muted-foreground" data-testid="button-annual-later">Tal vez después</Button>
-            <Button onClick={() => checkoutForAnnual.mutate({ data: { priceId: "annual" } })} disabled={checkoutForAnnual.isPending} className="bg-primary text-white hover:bg-primary/90" data-testid="button-annual-buy">
-              {checkoutForAnnual.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (<>Comprar plan anual<ArrowRight className="ml-2 h-4 w-4" /></>)}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Layout>
-  );
-}
-
-function UserPreferencesSection() {
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useGetMyPreferences();
-  const updateMutation = useUpdateMyPreferences({
-    mutation: {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetMyPreferencesQueryKey() }); },
-    },
-  });
-  return (
-    <AgentNotesPanel
-      title="Mis preferencias para el agente"
-      description="Reglas que el agente respetará en TODAS tus apps. Por ejemplo: idioma del producto, estética, librerías favoritas o cosas que nunca debe hacer."
-      initialValue={data?.notes}
-      isLoading={isLoading}
-      isSaving={updateMutation.isPending}
-      onSave={async (notes) => { await updateMutation.mutateAsync({ data: { notes } }); }}
-      testIdPrefix="user-preferences"
-    />
-  );
-}
-
-function TemplateGallery({ disabled, onPick }: { disabled?: boolean; onPick: (t: { id: string; kind: string; seedPrompt: string; name: string }) => void }) {
-  const { data, isLoading } = useListTemplates();
-  const templates = data?.templates ?? [];
-  if (isLoading) return <div className="flex flex-wrap gap-2" data-testid="template-gallery-loading">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-44 rounded-lg" />)}</div>;
-  if (templates.length === 0) return null;
-  return (
-    <div data-testid="template-gallery">
-      <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
-        <Sparkles className="h-3.5 w-3.5 text-primary" />
-        Empieza desde una plantilla
-        <span className="text-muted-foreground/60 font-normal">(rellena el prompt, lo puedes editar antes de generar)</span>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        {templates.map((t: any) => {
-          const Icon = TEMPLATE_ICONS[t.icon] ?? Sparkles;
-          return (
-            <button key={t.id} type="button" onClick={() => onPick(t)} disabled={disabled} title={t.description} className="group flex flex-col items-start gap-1 rounded-lg border border-white/10 bg-background/40 hover:bg-primary/5 hover:border-primary/40 p-3 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed" data-testid={`template-card-${t.id}`}>
-              <Icon className="h-4 w-4 text-primary/80 group-hover:text-primary" />
-              <div className="text-xs font-semibold text-white leading-tight">{t.name}</div>
-              <div className="text-[10px] text-muted-foreground leading-tight line-clamp-2">{t.description}</div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }
