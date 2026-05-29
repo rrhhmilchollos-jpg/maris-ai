@@ -140,6 +140,14 @@ Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
 - Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
+- SEO & Google Visibility (CRITICAL): 
+  · Mandatory <title> and <meta name="description"> tailored to the app's purpose in index.html.
+  · OpenGraph tags (og:title, og:description, og:image, og:url) for high-quality social sharing.
+  · Twitter Card tags for viral potential.
+  · Semantic structure (H1-H6) strictly optimized for Google SEO indexing.
+  · Dynamic Metatags: if the app has multiple pages, each MUST have unique SEO tags via a Helmet-like component.
+  · JSON-LD Schema: Include structured data (WebSite, SoftwareApplication or Organization) to ensure Google understands the content perfectly.
+  · Favicon and Apple Touch Icon references in index.html.
 - NO SIZE LIMIT — generate every file the plan needs, in full. This is a paid product; bigger apps deliver more value. Never truncate or "TODO" a file to save tokens.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
@@ -197,6 +205,7 @@ PRODUCT THINKING — be ambitious about UX:
 - For consumer apps: think Browse + Detail + Auth/Profile + Cart/Bookmarks + Settings. For SaaS: Dashboard + List + Detail + Settings + Onboarding. For tools: Workspace + History + Settings.
 - A real product has 4-6 pages minimum (unless it's a single-page tool/calculator). Don't ship 2-page apps when the domain calls for more.
 - Think about empty states, error states, loading states — they're real screens.
+- SEO & MONETIZATION: Plan for a robust SEO foundation (Metatags, JSON-LD, Sitemap) and conversion-focused UI to maximize Google visibility and user revenue from day one.
 
 COMPONENTS — model real reusable pieces:
 - Always include: Navbar, Footer, Button (if you need a custom button), Card variant(s), at least one Form component.

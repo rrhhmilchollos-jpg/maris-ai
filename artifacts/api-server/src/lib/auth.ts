@@ -37,8 +37,29 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUser> {
   await connectDB();
  
-  // Try to find existing user
-  const existing = await User.findById(clerkUserId).lean<IUser>();
+  // Fetch from Clerk to get the email for reconciliation
+  const clerkUser = await clerkClient.users.getUser(clerkUserId);
+  const email =
+    clerkUser.primaryEmailAddress?.emailAddress ??
+    clerkUser.emailAddresses[0]?.emailAddress ??
+    "";
+
+  // Try to find existing user by clerkUserId (ID primario)
+  let existing = await User.findById(clerkUserId).lean<IUser>();
+
+  // Si no existe por ID, intentamos reconciliar por EMAIL (usuarios que cambiaron de Clerk ID o migraciones)
+  if (!existing && email) {
+    existing = await User.findOne({ email }).lean<IUser>();
+    if (existing) {
+      // Reconciliación: actualizamos el ID del usuario existente al nuevo clerkUserId
+      // Esto asegura que sus proyectos antiguos (ligados a su email) sigan siendo suyos
+      await User.deleteOne({ _id: existing._id });
+      existing._id = clerkUserId;
+      await User.create({ ...existing, _id: clerkUserId });
+      console.log(`✅ Usuario reconciliado por email: ${email} (Nuevo ID: ${clerkUserId})`);
+    }
+  }
+
   if (existing) {
     // Si es el admin, nos aseguramos de que siempre tenga créditos ilimitados
     if (isAdminEmail(existing.email) && existing.credits < 1000000) {
@@ -47,13 +68,6 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
     }
     return existing;
   }
- 
-  // Fetch from Clerk
-  const clerkUser = await clerkClient.users.getUser(clerkUserId);
-  const email =
-    clerkUser.primaryEmailAddress?.emailAddress ??
-    clerkUser.emailAddresses[0]?.emailAddress ??
-    "";
   const fullName =
     [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || undefined;
  
