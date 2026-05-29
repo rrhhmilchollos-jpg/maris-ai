@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ShoppingBag, ArrowRight, Star, Github, Globe } from "lucide-react";
+import { Bot, Code2, Eye, EyeOff, Loader2, CheckCircle2, XCircle, Zap, Share2, Rocket, RefreshCcw, Maximize2, X, Layout as LayoutIcon, Paperclip, Send, Mic, Sparkles, Plus, ShoppingBag, ArrowRight, Star, Github, Globe, Search, Database, Server } from "lucide-react";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -296,6 +296,18 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const progressValue = job?.progress ?? 0;
   const partialCode = job?.partialFrontendCode;
 
+  const AGENTS = [
+    { id: 'researcher', name: 'Product Researcher', icon: Search, color: 'text-blue-400', phase: 'researching' },
+    { id: 'architect', name: 'System Architect', icon: LayoutIcon, color: 'text-purple-400', phase: 'architecting' },
+    { id: 'designer', name: 'UI/UX Designer', icon: Sparkles, color: 'text-pink-400', phase: 'designing' },
+    { id: 'database', name: 'Database Engineer', icon: Database, color: 'text-amber-400', phase: 'schema' },
+    { id: 'frontend', name: 'Frontend Engineer', icon: Code2, color: 'text-emerald-400', phase: 'frontend' },
+    { id: 'backend', name: 'Backend Engineer', icon: Server, color: 'text-indigo-400', phase: 'backend' },
+    { id: 'api', name: 'API Integrator', icon: Zap, color: 'text-yellow-400', phase: 'integrations' },
+    { id: 'qa', name: 'QA Specialist', icon: CheckCircle2, color: 'text-cyan-400', phase: 'testing' },
+    { id: 'devops', name: 'DevOps Patcher', icon: Rocket, color: 'text-orange-400', phase: 'deploying' }
+  ];
+
   if (!job) {
     return (
       <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0a0a0f] text-white overflow-hidden">
@@ -473,6 +485,57 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
                 </Button>
               </div>
             )}
+
+            {/* 9 Agents Grid — Emergent Style */}
+            <div className="grid grid-cols-3 gap-3 p-1 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              {AGENTS.map((agent) => {
+                const isCurrent = job?.phase === agent.phase;
+                const isPast = progressValue > 0 && !isCurrent && (
+                  (agent.id === 'researcher' && progressValue > 10) ||
+                  (agent.id === 'architect' && progressValue > 20) ||
+                  (agent.id === 'designer' && progressValue > 30) ||
+                  (agent.id === 'database' && progressValue > 40) ||
+                  (agent.id === 'frontend' && progressValue > 60) ||
+                  (agent.id === 'backend' && progressValue > 80)
+                );
+                const Icon = agent.icon;
+                
+                return (
+                  <div 
+                    key={agent.id}
+                    className={`relative p-3 rounded-2xl border transition-all duration-500 ${
+                      isCurrent 
+                        ? 'bg-primary/10 border-primary/40 shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]' 
+                        : isPast 
+                          ? 'bg-emerald-500/5 border-emerald-500/20' 
+                          : 'bg-white/[0.02] border-white/5 opacity-40'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <div className={`h-8 w-8 rounded-xl flex items-center justify-center ${
+                        isCurrent ? 'bg-primary/20 animate-pulse' : isPast ? 'bg-emerald-500/20' : 'bg-white/5'
+                      }`}>
+                        <Icon className={`h-4 w-4 ${isCurrent ? agent.color : isPast ? 'text-emerald-400' : 'text-white/20'}`} />
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className={`text-[9px] font-black uppercase tracking-tighter ${isCurrent ? 'text-white' : 'text-white/40'}`}>
+                          {agent.name}
+                        </p>
+                        {isCurrent && (
+                          <span className="text-[8px] font-bold text-primary animate-pulse">ACTIVO</span>
+                        )}
+                        {isPast && (
+                          <CheckCircle2 className="h-3 w-3 text-emerald-500 mx-auto" />
+                        )}
+                      </div>
+                    </div>
+                    {isCurrent && (
+                      <div className="absolute -top-1 -right-1 h-2 w-2 bg-primary rounded-full animate-ping" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
             <AgentLogStream jobId={jobId} isActive={isActive || isAwaitingApproval} />
           </div>
