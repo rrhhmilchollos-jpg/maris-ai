@@ -5,27 +5,20 @@ import {
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@/lib/api-client";
-import { Bot, Code2, FlaskConical } from "lucide-react";
+import { Bot, Code2, FlaskConical, Search, Layout, Sparkles, Database, Server, Zap, CheckCircle2, Rocket, Terminal } from "lucide-react";
 
-const AGENT_LABELS: Record<string, string> = {
-  researcher: "Product Researcher",
-  architect: "System Architect",
-  designer: "UI/UX Designer",
-  database: "Database Engineer",
-  frontend: "Frontend Engineer",
-  backend: "Backend Engineer",
-  integration: "API Integrator",
-  qa: "QA Specialist",
-  patcher: "DevOps Patcher",
-  validator: "Security Validator",
-  testing: "Testing Agent",
-  system: "Core System",
-  memory: "Neural Memory",
-  planner: "Strategy Planner",
+const AGENT_CONFIG: Record<string, { label: string, icon: any, color: string }> = {
+  researcher: { label: "Product Researcher", icon: Search, color: "text-blue-400" },
+  architect: { label: "System Architect", icon: Layout, color: "text-purple-400" },
+  designer: { label: "UI/UX Designer", icon: Sparkles, color: "text-pink-400" },
+  database: { label: "Database Engineer", icon: Database, color: "text-amber-400" },
+  frontend: { label: "Frontend Engineer", icon: Code2, color: "text-emerald-400" },
+  backend: { label: "Backend Engineer", icon: Server, color: "text-indigo-400" },
+  integration: { label: "API Integrator", icon: Zap, color: "text-yellow-400" },
+  qa: { label: "QA Specialist", icon: CheckCircle2, color: "text-cyan-400" },
+  patcher: { label: "DevOps Patcher", icon: Rocket, color: "text-rose-400" },
+  system: { label: "Core System", icon: Bot, color: "text-white" },
 };
-
-/** Agentes que usan el color rosa fucsia del Testing Agent */
-const TESTING_AGENTS = new Set(["testing"]);
 
 function timeOf(iso: string): string {
   try {
@@ -42,21 +35,10 @@ function timeOf(iso: string): string {
 }
 
 interface AgentLogStreamProps {
-  /** Job id whose logs to stream. Pass null to render nothing. */
   jobId: string | null;
-  /** Whether the job is still running — when false we stop polling. */
   isActive: boolean;
 }
 
-/**
- * Live, terminal-style log of every agent step for a single generation job.
- *
- * Polls `/api/generate/jobs/:id/logs?afterId=N` every ~400ms while the job
- * is active, accumulates las líneas localmente y auto-scrollea al fondo.
- * Detiene el polling cuando `isActive` es false.
- *
- * El Testing Agent se muestra con letras ROSA FUCSIA y un icono de tubo de ensayo.
- */
 export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   const [lines, setLines] = useState<JobLogEntry[]>([]);
   const [lastId, setLastId] = useState<number | string>(0);
@@ -65,7 +47,6 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   const lastJobIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset buffer whenever the job switches.
   useEffect(() => {
     if (lastJobIdRef.current !== jobId) {
       lastJobIdRef.current = jobId;
@@ -90,13 +71,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       } catch (error) {
         if (signal?.aborted) throw error;
         consecutiveErrorsRef.current += 1;
-        const message = error instanceof Error ? error.message : String(error);
-        const shouldPause =
-          /unauthorized/i.test(message) ||
-          /HTTP\s*40[13]/i.test(message) ||
-          /HTTP\s*50[0234]/i.test(message) ||
-          consecutiveErrorsRef.current >= 3;
-        if (shouldPause) setStreamPaused(true);
+        if (consecutiveErrorsRef.current >= 3) setStreamPaused(true);
         throw error;
       }
     },
@@ -107,18 +82,6 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     gcTime: 60_000,
     retry: 1,
   });
-
-  // Tail-loss mitigation: dos fetches extra tras finalizar el job.
-  const wasActiveRef = useRef(isActive);
-  useEffect(() => {
-    const justFinished = wasActiveRef.current && !isActive && enabled;
-    wasActiveRef.current = isActive;
-    if (!justFinished) return undefined;
-    const t1 = window.setTimeout(() => queryClient.invalidateQueries({ queryKey }), 1500);
-    const t2 = window.setTimeout(() => queryClient.invalidateQueries({ queryKey }), 3000);
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, enabled, jobId, queryClient]);
 
   useEffect(() => {
     if (!data?.logs?.length) return;
@@ -132,7 +95,6 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
     if (newestLog) setLastId(newestLog.id);
   }, [data]);
 
-  // Auto-scroll al fondo cuando llegan nuevas líneas.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -141,154 +103,41 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   if (jobId === null) return null;
 
   return (
-    <div className="space-y-4" data-testid="agent-log-stream">
-      {streamPaused && lines.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
-          <div className="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-            <Bot className="h-6 w-6 text-amber-300" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-white/70 font-semibold">Reconectando con el agente...</p>
-            <p className="text-xs text-white/40">La generación sigue protegida; se reintentará al actualizar la vista.</p>
-          </div>
-        </div>
-      ) : lines.length === 0 && isActive ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 animate-in fade-in duration-700">
-          <div className="relative">
-            <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Bot className="h-8 w-8 text-primary animate-pulse" />
-            </div>
-            <div className="absolute -top-1 -right-1 h-4 w-4 bg-emerald-500 rounded-full border-4 border-[#0d0d12] animate-pulse" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-bold text-white tracking-tight">Iniciando sistema...</p>
-            <p className="text-xs text-white/40">Conectando con el equipo de ingenieros de Maris AI</p>
-          </div>
-        </div>
-      ) : lines.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
-          <div className="h-12 w-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-            <Bot className="h-6 w-6 text-white/20" />
-          </div>
-          <p className="text-sm text-white/40 font-medium">No hay actividad registrada todavía.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {lines.map((line, idx) => {
-            const isTesting = TESTING_AGENTS.has(line.agent);
-            const isError = line.level === "error";
-            const isWarn = line.level === "warn";
-            const isLatest = idx === lines.length - 1;
-            const vibrate = isActive && isLatest ? "robot-vibrate" : "";
-
-            // ── Testing Agent: estilos rosa fucsia ──────────────────────
-            if (isTesting) {
-              return (
-                <div
-                  key={line.id}
-                  className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-500"
-                  style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
-                >
-                  {/* Icono rosa fucsia con brillo */}
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 transition-all ${
-                    isError
-                      ? "bg-red-500/10 border-red-500/30"
-                      : "bg-fuchsia-500/15 border-fuchsia-500/40 shadow-[0_0_8px_rgba(217,70,239,0.3)]"
-                  }`}>
-                    <FlaskConical className={`h-4 w-4 ${
-                      isError ? "text-red-400" : `text-fuchsia-400 ${vibrate}`
-                    }`} />
-                  </div>
-
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      {/* Etiqueta rosa fucsia en negrita */}
-                      <span className={`text-[11px] font-black uppercase tracking-tight ${
-                        isError ? "text-red-400" : isWarn ? "text-amber-400" : "text-fuchsia-400"
-                      }`}>
-                        {AGENT_LABELS[line.agent] || line.agent}
-                      </span>
-                      {/* Badge "TESTING" */}
-                      {!isError && !isWarn && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
-                          LIVE
-                        </span>
-                      )}
-                      <span className="text-[10px] text-white/20 font-mono">
-                        {timeOf(line.createdAt)}
-                      </span>
-                    </div>
-
-                    <div className={`p-3 rounded-2xl text-sm leading-relaxed border transition-all ${
-                      isError
-                        ? "bg-red-500/5 border-red-500/20 text-red-200"
-                        : isWarn
-                        ? "bg-amber-500/5 border-amber-500/20 text-amber-200"
-                        : "bg-fuchsia-500/5 border-fuchsia-500/20 text-fuchsia-100 group-hover:bg-fuchsia-500/10"
-                    }`}>
-                      {line.message}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-
-            // ── Agentes normales ─────────────────────────────────────────
-            return (
-              <div
-                key={line.id}
-                className="flex items-start gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-500"
-                style={{ animationDelay: `${Math.min(idx * 50, 500)}ms` }}
-              >
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 transition-all ${
-                  isError ? "bg-red-500/10 border-red-500/30" :
-                  isWarn ? "bg-amber-500/10 border-amber-500/30" :
-                  "bg-white/5 border-white/10 group-hover:border-primary/30"
-                }`}>
-                  <Bot className={`h-4 w-4 ${
-                    isError ? "text-red-400" :
-                    isWarn ? "text-amber-400" :
-                    "text-primary"
-                  } ${vibrate}`} />
-                </div>
-
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-bold uppercase tracking-tight ${
-                      isError ? "text-red-400" :
-                      isWarn ? "text-amber-400" :
-                      "text-white/80"
-                    }`}>
-                      {AGENT_LABELS[line.agent] || line.agent}
-                    </span>
-                    <span className="text-[10px] text-white/20 font-mono">
-                      {timeOf(line.createdAt)}
-                    </span>
-                  </div>
-
-                  <div className={`p-3 rounded-2xl text-sm leading-relaxed border transition-all ${
-                    isError ? "bg-red-500/5 border-red-500/20 text-red-200" :
-                    isWarn ? "bg-amber-500/5 border-amber-500/20 text-amber-200" :
-                    "bg-white/[0.03] border-white/5 text-white/70 group-hover:bg-white/[0.05]"
-                  }`}>
-                    {line.message.includes("FILE:") || line.message.includes("Carpeta:") ? (
-                      <div className="flex items-center gap-2 font-mono text-[12px] text-primary">
-                        <Code2 className="h-3.5 w-3.5" />
-                        <span className="bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-                          {line.message.replace("FILE:", "📄 Archivo:").replace("Carpeta:", "📁 Carpeta:")}
-                        </span>
-                      </div>
-                    ) : (
-                      line.message
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={scrollRef} className="h-1" />
+    <div className="flex flex-col h-full bg-[#0d0d12] font-mono text-[11px] leading-relaxed custom-scrollbar overflow-auto p-4 space-y-3">
+      {lines.length === 0 && isActive && (
+        <div className="flex flex-col items-center justify-center py-12 text-center animate-pulse">
+          <Terminal className="h-6 w-6 text-primary mb-2" />
+          <p className="text-white/40 uppercase tracking-widest font-black">Esperando señal de los agentes...</p>
         </div>
       )}
+      
+      {lines.map((line, idx) => {
+        const config = AGENT_CONFIG[line.agent] || AGENT_CONFIG.system;
+        const Icon = config.icon;
+        const isLatest = idx === lines.length - 1 && isActive;
+
+        return (
+          <div key={line.id} className={`group flex flex-col gap-1 animate-in fade-in slide-in-from-left-2 duration-300`}>
+            <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+              <Icon className={`h-3 w-3 ${config.color}`} />
+              <span className={`font-black uppercase tracking-tighter ${config.color}`}>{config.label}</span>
+              <span className="text-[9px] text-white/20">{timeOf(line.createdAt)}</span>
+              {isLatest && <div className="h-1 w-1 rounded-full bg-emerald-500 animate-ping" />}
+            </div>
+            <div className={`pl-5 border-l border-white/5 py-1 ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-400' : 'text-white/60'}`}>
+              {line.message.includes("FILE:") ? (
+                <div className="flex items-center gap-2 bg-white/[0.03] p-2 rounded-lg border border-white/5">
+                  <Code2 className="h-3 w-3 text-emerald-400" />
+                  <span className="text-emerald-400/80">{line.message.replace("FILE:", "📄")}</span>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap">{line.message}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <div ref={scrollRef} />
     </div>
   );
 }
