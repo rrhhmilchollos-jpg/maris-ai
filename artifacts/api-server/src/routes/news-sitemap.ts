@@ -84,6 +84,7 @@ router.get("/sitemap.xml", async (_req, res) => {
       { url: "https://www.marisai.es/news", priority: "0.9", changefreq: "hourly", lastmod: today },
       { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly", lastmod: today },
       { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly", lastmod: today },
+      { url: "https://www.marisai.es/glosario", priority: "0.7", changefreq: "monthly", lastmod: today },
       { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly", lastmod: "2026-05-28" },
       { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly", lastmod: "2026-05-28" },
       { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly", lastmod: "2026-05-28" },

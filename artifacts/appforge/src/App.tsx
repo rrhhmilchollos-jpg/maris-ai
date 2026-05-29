@@ -33,6 +33,7 @@ const PricingPage = lazy(() => import("@/pages/pricing"));
 const PrivacidadPage = lazy(() => import("@/pages/legal/privacidad"));
 const AvisoLegalPage = lazy(() => import("@/pages/legal/aviso-legal"));
 const CookiesPage = lazy(() => import("@/pages/legal/cookies"));
+const GlossaryPage = lazy(() => import("@/pages/glosario"));
 
 // Fallback de carga para Suspense
 function PageLoader() {
@@ -326,6 +327,10 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/pricing">
             <PricingPage />
+          </Route>
+
+          <Route path="/glosario">
+            <GlossaryPage />
           </Route>
 
           <Route path="/legal/privacidad">

@@ -8,20 +8,20 @@ import {
 import { Bot, Code2, FlaskConical } from "lucide-react";
 
 const AGENT_LABELS: Record<string, string> = {
-  researcher: "Investigador",
-  architect: "Arquitecto",
-  designer: "Diseñador",
-  integration: "Integraciones",
-  coder: "Ingeniero",
-  frontend: "Frontend",
-  backend: "Backend",
-  qa: "QA Reviewer",
-  validator: "Validador",
-  patcher: "Patcher",
+  researcher: "Product Researcher",
+  architect: "System Architect",
+  designer: "UI/UX Designer",
+  database: "Database Engineer",
+  frontend: "Frontend Engineer",
+  backend: "Backend Engineer",
+  integration: "API Integrator",
+  qa: "QA Specialist",
+  patcher: "DevOps Patcher",
+  validator: "Security Validator",
   testing: "Testing Agent",
-  system: "Sistema",
-  memory: "Memoria",
-  planner: "Planner",
+  system: "Core System",
+  memory: "Neural Memory",
+  planner: "Strategy Planner",
 };
 
 /** Agentes que usan el color rosa fucsia del Testing Agent */

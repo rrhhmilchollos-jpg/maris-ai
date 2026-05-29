@@ -16,6 +16,61 @@
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*"
     },
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
+        }
+      ],
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/"
+    },
+    {
+      "source": "/pricing",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
+        }
+      ],
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/pricing"
+    },
+    {
+      "source": "/vs-emergent",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
+        }
+      ],
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/vs-emergent"
+    },
+    {
+      "source": "/news",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
+        }
+      ],
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news"
+    },
+    {
+      "source": "/news/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
+        }
+      ],
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news/:slug"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

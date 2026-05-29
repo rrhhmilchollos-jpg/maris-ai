@@ -1955,10 +1955,11 @@ function detectRequestLocale(req: any): { country?: string; uiLanguage: string; 
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente según la tarea." },
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", description: "Máximo ahorro de créditos y velocidad instantánea." },
-    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", description: "Equilibrio perfecto entre inteligencia y coste." },
-    { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", description: "Para tareas de alta complejidad y razonamiento profundo." },
+    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps Saas." },
+    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "Velocidad extrema para prototipado rápido." },
+    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería de software." },
+    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas." },
+    { id: "claude-mithos-v1", name: "Claude Mithos", description: "Modelo experimental optimizado para creatividad y UI." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
   ];
   res.json(availableModels);
