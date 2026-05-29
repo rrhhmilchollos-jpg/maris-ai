@@ -361,8 +361,16 @@ export function DeployModal({
                   onClick={() => isPremium ? setDomainStep("input") : window.open("/pricing", "_blank")}
                   className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-400 hover:text-violet-300 transition"
                 >
-                  <Pencil className="h-3 w-3" />
-                  Link Domain
+                  Connect
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {domainStep === "dns" && (
+                <button
+                  onClick={() => setDomainStep("input")}
+                  className="text-white/30 hover:text-white transition"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
                 </button>
               )}
               {domainStep === "verified" && (
@@ -414,43 +422,58 @@ export function DeployModal({
                   <p className="text-[12px] text-amber-300">Configura estos registros DNS en tu proveedor</p>
                 </div>
 
-                {/* DNS table */}
-                <div className="overflow-x-auto rounded-lg border border-white/[0.06] bg-[#070910]">
-                  <table className="w-full text-[11.5px]">
-                    <thead>
-                      <tr className="border-b border-white/[0.06]">
-                        <th className="px-3 py-2 text-left font-semibold text-white/30">Tipo</th>
-                        <th className="px-3 py-2 text-left font-semibold text-white/30">Host/Nombre</th>
-                        <th className="px-3 py-2 text-left font-semibold text-white/30">Valor/IP</th>
-                        <th className="px-3 py-2 text-left font-semibold text-white/30">TTL</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dnsRecords.length > 0 ? dnsRecords.map((r, i) => (
-                        <tr key={i} className="border-b border-white/[0.04] last:border-0">
-                          <td className="px-3 py-2 font-mono font-bold text-blue-400">{r.type}</td>
-                          <td className="px-3 py-2 font-mono text-white/60">{r.name}</td>
-                          <td className="px-3 py-2 font-mono text-white/60 break-all">{r.value}</td>
-                          <td className="px-3 py-2 font-mono text-white/40">{r.ttl || "300"}</td>
+                <div className="mb-1 space-y-2">
+                  <p className="text-[11px] text-white/50 leading-relaxed">
+                    Añade estos registros en tu proveedor de dominio (GoDaddy, Namecheap, Cloudflare, Arsys, etc.) para enlazar <strong>{domainInput}</strong> con Maris AI.
+                  </p>
+                  <div className="overflow-x-auto rounded-lg border border-white/[0.06] bg-[#070910]">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="border-b border-white/[0.06]">
+                          <th className="px-3 py-2 text-left font-semibold text-white/30">Tipo</th>
+                          <th className="px-3 py-2 text-left font-semibold text-white/30">Nombre</th>
+                          <th className="px-3 py-2 text-left font-semibold text-white/30">Valor</th>
                         </tr>
-                      )) : (
-                        <>
-                          <tr className="border-b border-white/[0.04]">
-                            <td className="px-3 py-2 font-mono font-bold text-blue-400">A</td>
-                            <td className="px-3 py-2 font-mono text-white/60">@</td>
-                            <td className="px-3 py-2 font-mono text-white/60">76.76.21.21</td>
-                            <td className="px-3 py-2 font-mono text-white/40">300</td>
+                      </thead>
+                      <tbody>
+                        {dnsRecords.length > 0 ? dnsRecords.map((r, i) => (
+                          <tr key={i} className="border-b border-white/[0.04] last:border-0">
+                            <td className="px-3 py-2 font-mono font-bold text-violet-400">{r.type}</td>
+                            <td className="px-3 py-2 font-mono text-white/60">{r.name}</td>
+                            <td className="px-3 py-2 font-mono text-white/60 break-all">{r.value}</td>
                           </tr>
-                          <tr>
-                            <td className="px-3 py-2 font-mono font-bold text-blue-400">CNAME</td>
-                            <td className="px-3 py-2 font-mono text-white/60">www</td>
-                            <td className="px-3 py-2 font-mono text-white/60">cname.vercel-dns.com</td>
-                            <td className="px-3 py-2 font-mono text-white/40">300</td>
-                          </tr>
-                        </>
-                      )}
-                    </tbody>
-                  </table>
+                        )) : (
+                          <>
+                            <tr className="border-b border-white/[0.04]">
+                              <td className="px-3 py-2 font-mono font-bold text-violet-400">A</td>
+                              <td className="px-3 py-2 font-mono text-white/60">@</td>
+                              <td className="px-3 py-2 font-mono text-white/60">76.76.21.21</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 font-mono font-bold text-violet-400">CNAME</td>
+                              <td className="px-3 py-2 font-mono text-white/60">www</td>
+                              <td className="px-3 py-2 font-mono text-white/60">cname.vercel-dns.com</td>
+                            </tr>
+                          </>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {/* Registrar Quick Links */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <span className="text-[10px] text-white/20 uppercase font-bold w-full">Guías rápidas:</span>
+                    {[
+                      { name: "Arsys", url: "https://www.arsys.es/ayuda/dns" },
+                      { name: "GoDaddy", url: "https://www.godaddy.com/help/add-an-a-record-19238" },
+                      { name: "Cloudflare", url: "https://dash.cloudflare.com/" },
+                      { name: "Hostinger", url: "https://support.hostinger.com/en/articles/4738348-how-to-manage-dns-records-at-hostinger" }
+                    ].map(reg => (
+                      <a key={reg.name} href={reg.url} target="_blank" rel="noreferrer" className="text-[10px] text-violet-400/60 hover:text-violet-400 transition underline decoration-violet-400/20">
+                        {reg.name}
+                      </a>
+                    ))}
+                  </div>
                 </div>
                 <p className="text-[10.5px] text-white/30">La propagación DNS puede tardar entre 5 minutos y 48 horas.</p>
 
