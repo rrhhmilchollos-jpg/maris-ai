@@ -13,6 +13,11 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
+  "vercel": {
+    "outputDirectory": "artifacts/appforge/dist",
+    "buildCommand": "pnpm --filter @workspace/appforge build",
+    "framework": "vite"
+  },
   "devDependencies": {
     "execa": "^9.6.1",
     "prettier": "^3.8.3",
