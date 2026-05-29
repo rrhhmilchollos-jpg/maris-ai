@@ -4,7 +4,7 @@ import { Check, X, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Layout } from "@/components/layout";
 
-export function PricingPage() {
+export default function PricingPage() {
   const plans = [
     {
       name: "Gratuito",

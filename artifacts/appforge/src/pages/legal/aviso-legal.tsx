@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { motion } from "framer-motion";
 
-export function AvisoLegalPage() {
+export default function AvisoLegalPage() {
   return (
     <Layout>
       <div className="min-h-screen bg-background pt-24 pb-12">
