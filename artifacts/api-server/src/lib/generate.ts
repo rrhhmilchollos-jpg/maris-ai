@@ -41,20 +41,23 @@ export interface GenerationRequestContext {
  * Arquitectura de Élite (Anthropic-First):
  *   - Modelos sincronizados con la interfaz del usuario para máxima eficiencia.
  *
- * Agentes (Configuración por defecto - Ahorro de Créditos):
- *   - Researcher    (claude-haiku-4-5)
- *   - Architect     (claude-haiku-4-5)
- *   - Designer      (claude-haiku-4-5)
- *   - Frontend Eng  (claude-haiku-4-5)
- *   - Backend Eng   (claude-haiku-4-5)
- *   - QA Reviewer   (claude-haiku-4-5)
- *   - Patcher       (claude-haiku-4-5)
+ * Agentes de Élite (Flujo Emergent):
+ *   - 1. Product Researcher    (Investigación de mercado y competencia)
+ *   - 2. System Architect      (Estructura de archivos y escalabilidad)
+ *   - 3. UI/UX Designer        (Sistema de diseño y tokens visuales)
+ *   - 4. Database Engineer     (Esquemas de datos y persistencia)
+ *   - 5. Frontend Engineer     (React, Tailwind y animaciones)
+ *   - 6. Backend Engineer      (API, Auth y Lógica de negocio)
+ *   - 7. API Integrator        (Conexiones externas y Webhooks)
+ *   - 8. QA Specialist         (Pruebas y validación de código)
+ *   - 9. DevOps Patcher        (Optimización y despliegue final)
  * ========================================================================== */
 
 const useAnthropic = true;
 const DEFAULT_MODEL = "claude-haiku-4-5";
-const AUTO_MODEL = "claude-sonnet-4-5";
-const OPUS_MODEL = "claude-opus-4-7";
+const AUTO_MODEL = "claude-sonnet-4-8";
+const OPUS_MODEL = "claude-4-8-pro";
+const MITHOS_MODEL = "claude-mithos-v1";
 const GPT_MODEL = "gpt-5-4-ultra";
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
@@ -633,7 +636,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-8" | "claude-4-8-pro" | "claude-mithos-v1";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
