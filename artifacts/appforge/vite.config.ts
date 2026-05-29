@@ -7,14 +7,8 @@ const clerkPubKey =
   process.env.VITE_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "";
 const clerkProxyUrl = process.env.VITE_CLERK_PROXY_URL ?? "";
 
-// WebContainer requires cross-origin isolation (SharedArrayBuffer).
-// These headers must be present on EVERY response from the dev server and
-// the production Vercel deployment (vercel.json handles the latter).
 const ISOLATION_HEADERS = {
-  // same-origin-allow-popups: allows Clerk OAuth popups while still isolating
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
-  // credentialless: looser than require-corp but still enables SharedArrayBuffer
-  // in Chrome 96+ and Edge 96+. Needed for WebContainer.boot() to succeed.
   "Cross-Origin-Embedder-Policy": "credentialless",
 };
 
@@ -32,7 +26,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    tailwindcss({ optimize: false }),
+    tailwindcss({ optimize: true }),
   ],
   resolve: {
     alias: {
@@ -44,35 +38,25 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 500, // Bajamos el límite para ser más estrictos con el rendimiento
+    minify: "terser", // Minificación más agresiva
+    terserOptions: {
+      compress: {
+        drop_console: true, // Elimina console.logs en producción
+        drop_debugger: true,
+      },
+    },
     rollupOptions: {
       output: {
-        // Code splitting manual para reducir JS no usado en carga inicial
         manualChunks(id) {
-          // Clerk auth — chunk separado, se carga solo cuando se necesita
-          if (id.includes("@clerk/clerk-react") || id.includes("clerk.browser")) {
-            return "vendor-clerk";
-          }
-          // Framer Motion — chunk separado (animaciones, no crítico)
-          if (id.includes("framer-motion")) {
-            return "vendor-motion";
-          }
-          // Iconos Lucide — chunk separado
-          if (id.includes("lucide-react")) {
-            return "vendor-icons";
-          }
-          // Componentes Radix UI — chunk separado
-          if (id.includes("@radix-ui")) {
-            return "vendor-ui";
-          }
-          // React core
-          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
-            return "vendor-react";
-          }
-          // TanStack Query + router
-          if (id.includes("@tanstack/react-query") || id.includes("wouter")) {
-            return "vendor-router";
-          }
+          if (id.includes("@clerk/clerk-react") || id.includes("clerk.browser")) return "vendor-clerk";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("@radix-ui")) return "vendor-ui";
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) return "vendor-react";
+          if (id.includes("@tanstack/react-query") || id.includes("wouter")) return "vendor-router";
+          // Separar el editor de código y el preview que son los más pesados
+          if (id.includes("monaco-editor") || id.includes("debug-preview")) return "vendor-editor";
         },
       },
     },
