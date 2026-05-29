@@ -90,15 +90,22 @@ type ChatMessage = {
 };
 
 const TECHNICAL_ASSISTANT_PREFIXES = /^(leer|buscar|revisar|aplicar|ejecutar|comprobar|abrir|expandir|desplazarse|extraer|registrar|actualizar|comparar|descargar|esperar|localizar|listar|usar búsqueda|corregir en backend)\b/i;
-const TECHNICAL_ASSISTANT_MARKERS = ["/home/ubuntu", "app-detail.tsx", "api-server", "grep", "shell", "file action", "browser_", "tool", "chunk", "diff --", "pnpm build"];
+const TECHNICAL_ASSISTANT_MARKERS = ["/home/ubuntu", "grep", "shell action", "browser_", "tool use", "diff --", "pnpm build"];
 
 function isTechnicalAssistantMessage(message: ChatMessage) {
   const role = String(message.role ?? "");
   const content = String(message.content ?? "").trim();
   if (!content) return true;
   if (role === "user") return false;
+  
+  // Solo ocultamos si el mensaje es EXCLUSIVAMENTE técnico y corto (probablemente un log interno del agente)
   const lower = content.toLowerCase();
-  return TECHNICAL_ASSISTANT_PREFIXES.test(content) || TECHNICAL_ASSISTANT_MARKERS.some((marker) => lower.includes(marker.toLowerCase()));
+  const isTechnical = TECHNICAL_ASSISTANT_PREFIXES.test(lower) || TECHNICAL_ASSISTANT_MARKERS.some(m => lower.includes(m));
+  
+  // Si el mensaje tiene más de 300 caracteres, probablemente contiene explicaciones útiles, no lo ocultamos
+  if (content.length > 300) return false;
+  
+  return isTechnical;
 }
 
 function formatMessageTime(value?: string) {
