@@ -1,7 +1,6 @@
 {
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm --filter @workspace/appforge build",
-  "installCommand": "npm install -g pnpm@10.11.0 && pnpm install",
   "headers": [
     {
       "source": "/robots.txt",
@@ -84,6 +83,11 @@
       "source": "/pricing",
       "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|twitterbot|linkedinbot|facebot|developers\\.google\\.com).*" }],
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/pricing"
+    },
+    {
+      "source": "/glosario",
+      "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|twitterbot|linkedinbot|facebot|developers\\.google\\.com).*" }],
+      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/glosario"
     },
     {
       "source": "/",
