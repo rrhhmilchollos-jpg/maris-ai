@@ -322,6 +322,7 @@ export default function DashboardPage() {
                       <SelectItem value="auto">⚡ Auto (Claude 4.8 Sonnet)</SelectItem>
                       <SelectItem value="claude-4-8-sonnet">✨ Claude 4.8 Sonnet (recomendado)</SelectItem>
                       <SelectItem value="claude-mithos">🎨 Claude Mithos (diseño disruptivo)</SelectItem>
+                      <SelectItem value="gemini-3">💎 Gemini 3 (última generación)</SelectItem>
                       <SelectItem value="gemini-2-5-flash">🚀 Gemini 2.5 Flash (ultra rápido)</SelectItem>
                       <SelectItem value="claude-opus-4-8" disabled={!me?.isPremium}>🏆 Claude Opus 4.8 {me?.isPremium ? "(máxima calidad)" : "(Premium)"}</SelectItem>
                       <SelectItem value="gpt-5-4" disabled={!me?.isPremium}>⚡ GPT-5.4 {me?.isPremium ? "(OpenAI Ultra)" : "(Premium)"}</SelectItem>
