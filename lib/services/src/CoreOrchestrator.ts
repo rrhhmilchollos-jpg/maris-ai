@@ -45,8 +45,7 @@ export class CoreOrchestrator {
       model: "claude-haiku-4-5",
       max_tokens: 1000,
       system: `Eres el Diseñador de Arquitectura de Maris AI. Tu trabajo es recibir la idea de una app completa y dividir su construcción en exactamente 4 hitos secuenciales mapeados a la estructura de nuestro monorepo.
-	      SEO & MONETIZATION: El plan debe incluir obligatoriamente una estrategia de SEO (Metatags, JSON-LD, Sitemap) y una UI optimizada para conversión y monetización.
-	      Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
+      Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
       {
         "milestones": [
           { "id": 1, "name": "Base de datos", "targetWorkspace": "packages/db", "description": "Explicación del esquema", "filePath": "src/schema.ts" },
@@ -89,9 +88,8 @@ export class CoreOrchestrator {
         model: "claude-haiku-4-5",
         max_tokens: 4000,
         system: `Eres el Agente de Código Experto de Maris AI. 
-	        Estado actual global: ${this.architectureSummary || 'Iniciando proyecto'}.
-	        SEO & GOOGLE RANKING: Es obligatorio inyectar Metatags dinámicos, OpenGraph, Twitter Cards y Schema.org (JSON-LD) en el código generado para asegurar que el sitio sea 100% amigable para Google y supere a la competencia en SEO.
-	        Genera EXCLUSIVAMENTE el código fuente para ${milestone.filePath}. Sin explicaciones.`,
+        Estado actual global: ${this.architectureSummary || 'Iniciando proyecto'}.
+        Genera EXCLUSIVAMENTE el código fuente para ${milestone.filePath}. Sin explicaciones.`,
         messages: [{ role: "user", content: `Escribe el código para el hito: ${milestone.description}.` }]
       });
 

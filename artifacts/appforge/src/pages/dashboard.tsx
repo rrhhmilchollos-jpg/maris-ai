@@ -325,24 +325,6 @@ export default function DashboardPage() {
                           <span>Claude Mithos (Especialista UI/UX)</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="claude-opus-4-8">
-                        <div className="flex items-center">
-                          <Sparkles className="h-4 w-4 mr-2 text-amber-400" />
-                          <span>Claude Opus 4.8 ✨ NUEVO</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="claude-opus-4-7">
-                        <div className="flex items-center">
-                          <Brain className="h-4 w-4 mr-2 text-violet-400" />
-                          <span>Claude Opus 4.7 (Alta Calidad)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="claude-haiku-4-5">
-                        <div className="flex items-center">
-                          <Zap className="h-4 w-4 mr-2 text-green-400" />
-                          <span>Claude Haiku 4.5 (Velocidad)</span>
-                        </div>
-                      </SelectItem>
                       <SelectItem value="gemini-3">
                         <div className="flex items-center">
                           <Brain className="h-4 w-4 mr-2 text-blue-400" />

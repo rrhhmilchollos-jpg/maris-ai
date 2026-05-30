@@ -140,14 +140,6 @@ Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
 - Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
-- SEO & Google Visibility (CRITICAL): 
-  · Mandatory <title> and <meta name="description"> tailored to the app's purpose in index.html.
-  · OpenGraph tags (og:title, og:description, og:image, og:url) for high-quality social sharing.
-  · Twitter Card tags for viral potential.
-  · Semantic structure (H1-H6) strictly optimized for Google SEO indexing.
-  · Dynamic Metatags: if the app has multiple pages, each MUST have unique SEO tags via a Helmet-like component.
-  · JSON-LD Schema: Include structured data (WebSite, SoftwareApplication or Organization) to ensure Google understands the content perfectly.
-  · Favicon and Apple Touch Icon references in index.html.
 - NO SIZE LIMIT — generate every file the plan needs, in full. This is a paid product; bigger apps deliver more value. Never truncate or "TODO" a file to save tokens.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
@@ -205,7 +197,6 @@ PRODUCT THINKING — be ambitious about UX:
 - For consumer apps: think Browse + Detail + Auth/Profile + Cart/Bookmarks + Settings. For SaaS: Dashboard + List + Detail + Settings + Onboarding. For tools: Workspace + History + Settings.
 - A real product has 4-6 pages minimum (unless it's a single-page tool/calculator). Don't ship 2-page apps when the domain calls for more.
 - Think about empty states, error states, loading states — they're real screens.
-- SEO & MONETIZATION: Plan for a robust SEO foundation (Metatags, JSON-LD, Sitemap) and conversion-focused UI to maximize Google visibility and user revenue from day one.
 
 COMPONENTS — model real reusable pieces:
 - Always include: Navbar, Footer, Button (if you need a custom button), Card variant(s), at least one Form component.
@@ -606,7 +597,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7" | "claude-opus-4-8";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
@@ -616,8 +607,6 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
-  // Claude Opus 4.8 — el modelo más avanzado de Anthropic disponible en Maris AI
-  if (coderModel === "claude-opus-4-8" || coderModel === "claude-opus" || coderModel === "claude-4-8-pro") return "claude-opus-4-8";
   return "claude-sonnet-4-6";
 }
 
@@ -1966,12 +1955,11 @@ function detectRequestLocale(req: any): { country?: string; uiLanguage: string; 
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps SaaS." },
+    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps Saas." },
     { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "Velocidad extrema para prototipado rápido." },
-    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "El estándar de oro para ingeniería de software." },
-    { id: "claude-opus-4-7", name: "Claude Opus 4.7", description: "Razonamiento profundo para arquitecturas complejas." },
-    { id: "claude-opus-4-8", name: "Claude Opus 4.8 ✨ NUEVO", description: "El modelo más avanzado de Anthropic. Máxima calidad para proyectos premium." },
-    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Alias de Claude Opus 4.8 para compatibilidad." },
+    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería de software." },
+    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas." },
+    { id: "claude-mithos-v1", name: "Claude Mithos", description: "Modelo experimental optimizado para creatividad y UI." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
   ];
   res.json(availableModels);
@@ -2356,12 +2344,11 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "auto", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic", description: "Selección inteligente óptima" },
-      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic", description: "Velocidad extrema" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic", description: "Estándar de oro" },
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (alta calidad)", provider: "anthropic", description: "Razonamiento profundo" },
-      { id: "claude-opus-4-8", name: "Claude Opus 4.8 ✨ NUEVO", provider: "anthropic", description: "El más avanzado de Anthropic" },
-      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai", description: "Potencia extrema" },
+      { id: "claude-sonnet-4-6", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic" },
+      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic" },
+      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", provider: "anthropic" },
+      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai" },
     ];
     res.json(models);
   } catch (err) {

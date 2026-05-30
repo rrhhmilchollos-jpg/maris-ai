@@ -71,7 +71,7 @@
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news/:slug"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],
@@ -88,12 +88,10 @@
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
+        { "key": "X-XSS-Protection", "value": "1; mode=block" }
       ]
     },
     {
