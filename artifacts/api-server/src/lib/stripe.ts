@@ -1,5 +1,4 @@
 import Stripe from "stripe";
-import { logger } from "./logger";
 
 async function fetchStripeSecretKey(): Promise<string | null> {
   if (process.env.STRIPE_SECRET_KEY) {
@@ -148,7 +147,7 @@ export async function createStripeCheckoutSession(
     });
     return session.url;
   } catch (error) {
-    logger.error({ err: error }, "Error creating Stripe checkout session");
+    console.error("Error creating Stripe checkout session:", error);
     return null;
   }
 }

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getGenerationJobLogs,
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@/lib/api-client";
-import { Bot, Code2, Search, Layout, Sparkles, Database, Server, Zap, CheckCircle2, Rocket, Terminal } from "lucide-react";
+import { Bot, Code2, FlaskConical, Search, Layout, Sparkles, Database, Server, Zap, CheckCircle2, Rocket, Terminal } from "lucide-react";
 
 const AGENT_CONFIG: Record<string, { label: string, icon: any, color: string }> = {
   researcher: { label: "Product Researcher", icon: Search, color: "text-blue-400" },
@@ -58,6 +58,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   }, [jobId]);
 
   const enabled = jobId !== null && !streamPaused;
+  const queryClient = useQueryClient();
   const queryKey = [...getGetGenerationJobLogsQueryKey(jobId ?? ""), "stream"];
 
   const { data } = useQuery({
