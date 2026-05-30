@@ -4,7 +4,7 @@ import { NewsArticle } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const BASE_URL = "https://marisai.es";
+const BASE_URL = process.env.MARIS_AI_PUBLIC_URL ?? "https://www.marisai.es";
 
 router.get("/rss", async (_req, res) => {
   await connectDB();
