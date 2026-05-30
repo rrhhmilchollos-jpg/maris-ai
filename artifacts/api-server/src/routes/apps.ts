@@ -443,13 +443,25 @@ function extractJsonObject<T = any>(raw: string): T | null {
   let s = raw.trim();
   if (s.startsWith("```")) s = s.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
   const first = s.indexOf("{");
-  const last = s.lastIndexOf("}");
-  if (first === -1 || last === -1) return null;
-  try {
-    return JSON.parse(s.slice(first, last + 1)) as T;
-  } catch {
-    return null;
+  if (first === -1) return null;
+  // Parse char-by-char respecting strings — handles } inside string values correctly
+  let depth = 0, inString = false, escape = false;
+  for (let i = first; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(s.slice(first, i + 1)) as T; } catch {}
+      }
+    }
   }
+  try { return JSON.parse(s) as T; } catch {}
+  return null;
 }
 
 async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
@@ -722,7 +734,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   }
   const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
   if (!parsed || typeof parsed.frontendCode !== "string") {
-    return { code: "", truncated, error: "JSON inválido del Frontend Engineer." };
+    return { code: "", truncated, error: "JSON inválido del Frontend Engineer.", _raw: raw } as any;
   }
   return { code: parsed.frontendCode, truncated };
 }
@@ -1824,8 +1836,34 @@ export async function generateApp(
     await log("coder", `Frontend listo (plan reducido): ${Math.round(retryResult.code.length / 1000)} KB.`);
     frontendResult.code = retryResult.code;
   } else if (!frontendResult.code) {
-    await log("coder", `Frontend falló: ${frontendResult.error ?? "desconocido"}`, "error");
-    throw new Error(`No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`);
+    // 🔧 Repair Agent: intentar recuperar JSON malformado antes de cancelar
+    await log("coder", `Frontend falló (${frontendResult.error}), activando Repair Agent…`, "warn");
+    onProgress?.({ phase: "fixing", progress: 65, note: "🔧 Repair Agent: intentando recuperar código malformado…" });
+    try {
+      const repairResponse = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 16000,
+        system: `You are a JSON Repair Agent. The Frontend Engineer returned malformed JSON.
+Your job: extract or reconstruct the frontendCode and return ONLY valid JSON: {"frontendCode":"..."}
+The frontendCode must use '// === FILE: <path> ===' separators between files.
+Output STRICT JSON only, no markdown, no explanation.`,
+        messages: [{
+          role: "user",
+          content: `Original user request: ${prompt}\n\nThe Frontend Engineer returned this malformed output (first 12000 chars):\n${(frontendResult as any)._raw?.slice(0, 12000) ?? "unavailable"}\n\nReconstruct a complete React+TypeScript+Tailwind frontend for the request above.\nReturn ONLY: {"frontendCode":"..."}`
+        }]
+      });
+      const repairRaw = repairResponse.content[0].type === "text" ? repairResponse.content[0].text : "";
+      const repairParsed = extractJsonObject<{ frontendCode?: string }>(repairRaw);
+      if (repairParsed && typeof repairParsed.frontendCode === "string" && repairParsed.frontendCode.length > 500) {
+        await log("coder", `Repair Agent recuperó el frontend (${Math.round(repairParsed.frontendCode.length / 1000)} KB). Continuando…`);
+        frontendResult.code = repairParsed.frontendCode;
+      } else {
+        throw new Error("Repair Agent no pudo recuperar el frontend.");
+      }
+    } catch (repairErr) {
+      await log("coder", `Repair Agent falló: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}`, "error");
+      throw new Error(`No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`);
+    }
   }
   await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
   if (plan.backendNeeded && backendResult?.code) {
