@@ -2,21 +2,21 @@
   "framework": "vite",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/sitemap.xml",
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/sitemap.xml"
+      "src": "/sitemap.xml",
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/sitemap.xml"
     },
     {
-      "source": "/news-sitemap.xml",
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml"
+      "src": "/news-sitemap.xml",
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml"
     },
     {
-      "source": "/api/:path*",
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*"
+      "src": "/api/(.*)",
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/api/$1"
     },
     {
-      "source": "/",
+      "src": "/",
       "has": [
         {
           "type": "header",
@@ -24,10 +24,10 @@
           "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
         }
       ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/"
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/"
     },
     {
-      "source": "/pricing",
+      "src": "/pricing",
       "has": [
         {
           "type": "header",
@@ -35,10 +35,10 @@
           "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
         }
       ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/pricing"
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/pricing"
     },
     {
-      "source": "/vs-emergent",
+      "src": "/vs-emergent",
       "has": [
         {
           "type": "header",
@@ -46,10 +46,10 @@
           "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
         }
       ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/vs-emergent"
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/vs-emergent"
     },
     {
-      "source": "/news",
+      "src": "/news",
       "has": [
         {
           "type": "header",
@@ -57,10 +57,10 @@
           "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
         }
       ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news"
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news"
     },
     {
-      "source": "/news/:slug",
+      "src": "/news/(.*)",
       "has": [
         {
           "type": "header",
@@ -68,47 +68,27 @@
           "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
         }
       ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news/:slug"
+      "dest": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news/$1"
     },
     {
-      "source": "/app/:id",
-      "destination": "/index.html"
+      "src": "/(.+\\.(js|css|svg|png|jpg|ico|woff2|woff|ttf|eot|map))",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      },
+      "dest": "/$1"
     },
     {
-      "source": "/app/:id/:rest*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/dashboard",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/billing",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/billing/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/admin",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/admin/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/sign-in/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/sign-up/:path*",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "X-XSS-Protection": "1; mode=block",
+        "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+        "Cross-Origin-Embedder-Policy": "credentialless"
+      },
+      "dest": "/index.html"
     }
   ],
   "redirects": [
@@ -117,26 +97,6 @@
       "has": [{ "type": "host", "value": "marisai.es" }],
       "destination": "https://www.marisai.es/:path*",
       "permanent": true
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
-      ]
-    },
-    {
-      "source": "/(.+\\.(js|css|svg|png|jpg|ico|woff2))",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
     }
   ]
 }
