@@ -1,106 +1,29 @@
 {
+  "version": 2,
   "framework": "vite",
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/sitemap.xml",
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/sitemap.xml"
-    },
-    {
-      "source": "/news-sitemap.xml",
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*"
-    },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/"
-    },
-    {
-      "source": "/pricing",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/pricing"
-    },
-    {
-      "source": "/vs-emergent",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/vs-emergent"
-    },
-    {
-      "source": "/news",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news"
-    },
-    {
-      "source": "/news/:slug",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": ".*(Googlebot|bingbot|Baiduspider|yandex|Twitterbot|facebookexternalhit|LinkedInBot|Embedly|quora.*link.*preview|showyoubot|outbrain|pinterest\\/0\\.|slackbot|vkShare|W3C_Validator|WhatsApp|TelegramBot).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news/:slug"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "redirects": [
-    {
-      "source": "/:path*",
-      "has": [{ "type": "host", "value": "marisai.es" }],
-      "destination": "https://www.marisai.es/:path*",
-      "permanent": true
-    }
-  ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/:path*",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
-      ]
-    },
-    {
-      "source": "/(.+\\.(js|css|svg|png|jpg|ico|woff2))",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        { "key": "X-XSS-Protection", "value": "1; mode=block" }
       ]
     }
+  ],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://maris-ai-api-server-6c5u.onrender.com/api/:path*" },
+    { "source": "/news-sitemap.xml", "destination": "https://maris-ai-api-server-6c5u.onrender.com/news-sitemap.xml" },
+    { "source": "/sitemap.xml", "destination": "https://maris-ai-api-server-6c5u.onrender.com/sitemap.xml" },
+    { "source": "/rss", "destination": "https://maris-ai-api-server-6c5u.onrender.com/rss" },
+    { "source": "/rss/:path*", "destination": "https://maris-ai-api-server-6c5u.onrender.com/rss/:path*" },
+    { "source": "/:path*", "destination": "/index.html" }
+  ],
+  "redirects": [
+    { "source": "/:path*", "has": [{ "type": "host", "value": "marisai.es" }], "destination": "https://www.marisai.es/:path*", "permanent": true }
   ]
 }
