@@ -1798,7 +1798,7 @@ export async function generateApp(
           void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language, templateContextBlock),
-      600_000,
+      240_000,
       "frontend-engineer",
     ),
   );
@@ -1813,6 +1813,12 @@ export async function generateApp(
   }
 
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
+
+  // Si el frontend falló por timeout, tratarlo como truncado para reintentar con plan reducido
+  if (!frontendResult.code && !frontendResult.truncated && frontendResult.error?.includes("timeout")) {
+    await log("coder", "Frontend-engineer timeout — reintentando con plan reducido automáticamente…", "warn");
+    frontendResult.truncated = true;
+  }
 
   if (!frontendResult.code && frontendResult.truncated) {
     await log("coder", "Frontend truncado por tokens, reintentando con plan reducido…", "warn");
@@ -1831,7 +1837,7 @@ export async function generateApp(
     );
     if (!retryResult.code) {
       await log("coder", "Reintento con plan reducido también falló.", "error");
-      throw new Error("La app es demasiado compleja incluso con plan reducido. Prueba describiendo menos funcionalidades o selecciona el modelo Opus.");
+      throw new Error("La app es demasiado compleja incluso con plan reducido. Prueba con un prompt más concreto o selecciona el modelo Haiku para mayor velocidad.");
     }
     await log("coder", `Frontend listo (plan reducido): ${Math.round(retryResult.code.length / 1000)} KB.`);
     frontendResult.code = retryResult.code;
