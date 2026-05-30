@@ -248,8 +248,7 @@ function ClerkProviderWithRoutes() {
 
   return (
     <ClerkProvider
-      publishableKey={clerkPubKey}
-      clerkJSUrl={clerkJsUrl}
+      {...({ publishableKey: clerkPubKey, clerkJSUrl: clerkJsUrl } as any)}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
