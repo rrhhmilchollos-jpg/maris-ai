@@ -1,7 +1,30 @@
 import { useQuery, useMutation, type UseQueryOptions, type UseMutationOptions } from "@tanstack/react-query";
 
+declare global {
+  interface Window {
+    Clerk?: {
+      session?: {
+        getToken?: () => Promise<string | null>;
+      };
+    };
+  }
+}
+
+async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
+  const headers = new Headers(options?.headers || {});
+  const hasAuthorization = headers.has("Authorization");
+  const token = await window.Clerk?.session?.getToken?.();
+
+  if (token && !hasAuthorization) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  return headers;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: "include", ...options });
+  const headers = await buildAuthHeaders(options);
+  const res = await fetch(path, { credentials: "include", ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     throw new Error(err.error || `HTTP ${res.status}`);
