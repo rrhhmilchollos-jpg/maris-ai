@@ -71,6 +71,42 @@
       "destination": "https://maris-ai-api-server-6c5u.onrender.com/bot-render/news/:slug"
     },
     {
+      "source": "/app/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/app/:id/:rest*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/billing",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/billing/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sign-in/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sign-up/:path*",
+      "destination": "/index.html"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
