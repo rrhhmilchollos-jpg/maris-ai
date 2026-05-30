@@ -2,10 +2,6 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
-import {
-  CLERK_PROXY_PATH,
-  clerkProxyMiddleware,
-} from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import ticketsRouter from "./routes/tickets";
 import newsRouter from "./routes/news";
@@ -47,8 +43,6 @@ app.use(
   }),
 );
  
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
- 
 // Stripe webhook needs the raw body — mount BEFORE express.json()
 app.use("/api/billing/webhook", stripeWebhookRouter);
  
@@ -60,7 +54,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Clerk-Proxy-Url", "Clerk-Secret-Key"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
 }));
 
 // Security headers for Cross-Origin Isolation (required for WebContainers)
@@ -115,7 +109,7 @@ app.use("/api", metricsMiddleware);
 app.use("/api", router);
 app.use("/api", ticketsRouter);
 app.use("/api", newsRouter);
-app.use("/rss", rssRouter);
+app.use("/", rssRouter);
 app.use("/", newsSitemapRouter);
  
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
