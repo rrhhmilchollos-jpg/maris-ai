@@ -57,13 +57,7 @@ const queryClient = new QueryClient({
 // publishableKeyFromHost generaba un proxy automático basado en el dominio de Vercel
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// ✅ CORREGIDO: evitar el proxy antiguo clerk.maris-ai.shop porque su TLS falla en producción.
-// Si en Vercel existe esa variable antigua, se ignora para que www.marisai.es no cargue recursos desde un dominio con SSL roto.
-const configuredClerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL || "";
-const clerkProxyUrl =
-  configuredClerkProxyUrl && !configuredClerkProxyUrl.includes("clerk.maris-ai.shop")
-    ? configuredClerkProxyUrl
-    : undefined;
+// ✅ CORREGIDO: no usar proxy Clerk heredado; www.marisai.es debe cargar Clerk JS desde un CDN válido.
 const clerkJsUrl =
   import.meta.env.VITE_CLERK_JS_URL ||
   "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
@@ -256,7 +250,6 @@ function ClerkProviderWithRoutes() {
     <ClerkProvider
       publishableKey={clerkPubKey}
       clerkJSUrl={clerkJsUrl}
-      {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
