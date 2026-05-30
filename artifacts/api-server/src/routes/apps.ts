@@ -606,7 +606,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7" | "claude-opus-4-8";
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
@@ -616,6 +616,8 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
   if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
+  // Claude Opus 4.8 — el modelo más avanzado de Anthropic disponible en Maris AI
+  if (coderModel === "claude-opus-4-8" || coderModel === "claude-opus" || coderModel === "claude-4-8-pro") return "claude-opus-4-8";
   return "claude-sonnet-4-6";
 }
 
@@ -1964,11 +1966,12 @@ function detectRequestLocale(req: any): { country?: string; uiLanguage: string; 
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps Saas." },
+    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps SaaS." },
     { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "Velocidad extrema para prototipado rápido." },
-    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería de software." },
-    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas." },
-    { id: "claude-mithos-v1", name: "Claude Mithos", description: "Modelo experimental optimizado para creatividad y UI." },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "El estándar de oro para ingeniería de software." },
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7", description: "Razonamiento profundo para arquitecturas complejas." },
+    { id: "claude-opus-4-8", name: "Claude Opus 4.8 ✨ NUEVO", description: "El modelo más avanzado de Anthropic. Máxima calidad para proyectos premium." },
+    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Alias de Claude Opus 4.8 para compatibilidad." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
   ];
   res.json(availableModels);
@@ -2353,11 +2356,12 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "claude-sonnet-4-6", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic" },
-      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic" },
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", provider: "anthropic" },
-      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai" },
+      { id: "auto", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic", description: "Selección inteligente óptima" },
+      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic", description: "Velocidad extrema" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic", description: "Estándar de oro" },
+      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (alta calidad)", provider: "anthropic", description: "Razonamiento profundo" },
+      { id: "claude-opus-4-8", name: "Claude Opus 4.8 ✨ NUEVO", provider: "anthropic", description: "El más avanzado de Anthropic" },
+      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai", description: "Potencia extrema" },
     ];
     res.json(models);
   } catch (err) {
