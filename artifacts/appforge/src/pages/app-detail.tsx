@@ -9,6 +9,8 @@ import {
   useGetActiveAppJob,
   getGetActiveAppJobQueryKey,
   useGetMyStats,
+  getGetMyStatsQueryKey,
+  getGetMeQueryKey,
   getGetAppQueryKey,
   getListAppMessagesQueryKey,
   getGetGenerationJobQueryKey,
@@ -307,8 +309,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       onSuccess: (nextJob: any) => {
         setDraft("");
         setChatAttachments([]);
-        setActiveJobId(nextJob.id);
         queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+        if (nextJob?.conversationOnly) {
+          setActiveJobId(null);
+          return;
+        }
+        if (nextJob?.id) {
+          setActiveJobId(nextJob.id);
+          return;
+        }
+        toast({ title: "Respuesta inesperada", description: "No se ha iniciado ningún trabajo de modificación.", variant: "destructive" });
       },
       onError: (err: any) => {
         toast({ title: "No se pudo enviar", description: err?.message ?? "Error", variant: "destructive" });
