@@ -168,7 +168,18 @@ export default function DashboardPage() {
 
   const generateMutation = useGenerateApp({
     mutation: {
-      onSuccess: (data) => { setActiveJobId(data.id); },
+      onSuccess: (data) => {
+        if (data?.conversationOnly) {
+          toast({ title: "Maris AI", description: data.reply || data.message || "Mensaje recibido. No se ha iniciado ninguna generación." });
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          return;
+        }
+        if (data?.id) {
+          setActiveJobId(data.id);
+          return;
+        }
+        toast({ title: "Respuesta inesperada", description: "No se ha iniciado ningún trabajo de generación.", variant: "destructive" });
+      },
       onError: (error: any) => {
         toast({ title: "No pudimos encolar la generación", description: error?.message || error?.error || "Inténtalo otra vez en un momento.", variant: "destructive" });
       },
@@ -203,7 +214,7 @@ export default function DashboardPage() {
       return;
     }
     localStorage.setItem("appforge_last_prompt", prompt);
-    generateMutation.mutate({ data: { prompt, coderModel, language, kind, attachmentIds: attachments.map((a: any) => a.id) } });
+    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } });
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
