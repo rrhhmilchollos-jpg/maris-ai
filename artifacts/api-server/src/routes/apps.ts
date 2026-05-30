@@ -1952,6 +1952,31 @@ function detectRequestLocale(req: any): { country?: string; uiLanguage: string; 
   return { country, uiLanguage, locale, source: countryLanguage ? "ip-country-header" : acceptedLanguage ? "accept-language" : "fallback" };
 }
 
+const GENERATION_INTENT_RE = /\b(app|aplicaci[oó]n|web|website|landing|tienda|ecommerce|saas|dashboard|crm|erp|juego|game|portal|panel|crear|crea|cr[eé]ame|generar|genera|construir|construye|desarrollar|desarrolla|programar|programa|diseñar|diseña|modificar|modifica|cambiar|cambia|arreglar|arregla|fix|build|create|generate|make|develop|code|deploy|preview|proyecto)\b/i;
+
+const SMALL_TALK_RE = /^(hola+|buenas+|hey+|hi+|hello+|saludos+|qu[eé] tal\??|como estas\??|c[oó]mo est[aá]s\??|gracias+|ok+|vale+|test+|prueba+|probando+|ping+)$/i;
+
+function getConversationalOnlyReply(content: string, hasAttachments = false): string | null {
+  const normalized = String(content || "").trim().replace(/\s+/g, " ");
+  if (!normalized || hasAttachments) return null;
+  if (GENERATION_INTENT_RE.test(normalized)) return null;
+
+  const stripped = normalized
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[!¡¿?.,;:()\[\]{}"'`´]/g, "")
+    .trim();
+  const wordCount = stripped.split(/\s+/).filter(Boolean).length;
+
+  const isGreeting = SMALL_TALK_RE.test(stripped);
+  const isVeryShortSmallTalk = wordCount <= 3 && /^(hola|buenas|hey|hi|hello|saludos|gracias|ok|vale|test|prueba|probando|ping)(\s|$)/i.test(stripped);
+
+  if (!isGreeting && !isVeryShortSmallTalk) return null;
+
+  return "¡Hola! Soy Maris AI. Puedo ayudarte a crear, mejorar o revisar una app, web, tienda online, SaaS, juego o sistema completo. Si solo querías saludar, no voy a iniciar ninguna generación ni gastar créditos. Cuando quieras construir algo, descríbeme claramente qué necesitas y arrancamos.";
+}
+
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
@@ -1969,6 +1994,17 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
   try {
     const { prompt, model, language, attachments, kind } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
+    const safeAttachments = Array.isArray(attachments) ? attachments : [];
+    const conversationalReply = getConversationalOnlyReply(prompt, safeAttachments.length > 0);
+    if (conversationalReply) {
+      return res.status(200).json({
+        conversationOnly: true,
+        reply: conversationalReply,
+        message: conversationalReply,
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+      });
+    }
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
     // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) ──────────────────────────────
@@ -2186,6 +2222,19 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const conversationalReply = getConversationalOnlyReply(trimmedContent, safeAttachmentIds.length > 0);
+    if (conversationalReply) {
+      await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent });
+      await AppMessage.create({ appId: req.params.id, role: "assistant", content: conversationalReply });
+      return res.status(200).json({
+        conversationOnly: true,
+        reply: conversationalReply,
+        message: conversationalReply,
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+      });
+    }
 
     // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) — MODIFICACIONES ────────────
     // PLAN FREE: 0.2 créditos por modificación → 20 modificaciones con 4 créditos restantes
