@@ -5,7 +5,6 @@ import path from "path";
 
 const clerkPubKey =
   process.env.VITE_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "";
-const clerkProxyUrl = process.env.VITE_CLERK_PROXY_URL ?? "";
 
 const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
@@ -22,7 +21,6 @@ export default defineConfig({
   },
   define: {
     "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPubKey),
-    "import.meta.env.VITE_CLERK_PROXY_URL": JSON.stringify(clerkProxyUrl),
   },
   plugins: [
     react(),

@@ -36,9 +36,9 @@ REDIS_URL=redis://...
 
 ### Frontend (artifacts/appforge)
 ```
-VITE_API_URL=https://marisai.es/api
-VITE_CLERK_PROXY_URL=/api/__clerk
+VITE_API_URL=https://www.marisai.es/api
 VITE_CLERK_PUBLISHABLE_KEY=pk_...
+# Opcional: VITE_CLERK_JS_URL=https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js
 ```
 
 ## 📦 Deployment Instructions
