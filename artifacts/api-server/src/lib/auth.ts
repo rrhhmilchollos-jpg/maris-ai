@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
 import { connectDB } from "./db";
 import { User, type IUser } from "@workspace/db/schema";
+import { logger } from "./logger";
  
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -56,7 +57,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
       await User.deleteOne({ _id: existing._id });
       existing._id = clerkUserId;
       await User.create({ ...existing, _id: clerkUserId });
-      console.log(`✅ Usuario reconciliado por email: ${email} (Nuevo ID: ${clerkUserId})`);
+      logger.info({ email, clerkUserId }, "Usuario reconciliado por email");
     }
   }
 

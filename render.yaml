@@ -55,6 +55,26 @@ services:
         sync: false
       - key: SENTRY_DSN
         sync: false
+      - key: MARIS_AI_DOMAIN
+        value: "marisai.es"
+      - key: MARIS_AI_DOMAINS
+        value: "maris-ai-api-server-6c5u.onrender.com"
+      - key: MARIS_AI_PUBLIC_DOMAINS
+        value: "maris-ai-api-server-6c5u.onrender.com"
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_PRICE_PACK_100
+        sync: false
+      - key: STRIPE_PRICE_PACK_250
+        sync: false
+      - key: STRIPE_PRICE_PACK_500
+        sync: false
+      - key: STRIPE_PRICE_PACK_1250
+        sync: false
+      - key: STRIPE_PRICE_PACK_3000
+        sync: false
+      - key: STRIPE_PRICE_PACK_6000
+        sync: false
 
   # ============================================================================
   # Worker Service (Background Job Processing)

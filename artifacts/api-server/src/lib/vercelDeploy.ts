@@ -123,8 +123,23 @@ export async function deployAppToVercel(opts: {
       // the framework field; the runtime is selected by the vercel.json that
       // ships in the bundle (functions = "@vercel/python").
       body: isPython
-        ? { name: projectName }
-        : { name: projectName, framework: "vite" },
+        ? { 
+            name: projectName,
+            publicSource: true,
+            directoryListing: false,
+            passwordProtection: null,
+            ssoProtection: null,
+            appPathProtection: null
+          }
+        : { 
+            name: projectName, 
+            framework: "vite",
+            publicSource: true,
+            directoryListing: false,
+            passwordProtection: null,
+            ssoProtection: null,
+            appPathProtection: null
+          },
       log,
     });
     if (!created.ok) return { ok: false, failure: created.failure };
