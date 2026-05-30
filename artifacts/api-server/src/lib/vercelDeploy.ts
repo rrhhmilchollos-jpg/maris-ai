@@ -144,12 +144,24 @@ export async function deployAppToVercel(opts: {
     });
     if (!created.ok) return { ok: false, failure: created.failure };
     projectId = created.data.id;
-
     // Persist the new project id immediately so a crash between project
     // creation and deployment doesn't strand an orphan project.
     await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: projectId });
+  } else {
+    // For EXISTING projects, ensure SSO/password protection is disabled
+    // so the deployed app is publicly accessible in iframes.
+    await callVercel<any>({
+      token,
+      method: "PATCH" as any,
+      path: `/v9/projects/${projectId}`,
+      body: {
+        passwordProtection: null,
+        ssoProtection: null,
+        appPathProtection: null,
+      },
+      log,
+    }).catch(() => { /* non-critical — continue with deploy */ });
   }
-
   // 4. Create a production deployment with the FULL project tree. Vercel
   //    runs `npm install` + `vite build` on its build infrastructure and
   //    serves the `dist/` output at the project's main URL.
