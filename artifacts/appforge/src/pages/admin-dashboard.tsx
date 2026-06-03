@@ -245,18 +245,58 @@ export default function AdminDashboardPage() {
                       Aún no hay consumo de créditos registrado.
                     </p>
                   ) : (
-                    <ul className="space-y-2">
+                    <ul className="space-y-3">
                       {data.topUsers.map((u: any) => (
                         <li
                           key={u.userId}
-                          className="flex items-center justify-between text-sm"
+                          className="flex flex-col gap-1 text-sm border-b border-white/5 pb-2 last:border-0"
                         >
-                          <span className="truncate max-w-[200px]" title={u.email}>
-                            {u.email}
-                          </span>
-                          <Badge variant="secondary">
-                            {u.creditsUsed.toLocaleString("es-ES")}
-                          </Badge>
+                          <div className="flex items-center justify-between">
+                            <span className="truncate font-medium" title={u.email}>
+                              {u.email}
+                            </span>
+                            <Badge variant="secondary">
+                              {u.creditsUsed.toLocaleString("es-ES")}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2 mt-1">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className="h-7 text-[10px] px-2 hover:bg-emerald-500/10 hover:text-emerald-500"
+                              onClick={() => {
+                                const amount = prompt(`¿Cuántos créditos quieres añadir a ${u.email}?`, "100");
+                                if (amount && !isNaN(Number(amount))) {
+                                  refundUserCredits(u.userId, Number(amount), "Admin refund/bonus").then(() => {
+                                    queryClient.invalidateQueries({ queryKey: ["admin", "metrics"] });
+                                    toast({ title: "Créditos añadidos", description: `Se han añadido ${amount} créditos a ${u.email}` });
+                                  }).catch(err => {
+                                    toast({ title: "Error", description: err.message, variant: "destructive" });
+                                  });
+                                }
+                              }}
+                            >
+                              + Añadir
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className="h-7 text-[10px] px-2 hover:bg-rose-500/10 hover:text-rose-500"
+                              onClick={() => {
+                                const amount = prompt(`¿Cuántos créditos quieres quitar a ${u.email}?`, "50");
+                                if (amount && !isNaN(Number(amount))) {
+                                  refundUserCredits(u.userId, -Number(amount), "Admin correction").then(() => {
+                                    queryClient.invalidateQueries({ queryKey: ["admin", "metrics"] });
+                                    toast({ title: "Créditos retirados", description: `Se han quitado ${amount} créditos a ${u.email}` });
+                                  }).catch(err => {
+                                    toast({ title: "Error", description: err.message, variant: "destructive" });
+                                  });
+                                }
+                              }}
+                            >
+                              - Quitar
+                            </Button>
+                          </div>
                         </li>
                       ))}
                     </ul>

@@ -468,8 +468,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       const targetUrl = deployedUrl;
       if (targetUrl) {
         // Abrir Google Search Console para solicitar indexación
-        const searchConsoleUrl = `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(targetUrl)}&id=${encodeURIComponent(targetUrl)}`;
-        window.open(searchConsoleUrl, "_blank", "noopener,noreferrer");
+        const scUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(targetUrl)}&url=${encodeURIComponent(targetUrl)}`;
+        window.open(scUrl, "_blank", "noopener,noreferrer");
         // También abrir Google para buscar la app (visibilidad inmediata)
         const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent((app?.title || "Maris AI App") + " site:" + new URL(targetUrl).hostname)}`;
         setTimeout(() => window.open(googleSearchUrl, "_blank", "noopener,noreferrer"), 500);
@@ -488,7 +488,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             const url = result?.deploymentUrl || result?.url;
             if (url) {
               setTimeout(() => {
-                const scUrl = `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(url)}&id=${encodeURIComponent(url)}`;
+                const scUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(url)}&url=${encodeURIComponent(url)}`;
                 window.open(scUrl, "_blank", "noopener,noreferrer");
                 toast({ title: "✅ App desplegada y enviada a Google", description: `Tu app está en ${url}. Google Search Console está listo para indexarla.` });
               }, 1000);
