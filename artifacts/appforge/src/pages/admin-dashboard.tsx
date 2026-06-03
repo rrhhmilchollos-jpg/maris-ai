@@ -17,6 +17,7 @@ import {
   Clock,
   Cpu,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 
 interface MetricsResponse {
@@ -114,12 +115,23 @@ export default function AdminDashboardPage() {
     <Layout>
       <div className="container mx-auto px-4 py-8 space-y-6">
         <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Panel de métricas</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Resumen del negocio en tiempo real. Se actualiza automáticamente cada 30
-              segundos.
-            </p>
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full hover:bg-white/10"
+              onClick={() => window.history.back()}
+              title="Volver"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Panel de métricas</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Resumen del negocio en tiempo real. Se actualiza automáticamente cada 30
+                segundos.
+              </p>
+            </div>
           </div>
           {dataUpdatedAt > 0 && (
             <Badge variant="outline" className="gap-1">
