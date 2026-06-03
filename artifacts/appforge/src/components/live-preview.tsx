@@ -227,7 +227,11 @@ export function LivePreview({
 
   const handleRefresh = () => {
     if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
+      const currentSrc = iframeRef.current.src;
+      iframeRef.current.src = 'about:blank';
+      setTimeout(() => {
+        if (iframeRef.current) iframeRef.current.src = currentSrc;
+      }, 10);
     }
   };
 
@@ -338,7 +342,8 @@ export function LivePreview({
           className="w-full h-full bg-white border-0"
           title="App Preview"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
-          allow="cross-origin-isolated"
+          allow="cross-origin-isolated; clipboard-read; clipboard-write"
+          referrerPolicy="no-referrer"
         />
       );
     }

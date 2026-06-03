@@ -22,7 +22,7 @@ async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
   return headers;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = await buildAuthHeaders(options);
   const baseUrl = import.meta.env.VITE_API_URL || "";
   const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path}`;
