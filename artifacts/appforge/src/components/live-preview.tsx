@@ -320,6 +320,15 @@ export function LivePreview({
         <button onClick={handleRefresh} className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors">
           <RefreshCw className="w-4 h-4" />
         </button>
+        {serverUrl && (
+          <button 
+            onClick={() => window.open(serverUrl, '_blank')} 
+            className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors"
+            title="Abrir en nueva pestaña"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        )}
         <Button variant="ghost" size="sm" onClick={onShare} className="h-8 px-2 text-xs text-slate-400 hover:text-white hover:bg-white/10">
           <Share2 className="w-3.5 h-3.5 mr-1.5" />
           Share
@@ -335,16 +344,50 @@ export function LivePreview({
   // ── Contenido principal ─────────────────────────────────────────────────
   const renderContent = () => {
     if (phase === "ready" && serverUrl) {
+      const isVercel = serverUrl.includes('vercel.app');
+      
       return (
-        <iframe
-          ref={iframeRef}
-          src={serverUrl}
-          className="w-full h-full bg-white border-0"
-          title="App Preview"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
-          allow="cross-origin-isolated; clipboard-read; clipboard-write"
-          referrerPolicy="no-referrer"
-        />
+        <div className="relative w-full h-full bg-white">
+          <iframe
+            ref={iframeRef}
+            src={serverUrl}
+            className="w-full h-full border-0"
+            title="App Preview"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
+            allow="cross-origin-isolated; clipboard-read; clipboard-write"
+            referrerPolicy="no-referrer"
+          />
+          {isVercel && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-white p-6 text-center pointer-events-none z-10 opacity-0 hover:opacity-100 transition-opacity duration-300">
+              <div className="pointer-events-auto flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center mb-2">
+                  <Play className="w-8 h-8 text-blue-400" />
+                </div>
+                <h4 className="text-xl font-bold">App Lista para Ver</h4>
+                <p className="text-sm text-slate-300 max-w-xs">
+                  Vercel bloquea la vista previa interna por seguridad. Abre tu app en una nueva pestaña para verla al 100%.
+                </p>
+                <Button 
+                  onClick={() => window.open(serverUrl, '_blank')}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8"
+                >
+                  Abrir App en Nueva Pestaña
+                </Button>
+              </div>
+            </div>
+          )}
+          {/* Fallback siempre visible si el iframe falla o para dar la opción */}
+          <div className="absolute bottom-4 right-4 z-20">
+             <Button 
+                size="sm"
+                onClick={() => window.open(serverUrl, '_blank')}
+                className="bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 shadow-xl"
+              >
+                <Maximize2 className="w-3.5 h-3.5 mr-2" />
+                Abrir Externamente
+              </Button>
+          </div>
+        </div>
       );
     }
 
