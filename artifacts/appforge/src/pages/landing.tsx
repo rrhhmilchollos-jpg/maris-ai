@@ -239,31 +239,31 @@ export default function LandingPage() {
               },
               {
                 title: "E-commerce de Alto Rendimiento",
-                desc: "Lanza tiendas online con catálogos dinámicos, pasarelas de pago integradas (Stripe) y paneles de administración intuitivos."
+                desc: "Lanza tiendas online con catálogos dinámicos, pasarelas de pago integradas (Stripe) y paneles de administración intuitivos.",
                 image: "https://images.unsplash.com/photo-1472851294608-062f824d29cc?q=80&w=800&auto=format&fit=crop",
                 tags: ["Stripe", "Tailwind", "Vite"]
               },
               {
                 title: "Dashboards de Analítica Avanzada",
-                desc: "Visualiza tus datos con gráficos interactivos, filtros potentes y exportación de informes para una toma de decisiones inteligente."
+                desc: "Visualiza tus datos con gráficos interactivos, filtros potentes y exportación de informes para una toma de decisiones inteligente.",
                 image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800&auto=format&fit=crop",
                 tags: ["Recharts", "Lucide", "Framer Motion"]
               },
               {
                 title: "CRMs y Herramientas de Ventas",
-                desc: "Optimiza tus procesos de venta con CRMs personalizados, seguimiento de leads y automatización de recordatorios."
+                desc: "Optimiza tus procesos de venta con CRMs personalizados, seguimiento de leads y automatización de recordatorios.",
                 image: "https://images.unsplash.com/photo-1552581234-26160f608093?q=80&w=800&auto=format&fit=crop",
                 tags: ["CRM", "Full-stack", "IA"]
               },
               {
                 title: "Plataformas Educativas Interactivas",
-                desc: "Desarrolla entornos de aprendizaje online con gestión de cursos, seguimiento de progreso y herramientas de evaluación."
+                desc: "Desarrolla entornos de aprendizaje online con gestión de cursos, seguimiento de progreso y herramientas de evaluación.",
                 image: "https://images.unsplash.com/photo-1501504905252-473c47e087f8?q=80&w=800&auto=format&fit=crop",
                 tags: ["EdTech", "PWA", "Node.js"]
               },
               {
                 title: "Soluciones de RRHH Inteligentes",
-                desc: "Implementa portales de empleado, sistemas de gestión de nóminas y herramientas de evaluación de desempeño para tu equipo."}]}))
+                desc: "Implementa portales de empleado, sistemas de gestión de nóminas y herramientas de evaluación de desempeño para tu equipo.",
                 image: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?q=80&w=800&auto=format&fit=crop",
                 tags: ["Internal Tools", "Auth", "Clerk"]
               }
