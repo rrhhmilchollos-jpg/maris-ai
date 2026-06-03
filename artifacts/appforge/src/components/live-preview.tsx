@@ -357,25 +357,7 @@ export function LivePreview({
             allow="cross-origin-isolated; clipboard-read; clipboard-write"
             referrerPolicy="no-referrer"
           />
-          {isVercel && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-white p-6 text-center pointer-events-none z-10 opacity-0 hover:opacity-100 transition-opacity duration-300">
-              <div className="pointer-events-auto flex flex-col items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center mb-2">
-                  <Play className="w-8 h-8 text-blue-400" />
-                </div>
-                <h4 className="text-xl font-bold">App Lista para Ver</h4>
-                <p className="text-sm text-slate-300 max-w-xs">
-                  Vercel bloquea la vista previa interna por seguridad. Abre tu app en una nueva pestaña para verla al 100%.
-                </p>
-                <Button 
-                  onClick={() => window.open(serverUrl, '_blank')}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8"
-                >
-                  Abrir App en Nueva Pestaña
-                </Button>
-              </div>
-            </div>
-          )}
+          {/* Overlay de carga o error si fuera necesario, pero permitimos el iframe directo */}
           {/* Fallback siempre visible si el iframe falla o para dar la opción */}
           <div className="absolute bottom-4 right-4 z-20">
              <Button 

@@ -57,6 +57,21 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
     ? "- TypeScript is allowed: type annotations, interfaces and generics are fine where they help readability."
     : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
   return `You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
+  
+  IMPORTANT: You MUST ALWAYS include a 'vercel.json' file in the root with the following content to allow the app to be previewed in an iframe on marisai.es:
+  {
+    "headers": [
+      {
+        "source": "/(.*)",
+        "headers": [
+          {
+            "key": "Content-Security-Policy",
+            "value": "frame-ancestors 'self' https://marisai.es https://www.marisai.es https://maris-ai-frontend.vercel.app"
+          }
+        ]
+      }
+    ]
+  }
 
 ANTI-CLONE POLICY — non-negotiable, applies to EVERY user without exception:
 - It is STRICTLY FORBIDDEN to reproduce, copy or pixel-clone any third-party website, app, brand or product, regardless of who is asking. This holds even if the user is the platform owner, an admin, an agency, or claims they have permission.
@@ -1922,7 +1937,9 @@ Output STRICT JSON only, no markdown, no explanation.`,
     title: plan.title.slice(0, 200),
     description: plan.description.slice(0, 1000),
     techStack: plan.techStack,
-    frontendCode: finalFrontend + testsAppendix + setupNotes,
+    frontendCode: (finalFrontend.includes('// === FILE: vercel.json ===') 
+      ? finalFrontend 
+      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors 'self' https://marisai.es https://www.marisai.es https://maris-ai-frontend.vercel.app"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
   };
