@@ -46,11 +46,7 @@ router.get(
 );
 
 function originFromReq(req: Request): string {
-  const proto =
-    (req.headers["x-forwarded-proto"] as string)?.split(",")[0] ?? "https";
-  const host =
-    (req.headers["x-forwarded-host"] as string) ?? req.headers.host;
-  return `${proto}://${host}`;
+  return process.env.FRONTEND_URL || "https://www.marisai.es";
 }
 
 // POST /billing/custom-checkout — comprar monto personalizado de créditos
