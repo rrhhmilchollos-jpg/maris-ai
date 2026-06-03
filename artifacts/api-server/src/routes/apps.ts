@@ -2116,12 +2116,21 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
 // ── GET /api/apps ─────────────────────────────────────────────────────────
 router.get("/apps", requireAuth, async (req: any, res: any) => {
   try {
+    await connectDB();
     const userId = req.userId as string;
-    const apps = await GeneratedApp.find({ userId }).sort({ createdAt: -1 });
-    res.json(apps);
+    const apps = await GeneratedApp.find({ userId }).sort({ createdAt: -1 }).lean();
+    
+    // Serializar fechas para evitar problemas de serialización
+    const serializedApps = apps.map((app: any) => ({
+      ...app,
+      createdAt: app.createdAt ? (typeof app.createdAt === 'string' ? app.createdAt : app.createdAt.toISOString()) : new Date().toISOString(),
+      updatedAt: app.updatedAt ? (typeof app.updatedAt === 'string' ? app.updatedAt : app.updatedAt.toISOString()) : new Date().toISOString(),
+    }));
+    
+    res.json(serializedApps);
   } catch (err) {
     logger.error({ err }, "GET /api/apps error");
-    res.status(500).json({ error: "Error interno" });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
   }
 });
 
