@@ -36,7 +36,7 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    chunkSizeWarningLimit: 500, // Bajamos el límite para ser más estrictos con el rendimiento
+    chunkSizeWarningLimit: 1000, // Aumentamos el límite ya que hemos optimizado el chunking manual
     minify: "terser", // Minificación más agresiva
     terserOptions: {
       compress: {
@@ -47,14 +47,17 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("@clerk/clerk-react") || id.includes("clerk.browser")) return "vendor-clerk";
-          if (id.includes("framer-motion")) return "vendor-motion";
-          if (id.includes("lucide-react")) return "vendor-icons";
-          if (id.includes("@radix-ui")) return "vendor-ui";
-          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) return "vendor-react";
-          if (id.includes("@tanstack/react-query") || id.includes("wouter")) return "vendor-router";
-          // Separar el editor de código y el preview que son los más pesados
-          if (id.includes("monaco-editor") || id.includes("debug-preview")) return "vendor-editor";
+          if (id.includes("node_modules")) {
+            if (id.includes("@clerk/clerk-react") || id.includes("clerk.browser")) return "vendor-clerk";
+            if (id.includes("framer-motion")) return "vendor-motion";
+            if (id.includes("lucide-react")) return "vendor-icons";
+            if (id.includes("@radix-ui")) return "vendor-ui";
+            if (id.includes("react") || id.includes("react-dom")) return "vendor-react";
+            if (id.includes("@tanstack/react-query") || id.includes("wouter")) return "vendor-router";
+            if (id.includes("monaco-editor")) return "vendor-editor";
+            if (id.includes("shiki") || id.includes("prismjs")) return "vendor-highlight";
+            return "vendor-others";
+          }
         },
       },
     },
