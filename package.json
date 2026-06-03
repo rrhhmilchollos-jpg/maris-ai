@@ -22,10 +22,5 @@
     "execa": "^9.6.1",
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/pg": "^8.20.0"
-    }
   }
 }
