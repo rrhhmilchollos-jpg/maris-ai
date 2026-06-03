@@ -39,10 +39,17 @@ interface MetricsResponse {
   };
 }
 
+import { apiFetch } from "@/lib/api-client";
+
 async function fetchMetrics(): Promise<MetricsResponse> {
-  const r = await fetch("/api/admin/metrics", { credentials: "include" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  return apiFetch("/api/admin/metrics");
+}
+
+async function refundUserCredits(userId: string, amount: number, reason: string) {
+  return apiFetch(`/api/admin/users/${userId}/refund`, {
+    method: "POST",
+    body: JSON.stringify({ amount, reason }),
+  });
 }
 
 async function toggleE2B(enabled: boolean) {
