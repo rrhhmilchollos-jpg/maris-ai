@@ -9,6 +9,7 @@ import {
   AgentMemory,
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
+import { refundCredits } from "../lib/credits";
 import { bulkCreateProjectSeeds } from "../lib/projectSeeds";
 import { IProjectSeed } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
@@ -117,6 +118,25 @@ router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void
     isAdmin: isAdminEmail(user.email),
     createdAt: new Date(user.createdAt).toISOString(),
   });
+});
+
+router.post("/admin/users/:id/refund", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const targetId = req.params.id;
+  const { amount, reason } = req.body;
+
+  if (!amount || amount <= 0) {
+    res.status(400).json({ error: "Cantidad de reembolso inválida" });
+    return;
+  }
+
+  try {
+    const result = await refundCredits(targetId, amount, reason || "Reembolso administrativo");
+    res.json({ ok: true, newBalance: result.credits });
+  } catch (err) {
+    logger.error({ err, userId: targetId }, "Error processing refund");
+    res.status(500).json({ error: "Error al procesar el reembolso" });
+  }
 });
 
 router.get("/admin/apps", async (_req, res) => {

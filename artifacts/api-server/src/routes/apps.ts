@@ -2024,12 +2024,11 @@ function getConversationalOnlyReply(content: string, hasAttachments = false): st
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Claude 4.8 Sonnet)", description: "Selección inteligente optimizada para apps Saas." },
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "Velocidad extrema para prototipado rápido." },
-    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería de software." },
-    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas." },
-    { id: "claude-mithos-v1", name: "Claude Mithos", description: "Modelo experimental optimizado para creatividad y UI." },
-    { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI." }
+    { id: "auto", name: "Auto (Gemini 2.5 Flash)", description: "Selección inteligente optimizada para velocidad y precisión." },
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Modelo por defecto. Rápido, preciso y optimizado para Vibe Coding." },
+    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería. Requiere créditos extra." },
+    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
+    { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI. Coste premium." }
   ];
   res.json(availableModels);
 });
@@ -2096,7 +2095,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
       _id: jobId,
       userId,
       prompt: generationPrompt,
-      coderModel: model || "auto",
+      coderModel: model || "gemini-2.5-flash",
       language: language || "typescript",
       kind: kind || "fullstack",
       status: "queued",
