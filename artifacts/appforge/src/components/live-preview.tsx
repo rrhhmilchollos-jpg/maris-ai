@@ -351,11 +351,11 @@ export function LivePreview({
           <iframe
             ref={iframeRef}
             src={serverUrl}
-            className="w-full h-full border-0"
+            className="w-full h-full border-0 bg-white"
             title="App Preview"
             sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
             allow="cross-origin-isolated; clipboard-read; clipboard-write"
-            referrerPolicy="no-referrer"
+            loading="lazy"
           />
           {/* Overlay de carga o error si fuera necesario, pero permitimos el iframe directo */}
           {/* Fallback siempre visible si el iframe falla o para dar la opción */}
