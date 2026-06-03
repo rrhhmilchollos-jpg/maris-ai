@@ -7,20 +7,20 @@ import { Layout } from "@/components/layout";
 export default function PricingPage() {
   const plans = [
     {
-      name: "Gratuito",
+      name: "Starter",
       price: "0€",
       period: "para siempre",
-      description: "Perfecto para probar Maris AI sin compromiso",
+      description: "Ideal para explorar el potencial de Maris AI y dar vida a tu primera idea.",
       features: [
         { text: "1 app generada/mes", included: true },
-        { text: "Acceso a 9 agentes IA", included: true },
-        { text: "Exportación a GitHub", included: true },
-        { text: "Soporte por email", included: true },
-        { text: "Apps ilimitadas", included: false },
-        { text: "Prioridad en soporte", included: false },
-        { text: "Dominio personalizado", included: false },
+        { text: "Acceso completo a 9 agentes IA", included: true },
+        { text: "Exportación de código a GitHub", included: true },
+        { text: "Soporte estándar por email", included: true },
+        { text: "Generación de apps ilimitadas", included: false },
+        { text: "Soporte prioritario 24/7", included: false },
+        { text: "Dominio personalizado y SSL", included: false },
       ],
-      cta: "Comenzar gratis",
+      cta: "Empieza gratis",
       href: "/sign-up",
       highlight: false,
     },
@@ -28,15 +28,15 @@ export default function PricingPage() {
       name: "Pro",
       price: "29€",
       period: "/mes",
-      description: "Para emprendedores y startups que necesitan velocidad",
+      description: "Para emprendedores y equipos que buscan escalar rápidamente con soporte premium.",
       features: [
-        { text: "Apps ilimitadas", included: true },
-        { text: "Acceso a 9 agentes IA", included: true },
-        { text: "Exportación a GitHub", included: true },
-        { text: "Soporte prioritario", included: true },
-        { text: "Dominio personalizado", included: true },
-        { text: "Historial ilimitado", included: true },
-        { text: "API de generación", included: false },
+        { text: "Generación de apps ilimitadas", included: true },
+        { text: "Acceso completo a 9 agentes IA", included: true },
+        { text: "Exportación de código a GitHub", included: true },
+        { text: "Soporte prioritario 24/7", included: true },
+        { text: "Dominio personalizado y SSL", included: true },
+        { text: "Historial de proyectos ilimitado", included: true },
+        { text: "Acceso a la API de generación", included: false },
       ],
       cta: "Actualizar a Pro",
       href: "/sign-up",
@@ -44,19 +44,19 @@ export default function PricingPage() {
     },
     {
       name: "Enterprise",
-      price: "Personalizado",
+      price: "A medida",
       period: "contacta con nosotros",
-      description: "Para equipos y organizaciones con necesidades específicas",
+      description: "Soluciones personalizadas para grandes empresas y proyectos con requisitos únicos.",
       features: [
-        { text: "Todo en Pro", included: true },
-        { text: "API de generación", included: true },
-        { text: "Modelos personalizados", included: true },
-        { text: "Soporte 24/7 dedicado", included: true },
-        { text: "SLA garantizado", included: true },
-        { text: "Integración personalizada", included: true },
-        { text: "Análisis de uso avanzado", included: true },
+        { text: "Todas las características del plan Pro", included: true },
+        { text: "Acceso a la API de generación", included: true },
+        { text: "Modelos de IA personalizados y optimizados", included: true },
+        { text: "Soporte técnico 24/7 dedicado", included: true },
+        { text: "Acuerdo de Nivel de Servicio (SLA) garantizado", included: true },
+        { text: "Integración personalizada con tus sistemas", included: true },
+        { text: "Análisis de uso avanzado y consultoría estratégica", included: true },
       ],
-      cta: "Contactar ventas",
+      cta: "Contactar con Ventas",
       href: "mailto:ventas@marisai.es",
       highlight: false,
     },
@@ -73,10 +73,10 @@ export default function PricingPage() {
             className="text-center"
           >
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-              Precios transparentes
+              Planes flexibles para tu éxito.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Sin sorpresas. Sin cargos ocultos. Elige el plan que se adapte a tu presupuesto y escala cuando necesites.
+              Elige la potencia de Maris AI que mejor se adapte a tus ambiciones. Escala sin límites, paga solo por lo que necesitas.
             </p>
           </motion.div>
         </section>
@@ -155,25 +155,29 @@ export default function PricingPage() {
 
         {/* FAQ */}
         <section className="container px-4 md:px-8 mx-auto max-w-3xl mb-20">
-          <h2 className="text-3xl font-bold text-white mb-12 text-center">Preguntas frecuentes</h2>
+            <h2 className="text-3xl font-bold text-white mb-12 text-center">Preguntas Frecuentes (FAQ)</h2>
 
           <div className="space-y-6">
             {[
               {
-                q: "¿Puedo cambiar de plan en cualquier momento?",
-                a: "Sí. Puedes cambiar o cancelar tu plan en cualquier momento sin penalización. Los cambios se aplican al siguiente ciclo de facturación.",
+                q: "¿Puedo cambiar o cancelar mi plan en cualquier momento?",
+                a: "Sí, tienes total flexibilidad. Puedes cambiar o cancelar tu suscripción en cualquier momento desde tu panel de usuario, sin penalizaciones. Los cambios se aplic aplicarán al inicio de tu próximo ciclo de facturación.",
               },
               {
-                q: "¿Qué incluye la prueba gratuita?",
-                a: "La prueba gratuita incluye acceso completo a los 9 agentes IA, generación de 1 app/mes y exportación a GitHub. Sin tarjeta de crédito requerida.",
+                q: "¿Qué funcionalidades incluye el plan Starter (gratuito)?",
+                a: "El plan Starter te permite generar 1 aplicación al mes, acceder a nuestro equipo completo de 9 agentes IA especializados y exportar el código generado a GitHub. No se requiere tarjeta de crédito para empezar.",
               },
               {
-                q: "¿Hay descuentos para pagos anuales?",
-                a: "Sí. Si pagas anualmente, obtienes 2 meses gratis. Contacta con nosotros para más detalles.",
+                q: "¿Ofrecen descuentos por suscripciones anuales?",
+                a: "¡Absolutamente! Al optar por una suscripción anual, te beneficiarás de un descuento equivalente a 2 meses gratis. Contacta con nuestro equipo de ventas para obtener más información y activar esta oferta.",
               },
               {
-                q: "¿Qué pasa con mis apps si cancelo?",
-                a: "Tus apps seguirán siendo tuyas. Puedes exportarlas a GitHub y desplegarlas donde quieras. Solo perderás acceso a generar nuevas apps.",
+                q: "¿Qué sucede con mis aplicaciones si decido cancelar mi suscripción?",
+                a: "Tus aplicaciones son y siempre serán tuyas. Aunque canceles, mantendrás la propiedad y podrás exportar todo el código a GitHub para desplegarlo donde desees. Solo perderás la capacidad de generar nuevas aplicaciones o acceder a funciones premium.",
+              },
+              {
+                q: "¿Cómo funciona el soporte prioritario?",
+                a: "Los planes Pro y Enterprise incluyen soporte prioritario 24/7. Esto significa que tus consultas y solicitudes serán atendidas con la máxima urgencia por nuestro equipo de expertos, garantizando una resolución rápida y eficiente.",
               },
             ].map((item, i) => (
               <motion.div
@@ -199,14 +203,14 @@ export default function PricingPage() {
             viewport={{ once: true }}
           >
             <h2 className="text-3xl font-bold text-white mb-6">
-              ¿Listo para empezar?
+              ¿Preparado para transformar tus ideas en realidad?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Crea tu primera app gratis. Sin tarjeta de crédito. Sin compromiso.
+              Empieza hoy mismo con Maris AI. Crea tu primera aplicación de forma gratuita, sin necesidad de tarjeta de crédito y sin compromiso.
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
-                Comenzar ahora <ArrowRight className="ml-2 h-5 w-5" />
+                Crea tu primera app gratis <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
           </motion.div>
