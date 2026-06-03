@@ -53,23 +53,16 @@ async function refundUserCredits(userId: string, amount: number, reason: string)
 }
 
 async function toggleE2B(enabled: boolean) {
-  const r = await fetch("/api/admin/e2b-toggle", {
+  return apiFetch("/api/admin/e2b-toggle", {
     method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{ validateOnGenerate: boolean; configured: boolean; effective: boolean }>;
 }
 
 async function runE2BSmoke() {
-  const r = await fetch("/api/admin/e2b-smoke", {
+  return apiFetch("/api/admin/e2b-smoke", {
     method: "POST",
-    credentials: "include",
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{ ok: boolean; durationMs: number; output: string; reason?: string }>;
 }
 
 function formatDuration(ms: number): string {
