@@ -20,6 +20,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { signOut } = useClerk();
   const { user } = useUser();
   const { data: me } = useGetMe({ query: { enabled: !!user, queryKey: getGetMeQueryKey() } });
+  const isOwner = user?.primaryEmailAddress?.emailAddress === "rrhh.milchollos@gmail.com";
+  const isAdmin = me?.isAdmin || isOwner;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -42,7 +44,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link href="/billing" className="transition-colors hover:text-foreground/80 text-foreground/60">
                     Facturación
                   </Link>
-                  {me?.isAdmin && (
+                  {isAdmin && (
                     <Link href="/admin" className="transition-colors hover:text-primary text-primary/80 font-semibold flex items-center gap-1">
                       <Shield className="h-3.5 w-3.5" /> Admin
                     </Link>
@@ -82,7 +84,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <CreditCard className="mr-2 h-4 w-4 text-muted-foreground" />
                       <span>Facturación</span>
                     </DropdownMenuItem>
-                    {me?.isAdmin && (
+                    {isAdmin && (
                       <DropdownMenuItem onClick={() => setLocation("/admin")}>
                         <Shield className="mr-2 h-4 w-4 text-primary" />
                         <span>Panel admin</span>

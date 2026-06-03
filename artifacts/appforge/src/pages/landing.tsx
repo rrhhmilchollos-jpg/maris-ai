@@ -153,7 +153,7 @@ export default function LandingPage() {
                   <Button variant="ghost" className="text-white hover:bg-white/10 text-sm">Iniciar Sesión</Button>
                 </Link>
                 <Link href="/sign-up">
-                  <Button className="bg-primary hover:bg-primary/90 text-white text-sm">Comenzar gratis</Button>
+                  <Button className="bg-primary hover:bg-primary/90 text-white text-sm">Comenzar con 50 créditos</Button>
                 </Link>
               </>
             )}

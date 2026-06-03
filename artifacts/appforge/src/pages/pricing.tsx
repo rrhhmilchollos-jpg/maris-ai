@@ -10,9 +10,9 @@ export default function PricingPage() {
       name: "Starter",
       price: "0€",
       period: "para siempre",
-      description: "Ideal para explorar el potencial de Maris AI y dar vida a tu primera idea.",
+      description: "Ideal para explorar el potencial de Maris AI con 50 créditos de prueba.",
       features: [
-        { text: "1 app generada/mes", included: true },
+        { text: "50 créditos de bienvenida", included: true },
         { text: "Acceso completo a 9 agentes IA", included: true },
         { text: "Exportación de código a GitHub", included: true },
         { text: "Soporte estándar por email", included: true },
@@ -165,7 +165,7 @@ export default function PricingPage() {
               },
               {
                 q: "¿Qué funcionalidades incluye el plan Starter (gratuito)?",
-                a: "El plan Starter te permite generar 1 aplicación al mes, acceder a nuestro equipo completo de 9 agentes IA especializados y exportar el código generado a GitHub. No se requiere tarjeta de crédito para empezar.",
+                a: "El plan Starter incluye 50 créditos de bienvenida al registrarte. Esto te permite generar una aplicación básica, acceder a nuestro equipo completo de 9 agentes IA especializados y exportar el código generado a GitHub. No se requiere tarjeta de crédito para empezar.",
               },
               {
                 q: "¿Ofrecen descuentos por suscripciones anuales?",
@@ -206,11 +206,11 @@ export default function PricingPage() {
               ¿Preparado para transformar tus ideas en realidad?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Empieza hoy mismo con Maris AI. Crea tu primera aplicación de forma gratuita, sin necesidad de tarjeta de crédito y sin compromiso.
+              Empieza hoy mismo con Maris AI. Recibe 50 créditos de bienvenida al registrarte, sin necesidad de tarjeta de crédito y sin compromiso.
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
-                Crea tu primera app gratis <ArrowRight className="ml-2 h-5 w-5" />
+                Comienza con 50 créditos gratis <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
           </motion.div>
