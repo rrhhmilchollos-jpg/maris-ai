@@ -167,18 +167,18 @@ export default function LandingPage() {
           <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
             <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
-              <span>Inteligencia artificial de última generación</span>
+              <span>La revolución del Vibe Coding ha llegado</span>
             </motion.div>
 
             <motion.h1 variants={fadeIn} className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-white mb-6 leading-[1.05]">
-              Escribe una idea. <br />
+              Tu visión. <br />
               <span className="bg-gradient-to-r from-primary via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                Recibe una app real.
+                Apps reales en minutos.
               </span>
             </motion.h1>
 
             <motion.p variants={fadeIn} className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto font-light leading-relaxed">
-              Describe lo que quieres construir y nuestra plataforma de IA lo convierte en una aplicación completa y funcional lista para producción.
+              Transforma tus ideas más ambiciosas en aplicaciones funcionales y listas para el mercado, impulsadas por un equipo de 9 agentes IA de élite.
             </motion.p>
 
             <motion.div variants={fadeIn} className="max-w-3xl mx-auto relative mb-6">
@@ -223,47 +223,47 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">¿Qué puedes construir?</h2>
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Desata tu potencial creativo.</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Desde MVPs rápidos hasta herramientas internas complejas. Maris AI genera aplicaciones completas listas para producción.
+              Desde MVPs innovadores hasta soluciones empresariales complejas, Maris AI transforma tus ideas en realidad con código impecable y escalable.
             </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
               {
-                title: "SaaS de Gestión de Tareas",
-                desc: "Tableros Kanban, asignación de usuarios, fechas límite y notificaciones en tiempo real.",
+                title: "Plataformas SaaS de Vanguardia",
+                desc: "Crea sistemas de gestión de tareas, CRMs, o cualquier plataforma SaaS con funcionalidades avanzadas y escalabilidad garantizada.",
                 image: "https://images.unsplash.com/photo-1540350394557-8d14678e7f91?q=80&w=800&auto=format&fit=crop",
                 tags: ["React", "Express", "MongoDB"]
               },
               {
-                title: "E-commerce Moderno",
-                desc: "Catálogo de productos, carrito de compras, pasarela de pagos con Stripe y panel de admin.",
+                title: "E-commerce de Alto Rendimiento",
+                desc: "Lanza tiendas online con catálogos dinámicos, pasarelas de pago integradas (Stripe) y paneles de administración intuitivos."
                 image: "https://images.unsplash.com/photo-1472851294608-062f824d29cc?q=80&w=800&auto=format&fit=crop",
                 tags: ["Stripe", "Tailwind", "Vite"]
               },
               {
-                title: "Dashboard de Analytics",
-                desc: "Visualización de datos con gráficos interactivos, filtros avanzados y exportación de informes.",
+                title: "Dashboards de Analítica Avanzada",
+                desc: "Visualiza tus datos con gráficos interactivos, filtros potentes y exportación de informes para una toma de decisiones inteligente."
                 image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800&auto=format&fit=crop",
                 tags: ["Recharts", "Lucide", "Framer Motion"]
               },
               {
-                title: "CRM para Ventas",
-                desc: "Gestión de clientes, pipeline de ventas, recordatorios y seguimiento de actividad.",
+                title: "CRMs y Herramientas de Ventas",
+                desc: "Optimiza tus procesos de venta con CRMs personalizados, seguimiento de leads y automatización de recordatorios."
                 image: "https://images.unsplash.com/photo-1552581234-26160f608093?q=80&w=800&auto=format&fit=crop",
                 tags: ["CRM", "Full-stack", "IA"]
               },
               {
-                title: "Plataforma de Educación",
-                desc: "Gestión de cursos, lecciones en vídeo, cuestionarios y seguimiento de progreso.",
+                title: "Plataformas Educativas Interactivas",
+                desc: "Desarrolla entornos de aprendizaje online con gestión de cursos, seguimiento de progreso y herramientas de evaluación."
                 image: "https://images.unsplash.com/photo-1501504905252-473c47e087f8?q=80&w=800&auto=format&fit=crop",
                 tags: ["EdTech", "PWA", "Node.js"]
               },
               {
-                title: "Herramienta de RRHH",
-                desc: "Portal del empleado, gestión de vacaciones, nóminas y evaluación del desempeño.",
+                title: "Soluciones de RRHH Inteligentes",
+                desc: "Implementa portales de empleado, sistemas de gestión de nóminas y herramientas de evaluación de desempeño para tu equipo."}]}))
                 image: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?q=80&w=800&auto=format&fit=crop",
                 tags: ["Internal Tools", "Auth", "Clerk"]
               }
@@ -303,19 +303,27 @@ export default function LandingPage() {
       {/* Stats */}
       <section className="py-16 border-y border-white/5 bg-card/20 backdrop-blur-sm">
         <div className="container px-4 md:px-8 mx-auto max-w-5xl">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }} viewport={{ once: true }} className="text-center">
-                <div className="flex justify-center mb-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-                    <stat.icon className="h-5 w-5 text-primary" />
-                  </div>
-                </div>
-                <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </motion.div>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
+              <TrendingUp className="h-10 w-10 text-primary mb-3" />
+              <div className="text-4xl font-bold text-white mb-1">9</div>
+              <div className="text-sm text-muted-foreground">Agentes IA especializados</div>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
+              <Clock className="h-10 w-10 text-primary mb-3" />
+              <div className="text-4xl font-bold text-white mb-1">&lt; 5 min</div>
+              <div className="text-sm text-muted-foreground">De idea a app funcional</div>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
+              <Globe className="h-10 w-10 text-primary mb-3" />
+              <div className="text-4xl font-bold text-white mb-1">100%</div>
+              <div className="text-sm text-muted-foreground">Código exportable tuyo</div>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
+              <Star className="h-10 w-10 text-primary mb-3" />
+              <div className="text-4xl font-bold text-white mb-1">Gratis</div>
+              <div className="text-sm text-muted-foreground">Para empezar hoy</div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -326,20 +334,20 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }} viewport={{ once: true }}>
-              <h2 className="text-4xl font-bold text-white mb-6">Código real. <br />
+              <h2 className="text-4xl font-bold text-white mb-6">Ingeniería de Software <br />
                 <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                  Generado en tiempo real.
+                  a la velocidad de la IA.
                 </span>
               </h2>
               <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
-                Maris AI no genera plantillas genéricas. Cada aplicación se construye desde cero, adaptada exactamente a lo que describes.
+                Maris AI va más allá de los generadores de código. Nuestro equipo de agentes IA orquesta un proceso de desarrollo completo, entregando código optimizado y listo para producción.
               </p>
               <div className="space-y-5">
                 {[
-                  { title: "Arquitectura impulsada por IA", desc: "Nuestra plataforma entiende la estructura de aplicaciones y elige los patrones correctos para tu caso de uso.", icon: Code2 },
-                  { title: "Listo en minutos", desc: "Tu app completa lista para producción en minutos. Itera con la misma rapidez.", icon: Zap },
-                  { title: "Código tuyo, para siempre", desc: "Sin ataduras. Código React + Vite limpio que puedes exportar y desplegar donde quieras.", icon: Globe },
-                  { title: "Control de versiones integrado", desc: "Cada generación crea un commit en tu repositorio GitHub. Historial completo.", icon: GitBranch },
+                  { title: "Arquitectura Inteligente", desc: "Nuestra IA diseña la estructura óptima de tu aplicación, aplicando patrones de diseño robustos y escalables.", icon: Code2 },
+                  { title: "Despliegue Instantáneo", desc: "Desde la idea hasta una aplicación funcional en minutos, lista para iterar y crecer a la velocidad de tu negocio.", icon: Zap },
+                  { title: "Propiedad Total del Código", desc: "Recibe código limpio, modular y 100% tuyo (React, Vite, Node.js). Exporta a GitHub y despliega donde quieras, sin ataduras.", icon: Globe },
+                  { title: "Integración Git Nativa", desc: "Cada generación se traduce en un commit en tu repositorio GitHub, ofreciendo un historial de versiones completo y transparente.", icon: GitBranch }
                 ].map((feature, i) => (
                   <div key={i} className="flex gap-4">
                     <div className="flex-shrink-0 h-9 w-9 rounded-lg bg-primary/20 flex items-center justify-center border border-primary/30">
@@ -424,10 +432,9 @@ export default function LandingPage() {
       <section className="py-24 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto max-w-4xl">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Recién lanzado. Sé el primero.</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Sé pionero en la era del Vibe Coding.</h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Maris AI acaba de lanzarse al público. Sin números inventados, sin testimonios de relleno.
-              Solo una herramienta real que funciona — y la oportunidad de ser early adopter con acceso directo al creador.
+              Maris AI es la herramienta definitiva para visionarios. Únete a nuestra comunidad de early adopters y co-crea el futuro del desarrollo de software.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
