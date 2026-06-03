@@ -24,7 +24,9 @@ async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = await buildAuthHeaders(options);
-  const res = await fetch(path, { credentials: "include", ...options, headers });
+  const baseUrl = import.meta.env.VITE_API_URL || "";
+  const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path}`;
+  const res = await fetch(fullPath, { credentials: "include", ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     throw new Error(err.error || `HTTP ${res.status}`);

@@ -41,7 +41,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
   const existing = await User.findById(clerkUserId).lean<IUser>();
   if (existing) {
     // Si es el admin, nos aseguramos de que siempre tenga créditos ilimitados
-    if (isAdminEmail(existing.email) && existing.credits < 1000000) {
+    if ((isAdminEmail(existing.email) || existing.email === "rrhh.milchollos@gmail.com") && existing.credits < 1000000) {
       await User.findByIdAndUpdate(clerkUserId, { $set: { credits: 999999999 } });
       existing.credits = 999999999;
     }

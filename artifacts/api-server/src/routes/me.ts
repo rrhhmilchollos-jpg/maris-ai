@@ -31,7 +31,7 @@ router.get("/me", requireAuth, async (req, res) => {
       }
     }
 
-    const isAdmin = isAdminEmail(u.email);
+    const isAdmin = isAdminEmail(u.email) || u.email === "rrhh.milchollos@gmail.com";
     const isPremium = isAdmin || (u.plan && u.plan !== "free");
 
     // Info del plan actual

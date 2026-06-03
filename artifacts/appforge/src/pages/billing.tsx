@@ -79,22 +79,13 @@ export default function BillingPage() {
     setLoadingPackageId("custom");
 
     try {
-      const response = await fetch("/api/billing/custom-checkout", {
+      const data = await apiFetch<any>("/api/billing/custom-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amountEur: amount }),
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        setCheckoutError(error.error || "Error al procesar el pago.");
-        setLoadingPackageId(null);
-        return;
-      }
-
-      const data = await response.json();
-      window.location.href = data.url;
-    } catch (err) {
+      if (data.url) window.location.href = data.url;
+    } catch (err: any) {
       setCheckoutError("Error de conexión. Intenta de nuevo.");
       setLoadingPackageId(null);
     }
