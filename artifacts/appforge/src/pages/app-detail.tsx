@@ -456,6 +456,45 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     toast({ title: "Preview abierta", description: hasRenderableCode ? "La vista en vivo se ha restaurado." : "Todavía no hay frontend renderizable; verás el estado de construcción." });
   };
 
+  const normalizePublicUrl = (rawUrl?: string | null): URL | null => {
+    const value = rawUrl?.trim();
+    if (!value) return null;
+    try {
+      return new URL(value.startsWith("http://") || value.startsWith("https://") ? value : `https://${value}`);
+    } catch {
+      return null;
+    }
+  };
+
+  const openGoogleIndexing = (rawUrl?: string | null) => {
+    const target = normalizePublicUrl(rawUrl);
+    if (!target) {
+      toast({ title: "URL no válida", description: "No se encontró una URL pública válida para enviar a Google.", variant: "destructive" });
+      return false;
+    }
+
+    const propertyUrl = `${target.origin}/`;
+    const searchConsoleUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(propertyUrl)}&url=${encodeURIComponent(target.href)}`;
+    const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${app?.title || "Maris AI App"} site:${target.hostname}`)}`;
+    const opened = window.open(searchConsoleUrl, "_blank", "noopener,noreferrer");
+
+    if (!opened) {
+      toast({ title: "Ventana bloqueada", description: "Permite ventanas emergentes para Maris AI y vuelve a pulsar Publicar en Google.", variant: "destructive" });
+      return false;
+    }
+
+    toast({
+      title: "Google Search Console abierto",
+      description: "Revisa la propiedad y pulsa Solicitar indexación en Google. Si la propiedad no existe, Google te pedirá verificarla.",
+    });
+
+    window.setTimeout(() => {
+      window.open(googleSearchUrl, "_blank", "noopener,noreferrer");
+    }, 250);
+
+    return true;
+  };
+
   const handlePublishGoogle = async () => {
     if (!hasRenderableCode) {
       toast({ title: "App no disponible", description: "Genera la app primero antes de publicarla en Google.", variant: "destructive" });
@@ -464,21 +503,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     if (isPublishingGoogle) return;
     setIsPublishingGoogle(true);
     try {
-      // Si la app ya tiene URL desplegada, la indexamos en Google Search Console
-      const targetUrl = deployedUrl;
-      if (targetUrl) {
-        // Abrir Google Search Console para solicitar indexación
-        const scUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(targetUrl)}&url=${encodeURIComponent(targetUrl)}`;
-        window.open(scUrl, "_blank", "noopener,noreferrer");
-        // También abrir Google para buscar la app (visibilidad inmediata)
-        const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent((app?.title || "Maris AI App") + " site:" + new URL(targetUrl).hostname)}`;
-        setTimeout(() => window.open(googleSearchUrl, "_blank", "noopener,noreferrer"), 500);
-        toast({
-          title: "✅ Publicando en Google",
-          description: "Se ha abierto Google Search Console para solicitar la indexación de tu app. También puedes ver la búsqueda en Google.",
-        });
+      if (deployedUrl) {
+        openGoogleIndexing(deployedUrl);
       } else {
-        // Si no hay URL desplegada, primero hacer deploy y luego publicar
         toast({
           title: "Desplegando antes de publicar…",
           description: "Tu app necesita estar desplegada para aparecer en Google. Iniciando deploy automático.",
@@ -486,13 +513,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         deployMutation.mutate({ id }, {
           onSuccess: (result: any) => {
             const url = result?.deploymentUrl || result?.url;
-            if (url) {
-              setTimeout(() => {
-                const scUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(url)}&url=${encodeURIComponent(url)}`;
-                window.open(scUrl, "_blank", "noopener,noreferrer");
-                toast({ title: "✅ App desplegada y enviada a Google", description: `Tu app está en ${url}. Google Search Console está listo para indexarla.` });
-              }, 1000);
+            if (openGoogleIndexing(url)) {
+              toast({ title: "App desplegada", description: `Tu app está en ${url}. Search Console se ha abierto para solicitar la indexación.` });
             }
+          },
+          onError: (err: any) => {
+            toast({ title: "No se pudo desplegar", description: err?.message || "Intenta publicar de nuevo en unos minutos.", variant: "destructive" });
           },
         });
       }

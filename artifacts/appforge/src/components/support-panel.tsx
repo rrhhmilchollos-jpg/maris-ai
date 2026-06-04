@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Send, AlertCircle, CheckCircle2, MessageSquare, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -48,12 +49,8 @@ export function SupportPanel() {
   const loadTickets = async () => {
     setIsLoadingTickets(true);
     try {
-      const response = await fetch("/api/tickets", {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) throw new Error("Error al cargar tickets");
-      const data = await response.json();
-      setTickets(data);
+      const data = await apiFetch<Ticket[]>("/api/tickets");
+      setTickets(Array.isArray(data) ? data : []);
       // Si hay un ticket seleccionado, actualizar su contenido
       if (selectedTicket) {
         const updated = data.find((t: Ticket) => t._id === selectedTicket._id);
@@ -83,12 +80,11 @@ export function SupportPanel() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch("/api/tickets", {
+      await apiFetch<Ticket>("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subject, message }),
       });
-      if (!response.ok) throw new Error("Error al crear ticket");
       
       toast({
         title: "Ticket creado",
@@ -122,14 +118,11 @@ export function SupportPanel() {
 
     setIsReplySubmitting(true);
     try {
-      const response = await fetch(`/api/tickets/${selectedTicket._id}/respond`, {
+      const updatedTicket = await apiFetch<Ticket>(`/api/tickets/${selectedTicket._id}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: replyMessage }),
       });
-      if (!response.ok) throw new Error("Error al enviar respuesta");
-      
-      const updatedTicket = await response.json();
       setSelectedTicket(updatedTicket);
       setReplyMessage("");
       

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
@@ -31,6 +32,32 @@ interface DnsRecord {
   name: string;
   value: string;
   ttl?: string;
+}
+
+interface HealthCheckResponse {
+  ok?: boolean;
+  status?: "pass" | "fail" | string;
+  issues?: string[];
+  error?: string;
+}
+
+interface DeploymentStatusResponse {
+  lastDeployedAt?: string;
+  deploymentUrl?: string;
+}
+
+interface DeployResponse {
+  success?: boolean;
+  deploymentUrl?: string;
+  url?: string;
+  error?: string;
+}
+
+interface CustomDomainResponse {
+  verified?: boolean;
+  dnsRecords?: DnsRecord[];
+  recommendedDns?: DnsRecord[];
+  error?: string;
 }
 
 interface DeployModalProps {
@@ -88,6 +115,7 @@ export function DeployModal({
   const [healthExpanded, setHealthExpanded] = useState(false);
   const [healthRunning, setHealthRunning] = useState(false);
   const [healthResult, setHealthResult] = useState<"pass" | "fail" | null>(null);
+  const [healthIssues, setHealthIssues] = useState<string[]>([]);
 
   // Custom domain
   const [domainStep, setDomainStep] = useState<DomainStep>(
@@ -105,8 +133,7 @@ export function DeployModal({
 
   // Fetch last deployed date on mount
   useEffect(() => {
-    fetch(`/api/apps/${appId}/deployment-status`, { credentials: "include" })
-      .then((r) => r.json())
+    apiFetch<DeploymentStatusResponse>(`/api/apps/${appId}/deployment-status`)
       .then((d) => {
         if (d.lastDeployedAt) setLastDeployedAt(d.lastDeployedAt);
         if (d.deploymentUrl) setDeployUrl(d.deploymentUrl);
@@ -118,13 +145,10 @@ export function DeployModal({
   const handleRedeploy = useCallback(async () => {
     setIsRedeploying(true);
     try {
-      const res = await fetch(`/api/apps/${appId}/deploy`, {
+      const data = await apiFetch<DeployResponse>(`/api/apps/${appId}/deploy`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Error al redesplegar");
+      if (data.success === false) throw new Error(data.error || "Error al redesplegar");
       const url = data.deploymentUrl || data.url || "";
       setDeployUrl(url);
       setLastDeployedAt(new Date().toISOString());
@@ -142,9 +166,8 @@ export function DeployModal({
     if (!confirm("¿Seguro que quieres apagar el deployment? La URL dejará de funcionar.")) return;
     setIsShuttingDown(true);
     try {
-      await fetch(`/api/apps/${appId}/deploy`, {
+      await apiFetch(`/api/apps/${appId}/deploy`, {
         method: "DELETE",
-        credentials: "include",
       });
       toast({ title: "App apagada", description: "El deployment ha sido eliminado." });
       onClose();
@@ -160,14 +183,26 @@ export function DeployModal({
     setHealthRunning(true);
     setHealthResult(null);
     try {
-      await new Promise((r) => setTimeout(r, 2200));
-      setHealthResult("pass");
-    } catch {
+      setHealthIssues([]);
+      const data = await apiFetch<HealthCheckResponse>(`/api/apps/${appId}/health`, {
+        method: "POST",
+      });
+      const passed = data.ok === true || data.status === "pass";
+      setHealthResult(passed ? "pass" : "fail");
+      setHealthIssues(Array.isArray(data.issues) ? data.issues : []);
+      toast({
+        title: passed ? "Test superado" : "Test con incidencias",
+        description: passed ? "El health check real de la app ha finalizado correctamente." : (data.issues?.join(" · ") || data.error || "Revisa la configuración antes de desplegar."),
+        variant: passed ? "default" : "destructive",
+      });
+    } catch (err: any) {
       setHealthResult("fail");
+      setHealthIssues([err?.message || "No se pudo ejecutar el health check"]);
+      toast({ title: "Error en el test", description: err?.message || "No se pudo ejecutar el health check", variant: "destructive" });
     } finally {
       setHealthRunning(false);
     }
-  }, []);
+  }, [appId, toast]);
 
   /* ── Custom domain: Next (submit domain) ── */
   const handleDomainNext = useCallback(async () => {
@@ -175,14 +210,11 @@ export function DeployModal({
     if (!normalized) return;
     setDomainSaving(true);
     try {
-      const res = await fetch(`/api/apps/${appId}/custom-domain`, {
+      const data = await apiFetch<CustomDomainResponse>(`/api/apps/${appId}/custom-domain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ domain: normalized }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al guardar dominio");
       setDnsRecords(data.dnsRecords || data.recommendedDns || []);
       setDomainInput(normalized);
       if (data.verified) {
@@ -202,8 +234,7 @@ export function DeployModal({
   const handleVerifyStatus = useCallback(async () => {
     setDomainVerifying(true);
     try {
-      const res = await fetch(`/api/apps/${appId}/custom-domain`, { credentials: "include" });
-      const data = await res.json();
+      const data = await apiFetch<CustomDomainResponse>(`/api/apps/${appId}/custom-domain`);
       if (data.verified) {
         setVerifiedDomain(domainInput);
         setDomainStep("verified");
@@ -223,7 +254,7 @@ export function DeployModal({
     if (!confirm("¿Desvincular el dominio personalizado?")) return;
     setDomainUnlinking(true);
     try {
-      await fetch(`/api/apps/${appId}/custom-domain`, { method: "DELETE", credentials: "include" });
+      await apiFetch(`/api/apps/${appId}/custom-domain`, { method: "DELETE" });
       setDomainStep("idle");
       setDomainInput("");
       setDnsRecords([]);
@@ -332,8 +363,17 @@ export function DeployModal({
                   </div>
                 )}
                 {healthResult === "fail" && (
-                  <div className="flex items-center gap-2 text-[12px] text-red-400">
-                    <AlertTriangle className="h-3.5 w-3.5" /> Se encontraron problemas. Revisa los logs antes de desplegar.
+                  <div className="space-y-2 text-[12px] text-red-400">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Se encontraron problemas. Revisa los detalles antes de desplegar.
+                    </div>
+                    {healthIssues.length > 0 && (
+                      <ul className="list-disc space-y-1 pl-6 text-red-300/90">
+                        {healthIssues.map((issue, index) => (
+                          <li key={`${issue}-${index}`}>{issue}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>

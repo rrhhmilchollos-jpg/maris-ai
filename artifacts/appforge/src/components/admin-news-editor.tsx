@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
 import { Loader2, Plus, Trash2, Edit2, Eye } from "lucide-react";
 
 interface NewsArticle {
@@ -50,12 +51,8 @@ export function AdminNewsEditor() {
   const loadArticles = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/news", {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) throw new Error("Error al cargar noticias");
-      const data = await response.json();
-      setArticles(data);
+      const data = await apiFetch<NewsArticle[]>("/api/news");
+      setArticles(Array.isArray(data) ? data : []);
     } catch (error) {
       toast({
         title: "Error",
@@ -90,13 +87,11 @@ export function AdminNewsEditor() {
       const url = editingId ? `/api/admin/news/${editingId}` : "/api/admin/news";
       const method = editingId ? "PUT" : "POST";
 
-      const response = await fetch(url, {
+      await apiFetch<NewsArticle>(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      if (!response.ok) throw new Error("Error al guardar la noticia");
 
       toast({
         title: "Éxito",
@@ -136,12 +131,9 @@ export function AdminNewsEditor() {
     if (!confirm("¿Estás seguro de que deseas eliminar esta noticia?")) return;
 
     try {
-      const response = await fetch(`/api/admin/news/${id}`, {
+      await apiFetch<void>(`/api/admin/news/${id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
       });
-
-      if (!response.ok) throw new Error("Error al eliminar la noticia");
 
       toast({
         title: "Éxito",

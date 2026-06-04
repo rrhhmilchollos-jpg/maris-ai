@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Send, MessageSquare, X, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -73,12 +74,8 @@ export function AdminTicketsPanel() {
     if (!selectedTicket) return;
     setIsRefreshing(true);
     try {
-      const response = await fetch("/api/admin/tickets", {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) return;
-      const data = await response.json();
-      setTickets(data);
+      const data = await apiFetch<Ticket[]>("/api/admin/tickets");
+      setTickets(Array.isArray(data) ? data : []);
       const updated = data.find((t: Ticket) => t._id === selectedTicket._id);
       if (updated) {
         setSelectedTicket(updated);
@@ -95,12 +92,8 @@ export function AdminTicketsPanel() {
   const loadTickets = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/admin/tickets", {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) throw new Error("Error al cargar tickets");
-      const data = await response.json();
-      setTickets(data);
+      const data = await apiFetch<Ticket[]>("/api/admin/tickets");
+      setTickets(Array.isArray(data) ? data : []);
       if (selectedTicket) {
         const updated = data.find((t: Ticket) => t._id === selectedTicket._id);
         if (updated) {
@@ -132,13 +125,11 @@ export function AdminTicketsPanel() {
 
     setIsResponding(true);
     try {
-      const response = await fetch(`/api/admin/tickets/${selectedTicket._id}/respond`, {
+      const updatedTicket = await apiFetch<Ticket>(`/api/admin/tickets/${selectedTicket._id}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: responseMessage, newStatus }),
       });
-      if (!response.ok) throw new Error("Error al responder ticket");
-      const updatedTicket = await response.json();
       setSelectedTicket(updatedTicket);
       setResponseMessage("");
       toast({ title: "Éxito", description: "Respuesta enviada al usuario" });

@@ -29,8 +29,17 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   const res = await fetch(fullPath, { credentials: "include", ...options, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    throw new Error(err.error || err.message || `HTTP ${res.status}`);
   }
+
+  if (res.status === 204) return undefined as T;
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    const text = await res.text();
+    return text as T;
+  }
+
   return res.json();
 }
 
