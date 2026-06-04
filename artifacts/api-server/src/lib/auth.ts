@@ -34,21 +34,24 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   return adminEmailSet().has(email.toLowerCase());
 }
  
+async function ensureAdminCredits(user: IUser): Promise<IUser> {
+  if (isAdminEmail(user.email) && user.credits < 1000000 && user._id) {
+    await User.findByIdAndUpdate(user._id, { $set: { credits: 999999999 } });
+    user.credits = 999999999;
+  }
+  return user;
+}
+
 export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUser> {
   await connectDB();
  
-  // Try to find existing user
+  // Ruta principal: el usuario actual ya está guardado con el ID de Clerk como _id.
   const existing = await User.findById(clerkUserId).lean<IUser>();
   if (existing) {
-    // Si es el admin, nos aseguramos de que siempre tenga créditos ilimitados
-    if ((isAdminEmail(existing.email) || existing.email === "rrhh.milchollos@gmail.com") && existing.credits < 1000000) {
-      await User.findByIdAndUpdate(clerkUserId, { $set: { credits: 999999999 } });
-      existing.credits = 999999999;
-    }
-    return existing;
+    return ensureAdminCredits(existing);
   }
  
-  // Fetch from Clerk
+  // Si no existe por _id, obtenemos el email desde Clerk antes de crear nada.
   const clerkUser = await clerkClient.users.getUser(clerkUserId);
   const email =
     clerkUser.primaryEmailAddress?.emailAddress ??
@@ -56,8 +59,23 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
     "";
   const fullName =
     [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || undefined;
+
+  // Compatibilidad con usuarios históricos: puede existir el mismo email con otro _id.
+  // En ese caso no insertamos un duplicado que rompería el índice único de email; devolvemos
+  // el registro existente y refrescamos metadatos no destructivos.
+  const existingByEmail = email ? await User.findOne({ email }).lean<IUser>() : null;
+  if (existingByEmail) {
+    const updates: Partial<IUser> = {};
+    if (fullName && !existingByEmail.fullName) updates.fullName = fullName;
+    if (clerkUser.imageUrl && !existingByEmail.imageUrl) updates.imageUrl = clerkUser.imageUrl;
+    if (Object.keys(updates).length > 0 && existingByEmail._id) {
+      await User.findByIdAndUpdate(existingByEmail._id, { $set: updates });
+      Object.assign(existingByEmail, updates);
+    }
+    return ensureAdminCredits(existingByEmail);
+  }
  
-  // Lógica anti-abuso: verificar si el email o la IP ya han recibido créditos gratuitos
+  // Lógica anti-abuso: verificar si el email o la IP ya han recibido créditos gratuitos.
   const alreadyUsed = await User.findOne({
     $or: [{ email }, { registrationIp: ip }],
     freeCreditsUsed: true,
@@ -65,7 +83,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
 
   const shouldGiveFreeCredits = !isAdminEmail(email) && !alreadyUsed;
 
-  // Upsert — handles race conditions where two requests create the same user
+  // Upsert — handles race conditions where two requests create the same user.
   const user = await User.findByIdAndUpdate(
     clerkUserId,
     {
@@ -106,7 +124,7 @@ export const requireAuth = async (
  
   try {
     const user = await ensureUser(userId, req.ip);
-    req.userId = userId;
+    req.userId = String(user._id ?? userId);
     req.dbUser = user;
     next();
   } catch (err) {
