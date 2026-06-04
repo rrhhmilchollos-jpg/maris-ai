@@ -500,13 +500,12 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
 /**
  * Researcher — Gemini 2.0 Flash con google_search tool.
  */
-export async function researchTopic(prompt: string): Promise<string> {
+export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt)): Promise<string> {
   const hasUrl = URL_LIKE.test(prompt);
   return withTimeout(
     (async () => {
       try {
-        const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+        const response = await createClaudeMessageWithFallback("researcher", agentPlan.agents.researcher.model, {
           max_tokens: 1500,
           system: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
 - 1 short paragraph: what the source product/site does and who it's for.
@@ -537,7 +536,7 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
 /**
  * Architect — Gemini 2.5 Flash.
  */
-async function architectPlan(prompt: string, research: string, templateContext = ""): Promise<ProjectPlan> {
+async function architectPlan(prompt: string, research: string, templateContext = "", agentPlan = selectAgentModelPlan(prompt)): Promise<ProjectPlan> {
   const templateNote = templateContext ? `\n\n${templateContext}` : "";
   const userContent = research
     ? `Design the file structure for this app:\n\n${prompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
@@ -573,7 +572,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
 /**
  * Designer — Gemini 2.5 Flash.
  */
-async function designSystem(plan: ProjectPlan, research: string, templateContext = ""): Promise<DesignSystem> {
+async function designSystem(plan: ProjectPlan, research: string, templateContext = "", agentPlan = selectAgentModelPlan(plan.description ?? plan.title)): Promise<DesignSystem> {
   const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
   const templateNote = templateContext ? `\n\n${templateContext}` : "";
   const userContent = research
@@ -582,8 +581,7 @@ async function designSystem(plan: ProjectPlan, research: string, templateContext
   let raw = "";
   try {
     const response = await withTimeoutOrThrow(
-      anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+      createClaudeMessageWithFallback("designer", agentPlan.agents.designer.model, {
         max_tokens: 4096,
         system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -625,16 +623,139 @@ interface CodeGenResult {
 
 type CoderProvider = "claude" | "gpt-5";
 type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ComplexityTier = "basic" | "standard" | "robust";
+type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
+
+interface AgentModelChoice {
+  role: AgentRole;
+  label: string;
+  model: ClaudeCoderModel | "gpt-5.4";
+  reason: string;
+}
+
+interface AgentModelPlan {
+  tier: ComplexityTier;
+  score: number;
+  selectedCoderModel: string;
+  auto: boolean;
+  agents: Record<AgentRole, AgentModelChoice>;
+}
+
+const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"];
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
-  if (coderModel === "gpt-5" || coderModel === "gpt-5-codex" || coderModel === "gpt-5.4") return "gpt-5";
+  const normalized = normalizeCoderModel(coderModel);
+  if (normalized === "gpt-5.4") return "gpt-5";
   return "claude";
 }
 
+function normalizeCoderModel(coderModel?: string): string {
+  const value = String(coderModel || "auto").trim().toLowerCase();
+  if (!value || value === "auto" || value === "automatic") return "auto";
+  if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
+  if (["claude-haiku", "claude-haiku-4-5", "haiku", "fast", "basic"].includes(value)) return "claude-haiku-4-5";
+  if (["claude-opus", "claude-opus-4-7", "opus", "robust", "max"].includes(value)) return "claude-opus-4-7";
+  if (["claude-sonnet", "claude-sonnet-4-6", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash"].includes(value)) return "claude-sonnet-4-6";
+  return value;
+}
+
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
-  if (coderModel === "claude-haiku" || coderModel === "claude-haiku-4-5") return "claude-haiku-4-5";
-  if (coderModel === "claude-opus-4-7") return "claude-opus-4-7";
+  const normalized = normalizeCoderModel(coderModel);
+  if (normalized === "claude-haiku-4-5") return "claude-haiku-4-5";
+  if (normalized === "claude-opus-4-7") return "claude-opus-4-7";
   return "claude-sonnet-4-6";
+}
+
+function classifyPromptComplexity(prompt: string, context?: { kind?: string; hasExistingApp?: boolean }): { tier: ComplexityTier; score: number; reasons: string[] } {
+  const text = prompt.toLowerCase();
+  let score = 0;
+  const reasons: string[] = [];
+  const add = (points: number, reason: string) => { score += points; reasons.push(reason); };
+  if (prompt.length > 350) add(1, "prompt detallado");
+  if (prompt.length > 900) add(2, "prompt extenso");
+  if (/(marketplace|saas|crm|erp|dashboard|admin|multiusuario|usuarios|roles|permisos|auth|login|registro|stripe|suscripci[oó]n|pagos|checkout|base de datos|mongodb|postgres|api|backend|webhook|tiempo real|chat|notificaciones|email|analytics|ia|agente|scraping|integraci[oó]n)/.test(text)) add(2, "funcionalidad de producto robusto");
+  if (/(fullstack|backend|base de datos|crud|api|admin|panel|dashboard|stripe|auth|roles|webhook|notificaciones)/.test(text)) add(2, "requiere backend/integraciones");
+  if (/(juego 3d|3d|three|webgl|pwa|offline|sincronizaci[oó]n|mobile|m[oó]vil|next|django|fastapi)/.test(text)) add(2, "stack especializado");
+  if (/(landing|portfolio|portafolio|one page|p[aá]gina simple|blog simple|est[aá]tica)/.test(text)) add(-1, "alcance básico");
+  if (context?.hasExistingApp) add(1, "edición de app existente");
+  if (["landing", "vue", "svelte"].includes(context?.kind || "")) add(-1, "preset ligero");
+  if (["game-3d", "nextjs", "python-api", "django", "fullstack"].includes(context?.kind || "")) add(2, "preset avanzado");
+  const tier: ComplexityTier = score >= 5 ? "robust" : score >= 2 ? "standard" : "basic";
+  return { tier, score, reasons };
+}
+
+function makeAgentChoice(role: AgentRole, label: string, model: AgentModelChoice["model"], reason: string): AgentModelChoice {
+  return { role, label, model, reason };
+}
+
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean }): AgentModelPlan {
+  const normalized = normalizeCoderModel(requestedModel);
+  const auto = normalized === "auto";
+  const complexity = classifyPromptComplexity(prompt, context);
+  const frontendModel: AgentModelChoice["model"] = auto
+    ? (complexity.tier === "robust" ? "claude-opus-4-7" : complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6")
+    : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
+  const architectModel: ClaudeCoderModel = complexity.tier === "robust" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+  const qualityModel: ClaudeCoderModel = complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
+  const agents: Record<AgentRole, AgentModelChoice> = {
+    researcher: makeAgentChoice("researcher", "Researcher", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "recopila contexto desde el primer prompt"),
+    architect: makeAgentChoice("architect", "Architect", architectModel, "decide estructura, páginas y alcance"),
+    designer: makeAgentChoice("designer", "Designer", complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-haiku-4-5", "define sistema visual"),
+    frontend: makeAgentChoice("frontend", "Frontend", frontendModel, auto ? `auto por complejidad ${complexity.tier}` : "selección manual del usuario"),
+    backend: makeAgentChoice("backend", "Backend", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "implementa API cuando el plan la necesita"),
+    database: makeAgentChoice("database", "Database", qualityModel, "modela datos y semillas"),
+    integrator: makeAgentChoice("integrator", "Integrator", qualityModel, "detecta auth, pagos y servicios externos"),
+    qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
+    devops: makeAgentChoice("devops", "DevOps", qualityModel, "verifica despliegue, scripts y configuración"),
+    patcher: makeAgentChoice("patcher", "Patcher", complexity.tier === "robust" ? "claude-opus-4-7" : "claude-sonnet-4-6", "corrige fallos de build/runtime"),
+    repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
+  };
+  return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
+}
+
+function fallbackClaudeModels(model: AgentModelChoice["model"]): ClaudeCoderModel[] {
+  const primary = model === "gpt-5.4" ? "claude-sonnet-4-6" : model;
+  return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
+}
+
+async function createClaudeMessageWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any): Promise<any> {
+  let lastError: unknown;
+  for (const candidate of fallbackClaudeModels(model)) {
+    try {
+      return await anthropic.messages.create({ ...params, model: candidate });
+    } catch (err) {
+      lastError = err;
+      logger.warn({ role, model: candidate, err }, "Agent model failed; trying fallback");
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ClaudeCoderModel }> {
+  let lastError: unknown;
+  for (const candidate of fallbackClaudeModels(model)) {
+    try {
+      let accumulated = "";
+      let lastReport = 0;
+      let finishReason: string | undefined;
+      const stream = anthropic.messages.stream({ ...params, model: candidate });
+      for await (const chunk of stream) {
+        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+          accumulated += chunk.delta.text;
+          if (accumulated.length - lastReport >= 1500) {
+            lastReport = accumulated.length;
+            onChars(accumulated.length);
+          }
+        }
+        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+      }
+      return { text: accumulated, truncated: finishReason === "MAX_TOKENS", model: candidate };
+    } catch (err) {
+      lastError = err;
+      logger.warn({ role, model: candidate, err }, "Streaming agent model failed; trying fallback");
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /**
@@ -650,6 +771,7 @@ async function generateFrontendCode(
   coderModel: string | undefined,
   language: GenLanguage,
   templateContext = "",
+  agentPlan = selectAgentModelPlan(prompt, coderModel),
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -673,12 +795,14 @@ ${research ? `\nResearch context (visual reference, treat as ground truth):\n${r
 
 Now produce the JSON object with frontendCode containing every listed file.`;
 
-  const provider = resolveCoderProvider(coderModel);
+  const frontendModel = agentPlan.agents.frontend.model;
+  const provider = frontendModel === "gpt-5.4" ? "gpt-5" : resolveCoderProvider(frontendModel);
   const systemPrompt = buildFrontendSystemPrompt(language);
   let accumulated = "";
   let truncated = false;
 
   if (provider === "gpt-5") {
+    try {
     const stream = await openai.chat.completions.create({
       model: "gpt-5.4",
       max_completion_tokens: 128000,
@@ -703,44 +827,24 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       if (fr === "length") finishReason = "MAX_TOKENS";
     }
     truncated = finishReason === "MAX_TOKENS";
-  } else if (provider === "claude") {
-    const stream = anthropic.messages.stream({
-      model: resolveClaudeCoderModel(coderModel),
-      max_tokens: 128000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
-    });
-    let lastReport2 = 0;
-    let finishReason2: string | undefined;
-    for await (const chunk of stream) {
-      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-        accumulated += chunk.delta.text;
-        if (accumulated.length - lastReport2 >= 1500) { lastReport2 = accumulated.length; onChars(accumulated.length); }
-      }
-      if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason2 = "MAX_TOKENS";
+    } catch (err) {
+      logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
+      const streamed = await streamClaudeTextWithFallback("frontend", "claude-sonnet-4-6", {
+        max_tokens: 128000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userContent }],
+      }, onChars);
+      accumulated = streamed.text;
+      truncated = streamed.truncated;
     }
-    truncated = finishReason2 === "MAX_TOKENS";
   } else {
-    // Claude streaming según el modelo elegido en el selector.
-    const stream = anthropic.messages.stream({
-      model: resolveClaudeCoderModel(coderModel),
+    const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
       max_tokens: 128000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
-    });
-    let lastReport = 0;
-    let finishReason: string | undefined;
-    for await (const chunk of stream) {
-      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-        accumulated += chunk.delta.text;
-        if (accumulated.length - lastReport >= 1500) {
-          lastReport = accumulated.length;
-          onChars(accumulated.length);
-        }
-      }
-      if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
-    }
-    truncated = finishReason === "MAX_TOKENS";
+    }, onChars);
+    accumulated = streamed.text;
+    truncated = streamed.truncated;
   }
 
   const raw = accumulated.trim();
@@ -761,6 +865,7 @@ async function generateBackendCode(
   plan: ProjectPlan,
   prompt: string,
   templateContext = "",
+  agentPlan = selectAgentModelPlan(prompt),
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
@@ -779,8 +884,7 @@ Now produce the JSON object with backendCode.`;
 
   try {
     const response = await withTimeoutOrThrow(
-      anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+      createClaudeMessageWithFallback("backend", agentPlan.agents.backend.model, {
         max_tokens: 8192,
         system: BACKEND_SYSTEM_PROMPT + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -814,11 +918,11 @@ async function specifyIntegrations(
   plan: ProjectPlan,
   prompt: string,
 ): Promise<IntegrationSpec> {
+  const agentPlan = selectAgentModelPlan(prompt);
   return withTimeout(
     (async () => {
       try {
-        const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+        const response = await createClaudeMessageWithFallback("integrator", agentPlan.agents.integrator.model, {
           max_tokens: 800,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -864,14 +968,14 @@ Backend needed: ${plan.backendNeeded}`,
 async function reviewBundle(
   frontendCode: string,
   plan: ProjectPlan,
+  agentPlan = selectAgentModelPlan(plan.description ?? plan.title),
 ): Promise<QAReport> {
   return withTimeout(
     (async () => {
       try {
         const expected = plan.frontendFiles.join(", ");
         const sample = frontendCode.slice(0, 12000);
-        const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+        const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
           max_tokens: 700,
           system: "You are a QA reviewer for a React+TS+Tailwind bundle. Output JSON only.",
           messages: [
@@ -918,6 +1022,7 @@ Max 5 issues.`,
 async function generateTests(
   plan: ProjectPlan,
   frontendCode: string,
+  agentPlan = selectAgentModelPlan(plan.description ?? plan.title),
 ): Promise<string> {
   return withTimeout(
     (async () => {
@@ -925,8 +1030,7 @@ async function generateTests(
         const sample = frontendCode.slice(0, 6000);
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
-        const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-6",
+        const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
           max_tokens: 3000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -966,6 +1070,7 @@ export async function patchBundle(
   issues: QAIssue[],
   language: GenLanguage = "typescript",
   memoryContext: string = "",
+  agentPlan = selectAgentModelPlan(frontendCode),
 ): Promise<string | null> {
   if (issues.length === 0) return null;
   const issueList = issues
@@ -974,8 +1079,7 @@ export async function patchBundle(
   return withTimeout(
     (async () => {
       try {
-        const response = await anthropic.messages.create({
-          model: "claude-opus-4-7",
+        const response = await createClaudeMessageWithFallback("patcher", agentPlan.agents.patcher.model, {
           max_tokens: 8192,
           system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
@@ -1662,6 +1766,15 @@ export async function generateApp(
   );
   await log("planner", planSummaryEs(execPlan));
 
+  const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
+    kind: requestContext?.kind,
+    hasExistingApp: !!previous,
+  });
+  await log(
+    "planner",
+    `Modelo automático: complejidad ${agentModelPlan.tier} (score ${agentModelPlan.score}). Frontend: ${agentModelPlan.agents.frontend.model}; Architect: ${agentModelPlan.agents.architect.model}; QA/Patcher: ${agentModelPlan.agents.qa.model}/${agentModelPlan.agents.patcher.model}.`,
+  );
+
   // Edit mode
   if (previous) {
     if (execPlan.scope === "fast-patch") {
@@ -1705,6 +1818,7 @@ export async function generateApp(
       language,
       log,
       { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
+      agentModelPlan,
     );
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
@@ -1724,7 +1838,7 @@ export async function generateApp(
   if (runResearch && shouldResearch(prompt)) {
     onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando en internet y visitando páginas…" });
     await log("researcher", "🔍 Buscando en internet (Google/DuckDuckGo) y visitando páginas relevantes…");
-    research = await runPhase("researcher", () => researchTopic(prompt));
+    research = await runPhase("researcher", () => researchTopic(prompt, agentModelPlan));
     if (research) {
       await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
     } else {
@@ -1736,7 +1850,7 @@ export async function generateApp(
     // shouldResearch devolvió false (prompt muy corto) - investigar igualmente
     onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando contexto del mercado…" });
     await log("researcher", "🔍 Buscando en internet y visitando páginas relevantes…");
-    research = await runPhase("researcher", () => researchTopic(prompt));
+    research = await runPhase("researcher", () => researchTopic(prompt, agentModelPlan));
     if (research) {
       await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
     } else {
@@ -1747,7 +1861,7 @@ export async function generateApp(
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
   await log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock), 60_000, "architect"),
+    withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock, agentModelPlan), 60_000, "architect"),
   );
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
@@ -1763,7 +1877,7 @@ export async function generateApp(
 
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
-    ? runPhase("integrations", () => specifyIntegrations(plan, prompt))
+    ? runPhase("integrations", () => specifyIntegrations(plan, prompt, agentModelPlan))
     : Promise.resolve({ services: [], envVars: [] });
 
   const FALLBACK_DESIGN: DesignSystem = {
@@ -1776,7 +1890,7 @@ export async function generateApp(
     globalCSS: "",
   };
   const designPromise: Promise<DesignSystem> = runDesign
-    ? runPhase("design", () => designSystem(plan, research, templateContextBlock))
+    ? runPhase("design", () => designSystem(plan, research, templateContextBlock, agentModelPlan))
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
@@ -1812,7 +1926,7 @@ export async function generateApp(
           lastLogChars = chars;
           void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
-      }, coderModel, language, templateContextBlock),
+      }, coderModel, language, templateContextBlock, agentModelPlan),
       240_000,
       "frontend-engineer",
     ),
@@ -1820,7 +1934,7 @@ export async function generateApp(
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
-    ? runPhase("backend", () => generateBackendCode(plan, prompt, templateContextBlock))
+    ? runPhase("backend", () => generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan))
     : Promise.resolve(null);
 
   if (!execPlan.phases.includes("frontend")) {
@@ -1861,8 +1975,7 @@ export async function generateApp(
     await log("coder", `Frontend falló (${frontendResult.error}), activando Repair Agent…`, "warn");
     onProgress?.({ phase: "fixing", progress: 65, note: "🔧 Repair Agent: intentando recuperar código malformado…" });
     try {
-      const repairResponse = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+      const repairResponse = await createClaudeMessageWithFallback("repair", agentModelPlan.agents.repair.model, {
         max_tokens: 16000,
         system: `You are a JSON Repair Agent. The Frontend Engineer returned malformed JSON.
 Your job: extract or reconstruct the frontendCode and return ONLY valid JSON: {"frontendCode":"..."}
@@ -1897,10 +2010,10 @@ Output STRICT JSON only, no markdown, no explanation.`,
   if (runTests) await log("qa", "Generando tests en paralelo…");
 
   const reviewPromise = runQa
-    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan))
+    ? runPhase("qa", () => reviewBundle(frontendResult.code, plan, agentModelPlan))
     : Promise.resolve({ ok: true, issues: [] } as QAReport);
   const testsPromise = runTests
-    ? runPhase("tests", () => generateTests(plan, frontendResult.code))
+    ? runPhase("tests", () => generateTests(plan, frontendResult.code, agentModelPlan))
     : Promise.resolve(null);
 
   const [report, testCode] = await Promise.all([reviewPromise, testsPromise]);
@@ -1921,6 +2034,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
       language,
       log,
       { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
+      agentModelPlan,
     ),
   );
 
@@ -2462,11 +2576,14 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "claude-sonnet-4-6", name: "Auto (Claude Sonnet 4.6)", provider: "anthropic" },
-      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (más rápido)", provider: "anthropic" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (recomendado)", provider: "anthropic" },
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (máxima calidad)", provider: "anthropic" },
-      { id: "gpt-5-4-ultra", name: "GPT-5.4 (OpenAI Ultra)", provider: "openai" },
+      { id: "auto", name: "Auto (9 agentes: básico → robusto)", provider: "maris", recommended: true },
+      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (rápido / básico)", provider: "anthropic" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (equilibrado)", provider: "anthropic" },
+      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (robusto / máxima calidad)", provider: "anthropic" },
+      { id: "gpt-5.4", name: "GPT-5.4 (frontend alternativo con fallback Claude)", provider: "openai" },
+      { id: "claude-4-8-sonnet", name: "Compatibilidad: Claude 4.8 Sonnet → Sonnet 4.6", provider: "anthropic" },
+      { id: "claude-mithos", name: "Compatibilidad: Claude Mithos → Sonnet 4.6", provider: "anthropic" },
+      { id: "gemini-3", name: "Compatibilidad: Gemini 3 → Sonnet 4.6", provider: "anthropic" },
     ];
     res.json(models);
   } catch (err) {

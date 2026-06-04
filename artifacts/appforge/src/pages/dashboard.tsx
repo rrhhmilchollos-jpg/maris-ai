@@ -324,22 +324,28 @@ export default function DashboardPage() {
                           <span>Auto (Orquestación de 9 Agentes)</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="claude-4-8-sonnet">
+                      <SelectItem value="claude-haiku-4-5">
+                        <div className="flex items-center">
+                          <Zap className="h-4 w-4 mr-2 text-green-400" />
+                          <span>Haiku 4.5 (rápido / básico)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="claude-sonnet-4-6">
                         <div className="flex items-center">
                           <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
-                          <span>Claude 4.8 Sonnet (Líder de Ingeniería)</span>
+                          <span>Sonnet 4.6 (equilibrado)</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="claude-mithos">
-                        <div className="flex items-center">
-                          <Palette className="h-4 w-4 mr-2 text-pink-400" />
-                          <span>Claude Mithos (Especialista UI/UX)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="gemini-3">
+                      <SelectItem value="claude-opus-4-7">
                         <div className="flex items-center">
                           <Brain className="h-4 w-4 mr-2 text-blue-400" />
-                          <span>Gemini 3 (Investigación & QA)</span>
+                          <span>Opus 4.7 (robusto / máxima calidad)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="gpt-5.4">
+                        <div className="flex items-center">
+                          <Cpu className="h-4 w-4 mr-2 text-cyan-400" />
+                          <span>GPT-5.4 (alternativo con fallback)</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
