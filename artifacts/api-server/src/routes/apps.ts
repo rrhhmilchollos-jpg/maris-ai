@@ -656,7 +656,7 @@ interface AgentModelPlan {
   agents: Record<AgentRole, AgentModelChoice>;
 }
 
-const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"];
+const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"];
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   const normalized = normalizeCoderModel(coderModel);
@@ -710,9 +710,9 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
   const frontendModel: AgentModelChoice["model"] = auto
-    ? (complexity.tier === "robust" ? "claude-opus-4-7" : complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6")
+    ? (complexity.tier === "robust" ? "claude-sonnet-4-6" : complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6")
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
-  const architectModel: ClaudeCoderModel = complexity.tier === "robust" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+  const architectModel: ClaudeCoderModel = complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-sonnet-4-6";
   const qualityModel: ClaudeCoderModel = complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
   const agents: Record<AgentRole, AgentModelChoice> = {
     researcher: makeAgentChoice("researcher", "Researcher", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "recopila contexto desde el primer prompt"),
@@ -724,7 +724,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
     integrator: makeAgentChoice("integrator", "Integrator", qualityModel, "detecta auth, pagos y servicios externos"),
     qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
     devops: makeAgentChoice("devops", "DevOps", qualityModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "Patcher", complexity.tier === "robust" ? "claude-opus-4-7" : "claude-sonnet-4-6", "corrige fallos de build/runtime"),
+    patcher: makeAgentChoice("patcher", "Patcher", complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-sonnet-4-6", "corrige fallos de build/runtime"),
     repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
@@ -1978,7 +1978,7 @@ export async function generateApp(
           void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language, templateContextBlock, agentModelPlan),
-      600_000, // Increased to 600s (10 min). Opus is extremely slow for large apps.
+      480_000, // 8 minutes is more than enough for Sonnet. Opus was the bottleneck.
       "frontend-engineer",
     ),
   );
