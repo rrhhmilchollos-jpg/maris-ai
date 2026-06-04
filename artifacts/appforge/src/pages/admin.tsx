@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import {
+  apiFetch,
   useGetAdminOverview,
   useListAdminUsers,
   useListAdminApps,
@@ -106,9 +107,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
     try {
       const params = new URLSearchParams({ limit: String(MEMORY_PAGE_SIZE), offset: String(offset) });
       if (q.trim()) params.set("q", q.trim());
-      const r = await fetch(`/api/admin/memory?${params.toString()}`, { credentials: "include" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setMemory(await r.json());
+      setMemory(await apiFetch(`/api/admin/memory?${params.toString()}`));
     } catch (e) {
       toast({ title: "No se pudo cargar la memoria", description: e instanceof Error ? e.message : "Error desconocido", variant: "destructive" });
     } finally {
@@ -118,8 +117,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
   const deleteMemoryEntry = async (id: string) => {
     try {
-      const r = await fetch(`/api/admin/memory/${id}`, { method: "DELETE", credentials: "include" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await apiFetch(`/api/admin/memory/${id}`, { method: "DELETE" });
       toast({ title: "Entrada eliminada", description: `id ${id} borrada de la memoria.` });
       await loadMemory();
     } catch (e) {
