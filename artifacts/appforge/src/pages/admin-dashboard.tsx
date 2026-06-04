@@ -20,6 +20,19 @@ import {
   ArrowLeft,
 } from "lucide-react";
 
+interface E2BToggleResponse {
+  configured: boolean;
+  effective: boolean;
+  validateOnGenerate: boolean;
+}
+
+interface E2BSmokeResponse {
+  ok: boolean;
+  durationMs: number;
+  output: string;
+  reason?: string;
+}
+
 interface MetricsResponse {
   generatedAt: string;
   jobs24h: {
@@ -43,7 +56,7 @@ interface MetricsResponse {
 import { apiFetch } from "@/lib/api-client";
 
 async function fetchMetrics(): Promise<MetricsResponse> {
-  return apiFetch("/api/admin/metrics");
+  return apiFetch<MetricsResponse>("/api/admin/metrics");
 }
 
 async function refundUserCredits(userId: string, amount: number, reason: string) {
@@ -53,15 +66,15 @@ async function refundUserCredits(userId: string, amount: number, reason: string)
   });
 }
 
-async function toggleE2B(enabled: boolean) {
-  return apiFetch("/api/admin/e2b-toggle", {
+async function toggleE2B(enabled: boolean): Promise<E2BToggleResponse> {
+  return apiFetch<E2BToggleResponse>("/api/admin/e2b-toggle", {
     method: "POST",
     body: JSON.stringify({ enabled }),
   });
 }
 
-async function runE2BSmoke() {
-  return apiFetch("/api/admin/e2b-smoke", {
+async function runE2BSmoke(): Promise<E2BSmokeResponse> {
+  return apiFetch<E2BSmokeResponse>("/api/admin/e2b-smoke", {
     method: "POST",
   });
 }
@@ -274,7 +287,7 @@ export default function AdminDashboardPage() {
                           <div className="flex gap-2 mt-1">
                             <Button
                               variant="ghost"
-                              size="xs"
+                              size="sm"
                               className="h-7 text-[10px] px-2 hover:bg-emerald-500/10 hover:text-emerald-500"
                               onClick={() => {
                                 const amount = prompt(`¿Cuántos créditos quieres añadir a ${u.email}?`, "100");
@@ -292,7 +305,7 @@ export default function AdminDashboardPage() {
                             </Button>
                             <Button
                               variant="ghost"
-                              size="xs"
+                              size="sm"
                               className="h-7 text-[10px] px-2 hover:bg-rose-500/10 hover:text-rose-500"
                               onClick={() => {
                                 const amount = prompt(`¿Cuántos créditos quieres quitar a ${u.email}?`, "50");

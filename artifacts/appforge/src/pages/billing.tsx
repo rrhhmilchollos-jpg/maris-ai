@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useGetMe, useListCreditPackages, useCreateCheckoutSession, useListTransactions } from "@/lib/api-client";
+import { apiFetch, useGetMe, useListCreditPackages, useCreateCheckoutSession, useListTransactions } from "@/lib/api-client";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
