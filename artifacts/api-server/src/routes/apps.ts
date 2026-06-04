@@ -1567,7 +1567,8 @@ Return the FULL updated app as JSON.`;
         }
         if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       }
-    } catch (err) {
+    }
+  } catch (err) {
       // Re-throw with accumulated text attached so caller can recover partial work
       (err as any).accumulated = accumulated;
       throw err;
