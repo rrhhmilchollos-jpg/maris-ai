@@ -487,12 +487,27 @@ async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T
 }
 
 async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms),
-    ),
-  ]);
+  let timeoutId: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`${label} timeout after ${ms}ms`);
+      reject(error);
+    }, ms);
+  });
+
+  try {
+    const result = await Promise.race([p, timeoutPromise]);
+    clearTimeout(timeoutId!);
+    return result;
+  } catch (err) {
+    clearTimeout(timeoutId!);
+    // If the original promise 'p' already had accumulated data attached to its error,
+    // we want to make sure that data is available even if the timeout won the race.
+    // However, since we can't easily 'wait' for 'p' after timeout, we rely on 
+    // the fact that many async operations update a shared state or that 'p'
+    // might have already rejected with data just before the timeout.
+    throw err;
+  }
 }
 
 /* ----------------------------- agents ------------------------------------- */
@@ -1490,6 +1505,8 @@ Return the FULL updated app as JSON.`;
     const observe = makeStreamObserver();
     const PROGRESS_EVERY = 500;
 
+    try {
+
     if (provider === "gpt-5") {
       const stream = await openai.chat.completions.create({
         model: "gpt-5.4",
@@ -1550,11 +1567,37 @@ Return the FULL updated app as JSON.`;
         }
         if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       }
+    } catch (err) {
+      // Re-throw with accumulated text attached so caller can recover partial work
+      (err as any).accumulated = accumulated;
+      throw err;
     }
     return { text: accumulated, finishReason };
   }
 
-  let { text: accumulated, finishReason } = await callModel("");
+  let accumulated = "";
+  let finishReason: string | undefined;
+
+  try {
+    const res = await callModel("");
+    accumulated = res.text;
+    finishReason = res.finishReason;
+  } catch (err) {
+    // If we have partial content, wrap it in a successful return but mark it as an error
+    // so the caller can decide whether to use the partial content.
+    if ((err as any).accumulated && (err as any).accumulated.length > 500) {
+      return {
+        title: previous?.title || "App",
+        description: previous?.description || "",
+        techStack: previous?.techStack || [],
+        frontendCode: (err as any).accumulated,
+        backendCode: "",
+        error: (err as any).message,
+        accumulated: (err as any).accumulated
+      } as any;
+    }
+    throw err;
+  }
 
   if (finishReason === "MAX_TOKENS") {
     emit("coder", "△ respuesta alcanzando límite, continuando...", "info");
@@ -1703,6 +1746,11 @@ export async function generateApp(
       return await fn();
     } catch (err) {
       try { onPhaseError?.(phase, err); } catch { /* monitoring must never crash the pipeline */ }
+      // If the error has partial content (e.g. from a timeout), attach it to the error object
+      // so that calling code can recover it even if it was wrapped in withTimeoutOrThrow.
+      if ((err as any).accumulated) {
+        (err as any).message = `${(err as any).message} (partial content attached)`;
+      }
       throw err;
     }
   };
@@ -1929,7 +1977,7 @@ export async function generateApp(
           void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language, templateContextBlock, agentModelPlan),
-      480_000, // Increased timeout to 480s to accommodate larger generation models like claude-opus-4-7
+      600_000, // Increased to 600s (10 min). Opus is extremely slow for large apps.
       "frontend-engineer",
     ),
   );
@@ -1946,7 +1994,8 @@ export async function generateApp(
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
   // Si el frontend falló por timeout, tratarlo como truncado para reintentar con plan reducido
-  const frontendTimedOut = !frontendResult.code && !frontendResult.truncated && frontendResult.error?.includes("timeout");
+  // frontendResult.error comes from generateFrontendCode recovery, while frontendResult.code absence + catch in Promise.all handles the direct throw.
+  const frontendTimedOut = (!frontendResult.code || frontendResult.error) && !frontendResult.truncated && String(frontendResult.error || "").includes("timeout");
   if (frontendTimedOut) {
     await log("coder", "Frontend-engineer timeout — reintentando con plan reducido y modelo más rápido…", "warn");
     frontendResult.truncated = true;
@@ -1963,20 +2012,37 @@ export async function generateApp(
     // Si hubo timeout, forzar modelo más rápido (Sonnet) para el reintento
     const retryModel = frontendTimedOut ? "claude-sonnet-4-6" : coderModel;
     const retryAgentPlan = frontendTimedOut ? selectAgentModelPlan(prompt, "claude-sonnet-4-6") : agentModelPlan;
-    const retryResult = await generateFrontendCode(
-      reducedPlan, design, research, prompt,
-      (chars) => {
-        onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
-      },
-      retryModel, language, templateContextBlock, retryAgentPlan,
-    );
-    if (!retryResult.code) {
-      await log("coder", "Reintento con plan reducido también falló.", "error");
-      throw new Error("La app es demasiado compleja incluso con plan reducido. Prueba con un prompt más concreto o selecciona el modelo Haiku para mayor velocidad.");
+    try {
+      const retryResult = await generateFrontendCode(
+        reducedPlan, design, research, prompt,
+        (chars) => {
+          onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
+        }, retryModel, language, templateContextBlock, retryAgentPlan,
+      );
+      if (!retryResult.code) {
+        await log("coder", "Reintento con plan reducido también falló.", "error");
+      throw new Error("La app es demasiado compleja incluso con plan reducido (timeout 600s). Prueba con un prompt más concreto o selecciona el modelo Haiku para mayor velocidad.");
     }
     await log("coder", `Frontend listo (plan reducido): ${Math.round(retryResult.code.length / 1000)} KB.`);
-    frontendResult.code = retryResult.code;
-  } else if (!frontendResult.code) {
+      frontendResult.code = retryResult.code;
+    } catch (retryErr) {
+      // Si el reintento falla, pero tenemos código acumulado del primer intento (timeout), lo usamos como último recurso
+      if (frontendResult.accumulated && frontendResult.accumulated.length > 2000) {
+        await log("coder", "Reintento fallido, recuperando código parcial del primer intento como último recurso...", "warn");
+        frontendResult.code = frontendResult.accumulated;
+      } else {
+        throw retryErr;
+      }
+    }
+  } else if (!frontendResult.code || frontendResult.error) {
+    // Si llegamos aquí y no hay código limpio pero el streaming avanzó, intentamos recuperar lo que haya
+    if (String(frontendResult.error || "").includes("timeout") && (frontendResult as any).accumulated?.length > 1000) {
+      await log("coder", "Timeout detectado pero hay código parcial acumulado. Intentando recuperar...", "warn");
+      frontendResult.code = (frontendResult as any).accumulated;
+    }
+  }
+
+  if (!frontendResult.code) {
     // 🔧 Repair Agent: intentar recuperar JSON malformado antes de cancelar
     await log("coder", `Frontend falló (${frontendResult.error}), activando Repair Agent…`, "warn");
     onProgress?.({ phase: "fixing", progress: 65, note: "🔧 Repair Agent: intentando recuperar código malformado…" });
