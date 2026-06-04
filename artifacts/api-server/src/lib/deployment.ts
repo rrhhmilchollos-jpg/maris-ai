@@ -15,6 +15,28 @@ const VERCEL_API_TOKEN = process.env.VERCEL_TOKEN ?? process.env.VERCEL_API_TOKE
 const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
 export const MARIS_AI_DOMAIN = process.env.MARIS_AI_DOMAIN ?? "marisai.es";
 
+async function disableVercelAuthentication(projectId: string): Promise<void> {
+  if (!VERCEL_API_TOKEN) return;
+  try {
+    const response = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${VERCEL_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ssoProtection: null,
+        ...(VERCEL_TEAM_ID ? { teamId: VERCEL_TEAM_ID } : {}),
+      }),
+    });
+    if (!response.ok) {
+      logger.warn({ projectId, status: response.status, body: await response.text() }, "No se pudo desactivar Vercel Authentication");
+    }
+  } catch (error) {
+    logger.warn({ projectId, error }, "Error desactivando Vercel Authentication");
+  }
+}
+
 export interface DeploymentConfig {
   /** MongoDB ObjectId string of the app being deployed. */
   appId: string;
@@ -99,6 +121,7 @@ export async function createVercelProject(config: DeploymentConfig): Promise<Dep
     }
 
     const project = (await projectResponse.json()) as { id: string; name: string };
+    await disableVercelAuthentication(project.id);
 
     // Add domain
     const domainToUse =
@@ -181,6 +204,7 @@ export async function redeployVercelProject(projectId: string): Promise<Deployme
     }
 
     const deployment = (await response.json()) as { url: string };
+    await disableVercelAuthentication(projectId);
 
     logger.info({ projectId }, `Redeployment successful: ${deployment.url}`);
 

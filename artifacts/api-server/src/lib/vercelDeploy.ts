@@ -35,6 +35,7 @@ import { GeneratedApp } from "@workspace/db/schema";
 import { bundleToFiles } from "./exportZip";
 
 const VERCEL_API = "https://api.vercel.com";
+const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
 
 export type VercelDeployResult = {
   url: string;
@@ -122,9 +123,12 @@ export async function deployAppToVercel(opts: {
       // buildCommand, outputDirectory automatically. For Python apps we omit
       // the framework field; the runtime is selected by the vercel.json that
       // ships in the bundle (functions = "@vercel/python").
+      // ssoProtection: null overrides team defaults that would otherwise put
+      // Vercel Authentication in front of generated apps, causing 401 pages
+      // with X-Frame-Options: DENY inside Maris AI previews.
       body: isPython
-        ? { name: projectName }
-        : { name: projectName, framework: "vite" },
+        ? { name: projectName, ssoProtection: null }
+        : { name: projectName, framework: "vite", ssoProtection: null },
       log,
     });
     if (!created.ok) return { ok: false, failure: created.failure };
@@ -134,6 +138,10 @@ export async function deployAppToVercel(opts: {
     // creation and deployment doesn't strand an orphan project.
     await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: projectId });
   }
+
+  // Make existing projects public too. Older Maris deployments may have been
+  // created while the Vercel team default enabled Deployment Protection.
+  await ensureVercelProjectIsPublic({ token, projectId, log });
 
   // 4. Create a production deployment with the FULL project tree. Vercel
   //    runs `npm install` + `vite build` on its build infrastructure and
@@ -171,10 +179,19 @@ export async function deployAppToVercel(opts: {
   });
   if (!deploy.ok) return { ok: false, failure: deploy.failure };
 
-  // Vercel returns "url" as a hostname WITHOUT scheme (e.g. "myapp.vercel.app").
-  const publicUrl = deploy.data.url.startsWith("http")
-    ? deploy.data.url
-    : `https://${deploy.data.url}`;
+  const ready = await waitForVercelDeploymentReady({ token, deploymentId: deploy.data.id, log });
+  if (!ready.ok) return { ok: false, failure: ready.failure };
+
+  const alias = await assignStableVercelAlias({ token, deploymentId: deploy.data.id, alias: `${projectName}.vercel.app`, log });
+  if (!alias.ok) return { ok: false, failure: alias.failure };
+
+  // Vercel returns `deploy.data.url` as a one-off deployment URL. With Standard
+  // Deployment Protection, that generated deployment URL can be protected even
+  // when the production domain is public. Maris AI must store/open the stable
+  // production domain (<project>.vercel.app), not the protected deployment URL
+  // (<project>-<hash>.vercel.app), otherwise the preview iframe shows
+  // “rechazó la conexión” because Vercel serves an auth page with X-Frame-Options: DENY.
+  const publicUrl = `https://${projectName}.vercel.app`;
 
   await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl });
 
@@ -192,7 +209,7 @@ export async function deployAppToVercel(opts: {
  */
 async function callVercel<T>(opts: {
   token: string;
-  method: "GET" | "POST" | "DELETE";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   path: string;
   body?: unknown;
   log: Logger;
@@ -200,7 +217,11 @@ async function callVercel<T>(opts: {
   const { token, method, path, body, log } = opts;
   let res: Response;
   try {
-    res = await fetch(`${VERCEL_API}${path}`, {
+    const url = new URL(`${VERCEL_API}${path}`);
+    if (VERCEL_TEAM_ID && !url.searchParams.has("teamId")) {
+      url.searchParams.set("teamId", VERCEL_TEAM_ID);
+    }
+    res = await fetch(url, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -244,6 +265,97 @@ async function callVercel<T>(opts: {
   }
 
   return { ok: true, data: (await res.json()) as T };
+}
+
+async function ensureVercelProjectIsPublic(opts: {
+  token: string;
+  projectId: string;
+  log: Logger;
+}): Promise<void> {
+  const { token, projectId, log } = opts;
+  const updated = await callVercel<{ id: string }>({
+    token,
+    method: "PATCH",
+    path: `/v9/projects/${projectId}`,
+    body: { ssoProtection: null },
+    log,
+  });
+
+  if (!updated.ok) {
+    log.warn(
+      { projectId, failure: updated.failure },
+      "No se pudo desactivar automáticamente Vercel Authentication para el proyecto",
+    );
+  }
+}
+
+async function assignStableVercelAlias(opts: {
+  token: string;
+  deploymentId: string;
+  alias: string;
+  log: Logger;
+}): Promise<{ ok: true } | { ok: false; failure: VercelDeployFailure }> {
+  const { token, deploymentId, alias, log } = opts;
+  const assigned = await callVercel<{ alias: string; uid: string }>({
+    token,
+    method: "POST",
+    path: `/v2/deployments/${deploymentId}/aliases`,
+    body: { alias },
+    log,
+  });
+
+  if (assigned.ok) return { ok: true };
+
+  if (assigned.failure.kind === "vercel_api_error" && assigned.failure.status === 409) {
+    log.info({ deploymentId, alias }, "El alias estable ya estaba asignado al deployment");
+    return { ok: true };
+  }
+
+  return { ok: false, failure: assigned.failure };
+}
+
+async function waitForVercelDeploymentReady(opts: {
+  token: string;
+  deploymentId: string;
+  log: Logger;
+}): Promise<{ ok: true } | { ok: false; failure: VercelDeployFailure }> {
+  const { token, deploymentId, log } = opts;
+  const maxAttempts = 60;
+  const delayMs = 2_000;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const status = await callVercel<{ readyState?: string; errorMessage?: string }>({
+      token,
+      method: "GET",
+      path: `/v13/deployments/${deploymentId}`,
+      log,
+    });
+
+    if (!status.ok) return { ok: false, failure: status.failure };
+
+    if (status.data.readyState === "READY") return { ok: true };
+
+    if (status.data.readyState === "ERROR" || status.data.readyState === "CANCELED") {
+      return {
+        ok: false,
+        failure: {
+          kind: "build_failed",
+          message: status.data.errorMessage || `Vercel terminó el deployment con estado ${status.data.readyState}`,
+        },
+      };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+
+  return {
+    ok: false,
+    failure: {
+      kind: "vercel_api_error",
+      status: 408,
+      message: "Vercel no marcó el deployment como READY dentro del tiempo esperado",
+    },
+  };
 }
 
 /**
@@ -499,6 +611,11 @@ function sanitiseProjectName(raw: string): string {
   const trimmed = stripped.slice(0, 100) || "maris-app";
   // Vercel rejects names starting with a hyphen.
   return trimmed.replace(/^-+/, "");
+}
+
+export function stableVercelProductionUrlForApp(appId: string, title: string): string {
+  const projectName = sanitiseProjectName(`maris-${appId}-${title}`);
+  return `https://${projectName}.vercel.app`;
 }
 
 /**

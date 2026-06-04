@@ -17,6 +17,7 @@ import {
   getVercelDomainStatus,
   recommendedDnsFor,
   removeVercelDomainForApp,
+  stableVercelProductionUrlForApp,
 } from "../lib/vercelDeploy";
 
 const router = Router();
@@ -131,8 +132,11 @@ router.post("/apps/:appId/redeploy", requireAuth, async (req: Request, res: Resp
       await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "failed", deploymentError: redeployResult.error });
       return res.status(500).json({ success: false, error: redeployResult.error });
     }
-    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deployed", vercelDeployUrl: redeployResult.deploymentUrl, lastDeployedAt: new Date(), deploymentError: null });
-    return res.json({ success: true, deploymentUrl: redeployResult.deploymentUrl, creditsCharged: DEPLOY_COST_CREDITS });
+    const deploymentUrl = appData.customDomain
+      ? `https://${appData.customDomain}`
+      : stableVercelProductionUrlForApp(String(appId), appData.title);
+    await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deployed", vercelDeployUrl: deploymentUrl, lastDeployedAt: new Date(), deploymentError: null });
+    return res.json({ success: true, deploymentUrl, creditsCharged: DEPLOY_COST_CREDITS });
   } catch (error) {
     logger.error({ error }, "Redeployment error");
     return res.status(500).json({ error: "Internal server error" });
@@ -146,9 +150,19 @@ router.get("/apps/:appId/deployment-status", requireAuth, async (req: Request, r
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
     if (!appData) return res.status(404).json({ error: "App not found" });
+
+    let deploymentUrl = appData.vercelDeployUrl;
+    if (appData.vercelProjectId && deploymentUrl?.includes(".vercel.app")) {
+      const stableUrl = stableVercelProductionUrlForApp(String(appId), appData.title);
+      if (deploymentUrl !== stableUrl) {
+        deploymentUrl = stableUrl;
+        await GeneratedApp.updateOne({ _id: appId, userId }, { vercelDeployUrl: stableUrl });
+      }
+    }
+
     return res.json({
       status: appData.deploymentStatus || "not_deployed",
-      deploymentUrl: appData.vercelDeployUrl,
+      deploymentUrl,
       subdomain: appData.marisaiSubdomain,
       customDomain: appData.customDomain,
       customDomainVerified: appData.customDomainVerified,
