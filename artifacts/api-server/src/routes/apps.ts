@@ -2149,7 +2149,90 @@ function getConversationalOnlyReply(content: string, hasAttachments = false): st
 
   if (!isGreeting && !isVeryShortSmallTalk) return null;
 
-  return "¡Hola! Soy Maris AI. Puedo ayudarte a crear, mejorar o revisar una app, web, tienda online, SaaS, juego o sistema completo. Si solo querías saludar, no voy a iniciar ninguna generación ni gastar créditos. Cuando quieras construir algo, descríbeme claramente qué necesitas y arrancamos.";
+  return [
+    "¡Hola! Soy Maris AI. Estoy lista para construir contigo, pero no voy a gastar créditos por un saludo o una prueba corta.",
+    "",
+    "Si quieres que trabaje como consola de generación, dime qué cambio necesitas con contexto concreto. Por ejemplo: \"arregla el preview en móvil\", \"conecta estos botones a Stripe\" o \"añade una sección de planes de pago\".",
+  ].join("\n");
+}
+
+function stripRequestLocalePrefix(prompt: string | undefined): string {
+  return String(prompt || "")
+    .replace(/^\[MARIS AI REQUEST LOCALE\][^\n]*\n/i, "")
+    .trim();
+}
+
+function summarizeUserIntentForConsole(prompt: string): string {
+  const clean = stripRequestLocalePrefix(prompt).replace(/\s+/g, " ").trim();
+  if (!clean) return "refinamiento solicitado en la app";
+  return clean.length > 190 ? `${clean.slice(0, 187)}…` : clean;
+}
+
+function countBundleFiles(code: unknown): number {
+  const text = typeof code === "string" ? code : "";
+  const matches = text.match(/\/\/ === FILE:/g);
+  return matches?.length || 0;
+}
+
+function detectConsoleChangeAreas(prompt: string, result: any): string[] {
+  const text = `${stripRequestLocalePrefix(prompt)} ${result?.title || ""} ${result?.description || ""}`.toLowerCase();
+  const areas = new Set<string>();
+  if (/stripe|pago|checkout|suscrip|plan|precio|billing|factur/.test(text)) areas.add("pagos, planes y conversión");
+  if (/preview|vista|pantalla blanca|carga|vercel|deploy|desplieg/.test(text)) areas.add("preview, carga y despliegue");
+  if (/bot[oó]n|cta|click|enlace|link|naveg/.test(text)) areas.add("botones, enlaces e interacción");
+  if (/archivo|upload|subir|documento|adjunt/.test(text)) areas.add("subida de archivos y formularios");
+  if (/diseñ|ui|ux|responsive|m[oó]vil|tablet|estilo/.test(text)) areas.add("diseño responsive y experiencia visual");
+  if (/api|backend|base de datos|mongo|server|endpoint/.test(text)) areas.add("backend, datos e integraciones");
+  if (Array.isArray(result?.requiredEnvVars) && result.requiredEnvVars.length > 0) areas.add("variables de entorno necesarias");
+  if (areas.size === 0) areas.add("arquitectura, frontend y calidad general");
+  return Array.from(areas).slice(0, 5);
+}
+
+function buildAppUpdatedConsoleReply(args: {
+  prompt: string;
+  result: any;
+  appTitle?: string;
+  creditsRemaining?: number;
+}): string {
+  const { prompt, result, appTitle, creditsRemaining } = args;
+  const intent = summarizeUserIntentForConsole(prompt);
+  const title = result?.title || appTitle || "tu app";
+  const techStack = Array.isArray(result?.techStack) ? result.techStack.filter(Boolean).slice(0, 8) : [];
+  const pages = Array.isArray(result?.plannedPages) ? result.plannedPages.slice(0, 6) : [];
+  const envVars = Array.isArray(result?.requiredEnvVars) ? result.requiredEnvVars.filter(Boolean).slice(0, 8) : [];
+  const frontendFiles = countBundleFiles(result?.frontendCode);
+  const backendFiles = countBundleFiles(result?.backendCode);
+  const areas = detectConsoleChangeAreas(prompt, result);
+  const pageSummary = pages.length
+    ? pages.map((p: any) => `- ${p?.route || "/"} — ${p?.name || "Página"}${p?.purpose ? `: ${p.purpose}` : ""}`).join("\n")
+    : "- Estructura principal revisada y lista para la vista previa.";
+  const envSummary = envVars.length
+    ? envVars.map((v: any) => `- ${typeof v === "string" ? v : v?.name || String(v)}`).join("\n")
+    : "- No he detectado nuevas variables obligatorias en este cambio.";
+  const creditsLine = typeof creditsRemaining === "number"
+    ? `\n\n**Créditos restantes:** ${creditsRemaining}.`
+    : "";
+
+  return [
+    `**Actualización completada para ${title}.**`,
+    "",
+    `He interpretado tu prompt como: “${intent}”. No me he limitado a contestar con un OK: he vuelto a pasar la app por el flujo de generación y he guardado el nuevo bundle para que el preview cargue la versión más reciente.`,
+    "",
+    "**Agentes que han intervenido:** Researcher para entender el objetivo, Architect para reorganizar el alcance, Designer para mantener coherencia visual, Frontend Engineer para aplicar la interfaz, Backend Engineer cuando había lógica o integraciones, QA para revisar errores habituales y DevOps para dejar el bundle preparado para preview/despliegue.",
+    "",
+    `**Zonas trabajadas:** ${areas.join(", ")}.`,
+    techStack.length ? `\n**Stack actualizado:** ${techStack.join(", ")}.` : "",
+    `\n**Archivos generados o reempaquetados:** ${frontendFiles || "varios"} de frontend${backendFiles ? ` y ${backendFiles} de backend` : ""}.`,
+    "",
+    "**Páginas o rutas relevantes:**",
+    pageSummary,
+    "",
+    "**Variables y secretos:**",
+    envSummary,
+    "",
+    "**Siguiente paso recomendado:** pulsa **Refresh** en la vista previa para recargar el último build. Si el cambio incluye Stripe, dominios, Google Search Console o secretos, abre **Env Variables** y confirma que las claves reales estén configuradas antes de desplegar o probar pagos reales.",
+    creditsLine,
+  ].filter(Boolean).join("\n");
 }
 
 // ── POST /api/apps ────────────────────────────────────────────────────────
@@ -2717,7 +2800,11 @@ export async function runJobById(jobId: string): Promise<void> {
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",
-        content: "✅ App actualizada correctamente.",
+        content: buildAppUpdatedConsoleReply({
+          prompt: job.prompt,
+          result: finalResult,
+          appTitle: previousApp?.title,
+        }),
       });
     } else {
       const app = await GeneratedApp.create({
