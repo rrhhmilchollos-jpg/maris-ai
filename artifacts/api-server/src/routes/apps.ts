@@ -549,7 +549,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
       system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
       messages: [{ role: "user", content: userContent }],
     }),
-    60_000,
+    90_000, // Increased from 60s to 90s to match outer timeout
     "architect",
   );
 
@@ -680,7 +680,9 @@ function classifyPromptComplexity(prompt: string, context?: { kind?: string; has
   if (context?.hasExistingApp) add(1, "edición de app existente");
   if (["landing", "vue", "svelte"].includes(context?.kind || "")) add(-1, "preset ligero");
   if (["game-3d", "nextjs", "python-api", "django", "fullstack"].includes(context?.kind || "")) add(2, "preset avanzado");
-  const tier: ComplexityTier = score >= 5 ? "robust" : score >= 2 ? "standard" : "basic";
+  // Raised the robust threshold from 5 to 7 to reduce unnecessary Opus usage that causes timeouts.
+  // Opus is now reserved for truly complex prompts (score >= 7) while Sonnet handles standard-to-complex cases.
+  const tier: ComplexityTier = score >= 7 ? "robust" : score >= 2 ? "standard" : "basic";
   return { tier, score, reasons };
 }
 
@@ -1861,7 +1863,7 @@ export async function generateApp(
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
   await log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
   const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock, agentModelPlan), 60_000, "architect"),
+    withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock, agentModelPlan), 90_000, "architect"),
   );
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
@@ -1927,7 +1929,7 @@ export async function generateApp(
           void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language, templateContextBlock, agentModelPlan),
-      240_000,
+      480_000, // Increased timeout to 480s to accommodate larger generation models like claude-opus-4-7
       "frontend-engineer",
     ),
   );
@@ -1944,8 +1946,9 @@ export async function generateApp(
   const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
 
   // Si el frontend falló por timeout, tratarlo como truncado para reintentar con plan reducido
-  if (!frontendResult.code && !frontendResult.truncated && frontendResult.error?.includes("timeout")) {
-    await log("coder", "Frontend-engineer timeout — reintentando con plan reducido automáticamente…", "warn");
+  const frontendTimedOut = !frontendResult.code && !frontendResult.truncated && frontendResult.error?.includes("timeout");
+  if (frontendTimedOut) {
+    await log("coder", "Frontend-engineer timeout — reintentando con plan reducido y modelo más rápido…", "warn");
     frontendResult.truncated = true;
   }
 
@@ -1957,12 +1960,15 @@ export async function generateApp(
       pages: plan.pages.slice(0, 2),
       components: plan.components.slice(0, 6),
     };
+    // Si hubo timeout, forzar modelo más rápido (Sonnet) para el reintento
+    const retryModel = frontendTimedOut ? "claude-sonnet-4-6" : coderModel;
+    const retryAgentPlan = frontendTimedOut ? selectAgentModelPlan(prompt, "claude-sonnet-4-6") : agentModelPlan;
     const retryResult = await generateFrontendCode(
       reducedPlan, design, research, prompt,
       (chars) => {
         onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
       },
-      coderModel, language, templateContextBlock,
+      retryModel, language, templateContextBlock, retryAgentPlan,
     );
     if (!retryResult.code) {
       await log("coder", "Reintento con plan reducido también falló.", "error");

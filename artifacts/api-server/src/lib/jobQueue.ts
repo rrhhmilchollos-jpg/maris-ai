@@ -18,7 +18,7 @@ export const GENERATE_QUEUE =
 
 const DEFAULT_CONCURRENCY = 3;
 const DEFAULT_POLL_INTERVAL_MS = 200;
-export const MAX_ATTEMPTS = 3;
+export const MAX_ATTEMPTS = 3; // Retry limit
 
 export interface JobPayload {
   jobId: string;
