@@ -115,6 +115,12 @@ export default function LandingPage() {
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
+    
+    // Meta Pixel Tracking: Lead/StartTrial
+    if (typeof window !== "undefined" && (window as any).fbq) {
+      (window as any).fbq("track", "Lead", { content_name: "Generation Intent", content_category: "App Creation" });
+    }
+
     localStorage.setItem("appforge_pending_prompt", prompt);
     setLocation(isSignedIn ? "/dashboard" : "/sign-up");
   };
@@ -153,7 +159,16 @@ export default function LandingPage() {
                   <Button variant="ghost" className="text-white hover:bg-white/10 text-sm">Iniciar Sesión</Button>
                 </Link>
                 <Link href="/sign-up">
-                  <Button className="bg-primary hover:bg-primary/90 text-white text-sm">Comenzar con 50 créditos</Button>
+                  <Button 
+                    className="bg-primary hover:bg-primary/90 text-white text-sm"
+                    onClick={() => {
+                      if (typeof window !== "undefined" && (window as any).fbq) {
+                        (window as any).fbq("track", "CompleteRegistration", { content_name: "Sign Up Click" });
+                      }
+                    }}
+                  >
+                    Comenzar con 50 créditos
+                  </Button>
                 </Link>
               </>
             )}
