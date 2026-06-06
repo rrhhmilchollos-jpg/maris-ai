@@ -36,14 +36,14 @@ interface RouteGenerationRequestContext {
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
  *
- * Todos los agentes usan Gemini (sin dependencia de Anthropic):
- *   - Researcher    (gemini-2.0-flash + google_search)  — referencia web
- *   - Architect     (gemini-2.5-flash)                  — plan / estructura
- *   - Designer      (gemini-2.5-flash)                  — design system
- *   - Frontend Eng  (gemini-2.5-flash, streaming)       — bundle frontend
- *   - Backend Eng   (gemini-2.5-flash)                  — bundle backend
- *   - QA Reviewer   (gemini-2.0-flash)                  — revisión
- *   - Patcher       (gemini-2.0-flash)                  — auto-fix
+ * Todos los agentes usan Anthropic (Claude) por defecto para mayor estabilidad:
+ *   - Researcher    (Claude Sonnet/Haiku)  — referencia web
+ *   - Architect     (Claude Sonnet)        — plan / estructura
+ *   - Designer      (Claude Sonnet/Haiku)  — design system
+ *   - Frontend Eng  (Claude Sonnet, streaming) — bundle frontend
+ *   - Backend Eng   (Claude Sonnet/Haiku)  — bundle backend
+ *   - QA Reviewer   (Claude Sonnet/Haiku)  — revisión
+ *   - Patcher       (Claude Sonnet)        — auto-fix
  * ========================================================================== */
 
 function buildFrontendSystemPrompt(language: GenLanguage): string {
@@ -549,7 +549,7 @@ ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual;
 }
 
 /**
- * Architect — Gemini 2.5 Flash.
+ * Architect — Anthropic Claude Sonnet 4.6.
  */
 async function architectPlan(prompt: string, research: string, templateContext = "", agentPlan = selectAgentModelPlan(prompt)): Promise<ProjectPlan> {
   const templateNote = templateContext ? `\n\n${templateContext}` : "";
@@ -585,7 +585,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
 }
 
 /**
- * Designer — Gemini 2.5 Flash.
+ * Designer — Anthropic Claude Sonnet 4.6.
  */
 async function designSystem(plan: ProjectPlan, research: string, templateContext = "", agentPlan = selectAgentModelPlan(plan.description ?? plan.title)): Promise<DesignSystem> {
   const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
@@ -670,7 +670,7 @@ function normalizeCoderModel(coderModel?: string): string {
   if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
   if (["claude-haiku", "claude-haiku-4-5", "haiku", "fast", "basic"].includes(value)) return "claude-haiku-4-5";
   if (["claude-opus", "claude-opus-4-7", "opus", "robust", "max"].includes(value)) return "claude-opus-4-7";
-  if (["claude-sonnet", "claude-sonnet-4-6", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash"].includes(value)) return "claude-sonnet-4-6";
+  if (["claude-sonnet", "claude-sonnet-4-6", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "claude-sonnet-4-6";
   return value;
 }
 
@@ -710,7 +710,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
   const frontendModel: AgentModelChoice["model"] = auto
-    ? (complexity.tier === "robust" ? "claude-sonnet-4-6" : complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6")
+    ? "claude-sonnet-4-6" // Forzado a Sonnet por defecto para evitar timeouts de otros modelos
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
   const architectModel: ClaudeCoderModel = complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-sonnet-4-6";
   const qualityModel: ClaudeCoderModel = complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
@@ -776,8 +776,8 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
 }
 
 /**
- * Frontend Engineer — Gemini 2.5 Flash streaming (default) o GPT-5.
- * Claude Sonnet redirigido a Gemini Flash (sin key Anthropic disponible).
+ * Frontend Engineer — Anthropic Claude Sonnet 4.6 (default) o GPT-5.
+ * Optimizado para evitar timeouts y asegurar la generación completa.
  */
 async function generateFrontendCode(
   plan: ProjectPlan,
@@ -876,7 +876,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 }
 
 /**
- * Backend Engineer — Gemini 2.5 Flash.
+ * Backend Engineer — Anthropic Claude Sonnet 4.6.
  */
 async function generateBackendCode(
   plan: ProjectPlan,
@@ -2311,8 +2311,8 @@ function buildAppUpdatedConsoleReply(args: {
 // ── POST /api/apps ────────────────────────────────────────────────────────
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
-    { id: "auto", name: "Auto (Gemini 2.5 Flash)", description: "Selección inteligente optimizada para velocidad y precisión." },
-    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Modelo por defecto. Rápido, preciso y optimizado para Vibe Coding." },
+    { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
+    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
     { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería. Requiere créditos extra." },
     { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI. Coste premium." }
@@ -2382,7 +2382,7 @@ router.post("/apps", requireAuth, async (req: any, res: any) => {
       _id: jobId,
       userId,
       prompt: generationPrompt,
-      coderModel: model || "gemini-2.5-flash",
+      coderModel: model || "claude-sonnet-4-6",
       language: language || "typescript",
       kind: kind || "fullstack",
       status: "queued",
