@@ -19,13 +19,24 @@ function html(title: string, desc: string, canonical: string, body: string, opti
   
   let ldJson = "";
   if (isArticle && articleData) {
+    // Imagen con dimensiones explícitas (requerido por Google Discover: mín 1200px)
+    const heroImage = imageUrl && !imageUrl.endsWith('.svg')
+      ? imageUrl
+      : `${BASE}/opengraph.jpg`;
     const schema = {
       "@context": "https://schema.org",
       "@type": "NewsArticle",
       "headline": articleData.title,
-      "image": [imageUrl || `${BASE}/opengraph.jpg`],
-      "datePublished": articleData.publishedAt,
-      "dateModified": articleData.updatedAt || articleData.publishedAt,
+      "image": [
+        {
+          "@type": "ImageObject",
+          "url": heroImage,
+          "width": 1200,
+          "height": 630
+        }
+      ],
+      "datePublished": new Date(articleData.publishedAt).toISOString(),
+      "dateModified": new Date(articleData.updatedAt || articleData.publishedAt).toISOString(),
       "author": [{
         "@type": "Person",
         "name": articleData.author || "Equipo Maris AI",
@@ -34,16 +45,24 @@ function html(title: string, desc: string, canonical: string, body: string, opti
       "publisher": {
         "@type": "NewsMediaOrganization",
         "name": "Maris AI",
+        "url": BASE,
         "logo": {
           "@type": "ImageObject",
-          "url": `${BASE}/logo.svg`
+          "url": `${BASE}/opengraph.jpg`,
+          "width": 1200,
+          "height": 630
         }
       },
       "description": desc,
       "mainEntityOfPage": {
         "@type": "WebPage",
         "@id": canonical
-      }
+      },
+      "keywords": (articleData.tags || []).join(", ") || "inteligencia artificial, IA, tecnología",
+      "articleSection": "Inteligencia Artificial",
+      "inLanguage": "es",
+      "isAccessibleForFree": true,
+      "wordCount": articleData.body ? articleData.body.split(/\s+/).length : undefined
     };
     ldJson = JSON.stringify(schema);
   } else {
@@ -62,6 +81,16 @@ function html(title: string, desc: string, canonical: string, body: string, opti
       }
     });
   }
+
+  // Meta tags adicionales para artículos (Google Discover y Google News)
+  const articleMeta = isArticle && articleData ? `
+<meta property="article:published_time" content="${new Date(articleData.publishedAt).toISOString()}"/>
+<meta property="article:modified_time" content="${new Date(articleData.updatedAt || articleData.publishedAt).toISOString()}"/>
+<meta property="article:author" content="${articleData.author || 'Equipo Maris AI'}"/>
+<meta property="article:section" content="Inteligencia Artificial"/>
+<meta name="news_keywords" content="${(articleData.tags || []).join(', ') || 'inteligencia artificial, IA'}"/>
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"/>` : `
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"/>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -82,7 +111,7 @@ ${ogImage}
 <meta name="twitter:site" content="@marisai_es"/>
 <meta name="twitter:title" content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
-<meta name="twitter:image" content="${imageUrl || `${BASE}/opengraph.jpg`}"/>
+<meta name="twitter:image" content="${imageUrl || `${BASE}/opengraph.jpg`}"/>${articleMeta}
 <script type="application/ld+json">
 ${ldJson}
 </script>

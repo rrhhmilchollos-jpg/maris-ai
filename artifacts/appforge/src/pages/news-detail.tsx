@@ -105,7 +105,11 @@ export default function NewsDetailPage() {
       const existingJsonLd = document.querySelector('script[data-news-article]');
       if (existingJsonLd) existingJsonLd.remove();
 
-      // Añadir JSON-LD NewsArticle completo para Google News
+      // Añadir JSON-LD NewsArticle completo para Google News y Google Discover
+      // IMPORTANTE: imagen con dimensiones explícitas (≥ 1200px requerido por Discover)
+      const heroImage = data.imageUrl && !data.imageUrl.endsWith('.svg')
+        ? data.imageUrl
+        : "https://www.marisai.es/opengraph.jpg";
       const jsonLd = {
         "@context": "https://schema.org",
         "@type": "NewsArticle",
@@ -115,32 +119,53 @@ export default function NewsDetailPage() {
         },
         "headline": data.title,
         "image": [
-          data.imageUrl || "https://www.marisai.es/opengraph.jpg"
+          {
+            "@type": "ImageObject",
+            "url": heroImage,
+            "width": 1200,
+            "height": 630
+          }
         ],
-        "datePublished": data.publishedAt,
-        "dateModified": data.updatedAt || data.publishedAt,
-        "author": {
+        "datePublished": new Date(data.publishedAt).toISOString(),
+        "dateModified": new Date(data.updatedAt || data.publishedAt).toISOString(),
+        "author": [{
           "@type": "Person",
           "name": data.author,
           "url": "https://www.marisai.es/"
-        },
+        }],
         "publisher": {
           "@type": "NewsMediaOrganization",
           "name": "Maris AI",
           "url": "https://www.marisai.es/",
           "logo": {
             "@type": "ImageObject",
-            "url": "https://www.marisai.es/logo.svg",
-            "width": 512,
-            "height": 512
+            "url": "https://www.marisai.es/opengraph.jpg",
+            "width": 1200,
+            "height": 630
           }
         },
         "description": desc,
         "keywords": data.tags?.join(", ") || "inteligencia artificial, IA, tecnología",
         "articleSection": "Inteligencia Artificial",
         "inLanguage": "es",
-        "isAccessibleForFree": true
+        "isAccessibleForFree": true,
+        "wordCount": data.body ? data.body.split(/\s+/).length : undefined
       };
+
+      // Añadir meta tags article:* para Open Graph (Google Discover los lee)
+      const setOrCreate = (selector: string, attr: string, value: string) => {
+        let el = document.querySelector(selector);
+        if (!el) {
+          el = document.createElement('meta');
+          document.head.appendChild(el);
+        }
+        el.setAttribute(attr, value);
+      };
+      setOrCreate('meta[property="article:published_time"]', 'content', new Date(data.publishedAt).toISOString());
+      setOrCreate('meta[property="article:modified_time"]', 'content', new Date(data.updatedAt || data.publishedAt).toISOString());
+      setOrCreate('meta[property="article:author"]', 'content', data.author || 'Equipo Maris AI');
+      setOrCreate('meta[property="article:section"]', 'content', 'Inteligencia Artificial');
+      setOrCreate('meta[name="news_keywords"]', 'content', data.tags?.join(', ') || 'inteligencia artificial, IA');
 
       const script = document.createElement("script");
       script.type = "application/ld+json";
