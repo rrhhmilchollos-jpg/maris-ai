@@ -2,6 +2,30 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
   <url>
+    <loc>https://www.marisai.es/news/bolt-new-vs-maris-ai-comparativa-2026</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-06T11:16:09Z</news:publication_date>
+      <news:title>Bolt.new vs Maris AI: ¿Cuál es la Mejor Herramienta para Crear Apps con IA en Español? (2026)</news:title>
+      <news:keywords>bolt.new, alternativa bolt, vibe coding, crear apps con ia, comparativa, español</news:keywords>
+    </news:news>
+  </url>
+  <url>
+    <loc>https://www.marisai.es/news/crear-app-reservas-negocio-sin-programar-ia</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-28T09:00:00Z</news:publication_date>
+      <news:title>Cómo crear una app de reservas para tu negocio sin programar (en 5 minutos con IA)</news:title>
+      <news:keywords>app reservas, no-code, Maris AI, negocio, inteligencia artificial</news:keywords>
+    </news:news>
+  </url>
+  <url>
     <loc>https://www.marisai.es/news/meta-recorta-8000-empleos-apuesta-ia-automatizacion-2026</loc>
     <news:news>
       <news:publication>

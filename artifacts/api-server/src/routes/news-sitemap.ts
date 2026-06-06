@@ -21,11 +21,11 @@ function escapeXml(str: string): string {
 router.get("/news-sitemap.xml", async (_req, res) => {
   await connectDB();
   try {
-    // Google News sitemaps: máximo 1000 URLs, solo artículos de los últimos 30 días
-    const twoDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const articles = await NewsArticle.find({
-      publishedAt: { $gte: twoDaysAgo },
-    })
+    // Google News sitemaps: máximo 1000 URLs
+    // IMPORTANTE: Google News solo indexa artículos de los últimos 2 días.
+    // Para maximizar la cobertura, incluimos todos los artículos (Google ignora
+    // los más antiguos de 2 días para Google News, pero los mantiene para Discover).
+    const articles = await NewsArticle.find({})
       .sort({ publishedAt: -1 })
       .limit(1000)
       .lean();
