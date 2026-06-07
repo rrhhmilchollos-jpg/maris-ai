@@ -468,9 +468,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     }
   };
 
-  const openGoogleIndexing = (rawUrl?: string | null) => {
+  const openGoogleIndexing = (rawUrl?: string | null, preOpenedWindow?: Window | null) => {
     const target = normalizePublicUrl(rawUrl);
     if (!target) {
+      preOpenedWindow?.close();
       toast({ title: "URL no válida", description: "No se encontró una URL pública válida para enviar a Google.", variant: "destructive" });
       return false;
     }
@@ -478,11 +479,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     const propertyUrl = `${target.origin}/`;
     const searchConsoleUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(propertyUrl)}&url=${encodeURIComponent(target.href)}`;
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${app?.title || "Maris AI App"} site:${target.hostname}`)}`;
-    const opened = window.open(searchConsoleUrl, "_blank", "noopener,noreferrer");
 
-    if (!opened) {
-      toast({ title: "Ventana bloqueada", description: "Permite ventanas emergentes para Maris AI y vuelve a pulsar Publicar en Google.", variant: "destructive" });
-      return false;
+    // Si ya tenemos una ventana pre-abierta (desde el click directo), redirigirla
+    if (preOpenedWindow && !preOpenedWindow.closed) {
+      preOpenedWindow.location.href = searchConsoleUrl;
+    } else {
+      // Intento directo como fallback
+      const opened = window.open(searchConsoleUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        toast({ title: "Ventana bloqueada", description: "Permite ventanas emergentes para Maris AI y vuelve a pulsar Publicar en Google.", variant: "destructive" });
+        return false;
+      }
     }
 
     toast({
@@ -504,6 +511,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     }
     if (isPublishingGoogle) return;
     setIsPublishingGoogle(true);
+
+    // Pre-abrimos la ventana AQUÍ, en el contexto directo del click del usuario,
+    // antes de cualquier llamada async. Así el navegador no la bloquea.
+    const preOpenedWindow = !deployedUrl ? window.open("about:blank", "_blank", "noopener,noreferrer") : null;
+
     try {
       if (deployedUrl) {
         openGoogleIndexing(deployedUrl);
@@ -515,16 +527,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         deployMutation.mutate({ id }, {
           onSuccess: (result: any) => {
             const url = result?.deploymentUrl || result?.url;
-            if (openGoogleIndexing(url)) {
+            if (openGoogleIndexing(url, preOpenedWindow)) {
               toast({ title: "App desplegada", description: `Tu app está en ${url}. Search Console se ha abierto para solicitar la indexación.` });
             }
           },
           onError: (err: any) => {
+            preOpenedWindow?.close();
             toast({ title: "No se pudo desplegar", description: err?.message || "Intenta publicar de nuevo en unos minutos.", variant: "destructive" });
           },
         });
       }
     } catch (err: any) {
+      preOpenedWindow?.close();
       toast({ title: "Error al publicar en Google", description: err?.message ?? "Inténtalo de nuevo.", variant: "destructive" });
     } finally {
       setTimeout(() => setIsPublishingGoogle(false), 2000);
