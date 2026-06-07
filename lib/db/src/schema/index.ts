@@ -25,6 +25,8 @@ export interface IUser {
   planCredits?: number;
   planExpiresAt?: Date;
   stripeSubscriptionId?: string;
+  // Notas de admin
+  adminNotes?: Array<{ text: string; createdAt: Date }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +51,8 @@ const UserSchema = new Schema<IUser>(
     bannedAt: { type: Date },
     banReason: { type: String },
     blockedIps: { type: [String], default: [] },
+    // Notas de admin
+    adminNotes: { type: [{ text: String, createdAt: { type: Date, default: Date.now } }], default: [] },
     // Suscripción y plan
     plan: { type: String, default: "free" },
     planCredits: { type: Number, default: 0 },

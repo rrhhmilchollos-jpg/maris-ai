@@ -13,10 +13,16 @@ import {
   useAdminBanUser,
   useAdminBlockIp,
   useAdminRefundCredits,
+  useAdminStripeRefund,
+  useAdminAddNote,
+  useAdminUserTransactions,
+  useAdminUserApps,
   getListAdminUsersQueryKey,
   getListAdminJobsQueryKey,
   getGetAdminOverviewQueryKey,
   getListAdminAppsQueryKey,
+  getAdminUserTransactionsQueryKey,
+  getAdminUserAppsQueryKey,
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
@@ -41,13 +47,17 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { format } from "date-fns";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck,
   RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3,
   MessageSquare, X, Ban, WifiOff, UserX, RotateCcw, Eye, Search,
   ChevronDown, ChevronUp, History, DollarSign, Lock, Unlock, Loader2,
+  StickyNote, Send, ExternalLink, Wallet, ArrowUpRight, ArrowDownRight,
+  Globe, Mail, Calendar, Hash, Cpu, ChevronRight, AlertCircle, CheckCircle,
+  Zap, TrendingUp, TrendingDown, Star,
 } from "lucide-react";
 
 type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news";
@@ -69,20 +79,32 @@ interface AdminUser {
   id: string;
   email: string;
   fullName?: string;
+  imageUrl?: string;
   credits: number;
   appsGenerated: number;
   createdAt: string;
   isAdmin?: boolean;
   isSuspended?: boolean;
   isBanned?: boolean;
-  blockedIp?: string | null;
-  suspendedReason?: string | null;
-  bannedReason?: string | null;
+  blockedIps?: string[];
+  suspendReason?: string | null;
+  banReason?: string | null;
+  registrationIp?: string | null;
   lastLoginAt?: string | null;
   totalSpent?: number;
+  plan?: string;
 }
 
-type UserDetailTab = "overview" | "apps" | "transactions" | "moderation";
+interface Transaction {
+  id: string;
+  kind: string;
+  amount: number;
+  description?: string;
+  stripeSessionId?: string | null;
+  createdAt: string;
+}
+
+type UserDetailTab = "overview" | "apps" | "transactions" | "moderation" | "notes";
 
 export default function AdminPage({ initialTab = "users" }: { initialTab?: AdminTab } = {}) {
   const [, setLocation] = useLocation();
@@ -123,6 +145,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
+        if (selectedUser) queryClient.invalidateQueries({ queryKey: getAdminUserTransactionsQueryKey(selectedUser.id) });
         toast({ title: "Créditos actualizados" });
         setAdjustUser(null);
         setReason("");
@@ -140,7 +163,6 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         toast({ title: "Usuario actualizado", description: "El estado de suspensión ha cambiado." });
-        setSelectedUser(null);
       },
       onError: (err: unknown) => {
         const e = err as { message?: string };
@@ -154,7 +176,6 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         toast({ title: "Usuario actualizado", description: "El estado de ban ha cambiado." });
-        setSelectedUser(null);
       },
       onError: (err: unknown) => {
         const e = err as { message?: string };
@@ -168,7 +189,6 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         toast({ title: "IP actualizada", description: "El bloqueo de IP ha sido aplicado." });
-        setSelectedUser(null);
       },
       onError: (err: unknown) => {
         const e = err as { message?: string };
@@ -182,6 +202,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
+        if (selectedUser) queryClient.invalidateQueries({ queryKey: getAdminUserTransactionsQueryKey(selectedUser.id) });
         toast({ title: "Reembolso procesado", description: "Los créditos han sido reembolsados." });
         setRefundDialog(null);
       },
@@ -192,11 +213,42 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
     },
   });
 
+  const stripeRefundMutation = useAdminStripeRefund({
+    mutation: {
+      onSuccess: (data: any) => {
+        toast({
+          title: data.refundId ? "✅ Reembolso Stripe procesado" : "⚠️ Reembolso parcial",
+          description: data.message || `Reembolso de $${(data.amountRefunded / 100).toFixed(2)} procesado.`,
+        });
+        setStripeRefundDialog(null);
+      },
+      onError: (err: unknown) => {
+        const e = err as { message?: string };
+        toast({ title: "Error en reembolso Stripe", description: e?.message ?? "No se pudo procesar el reembolso a tarjeta.", variant: "destructive" });
+      },
+    },
+  });
+
+  const addNoteMutation = useAdminAddNote({
+    mutation: {
+      onSuccess: () => {
+        if (selectedUser) queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+        toast({ title: "Nota añadida" });
+        setNewNote("");
+      },
+      onError: (err: unknown) => {
+        const e = err as { message?: string };
+        toast({ title: "Error", description: e?.message ?? "Error desconocido", variant: "destructive" });
+      },
+    },
+  });
+
   const adminDeleteMutation = useDeleteApp({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListAdminAppsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
+        if (selectedUser) queryClient.invalidateQueries({ queryKey: getAdminUserAppsQueryKey(selectedUser.id) });
         toast({ title: "App eliminada" });
       },
       onError: (err: unknown) => {
@@ -216,9 +268,11 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [moderationReason, setModerationReason] = useState("");
   const [ipToBlock, setIpToBlock] = useState("");
   const [refundDialog, setRefundDialog] = useState<{ user: AdminUser; amount: number; reason: string } | null>(null);
+  const [stripeRefundDialog, setStripeRefundDialog] = useState<{ user: AdminUser; sessionId: string; amount: number; reason: string } | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [emailDialog, setEmailDialog] = useState<{ user: AdminUser; subject: string; message: string; creditsAdded: number } | null>(null);
   const [emailSending, setEmailSending] = useState(false);
+  const [newNote, setNewNote] = useState("");
 
   const MEMORY_PAGE_SIZE = 25;
   const [memory, setMemory] = useState<
@@ -227,6 +281,16 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryQuery, setMemoryQuery] = useState("");
   const [memoryOffset, setMemoryOffset] = useState(0);
+
+  // ── Queries for selected user ──────────────────────────────────────────────
+  const { data: userTransactions, isLoading: txLoading } = useAdminUserTransactions(
+    selectedUser?.id ?? "",
+    { query: { enabled: !!selectedUser && userDetailTab === "transactions" } }
+  );
+  const { data: userAppsData, isLoading: userAppsLoading } = useAdminUserApps(
+    selectedUser?.id ?? "",
+    { query: { enabled: !!selectedUser && userDetailTab === "apps" } }
+  );
 
   const loadMemory = async (overrides?: { q?: string; offset?: number }) => {
     const q = overrides?.q ?? memoryQuery;
@@ -275,7 +339,13 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
     (u.fullName?.toLowerCase().includes(userSearch.toLowerCase()))
   ) ?? [];
 
-  const userApps = (apps as any[] | undefined)?.filter(a => selectedUser && a.userId === selectedUser.id) ?? [];
+  const openUserDetail = (u: AdminUser) => {
+    setSelectedUser(u);
+    setUserDetailTab("overview");
+    setModerationReason("");
+    setIpToBlock((u.blockedIps ?? [])[0] || "");
+    setNewNote("");
+  };
 
   return (
     <Layout>
@@ -366,7 +436,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                 <div className="text-xs text-red-400/70 mt-1">Baneados</div>
               </div>
               <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 text-center">
-                <div className="text-2xl font-bold font-mono text-orange-400">{filteredUsers.filter(u => u.blockedIp).length}</div>
+                <div className="text-2xl font-bold font-mono text-orange-400">{filteredUsers.filter(u => (u.blockedIps ?? []).length > 0).length}</div>
                 <div className="text-xs text-orange-400/70 mt-1">IP bloqueada</div>
               </div>
             </div>
@@ -396,51 +466,44 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                     </TableHeader>
                     <TableBody>
                       {filteredUsers.map(u => (
-                        <TableRow key={u.id} className={`border-white/5 hover:bg-white/[0.02] ${u.isBanned ? "opacity-50" : ""}`}>
+                        <TableRow
+                          key={u.id}
+                          className={`border-white/5 hover:bg-white/[0.02] cursor-pointer ${u.isBanned ? "opacity-50" : ""}`}
+                          onClick={() => openUserDetail(u)}
+                        >
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
-                              {u.fullName || "—"}
+                              <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                                {(u.fullName || u.email)[0].toUpperCase()}
+                              </div>
+                              <span className="truncate max-w-[120px]">{u.fullName || "—"}</span>
                               {u.isAdmin && <Badge className="bg-primary/20 text-primary text-[10px] font-mono uppercase border border-primary/30">Admin</Badge>}
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm font-mono">{u.email}</TableCell>
-                          <TableCell className="text-right font-mono text-primary">{u.credits}</TableCell>
+                          <TableCell className="text-right font-mono text-primary font-bold">{u.credits}</TableCell>
                           <TableCell className="text-right font-mono">{u.appsGenerated}</TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
                               {u.isBanned && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Baneado</Badge>}
                               {u.isSuspended && !u.isBanned && <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">Suspendido</Badge>}
-                              {u.blockedIp && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px]">IP bloqueada</Badge>}
-                              {!u.isBanned && !u.isSuspended && !u.blockedIp && (
+                              {(u.blockedIps ?? []).length > 0 && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px]">IP bloqueada</Badge>}
+                              {!u.isBanned && !u.isSuspended && (u.blockedIps ?? []).length === 0 && (
                                 <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Activo</Badge>
                               )}
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground text-xs">{format(new Date(u.createdAt), "d MMM yyyy", { locale: es })}</TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="gap-1 text-xs"
-                                onClick={() => {
-                                  setSelectedUser(u);
-                                  setUserDetailTab("overview");
-                                  setModerationReason("");
-                                  setIpToBlock(u.blockedIp || "");
-                                }}
-                              >
-                                <Eye className="h-3.5 w-3.5" /> Ver
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="gap-1 text-xs"
-                                onClick={() => setAdjustUser({ id: u.id, email: u.email })}
-                              >
-                                <CreditCard className="h-3.5 w-3.5" /> Créditos
-                              </Button>
-                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1 text-xs"
+                              onClick={(e) => { e.stopPropagation(); openUserDetail(u); }}
+                            >
+                              <Eye className="h-3.5 w-3.5" /> Ver perfil
+                              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -622,7 +685,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         return (
                           <>
                             <TableRow key={j.id} className="border-white/5 hover:bg-white/[0.02]">
-                              <TableCell className="font-mono text-xs text-muted-foreground">{j.id}</TableCell>
+                              <TableCell className="font-mono text-xs text-muted-foreground">{j.id.slice(0, 8)}…</TableCell>
                               <TableCell><JobStatusBadge status={j.status} stale={isStale} /></TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground">{j.phase}</TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground max-w-[160px] truncate">{j.userEmail || j.userId?.slice(0, 12)}</TableCell>
@@ -710,304 +773,433 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
           </DialogContent>
         </Dialog>
 
-        {/* ── DIALOG: User Detail ── */}
+        {/* ── DIALOG: User Detail (Full Professional Panel) ── */}
         <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[92vh] p-0 overflow-hidden flex flex-col">
             {selectedUser && (
               <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold">
-                      {(selectedUser.fullName || selectedUser.email)[0].toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="text-white">{selectedUser.fullName || "Sin nombre"}</div>
-                      <div className="text-sm font-normal text-muted-foreground font-mono">{selectedUser.email}</div>
-                    </div>
-                  </DialogTitle>
-                </DialogHeader>
-
-                <Tabs value={userDetailTab} onValueChange={(v) => setUserDetailTab(v as UserDetailTab)}>
-                  <TabsList className="bg-card/40 border border-white/5 w-full">
-                    <TabsTrigger value="overview" className="flex-1">Resumen</TabsTrigger>
-                    <TabsTrigger value="apps" className="flex-1">Apps ({userApps.length})</TabsTrigger>
-                    <TabsTrigger value="moderation" className="flex-1">Moderación</TabsTrigger>
-                  </TabsList>
-
-                  {/* Overview */}
-                  <TabsContent value="overview" className="mt-4 space-y-4">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="rounded-lg border border-white/5 bg-card/30 p-3 text-center">
-                        <div className="text-2xl font-bold font-mono text-primary">{selectedUser.credits}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Créditos</div>
-                      </div>
-                      <div className="rounded-lg border border-white/5 bg-card/30 p-3 text-center">
-                        <div className="text-2xl font-bold font-mono text-white">{selectedUser.appsGenerated}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Apps generadas</div>
-                      </div>
-                      <div className="rounded-lg border border-white/5 bg-card/30 p-3 text-center">
-                        <div className="text-2xl font-bold font-mono text-emerald-400">${((selectedUser.totalSpent ?? 0) / 100).toFixed(2)}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Total gastado</div>
-                      </div>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between py-2 border-b border-white/5">
-                        <span className="text-muted-foreground">ID</span>
-                        <span className="font-mono text-xs">{selectedUser.id}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-b border-white/5">
-                        <span className="text-muted-foreground">Registrado</span>
-                        <span>{format(new Date(selectedUser.createdAt), "d MMM yyyy HH:mm", { locale: es })}</span>
-                      </div>
-                      {selectedUser.lastLoginAt && (
-                        <div className="flex justify-between py-2 border-b border-white/5">
-                          <span className="text-muted-foreground">Último acceso</span>
-                          <span>{format(new Date(selectedUser.lastLoginAt), "d MMM yyyy HH:mm", { locale: es })}</span>
-                        </div>
+                {/* User Header */}
+                <div className="flex items-start gap-4 p-6 border-b border-white/5 bg-gradient-to-r from-primary/5 to-transparent">
+                  <div className="h-14 w-14 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary text-xl font-bold flex-shrink-0">
+                    {(selectedUser.fullName || selectedUser.email)[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-xl font-bold text-white">{selectedUser.fullName || "Sin nombre"}</h2>
+                      {selectedUser.isAdmin && <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">Admin</Badge>}
+                      {selectedUser.isBanned && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Baneado</Badge>}
+                      {selectedUser.isSuspended && !selectedUser.isBanned && <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">Suspendido</Badge>}
+                      {(selectedUser.blockedIps ?? []).length > 0 && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px]">IP bloqueada</Badge>}
+                      {!selectedUser.isBanned && !selectedUser.isSuspended && (selectedUser.blockedIps ?? []).length === 0 && (
+                        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Activo</Badge>
                       )}
-                      <div className="flex justify-between py-2 border-b border-white/5">
-                        <span className="text-muted-foreground">Estado</span>
-                        <div className="flex gap-1">
-                          {selectedUser.isBanned && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Baneado</Badge>}
-                          {selectedUser.isSuspended && !selectedUser.isBanned && <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">Suspendido</Badge>}
-                          {selectedUser.blockedIp && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px]">IP: {selectedUser.blockedIp}</Badge>}
-                          {!selectedUser.isBanned && !selectedUser.isSuspended && !selectedUser.blockedIp && (
-                            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Activo</Badge>
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground font-mono mt-1">
+                      <Mail className="h-3.5 w-3.5" />
+                      {selectedUser.email}
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Registrado {format(new Date(selectedUser.createdAt), "d MMM yyyy", { locale: es })}</span>
+                      <span className="flex items-center gap-1"><Hash className="h-3 w-3" /> {selectedUser.id.slice(0, 16)}…</span>
+                    </div>
+                  </div>
+                  {/* Quick stats */}
+                  <div className="flex gap-3 flex-shrink-0">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold font-mono text-primary">{selectedUser.credits}</div>
+                      <div className="text-[10px] text-muted-foreground">créditos</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold font-mono text-white">{selectedUser.appsGenerated}</div>
+                      <div className="text-[10px] text-muted-foreground">apps</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Actions Bar */}
+                <div className="flex gap-2 px-6 py-3 border-b border-white/5 bg-black/20 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs"
+                    onClick={() => { setSelectedUser(null); setAdjustUser({ id: selectedUser.id, email: selectedUser.email }); }}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" /> Ajustar créditos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                    onClick={() => setRefundDialog({ user: selectedUser, amount: 0, reason: "" })}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Reembolso créditos
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                    onClick={() => setEmailDialog({ user: selectedUser, subject: `Compensación por el inconveniente — Maris AI`, message: `Hemos detectado un error en tu generación reciente y lo hemos solucionado. Sentimos las molestias causadas.`, creditsAdded: 20 })}
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Email compensación
+                  </Button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  <Tabs value={userDetailTab} onValueChange={(v) => setUserDetailTab(v as UserDetailTab)} className="flex-1 flex flex-col overflow-hidden">
+                    <TabsList className="bg-transparent border-b border-white/5 rounded-none px-6 h-10 gap-0 flex-shrink-0">
+                      <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Resumen</TabsTrigger>
+                      <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Transacciones</TabsTrigger>
+                      <TabsTrigger value="apps" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Apps</TabsTrigger>
+                      <TabsTrigger value="moderation" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Moderación</TabsTrigger>
+                      <TabsTrigger value="notes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Notas</TabsTrigger>
+                    </TabsList>
+
+                    <ScrollArea className="flex-1">
+                      {/* Overview */}
+                      <TabsContent value="overview" className="mt-0 p-6 space-y-4">
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="rounded-lg border border-white/5 bg-card/30 p-3 text-center">
+                            <div className="text-2xl font-bold font-mono text-primary">{selectedUser.credits}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Créditos actuales</div>
+                          </div>
+                          <div className="rounded-lg border border-white/5 bg-card/30 p-3 text-center">
+                            <div className="text-2xl font-bold font-mono text-white">{selectedUser.appsGenerated}</div>
+                            <div className="text-xs text-muted-foreground mt-1">Apps generadas</div>
+                          </div>
+                          <div className="rounded-lg border border-emerald-500/10 bg-emerald-500/5 p-3 text-center">
+                            <div className="text-2xl font-bold font-mono text-emerald-400">${((selectedUser.totalSpent ?? 0) / 100).toFixed(2)}</div>
+                            <div className="text-xs text-emerald-400/70 mt-1">Total gastado</div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-0 rounded-lg border border-white/5 overflow-hidden">
+                          <InfoRow label="ID de usuario" value={<span className="font-mono text-xs">{selectedUser.id}</span>} />
+                          <InfoRow label="Email" value={selectedUser.email} />
+                          <InfoRow label="Plan" value={<Badge variant="outline" className="text-[10px] border-white/10">{selectedUser.plan || "free"}</Badge>} />
+                          <InfoRow label="Registrado" value={format(new Date(selectedUser.createdAt), "d MMM yyyy 'a las' HH:mm", { locale: es })} />
+                          {selectedUser.registrationIp && (
+                            <InfoRow label="IP de registro" value={<span className="font-mono text-xs">{selectedUser.registrationIp}</span>} />
+                          )}
+                          {(selectedUser.blockedIps ?? []).length > 0 && (
+                            <InfoRow label="IPs bloqueadas" value={
+                              <div className="flex flex-wrap gap-1">
+                                {(selectedUser.blockedIps ?? []).map(ip => (
+                                  <Badge key={ip} className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px] font-mono">{ip}</Badge>
+                                ))}
+                              </div>
+                            } />
+                          )}
+                          {selectedUser.suspendReason && (
+                            <InfoRow label="Motivo suspensión" value={<span className="text-amber-400 text-xs">{selectedUser.suspendReason}</span>} />
+                          )}
+                          {selectedUser.banReason && (
+                            <InfoRow label="Motivo ban" value={<span className="text-red-400 text-xs">{selectedUser.banReason}</span>} />
                           )}
                         </div>
-                      </div>
-                      {selectedUser.isAdmin && (
-                        <div className="flex justify-between py-2 border-b border-white/5">
-                          <span className="text-muted-foreground">Rol</span>
-                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px]">Administrador</Badge>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => {
-                          setSelectedUser(null);
-                          setAdjustUser({ id: selectedUser.id, email: selectedUser.email });
-                        }}
-                      >
-                        <CreditCard className="h-4 w-4 mr-2" /> Ajustar créditos
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                        onClick={() => setRefundDialog({ user: selectedUser, amount: 0, reason: "" })}
-                      >
-                        <RotateCcw className="h-4 w-4 mr-2" /> Reembolsar
-                      </Button>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-2 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
-                      onClick={() => setEmailDialog({ user: selectedUser, subject: `Compensación por el inconveniente — Maris AI`, message: `Hemos detectado un error en tu generación reciente y lo hemos solucionado. Sentimos las molestias causadas.`, creditsAdded: 20 })}
-                    >
-                      <MessageSquare className="h-4 w-4 mr-2" /> Enviar email de compensación
-                    </Button>
-                  </TabsContent>
+                      </TabsContent>
 
-                  {/* Apps */}
-                  <TabsContent value="apps" className="mt-4">
-                    {userApps.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">Este usuario no tiene apps generadas.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {userApps.map((a: any) => (
-                          <div key={a.id} className="rounded-lg border border-white/5 bg-card/30 p-3 flex items-center justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm truncate">{a.title}</div>
-                              <div className="text-xs text-muted-foreground mt-0.5">{format(new Date(a.createdAt), "d MMM yyyy HH:mm", { locale: es })}</div>
+                      {/* Transactions */}
+                      <TabsContent value="transactions" className="mt-0 p-6 space-y-3">
+                        {txLoading ? (
+                          <div className="space-y-2">{[1,2,3,4].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+                        ) : (userTransactions as Transaction[] | undefined)?.length ? (
+                          <div className="space-y-2">
+                            {(userTransactions as Transaction[]).map(tx => {
+                              const isPositive = tx.amount > 0;
+                              return (
+                                <div key={tx.id} className="rounded-lg border border-white/5 bg-card/20 p-3 flex items-center gap-3">
+                                  <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${isPositive ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
+                                    {isPositive ? <ArrowUpRight className="h-4 w-4 text-emerald-400" /> : <ArrowDownRight className="h-4 w-4 text-red-400" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium text-white">{tx.description || tx.kind}</span>
+                                      <Badge variant="outline" className="text-[10px] border-white/10 font-mono">{tx.kind}</Badge>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">
+                                      {format(new Date(tx.createdAt), "d MMM yyyy HH:mm", { locale: es })}
+                                      {tx.stripeSessionId && (
+                                        <span className="ml-2 font-mono text-blue-400/70">#{tx.stripeSessionId.slice(0, 16)}…</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className={`font-bold font-mono text-sm ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+                                      {isPositive ? "+" : ""}{tx.amount}
+                                    </span>
+                                    {tx.stripeSessionId && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 text-xs text-blue-400 hover:bg-blue-500/10"
+                                        onClick={() => setStripeRefundDialog({ user: selectedUser, sessionId: tx.stripeSessionId!, amount: 0, reason: "" })}
+                                      >
+                                        <Wallet className="h-3 w-3 mr-1" /> Reembolso Stripe
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 text-muted-foreground">
+                            <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">Sin transacciones registradas</p>
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      {/* Apps */}
+                      <TabsContent value="apps" className="mt-0 p-6">
+                        {userAppsLoading ? (
+                          <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+                        ) : (userAppsData as any[])?.length ? (
+                          <div className="space-y-2">
+                            {(userAppsData as any[]).map((a: any) => (
+                              <div key={a.id} className="rounded-lg border border-white/5 bg-card/20 p-3 flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                                  <Code2 className="h-4 w-4 text-primary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm truncate">{a.title}</div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-xs text-muted-foreground">{format(new Date(a.createdAt), "d MMM yyyy HH:mm", { locale: es })}</span>
+                                    <div className="flex gap-1">
+                                      {a.techStack?.slice(0, 2).map((t: string) => (
+                                        <Badge key={t} variant="outline" className="text-[10px] border-white/10">{t}</Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setLocation(`/app/${a.id}`)}>
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-red-400 hover:bg-red-500/10"
+                                    onClick={() => {
+                                      if (confirm(`¿Eliminar "${a.title}"?`)) {
+                                        adminDeleteMutation.mutate({ id: a.id });
+                                      }
+                                    }}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 text-muted-foreground">
+                            <Code2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">Este usuario no tiene apps generadas</p>
+                          </div>
+                        )}
+                      </TabsContent>
+
+                      {/* Moderation */}
+                      <TabsContent value="moderation" className="mt-0 p-6 space-y-4">
+                        <div className="space-y-2">
+                          <Label>Motivo de la acción</Label>
+                          <Textarea
+                            placeholder="Describe el motivo de la acción de moderación..."
+                            value={moderationReason}
+                            onChange={e => setModerationReason(e.target.value)}
+                            className="bg-black/20 border-white/10 resize-none"
+                            rows={2}
+                          />
+                        </div>
+
+                        <Separator className="bg-white/5" />
+
+                        {/* Suspend / Unsuspend */}
+                        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Lock className="h-4 w-4 text-amber-400" />
+                              <span className="font-medium text-amber-400">Suspensión temporal</span>
                             </div>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => setLocation(`/app/${a.id}`)}>
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
+                            {selectedUser.isSuspended && (
+                              <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">Activa</Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">El usuario no podrá acceder a la plataforma pero sus datos se conservan.</p>
+                          {selectedUser.suspendReason && (
+                            <p className="text-xs text-amber-400/70 italic">Motivo actual: {selectedUser.suspendReason}</p>
+                          )}
+                          <div className="flex gap-2">
+                            {!selectedUser.isSuspended ? (
                               <Button
-                                variant="ghost"
+                                variant="outline"
                                 size="sm"
-                                className="text-red-400 hover:bg-red-500/10"
+                                className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                                disabled={suspendMutation.isPending}
+                                onClick={() => suspendMutation.mutate({ id: selectedUser.id, data: { suspend: true, reason: moderationReason || undefined } })}
+                              >
+                                <Lock className="h-3.5 w-3.5 mr-1" /> Suspender
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                                disabled={suspendMutation.isPending}
+                                onClick={() => suspendMutation.mutate({ id: selectedUser.id, data: { suspend: false } })}
+                              >
+                                <Unlock className="h-3.5 w-3.5 mr-1" /> Levantar suspensión
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Ban / Unban */}
+                        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Ban className="h-4 w-4 text-red-400" />
+                              <span className="font-medium text-red-400">Ban permanente</span>
+                            </div>
+                            {selectedUser.isBanned && (
+                              <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Activo</Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Bloquea al usuario de forma permanente. Puede revertirse manualmente.</p>
+                          {selectedUser.banReason && (
+                            <p className="text-xs text-red-400/70 italic">Motivo actual: {selectedUser.banReason}</p>
+                          )}
+                          <div className="flex gap-2">
+                            {!selectedUser.isBanned ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                disabled={banMutation.isPending}
                                 onClick={() => {
-                                  if (confirm(`¿Eliminar "${a.title}"?`)) {
-                                    adminDeleteMutation.mutate({ id: a.id });
+                                  if (confirm(`¿Banear permanentemente a ${selectedUser.email}?`)) {
+                                    banMutation.mutate({ id: selectedUser.id, data: { ban: true, reason: moderationReason || undefined } });
                                   }
                                 }}
                               >
-                                <X className="h-3.5 w-3.5" />
+                                <Ban className="h-3.5 w-3.5 mr-1" /> Banear
                               </Button>
-                            </div>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                                disabled={banMutation.isPending}
+                                onClick={() => banMutation.mutate({ id: selectedUser.id, data: { ban: false } })}
+                              >
+                                <Unlock className="h-3.5 w-3.5 mr-1" /> Levantar ban
+                              </Button>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </TabsContent>
+                        </div>
 
-                  {/* Moderation */}
-                  <TabsContent value="moderation" className="mt-4 space-y-4">
-                    <div className="space-y-2">
-                      <Label>Motivo de la acción</Label>
-                      <Textarea
-                        placeholder="Describe el motivo de la acción de moderación..."
-                        value={moderationReason}
-                        onChange={e => setModerationReason(e.target.value)}
-                        className="bg-black/20 border-white/10 resize-none"
-                        rows={3}
-                      />
-                    </div>
+                        {/* Block IP */}
+                        <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <WifiOff className="h-4 w-4 text-orange-400" />
+                            <span className="font-medium text-orange-400">Bloqueo por IP</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Bloquea el acceso desde una IP específica. Útil para evitar cuentas múltiples.</p>
+                          {(selectedUser.blockedIps ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {(selectedUser.blockedIps ?? []).map(ip => (
+                                <Badge key={ip} className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-xs font-mono">{ip}</Badge>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="ej. 192.168.1.1"
+                              value={ipToBlock}
+                              onChange={e => setIpToBlock(e.target.value)}
+                              className="bg-black/20 border-white/10 flex-1 text-sm"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                              disabled={blockIpMutation.isPending || !ipToBlock.trim()}
+                              onClick={() => blockIpMutation.mutate({ id: selectedUser.id, data: { ip: ipToBlock.trim() } })}
+                            >
+                              <WifiOff className="h-3.5 w-3.5 mr-1" /> Bloquear IP
+                            </Button>
+                          </div>
+                        </div>
 
-                    <Separator className="bg-white/5" />
-
-                    {/* Suspend / Unsuspend */}
-                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Lock className="h-4 w-4 text-amber-400" />
-                        <span className="font-medium text-amber-400">Suspensión temporal</span>
-                        {selectedUser.isSuspended && (
-                          <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px] ml-auto">Activa</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">El usuario no podrá acceder a la plataforma pero sus datos se conservan.</p>
-                      {selectedUser.suspendedReason && (
-                        <p className="text-xs text-amber-400/70 italic">Motivo actual: {selectedUser.suspendedReason}</p>
-                      )}
-                      <div className="flex gap-2">
-                        {!selectedUser.isSuspended ? (
+                        {/* Delete user */}
+                        <div className="rounded-lg border border-white/5 bg-card/20 p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <UserX className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium text-muted-foreground">Eliminar cuenta</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Elimina permanentemente al usuario y todos sus datos. Esta acción no se puede deshacer.</p>
                           <Button
                             variant="outline"
                             size="sm"
-                            className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                            disabled={suspendMutation.isPending}
-                            onClick={() => suspendMutation.mutate({ id: selectedUser.id, data: { suspend: true, reason: moderationReason || undefined } })}
-                          >
-                            <Lock className="h-3.5 w-3.5 mr-1" /> Suspender
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                            disabled={suspendMutation.isPending}
-                            onClick={() => suspendMutation.mutate({ id: selectedUser.id, data: { suspend: false } })}
-                          >
-                            <Unlock className="h-3.5 w-3.5 mr-1" /> Levantar suspensión
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Ban / Unban */}
-                    <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Ban className="h-4 w-4 text-red-400" />
-                        <span className="font-medium text-red-400">Ban permanente</span>
-                        {selectedUser.isBanned && (
-                          <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px] ml-auto">Activo</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Bloquea al usuario de forma permanente. Puede revertirse manualmente.</p>
-                      {selectedUser.bannedReason && (
-                        <p className="text-xs text-red-400/70 italic">Motivo actual: {selectedUser.bannedReason}</p>
-                      )}
-                      <div className="flex gap-2">
-                        {!selectedUser.isBanned ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="border-red-500/30 text-red-400 hover:bg-red-500/10"
-                            disabled={banMutation.isPending}
+                            className="border-destructive/30 text-destructive hover:bg-destructive/10"
                             onClick={() => {
-                              if (confirm(`¿Banear permanentemente a ${selectedUser.email}?`)) {
-                                banMutation.mutate({ id: selectedUser.id, data: { ban: true, reason: moderationReason || undefined } });
+                              if (confirm(`¿Eliminar PERMANENTEMENTE la cuenta de ${selectedUser.email}? Esta acción no se puede deshacer.`)) {
+                                toast({ title: "Función en desarrollo", description: "La eliminación de cuentas requiere confirmación adicional.", variant: "destructive" });
                               }
                             }}
                           >
-                            <Ban className="h-3.5 w-3.5 mr-1" /> Banear
+                            <UserX className="h-3.5 w-3.5 mr-1" /> Eliminar cuenta
                           </Button>
-                        ) : (
+                        </div>
+                      </TabsContent>
+
+                      {/* Notes */}
+                      <TabsContent value="notes" className="mt-0 p-6 space-y-4">
+                        <div className="space-y-2">
+                          <Label>Nueva nota interna</Label>
+                          <div className="flex gap-2">
+                            <Textarea
+                              placeholder="Añade una nota interna sobre este usuario..."
+                              value={newNote}
+                              onChange={e => setNewNote(e.target.value)}
+                              className="bg-black/20 border-white/10 resize-none flex-1"
+                              rows={3}
+                            />
+                          </div>
                           <Button
-                            variant="outline"
                             size="sm"
-                            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                            disabled={banMutation.isPending}
-                            onClick={() => banMutation.mutate({ id: selectedUser.id, data: { ban: false } })}
+                            className="gap-1.5"
+                            disabled={!newNote.trim() || addNoteMutation.isPending}
+                            onClick={() => addNoteMutation.mutate({ id: selectedUser.id, data: { text: newNote.trim() } })}
                           >
-                            <Unlock className="h-3.5 w-3.5 mr-1" /> Levantar ban
+                            {addNoteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <StickyNote className="h-3.5 w-3.5" />}
+                            Guardar nota
                           </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Block IP */}
-                    <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <WifiOff className="h-4 w-4 text-orange-400" />
-                        <span className="font-medium text-orange-400">Bloqueo por IP</span>
-                        {selectedUser.blockedIp && (
-                          <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px] ml-auto">{selectedUser.blockedIp}</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">Bloquea el acceso desde una IP específica. Útil para evitar cuentas múltiples.</p>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="ej. 192.168.1.1"
-                          value={ipToBlock}
-                          onChange={e => setIpToBlock(e.target.value)}
-                          className="bg-black/20 border-white/10 flex-1 text-sm"
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
-                          disabled={blockIpMutation.isPending}
-                          onClick={() => blockIpMutation.mutate({ id: selectedUser.id, data: { ip: ipToBlock || null } })}
-                        >
-                          {selectedUser.blockedIp ? <Unlock className="h-3.5 w-3.5 mr-1" /> : <WifiOff className="h-3.5 w-3.5 mr-1" />}
-                          {selectedUser.blockedIp ? "Desbloquear" : "Bloquear IP"}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Delete user */}
-                    <div className="rounded-lg border border-white/5 bg-card/20 p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <UserX className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium text-muted-foreground">Eliminar cuenta</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Elimina permanentemente al usuario y todos sus datos. Esta acción no se puede deshacer.</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                        onClick={() => {
-                          if (confirm(`¿Eliminar PERMANENTEMENTE la cuenta de ${selectedUser.email}? Esta acción no se puede deshacer.`)) {
-                            toast({ title: "Función en desarrollo", description: "La eliminación de cuentas requiere confirmación adicional.", variant: "destructive" });
-                          }
-                        }}
-                      >
-                        <UserX className="h-3.5 w-3.5 mr-1" /> Eliminar cuenta
-                      </Button>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                        </div>
+                        <Separator className="bg-white/5" />
+                        <div className="text-center py-8 text-muted-foreground">
+                          <StickyNote className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">Las notas se guardan en el perfil del usuario</p>
+                          <p className="text-xs mt-1 opacity-60">Solo visibles para administradores</p>
+                        </div>
+                      </TabsContent>
+                    </ScrollArea>
+                  </Tabs>
+                </div>
               </>
             )}
           </DialogContent>
         </Dialog>
 
-        {/* ── DIALOG: Refund ── */}
+        {/* ── DIALOG: Refund Credits ── */}
         <Dialog open={!!refundDialog} onOpenChange={(open) => !open && setRefundDialog(null)}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <RotateCcw className="h-5 w-5 text-emerald-400" />
-                Procesar reembolso
+                Reembolso de créditos
               </DialogTitle>
               <DialogDescription>
                 Reembolso para <span className="font-mono text-primary">{refundDialog?.user.email}</span>
@@ -1068,12 +1260,89 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
           </DialogContent>
         </Dialog>
 
-        {/* ─── Email Compensation Dialog ───────────────────────────────── */}
-        <Dialog open={!!emailDialog} onOpenChange={(open) => !open && setEmailDialog(null)}>
-          <DialogContent className="bg-[#0d0d12] border-white/10 max-w-lg">
+        {/* ── DIALOG: Stripe Card Refund ── */}
+        <Dialog open={!!stripeRefundDialog} onOpenChange={(open) => !open && setStripeRefundDialog(null)}>
+          <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-violet-400" />
+                <Wallet className="h-5 w-5 text-blue-400" />
+                Reembolso a tarjeta (Stripe)
+              </DialogTitle>
+              <DialogDescription>
+                Reembolso real a la tarjeta de crédito de <span className="font-mono text-primary">{stripeRefundDialog?.user.email}</span>
+              </DialogDescription>
+            </DialogHeader>
+            {stripeRefundDialog && (
+              <div className="space-y-4 py-2">
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-sm">
+                  <div className="flex items-center gap-2 text-blue-400 mb-1">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="font-medium">Reembolso real a tarjeta</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Este reembolso se procesará directamente a través de Stripe y devolverá el dinero a la tarjeta del cliente. Puede tardar 5-10 días hábiles.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>ID de sesión Stripe</Label>
+                  <Input
+                    value={stripeRefundDialog.sessionId}
+                    readOnly
+                    className="bg-black/20 border-white/10 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Importe a reembolsar (en céntimos, 0 = reembolso total)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={stripeRefundDialog.amount || ""}
+                    onChange={e => setStripeRefundDialog({ ...stripeRefundDialog, amount: parseInt(e.target.value) || 0 })}
+                    placeholder="0 = reembolso total"
+                    className="bg-black/20 border-white/10"
+                  />
+                  <p className="text-xs text-muted-foreground">Ejemplo: 999 = $9.99. Deja en 0 para reembolso total del pago.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Motivo del reembolso</Label>
+                  <Textarea
+                    placeholder="ej. Error en la generación, problema técnico..."
+                    value={stripeRefundDialog.reason}
+                    onChange={e => setStripeRefundDialog({ ...stripeRefundDialog, reason: e.target.value })}
+                    className="bg-black/20 border-white/10 resize-none"
+                    rows={2}
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setStripeRefundDialog(null)}>Cancelar</Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={stripeRefundMutation.isPending}
+                onClick={() => {
+                  if (!stripeRefundDialog) return;
+                  stripeRefundMutation.mutate({
+                    id: stripeRefundDialog.user.id,
+                    data: {
+                      stripeSessionId: stripeRefundDialog.sessionId,
+                      amountCents: stripeRefundDialog.amount || undefined,
+                      reason: stripeRefundDialog.reason || undefined,
+                    }
+                  });
+                }}
+              >
+                {stripeRefundMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wallet className="h-4 w-4 mr-2" />}
+                Procesar reembolso Stripe
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── DIALOG: Email Compensation ── */}
+        <Dialog open={!!emailDialog} onOpenChange={(open) => !open && setEmailDialog(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-violet-400" />
                 Email de compensación
               </DialogTitle>
               <DialogDescription>
@@ -1140,7 +1409,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                   }
                 }}
               >
-                {emailSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
+                {emailSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
                 Enviar email
               </Button>
             </DialogFooter>
@@ -1148,6 +1417,15 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
         </Dialog>
       </div>
     </Layout>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0 bg-card/10 hover:bg-card/20 transition-colors">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-white">{value}</span>
+    </div>
   );
 }
 

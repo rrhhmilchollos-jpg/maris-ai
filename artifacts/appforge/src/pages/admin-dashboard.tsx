@@ -1,4 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+} from "recharts";
+import { parseISO } from "date-fns";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,7 +45,7 @@ import {
   Database,
   Shield,
 } from "lucide-react";
-import { apiFetch, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs } from "@/lib/api-client";
+import { apiFetch, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs, useRetryAdminJob } from "@/lib/api-client";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useLocation } from "wouter";
@@ -71,6 +76,12 @@ interface MetricsResponse {
   credits: { today: number; month: number };
   topUsers: Array<{ userId: string; email: string; creditsUsed: number }>;
   publishedApps: { today: number; total: number };
+  jobs7dChart?: Array<{ date: string; succeeded: number; failed: number; total: number }>;
+  credits7dChart?: Array<{ date: string; credits: number }>;
+  server?: { memUsedMb: number; memTotalMb: number; uptimeSeconds: number; requestsTotal: number; errors5xx: number };
+  redis?: { connected: boolean; latencyMs: number };
+  queue?: { ready: boolean };
+  overview?: { totalUsers: number; totalApps: number; newUsers7d: number };
   e2b?: {
     configured: boolean;
     validateOnGenerate: boolean;
@@ -175,6 +186,16 @@ export default function AdminDashboardPage() {
     },
   });
 
+  const retryJob = useRetryAdminJob({
+    onSuccess: () => {
+      toast({ title: "Job reintentado", description: "El job ha sido re-encolado correctamente." });
+      queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error al reintentar", description: err?.message ?? "Error desconocido", variant: "destructive" });
+    },
+  });
+
   const e2bToggle = useMutation({
     mutationFn: toggleE2B,
     onSuccess: (res) => {
@@ -199,6 +220,38 @@ export default function AdminDashboardPage() {
 
   const successRate = data?.jobs24h.successRate ?? 0;
   const failRate = 100 - successRate;
+
+  // Chart data
+  const jobs7dChart = (data?.jobs7dChart ?? []).map((d: any) => ({
+    ...d,
+    label: d.date ? format(parseISO(d.date), "dd MMM", { locale: es }) : d.date,
+  }));
+  const credits7dChart = (data?.credits7dChart ?? []).map((d: any) => ({
+    ...d,
+    label: d.date ? format(parseISO(d.date), "dd MMM", { locale: es }) : d.date,
+  }));
+  const jobStatusPie = [
+    { name: "Completados", value: data?.jobs24h?.succeeded ?? 0, color: "#10b981" },
+    { name: "Fallidos", value: data?.jobs24h?.failed ?? 0, color: "#ef4444" },
+    { name: "En cola", value: jobsData?.queued ?? 0, color: "#f59e0b" },
+    { name: "Ejecutando", value: jobsData?.running ?? 0, color: "#0ea5e9" },
+  ].filter(d => d.value > 0);
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-[#16161e] border border-white/10 rounded-lg p-3 shadow-xl text-xs">
+        <p className="text-muted-foreground mb-1 font-medium">{label}</p>
+        {payload.map((p: any, i: number) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+            <span className="text-white/70">{p.name}:</span>
+            <span className="font-bold text-white">{p.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <Layout>
@@ -323,8 +376,12 @@ export default function AdminDashboardPage() {
             </section>
 
             {/* Main content tabs */}
-            <Tabs defaultValue="jobs" className="space-y-4">
+            <Tabs defaultValue="charts" className="space-y-4">
               <TabsList className="bg-black/20 border border-white/10">
+                <TabsTrigger value="charts" className="gap-2">
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  Gráficas
+                </TabsTrigger>
                 <TabsTrigger value="jobs" className="gap-2">
                   <Terminal className="h-3.5 w-3.5" />
                   Jobs & Errores
@@ -347,6 +404,156 @@ export default function AdminDashboardPage() {
                   Sistema
                 </TabsTrigger>
               </TabsList>
+
+              {/* CHARTS TAB */}
+              <TabsContent value="charts" className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Jobs 7-day area chart */}
+                  <Card className="bg-card/40 border-white/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-violet-400" />
+                        Jobs últimos 7 días
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {jobs7dChart.length === 0 ? (
+                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">Sin datos históricos aún</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={200}>
+                          <AreaChart data={jobs7dChart} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+                            <defs>
+                              <linearGradient id="gradSucceeded" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                              </linearGradient>
+                              <linearGradient id="gradFailed" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                            <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Area type="monotone" dataKey="succeeded" name="Completados" stroke="#10b981" fill="url(#gradSucceeded)" strokeWidth={2} dot={false} />
+                            <Area type="monotone" dataKey="failed" name="Fallidos" stroke="#ef4444" fill="url(#gradFailed)" strokeWidth={2} dot={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Credits 7-day bar chart */}
+                  <Card className="bg-card/40 border-white/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-pink-400" />
+                        Créditos consumidos (7 días)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {credits7dChart.length === 0 ? (
+                        <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">Sin datos históricos aún</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={200}>
+                          <BarChart data={credits7dChart} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                            <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Bar dataKey="credits" name="Créditos" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  {/* Pie chart job status */}
+                  <Card className="bg-card/40 border-white/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Cpu className="h-4 w-4 text-sky-400" />
+                        Estado de jobs (24h)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {jobStatusPie.length === 0 ? (
+                        <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">Sin jobs en 24h</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={160}>
+                          <PieChart>
+                            <Pie data={jobStatusPie} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={3} dataKey="value">
+                              {jobStatusPie.map((entry, index) => (
+                                <Cell key={index} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: "#16161e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }} />
+                            <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Top failing phases bar */}
+                  <Card className="bg-card/40 border-white/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-400" />
+                        Fases con más errores (24h)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {data.topFailingPhases.length === 0 ? (
+                        <div className="h-40 flex items-center justify-center text-emerald-400 text-sm gap-2">
+                          <CheckCircle2 className="h-4 w-4" />Sin errores
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={160}>
+                          <BarChart
+                            data={data.topFailingPhases.map((p) => ({ phase: p.phase.slice(0, 10), errores: p.count }))}
+                            layout="vertical"
+                            margin={{ top: 0, right: 10, bottom: 0, left: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                            <XAxis type="number" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                            <YAxis type="category" dataKey="phase" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={70} />
+                            <Tooltip content={<CustomTooltip />} />
+                            <Bar dataKey="errores" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* System health summary */}
+                  <Card className="bg-card/40 border-white/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-violet-400" />
+                        Salud del sistema
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {[
+                        { label: "Tasa de éxito 24h", value: `${successRate}%`, ok: successRate >= 80, bar: successRate },
+                        { label: "Jobs completados", value: String(data.jobs24h.succeeded), ok: true, bar: 100 },
+                        { label: "Jobs fallidos", value: String(data.jobs24h.failed), ok: data.jobs24h.failed === 0, bar: data.jobs24h.total > 0 ? (100 - successRate) : 0 },
+                        { label: "Base de datos", value: "Operativa", ok: true, bar: 100 },
+                        { label: "E2B Sandbox", value: data.e2b?.effective ? "Activo" : "Inactivo", ok: data.e2b?.effective ?? false, bar: data.e2b?.effective ? 100 : 0 },
+                      ].map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-white/60">{item.label}</span>
+                          <span className={`font-bold ${item.ok ? "text-emerald-400" : "text-red-400"}`}>{item.value}</span>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
 
               {/* JOBS TAB */}
               <TabsContent value="jobs" className="space-y-4">
