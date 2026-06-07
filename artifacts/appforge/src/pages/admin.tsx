@@ -47,7 +47,7 @@ import {
   Shield, Users, Code2, Sparkles, CreditCard, Plus, Minus, ShieldCheck,
   RefreshCw, Activity, AlertTriangle, CheckCircle2, Clock, BarChart3,
   MessageSquare, X, Ban, WifiOff, UserX, RotateCcw, Eye, Search,
-  ChevronDown, ChevronUp, History, DollarSign, Lock, Unlock,
+  ChevronDown, ChevronUp, History, DollarSign, Lock, Unlock, Loader2,
 } from "lucide-react";
 
 type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news";
@@ -217,6 +217,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [ipToBlock, setIpToBlock] = useState("");
   const [refundDialog, setRefundDialog] = useState<{ user: AdminUser; amount: number; reason: string } | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [emailDialog, setEmailDialog] = useState<{ user: AdminUser; subject: string; message: string; creditsAdded: number } | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
 
   const MEMORY_PAGE_SIZE = 25;
   const [memory, setMemory] = useState<
@@ -802,6 +804,14 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         <RotateCcw className="h-4 w-4 mr-2" /> Reembolsar
                       </Button>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                      onClick={() => setEmailDialog({ user: selectedUser, subject: `Compensación por el inconveniente — Maris AI`, message: `Hemos detectado un error en tu generación reciente y lo hemos solucionado. Sentimos las molestias causadas.`, creditsAdded: 20 })}
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" /> Enviar email de compensación
+                    </Button>
                   </TabsContent>
 
                   {/* Apps */}
@@ -1053,6 +1063,85 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Confirmar reembolso ({refundDialog?.amount ?? 0} créditos)
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ─── Email Compensation Dialog ───────────────────────────────── */}
+        <Dialog open={!!emailDialog} onOpenChange={(open) => !open && setEmailDialog(null)}>
+          <DialogContent className="bg-[#0d0d12] border-white/10 max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-violet-400" />
+                Email de compensación
+              </DialogTitle>
+              <DialogDescription>
+                Enviar email a <span className="font-mono text-primary">{emailDialog?.user.email}</span>
+              </DialogDescription>
+            </DialogHeader>
+            {emailDialog && (
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label>Asunto</Label>
+                  <Input
+                    value={emailDialog.subject}
+                    onChange={e => setEmailDialog({ ...emailDialog, subject: e.target.value })}
+                    className="bg-black/20 border-white/10"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Mensaje</Label>
+                  <Textarea
+                    value={emailDialog.message}
+                    onChange={e => setEmailDialog({ ...emailDialog, message: e.target.value })}
+                    className="bg-black/20 border-white/10 resize-none min-h-[100px]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Créditos de compensación (0 = no incluir)</Label>
+                  <Input
+                    type="number"
+                    value={emailDialog.creditsAdded}
+                    onChange={e => setEmailDialog({ ...emailDialog, creditsAdded: parseInt(e.target.value) || 0 })}
+                    className="bg-black/20 border-white/10"
+                    min={0}
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setEmailDialog(null)}>Cancelar</Button>
+              <Button
+                className="bg-violet-600 hover:bg-violet-700 text-white"
+                disabled={emailSending}
+                onClick={async () => {
+                  if (!emailDialog) return;
+                  setEmailSending(true);
+                  try {
+                    const result = await apiFetch(`/api/admin/users/${emailDialog.user.id}/send-compensation-email`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        subject: emailDialog.subject,
+                        message: emailDialog.message,
+                        creditsAdded: emailDialog.creditsAdded || undefined,
+                      }),
+                    });
+                    toast({
+                      title: result.emailSent ? '✅ Email enviado' : '📬 Email registrado',
+                      description: result.note,
+                    });
+                    setEmailDialog(null);
+                  } catch (e: any) {
+                    toast({ title: 'Error', description: e.message, variant: 'destructive' });
+                  } finally {
+                    setEmailSending(false);
+                  }
+                }}
+              >
+                {emailSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MessageSquare className="h-4 w-4 mr-2" />}
+                Enviar email
               </Button>
             </DialogFooter>
           </DialogContent>
