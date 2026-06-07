@@ -300,7 +300,11 @@ export default function DashboardPage() {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch {
+        throw new Error("El servidor no está listo aún. Espera unos segundos y vuelve a intentarlo.");
+      }
       if (!res.ok) throw new Error(data.error || "Error al importar");
       setImportResult({ title: data.title, filesImported: data.filesImported });
       queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });

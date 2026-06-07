@@ -70,13 +70,22 @@ async function extractZipToBundle(buffer: Buffer): Promise<{ files: Record<strin
 }
 
 async function importAdmZip(): Promise<any> {
+  // Try multiple possible paths for adm-zip
+  const candidates = [
+    "adm-zip",
+    "/app/node_modules/.pnpm/adm-zip@0.5.16/node_modules/adm-zip",
+    "/app/node_modules/adm-zip",
+  ];
+  for (const p of candidates) {
+    try { return require(p); } catch {}
+  }
+  // Last resort: install on-the-fly
   try {
-    return require("adm-zip");
-  } catch {
-    // adm-zip not installed, install it on the fly
     const { execSync } = require("child_process");
-    execSync("npm install adm-zip --no-save 2>/dev/null || true", { stdio: "ignore" });
+    execSync("cd /app && pnpm add adm-zip --save 2>/dev/null || npm install adm-zip --no-save 2>/dev/null || true", { stdio: "ignore", timeout: 30000 });
     return require("adm-zip");
+  } catch (e) {
+    throw new Error("No se pudo cargar adm-zip para descomprimir el archivo ZIP. Contacta con soporte.");
   }
 }
 
@@ -250,7 +259,10 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
     });
   } catch (err) {
     logger.error({ err }, "POST /api/import-app error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error al importar el proyecto." });
+    // Always return JSON, never HTML
+    if (!res.headersSent) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Error al importar el proyecto." });
+    }
   }
 });
 
