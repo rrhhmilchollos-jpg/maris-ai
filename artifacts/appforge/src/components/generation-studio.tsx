@@ -103,6 +103,7 @@ function bundleToPreviewHtml(code: string | null | undefined): string | null {
   const css = cssMatch ? `<style>${cssMatch[1]}</style>` : "";
   const files = Array.from(code.matchAll(/\/\/ === FILE: (.*?) ===/g)).map(m => m[1]);
   const lastFile = files[files.length - 1] || "Iniciando...";
+  const fileCount = files.length;
 
   return `<!DOCTYPE html><html><head>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -138,7 +139,7 @@ function bundleToPreviewHtml(code: string | null | undefined): string | null {
           <div class="shimmer h-full rounded-full w-3/4"></div>
         </div>
       </div>
-      <p class="text-[11px] text-white/20">El preview aparecerá cuando el Frontend Engineer termine</p>
+      <p class="text-[11px] text-white/20">${fileCount} archivo${fileCount !== 1 ? 's' : ''} generado${fileCount !== 1 ? 's' : ''} · El preview aparecerá cuando el Frontend Engineer termine</p>
     </div>
   </body></html>`;
 }
