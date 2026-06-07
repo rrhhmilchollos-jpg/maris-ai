@@ -206,7 +206,19 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: app, isLoading } = useGetApp(id, {
-    query: { enabled: !!id, queryKey: getGetAppQueryKey(id) },
+    query: {
+      enabled: !!id,
+      queryKey: getGetAppQueryKey(id),
+      // Refrescar la app periódicamente mientras hay un job activo para que
+      // el frontendCode se actualice en cuanto el job termine (succeeded).
+      // Una vez que hay código renderizable, reducimos a 10s para no saturar.
+      refetchInterval: (data: any) => {
+        if (!data) return 3000;
+        const code = String(data?.frontendCode ?? "").trim();
+        const hasCode = code.length >= 20 && !code.includes("El código ha sido consolidado en disco por hitos");
+        return hasCode ? 10000 : 3000;
+      },
+    },
   });
   const { data: me } = useGetMe();
   const isAdmin = !!me?.isAdmin;

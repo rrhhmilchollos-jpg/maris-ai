@@ -378,6 +378,27 @@ export function LivePreview({
     }
 
     if (phase === "idle") {
+      // Si WebContainer no está soportado (faltan headers COEP/COOP), mostrar mensaje informativo
+      if (!supported) {
+        return (
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-amber-400" />
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-white font-semibold">Live Preview no disponible</h4>
+              <p className="text-xs text-slate-400 max-w-xs">
+                El Live Preview requiere que el sitio se sirva con los headers de aislamiento
+                (<code className="text-amber-400">COEP/COOP</code>). Despliega la app en Vercel
+                para verla en acción, o usa Chrome con los headers correctos.
+              </p>
+            </div>
+            <Button onClick={startWebContainer} variant="outline" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10">
+              Intentar de todos modos
+            </Button>
+          </div>
+        );
+      }
       return (
         <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
           <div className="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
