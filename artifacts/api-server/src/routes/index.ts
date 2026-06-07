@@ -12,6 +12,7 @@ import jobsRouter from "./jobs";
 import watermarkRouter from "./watermark";
 import stripeWatermarkWebhookRouter from "./stripe-watermark-webhook";
 import deploymentRouter from "./deployment";
+import importRouter from "./import";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,7 @@ router.use(billingLiveRouter);
 router.use(watermarkRouter);
 router.use(stripeWatermarkWebhookRouter);
 router.use(deploymentRouter);
+router.use(importRouter);
 router.use(adminRouter);
 
 export default router;

@@ -44,7 +44,7 @@ import {
   ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, 
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
-  Settings2, ShieldAlert, TestTube2, HardDrive
+  Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2
 } from "lucide-react";
 import {
   Dialog,
@@ -139,6 +139,10 @@ export default function DashboardPage() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingAnswers, setOnboardingAnswers] = useState<Record<number, string>>({}); 
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{ title: string; filesImported: number } | null>(null); 
 
   const getOnboardingQuestions = () => [
     {
@@ -282,6 +286,30 @@ export default function DashboardPage() {
     e.stopPropagation();
     if (confirm(`¿Estás seguro de que quieres eliminar permanentemente "${title}"? Esta acción no se puede deshacer.`)) {
       deleteMutation.mutate({ id });
+    }
+  };
+
+  const handleImportProject = async () => {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await fetch("/api/import-app", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al importar");
+      setImportResult({ title: data.title, filesImported: data.filesImported });
+      queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+      toast({ title: `✅ "${data.title}" importado`, description: `${data.filesImported} archivos cargados. Ya aparece en tus apps recientes.` });
+      setTimeout(() => { setImportDialogOpen(false); setImportFile(null); setImportResult(null); }, 2000);
+    } catch (err: any) {
+      toast({ title: "Error al importar", description: err.message, variant: "destructive" });
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -638,9 +666,71 @@ export default function DashboardPage() {
         </Dialog>
 
         <div>
-          <h3 className="text-xl font-semibold flex items-center mb-4">
-            <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes
+          <h3 className="text-xl font-semibold flex items-center mb-4 justify-between">
+            <span className="flex items-center">
+              <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes
+            </span>
+            <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => { setImportDialogOpen(true); setImportResult(null); setImportFile(null); }}>
+              <FolderUp className="h-4 w-4" />
+              Importar proyecto
+            </Button>
           </h3>
+
+          {/* Import Dialog */}
+          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><FolderUp className="h-5 w-5 text-primary" />Importar proyecto existente</DialogTitle>
+                <DialogDescription>Sube un archivo .zip o .rar con tu proyecto web y aparecerá en tu panel listo para editar con Maris AI.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                {importResult ? (
+                  <div className="flex flex-col items-center gap-3 py-4 text-center">
+                    <CheckCircle2 className="h-12 w-12 text-green-500" />
+                    <p className="font-medium text-lg">"{importResult.title}"</p>
+                    <p className="text-sm text-muted-foreground">{importResult.filesImported} archivos importados correctamente.</p>
+                  </div>
+                ) : (
+                  <>
+                    <label
+                      htmlFor="import-file-input"
+                      className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${importFile ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50 hover:bg-white/5"}`}
+                    >
+                      <FolderUp className="h-8 w-8 mb-2 text-muted-foreground" />
+                      {importFile ? (
+                        <span className="text-sm font-medium text-primary">{importFile.name}</span>
+                      ) : (
+                        <>
+                          <span className="text-sm text-muted-foreground">Haz clic o arrastra tu archivo aquí</span>
+                          <span className="text-xs text-muted-foreground mt-1">ZIP o RAR · máx. 150 MB</span>
+                        </>
+                      )}
+                      <input
+                        id="import-file-input"
+                        type="file"
+                        accept=".zip,.rar,application/zip,application/x-rar-compressed"
+                        className="hidden"
+                        onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    {importFile && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        {(importFile.size / 1024 / 1024).toFixed(1)} MB · listo para importar
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              {!importResult && (
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setImportDialogOpen(false)} disabled={importLoading}>Cancelar</Button>
+                  <Button onClick={handleImportProject} disabled={!importFile || importLoading} className="gap-2">
+                    {importLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Importando…</> : <><FolderUp className="h-4 w-4" />Importar proyecto</>}
+                  </Button>
+                </DialogFooter>
+              )}
+            </DialogContent>
+          </Dialog>
           {appsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}
