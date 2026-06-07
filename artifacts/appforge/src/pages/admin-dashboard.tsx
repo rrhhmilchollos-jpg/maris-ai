@@ -5,8 +5,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Activity,
   AlertTriangle,
@@ -15,10 +19,31 @@ import {
   Globe,
   Users,
   Clock,
-  Cpu,
   Loader2,
   ArrowLeft,
+  RefreshCw,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Filter,
+  TrendingUp,
+  TrendingDown,
+  Zap,
+  Server,
+  Bug,
+  Eye,
+  BarChart3,
+  AlertCircle,
+  XCircle,
+  Terminal,
+  Cpu,
+  Database,
+  Shield,
 } from "lucide-react";
+import { apiFetch, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs } from "@/lib/api-client";
+import { format, formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
+import { useLocation } from "wouter";
 
 interface E2BToggleResponse {
   configured: boolean;
@@ -53,17 +78,8 @@ interface MetricsResponse {
   };
 }
 
-import { apiFetch } from "@/lib/api-client";
-
 async function fetchMetrics(): Promise<MetricsResponse> {
   return apiFetch<MetricsResponse>("/api/admin/metrics");
-}
-
-async function refundUserCredits(userId: string, amount: number, reason: string) {
-  return apiFetch(`/api/admin/users/${userId}/refund`, {
-    method: "POST",
-    body: JSON.stringify({ amount, reason }),
-  });
 }
 
 async function toggleE2B(enabled: boolean): Promise<E2BToggleResponse> {
@@ -89,17 +105,74 @@ function formatDuration(ms: number): string {
   return `${m}m ${rs}s`;
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const variants: Record<string, { color: string; icon: React.ReactNode }> = {
+    succeeded: { color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", icon: <CheckCircle2 className="h-3 w-3" /> },
+    failed: { color: "bg-red-500/15 text-red-400 border-red-500/30", icon: <XCircle className="h-3 w-3" /> },
+    running: { color: "bg-blue-500/15 text-blue-400 border-blue-500/30", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+    queued: { color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30", icon: <Clock className="h-3 w-3" /> },
+    generating: { color: "bg-purple-500/15 text-purple-400 border-purple-500/30", icon: <Zap className="h-3 w-3" /> },
+  };
+  const v = variants[status] ?? { color: "bg-white/10 text-white/60 border-white/10", icon: null };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${v.color}`}>
+      {v.icon}{status}
+    </span>
+  );
+}
+
+function JobLogsPanel({ jobId }: { jobId: string }) {
+  const [logs, setLogs] = useState<Array<{ id: string; agent: string; level: string; message: string; createdAt: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getGenerationJobLogs(jobId, {})
+      .then((res) => setLogs(res.logs))
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false));
+  }, [jobId]);
+
+  if (loading) return <div className="p-3 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" />Cargando logs…</div>;
+  if (!logs.length) return <div className="p-3 text-xs text-muted-foreground">Sin logs disponibles para este job.</div>;
+
+  return (
+    <ScrollArea className="h-48 w-full">
+      <div className="p-2 space-y-0.5 font-mono text-xs">
+        {logs.map((log) => (
+          <div key={log.id} className={`flex gap-2 py-0.5 ${log.level === "error" ? "text-red-400" : log.level === "warn" ? "text-yellow-400" : "text-white/70"}`}>
+            <span className="text-white/30 shrink-0">{format(new Date(log.createdAt), "HH:mm:ss")}</span>
+            <span className={`shrink-0 px-1 rounded text-[10px] ${log.level === "error" ? "bg-red-500/20" : "bg-white/5"}`}>{log.agent}</span>
+            <span className="break-all">{log.message}</span>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [smokeResult, setSmokeResult] = useState<{ ok: boolean; durationMs: number; output: string; reason?: string } | null>(null);
+  const [, setLocation] = useLocation();
+  const [smokeResult, setSmokeResult] = useState<E2BSmokeResponse | null>(null);
   const [smokeRunning, setSmokeRunning] = useState(false);
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [jobFilter, setJobFilter] = useState<"all" | "failed" | "running" | "queued">("all");
+  const [jobSearch, setJobSearch] = useState("");
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const { data, isLoading, error, dataUpdatedAt } = useQuery({
+  const { data, isLoading, error, dataUpdatedAt, refetch } = useQuery({
     queryKey: ["admin", "metrics"],
     queryFn: fetchMetrics,
-    refetchInterval: 30_000,
+    refetchInterval: autoRefresh ? 30_000 : false,
     refetchOnWindowFocus: true,
+  });
+
+  const { data: jobsData, isLoading: jobsLoading, refetch: refetchJobs } = useListAdminJobs({
+    query: {
+      refetchInterval: autoRefresh ? 15_000 : false,
+    },
   });
 
   const e2bToggle = useMutation({
@@ -109,54 +182,65 @@ export default function AdminDashboardPage() {
       toast({
         title: res.effective ? "E2B activado" : "E2B desactivado",
         description: res.effective
-          ? "Cada generación verificará el bundle con un build real (npm install + build) en una microVM."
-          : res.configured
-            ? "El pipeline ya no llamará a E2B. La validación in-memory sigue activa."
-            : "Falta E2B_API_KEY — configúralo para que el toggle tenga efecto.",
+          ? "Cada generación verificará el bundle con un build real en microVM."
+          : "El pipeline ya no llamará a E2B.",
       });
     },
     onError: (err) => {
-      toast({
-        title: "No se pudo cambiar el estado de E2B",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
+      toast({ title: "Error al cambiar E2B", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
     },
   });
 
+  const filteredJobs = (jobsData?.jobs ?? []).filter((job: any) => {
+    if (jobFilter !== "all" && job.status !== jobFilter) return false;
+    if (jobSearch && !job.userEmail?.toLowerCase().includes(jobSearch.toLowerCase()) && !job.prompt?.toLowerCase().includes(jobSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  const successRate = data?.jobs24h.successRate ?? 0;
+  const failRate = 100 - successRate;
+
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8 space-y-6">
-        <header className="flex items-center justify-between">
+      <div className="container mx-auto px-4 py-8 space-y-6 max-w-screen-2xl">
+        {/* Header */}
+        <header className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full hover:bg-white/10"
-              onClick={() => window.history.back()}
-              title="Volver"
-            >
-              <ArrowLeft className="h-6 w-6" />
+            <Button variant="ghost" size="icon" className="rounded-full hover:bg-white/10" onClick={() => window.history.back()}>
+              <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Panel de métricas</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Resumen del negocio en tiempo real. Se actualiza automáticamente cada 30
-                segundos.
+              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <BarChart3 className="h-6 w-6 text-primary" />
+                Panel de métricas
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Monitorización en tiempo real · Se actualiza cada {autoRefresh ? "30s" : "manual"}
               </p>
             </div>
           </div>
-          {dataUpdatedAt > 0 && (
-            <Badge variant="outline" className="gap-1">
-              <Clock className="h-3 w-3" />
-              {new Date(dataUpdatedAt).toLocaleTimeString("es-ES")}
-            </Badge>
-          )}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Auto-refresh</span>
+              <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { refetch(); refetchJobs(); }} className="gap-2">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Actualizar
+            </Button>
+            {dataUpdatedAt > 0 && (
+              <Badge variant="outline" className="gap-1 text-xs">
+                <Clock className="h-3 w-3" />
+                {new Date(dataUpdatedAt).toLocaleTimeString("es-ES")}
+              </Badge>
+            )}
+          </div>
         </header>
 
         {error && (
-          <Card className="border-destructive">
-            <CardContent className="pt-6 text-sm text-destructive">
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="pt-4 text-sm text-destructive flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
               No se han podido cargar las métricas: {(error as Error).message}
             </CardContent>
           </Card>
@@ -164,262 +248,435 @@ export default function AdminDashboardPage() {
 
         {isLoading || !data ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-32" />
-            ))}
+            {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
           </div>
         ) : (
           <>
-            <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* KPI Row 1 */}
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <MetricCard
-                icon={<Activity className="h-4 w-4" />}
+                icon={<Activity className="h-4 w-4 text-blue-400" />}
                 title="Generaciones (24h)"
                 value={data.jobs24h.total.toString()}
-                hint={
-                  data.jobs24h.successRate !== null
-                    ? `${data.jobs24h.successRate}% éxito`
-                    : "Sin datos"
-                }
+                hint={data.jobs24h.successRate !== null ? `${data.jobs24h.successRate}% éxito` : "Sin datos"}
+                trend={data.jobs24h.total > 0 ? "up" : "neutral"}
+                color="blue"
               />
               <MetricCard
-                icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                icon={<CheckCircle2 className="h-4 w-4 text-emerald-400" />}
                 title="Generaciones OK (24h)"
                 value={data.jobs24h.succeeded.toString()}
                 hint={`Tiempo medio: ${formatDuration(data.jobs24h.avgDurationMs)}`}
+                trend="up"
+                color="emerald"
               />
               <MetricCard
-                icon={<AlertTriangle className="h-4 w-4 text-rose-500" />}
+                icon={<AlertTriangle className="h-4 w-4 text-red-400" />}
                 title="Generaciones falladas (24h)"
                 value={data.jobs24h.failed.toString()}
-                hint={
-                  data.topFailingPhases[0]
-                    ? `Fase: ${data.topFailingPhases[0].phase}`
-                    : "Sin fallos"
-                }
+                hint={data.topFailingPhases[0] ? `Fase crítica: ${data.topFailingPhases[0].phase}` : "Sin fallos"}
+                trend={data.jobs24h.failed > 0 ? "down" : "neutral"}
+                color="red"
               />
               <MetricCard
-                icon={<Globe className="h-4 w-4 text-sky-500" />}
+                icon={<Globe className="h-4 w-4 text-sky-400" />}
                 title="Apps publicadas"
                 value={data.publishedApps.total.toString()}
-                hint={`Hoy: ${data.publishedApps.today}`}
+                hint={`Hoy: ${data.publishedApps.today} nuevas`}
+                trend="up"
+                color="sky"
               />
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" />
-                    Créditos consumidos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Hoy</span>
-                    <span className="text-2xl font-semibold">
-                      {data.credits.today.toLocaleString("es-ES")}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm text-muted-foreground">Este mes</span>
-                    <span className="text-2xl font-semibold">
-                      {data.credits.month.toLocaleString("es-ES")}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Fases con más fallos (24h)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.topFailingPhases.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Ninguna fase ha fallado en las últimas 24 horas.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {data.topFailingPhases.map((p) => (
-                        <li
-                          key={p.phase}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <span className="font-mono">{p.phase}</span>
-                          <Badge variant="destructive">{p.count}</Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Top 5 usuarios por créditos
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.topUsers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Aún no hay consumo de créditos registrado.
-                    </p>
-                  ) : (
-                    <ul className="space-y-3">
-                      {data.topUsers.map((u: any) => (
-                        <li
-                          key={u.userId}
-                          className="flex flex-col gap-1 text-sm border-b border-white/5 pb-2 last:border-0"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="truncate font-medium" title={u.email}>
-                              {u.email}
-                            </span>
-                            <Badge variant="secondary">
-                              {u.creditsUsed.toLocaleString("es-ES")}
-                            </Badge>
-                          </div>
-                          <div className="flex gap-2 mt-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-[10px] px-2 hover:bg-emerald-500/10 hover:text-emerald-500"
-                              onClick={() => {
-                                const amount = prompt(`¿Cuántos créditos quieres añadir a ${u.email}?`, "100");
-                                if (amount && !isNaN(Number(amount))) {
-                                  refundUserCredits(u.userId, Number(amount), "Admin refund/bonus").then(() => {
-                                    queryClient.invalidateQueries({ queryKey: ["admin", "metrics"] });
-                                    toast({ title: "Créditos añadidos", description: `Se han añadido ${amount} créditos a ${u.email}` });
-                                  }).catch(err => {
-                                    toast({ title: "Error", description: err.message, variant: "destructive" });
-                                  });
-                                }
-                              }}
-                            >
-                              + Añadir
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-[10px] px-2 hover:bg-rose-500/10 hover:text-rose-500"
-                              onClick={() => {
-                                const amount = prompt(`¿Cuántos créditos quieres quitar a ${u.email}?`, "50");
-                                if (amount && !isNaN(Number(amount))) {
-                                  refundUserCredits(u.userId, -Number(amount), "Admin correction").then(() => {
-                                    queryClient.invalidateQueries({ queryKey: ["admin", "metrics"] });
-                                    toast({ title: "Créditos retirados", description: `Se han quitado ${amount} créditos a ${u.email}` });
-                                  }).catch(err => {
-                                    toast({ title: "Error", description: err.message, variant: "destructive" });
-                                  });
-                                }
-                              }}
-                            >
-                              - Quitar
-                            </Button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Cpu className="h-4 w-4" />
-                    Validación E2B (build real en microVM)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <p className="text-sm">
-                        Tras la validación in-memory, el pipeline arranca un sandbox Linux
-                        y ejecuta <code className="text-xs bg-muted px-1 rounded">npm install &amp;&amp; npm run build</code>
-                        {" "}para detectar paquetes inexistentes, errores de Vite y otros
-                        fallos que el AST no ve. Si falla, intenta una ronda extra de auto-reparación
-                        usando el error real.
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Coste: ~30-90 s extra por generación + créditos E2B. Recomendado para
-                        producción de pago, opcional en desarrollo.
-                      </p>
-                      <div className="flex items-center gap-2 pt-1">
-                        <Badge variant={data.e2b?.configured ? "secondary" : "outline"}>
-                          {data.e2b?.configured ? "API key OK" : "Falta E2B_API_KEY"}
-                        </Badge>
-                        <Badge variant={data.e2b?.effective ? "default" : "outline"}>
-                          {data.e2b?.effective ? "Activo en pipeline" : "Inactivo en pipeline"}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <Switch
-                        checked={Boolean(data.e2b?.validateOnGenerate)}
-                        disabled={!data.e2b?.configured || e2bToggle.isPending}
-                        onCheckedChange={(checked) => e2bToggle.mutate(checked)}
-                        aria-label="Activar validación E2B en cada generación"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={smokeRunning}
-                        onClick={async () => {
-                          setSmokeRunning(true);
-                          setSmokeResult(null);
-                          try {
-                            const res = await runE2BSmoke();
-                            setSmokeResult(res);
-                          } catch (err) {
-                            setSmokeResult({
-                              ok: false,
-                              durationMs: 0,
-                              output: "",
-                              reason: err instanceof Error ? err.message : String(err),
-                            });
-                          } finally {
-                            setSmokeRunning(false);
-                          }
-                        }}
-                      >
-                        {smokeRunning ? (
-                          <>
-                            <Loader2 className="h-3 w-3 animate-spin mr-1" /> Probando…
-                          </>
-                        ) : (
-                          "Smoke test"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {smokeResult && (
-                    <div
-                      className={`text-xs rounded border px-3 py-2 ${
-                        smokeResult.ok
-                          ? "border-green-500/40 bg-green-500/10"
-                          : "border-destructive/40 bg-destructive/10"
-                      }`}
-                    >
-                      <div className="font-medium">
-                        {smokeResult.ok
-                          ? `✓ Smoke OK · ${smokeResult.durationMs} ms`
-                          : `✗ Smoke falló${smokeResult.reason ? ` · ${smokeResult.reason}` : ""}`}
-                      </div>
-                      {smokeResult.output && (
-                        <pre className="mt-1 whitespace-pre-wrap text-muted-foreground">{smokeResult.output}</pre>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+            {/* KPI Row 2 */}
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                icon={<CreditCard className="h-4 w-4 text-violet-400" />}
+                title="Créditos hoy"
+                value={data.credits.today.toLocaleString("es-ES")}
+                hint="Consumidos en las últimas 24h"
+                color="violet"
+              />
+              <MetricCard
+                icon={<CreditCard className="h-4 w-4 text-violet-400" />}
+                title="Créditos este mes"
+                value={data.credits.month.toLocaleString("es-ES")}
+                hint="Consumidos en el mes actual"
+                color="violet"
+              />
+              <MetricCard
+                icon={<Server className="h-4 w-4 text-orange-400" />}
+                title="Jobs en cola"
+                value={(jobsData?.queued ?? 0).toString()}
+                hint={`${jobsData?.running ?? 0} en ejecución ahora`}
+                trend={(jobsData?.queued ?? 0) > 5 ? "down" : "neutral"}
+                color="orange"
+              />
+              <MetricCard
+                icon={<Users className="h-4 w-4 text-pink-400" />}
+                title="Tasa de éxito"
+                value={`${successRate ?? 0}%`}
+                hint={`${failRate ?? 0}% de fallos en 24h`}
+                trend={(successRate ?? 0) >= 80 ? "up" : "down"}
+                color={successRate >= 80 ? "emerald" : "red"}
+              />
             </section>
+
+            {/* Main content tabs */}
+            <Tabs defaultValue="jobs" className="space-y-4">
+              <TabsList className="bg-black/20 border border-white/10">
+                <TabsTrigger value="jobs" className="gap-2">
+                  <Terminal className="h-3.5 w-3.5" />
+                  Jobs & Errores
+                  {(jobsData?.failedLast24h ?? 0) > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                      {jobsData?.failedLast24h}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="phases" className="gap-2">
+                  <Bug className="h-3.5 w-3.5" />
+                  Fases con fallos
+                </TabsTrigger>
+                <TabsTrigger value="users" className="gap-2">
+                  <Users className="h-3.5 w-3.5" />
+                  Top usuarios
+                </TabsTrigger>
+                <TabsTrigger value="system" className="gap-2">
+                  <Cpu className="h-3.5 w-3.5" />
+                  Sistema
+                </TabsTrigger>
+              </TabsList>
+
+              {/* JOBS TAB */}
+              <TabsContent value="jobs" className="space-y-4">
+                <Card className="bg-card/40 border-white/5">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Terminal className="h-4 w-4 text-muted-foreground" />
+                        Cola de generación
+                        <Badge variant="outline" className="text-xs ml-1">
+                          {jobsData?.jobs?.length ?? 0} jobs
+                        </Badge>
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder="Buscar por usuario o prompt…"
+                            value={jobSearch}
+                            onChange={(e) => setJobSearch(e.target.value)}
+                            className="pl-8 h-8 text-xs w-56 bg-black/20 border-white/10"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {(["all", "running", "failed", "queued"] as const).map((f) => (
+                            <Button
+                              key={f}
+                              variant={jobFilter === f ? "default" : "ghost"}
+                              size="sm"
+                              className="h-7 text-xs px-2"
+                              onClick={() => setJobFilter(f)}
+                            >
+                              {f === "all" ? "Todos" : f === "running" ? "Activos" : f === "failed" ? "Fallados" : "En cola"}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {jobsLoading ? (
+                      <div className="p-6 space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+                    ) : filteredJobs.length === 0 ? (
+                      <p className="p-6 text-sm text-muted-foreground text-center">No hay jobs que coincidan con los filtros.</p>
+                    ) : (
+                      <Table>
+                        <TableHeader className="bg-black/20">
+                          <TableRow className="border-white/5 hover:bg-transparent">
+                            <TableHead className="w-8"></TableHead>
+                            <TableHead>Usuario</TableHead>
+                            <TableHead>Prompt</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead>Fase</TableHead>
+                            <TableHead>Modelo</TableHead>
+                            <TableHead>Reintentos</TableHead>
+                            <TableHead>Creado</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredJobs.map((job: any) => (
+                            <>
+                              <TableRow
+                                key={job.id}
+                                className={`border-white/5 hover:bg-white/[0.02] cursor-pointer ${job.status === "failed" ? "bg-red-500/5" : ""}`}
+                                onClick={() => setExpandedJob(expandedJob === String(job.id) ? null : String(job.id))}
+                              >
+                                <TableCell>
+                                  {expandedJob === String(job.id)
+                                    ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                    : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                                </TableCell>
+                                <TableCell className="text-xs font-mono text-muted-foreground max-w-[140px] truncate">
+                                  {job.userEmail ?? job.userId?.slice(0, 10)}
+                                </TableCell>
+                                <TableCell className="text-sm max-w-xs">
+                                  <span className="truncate block max-w-[200px]" title={job.prompt}>{job.prompt}</span>
+                                  {job.errorMessage && (
+                                    <span className="text-red-400 text-xs block truncate max-w-[200px]" title={job.errorMessage}>
+                                      ⚠ {job.errorMessage}
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell><StatusBadge status={job.status} /></TableCell>
+                                <TableCell className="text-xs font-mono text-muted-foreground">{job.phase}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">{job.coderModel}</TableCell>
+                                <TableCell>
+                                  {job.retryCount > 0 ? (
+                                    <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-400">{job.retryCount}x</Badge>
+                                  ) : <span className="text-xs text-muted-foreground">—</span>}
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true, locale: es })}
+                                </TableCell>
+                              </TableRow>
+                              {expandedJob === String(job.id) && (
+                                <TableRow key={`${job.id}-logs`} className="border-white/5 bg-black/30">
+                                  <TableCell colSpan={8} className="p-0">
+                                    <div className="border-t border-white/5">
+                                      <div className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground border-b border-white/5">
+                                        <Terminal className="h-3 w-3" />
+                                        <span className="font-medium">Logs del job #{job.id}</span>
+                                        {job.appId && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 text-xs ml-auto gap-1"
+                                            onClick={(e) => { e.stopPropagation(); setLocation(`/app/${job.appId}`); }}
+                                          >
+                                            <Eye className="h-3 w-3" />
+                                            Ver app
+                                          </Button>
+                                        )}
+                                      </div>
+                                      {job.errorMessage && (
+                                        <div className="mx-4 my-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                                          <span className="font-semibold">Error:</span> {job.errorMessage}
+                                        </div>
+                                      )}
+                                      <JobLogsPanel jobId={String(job.id)} />
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* PHASES TAB */}
+              <TabsContent value="phases">
+                <Card className="bg-card/40 border-white/5">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Bug className="h-4 w-4 text-muted-foreground" />
+                      Fases con más fallos (últimas 24h)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.topFailingPhases.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2">
+                        <CheckCircle2 className="h-8 w-8 text-emerald-500/50" />
+                        <p className="text-sm">Ninguna fase ha fallado en las últimas 24 horas.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {data.topFailingPhases.map((p, i) => {
+                          const maxCount = data.topFailingPhases[0].count;
+                          const pct = Math.round((p.count / maxCount) * 100);
+                          return (
+                            <div key={p.phase} className="space-y-1">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground w-4">{i + 1}.</span>
+                                  <span className="font-mono text-xs bg-white/5 px-2 py-0.5 rounded">{p.phase}</span>
+                                </div>
+                                <Badge variant="destructive" className="text-xs">{p.count} fallos</Badge>
+                              </div>
+                              <div className="w-full bg-white/5 rounded-full h-1.5">
+                                <div
+                                  className="bg-red-500/70 h-1.5 rounded-full transition-all"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* TOP USERS TAB */}
+              <TabsContent value="users">
+                <Card className="bg-card/40 border-white/5">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      Top usuarios por créditos consumidos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.topUsers.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Sin datos de uso.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {data.topUsers.map((u, i) => (
+                          <div key={u.userId} className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 transition-colors">
+                            <span className={`text-lg font-bold w-6 text-center ${i === 0 ? "text-yellow-400" : i === 1 ? "text-white/60" : i === 2 ? "text-orange-400" : "text-white/30"}`}>
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{u.email}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{u.userId.slice(0, 16)}…</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-primary">{u.creditsUsed}</p>
+                              <p className="text-xs text-muted-foreground">créditos</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* SYSTEM TAB */}
+              <TabsContent value="system" className="space-y-4">
+                {/* E2B Card */}
+                <Card className="bg-card/40 border-white/5">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Server className="h-4 w-4 text-muted-foreground" />
+                      Validación E2B (build real en microVM)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 flex-1">
+                        <p className="text-sm text-muted-foreground">
+                          Tras la validación in-memory, el pipeline arranca un sandbox Linux y ejecuta{" "}
+                          <code className="text-xs bg-muted px-1 rounded">npm install && npm run build</code>{" "}
+                          para detectar paquetes inexistentes, errores de Vite y otros fallos que el AST no ve.
+                          Si falla, intenta una ronda extra de auto-reparación usando el error real.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Coste: ~30-90 s extra por generación + créditos E2B. Recomendado para producción de pago.
+                        </p>
+                        <div className="flex items-center gap-2 pt-2">
+                          <Badge variant={data.e2b?.configured ? "secondary" : "outline"} className="text-xs">
+                            {data.e2b?.configured ? "✓ API key OK" : "✗ Falta E2B_API_KEY"}
+                          </Badge>
+                          <Badge variant={data.e2b?.effective ? "default" : "outline"} className="text-xs">
+                            {data.e2b?.effective ? "Activo en pipeline" : "Inactivo en pipeline"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-3 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Activar</span>
+                          <Switch
+                            checked={Boolean(data.e2b?.validateOnGenerate)}
+                            disabled={!data.e2b?.configured || e2bToggle.isPending}
+                            onCheckedChange={(checked) => e2bToggle.mutate(checked)}
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={smokeRunning}
+                          onClick={async () => {
+                            setSmokeRunning(true);
+                            setSmokeResult(null);
+                            try {
+                              const res = await runE2BSmoke();
+                              setSmokeResult(res);
+                            } catch (err) {
+                              setSmokeResult({ ok: false, durationMs: 0, output: "", reason: err instanceof Error ? err.message : String(err) });
+                            } finally {
+                              setSmokeRunning(false);
+                            }
+                          }}
+                          className="gap-2"
+                        >
+                          {smokeRunning ? <><Loader2 className="h-3 w-3 animate-spin" />Probando…</> : <><Zap className="h-3 w-3" />Smoke test</>}
+                        </Button>
+                      </div>
+                    </div>
+                    {smokeResult && (
+                      <div className={`text-xs rounded-lg border px-3 py-2 ${smokeResult.ok ? "border-emerald-500/40 bg-emerald-500/10" : "border-red-500/40 bg-red-500/10"}`}>
+                        <div className="font-medium">
+                          {smokeResult.ok ? `✓ Smoke OK · ${smokeResult.durationMs} ms` : `✗ Smoke falló${smokeResult.reason ? ` · ${smokeResult.reason}` : ""}`}
+                        </div>
+                        {smokeResult.output && <pre className="mt-1 whitespace-pre-wrap text-muted-foreground">{smokeResult.output}</pre>}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* System Health */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card className="bg-card/40 border-white/5">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-emerald-500/10">
+                          <Database className="h-5 w-5 text-emerald-400" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Base de datos</p>
+                          <p className="text-sm font-medium text-emerald-400">Operativa</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/40 border-white/5">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-blue-500/10">
+                          <Zap className="h-5 w-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Pipeline de agentes</p>
+                          <p className="text-sm font-medium text-blue-400">{(jobsData?.running ?? 0) > 0 ? `${jobsData?.running} activos` : "En espera"}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/40 border-white/5">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-violet-500/10">
+                          <Shield className="h-5 w-5 text-violet-400" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">E2B Sandbox</p>
+                          <p className={`text-sm font-medium ${data.e2b?.effective ? "text-emerald-400" : "text-muted-foreground"}`}>
+                            {data.e2b?.effective ? "Activo" : data.e2b?.configured ? "Configurado (inactivo)" : "Sin configurar"}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
@@ -432,22 +689,38 @@ function MetricCard({
   title,
   value,
   hint,
+  trend,
+  color = "white",
 }: {
   icon: React.ReactNode;
   title: string;
   value: string;
   hint: string;
+  trend?: "up" | "down" | "neutral";
+  color?: string;
 }) {
+  const colorMap: Record<string, string> = {
+    blue: "from-blue-500/10 to-transparent border-blue-500/20",
+    emerald: "from-emerald-500/10 to-transparent border-emerald-500/20",
+    red: "from-red-500/10 to-transparent border-red-500/20",
+    sky: "from-sky-500/10 to-transparent border-sky-500/20",
+    violet: "from-violet-500/10 to-transparent border-violet-500/20",
+    orange: "from-orange-500/10 to-transparent border-orange-500/20",
+    pink: "from-pink-500/10 to-transparent border-pink-500/20",
+    white: "from-white/5 to-transparent border-white/10",
+  };
+
   return (
-    <Card>
+    <Card className={`bg-gradient-to-br ${colorMap[color] ?? colorMap.white} border`}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          {icon}
-          {title}
+        <CardTitle className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+          <span className="flex items-center gap-1.5">{icon}{title}</span>
+          {trend === "up" && <TrendingUp className="h-3 w-3 text-emerald-400" />}
+          {trend === "down" && <TrendingDown className="h-3 w-3 text-red-400" />}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-semibold tracking-tight">{value}</div>
+        <div className="text-3xl font-bold tracking-tight">{value}</div>
         <p className="text-xs text-muted-foreground mt-1">{hint}</p>
       </CardContent>
     </Card>

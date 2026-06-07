@@ -146,6 +146,35 @@ export function useListAdminJobs(opts?: { query?: Partial<UseQueryOptions> }) {
 export function useAdjustUserCredits(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/credits`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
+export function useAdminRefundCredits(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/refund`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+export function useAdminSuspendUser(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/suspend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data || {}) }), ...(opts?.mutation as any) });
+}
+export function useAdminUnsuspendUser(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/users/${id}/unsuspend`, { method: "POST" }), ...(opts?.mutation as any) });
+}
+export function useAdminBanUser(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/ban`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data || {}) }), ...(opts?.mutation as any) });
+}
+export function useAdminUnbanUser(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/users/${id}/unban`, { method: "POST" }), ...(opts?.mutation as any) });
+}
+export function useAdminBlockIp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/block-ip`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+export function useAdminUnblockIp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, ip }: any) => apiFetch(`/api/admin/users/${id}/block-ip/${encodeURIComponent(ip)}`, { method: "DELETE" }), ...(opts?.mutation as any) });
+}
+export const getAdminUserTransactionsQueryKey = (id: string) => ["admin-user-transactions", id];
+export function useAdminUserTransactions(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getAdminUserTransactionsQueryKey(id), queryFn: () => apiFetch(`/api/admin/users/${id}/transactions`), enabled: !!id, ...(opts?.query as any) });
+}
+export const getAdminUserAppsQueryKey = (id: string) => ["admin-user-apps", id];
+export function useAdminUserApps(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getAdminUserAppsQueryKey(id), queryFn: () => apiFetch(`/api/admin/users/${id}/apps`), enabled: !!id, ...(opts?.query as any) });
+}
 export function useRetryAdminJob(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/jobs/${id}/retry`, { method: "POST" }), ...(opts?.mutation as any) });
 }

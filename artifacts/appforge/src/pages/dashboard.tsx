@@ -53,6 +53,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -123,6 +127,116 @@ export default function DashboardPage() {
   const kindMeta = KIND_META[kind] ?? KIND_META.fullstack;
   const kindCost = kindMeta.cost;
   const [annualOpen, setAnnualOpen] = useState(false);
+
+  // ─── Onboarding Questions Modal ───────────────────────────────────────────
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [onboardingAnswers, setOnboardingAnswers] = useState<Record<number, string>>({}); 
+
+  const getOnboardingQuestions = () => [
+    {
+      id: 0,
+      question: "¿Qué tipo de aplicación es?",
+      type: "checkbox" as const,
+      options: [
+        "Landing page / web informativa",
+        "Plataforma SaaS / dashboard",
+        "E-commerce / tienda online",
+        "App móvil (PWA)",
+        "Juego / experiencia interactiva",
+        "API / backend",
+        "Otra (especifica)",
+      ],
+    },
+    {
+      id: 1,
+      question: "¿Tienes contexto previo del proyecto? (descripción, documentos, capturas, branding, etc.) Si es así, descríbelo.",
+      type: "textarea" as const,
+      placeholder: "ej. Tengo una carpeta con el logo, paleta de colores y una descripción del negocio...",
+    },
+    {
+      id: 2,
+      question: "¿Qué funcionalidades quieres implementar en esta sesión?",
+      type: "textarea" as const,
+      placeholder: "ej. Home page, autenticación, área de clientes, formulario de contacto, pasarela de pago...",
+    },
+    {
+      id: 3,
+      question: "¿Necesita alguna integración externa?",
+      type: "checkbox" as const,
+      options: [
+        "Pagos con Stripe",
+        "IA con GPT / Claude / Gemini",
+        "Email con Resend / SendGrid",
+        "Google Auth / OAuth",
+        "Mapas (Google Maps / Mapbox)",
+        "Analytics (GA4 / Mixpanel)",
+        "Ninguna",
+        "Otra (especifica)",
+      ],
+    },
+    {
+      id: 4,
+      question: "¿Tienes preferencias de diseño? (colores, tipografía, estilo, referencias visuales)",
+      type: "textarea" as const,
+      placeholder: "ej. Estilo oscuro y minimalista, colores morado y negro, tipografía moderna tipo Inter...",
+    },
+  ];
+
+  const onboardingQuestions = getOnboardingQuestions();
+  const currentQuestion = onboardingQuestions[onboardingStep];
+
+  const handleOnboardingAnswer = (value: string) => {
+    setOnboardingAnswers(prev => ({ ...prev, [onboardingStep]: value }));
+  };
+
+  const handleOnboardingCheckbox = (option: string, checked: boolean) => {
+    const current = onboardingAnswers[onboardingStep] || "";
+    const parts = current ? current.split(", ").filter(Boolean) : [];
+    if (checked) {
+      parts.push(option);
+    } else {
+      const idx = parts.indexOf(option);
+      if (idx > -1) parts.splice(idx, 1);
+    }
+    setOnboardingAnswers(prev => ({ ...prev, [onboardingStep]: parts.join(", ") }));
+  };
+
+  const handleOnboardingNext = () => {
+    if (onboardingStep < onboardingQuestions.length - 1) {
+      setOnboardingStep(prev => prev + 1);
+    } else {
+      // Build enriched prompt
+      const enrichedContext = onboardingQuestions
+        .map((q, i) => {
+          const answer = onboardingAnswers[i];
+          if (!answer || answer.trim() === "") return null;
+          return `[${q.question}]\n${answer}`;
+        })
+        .filter(Boolean)
+        .join("\n\n");
+
+      const finalPrompt = enrichedContext
+        ? `${prompt}\n\n--- Contexto adicional del proyecto ---\n${enrichedContext}`
+        : prompt;
+
+      setOnboardingOpen(false);
+      localStorage.setItem("appforge_last_prompt", finalPrompt);
+      generateMutation.mutate({ data: { prompt: finalPrompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } });
+    }
+  };
+
+  const handleOnboardingSkip = () => {
+    setOnboardingOpen(false);
+    localStorage.setItem("appforge_last_prompt", prompt);
+    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } });
+  };
+
+  const openOnboarding = () => {
+    setOnboardingStep(0);
+    setOnboardingAnswers({});
+    setOnboardingOpen(true);
+  };
 
   const { data: me } = useGetMe();
   useEffect(() => {
@@ -213,8 +327,8 @@ export default function DashboardPage() {
       setLocation("/billing");
       return;
     }
-    localStorage.setItem("appforge_last_prompt", prompt);
-    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } });
+    // Open onboarding questions before generating
+    openOnboarding();
   };
 
   const isWorking = generateMutation.isPending || activeJobId !== null;
@@ -268,104 +382,227 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <Card className="border-primary/20 bg-card/60 backdrop-blur shadow-lg overflow-hidden relative">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
-          <CardHeader>
-            <CardTitle className="text-xl flex items-center"><Sparkles className="h-5 w-5 text-primary mr-2" />Generar nueva aplicación</CardTitle>
-            <CardDescription>Describe con detalle lo que quieres construir. Maris AI coordinará a su equipo de agentes de élite.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleGenerate} className="space-y-6">
-              <div className="relative group">
+        {/* ─── Emergent-style Prompt Box ─────────────────────────────────── */}
+        <div className="relative rounded-2xl border border-white/[0.08] bg-[#0d0d12] overflow-hidden shadow-[0_0_60px_rgba(124,58,237,0.08)]">
+          {/* Top gradient line */}
+          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+
+          {/* Header */}
+          <div className="px-6 pt-6 pb-4">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+                <Sparkles className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-white tracking-tight">¿Qué vas a construir hoy?</h2>
+                <p className="text-[11px] text-white/30">9 agentes de IA especializados trabajarán para ti</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Kind selector tabs */}
+          <div className="px-6 pb-4">
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.entries(KIND_META) as [Kind, typeof KIND_META[Kind]][]).map(([k, meta]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  disabled={isWorking}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
+                    kind === k
+                      ? "bg-primary/15 border-primary/40 text-primary shadow-sm shadow-primary/10"
+                      : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
+                  }`}
+                >
+                  <meta.icon className="h-3 w-3" />
+                  {meta.label}
+                  {meta.cost > 1 && (
+                    <span className={`ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full ${
+                      kind === k ? "bg-primary/20 text-primary" : "bg-white/5 text-white/20"
+                    }`}>{meta.cost}cr</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Textarea */}
+          <form onSubmit={handleGenerate}>
+            <div className="px-6 pb-3">
+              <div className="relative bg-[#0a0a10] border border-white/[0.07] rounded-xl focus-within:border-primary/40 transition-all">
                 <Textarea
                   placeholder={kindMeta.placeholder}
-                  className="min-h-[160px] bg-background/50 border-white/10 focus:border-primary/50 transition-all resize-none text-base p-4 pb-12"
+                  className="min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm text-white placeholder:text-white/20 p-4 pb-14"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   disabled={isWorking}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.metaKey) {
+                      e.preventDefault();
+                      if (prompt.trim() && !isWorking) handleGenerate(e as any);
+                    }
+                  }}
                 />
-                <div className="absolute left-2 bottom-2">
-                  <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={isWorking} />
+                {/* Bottom bar inside textarea */}
+                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 border-t border-white/[0.05]">
+                  <div className="flex items-center gap-1">
+                    <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={isWorking} />
+                    <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
+                      <SelectTrigger className="h-7 w-auto min-w-[140px] bg-transparent border-0 text-[10px] font-semibold text-white/30 hover:text-white/60 focus:ring-0 px-2 gap-1">
+                        <SelectValue placeholder="Modelo" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#16161e] border-white/10">
+                        <SelectItem value="auto" className="text-[11px] font-semibold">
+                          <div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (9 Agentes)</div>
+                        </SelectItem>
+                        <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold">
+                          <div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div>
+                        </SelectItem>
+                        <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold">
+                          <div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div>
+                        </SelectItem>
+                        <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold">
+                          <div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div>
+                        </SelectItem>
+                        <SelectItem value="gpt-5.4" className="text-[11px] font-semibold">
+                          <div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4</div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isWorking || !prompt.trim()}
+                    className="h-8 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-[12px] font-bold"
+                  >
+                    {isWorking ? (
+                      <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</>
+                    ) : (
+                      <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar <span className="hidden sm:inline">({kindCost} cr)</span></>
+                    )}
+                  </Button>
                 </div>
               </div>
+              {attachments.length > 0 && <AttachmentChips attachments={attachments} onChange={setAttachments} />}
+            </div>
 
-              {/* Cuadrícula de Agentes — Estilo Emergent */}
-              <div className="bg-black/20 rounded-xl p-4 border border-white/5">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3 font-bold">Equipo de Agentes Activos</p>
-                <div className="grid grid-cols-3 md:grid-cols-9 gap-4">
+            {/* Quick suggestions */}
+            <div className="px-6 pb-5">
+              <p className="text-[10px] text-white/20 uppercase tracking-widest font-bold mb-2">Sugerencias rápidas</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  "Marketplace tipo Wallapop con chat y pagos",
+                  "SaaS de gestión de proyectos con Kanban",
+                  "App de reservas para restaurante con QR",
+                  "Dashboard de analytics con gráficas en tiempo real",
+                  "Juego 2D tipo Tetris con tabla de records",
+                  "Landing page para startup de IA con pricing",
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => setPrompt(suggestion)}
+                    disabled={isWorking}
+                    className="text-[11px] px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/40 hover:text-white/80 hover:bg-white/[0.08] hover:border-primary/30 transition-all"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Agents row */}
+            <div className="border-t border-white/[0.05] px-6 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Equipo activo</span>
+                <div className="flex items-center gap-1">
                   {AGENTS.map((agent) => (
                     <Tooltip key={agent.name}>
                       <TooltipTrigger asChild>
-                        <div className="flex flex-col items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity cursor-help">
-                          <div className={`p-2 rounded-lg bg-white/5 ${agent.color}`}>
-                            <agent.icon className="h-4 w-4" />
-                          </div>
-                          <span className="text-[10px] font-medium text-muted-foreground">{agent.name}</span>
+                        <div className={`h-6 w-6 rounded-lg bg-white/5 flex items-center justify-center cursor-help hover:bg-white/10 transition-colors ${agent.color}`}>
+                          <agent.icon className="h-3 w-3" />
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Agente especialista: {agent.name}</p>
+                      <TooltipContent side="top">
+                        <p className="text-xs font-semibold">{agent.name}</p>
                       </TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
               </div>
+              <p className="text-[10px] text-white/20 italic hidden sm:block">
+                ⌘+Enter para generar rápido
+              </p>
+            </div>
+          </form>
+        </div>
 
-              <div className="flex flex-wrap justify-between items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
-                    <SelectTrigger className="h-10 w-[280px] bg-background/50 border-white/10">
-                      <SelectValue placeholder="Modelo de orquestación" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">
-                        <div className="flex items-center">
-                          <Zap className="h-4 w-4 mr-2 text-yellow-400" />
-                          <span>Auto (Orquestación de 9 Agentes)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="claude-haiku-4-5">
-                        <div className="flex items-center">
-                          <Zap className="h-4 w-4 mr-2 text-green-400" />
-                          <span>Haiku 4.5 (rápido / básico)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="claude-sonnet-4-6">
-                        <div className="flex items-center">
-                          <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
-                          <span>Sonnet 4.6 (equilibrado)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="claude-opus-4-7">
-                        <div className="flex items-center">
-                          <Brain className="h-4 w-4 mr-2 text-blue-400" />
-                          <span>Opus 4.7 (robusto / máxima calidad)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="gpt-5.4">
-                        <div className="flex items-center">
-                          <Cpu className="h-4 w-4 mr-2 text-cyan-400" />
-                          <span>GPT-5.4 (alternativo con fallback)</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+        {/* ─── Onboarding Questions Modal ─────────────────────────────────── */}
+        <Dialog open={onboardingOpen} onOpenChange={setOnboardingOpen}>
+          <DialogContent className="max-w-lg bg-[#0d0d12] border-white/10">
+            <DialogHeader>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
                 </div>
+                <span className="text-xs font-bold uppercase tracking-widest text-primary">Maris AI — Análisis del proyecto</span>
+              </div>
+              <DialogTitle className="text-lg font-bold">{currentQuestion?.question}</DialogTitle>
+              <div className="flex items-center gap-1 mt-2">
+                {onboardingQuestions.map((_, i) => (
+                  <div key={i} className={`h-1 flex-1 rounded-full transition-all ${ i <= onboardingStep ? "bg-primary" : "bg-white/10" }`} />
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Pregunta {onboardingStep + 1} de {onboardingQuestions.length}</p>
+            </DialogHeader>
 
-                <Button type="submit" disabled={isWorking || !prompt.trim()} size="lg" className="min-w-[180px] bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
-                  {isWorking ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Iniciando equipo…</>
+            <div className="py-2 space-y-3">
+              {currentQuestion?.type === "checkbox" && currentQuestion.options && (
+                <div className="space-y-2">
+                  {currentQuestion.options.map((option) => {
+                    const checked = (onboardingAnswers[onboardingStep] || "").split(", ").includes(option);
+                    return (
+                      <div key={option} className="flex items-center gap-3 p-3 rounded-lg border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all cursor-pointer" onClick={() => handleOnboardingCheckbox(option, !checked)}>
+                        <Checkbox checked={checked} onCheckedChange={(c) => handleOnboardingCheckbox(option, !!c)} className="border-white/30" />
+                        <Label className="cursor-pointer text-sm">{option}</Label>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {currentQuestion?.type === "textarea" && (
+                <Textarea
+                  placeholder={currentQuestion.placeholder}
+                  className="min-h-[120px] bg-background/50 border-white/10 focus:border-primary/50 resize-none text-sm"
+                  value={onboardingAnswers[onboardingStep] || ""}
+                  onChange={(e) => handleOnboardingAnswer(e.target.value)}
+                  autoFocus
+                />
+              )}
+            </div>
+
+            <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white" onClick={handleOnboardingSkip}>
+                Saltar todo y generar
+              </Button>
+              <div className="flex gap-2">
+                {onboardingStep > 0 && (
+                  <Button variant="outline" size="sm" className="border-white/10" onClick={() => setOnboardingStep(p => p - 1)}>
+                    Atrás
+                  </Button>
+                )}
+                <Button size="sm" className="bg-primary hover:bg-primary/90 min-w-[100px]" onClick={handleOnboardingNext}>
+                  {onboardingStep < onboardingQuestions.length - 1 ? (
+                    <>Siguiente <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></>
                   ) : (
-                    <>Generar Aplicación <Plus className="ml-2 h-4 w-4" /></>
+                    <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar app</>
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground/60 text-center italic">
-                Tip: Al pulsar generar, los 9 agentes analizarán tu petición para construir una app completa y optimizada.
-              </p>
-            </form>
-          </CardContent>
-        </Card>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div>
           <h3 className="text-xl font-semibold flex items-center mb-4">
@@ -378,9 +615,17 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {visibleApps.map((app: any) => (
-                <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
+                <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group relative" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
+                  <button
+                    className="absolute top-2 right-2 z-10 p-1 rounded-full bg-black/40 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                    onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)}
+                    disabled={deleteMutation.isPending}
+                    title="Eliminar proyecto"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors">{app.title}</CardTitle>
+                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-6">{app.title}</CardTitle>
                     <CardDescription className="line-clamp-2">{app.description}</CardDescription>
                   </CardHeader>
                   <CardFooter className="text-xs text-muted-foreground border-t border-white/5 pt-3">
