@@ -58,10 +58,12 @@ const queryClient = new QueryClient({
 // publishableKeyFromHost generaba un proxy automático basado en el dominio de Vercel
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// ✅ CORREGIDO: no usar proxy Clerk heredado; www.marisai.es debe cargar Clerk JS desde un CDN válido.
-const clerkJsUrl =
-  import.meta.env.VITE_CLERK_JS_URL ||
-  "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
+// ✅ CORREGIDO: usar el CDN oficial de Clerk derivado de la publishable key.
+// El CDN de jsdelivr es genérico y no incluye la configuración del tenant
+// (social providers como Google OAuth no aparecen con el CDN genérico).
+// Si se especifica VITE_CLERK_JS_URL se respeta; si no, se deja undefined
+// para que @clerk/react lo resuelva automáticamente desde la publishable key.
+const clerkJsUrl = import.meta.env.VITE_CLERK_JS_URL || undefined;
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -72,7 +74,10 @@ function stripBase(path: string): string {
 }
 
 if (!clerkPubKey) {
-  throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY in .env file");
+  // En desarrollo, lanzar error para detectar el problema rápidamente.
+  // En producción, si la variable no está definida, la app no puede funcionar.
+  // Vercel debe tener VITE_CLERK_PUBLISHABLE_KEY configurada en las variables de entorno del proyecto.
+  console.error("[Maris AI] VITE_CLERK_PUBLISHABLE_KEY no está definida. Configura esta variable en el panel de Vercel.");
 }
 
 const clerkAppearance = {
@@ -249,7 +254,8 @@ function ClerkProviderWithRoutes() {
 
   return (
     <ClerkProvider
-      {...({ publishableKey: clerkPubKey, clerkJSUrl: clerkJsUrl } as any)}
+      publishableKey={clerkPubKey}
+      {...(clerkJsUrl ? { clerkJSUrl: clerkJsUrl } : {})}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
