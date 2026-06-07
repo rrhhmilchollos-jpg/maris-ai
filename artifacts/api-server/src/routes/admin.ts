@@ -811,4 +811,46 @@ router.post("/admin/users/:id/send-compensation-email", async (req: any, res: an
   });
 });
 
+// ─── Admin Private Projects (seguxat.es and other admin-owned projects) ─────
+// GET: list all projects owned by the admin
+router.get("/admin/my-projects", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const apps = await GeneratedApp.find({ userId: req.dbUser._id.toString() })
+    .sort({ updatedAt: -1 })
+    .select("_id title description prompt status kind publicSlug vercelDeployUrl marisaiSubdomain customDomain customDomainVerified deploymentStatus createdAt updatedAt hasWatermark");
+  res.json({ apps });
+});
+
+// POST: register an external project (like seguxat.es) in the admin dashboard
+router.post("/admin/my-projects", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { title, description, url, notes } = req.body;
+  if (!title) { res.status(400).json({ error: "title required" }); return; }
+  const app = await GeneratedApp.create({
+    userId: req.dbUser._id.toString(),
+    title,
+    description: description || "",
+    prompt: notes || `Proyecto externo: ${url || title}`,
+    techStack: ["external"],
+    frontendCode: `// External project: ${url || title}`,
+    backendCode: "",
+    status: "external",
+    kind: "external",
+    customDomain: url || undefined,
+    customDomainVerified: !!url,
+    hasWatermark: false,
+  });
+  res.json({ ok: true, app });
+});
+
+// DELETE: remove an admin project
+router.delete("/admin/my-projects/:id", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const app = await GeneratedApp.findOne({ _id: req.params.id, userId: req.dbUser._id.toString() });
+  if (!app) { res.status(404).json({ error: "Not found" }); return; }
+  await app.deleteOne();
+  res.json({ ok: true });
+});
+
 export default router;
+

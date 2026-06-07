@@ -187,6 +187,16 @@ export function useAdminAddNote(opts?: { mutation?: Partial<UseMutationOptions<a
 export function useAdminSendCompensationEmail(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/send-compensation-email`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
+export const getAdminMyProjectsQueryKey = () => ["admin-my-projects"];
+export function useAdminMyProjects(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getAdminMyProjectsQueryKey(), queryFn: () => apiFetch("/api/admin/my-projects"), ...(opts?.query as any) });
+}
+export function useAdminCreateMyProject(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ data }: any) => apiFetch("/api/admin/my-projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+export function useAdminDeleteMyProject(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/my-projects/${id}`, { method: "DELETE" }), ...(opts?.mutation as any) });
+}
 export function useUpdateAppModel(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/apps/${id}/model`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
