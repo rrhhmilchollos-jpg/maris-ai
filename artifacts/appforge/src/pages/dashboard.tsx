@@ -83,20 +83,22 @@ const AGENTS = [
 ];
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
-  queued: { label: "En cola…", icon: Loader2 },
-  starting: { label: "Iniciando equipo de agentes…", icon: Loader2 },
-  researching: { label: "🔎 Investigador buscando referencias…", icon: Search },
-  architecting: { label: "🧠 Arquitecto diseñando la estructura…", icon: Compass },
-  integrating: { label: "🔌 Definiendo integraciones (auth, pagos, IA)…", icon: Plug },
-  designing: { label: "🎨 Diseñador definiendo el sistema visual…", icon: Palette },
-  generating: { label: "⚡ Ingenieros escribiendo el código…", icon: Wand2 },
-  reviewing: { label: "✅ QA revisando + 🧪 generando tests…", icon: ShieldCheck },
-  validating: { label: "🔍 Compilando el código en memoria…", icon: Bug },
-  testing: { label: "🧪 Testing Agent verificando errores…", icon: Wrench },
-  fixing: { label: "🔧 Auto-reparando errores detectados…", icon: Wrench },
-  parsing: { label: "📦 Empaquetando archivos…", icon: FileCheck2 },
-  ready: { label: "¡Listo!", icon: FileCheck2 },
-  failed: { label: "Falló", icon: Loader2 },
+  queued:       { label: "En cola…",                                          icon: Loader2 },
+  starting:     { label: "Iniciando equipo de 9 agentes…",                    icon: Loader2 },
+  researching:  { label: "🔎 Researcher investigando referencias…",            icon: Search },
+  architecting: { label: "🧠 Architect diseñando la arquitectura…",            icon: Compass },
+  designing:    { label: "🎨 Designer definiendo el sistema visual…",          icon: Palette },
+  schema:       { label: "🗄️ Database diseñando los modelos de datos…",        icon: FileCheck2 },
+  frontend:     { label: "⚡ Frontend Engineer escribiendo el código…",        icon: Code2 },
+  backend:      { label: "🖥️ Backend Engineer creando la API…",                icon: Server },
+  integrations: { label: "🔌 API Integrator conectando servicios externos…",    icon: Plug },
+  testing:      { label: "🧪 QA Specialist verificando errores…",              icon: ShieldCheck },
+  patching:     { label: "🔧 DevOps Patcher auto-reparando errores…",           icon: Wrench },
+  validating:   { label: "🔍 Compilando el código en memoria…",                icon: Bug },
+  fixing:       { label: "🔧 Auto-reparando errores detectados…",              icon: Wrench },
+  parsing:      { label: "📦 Empaquetando archivos del proyecto…",             icon: FileCheck2 },
+  ready:        { label: "¡Tu app está lista!",                                icon: FileCheck2 },
+  failed:       { label: "La generación falló",                                icon: Loader2 },
 };
 
 export default function DashboardPage() {
