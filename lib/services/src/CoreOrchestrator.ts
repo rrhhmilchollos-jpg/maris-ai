@@ -81,19 +81,35 @@ export class CoreOrchestrator {
       progress: 10 
     });
 
-    // Ejecución paralela para máxima velocidad
+    // Ejecución paralela con control de timeout y reintentos para evitar fallos sistémicos
     const generationPromises = milestones.map(async (milestone) => {
-      
-      const agentResponse = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 4000,
-        system: `Eres el Agente de Código Experto de Maris AI. 
-        Estado actual global: ${this.architectureSummary || 'Iniciando proyecto'}.
-        Genera EXCLUSIVAMENTE el código fuente para ${milestone.filePath}. Sin explicaciones.`,
-        messages: [{ role: "user", content: `Escribe el código para el hito: ${milestone.description}.` }]
-      });
+      let attempts = 0;
+      const MAX_ATTEMPTS = 3;
+      let generatedCode = "";
 
-      const generatedCode = agentResponse.content[0].type === 'text' ? agentResponse.content[0].text : '';
+      while (attempts < MAX_ATTEMPTS) {
+        try {
+          const agentResponse = await anthropic.messages.create({
+            model: "claude-3-haiku-20240307", // Usamos un modelo más rápido y ligero para evitar timeouts
+            max_tokens: 4000,
+            timeout: 60000, // Timeout de 60s por llamada individual
+            system: `Eres el Agente de Código Experto de Maris AI. 
+            Estado actual global: ${this.architectureSummary || 'Iniciando proyecto'}.
+            Genera EXCLUSIVAMENTE el código fuente para ${milestone.filePath}. Sin explicaciones.`,
+            messages: [{ role: "user", content: `Escribe el código para el hito: ${milestone.description}.` }]
+          });
+
+          generatedCode = agentResponse.content[0].type === 'text' ? agentResponse.content[0].text : '';
+          if (generatedCode) break;
+        } catch (error) {
+          attempts++;
+          console.error(`⚠️ Error en hito ${milestone.id} (intento ${attempts}):`, error);
+          if (attempts === MAX_ATTEMPTS) throw new Error(`Fallo crítico tras ${MAX_ATTEMPTS} intentos en hito ${milestone.id}`);
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempts)); // Backoff exponencial
+        }
+      }
+
+
 
       // Guardamos en el sistema de archivos
       await this.writeCodeToWorkspace(milestone.targetWorkspace, milestone.filePath, generatedCode);
