@@ -2144,6 +2144,7 @@ import {
   AppRevision,
 } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
+import { generateRateLimiter } from "../middlewares/rateLimit";
 import { enqueueGenerateJob } from "../lib/jobQueue";
 import mongoose from "mongoose";
 
@@ -2320,7 +2321,7 @@ router.get("/models", requireAuth, async (req: any, res: any) => {
   res.json(availableModels);
 });
 
-router.post("/apps", requireAuth, async (req: any, res: any) => {
+router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
     const { prompt, model, language, attachments, kind } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });

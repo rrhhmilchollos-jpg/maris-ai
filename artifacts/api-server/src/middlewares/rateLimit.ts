@@ -11,22 +11,71 @@ const SKIP_PATHS = new Set<string>([
   "/api/healthz",
 ]);
 
+/** Shared key generator: per authenticated user or per IP /64 prefix */
+const keyGen = (req: Request): string => {
+  const userId = (req as Request & { auth?: { userId?: string } }).auth?.userId;
+  if (userId) return `u:${userId}`;
+  return ipKeyGenerator(req.ip ?? "unknown");
+};
+
+/** Standard global rate limiter — 120 req / min */
 export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: WINDOW_MS,
   limit: MAX_PER_WINDOW,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   skip: (req: Request) => SKIP_PATHS.has(req.path),
-  keyGenerator: (req: Request) => {
-    const userId = (req as Request & { auth?: { userId?: string } }).auth?.userId;
-    if (userId) return `u:${userId}`;
-    // ipKeyGenerator collapses an IPv6 address down to its /64 prefix so we
-    // don't rate-limit per individual IPv6 (those rotate per request) nor
-    // bucket every v6 user under the literal string "unknown".
-    return ipKeyGenerator(req.ip ?? "unknown");
-  },
+  keyGenerator: keyGen,
   message: {
     error: "rate_limited",
     message: "Demasiadas peticiones. Espera un momento e inténtalo de nuevo.",
+  },
+});
+
+/**
+ * Strict limiter for AI generation endpoints — 10 req / min per user/IP.
+ * Prevents abuse of expensive LLM calls.
+ */
+export const generateRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: keyGen,
+  message: {
+    error: "rate_limited",
+    message: "Límite de generaciones alcanzado. Espera un minuto e inténtalo de nuevo.",
+  },
+});
+
+/**
+ * Auth-endpoint limiter — 20 req / 15 min per IP.
+ * Protects against brute-force and credential stuffing.
+ */
+export const authRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => ipKeyGenerator(req.ip ?? "unknown"),
+  message: {
+    error: "rate_limited",
+    message: "Demasiados intentos de autenticación. Espera 15 minutos.",
+  },
+});
+
+/**
+ * Admin-endpoint limiter — 60 req / min per user/IP.
+ * Extra protection for sensitive admin operations.
+ */
+export const adminRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 60_000,
+  limit: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: keyGen,
+  message: {
+    error: "rate_limited",
+    message: "Demasiadas peticiones al panel de administración.",
   },
 });

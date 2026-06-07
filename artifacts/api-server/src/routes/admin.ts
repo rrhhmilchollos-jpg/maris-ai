@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
 import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
+import { adminRateLimiter } from "../middlewares/rateLimit";
 import {
   User,
   GeneratedApp,
@@ -20,7 +21,7 @@ import { pingRedis, getRedisStatus } from "../lib/redisHealth";
 
 const router: IRouter = Router();
 
-router.use("/admin", requireAuth, requireAdmin);
+router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 
 router.get("/admin/overview", async (_req, res) => {
   await connectDB();

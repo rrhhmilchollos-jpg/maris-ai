@@ -775,7 +775,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
         {/* ── DIALOG: User Detail (Full Professional Panel) ── */}
         <Dialog open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
-          <DialogContent className="max-w-3xl max-h-[92vh] p-0 overflow-hidden flex flex-col">
+          <DialogContent className="max-w-3xl h-[92vh] max-h-[92vh] p-0 overflow-hidden flex flex-col">
             {selectedUser && (
               <>
                 {/* User Header */}
@@ -845,8 +845,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                 </div>
 
                 {/* Tabs */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                  <Tabs value={userDetailTab} onValueChange={(v) => setUserDetailTab(v as UserDetailTab)} className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 min-h-0 flex flex-col">
+                  <Tabs value={userDetailTab} onValueChange={(v) => setUserDetailTab(v as UserDetailTab)} className="flex-1 min-h-0 flex flex-col">
                     <TabsList className="bg-transparent border-b border-white/5 rounded-none px-6 h-10 gap-0 flex-shrink-0">
                       <TabsTrigger value="overview" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Resumen</TabsTrigger>
                       <TabsTrigger value="transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Transacciones</TabsTrigger>
@@ -855,7 +855,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                       <TabsTrigger value="notes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs">Notas</TabsTrigger>
                     </TabsList>
 
-                    <ScrollArea className="flex-1">
+                    <ScrollArea className="flex-1 min-h-0">
                       {/* Overview */}
                       <TabsContent value="overview" className="mt-0 p-6 space-y-4">
                         <div className="grid grid-cols-3 gap-3">
