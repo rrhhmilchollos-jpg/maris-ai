@@ -201,9 +201,13 @@ export function LivePreview({
       appendLog(`✓ Servidor listo en ${url}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setErrorMsg(msg);
+      const isInstanceLimit = /unable to create more instances/i.test(msg) || /can only be created once/i.test(msg);
+      const friendlyMsg = isInstanceLimit
+        ? "Ya hay un Live Preview activo en otra pestaña. Cierra las demás pestañas de Maris AI y pulsa Reintentar."
+        : msg;
+      setErrorMsg(friendlyMsg);
       setPhase("error");
-      appendLog(`✗ ${msg}`);
+      appendLog(`✗ ${friendlyMsg}`);
     } finally {
       startingRef.current = false;
     }
