@@ -160,3 +160,82 @@
   animation: robot-vibrate 0.3s cubic-bezier(.36,.07,.19,.97) both infinite;
   transform-origin: center;
 }
+
+/* ─── Custom Scrollbar ─────────────────────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Generation Studio Animations ─────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { width: 10%; margin-left: 0%; }
+  50% { width: 60%; margin-left: 20%; }
+  100% { width: 10%; margin-left: 90%; }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+/* Smooth slide-in for chat bubbles */
+@keyframes slide-in-from-bottom-2 {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: fade-in;
+}
+
+.slide-in-from-bottom-2 {
+  animation-name: slide-in-from-bottom-2;
+}
+
+.slide-in-from-bottom-10 {
+  animation-name: slide-in-from-bottom-10;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-bottom-10 {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.duration-300 {
+  animation-duration: 300ms;
+}
+
+.duration-400 {
+  animation-duration: 400ms;
+}
