@@ -70,23 +70,17 @@ async function extractZipToBundle(buffer: Buffer): Promise<{ files: Record<strin
 }
 
 async function importAdmZip(): Promise<any> {
-  // Try multiple possible paths for adm-zip
+  // Try multiple possible paths for adm-zip across pnpm versions
   const candidates = [
     "adm-zip",
+    "/app/node_modules/.pnpm/adm-zip@0.5.17/node_modules/adm-zip",
     "/app/node_modules/.pnpm/adm-zip@0.5.16/node_modules/adm-zip",
     "/app/node_modules/adm-zip",
   ];
   for (const p of candidates) {
     try { return require(p); } catch {}
   }
-  // Last resort: install on-the-fly
-  try {
-    const { execSync } = require("child_process");
-    execSync("cd /app && pnpm add adm-zip --save 2>/dev/null || npm install adm-zip --no-save 2>/dev/null || true", { stdio: "ignore", timeout: 30000 });
-    return require("adm-zip");
-  } catch (e) {
-    throw new Error("No se pudo cargar adm-zip para descomprimir el archivo ZIP. Contacta con soporte.");
-  }
+  throw new Error("No se pudo cargar adm-zip. Reinicia el servicio e inténtalo de nuevo.");
 }
 
 async function extractRarToBundle(buffer: Buffer): Promise<{ files: Record<string, string>; allPaths: string[] }> {
