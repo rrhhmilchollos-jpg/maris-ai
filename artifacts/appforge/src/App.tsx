@@ -58,12 +58,13 @@ const queryClient = new QueryClient({
 // publishableKeyFromHost generaba un proxy automático basado en el dominio de Vercel
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// ✅ CORREGIDO: usar el CDN oficial de Clerk derivado de la publishable key.
-// El CDN de jsdelivr es genérico y no incluye la configuración del tenant
-// (social providers como Google OAuth no aparecen con el CDN genérico).
-// Si se especifica VITE_CLERK_JS_URL se respeta; si no, se deja undefined
-// para que @clerk/react lo resuelva automáticamente desde la publishable key.
-const clerkJsUrl = import.meta.env.VITE_CLERK_JS_URL || undefined;
+// ✅ CORREGIDO: usar el CDN del tenant de Clerk (clerk.marisai.es) que incluye
+// la configuración del tenant con los social providers habilitados (Google OAuth).
+// El CDN genérico de jsdelivr NO incluye esta configuración y por eso Google no aparecía.
+// Se usa la URL del tenant directamente para garantizar que Google OAuth siempre esté disponible.
+const clerkJsUrl =
+  import.meta.env.VITE_CLERK_JS_URL ||
+  "https://clerk.marisai.es/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -255,7 +256,7 @@ function ClerkProviderWithRoutes() {
   return (
     <ClerkProvider
       publishableKey={clerkPubKey}
-      {...(clerkJsUrl ? { clerkJSUrl: clerkJsUrl } : {})}
+      clerkJSUrl={clerkJsUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
