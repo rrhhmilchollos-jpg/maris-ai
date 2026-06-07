@@ -34,6 +34,7 @@ const PrivacidadPage = lazy(() => import("@/pages/legal/privacidad"));
 const AvisoLegalPage = lazy(() => import("@/pages/legal/aviso-legal"));
 const CookiesPage = lazy(() => import("@/pages/legal/cookies"));
 const GlossaryPage = lazy(() => import("@/pages/glosario"));
+const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
 
 // Fallback de carga para Suspense
 function PageLoader() {
@@ -332,6 +333,10 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/glosario">
             <GlossaryPage />
+          </Route>
+
+          <Route path="/crm/fisioterapeuta">
+            <FisioterapeutaCRM />
           </Route>
 
           <Route path="/legal/privacidad">

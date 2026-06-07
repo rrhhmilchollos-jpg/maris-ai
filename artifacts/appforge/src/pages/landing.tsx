@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Zap, Code2, Globe, ArrowRight, CheckCircle2, LayoutDashboard,
   Database, Smartphone, Newspaper, ChevronRight, GitBranch, Star,
-  Users, TrendingUp, Clock
+  Users, TrendingUp, Clock, Activity
 } from "lucide-react";
 
 // Líneas de código que se van escribiendo
@@ -244,6 +244,16 @@ export default function LandingPage() {
             </p>
           </motion.div>
 
+          <div className="flex justify-center mb-12">
+            <Button 
+              onClick={() => setLocation("/crm/fisioterapeuta")}
+              className="bg-primary hover:bg-primary/90 text-white px-8 py-6 text-lg rounded-full shadow-lg shadow-primary/20 group h-auto"
+            >
+              <Activity className="mr-2 h-5 w-5 animate-pulse" />
+              Ver Demo CRM Fisioterapeuta
+              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
               {
