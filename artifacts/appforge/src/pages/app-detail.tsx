@@ -66,20 +66,22 @@ import {
 } from "lucide-react";
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
-  queued: { label: "En cola…", icon: Loader2 },
-  starting: { label: "Inicializando equipo…", icon: Loader2 },
-  researching: { label: "Investigando referencias…", icon: Sparkles },
-  architecting: { label: "Arquitecto planificando…", icon: Sparkles },
-  integrating: { label: "Definiendo integraciones…", icon: Sparkles },
-  designing: { label: "Diseñador trabajando…", icon: Sparkles },
-  generating: { label: "Aplicando cambios al código…", icon: Zap },
-  reviewing: { label: "Revisión de calidad…", icon: Sparkles },
-  validating: { label: "Compilando en memoria…", icon: Sparkles },
-  testing: { label: "🧪 Testing Agent verificando errores…", icon: Sparkles },
-  fixing: { label: "Auto-reparación…", icon: Sparkles },
-  parsing: { label: "Empaquetando archivos…", icon: Sparkles },
-  ready: { label: "Listo", icon: Sparkles },
-  failed: { label: "Error", icon: Sparkles },
+  queued:       { label: "En cola…",                                          icon: Loader2 },
+  starting:     { label: "Iniciando equipo de 9 agentes…",                    icon: Loader2 },
+  researching:  { label: "🔎 Researcher investigando referencias…",            icon: Sparkles },
+  architecting: { label: "🧠 Architect planificando la arquitectura…",          icon: Sparkles },
+  designing:    { label: "🎨 Designer definiendo el sistema visual…",          icon: Sparkles },
+  schema:       { label: "🗄️ Database diseñando los modelos de datos…",        icon: Sparkles },
+  frontend:     { label: "⚡ Frontend Engineer aplicando cambios…",            icon: Zap },
+  backend:      { label: "🖥️ Backend Engineer actualizando la API…",          icon: Sparkles },
+  integrations: { label: "🔌 API Integrator conectando servicios…",            icon: Sparkles },
+  testing:      { label: "🧪 QA Specialist verificando errores…",              icon: Sparkles },
+  patching:     { label: "🔧 DevOps Patcher auto-reparando errores…",           icon: Sparkles },
+  validating:   { label: "🔍 Compilando el código en memoria…",                icon: Sparkles },
+  fixing:       { label: "🔧 Auto-reparando errores detectados…",              icon: Sparkles },
+  parsing:      { label: "📦 Empaquetando archivos del proyecto…",             icon: Sparkles },
+  ready:        { label: "Cambios aplicados con éxito",                        icon: Sparkles },
+  failed:       { label: "Error en la generación",                            icon: Sparkles },
 };
 
 type SidebarTab = "chat" | "plan" | "data" | "integrations" | "ui-builder" | "workflows" | "settings";

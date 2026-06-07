@@ -239,3 +239,22 @@
 .duration-400 {
   animation-duration: 400ms;
 }
+
+/* ─── Shimmer gradient for progress bars ───────────────────────────────────── */
+@keyframes shimmer-gradient {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Tailwind arbitrary value support for shimmer animation */
+.animate-\[shimmer_2s_linear_infinite\] {
+  background: linear-gradient(90deg, #7c3aed 0%, #6d28d9 25%, #a78bfa 50%, #6d28d9 75%, #7c3aed 100%);
+  background-size: 200% 100%;
+  animation: shimmer-gradient 2s linear infinite;
+}
+
+.animate-\[shimmer_2s_ease-in-out_infinite\] {
+  background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 50%, #7c3aed 100%);
+  background-size: 200% 100%;
+  animation: shimmer-gradient 2s ease-in-out infinite;
+}
