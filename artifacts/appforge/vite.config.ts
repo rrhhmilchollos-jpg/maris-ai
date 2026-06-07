@@ -3,8 +3,13 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
-const clerkPubKey =
-  process.env.VITE_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY ?? "";
+// Nota: VITE_CLERK_PUBLISHABLE_KEY se expone automáticamente por Vite a través de import.meta.env
+// No es necesario el bloque "define" — Vite ya maneja las variables VITE_* correctamente.
+// El bloque "define" anterior sobreescribía la variable con el valor del entorno de BUILD,
+// lo que causaba que quedara vacía si la variable no estaba definida al compilar.
+
+// Si CLERK_PUBLISHABLE_KEY está definida (sin el prefijo VITE_), la exponemos también.
+const clerkPubKeyFallback = process.env.CLERK_PUBLISHABLE_KEY ?? "";
 
 const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
@@ -20,7 +25,11 @@ export default defineConfig({
     headers: ISOLATION_HEADERS,
   },
   define: {
-    "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPubKey),
+    // Solo inyectar el fallback si VITE_CLERK_PUBLISHABLE_KEY no está definida
+    // Esto permite que Vercel inyecte la variable en tiempo de build correctamente
+    ...(clerkPubKeyFallback && !process.env.VITE_CLERK_PUBLISHABLE_KEY
+      ? { "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPubKeyFallback) }
+      : {}),
   },
   plugins: [
     react(),
