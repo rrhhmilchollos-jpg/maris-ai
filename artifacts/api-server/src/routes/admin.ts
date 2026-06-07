@@ -314,10 +314,6 @@ router.get("/admin/jobs", async (_req, res) => {
   });
 });
 
-router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> => {
-  // ... existing job retry route ...
-});
-
 router.post("/admin/project-seeds/bulk", requireAdmin, async (req: any, res: any): Promise<void> => {
   const seeds: Partial<IProjectSeed>[] = req.body;
   if (!Array.isArray(seeds)) {
