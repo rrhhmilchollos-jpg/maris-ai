@@ -1978,7 +1978,7 @@ export async function generateApp(
           void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
         }
       }, coderModel, language, templateContextBlock, agentModelPlan),
-      480_000, // 8 minutes is more than enough for Sonnet. Opus was the bottleneck.
+      180_000, // 3 minutes max per frontend generation (Sonnet 4.6)
       "frontend-engineer",
     ),
   );

@@ -90,9 +90,8 @@ export class CoreOrchestrator {
       while (attempts < MAX_ATTEMPTS) {
         try {
           const agentResponse = await anthropic.messages.create({
-            model: "claude-3-haiku-20240307", // Usamos un modelo más rápido y ligero para evitar timeouts
+            model: "claude-haiku-4-5", // Usamos un modelo más rápido y ligero para evitar timeouts
             max_tokens: 4000,
-            timeout: 60000, // Timeout de 60s por llamada individual
             system: `Eres el Agente de Código Experto de Maris AI. 
             Estado actual global: ${this.architectureSummary || 'Iniciando proyecto'}.
             Genera EXCLUSIVAMENTE el código fuente para ${milestone.filePath}. Sin explicaciones.`,

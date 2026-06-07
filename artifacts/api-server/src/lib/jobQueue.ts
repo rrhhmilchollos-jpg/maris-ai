@@ -33,6 +33,7 @@ type JobHandler = (jobId: string, ctx: AttemptContext) => Promise<void>;
 
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let activeJobs = 0;
+const activeJobsByUser = new Map<string, number>();
 let registeredHandler: JobHandler | null = null;
 let isStarted = false;
 let triggerPollFn: (() => Promise<void>) | null = null;
@@ -137,6 +138,14 @@ export async function registerGenerateWorker(
 
       for (const job of jobs) {
         // Atomic claim — only one worker wins per job.
+        // Per-user concurrency limit (max 1 concurrent job per user)
+        const jobUserId = String(job.userId || "unknown");
+        const userActive = activeJobsByUser.get(jobUserId) ?? 0;
+        if (userActive >= 1) {
+          logger.info({ jobId: String(job._id), userId: jobUserId }, "User already has an active job — skipping for now");
+          continue;
+        }
+
         const claimed = await GenerationJob.findOneAndUpdate(
           { _id: job._id, status: "queued" },
           { $set: { status: "running", updatedAt: new Date() } },
@@ -145,6 +154,7 @@ export async function registerGenerateWorker(
         if (!claimed) continue; // another worker claimed it first
 
         activeJobs++;
+        activeJobsByUser.set(jobUserId, (activeJobsByUser.get(jobUserId) ?? 0) + 1);
         const jobId = String(job._id);
         const attempt = (job.retryCount ?? 0) + 1;
 
@@ -174,6 +184,10 @@ export async function registerGenerateWorker(
             }
           } finally {
             activeJobs--;
+            const uid = String(job.userId || "unknown");
+            const prev = activeJobsByUser.get(uid) ?? 1;
+            if (prev <= 1) activeJobsByUser.delete(uid);
+            else activeJobsByUser.set(uid, prev - 1);
           }
         })();
       }
