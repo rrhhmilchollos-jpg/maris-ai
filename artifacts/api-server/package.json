@@ -32,6 +32,7 @@
     "@workspace/integrations-anthropic-ai": "workspace:*",
     "@workspace/integrations-gemini-ai": "workspace:*",
     "@workspace/services": "workspace:*",
+    "adm-zip": "^0.5.17",
     "archiver": "^7.0.1",
     "bullmq": "^5.76.10",
     "cookie-parser": "^1.4.7",
@@ -48,10 +49,10 @@
     "pino-http": "^10.5.0",
     "puppeteer": "^24.43.1",
     "resend": "^6.12.4",
-    "stripe": "^22.1.1",
-    "adm-zip": "^0.5.16"
+    "stripe": "^22.1.1"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/archiver": "^7.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
@@ -62,7 +63,6 @@
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13.1.3",
     "thread-stream": "3.1.0",
-    "tsx": "catalog:",
-    "@types/adm-zip": "^0.5.7"
+    "tsx": "catalog:"
   }
 }

@@ -296,16 +296,10 @@ export default function DashboardPage() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const res = await fetch("/api/import-app", {
+      const data = await apiFetch<any>("/api/import-app", {
         method: "POST",
         body: formData,
       });
-      const text = await res.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        throw new Error("El servidor no está listo aún. Espera unos segundos y vuelve a intentarlo.");
-      }
-      if (!res.ok) throw new Error(data.error || "Error al importar");
       setImportResult({ title: data.title, filesImported: data.filesImported });
       queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
       toast({ title: `✅ "${data.title}" importado`, description: `${data.filesImported} archivos cargados. Ya aparece en tus apps recientes.` });
