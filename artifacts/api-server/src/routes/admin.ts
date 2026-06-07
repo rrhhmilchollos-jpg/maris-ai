@@ -776,7 +776,7 @@ router.post("/admin/users/:id/send-compensation-email", async (req: any, res: an
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Maris AI <soporte@marisai.es>',
+          from: process.env.RESEND_FROM_EMAIL || 'Maris AI <onboarding@resend.dev>',
           to: [recipientEmail],
           subject: emailSubject,
           html: htmlBody,
