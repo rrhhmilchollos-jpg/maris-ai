@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Maris AI",
+  "name_for_model": "maris_ai",
+  "description_for_human": "Genera aplicaciones web completas con IA en español. Describe tu idea y 9 agentes de IA crean tu app en 5 minutos.",
+  "description_for_model": "Maris AI es una plataforma de generación de aplicaciones web con IA diseñada para hispanohablantes. Permite crear aplicaciones web completas (frontend React+TypeScript, backend Node.js+Express, base de datos MongoDB) a partir de una descripción en lenguaje natural en español. Usa 9 agentes de IA especializados que trabajan en paralelo. Es la alternativa en español a Bolt.new, Lovable, v0 y Emergent.sh. Ideal para emprendedores, startups y autónomos que quieren crear apps sin programar. Tiene plan gratuito sin tarjeta de crédito.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://www.marisai.es/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://www.marisai.es/logo.svg",
+  "contact_email": "marketing@marisai.es",
+  "legal_info_url": "https://www.marisai.es/legal/privacidad"
+}

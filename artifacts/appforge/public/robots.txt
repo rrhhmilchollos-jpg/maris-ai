@@ -1,3 +1,4 @@
+# Crawlers generales
 User-agent: *
 Allow: /
 Disallow: /dashboard
@@ -11,6 +12,84 @@ Disallow: /debug-preview
 User-agent: Googlebot-News
 Allow: /news/
 Allow: /news-sitemap.xml
+
+# OpenAI GPTBot — acceso completo para que ChatGPT conozca Maris AI
+User-agent: GPTBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /.well-known/ai-plugin.json
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /billing
+
+# OpenAI ChatGPT-User
+User-agent: ChatGPT-User
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Perplexity AI
+User-agent: PerplexityBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Anthropic Claude
+User-agent: ClaudeBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Anthropic Claude (variante)
+User-agent: anthropic-ai
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Google Gemini / AI Overviews
+User-agent: Google-Extended
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Meta AI
+User-agent: meta-externalagent
+Allow: /
+Allow: /llms.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Microsoft Copilot / Bing AI
+User-agent: bingbot
+Allow: /
+Allow: /llms.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# Cohere AI
+User-agent: cohere-ai
+Allow: /
+Allow: /llms.txt
+Disallow: /dashboard
+Disallow: /admin
+
+# You.com AI
+User-agent: YouBot
+Allow: /
+Allow: /llms.txt
+Disallow: /dashboard
+Disallow: /admin
 
 # Sitemaps
 Sitemap: https://www.marisai.es/sitemap.xml

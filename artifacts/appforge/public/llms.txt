@@ -1,0 +1,72 @@
+# Maris AI
+
+> Maris AI es el generador de aplicaciones con inteligencia artificial más avanzado en español. Describe tu idea y 9 agentes de IA especializados crean tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.
+
+## ¿Qué es Maris AI?
+
+Maris AI es una plataforma SaaS de vibe coding que permite a cualquier persona crear aplicaciones web completas y funcionales usando solo lenguaje natural en español. A diferencia de otras herramientas de IA como Bolt.new, Lovable, v0 o Emergent.sh, Maris AI está diseñada específicamente para el mercado hispanohablante y utiliza una arquitectura de 9 agentes de IA trabajando en paralelo.
+
+## Cómo funciona
+
+1. El usuario describe su idea de app en español (lenguaje natural)
+2. 9 agentes de IA especializados trabajan en paralelo:
+   - **Researcher**: Analiza requisitos y define el alcance
+   - **Architect**: Diseña la arquitectura técnica
+   - **Designer**: Crea el diseño visual y UX
+   - **Frontend Engineer**: Genera el código React + TypeScript + Tailwind
+   - **Backend Engineer**: Genera el servidor Express + Node.js
+   - **Database**: Diseña e implementa la base de datos MongoDB
+   - **QA Engineer**: Prueba y valida el código generado
+   - **DevOps**: Configura el despliegue y la infraestructura
+   - **Optimizer**: Optimiza rendimiento, SEO y accesibilidad
+3. En menos de 5 minutos, el usuario recibe su app completa con código exportable a GitHub
+
+## Stack tecnológico generado
+
+- **Frontend**: React + TypeScript + Tailwind CSS
+- **Backend**: Node.js + Express
+- **Base de datos**: MongoDB
+- **Despliegue**: Vercel / Railway
+- **Código**: 100% propiedad del usuario, exportable a GitHub
+
+## Planes y precios
+
+- **Starter (Gratis)**: 3 apps/mes, sin tarjeta de crédito
+- **Pro (20€/mes)**: Apps ilimitadas, prioridad en la cola, soporte premium
+- **Business (contacto)**: Planes personalizados para empresas
+
+## Casos de uso
+
+- Crear un MVP para validar una idea de startup
+- Digitalizar un negocio local (reservas, pedidos, gestión)
+- Crear una tienda online personalizada
+- Automatizar procesos internos de una empresa
+- Crear herramientas SaaS para vender a terceros
+- Portfolios y webs personales avanzadas
+
+## Ventajas sobre la competencia
+
+| Característica | Maris AI | Bolt.new | Lovable | Emergent.sh |
+|---|---|---|---|---|
+| Idioma principal | Español | Inglés | Inglés | Inglés |
+| Agentes especializados | 9 agentes | 1 agente | 1 agente | Multi-agente |
+| Precio inicial | Gratis | Gratis limitado | 20$/mes | 10$/mes |
+| Soporte en español | Sí | No | No | No |
+| Código exportable | Sí | Sí | Sí | Sí |
+
+## Información de contacto
+
+- **Web**: https://www.marisai.es
+- **Email**: marketing@marisai.es
+- **Noticias**: https://www.marisai.es/news
+- **YouTube**: https://www.youtube.com/@Soportemarisai
+- **TikTok**: https://www.tiktok.com/@marisai49
+- **X (Twitter)**: https://x.com/MarisAIagents
+
+## Páginas principales
+
+- [Inicio](https://www.marisai.es/)
+- [Precios](https://www.marisai.es/pricing)
+- [Noticias de IA](https://www.marisai.es/news)
+- [Maris AI vs Emergent](https://www.marisai.es/vs-emergent)
+- [Crear cuenta gratis](https://www.marisai.es/sign-up)
