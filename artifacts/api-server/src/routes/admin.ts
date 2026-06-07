@@ -167,6 +167,7 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
     kind: t.kind,
     amount: t.amount,
     description: t.description,
+    stripeSessionId: t.stripeSessionId ?? null,
     createdAt: t.createdAt.toISOString(),
   })));
 });
@@ -225,6 +226,85 @@ router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void
     isAdmin: isAdminEmail(user.email),
     createdAt: new Date(user.createdAt).toISOString(),
   });
+});
+
+// ─── Stripe card refund (real money back to card) ───────────────────────────
+router.post("/admin/users/:id/stripe-refund", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const targetId = req.params.id;
+  const { stripeSessionId, amountCents, reason } = req.body;
+
+  if (!stripeSessionId) {
+    res.status(400).json({ error: "stripeSessionId es obligatorio" });
+    return;
+  }
+
+  try {
+    const { getStripe } = await import("../lib/stripe");
+    const stripe = await getStripe();
+    if (!stripe) {
+      res.status(503).json({ error: "Stripe no está configurado en este servidor" });
+      return;
+    }
+
+    // Retrieve the checkout session to get the payment intent
+    const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+    if (!session.payment_intent) {
+      res.status(400).json({ error: "La sesión no tiene payment_intent asociado" });
+      return;
+    }
+
+    const paymentIntentId = typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent.id;
+
+    // Create the refund
+    const refundParams: any = {
+      payment_intent: paymentIntentId,
+      reason: "requested_by_customer",
+    };
+    if (amountCents && amountCents > 0) {
+      refundParams.amount = amountCents; // in cents
+    }
+
+    const refund = await stripe.refunds.create(refundParams);
+
+    // Log the refund in credit transactions
+    const CreditTransaction = (await import("@maris-ai/db")).CreditTransaction;
+    await CreditTransaction.create({
+      userId: targetId,
+      kind: "admin_stripe_refund",
+      amount: 0, // no credit change, just a record
+      description: reason || `Reembolso Stripe ${refund.id} · ${(refund.amount / 100).toFixed(2)}€`,
+      stripeSessionId,
+    });
+
+    logger.info({ userId: targetId, refundId: refund.id, amount: refund.amount }, "Stripe refund created");
+    res.json({ ok: true, refundId: refund.id, amount: refund.amount, status: refund.status });
+  } catch (err: any) {
+    logger.error({ err, userId: targetId }, "Error creating Stripe refund");
+    res.status(500).json({ error: err?.message ?? "Error al procesar el reembolso Stripe" });
+  }
+});
+
+// ─── Admin notes on user ─────────────────────────────────────────────────────
+router.post("/admin/users/:id/notes", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const targetId = req.params.id;
+  const { note } = req.body;
+  if (!note?.trim()) {
+    res.status(400).json({ error: "La nota no puede estar vacía" });
+    return;
+  }
+  try {
+    await User.findByIdAndUpdate(targetId, {
+      $push: { adminNotes: { text: note.trim(), createdAt: new Date() } },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, userId: targetId }, "Error adding admin note");
+    res.status(500).json({ error: "Error al guardar la nota" });
+  }
 });
 
 router.post("/admin/users/:id/refund", async (req: any, res: any): Promise<void> => {
@@ -468,11 +548,12 @@ router.get("/admin/metrics", async (_req, res) => {
   await connectDB();
   const now = new Date();
   const day = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const week = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const [jobs24h, failingPhases, creditsToday, creditsMonth, topUsers,
-    publishedTotal, publishedToday, queueByStatusRaw] = await Promise.all([
+    publishedTotal, publishedToday, queueByStatusRaw, jobs7dByDay, credits7dByDay, newUsers7d, totalUsers, totalApps] = await Promise.all([
     GenerationJob.aggregate([
       { $match: { createdAt: { $gte: day } } },
       { $group: {
@@ -507,6 +588,31 @@ router.get("/admin/metrics", async (_req, res) => {
       { $match: { createdAt: { $gte: day } } },
       { $group: { _id: "$status", total: { $sum: 1 } } },
     ]),
+    // 7-day jobs histogram by day
+    GenerationJob.aggregate([
+      { $match: { createdAt: { $gte: week } } },
+      { $group: {
+        _id: {
+          date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          status: "$status",
+        },
+        count: { $sum: 1 },
+      }},
+      { $sort: { "_id.date": 1 } },
+    ]),
+    // 7-day credits usage histogram by day
+    CreditTransaction.aggregate([
+      { $match: { kind: "usage", createdAt: { $gte: week } } },
+      { $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        total: { $sum: { $abs: "$amount" } },
+      }},
+      { $sort: { _id: 1 } },
+    ]),
+    // new users in last 7 days
+    User.countDocuments({ createdAt: { $gte: week } }),
+    User.countDocuments(),
+    GeneratedApp.countDocuments(),
   ]);
 
   let jobsTotal = 0, jobsSuccess = 0, jobsFailed = 0;
@@ -530,8 +636,27 @@ router.get("/admin/metrics", async (_req, res) => {
     queueByStatus[row._id] = row.total;
   }
 
+  // Build 7-day jobs histogram: { date, succeeded, failed, total }[]
+  const jobsByDayMap: Record<string, { date: string; succeeded: number; failed: number; total: number }> = {};
+  for (const row of jobs7dByDay as any[]) {
+    const d = row._id.date;
+    if (!jobsByDayMap[d]) jobsByDayMap[d] = { date: d, succeeded: 0, failed: 0, total: 0 };
+    jobsByDayMap[d].total += row.count;
+    if (row._id.status === "succeeded") jobsByDayMap[d].succeeded += row.count;
+    if (row._id.status === "failed") jobsByDayMap[d].failed += row.count;
+  }
+  const jobs7dChart = Object.values(jobsByDayMap).sort((a, b) => a.date.localeCompare(b.date));
+
+  // Build 7-day credits histogram: { date, credits }[]
+  const credits7dChart = (credits7dByDay as any[]).map((r) => ({ date: r._id, credits: r.total }));
+
   res.json({
     generatedAt: now.toISOString(),
+    overview: {
+      totalUsers,
+      totalApps,
+      newUsers7d,
+    },
     jobs24h: {
       total: jobsTotal,
       succeeded: jobsSuccess,
@@ -539,6 +664,8 @@ router.get("/admin/metrics", async (_req, res) => {
       successRate: jobsTotal > 0 ? Math.round((jobsSuccess / jobsTotal) * 100) : null,
       avgDurationMs: avgDurationCount > 0 ? Math.round(avgDurationMsAccum / avgDurationCount) : 0,
     },
+    jobs7dChart,
+    credits7dChart,
     topFailingPhases: failingPhases.map((p: { _id: string; total: number }) => ({
       phase: p._id,
       count: p.total,

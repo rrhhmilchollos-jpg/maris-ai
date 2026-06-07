@@ -23,6 +23,7 @@ import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import { SupportPanel } from "@/components/support-panel";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { GenerationStudio } from "@/components/generation-studio";
+import { PreGenerationChat } from "@/components/pre-generation-chat";
 import {
   AttachmentPicker,
   AttachmentChips,
@@ -130,7 +131,11 @@ export default function DashboardPage() {
   const kindCost = kindMeta.cost;
   const [annualOpen, setAnnualOpen] = useState(false);
 
-  // ─── Onboarding Questions Modal ───────────────────────────────────────────
+  // ─── Pre-Generation Chat (Emergent.sh style) ────────────────────────────────
+  const [preGenChatOpen, setPreGenChatOpen] = useState(false);
+  const [preGenChatGenerating, setPreGenChatGenerating] = useState(false);
+
+  // Legacy onboarding state (kept for reference, replaced by PreGenerationChat)
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingAnswers, setOnboardingAnswers] = useState<Record<number, string>>({}); 
@@ -235,9 +240,22 @@ export default function DashboardPage() {
   };
 
   const openOnboarding = () => {
-    setOnboardingStep(0);
-    setOnboardingAnswers({});
-    setOnboardingOpen(true);
+    // Use new PreGenerationChat instead of old modal
+    setPreGenChatOpen(true);
+  };
+
+  const handlePreGenConfirm = (enrichedPrompt: string) => {
+    setPreGenChatGenerating(true);
+    localStorage.setItem("appforge_last_prompt", enrichedPrompt);
+    generateMutation.mutate(
+      { data: { prompt: enrichedPrompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } },
+      {
+        onSettled: () => {
+          setPreGenChatGenerating(false);
+          setPreGenChatOpen(false);
+        },
+      }
+    );
   };
 
   const { data: me } = useGetMe();
@@ -336,6 +354,19 @@ export default function DashboardPage() {
   const isWorking = generateMutation.isPending || activeJobId !== null;
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
+
+  // ─── Pre-Generation Chat overlay ────────────────────────────────────────────
+  if (preGenChatOpen) {
+    return (
+      <PreGenerationChat
+        initialPrompt={prompt}
+        appKind={kind}
+        onConfirm={handlePreGenConfirm}
+        onCancel={() => setPreGenChatOpen(false)}
+        isGenerating={preGenChatGenerating}
+      />
+    );
+  }
 
   if (activeJobId) {
     return (
@@ -540,7 +571,7 @@ export default function DashboardPage() {
           </form>
         </div>
 
-        {/* ─── Onboarding Questions Modal ─────────────────────────────────── */}
+        {/* ─── Onboarding Questions Modal (legacy, replaced by PreGenerationChat) ─── */}
         <Dialog open={onboardingOpen} onOpenChange={setOnboardingOpen}>
           <DialogContent className="max-w-lg bg-[#0d0d12] border-white/10">
             <DialogHeader>

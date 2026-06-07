@@ -178,6 +178,15 @@ export function useAdminUserApps(id: string, opts?: { query?: Partial<UseQueryOp
 export function useRetryAdminJob(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/jobs/${id}/retry`, { method: "POST" }), ...(opts?.mutation as any) });
 }
+export function useAdminStripeRefund(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/stripe-refund`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+export function useAdminAddNote(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
+export function useAdminSendCompensationEmail(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/admin/users/${id}/send-compensation-email`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
+}
 export function useUpdateAppModel(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id, data }: any) => apiFetch(`/api/apps/${id}/model`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }), ...(opts?.mutation as any) });
 }
