@@ -1,5 +1,6 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
@@ -43,6 +44,74 @@ app.use(
   }),
 );
  
+// ── Security Headers (Helmet) ─────────────────────────────────────────────
+// Protects against XSS, clickjacking, MIME sniffing, and other common attacks.
+// CSP is relaxed to allow Clerk, Stripe, and our CDN assets.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'", // Required for Clerk and Stripe embedded scripts
+          "https://clerk.marisai.es",
+          "https://*.clerk.accounts.dev",
+          "https://js.stripe.com",
+          "https://cdn.jsdelivr.net",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:", "blob:"],
+        connectSrc: [
+          "'self'",
+          "https://api.marisai.es",
+          "https://maris-ai-api-server-6c5u.onrender.com",
+          "https://*.clerk.com",
+          "https://*.stripe.com",
+          "https://api.resend.com",
+          "wss:",
+        ],
+        fontSrc: ["'self'", "data:", "https:"],
+        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Disabled: required for WebContainers
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true,
+    },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+    xContentTypeOptions: true,
+    xFrameOptions: { action: "DENY" },
+    xXssProtection: true,
+    hidePoweredBy: true,
+  })
+);
+
+// ── Anti-phishing: block suspicious User-Agent patterns ────────────────────
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const ua = req.headers["user-agent"] || "";
+  // Block known scanner/exploit tools
+  const blockedPatterns = [
+    /sqlmap/i,
+    /nikto/i,
+    /masscan/i,
+    /zgrab/i,
+    /python-requests\/[01]\./i, // old python-requests versions used in attacks
+    /go-http-client\/1\.0/i,
+    /\bscanner\b/i,
+    /\bexploit\b/i,
+  ];
+  if (blockedPatterns.some((p) => p.test(ua))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
+
 // Stripe webhook needs the raw body — mount BEFORE express.json()
 app.use("/api/billing/webhook", stripeWebhookRouter);
  
