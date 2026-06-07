@@ -12,6 +12,14 @@ export interface IUser {
   isAdmin?: boolean;
   freeCreditsUsed?: boolean;
   registrationIp?: string;
+  // Moderación
+  isSuspended?: boolean;
+  suspendedAt?: Date;
+  suspendReason?: string;
+  isBanned?: boolean;
+  bannedAt?: Date;
+  banReason?: string;
+  blockedIps?: string[];
   // Suscripción y plan
   plan?: string;
   planCredits?: number;
@@ -33,6 +41,14 @@ const UserSchema = new Schema<IUser>(
     isAdmin: { type: Boolean, default: false },
     freeCreditsUsed: { type: Boolean, default: false },
     registrationIp: { type: String },
+    // Moderación
+    isSuspended: { type: Boolean, default: false },
+    suspendedAt: { type: Date },
+    suspendReason: { type: String },
+    isBanned: { type: Boolean, default: false },
+    bannedAt: { type: Date },
+    banReason: { type: String },
+    blockedIps: { type: [String], default: [] },
     // Suscripción y plan
     plan: { type: String, default: "free" },
     planCredits: { type: Number, default: 0 },
