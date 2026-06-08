@@ -5,20 +5,14 @@
   "outputDirectory": "dist",
   "headers": [
     {
-      "source": "/app/:path*",
-      "headers": [
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" }
-      ]
-    },
-    {
       "source": "/:path*",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
         { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
         { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
         { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://cdn.jsdelivr.net https://js.stripe.com https://cdn.tailwindcss.com https://fonts.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com https://connect.facebook.net https://vercel.live https://*.vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https:; img-src 'self' data: blob: https: https://www.google-analytics.com https://www.googletagmanager.com https://www.facebook.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://api.marisai.es https://maris-ai-api-server-6c5u.onrender.com https://maris-ai-api-server.onrender.com https://*.stripe.com wss: https://accounts.google.com https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.googletagmanager.com https://www.facebook.com https://*.vercel.live wss://*.vercel.live; frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://js.stripe.com https://hooks.stripe.com https://accounts.google.com https://www.googletagmanager.com https://vercel.live; worker-src 'self' blob:; object-src 'none';" }
       ]
