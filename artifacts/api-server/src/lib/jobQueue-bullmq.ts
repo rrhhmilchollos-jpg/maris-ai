@@ -248,14 +248,16 @@ export async function registerGenerateWorker(
           "Job processing error"
         );
         
-        // Update job with error
+        // Update job with error context, but only mark as terminal failure if attempts are exhausted
+        const isFinalAttempt = (bullJob.attemptsMade ?? 0) + 1 >= (bullJob.opts.attempts ?? 3);
         await GenerationJob.findByIdAndUpdate(jobId, {
           $set: {
-            status: "failed",
-            phase: "failed",
+            status: isFinalAttempt ? "failed" : "queued",
+            phase: isFinalAttempt ? "failed" : "retrying",
             errorMessage: err instanceof Error ? err.message : "Unknown error",
             updatedAt: new Date(),
           },
+          $inc: { retryCount: 1 }
         }).catch(() => {});
         
         // Re-throw so BullMQ retries according to backoff strategy
