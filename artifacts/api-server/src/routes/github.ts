@@ -13,8 +13,7 @@ import { requireAuth } from "../lib/auth";
 import { connectDB } from "../lib/db";
 import { User, GeneratedApp } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
-import fetch from "node-fetch";
-
+// fetch es nativo en Node.js 18+ — no se necesita node-fetch
 const router: IRouter = Router();
 
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
