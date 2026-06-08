@@ -125,14 +125,29 @@ function fallbackClaudeModels(model: string): string[] {
 
 export async function createClaudeMessageWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
   let lastError: unknown;
+  const MAX_RETRIES = 3;
   
-  // Try Anthropic first
+  // Try Anthropic first with exponential backoff
   for (const candidate of fallbackClaudeModels(model)) {
-    try {
-      return await anthropic.messages.create({ ...params, model: candidate });
-    } catch (err) {
-      lastError = err;
-      logger.warn({ role, model: candidate, err }, "Anthropic model failed; trying fallback");
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        // Pequeño desfase aleatorio para evitar colisiones de agentes
+        await new Promise(r => setTimeout(r, Math.random() * 500));
+        return await anthropic.messages.create({ ...params, model: candidate });
+      } catch (err: any) {
+        lastError = err;
+        const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
+        
+        if (isRateLimit && attempt < MAX_RETRIES - 1) {
+          const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
+          logger.warn({ role, model: candidate, attempt, delay }, "Rate limit hit; retrying with backoff");
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        
+        logger.warn({ role, model: candidate, err }, "Anthropic model failed; trying next candidate or fallback");
+        break; // Probar el siguiente modelo candidato
+      }
     }
   }
 
