@@ -273,3 +273,15 @@ export interface JobLogEntry {
   message: string;
   createdAt: string;
 }
+
+// ✅ Seguimiento 2: Historial de créditos para el gráfico de uso
+export const getGetCreditsHistoryQueryKey = () => ["credits-history"];
+export function useGetCreditsHistory(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getGetCreditsHistoryQueryKey(), queryFn: () => apiFetch("/api/me/credits-history"), refetchInterval: 60_000, ...(opts?.query as any) });
+}
+
+// ✅ Seguimiento 3: Notificaciones en tiempo real
+export const getGetNotificationsQueryKey = () => ["notifications"];
+export function useGetNotifications(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: getGetNotificationsQueryKey(), queryFn: () => apiFetch("/api/me/notifications"), refetchInterval: 30_000, ...(opts?.query as any) });
+}

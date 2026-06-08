@@ -35,6 +35,7 @@ const AvisoLegalPage = lazy(() => import("@/pages/legal/aviso-legal"));
 const CookiesPage = lazy(() => import("@/pages/legal/cookies"));
 const GlossaryPage = lazy(() => import("@/pages/glosario"));
 const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
+const OnboardingPage = lazy(() => import("@/pages/onboarding")); // ✅ Seguimiento 4
 
 // Fallback de carga para Suspense
 function PageLoader() {
@@ -290,6 +291,10 @@ function ClerkProviderWithRoutes() {
           <Route path="/sign-in/*?" component={SignInPage} />
           <Route path="/sign-up/*?" component={SignUpPage} />
           
+          <Route path="/onboarding">
+            <Gated><OnboardingPage /></Gated>
+          </Route>
+
           <Route path="/dashboard">
             <Gated><DashboardPage /></Gated>
           </Route>
