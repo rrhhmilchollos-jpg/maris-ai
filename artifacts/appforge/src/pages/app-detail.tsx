@@ -301,11 +301,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     (activeAppJob?.id ? String(activeAppJob.id) : null) ?? activeJobId;
 
   // Job logs para los bloques inline de agentes (Emergent.sh style)
+  // NOTA: isWorking se declara más abajo, por eso usamos solo effectiveJobId como condición
+  // para evitar la referencia circular que causaba: ReferenceError: Cannot access 'Vt' before initialization
   const { data: jobLogsData } = useQuery({
     queryKey: [...getGetGenerationJobLogsQueryKey(effectiveJobId ?? ""), "inline"],
     queryFn: () => getGenerationJobLogs(effectiveJobId!, { }),
-    enabled: !!effectiveJobId && isWorking,
-    refetchInterval: isWorking ? 2000 : false,
+    enabled: !!effectiveJobId,
+    refetchInterval: effectiveJobId ? 2000 : false,
     select: (d) => d.logs ?? [],
   });
   const jobLogs = jobLogsData ?? [];
