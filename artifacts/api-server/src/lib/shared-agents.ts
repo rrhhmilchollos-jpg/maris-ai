@@ -240,7 +240,7 @@ export async function patchBundle(
         return null;
       }
     })(),
-    120_000,
+    240_000, // Aumentado a 4 minutos para evitar timeouts en Render
     null,
   );
 }

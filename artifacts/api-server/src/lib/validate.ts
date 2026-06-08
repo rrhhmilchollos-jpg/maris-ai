@@ -161,8 +161,10 @@ const EMPTY_LOADER_EXTS = new Set([
  */
 export async function validateBundle(bundle: string): Promise<ValidationReport> {
   const started = Date.now();
+  logger.info("VALIDATOR: Iniciando validación de bundle...");
   const vfs = parseBundleToVFS(bundle);
   const filesAnalyzed = Object.keys(vfs).length;
+  logger.info({ filesAnalyzed }, "VALIDATOR: Bundle parseado.");
 
   if (filesAnalyzed === 0) {
     return {
@@ -195,6 +197,7 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   const NAMESPACE = "appforge-vfs";
 
   try {
+    logger.info({ entry }, "VALIDATOR: Ejecutando esbuild.build...");
     const result = await esbuild.build({
       entryPoints: [entry],
       bundle: true,
@@ -289,8 +292,10 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // the page. Catch the pattern statically so the patcher can fix it.
     issues.push(...detectWouterAnchorNesting(vfs));
 
+    const ok = issues.length === 0;
+    logger.info({ ok, issuesCount: issues.length, duration: Date.now() - started }, "VALIDATOR: Finalizado con éxito.");
     return {
-      ok: issues.length === 0,
+      ok,
       issues,
       filesAnalyzed,
       durationMs: Date.now() - started,
