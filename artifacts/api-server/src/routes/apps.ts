@@ -1883,20 +1883,17 @@ export async function generateApp(
   let frontendAccumulated = "";
   const frontendPromise = runPhase("frontend", async () => {
     try {
-      return await withTimeoutOrThrow(
-        generateFrontendCode(plan, design, research, prompt, (chars) => {
-          const ratio = Math.min(1, chars / TARGET_CHARS);
-          onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
-          // Log cada 5KB para dar feedback visual al usuario
-          if (chars - lastLogChars >= 5000) {
-            lastLogChars = chars;
-            void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
-          }
-        }, coderModel, language, templateContextBlock, agentModelPlan,
-        (partial) => { frontendAccumulated = partial; }), // onPartial: keep latest accumulated text for timeout recovery
-        480_000, // 8 minutes max per frontend generation — increased for ultra-complex apps (CRM, ERP, full platforms)
-        "frontend-engineer",
-      );
+      // He eliminado el withTimeoutOrThrow porque causaba fallos en apps grandes (CRM, ERP, etc.)
+      // Ahora dejamos que la IA termine su trabajo sin importar el tiempo, evitando el error "Algo salió mal".
+      return await generateFrontendCode(plan, design, research, prompt, (chars) => {
+        const ratio = Math.min(1, chars / TARGET_CHARS);
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+        if (chars - lastLogChars >= 5000) {
+          lastLogChars = chars;
+          void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+        }
+      }, coderModel, language, templateContextBlock, agentModelPlan,
+      (partial) => { frontendAccumulated = partial; });
     } catch (err) {
       // On timeout, return a partial result instead of throwing so Promise.all doesn't fail
       // The retry logic below will handle it with a reduced plan
