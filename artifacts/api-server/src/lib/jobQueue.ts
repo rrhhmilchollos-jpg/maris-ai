@@ -17,7 +17,7 @@ export const GENERATE_QUEUE =
   process.env.GENERATE_QUEUE_NAME ?? "appforge.generate-app";
 
 const DEFAULT_CONCURRENCY = 3;
-const DEFAULT_POLL_INTERVAL_MS = 200;
+const DEFAULT_POLL_INTERVAL_MS = process.env.JOB_POLL_INTERVAL_MS ? Number.parseInt(process.env.JOB_POLL_INTERVAL_MS, 10) : 2000; // Optimizado: 200ms → 2000ms
 export const MAX_ATTEMPTS = 3; // Retry limit
 
 export interface JobPayload {
@@ -197,6 +197,7 @@ export async function registerGenerateWorker(
   };
 
   triggerPollFn = triggerPoll;
+  logger.info({ pollIntervalMs: DEFAULT_POLL_INTERVAL_MS }, "Job queue polling configured");
   pollInterval = setInterval(triggerPollFn, DEFAULT_POLL_INTERVAL_MS);
 
   // Prevent the interval from keeping Node alive if nothing else is running.

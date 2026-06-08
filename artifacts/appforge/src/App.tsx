@@ -13,8 +13,9 @@ import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
 import { useUser } from "@clerk/react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
-// Pages — lazy loaded para reducir bundle inicial y mejorar LCP/FCP
 import { setSentryUser } from "@/lib/sentry";
+
+// Pages — lazy loaded para reducir bundle inicial y mejorar LCP/FCP
 // La landing se carga de forma inmediata (es la primera página visible)
 import LandingPage from "@/pages/landing";
 // El resto de páginas se cargan bajo demanda
@@ -43,6 +44,15 @@ function PageLoader() {
     <div className="flex min-h-[60vh] items-center justify-center">
       <Loader2 className="h-6 w-6 animate-spin text-primary" />
     </div>
+  );
+}
+
+// Wrapper para Suspense en rutas
+function SuspendedRoute({ component: Component, ...props }: any) {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Component {...props} />
+    </Suspense>
   );
 }
 

@@ -48,14 +48,20 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1000, // Aumentamos el límite ya que hemos optimizado el chunking manual
-    minify: "terser", // Minificación más agresiva
+    chunkSizeWarningLimit: 1000,
+    minify: "terser",
     terserOptions: {
       compress: {
-        drop_console: true, // Elimina console.logs en producción
+        drop_console: true,
         drop_debugger: true,
+        passes: 2,
       },
+      mangle: true,
+      format: { comments: false },
     },
+    cssMinify: true,
+    reportCompressedSize: false,
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
