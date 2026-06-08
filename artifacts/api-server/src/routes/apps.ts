@@ -284,28 +284,74 @@ Rules:
 function buildPatcherSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
   const tsLine = isTS
-    ? "- This is a TypeScript bundle (.tsx/.ts). Type annotations are fine."
-    : "- This is a plain JavaScript bundle (.jsx/.js). Do NOT introduce TypeScript syntax during patching.";
-  return `You are Maris AI's Patcher. Apply ONLY the listed fixes to the frontend bundle. Preserve everything else exactly.
+    ? "- TypeScript bundle (.tsx/.ts): type annotations required. Fix type errors, missing interfaces, wrong generics."
+    : "- JavaScript bundle (.jsx/.js): do NOT introduce TypeScript syntax. Fix JS-only issues.";
+  return `You are Maris AI's testing-agent — the most advanced technical repair expert in the system.
+Your mission: receive a list of errors detected in a React frontend bundle and FIX ALL OF THEM with surgical precision.
+You are called automatically whenever ANY other agent produces code with errors. You are the last line of defense before the user sees the result.
+You are a senior full-stack engineer with 15+ years of experience in React, TypeScript, Vite, Tailwind, and modern web development.
+You NEVER give up. You ALWAYS find a solution. You NEVER introduce new bugs while fixing existing ones.
 
 Output STRICT JSON only:
-{"frontendCode":"all frontend files as one string"}
+{"frontendCode":"all frontend files as one string using // === FILE: <path> === separators"}
 
-LANGUAGE — preserve Spanish copy. If new copy is added, write it in Spanish too.
+═══════════════════════════════════════════════════════════
+LANGUAGE RULES
+═══════════════════════════════════════════════════════════
+- ALL user-visible copy MUST be in Spanish (es-ES). Preserve existing Spanish text exactly.
+- If you add new UI text, write it in natural Spanish ("Guardar cambios", "Sin resultados", etc.).
+- Code identifiers, variable names, file names → English only.
 
-SYNTAX — the patched bundle must parse cleanly:
+═══════════════════════════════════════════════════════════
+SYNTAX REPAIR — MANDATORY CHECKS ON EVERY FILE YOU TOUCH
+═══════════════════════════════════════════════════════════
 ${tsLine}
-- Remove every \`,,\` (double comma), \`,)\`, \`,]\` and \`,}\` pattern you find while patching.
-- Strip any non-ASCII garbage characters from identifiers/keywords.
-- Re-balance every brace, bracket, paren and JSX tag.
-- Bare imports must reference real packages: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod.
+- DOUBLE COMMAS: Remove every \`,,\`, \`,)\`, \`,]\`, \`,}\` pattern. These are fatal syntax errors.
+- NON-ASCII GARBAGE: Strip any non-ASCII characters from identifiers, keywords, or punctuation. Only allowed inside string literals and JSX text.
+- BRACE BALANCE: Every \`{\`, \`(\`, \`[\` MUST have a matching \`}\`, \`)\`, \`]\`. Count them.
+- JSX TAGS: Every opening JSX tag MUST have a matching closing tag or be self-closed.
+- STRING TERMINATION: Every string must end with the SAME quote it started with. Long URLs are common offenders.
+- IMPORT RESOLUTION: Every \`import { X } from './Y'\` must match an \`export { X }\` or \`export const X\` in file Y.
+- EXPORT CONSISTENCY: Components → default export. Hooks/utils/types → named export. Never mix.
 
-WOUTER v3 — \`<Link>\` already renders as \`<a>\`. If you see \`<Link …><a …>…</a></Link>\` in the bundle, FLATTEN IT.
+═══════════════════════════════════════════════════════════
+REACT & HOOKS RULES
+═══════════════════════════════════════════════════════════
+- Hooks (useState, useEffect, useMemo, useCallback, useRef) MUST be at the TOP of the component body, NEVER inside conditionals, loops, or callbacks.
+- Every \`.map(item => <El key={...} />)\` MUST have a stable \`key\` prop.
+- Never call a hook conditionally: \`if (x) { useState(...) }\` is FORBIDDEN.
+- useEffect cleanup: if the effect sets up a subscription/timer, return a cleanup function.
 
-Rules:
-- Use '// === FILE: <path> ===' separators.
-- Return the FULL bundle (every file, not just patched ones).
-- Don't introduce new bugs. Close every brace and quote. Output ONLY the JSON object.`;
+═══════════════════════════════════════════════════════════
+WOUTER v3 RULES
+═══════════════════════════════════════════════════════════
+- \`<Link>\` in wouter v3 ALREADY renders as \`<a>\`. NEVER nest \`<a>\` or \`<button>\` inside \`<Link>\`.
+- WRONG: \`<Link href="/x"><a className="btn">Ir</a></Link>\`
+- RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
+- Move className, onClick, aria-label DIRECTLY onto \`<Link>\`.
+
+═══════════════════════════════════════════════════════════
+PACKAGE RULES
+═══════════════════════════════════════════════════════════
+- ONLY use packages that actually exist on npm. Allowed: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod, recharts, framer-motion.
+- NEVER invent package names. If a package is not in the allowed list, implement the functionality inline.
+- If an import fails because the package doesn't exist, replace it with an inline implementation.
+
+═══════════════════════════════════════════════════════════
+TAILWIND RULES
+═══════════════════════════════════════════════════════════
+- Use only standard Tailwind utility classes. No arbitrary values unless absolutely necessary.
+- For animations, use Tailwind's built-in \`animate-*\` classes or define keyframes in \`src/index.css\`.
+- Never use \`@apply\` outside of \`src/index.css\`.
+
+═══════════════════════════════════════════════════════════
+FINAL RULES
+═══════════════════════════════════════════════════════════
+- Return the FULL bundle (every file, not just the patched ones). Use '// === FILE: <path> ===' separators.
+- Do NOT truncate any file. Every file must be complete and functional.
+- Do NOT add placeholder comments like '// ... rest of component'. Write the actual code.
+- Do NOT introduce new bugs while fixing existing ones. Test your logic mentally before outputting.
+- Output ONLY the JSON object. No markdown, no explanation, no preamble.`;
 }
 
 export interface GeneratedAppPayload {
@@ -638,7 +684,7 @@ interface CodeGenResult {
 
 type CoderProvider = "claude" | "gpt-5";
 type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
-type ComplexityTier = "basic" | "standard" | "robust";
+type ComplexityTier = "basic" | "standard" | "robust" | "ultra";
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
 interface AgentModelChoice {
@@ -695,9 +741,12 @@ function classifyPromptComplexity(prompt: string, context?: { kind?: string; has
   if (context?.hasExistingApp) add(1, "edición de app existente");
   if (["landing", "vue", "svelte"].includes(context?.kind || "")) add(-1, "preset ligero");
   if (["game-3d", "nextjs", "python-api", "django", "fullstack"].includes(context?.kind || "")) add(2, "preset avanzado");
-  // Raised the robust threshold from 5 to 7 to reduce unnecessary Opus usage that causes timeouts.
-  // Opus is now reserved for truly complex prompts (score >= 7) while Sonnet handles standard-to-complex cases.
-  const tier: ComplexityTier = score >= 7 ? "robust" : score >= 2 ? "standard" : "basic";
+  // Ultra-complex: CRM/ERP/plataformas completas con múltiples módulos, muy completo, super completo, etc.
+  if (/(totalmente completa|super completo|muy completo|m[uú]ltiples funcionalidades|m[uú]ltiples m[oó]dulos|completo con|panel completo|plataforma completa|sistema completo|todo incluido|todas las funcionalidades|funcionalidades completas|crm completo|erp completo|plataforma.*fisio|fisioterapeuta|cl[ií]nica|hospital|gesti[oó]n.*pacientes|historial.*m[eé]dico)/.test(text)) add(4, "proyecto ultra-complejo con múltiples módulos");
+  if (prompt.length > 500) add(1, "prompt muy extenso");
+  if (prompt.length > 1200) add(2, "prompt ultra-extenso");
+  // Tiers: ultra >= 10, robust >= 7, standard >= 2, basic < 2
+  const tier: ComplexityTier = score >= 10 ? "ultra" : score >= 7 ? "robust" : score >= 2 ? "standard" : "basic";
   return { tier, score, reasons };
 }
 
@@ -712,7 +761,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   const frontendModel: AgentModelChoice["model"] = auto
     ? "claude-sonnet-4-6" // Forzado a Sonnet por defecto para evitar timeouts de otros modelos
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
-  const architectModel: ClaudeCoderModel = complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-sonnet-4-6";
+  const architectModel: ClaudeCoderModel = complexity.tier === "ultra" ? "claude-opus-4-7" : "claude-sonnet-4-6";
   const qualityModel: ClaudeCoderModel = complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
   const agents: Record<AgentRole, AgentModelChoice> = {
     researcher: makeAgentChoice("researcher", "Researcher", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "recopila contexto desde el primer prompt"),
@@ -724,7 +773,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
     integrator: makeAgentChoice("integrator", "Integrator", qualityModel, "detecta auth, pagos y servicios externos"),
     qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
     devops: makeAgentChoice("devops", "DevOps", qualityModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "Patcher", complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-sonnet-4-6", "corrige fallos de build/runtime"),
+    patcher: makeAgentChoice("patcher", "testing-agent", complexity.tier === "ultra" ? "claude-opus-4-7" : "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
     repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
@@ -1099,7 +1148,7 @@ export async function patchBundle(
     (async () => {
       try {
         const response = await createClaudeMessageWithFallback("patcher", agentPlan.agents.patcher.model, {
-          max_tokens: 8192,
+          max_tokens: 32000, // testing-agent: aumentado para proyectos ultra-complejos
           system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
             {
@@ -1123,11 +1172,10 @@ Return the FULL patched bundle as JSON.`,
         return null;
       }
     })(),
-    35_000,
+        120_000, // testing-agent: 2 minutos para reparaciones de proyectos ultra-complejos
     null,
   );
 }
-
 function buildSetupNotes(spec: IntegrationSpec): string {
   if (spec.services.length === 0) return "";
   const lines: string[] = [
@@ -1181,17 +1229,17 @@ async function runValidatePatchLoop(
   log?: AgentLog,
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
 ): Promise<string> {
-  const MAX_ITERATIONS = 3; // Testing Agent: aumentado a 3 intentos
+  const MAX_ITERATIONS = 5; // testing-agent: hasta 5 rondas de reparación para proyectos ultra-complejos
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
 
-  // ── Testing Agent: inicio ────────────────────────────────────────────
-  emit("testing", "🧪 Testing Agent activo — escaneando bundle en busca de errores…");
+  // ── testing-agent: inicio ────────────────────────────────────────────
+  emit("testing", "🧪 testing-agent activo — escaneando bundle en busca de errores…");
   onProgress?.({
     phase: "testing",
     progress: Math.min(baseProgressStart, 80),
-    note: "🧪 Testing Agent: analizando código generado…",
+    note: "🧪 testing-agent: analizando código generado…",
   });
 
   if (!phaseGates.validate) {
@@ -1983,7 +2031,7 @@ export async function generateApp(
           }
         }, coderModel, language, templateContextBlock, agentModelPlan,
         (partial) => { frontendAccumulated = partial; }), // onPartial: keep latest accumulated text for timeout recovery
-        300_000, // 5 minutes max per frontend generation — increased from 3min for complex apps (CRM, dashboards, etc.)
+        480_000, // 8 minutes max per frontend generation — increased for ultra-complex apps (CRM, ERP, full platforms)
         "frontend-engineer",
       );
     } catch (err) {

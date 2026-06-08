@@ -5,7 +5,7 @@ import {
   Database, Server, MessageSquare, Terminal, Square,
   ChevronRight, FileCode2, Layout as LayoutIcon, Palette,
   Shield, Plug, Wrench, X, Maximize2, Minimize2, AlertTriangle,
-  Clock, CheckCheck, Play, Globe
+  Clock, CheckCheck, Play, Globe, Bug, ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,7 +67,12 @@ const AGENT_CONFIG: Record<string, {
   backend:     { label: "Backend Engineer",  shortLabel: "BE", icon: Server,       color: "text-indigo-400",  bg: "bg-indigo-500/15",  borderColor: "border-indigo-500/30",  phase: "backend" },
   integration: { label: "API Integrator",    shortLabel: "AI", icon: Plug,         color: "text-yellow-400",  bg: "bg-yellow-500/15",  borderColor: "border-yellow-500/30",  phase: "integrations" },
   qa:          { label: "QA Specialist",     shortLabel: "QA", icon: Shield,       color: "text-cyan-400",    bg: "bg-cyan-500/15",    borderColor: "border-cyan-500/30",    phase: "testing" },
-  patcher:     { label: "DevOps Patcher",    shortLabel: "DO", icon: Wrench,       color: "text-rose-400",    bg: "bg-rose-500/15",    borderColor: "border-rose-500/30",    phase: "patching" },
+  // testing-agent: experto técnico de reparación — nombre en azul cielo
+  patcher:     { label: "testing-agent",     shortLabel: "TA", icon: Bug,          color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "patching" },
+  testing:     { label: "testing-agent",     shortLabel: "TA", icon: Bug,          color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "testing" },
+  validator:   { label: "testing-agent",     shortLabel: "TA", icon: ShieldCheck,  color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "validating" },
+  repair:      { label: "testing-agent",     shortLabel: "TA", icon: Wrench,       color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "fixing" },
+  coder:       { label: "Frontend Engineer", shortLabel: "FE", icon: Code2,        color: "text-emerald-400", bg: "bg-emerald-500/15", borderColor: "border-emerald-500/30", phase: "frontend" },
   system:      { label: "Maris AI",          shortLabel: "M",  icon: Sparkles,     color: "text-violet-400",  bg: "bg-violet-500/15",  borderColor: "border-violet-500/30",  phase: "" },
 };
 
@@ -80,10 +85,10 @@ const PHASE_TO_AGENT: Record<string, string> = {
   frontend: "frontend",
   backend: "backend",
   integrations: "integration",
-  testing: "qa",
-  patching: "patcher",
-  validating: "patcher",
-  fixing: "patcher",
+  testing:    "testing",
+  patching:   "patcher",
+  validating: "validator",
+  fixing:     "repair",
   parsing: "system",
   starting: "system",
   queued: "system",

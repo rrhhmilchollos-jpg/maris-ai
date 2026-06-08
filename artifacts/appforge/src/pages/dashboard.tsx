@@ -81,7 +81,7 @@ const AGENTS = [
   { name: "Database", icon: HardDrive, color: "text-emerald-400" },
   { name: "Integrator", icon: Plug, color: "text-yellow-400" },
   { name: "QA Auditor", icon: ShieldCheck, color: "text-red-400" },
-  { name: "DevOps", icon: Rocket, color: "text-indigo-400" },
+  { name: "testing-agent", icon: Bug, color: "text-sky-400" },
 ];
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
@@ -94,10 +94,10 @@ const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   frontend:     { label: "⚡ Frontend Engineer escribiendo el código…",        icon: Code2 },
   backend:      { label: "🖥️ Backend Engineer creando la API…",                icon: Server },
   integrations: { label: "🔌 API Integrator conectando servicios externos…",    icon: Plug },
-  testing:      { label: "🧪 QA Specialist verificando errores…",              icon: ShieldCheck },
-  patching:     { label: "🔧 DevOps Patcher auto-reparando errores…",           icon: Wrench },
-  validating:   { label: "🔍 Compilando el código en memoria…",                icon: Bug },
-  fixing:       { label: "🔧 Auto-reparando errores detectados…",              icon: Wrench },
+  testing:      { label: "🧪 testing-agent analizando el bundle…",                 icon: Bug },
+  patching:     { label: "🔧 testing-agent reparando errores…",                  icon: Wrench },
+  validating:   { label: "🔍 testing-agent validando el código…",                  icon: Bug },
+  fixing:       { label: "🛠️ testing-agent aplicando correcciones…",               icon: Wrench },
   parsing:      { label: "📦 Empaquetando archivos del proyecto…",             icon: FileCheck2 },
   ready:        { label: "¡Tu app está lista!",                                icon: FileCheck2 },
   failed:       { label: "La generación falló",                                icon: Loader2 },
