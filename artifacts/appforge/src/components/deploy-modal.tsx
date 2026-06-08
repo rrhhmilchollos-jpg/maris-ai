@@ -24,6 +24,7 @@ import {
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-client";
+import { MatrixBackground } from "@/components/matrix-background";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
@@ -272,6 +273,31 @@ export function DeployModal({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-end bg-black/60 backdrop-blur-sm p-4">
+      {/* Matrix overlay during deploy */}
+      {isRedeploying && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/90">
+          <MatrixBackground opacity={0.7} />
+          <div className="relative z-10 flex flex-col items-center gap-6 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-[0_0_60px_rgba(124,58,237,0.6)]">
+              <svg viewBox="0 0 40 40" fill="none" className="h-10 w-10">
+                <path d="M8 32 L20 8 L32 32" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="20" cy="34" r="2.5" fill="white" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Maris AI</h2>
+              <p className="mt-2 text-lg font-bold text-white/80">Desplegando tu app…</p>
+            </div>
+            <div className="flex items-center gap-2 text-[13px] text-cyan-400 font-mono">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>testing-agent verificando el bundle…</span>
+            </div>
+            <button onClick={onClose} className="mt-2 flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-semibold text-white/70 hover:bg-white/10 hover:text-white transition">
+              <X className="h-4 w-4" /> Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       <div className="relative flex w-full max-w-sm flex-col rounded-2xl border border-white/[0.08] bg-[#0d0f16] shadow-[0_32px_80px_rgba(0,0,0,0.7)] h-fit mt-14 mr-2">
 
         {/* Header */}

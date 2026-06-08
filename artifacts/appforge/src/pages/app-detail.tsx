@@ -17,7 +17,10 @@ import {
   useGetMe,
   useApproveFacet,
   useDeployApp,
+  getGenerationJobLogs,
+  getGetGenerationJobLogsQueryKey,
 } from "@/lib/api-client";
+import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { DeployModal } from "@/components/deploy-modal";
 import { GitHubButton } from "@/components/github-button";
@@ -64,7 +67,29 @@ import {
   Shield,
   ExternalLink,
   Globe,
+  Flame,
+  Settings,
+  Gift,
+  Crown,
+  Moon,
+  X,
+  Code,
+  Monitor,
+  Tablet,
+  Smartphone,
+  Copy,
+  ChevronRight,
+  Terminal,
+  Cpu,
+  GitBranch,
+  Minimize2,
+  Link,
+  Users,
+  Key,
+  Star,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { AgentLogStream } from "@/components/agent-log-stream";
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
@@ -113,14 +138,14 @@ function formatMessageTime(value?: string) {
   return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 }
 
-const NAV_ITEMS: Array<{ id: SidebarTab; label: string; glyph: string }> = [
-  { id: "chat", label: "Chat", glyph: "◌" },
-  { id: "plan", label: "Plan", glyph: "□" },
-  { id: "data", label: "Data", glyph: "▣" },
-  { id: "integrations", label: "Integrations", glyph: "✦" },
-  { id: "ui-builder", label: "UI Builder", glyph: "◇" },
-  { id: "workflows", label: "Workflows", glyph: "⌘" },
-  { id: "settings", label: "Settings", glyph: "⚙" },
+const NAV_ITEMS: Array<{ id: SidebarTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { id: "chat", label: "Chat", icon: Bot },
+  { id: "plan", label: "Plan", icon: Sparkles },
+  { id: "data", label: "Data", icon: GitBranch },
+  { id: "integrations", label: "Integrations", icon: Link },
+  { id: "ui-builder", label: "UI Builder", icon: Monitor },
+  { id: "workflows", label: "Workflows", icon: Zap },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 function MarisLogo({ compact = false }: { compact?: boolean }) {
@@ -204,6 +229,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
+  const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code">("preview");
+  const [previewSize, setPreviewSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [darkModeEnabled, setDarkModeEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const { data: app, isLoading } = useGetApp(id, {
@@ -263,6 +293,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // NUNCA del objeto app, cuyo _id es el ID de la app (causaba 404 en /api/jobs/:appId)
   const effectiveJobId: string | null =
     (activeAppJob?.id ? String(activeAppJob.id) : null) ?? activeJobId;
+
+  // Job logs para los bloques inline de agentes (Emergent.sh style)
+  const { data: jobLogsData } = useQuery({
+    queryKey: [...getGetGenerationJobLogsQueryKey(effectiveJobId ?? ""), "inline"],
+    queryFn: () => getGenerationJobLogs(effectiveJobId!, { }),
+    enabled: !!effectiveJobId && isWorking,
+    refetchInterval: isWorking ? 2000 : false,
+    select: (d) => d.logs ?? [],
+  });
+  const jobLogs = jobLogsData ?? [];
 
   const { data: job } = useGetGenerationJob(effectiveJobId ?? "", {
     query: {
@@ -803,12 +843,62 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               })}
             </div>
           )}
-          {isWorking && job && (
-            <div className="mt-8 rounded-2xl border border-[#7c3aed]/25 bg-[#7c3aed]/8 p-4 text-sm text-white/80">
-              <div className="flex items-center gap-3">
-                <PhaseIcon className="h-4 w-4 animate-pulse text-[#a78bfa]" />
-                <span className="font-semibold">{phaseInfo.label}</span>
+          {/* ─── Agent logs inline (Emergent.sh style) ─── */}
+          {isWorking && job && jobLogs && jobLogs.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {jobLogs.slice(-8).map((log: any, idx: number) => {
+                const agentKey = (log.agent || "system").toLowerCase();
+                const agentCfg: Record<string, { label: string; color: string; bg: string; border: string; Icon: any }> = {
+                  frontend:     { label: "FRONTEND",     color: "text-emerald-400", bg: "bg-emerald-500/10",  border: "border-emerald-500/25", Icon: Code },
+                  backend:      { label: "BACKEND",      color: "text-orange-400",  bg: "bg-orange-500/10",   border: "border-orange-500/25",  Icon: Terminal },
+                  testing:      { label: "TESTING",      color: "text-sky-400",     bg: "bg-sky-500/10",      border: "border-sky-500/25",     Icon: Terminal },
+                  planner:      { label: "PLANNER",      color: "text-amber-400",   bg: "bg-amber-500/10",    border: "border-amber-500/25",   Icon: Sparkles },
+                  orchestrator: { label: "ORCHESTRATOR", color: "text-violet-400",  bg: "bg-violet-500/10",   border: "border-violet-500/25",  Icon: Cpu },
+                  system:       { label: "SYSTEM",       color: "text-red-400",     bg: "bg-red-500/10",      border: "border-red-500/25",     Icon: AlertCircle },
+                };
+                const cfg = agentCfg[agentKey] || agentCfg.system;
+                const isActive = idx === jobLogs.slice(-8).length - 1 && isWorking;
+                const isError = log.level === "error" || agentKey === "system";
+                return (
+                  <div key={log.id || idx} className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 ${
+                    isError ? "border-red-500/30 bg-red-500/8" :
+                    isActive ? "border-[#7c3aed]/40 bg-[#7c3aed]/8" :
+                    `${cfg.border} ${cfg.bg}`
+                  }`}>
+                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${
+                      isError ? "border-red-500/30 bg-red-500/15" :
+                      `${cfg.border} ${cfg.bg}`
+                    }`}>
+                      <cfg.Icon className={`h-4 w-4 ${isError ? "text-red-400" : cfg.color}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-black tracking-widest ${isError ? "text-red-400" : cfg.color}`}>{cfg.label}</span>
+                        {log.file && <span className="text-[11px] text-white/35 font-mono truncate">{log.file}</span>}
+                      </div>
+                      {log.message && <p className={`text-[12px] leading-snug truncate ${
+                        isError ? "text-red-300" : "text-white/60"
+                      }`}>{log.message}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-white/25 font-mono">{formatMessageTime(log.createdAt)}</span>
+                      {isActive ? (
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 text-white/20" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {isWorking && job && (!jobLogs || jobLogs.length === 0) && (
+            <div className="mt-4 flex flex-col items-center gap-3 py-6">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-[#7c3aed]/30 bg-[#7c3aed]/10">
+                <Terminal className="h-6 w-6 text-[#a78bfa] animate-pulse" />
               </div>
+              <p className="text-[12px] font-mono uppercase tracking-widest text-white/30">Conectando con los agentes…</p>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -828,17 +918,42 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           )}
           {/* Input de mensajes: SOLO visible cuando NO está en awaiting_approval */}
           {!isAwaitingApproval && (
-            <>
-              <Textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Pide cambios a Maris AI..." className="min-h-[92px] resize-none border-white/10 bg-white/[0.04] text-white placeholder:text-white/35" />
+            <div className="rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
               <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
-              <div className="flex items-center gap-3">
-                <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || isActivelyProcessing} />
-                <Button onClick={handleSend} disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing} className="flex-1 bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
-                  {sendMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                  Enviar
-                </Button>
+              <Textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    if (draft.trim().length >= 2 && !sendMutation.isPending && !isActivelyProcessing) handleSend();
+                  }
+                }}
+                placeholder="Escribe un mensaje al agente..."
+                className="min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2"
+              />
+              <div className="flex items-center justify-between px-3 pb-3">
+                <div className="flex items-center gap-1">
+                  <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || isActivelyProcessing} />
+                  <button type="button" title="Marcar" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
+                    <Star className="h-4 w-4" />
+                  </button>
+                  <button type="button" title="Fork" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
+                    <GitBranch className="h-4 w-4" />
+                  </button>
+                  <button type="button" title="Compartir" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={handleSend}
+                  disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_14px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </>
@@ -875,46 +990,51 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     <>
     <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#070910] text-white" data-testid="maris-emergent-workspace">
       <header className="h-[61px] shrink-0 border-b border-white/[0.075] bg-[#070910]/95 backdrop-blur-xl">
-        <div className="flex h-full items-center justify-between px-6">
-          <div className="flex items-center gap-8">
-            <MarisLogo />
-            <button className="grid h-9 w-9 place-items-center rounded-lg border border-white/[0.065] bg-white/[0.04] text-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <span className="text-lg leading-none">⌘</span>
+        <div className="flex h-full items-center justify-between px-5">
+          {/* LEFT: Logo + project tab */}
+          <div className="flex items-center gap-4">
+            <button onClick={() => setLocation("/dashboard")} className="flex items-center gap-2.5 hover:opacity-80 transition">
+              <MarisLogo />
             </button>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.065] bg-white/[0.04] px-3 py-1.5 text-[13.5px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <span className="h-2 w-2 rounded-full bg-[#7c3aed]" />
+                <span className="max-w-[180px] truncate">{app?.title || "Sin título"}</span>
+                <X className="ml-1 h-3.5 w-3.5 text-white/35 hover:text-white/70 cursor-pointer" onClick={(e) => { e.stopPropagation(); setLocation("/dashboard"); }} />
+              </div>
+              <button onClick={() => setLocation("/dashboard")} className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.065] bg-white/[0.04] text-white/60 hover:bg-white/[0.07] hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition">
+                <span className="text-lg leading-none font-bold">+</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-5 text-white/70">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" aria-label="Abrir ayuda" className="grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
-                  <HelpCircle className="h-[19px] w-[19px]" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" forceMount className="z-[220] w-64 border-white/10 bg-[#0f1320] text-white">
-                <DropdownMenuLabel>Ayuda de Maris AI</DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem onClick={handleOpenDocs} className="cursor-pointer focus:bg-white/10 focus:text-white">
-                  <ExternalLink className="mr-2 h-4 w-4 text-white/55" />
-                  Abrir documentación
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleOpenHelp} className="cursor-pointer focus:bg-white/10 focus:text-white">
-                  <HelpCircle className="mr-2 h-4 w-4 text-white/55" />
-                  Contactar soporte
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
+          {/* RIGHT: streak + credits + notifications + profile */}
+          <div className="flex items-center gap-3 text-white/70">
+            {/* Streak */}
+            <button onClick={() => setLocation("/billing")} className="flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/8 px-3 py-1.5 text-[13px] font-bold text-orange-400 hover:bg-orange-500/15 transition">
+              <Flame className="h-4 w-4" />
+              <span>{(stats as any)?.streak ?? 1}</span>
+            </button>
+
+            {/* Credits */}
+            <button onClick={() => setLocation("/billing")} className="flex items-center gap-1.5 rounded-full border border-yellow-500/20 bg-yellow-500/8 px-3 py-1.5 text-[13px] font-bold text-yellow-400 hover:bg-yellow-500/15 transition">
+              <Cpu className="h-4 w-4" />
+              <span>{isAdmin ? "∞" : credits}</span>
+            </button>
+
+            {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" aria-label="Abrir notificaciones" className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
-                  <Bell className="h-[19px] w-[19px]" />
-                  <span className="absolute right-1 top-0 h-2 w-2 rounded-full bg-[#7c3aed]" />
+                <button type="button" aria-label="Notificaciones" className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
+                  <Bell className="h-[18px] w-[18px]" />
+                  {isWorking && <span className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-[#7c3aed] animate-pulse" />}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" forceMount className="z-[220] w-80 border-white/10 bg-[#0f1320] text-white">
                 <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
                 {notificationItems.map((item) => (
-                  <DropdownMenuItem key={item.title} onSelect={(event) => event.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
+                  <DropdownMenuItem key={item.title} onSelect={(e) => e.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
                     <span className="text-sm font-semibold text-white">{item.title}</span>
                     <span className="text-xs leading-relaxed text-white/55">{item.description}</span>
                   </DropdownMenuItem>
@@ -922,43 +1042,93 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Profile dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" aria-label="Abrir menú de perfil" className="flex items-center gap-2 rounded-full pl-1 pr-1.5 hover:bg-white/5">
-                  <Avatar className="h-9 w-9 border border-white/10">
+                <button type="button" aria-label="Perfil" className="flex items-center gap-2 rounded-full pl-1 pr-1.5 hover:bg-white/5 transition">
+                  <Avatar className="h-8 w-8 border border-white/10">
                     <AvatarImage src={user?.imageUrl} alt={user?.fullName || firstName} />
-                    <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-sm font-bold text-white">{user?.firstName?.charAt(0) || firstName.charAt(0) || "M"}</AvatarFallback>
+                    <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-xs font-bold text-white">{user?.firstName?.charAt(0) || firstName.charAt(0) || "M"}</AvatarFallback>
                   </Avatar>
-                  <ChevronDown className="h-4 w-4 text-white/45" />
+                  <ChevronDown className="h-3.5 w-3.5 text-white/45" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" forceMount className="z-[220] w-60 border-white/10 bg-[#0f1320] text-white">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{user?.fullName || me?.name || firstName}</p>
-                    <p className="text-xs leading-none text-white/45">{user?.primaryEmailAddress?.emailAddress || me?.email || "Cuenta Maris AI"}</p>
+              <DropdownMenuContent align="end" forceMount className="z-[220] w-72 border-white/10 bg-[#0f1320] text-white p-0 overflow-hidden">
+                {/* User info header */}
+                <div className="px-4 py-3 border-b border-white/[0.07]">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border border-white/10">
+                      <AvatarImage src={user?.imageUrl} alt={user?.fullName || firstName} />
+                      <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-sm font-bold text-white">{user?.firstName?.charAt(0) || firstName.charAt(0) || "M"}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{user?.fullName || me?.fullName || firstName}</p>
+                      <p className="text-xs text-white/45 truncate">{user?.primaryEmailAddress?.emailAddress || me?.email || "Cuenta Maris AI"}</p>
+                    </div>
+                    {isAdmin && <Crown className="h-4 w-4 text-yellow-400 shrink-0" />}
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem onClick={() => setLocation("/dashboard")} className="cursor-pointer focus:bg-white/10 focus:text-white">
-                  <LayoutDashboard className="mr-2 h-4 w-4 text-white/55" />
-                  Panel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLocation("/billing")} className="cursor-pointer focus:bg-white/10 focus:text-white">
-                  <CreditCard className="mr-2 h-4 w-4 text-white/55" />
-                  Facturación
-                </DropdownMenuItem>
-                {isAdmin && (
-                  <DropdownMenuItem onClick={() => setLocation("/admin")} className="cursor-pointer focus:bg-white/10 focus:text-white">
-                    <Shield className="mr-2 h-4 w-4 text-[#a78bfa]" />
-                    Panel admin
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs text-orange-400">
+                      <Flame className="h-3.5 w-3.5" />
+                      <span className="font-bold">{(stats as any)?.streak ?? 1} días de racha</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-yellow-400">
+                      <Cpu className="h-3.5 w-3.5" />
+                      <span className="font-bold">{isAdmin ? "∞" : credits} créditos</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Buy credits CTA */}
+                <div className="px-3 py-2 border-b border-white/[0.07]">
+                  <button onClick={() => setLocation("/billing")} className="w-full flex items-center justify-between rounded-lg bg-gradient-to-r from-yellow-500/15 to-orange-500/15 border border-yellow-500/20 px-3 py-2 text-sm font-semibold text-yellow-300 hover:from-yellow-500/25 hover:to-orange-500/25 transition">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="h-4 w-4" />
+                      Comprar créditos
+                    </div>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                {/* Menu items */}
+                <div className="py-1">
+                  <DropdownMenuItem onClick={() => setLocation("/dashboard")} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
+                    <LayoutDashboard className="mr-2 h-4 w-4 text-white/45" />
+                    Panel de proyectos
                   </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))} className="cursor-pointer focus:bg-white/10 focus:text-white">
-                  <LogOut className="mr-2 h-4 w-4 text-white/55" />
-                  Cerrar sesión
-                </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setShowAccountSettings(true); setAccountSettingsTab("personal"); }} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
+                    <Settings className="mr-2 h-4 w-4 text-white/45" />
+                    Configuración de cuenta
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setShowAccountSettings(true); setAccountSettingsTab("agents"); }} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
+                    <Users className="mr-2 h-4 w-4 text-white/45" />
+                    Gestionar agentes
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-default focus:bg-white/5 mx-1 rounded-md">
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <Moon className="h-4 w-4 text-white/45" />
+                        <span>Modo oscuro</span>
+                      </div>
+                      <Switch checked={darkModeEnabled} onCheckedChange={setDarkModeEnabled} className="scale-75" />
+                    </div>
+                  </DropdownMenuItem>
+                </div>
+                <DropdownMenuSeparator className="bg-white/[0.07]" />
+                <div className="py-1">
+                  {isAdmin && (
+                    <DropdownMenuItem onClick={() => setLocation("/admin")} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
+                      <Shield className="mr-2 h-4 w-4 text-[#a78bfa]" />
+                      Panel admin
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={handleOpenDocs} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
+                    <ExternalLink className="mr-2 h-4 w-4 text-white/45" />
+                    Documentación
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))} className="cursor-pointer focus:bg-red-500/10 focus:text-red-300 mx-1 rounded-md text-white/70">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Cerrar sesión
+                  </DropdownMenuItem>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -966,10 +1136,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[102px] shrink-0 flex-col border-r border-white/[0.07] bg-[#070910]">
-          <nav className="flex flex-1 flex-col items-center gap-7 pt-9">
+        <aside className="flex w-[72px] shrink-0 flex-col border-r border-white/[0.07] bg-[#070910]">
+          <nav className="flex flex-1 flex-col items-center gap-1 pt-4 px-2">
             {NAV_ITEMS.map((item) => {
               const active = activeSidebar === item.id;
+              const Icon = item.icon;
               return (
                 <button
                   key={item.id}
@@ -977,16 +1148,30 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   onClick={() => handleSidebarClick(item.id)}
                   aria-pressed={active}
                   title={item.label}
-                  className={`group relative flex w-full flex-col items-center gap-2 text-[13px] font-medium transition ${active ? "text-[#c084fc]" : "text-white/55 hover:text-white/80"}`}
+                  className={`group relative flex w-full flex-col items-center gap-1.5 py-2.5 rounded-xl text-[11px] font-medium transition ${
+                    active
+                      ? "bg-[#7c3aed]/12 text-[#c084fc]"
+                      : "text-white/40 hover:bg-white/[0.04] hover:text-white/75"
+                  }`}
                 >
-                  {active && <span className="absolute left-0 top-[-8px] h-[62px] w-1 rounded-r-full bg-[#7c3aed] shadow-[0_0_18px_rgba(124,58,237,0.8)]" />}
-                  <span className={`grid h-8 w-8 place-items-center rounded-xl text-[22px] ${active ? "bg-[#7c3aed]/10 text-[#c084fc] shadow-[0_0_22px_rgba(124,58,237,0.7)]" : "text-white/50"}`}>{item.glyph}</span>
-                  <span>{item.label}</span>
+                  {active && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-0.5 rounded-r-full bg-[#7c3aed] shadow-[0_0_12px_rgba(124,58,237,0.9)]" />
+                  )}
+                  <Icon className={`h-5 w-5 transition ${
+                    active ? "text-[#c084fc] drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]" : ""
+                  }`} />
+                  <span className="leading-none">{item.label}</span>
                 </button>
               );
             })}
           </nav>
-          <button className="m-4 mb-5 rounded-md bg-[#4f46e5] p-3 text-base font-bold text-white shadow-[0_0_22px_rgba(79,70,229,0.35)]">P</button>
+          {/* Avatar at bottom */}
+          <div className="flex justify-center pb-4">
+            <Avatar className="h-9 w-9 border border-white/10 cursor-pointer hover:ring-2 hover:ring-[#7c3aed]/50 transition" onClick={() => setShowAccountSettings(true)}>
+              <AvatarImage src={user?.imageUrl} />
+              <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-xs font-bold text-white">{user?.firstName?.charAt(0) || firstName.charAt(0) || "M"}</AvatarFallback>
+            </Avatar>
+          </div>
         </aside>
 
         <section className={`flex min-w-[430px] flex-col border-r border-white/[0.08] bg-[#080a12] ${isPreviewClosed ? "flex-1" : "w-[590px] shrink-0"}`}>
@@ -1002,99 +1187,333 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
         {!isPreviewClosed && (
         <main className={`${isPreviewMaximized ? "fixed inset-0 z-[130]" : "flex min-w-0 flex-1"} flex-col bg-[#0a0d15]`}>
-          <div className="flex h-[69px] shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0a0d15] px-8">
-            <div className="flex items-center gap-4 text-white/90">
-              <div className="grid h-7 w-7 place-items-center text-white/65">
-                <span className="text-3xl leading-none">▱</span>
-              </div>
-              <h1 className="text-[20px] font-bold tracking-tight">App Preview</h1>
-            </div>
-            <div className="flex items-center gap-3">
-              <GitHubButton
-                appId={id}
-                appTitle={app?.title ?? "app"}
-                appDescription={app?.description ?? ""}
-                githubRepoUrl={(app as any)?.githubRepoUrl}
-                onSuccess={(repoUrl) => {
-                  queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
-                }}
-              />
-              <TopActionButton icon={Share2} label="Share" onClick={handleShare} />
-              <TopActionButton icon={Rocket} label={deployMutation.isPending ? "Deploying" : "Deploy"} onClick={handleDeploy} disabled={deployMutation.isPending} />
-              <TopActionButton icon={RefreshCcw} label="Refresh" onClick={handleRefreshPreview} />
-              <button
-                type="button"
-                onClick={handlePublishGoogle}
-                disabled={isPublishingGoogle || !hasRenderableCode}
-                title="Publicar en Google — Indexa tu app en Google Search Console"
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-white/8 bg-white/[0.055] px-4 text-[13.5px] font-semibold text-white/75 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:bg-white/[0.085] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {isPublishingGoogle ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" aria-hidden="true">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                  </svg>
-                )}
-                Publicar en Google
+          {/* ─── Right panel toolbar ─── */}
+          <div className="flex h-[61px] shrink-0 items-center border-b border-white/[0.07] bg-[#0a0d15] px-4 gap-3">
+            {/* Preview / Code tabs */}
+            <div className="flex items-center rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5">
+              <button onClick={() => setRightPanelTab("preview")} className={`px-3 py-1.5 rounded-md text-[13px] font-semibold transition ${rightPanelTab === "preview" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>Preview</button>
+              <button onClick={() => setRightPanelTab("code")} className={`px-3 py-1.5 rounded-md text-[13px] font-semibold transition ${rightPanelTab === "code" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>
+                <Code className="inline h-3.5 w-3.5 mr-1" />Código
               </button>
-              <TopActionButton icon={Maximize2} label={isPreviewMaximized ? "Restore" : "Maximize"} onClick={handleMaximizePreview} active={isPreviewMaximized} />
             </div>
+
+            {/* URL bar */}
+            <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 min-w-0">
+              <Globe className="h-3.5 w-3.5 text-white/30 shrink-0" />
+              <span className="flex-1 truncate text-[12.5px] text-white/50 font-mono">{deployedUrl || `https://${(app?.title || "mi-app").toLowerCase().replace(/\s+/g, "-")}.marisai.es`}</span>
+              <button onClick={() => { if (deployedUrl) { navigator.clipboard.writeText(deployedUrl); toast({ title: "URL copiada" }); } }} className="shrink-0 text-white/30 hover:text-white/70 transition">
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={handleRefreshPreview} className="shrink-0 text-white/30 hover:text-white/70 transition">
+                <RefreshCcw className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Size controls */}
+            <div className="flex items-center rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5 gap-0.5">
+              <button onClick={() => setPreviewSize("desktop")} title="Escritorio" className={`grid h-7 w-7 place-items-center rounded-md transition ${previewSize === "desktop" ? "bg-white/[0.1] text-white" : "text-white/35 hover:text-white/65"}`}><Monitor className="h-4 w-4" /></button>
+              <button onClick={() => setPreviewSize("tablet")} title="Tablet" className={`grid h-7 w-7 place-items-center rounded-md transition ${previewSize === "tablet" ? "bg-white/[0.1] text-white" : "text-white/35 hover:text-white/65"}`}><Tablet className="h-4 w-4" /></button>
+              <button onClick={() => setPreviewSize("mobile")} title="Móvil" className={`grid h-7 w-7 place-items-center rounded-md transition ${previewSize === "mobile" ? "bg-white/[0.1] text-white" : "text-white/35 hover:text-white/65"}`}><Smartphone className="h-4 w-4" /></button>
+            </div>
+
+            {/* GitHub button */}
+            <GitHubButton
+              appId={id}
+              appTitle={app?.title ?? "app"}
+              appDescription={app?.description ?? ""}
+              githubRepoUrl={(app as any)?.githubRepoUrl}
+              onSuccess={() => queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) })}
+            />
+
+            {/* Share */}
+            <button onClick={handleShare} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/[0.07] bg-white/[0.04] px-3 text-[13px] font-semibold text-white/70 hover:bg-white/[0.07] hover:text-white transition">
+              <Share2 className="h-3.5 w-3.5" />Share
+            </button>
+
+            {/* Deploy split button */}
+            <div className="flex items-center">
+              <button
+                onClick={handleDeploy}
+                disabled={deployMutation.isPending || !hasRenderableCode}
+                className="inline-flex h-8 items-center gap-1.5 rounded-l-md bg-gradient-to-r from-[#7c3aed] to-[#9333ea] px-4 text-[13px] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-50 transition"
+              >
+                {deployMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
+                {deployMutation.isPending ? "Desplegando" : "Deploy"}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="inline-flex h-8 w-8 items-center justify-center rounded-r-md border-l border-[#5b21b6] bg-gradient-to-r from-[#9333ea] to-[#7c3aed] text-white hover:from-[#a855f7] hover:to-[#8b5cf6] transition">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="z-[220] w-52 border-white/10 bg-[#0f1320] text-white">
+                  <DropdownMenuItem onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="cursor-pointer focus:bg-white/10">
+                    <Rocket className="mr-2 h-4 w-4 text-[#a78bfa]" />Deploy rápido
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowDeployModal(true)} className="cursor-pointer focus:bg-white/10">
+                    <Globe className="mr-2 h-4 w-4 text-[#a78bfa]" />Deploy con dominio
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handlePublishGoogle} disabled={isPublishingGoogle || !hasRenderableCode} className="cursor-pointer focus:bg-white/10">
+                    <Star className="mr-2 h-4 w-4 text-[#a78bfa]" />Publicar en Google
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Maximize */}
+            <button onClick={handleMaximizePreview} title={isPreviewMaximized ? "Restaurar" : "Maximizar"} className={`grid h-8 w-8 place-items-center rounded-md border border-white/[0.07] bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white transition ${isPreviewMaximized ? "border-[#7c3aed]/40 text-[#a78bfa]" : ""}`}>
+              {isPreviewMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
           </div>
 
-          <div className="relative min-h-0 flex-1 overflow-hidden">
-            <button
-              type="button"
-              onClick={handleClosePreview}
-              aria-label="Cerrar vista previa en vivo"
-              title="Cerrar vista previa en vivo"
-              className="absolute right-5 top-5 z-20 grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-2xl font-bold leading-none text-white shadow-[0_12px_35px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
-            >
-              ×
-            </button>
-            {showStaticBuildState ? (
-              <AppPreviewWaitingState />
-            ) : deployedUrl ? (
-              <iframe
-                key={`deployed-${previewKey}`}
-                src={deployedUrl}
-                title="App Preview"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
-                className="h-full w-full border-0 bg-white"
-              />
-            ) : (
-              <LivePreview
-                key={`live-${previewKey}`}
-                appId={id}
-                appName={app?.title ?? "App"}
-                frontendCode={frontendCode}
-                vercelUrl={deployedUrl || undefined}
-                isBuilding={isWorking}
-                onShare={handleShare}
-                onDeploy={() => setShowDeployModal(true)}
-                onClose={handleClosePreview}
-              />
-            )}
 
-            <div className="pointer-events-none absolute bottom-9 left-1/2 w-[720px] max-w-[calc(100%-6rem)] -translate-x-1/2">
-              <div className="pointer-events-auto flex h-[69px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-6 shadow-[0_18px_55px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                <div className="flex items-center gap-4 text-[15px] text-white/65">
-                  <Info className="h-5 w-5 text-white/60" />
-                  <span>{showStaticBuildState ? "La app todavía no tiene código frontend renderizable." : "Vista en vivo activa. Usa Refrescar para recargar el último build."}</span>
-                </div>
-                <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/70 px-5 py-2.5 text-[15px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
-                  {hasRenderableCode ? "Resume Preview" : "Cerrar preview"}
-                </button>
+
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            {rightPanelTab === "code" ? (
+              /* ─── Code view ─── */
+              <div className="h-full overflow-auto bg-[#060810] p-6">
+                {frontendCode ? (
+                  <pre className="text-[12px] leading-relaxed text-emerald-300/80 font-mono whitespace-pre-wrap break-words">{frontendCode.slice(0, 50000)}{frontendCode.length > 50000 ? "\n\n... (truncado, descarga el proyecto para ver el código completo)" : ""}</pre>
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="text-center">
+                      <Terminal className="h-12 w-12 text-white/15 mx-auto mb-4" />
+                      <p className="text-white/30 text-sm">El código aparecerá aquí cuando Maris AI termine de generarlo.</p>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              /* ─── Preview view ─── */
+              <>
+                <button
+                  type="button"
+                  onClick={handleClosePreview}
+                  aria-label="Cerrar vista previa"
+                  title="Cerrar vista previa"
+                  className="absolute right-4 top-4 z-20 grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-white shadow-[0_8px_25px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <div className={`h-full flex items-center justify-center transition-all ${
+                  previewSize === "mobile" ? "px-[calc(50%-190px)]" :
+                  previewSize === "tablet" ? "px-[calc(50%-384px)]" : ""
+                }`}>
+                  {showStaticBuildState ? (
+                    <AppPreviewWaitingState />
+                  ) : deployedUrl ? (
+                    <iframe
+                      key={`deployed-${previewKey}`}
+                      src={deployedUrl}
+                      title="App Preview"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
+                      className={`border-0 bg-white ${
+                        previewSize === "mobile" ? "w-[380px] h-[calc(100%-2rem)] rounded-2xl shadow-2xl" :
+                        previewSize === "tablet" ? "w-[768px] h-[calc(100%-2rem)] rounded-xl shadow-xl" :
+                        "w-full h-full"
+                      }`}
+                    />
+                  ) : (
+                    <LivePreview
+                      key={`live-${previewKey}`}
+                      appId={id}
+                      appName={app?.title ?? "App"}
+                      frontendCode={frontendCode}
+                      vercelUrl={deployedUrl || undefined}
+                      isBuilding={isWorking}
+                      onShare={handleShare}
+                      onDeploy={() => setShowDeployModal(true)}
+                      onClose={handleClosePreview}
+                    />
+                  )}
+                </div>
+                <div className="pointer-events-none absolute bottom-6 left-1/2 w-[620px] max-w-[calc(100%-4rem)] -translate-x-1/2">
+                  <div className="pointer-events-auto flex h-[56px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                    <div className="flex items-center gap-3 text-[13px] text-white/55">
+                      <span className={`h-2 w-2 rounded-full ${hasRenderableCode ? "bg-emerald-400" : "bg-white/20"}`} />
+                      <span>{showStaticBuildState ? "Esperando código renderizable…" : "Vista en vivo activa"}</span>
+                    </div>
+                    <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-4 py-1.5 text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
+                      {hasRenderableCode ? "Resume Preview" : "Cerrar preview"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </main>
         )}
       </div>
     </div>
+
+    {/* Account Settings Modal */}
+    {showAccountSettings && (
+      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowAccountSettings(false)}>
+        <div className="relative w-full max-w-3xl mx-4 rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_32px_80px_rgba(0,0,0,0.7)] overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85vh" }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
+            <div>
+              <h2 className="text-lg font-bold text-white">Configuración de cuenta</h2>
+              <p className="text-xs text-white/40 mt-0.5">{user?.primaryEmailAddress?.emailAddress || me?.email}</p>
+            </div>
+            <button onClick={() => setShowAccountSettings(false)} className="grid h-8 w-8 place-items-center rounded-lg text-white/40 hover:bg-white/5 hover:text-white transition">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex" style={{ height: "calc(85vh - 73px)" }}>
+            {/* Sidebar tabs */}
+            <div className="w-52 shrink-0 border-r border-white/[0.07] p-3 space-y-0.5 overflow-y-auto">
+              {([
+                { id: "personal", label: "Configuración personal", icon: Settings },
+                { id: "apikey", label: "Clave universal", icon: Key },
+                { id: "agents", label: "Gestionar agentes", icon: Users },
+                { id: "preferences", label: "Preferencias", icon: Moon },
+                { id: "billing", label: "Facturas y planes", icon: CreditCard },
+                { id: "usage", label: "Uso de créditos", icon: Cpu },
+              ] as const).map(({ id: tabId, label, icon: Icon }) => (
+                <button
+                  key={tabId}
+                  onClick={() => setAccountSettingsTab(tabId)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition text-left ${
+                    accountSettingsTab === tabId
+                      ? "bg-[#7c3aed]/15 text-[#c084fc] border border-[#7c3aed]/25"
+                      : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Tab content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {accountSettingsTab === "personal" && (
+                <div className="space-y-5">
+                  <h3 className="text-base font-bold text-white">Información personal</h3>
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16 border-2 border-white/10">
+                      <AvatarImage src={user?.imageUrl} />
+                      <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-xl font-bold text-white">{user?.firstName?.charAt(0) || "M"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-white">{user?.fullName || firstName}</p>
+                      <p className="text-sm text-white/45">{user?.primaryEmailAddress?.emailAddress || me?.email}</p>
+                      {isAdmin && <span className="inline-flex items-center gap-1 mt-1 text-xs text-yellow-400"><Crown className="h-3 w-3" />Propietario</span>}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                      <p className="text-xs text-white/35 uppercase tracking-widest">Racha actual</p>
+                      <p className="mt-2 text-2xl font-bold text-orange-400 flex items-center gap-2"><Flame className="h-5 w-5" />{(stats as any)?.streak ?? 1} días</p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                      <p className="text-xs text-white/35 uppercase tracking-widest">Créditos</p>
+                      <p className="mt-2 text-2xl font-bold text-yellow-400 flex items-center gap-2"><Cpu className="h-5 w-5" />{isAdmin ? "∞" : credits}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {accountSettingsTab === "apikey" && (
+                <div className="space-y-5">
+                  <h3 className="text-base font-bold text-white">Clave universal de API</h3>
+                  <p className="text-sm text-white/50">Usa esta clave para integrar Maris AI en tus propios proyectos o automatizaciones.</p>
+                  <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-[#060810] px-4 py-3">
+                    <Key className="h-4 w-4 text-white/30 shrink-0" />
+                    <span className="flex-1 font-mono text-sm text-white/50">maris_sk_••••••••••••••••••••••••••••••••</span>
+                    <button onClick={() => toast({ title: "Clave copiada" })} className="text-white/30 hover:text-white/70 transition"><Copy className="h-4 w-4" /></button>
+                  </div>
+                  <button onClick={() => toast({ title: "Nueva clave generada", description: "La clave anterior ha sido revocada." })} className="rounded-lg border border-white/[0.07] bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white transition">
+                    Regenerar clave
+                  </button>
+                </div>
+              )}
+              {accountSettingsTab === "agents" && (
+                <div className="space-y-5">
+                  <h3 className="text-base font-bold text-white">Gestionar agentes</h3>
+                  <p className="text-sm text-white/50">Activa o desactiva las integraciones que usan tus agentes de Maris AI.</p>
+                  <div className="space-y-3">
+                    {[
+                      { name: "GitHub", desc: "Subir proyectos a repositorios", icon: GitBranch, enabled: true },
+                      { name: "Memoria", desc: "Recordar contexto entre sesiones", icon: Cpu, enabled: true },
+                      { name: "Supabase", desc: "Base de datos para tus apps", icon: Terminal, enabled: false },
+                      { name: "Notion", desc: "Exportar planes a Notion", icon: ExternalLink, enabled: false },
+                    ].map((integration) => (
+                      <div key={integration.name} className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="grid h-9 w-9 place-items-center rounded-lg bg-white/[0.05]">
+                            <integration.icon className="h-4 w-4 text-white/60" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">{integration.name}</p>
+                            <p className="text-xs text-white/40">{integration.desc}</p>
+                          </div>
+                        </div>
+                        <Switch defaultChecked={integration.enabled} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {accountSettingsTab === "preferences" && (
+                <div className="space-y-5">
+                  <h3 className="text-base font-bold text-white">Preferencias</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Modo oscuro</p>
+                        <p className="text-xs text-white/40">Interfaz oscura siempre activa</p>
+                      </div>
+                      <Switch checked={darkModeEnabled} onCheckedChange={setDarkModeEnabled} />
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Idioma</p>
+                        <p className="text-xs text-white/40">Español (ES)</p>
+                      </div>
+                      <span className="text-sm font-bold text-white/60">ES</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Notificaciones de agentes</p>
+                        <p className="text-xs text-white/40">Avisar cuando un agente termina</p>
+                      </div>
+                      <Switch defaultChecked={true} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {accountSettingsTab === "billing" && (
+                <div className="space-y-5">
+                  <h3 className="text-base font-bold text-white">Facturas y planes</h3>
+                  <div className="rounded-xl border border-[#7c3aed]/30 bg-[#7c3aed]/10 p-4">
+                    <p className="text-sm font-bold text-[#c084fc]">Plan actual: {isAdmin ? "Propietario" : "Starter"}</p>
+                    <p className="text-xs text-white/45 mt-1">{isAdmin ? "Acceso ilimitado" : `${credits} créditos disponibles`}</p>
+                  </div>
+                  <button onClick={() => { setShowAccountSettings(false); setLocation("/billing"); }} className="w-full rounded-xl bg-gradient-to-r from-[#7c3aed] to-[#9333ea] px-4 py-3 text-sm font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7] transition">
+                    Ver planes y comprar créditos
+                  </button>
+                </div>
+              )}
+              {accountSettingsTab === "usage" && (
+                <div className="space-y-5">
+                  <h3 className="text-base font-bold text-white">Uso de créditos</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                      <p className="text-xs text-white/35 uppercase tracking-widest">Disponibles</p>
+                      <p className="mt-2 text-2xl font-bold text-yellow-400">{isAdmin ? "∞" : credits}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                      <p className="text-xs text-white/35 uppercase tracking-widest">Apps generadas</p>
+                      <p className="mt-2 text-2xl font-bold text-white">{stats?.appsGenerated ?? 0}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Deploy Modal */}
     {showDeployModal && (
