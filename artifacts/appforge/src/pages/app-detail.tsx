@@ -19,6 +19,8 @@ import {
   useDeployApp,
   getGenerationJobLogs,
   getGetGenerationJobLogsQueryKey,
+  useGetNotifications,
+  useGetCreditsHistory,
 } from "@/lib/api-client";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
@@ -251,12 +253,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
-  const { data: me } = useGetMe();
+    const { data: me } = useGetMe();
   const isAdmin = !!me?.isAdmin;
-
   const { data: stats } = useGetMyStats();
   const credits = stats?.credits ?? 0;
   const outOfCredits = credits <= 0 && !isAdmin;
+
+  // ✅ Seguimiento 2 y 3: Notificaciones y gráfico de créditos
+  const { data: notificationsData } = useGetNotifications();
+  const unreadCount: number = notificationsData?.unreadCount ?? 0;
+  const { data: creditsHistory } = useGetCreditsHistory();
 
   const { data: messages } = useListAppMessages(id, {
     query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: 3000 },
@@ -1022,23 +1028,43 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <span>{isAdmin ? "∞" : credits}</span>
             </button>
 
-            {/* Notifications */}
+            {/* ✅ Seguimiento 3: Notificaciones con badge de contador real */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label="Notificaciones" className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
                   <Bell className="h-[18px] w-[18px]" />
-                  {isWorking && <span className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-[#7c3aed] animate-pulse" />}
+                  {(unreadCount > 0 || isWorking) && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7c3aed] text-[9px] font-bold text-white shadow-[0_0_8px_rgba(124,58,237,0.8)] animate-pulse">
+                      {unreadCount > 0 ? Math.min(unreadCount, 9) : ""}
+                    </span>
+                  )}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" forceMount className="z-[220] w-80 border-white/10 bg-[#0f1320] text-white">
-                <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  <span>Notificaciones</span>
+                  {unreadCount > 0 && <span className="rounded-full bg-[#7c3aed]/20 px-2 py-0.5 text-[10px] font-bold text-[#a78bfa]">{unreadCount} nuevas</span>}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
-                {notificationItems.map((item) => (
-                  <DropdownMenuItem key={item.title} onSelect={(e) => e.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
-                    <span className="text-sm font-semibold text-white">{item.title}</span>
-                    <span className="text-xs leading-relaxed text-white/55">{item.description}</span>
+                {/* Notificaciones del backend */}
+                {notificationsData?.notifications?.map((n: any) => (
+                  <DropdownMenuItem key={n.id} onSelect={(e) => e.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
+                    <span className={`text-sm font-semibold ${n.type === 'error' ? 'text-red-400' : n.type === 'warning' ? 'text-yellow-400' : 'text-white'}`}>{n.title}</span>
+                    <span className="text-xs leading-relaxed text-white/55">{n.body}</span>
                   </DropdownMenuItem>
                 ))}
+                {/* Notificaciones del estado del job activo */}
+                {isWorking && (
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-[#a78bfa]"><span className="h-1.5 w-1.5 rounded-full bg-[#7c3aed] animate-pulse" />Trabajo activo</span>
+                    <span className="text-xs leading-relaxed text-white/55">{phaseInfo.label}</span>
+                  </DropdownMenuItem>
+                )}
+                {!isWorking && !notificationsData?.notifications?.length && (
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-default text-white/40 focus:bg-white/5 focus:text-white/40">
+                    Sin notificaciones nuevas
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 

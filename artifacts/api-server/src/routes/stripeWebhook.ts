@@ -154,9 +154,15 @@ stripeWebhookRouter.post(
           stripeSubscriptionId: subscriptionId,
         });
 
+        // ✅ Seguimiento 1: Marcar isPremium=true para desbloquear dominio personalizado
+        await connectDB();
+        await User.findByIdAndUpdate(clerkUserId, {
+          $set: { isPremium: true },
+        });
+
         req.log.info(
           { clerkUserId, planId, creditsPerMonth, periodEnd },
-          "Plan credits granted on subscription payment",
+          "Plan credits granted on subscription payment — isPremium=true",
         );
       }
 
@@ -182,6 +188,7 @@ stripeWebhookRouter.post(
               credits: topUpCredits + freeCredits,
               planExpiresAt: null,
               stripeSubscriptionId: null,
+              isPremium: false, // ✅ Seguimiento 1: Revocar acceso a dominio personalizado
             },
           });
 

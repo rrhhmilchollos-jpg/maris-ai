@@ -152,4 +152,124 @@ router.put("/me/preferences", requireAuth, async (req, res) => {
   }
 });
 
+// =============================================================================
+// ✅ Seguimiento 2: Historial de créditos para el gráfico de uso (30 días)
+// =============================================================================
+router.get("/me/credits-history", requireAuth, async (req, res) => {
+  try {
+    await connectDB();
+    const userId = req.userId!;
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const txns = await CreditTransaction.find(
+      { userId, createdAt: { $gte: thirtyDaysAgo } },
+      { kind: 1, amount: 1, description: 1, createdAt: 1 },
+    ).sort({ createdAt: 1 }).lean();
+
+    // Agrupar por día
+    const byDay: Record<string, { used: number; purchased: number; date: string }> = {};
+    for (const t of txns) {
+      const day = new Date(t.createdAt).toISOString().slice(0, 10);
+      if (!byDay[day]) byDay[day] = { used: 0, purchased: 0, date: day };
+      if (t.kind === "usage") byDay[day].used += Math.abs(t.amount);
+      if (t.kind === "purchase" || t.kind === "subscription") byDay[day].purchased += Math.abs(t.amount);
+    }
+
+    // Rellenar los 30 días aunque no haya actividad
+    const days: Array<{ date: string; used: number; purchased: number }> = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      days.push(byDay[d] ?? { date: d, used: 0, purchased: 0 });
+    }
+
+    const totalUsed = txns.filter(t => t.kind === "usage").reduce((s, t) => s + Math.abs(t.amount), 0);
+    const totalPurchased = txns.filter(t => t.kind !== "usage").reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    res.json({
+      days,
+      totalUsed,
+      totalPurchased,
+      currentCredits: req.dbUser!.credits ?? 0,
+      plan: req.dbUser!.plan ?? "free",
+      recentTransactions: txns.slice(-10).reverse().map(t => ({
+        kind: t.kind,
+        amount: t.amount,
+        description: t.description,
+        date: new Date(t.createdAt).toISOString(),
+      })),
+    });
+  } catch (err) {
+    logger.error({ err }, "GET /me/credits-history error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
+// =============================================================================
+// ✅ Seguimiento 3: Notificaciones del usuario
+// =============================================================================
+router.get("/me/notifications", requireAuth, async (req, res) => {
+  try {
+    await connectDB();
+    const userId = req.userId!;
+    const u = req.dbUser!;
+    const notifications: Array<{ id: string; type: string; title: string; body: string; read: boolean; createdAt: string }> = [];
+
+    // Notificación de bienvenida si la cuenta tiene menos de 7 días
+    const accountAge = Date.now() - new Date(u.createdAt).getTime();
+    if (accountAge < 7 * 24 * 60 * 60 * 1000) {
+      notifications.push({
+        id: "welcome",
+        type: "info",
+        title: "🚀 ¡Bienvenido a Maris AI!",
+        body: `Tienes ${u.credits ?? 0} créditos para crear tu primera app. ¡Empieza ahora!`,
+        read: false,
+        createdAt: u.createdAt.toISOString(),
+      });
+    }
+
+    // Notificación de créditos bajos
+    if ((u.credits ?? 0) <= 5 && (u.credits ?? 0) > 0) {
+      notifications.push({
+        id: "low-credits",
+        type: "warning",
+        title: "🚨 Créditos bajos",
+        body: `Solo te quedan ${u.credits} créditos. Recarga para seguir creando apps.`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Notificación de créditos agotados
+    if ((u.credits ?? 0) === 0) {
+      notifications.push({
+        id: "no-credits",
+        type: "error",
+        title: "❌ Créditos agotados",
+        body: "No tienes créditos disponibles. Compra un pack para continuar.",
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    // Notificación de plan premium activo
+    if (u.isPremium && u.planExpiresAt) {
+      const daysLeft = Math.ceil((new Date(u.planExpiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+      if (daysLeft <= 7 && daysLeft > 0) {
+        notifications.push({
+          id: "plan-expiring",
+          type: "warning",
+          title: "⏰ Tu plan expira pronto",
+          body: `Tu plan ${u.plan} expira en ${daysLeft} día(s). Renueva para no perder el acceso.`,
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    res.json({ notifications, unreadCount: notifications.filter(n => !n.read).length });
+  } catch (err) {
+    logger.error({ err }, "GET /me/notifications error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
 export default router;
