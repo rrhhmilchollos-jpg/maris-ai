@@ -35,7 +35,10 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 }
  
 async function ensureAdminCredits(user: IUser): Promise<IUser> {
-  if (isAdminEmail(user.email) && user.credits < 1000000 && user._id) {
+  // Solo inicializar créditos si la cuenta admin es nueva (credits === 0).
+  // Si el admin ya tiene créditos asignados (aunque sean pocos), no se sobreescriben,
+  // permitiendo ajustar libremente el saldo desde el panel de administración.
+  if (isAdminEmail(user.email) && user.credits === 0 && user._id) {
     await User.findByIdAndUpdate(user._id, { $set: { credits: 999999999 } });
     user.credits = 999999999;
   }
