@@ -17,7 +17,7 @@ export const GENERATE_QUEUE =
   process.env.GENERATE_QUEUE_NAME ?? "appforge.generate-app";
 
 const DEFAULT_CONCURRENCY = 3;
-const DEFAULT_POLL_INTERVAL_MS = process.env.JOB_POLL_INTERVAL_MS ? Number.parseInt(process.env.JOB_POLL_INTERVAL_MS, 10) : 2000; // Optimizado: 200ms → 2000ms
+const DEFAULT_POLL_INTERVAL_MS = process.env.JOB_POLL_INTERVAL_MS ? Number.parseInt(process.env.JOB_POLL_INTERVAL_MS, 10) : 500; // Ultra-optimizado: 500ms para arranque instantáneo
 export const MAX_ATTEMPTS = 3; // Retry limit
 
 export interface JobPayload {
