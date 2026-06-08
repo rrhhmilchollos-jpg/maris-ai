@@ -265,7 +265,8 @@ export async function registerGenerateWorker(
     {
       connection: redis,
       concurrency: DEFAULT_CONCURRENCY, // Parallel workers on this instance
-      // settings removed: lockDuration, lockRenewTime, maxStalledCount, stalledInterval not in AdvancedOptions
+      lockDuration: 420_000, // 7 minutes — must exceed max job duration (5min frontend + overhead)
+      lockRenewTime: 120_000, // Renew lock every 2 minutes (must be < lockDuration/3)
     }
   );
   

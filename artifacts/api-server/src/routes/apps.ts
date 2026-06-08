@@ -789,6 +789,7 @@ async function generateFrontendCode(
   language: GenLanguage,
   templateContext = "",
   agentPlan = selectAgentModelPlan(prompt, coderModel),
+  onPartial?: (text: string) => void,
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -838,6 +839,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
         if (accumulated.length - lastReport >= 1500) {
           lastReport = accumulated.length;
           onChars(accumulated.length);
+          onPartial?.(accumulated);
         }
       }
       const fr = chunk.choices[0]?.finish_reason;
@@ -850,7 +852,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
         max_tokens: 128000,
         system: systemPrompt,
         messages: [{ role: "user", content: userContent }],
-      }, onChars);
+      }, (chars) => { onChars(chars); onPartial?.(accumulated); });
       accumulated = streamed.text;
       truncated = streamed.truncated;
     }
@@ -859,7 +861,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       max_tokens: 128000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
-    }, onChars);
+    }, (chars) => { onChars(chars); onPartial?.(accumulated); });
     accumulated = streamed.text;
     truncated = streamed.truncated;
   }
@@ -1966,22 +1968,34 @@ export async function generateApp(
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
   let lastLogChars = 0;
-  const frontendPromise = runPhase("frontend", async () =>
-    withTimeoutOrThrow(
-      generateFrontendCode(plan, design, research, prompt, (chars) => {
-        const ratio = Math.min(1, chars / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
-        
-        // Log cada 5KB para dar feedback visual al usuario (Mejorado de 10KB)
-        if (chars - lastLogChars >= 5000) {
-          lastLogChars = chars;
-          void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
-        }
-      }, coderModel, language, templateContextBlock, agentModelPlan),
-      180_000, // 3 minutes max per frontend generation (Sonnet 4.6)
-      "frontend-engineer",
-    ),
-  );
+  // Shared accumulator so the timeout catch can recover partial code
+  let frontendAccumulated = "";
+  const frontendPromise = runPhase("frontend", async () => {
+    try {
+      return await withTimeoutOrThrow(
+        generateFrontendCode(plan, design, research, prompt, (chars) => {
+          const ratio = Math.min(1, chars / TARGET_CHARS);
+          onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+          // Log cada 5KB para dar feedback visual al usuario
+          if (chars - lastLogChars >= 5000) {
+            lastLogChars = chars;
+            void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+          }
+        }, coderModel, language, templateContextBlock, agentModelPlan,
+        (partial) => { frontendAccumulated = partial; }), // onPartial: keep latest accumulated text for timeout recovery
+        300_000, // 5 minutes max per frontend generation — increased from 3min for complex apps (CRM, dashboards, etc.)
+        "frontend-engineer",
+      );
+    } catch (err) {
+      // On timeout, return a partial result instead of throwing so Promise.all doesn't fail
+      // The retry logic below will handle it with a reduced plan
+      if (String((err as any).message || "").includes("timeout") && frontendAccumulated.length > 2000) {
+        void log("coder", `Frontend-engineer timeout con ${Math.round(frontendAccumulated.length / 1000)} KB acumulados — usando código parcial para reintento.`, "warn");
+        return { code: "", truncated: true, error: (err as any).message, accumulated: frontendAccumulated } as CodeGenResult;
+      }
+      throw err;
+    }
+  });
 
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
   const backendPromise = runBackend
