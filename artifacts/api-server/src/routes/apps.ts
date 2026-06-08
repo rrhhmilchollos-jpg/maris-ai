@@ -1906,14 +1906,20 @@ export async function generateApp(
     }
   });
 
-  // --- FASE 2: BACKEND (SECUENCIAL) ---
-  const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
-  const backendResult = runBackend
-    ? await runPhase("backend", () => {
-        void log("coder", "Generando backend en secuencia para mayor estabilidad...");
-        return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan);
-      })
-    : null;
+  // --- FASE 2: BACKEND (INTERACTIVO / A PETICIÓN) ---
+  // Siguiendo la sugerencia del usuario, Maris AI ahora se detendrá tras el Frontend.
+  // Solo generará el Backend si el usuario lo solicita explícitamente o si es una app muy simple que ya lo incluía en el plan inicial.
+  const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded && (prompt.toLowerCase().includes("backend") || prompt.toLowerCase().includes("servidor") || prompt.toLowerCase().includes("base de datos"));
+  
+  let backendResult = null;
+  if (runBackend) {
+    backendResult = await runPhase("backend", () => {
+      void log("coder", "Generando backend a petición del usuario para mayor control...");
+      return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan);
+    });
+  } else if (execPlan.phases.includes("backend") && plan.backendNeeded) {
+    void log("coder", "Frontend terminado. El backend se ha pausado para tu revisión. Si te gusta el diseño, dime 'Continúa con el backend' y me pondré con ello.", "info");
+  }
 
   // Si el frontend falló por timeout, tratarlo como truncado para reintentar con plan reducido
   // frontendResult.error comes from generateFrontendCode recovery, while frontendResult.code absence + catch in Promise.all handles the direct throw.
