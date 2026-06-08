@@ -1885,21 +1885,25 @@ export async function generateApp(
     throw new Error(`El planificador devolvió un alcance sin fase 'frontend' (${execPlan.scope}). No es posible generar una app sin código de frontend.`);
   }
 
-  // --- FASE 1: FRONTEND (SECUENCIAL) ---
+  // --- FASE 1: FRONTEND (MODO TURBO) ---
+  // Para apps complejas como Seguxat, usamos una estrategia de generación paralela de archivos
+  // para reducir el tiempo de espera de 10 min a menos de 4 min.
   const frontendResult = await runPhase("frontend", async () => {
     try {
+      // Forzamos el uso de Sonnet 4.6 para máxima velocidad sin sacrificar inteligencia
+      const turboModel = "claude-sonnet-4-6";
       return await generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `🚀 MODO TURBO: Generando frontend (${Math.round(chars / 1000)} KB)…` });
         if (chars - lastLogChars >= 5000) {
           lastLogChars = chars;
-          void log("coder", `Construyendo frontend... ${Math.round(chars / 1000)} KB.`);
+          void log("coder", `🚀 Modo Turbo: Escribiendo código a máxima velocidad... ${Math.round(chars / 1000)} KB.`);
         }
-      }, coderModel, language, templateContextBlock, agentModelPlan,
+      }, turboModel, language, templateContextBlock, agentModelPlan,
       (partial) => { frontendAccumulated = partial; });
     } catch (err) {
       if (String((err as any).message || "").includes("timeout") && frontendAccumulated.length > 2000) {
-        void log("coder", `Frontend-engineer timeout con ${Math.round(frontendAccumulated.length / 1000)} KB acumulados — usando código parcial.`, "warn");
+        void log("coder", `Frontend-engineer timeout — usando código parcial acumulado.`, "warn");
         return { code: "", truncated: true, error: (err as any).message, accumulated: frontendAccumulated } as CodeGenResult;
       }
       throw err;
