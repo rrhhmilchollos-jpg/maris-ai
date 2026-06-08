@@ -2,6 +2,14 @@ import { logger } from "./logger";
 import { anthropic, resolveClaudeCoderModel } from "./anthropic";
 import { performWebResearch, formatWebResearchForLLM } from "./web-research";
 import { recallGenerations, buildGenerationMemoryBlock } from "./memory";
+import { runTestingAgent } from "./tester";
+import { 
+  type GenLanguage, 
+  type AgentRole, 
+  type AgentLog, 
+  type GeneratePhase, 
+  type GenerateProgress 
+} from "./shared-agents";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -10,33 +18,6 @@ const DESIGNER_SYSTEM_PROMPT = `Eres el UI/UX Designer de Maris AI. Define el si
 const CODER_SYSTEM_PROMPT = `Eres el Senior Engineer de Maris AI. Escribe código de alta calidad y listo para producción.`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export type GeneratePhase = 
-  | "starting"
-  | "researching"
-  | "architecting"
-  | "designing"
-  | "schema"
-  | "frontend"
-  | "backend"
-  | "integrations"
-  | "testing"
-  | "patching"
-  | "validating"
-  | "fixing"
-  | "parsing";
-
-export interface GenerateProgress {
-  phase: GeneratePhase;
-  progress: number;
-  note?: string;
-}
-
-export type AgentLog = (
-  agent: string,
-  message: string,
-  level?: "info" | "warn" | "error",
-) => void;
 
 interface ProjectPlan {
   title: string;
@@ -122,15 +103,25 @@ export async function runGenerationPipeline(
     // Wait for all core tasks to complete
     const [frontendCode] = await Promise.all([frontendPromise, backendPromise, dbPromise]);
 
-    // 5. QA & TESTING PHASE
-    log("qa", "Iniciando auditoría de calidad y pruebas de integración...");
-    await updateProgress({ phase: "testing", progress: 80 });
-    await runQA(frontendCode, plan, (msg) => log("qa", msg));
+    // 5. TESTING AGENT PHASE (Systematic Validation & Repair)
+    const testedFrontend = await runTestingAgent(frontendCode, {
+      jobId,
+      prompt,
+      plan,
+      language: "typescript", // Default for this pipeline
+      log,
+      onProgress: (p) => updateProgress(p),
+    });
+
+    // 6. QA & FINAL VALIDATION
+    log("qa", "Iniciando auditoría de calidad final...");
+    await updateProgress({ phase: "testing", progress: 90 });
+    await runQA(testedFrontend, plan, (msg) => log("qa", msg));
     log("qa", "Auditoría completada. La aplicación cumple con los estándares de calidad.");
 
-    // 6. DEVOPS & PATCHING
+    // 7. DEVOPS & PATCHING
     log("patcher", "Realizando ajustes finales y preparando el despliegue...");
-    await updateProgress({ phase: "patching", progress: 90 });
+    await updateProgress({ phase: "patching", progress: 95 });
     log("patcher", "Optimización de activos y configuración de entorno completada.");
 
     await updateProgress({ phase: "parsing", progress: 100 });

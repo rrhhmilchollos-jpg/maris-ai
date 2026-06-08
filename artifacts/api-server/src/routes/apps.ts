@@ -9,7 +9,22 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
 });
 import { makeSlug } from "../lib/deployBundle";
-import { validateBundle, type BuildIssue } from "../lib/validate";
+import { validateBundle } from "../lib/validate";
+import { runTestingAgent } from "../lib/tester";
+import { 
+  type GenLanguage, 
+  type QAIssue, 
+  type QAReport, 
+  type BuildIssue,
+  type AgentLog,
+  type GeneratePhase,
+  type GenerateProgress,
+  extractJsonObject,
+  withTimeout,
+  createClaudeMessageWithFallback,
+  buildPatcherSystemPrompt,
+  patchBundle
+} from "../lib/shared-agents";
 import { validateBundleInE2B } from "../lib/e2bValidator";
 import { shouldValidateInE2B } from "../lib/e2bGate";
 import { logger } from "../lib/logger";
@@ -22,9 +37,6 @@ import { chargeCredits } from "../lib/credits";
 import { pushAppToGitHub } from "../lib/githubPush";
 import { connectDB } from "@workspace/db";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
-
-/** Source language the generated app uses. Affects file extensions + prompt rules. */
-export type GenLanguage = "typescript" | "javascript";
 
 interface RouteGenerationRequestContext {
   kind?: string;
@@ -281,78 +293,7 @@ Rules:
 - Real working tests. No TODOs, no placeholders.
 - Combined output under 6 KB. Close every brace. Output ONLY the JSON object.`;
 
-function buildPatcherSystemPrompt(language: GenLanguage): string {
-  const isTS = language === "typescript";
-  const tsLine = isTS
-    ? "- TypeScript bundle (.tsx/.ts): type annotations required. Fix type errors, missing interfaces, wrong generics."
-    : "- JavaScript bundle (.jsx/.js): do NOT introduce TypeScript syntax. Fix JS-only issues.";
-  return `You are Maris AI's testing-agent — the most advanced technical repair expert in the system.
-Your mission: receive a list of errors detected in a React frontend bundle and FIX ALL OF THEM with surgical precision.
-You are called automatically whenever ANY other agent produces code with errors. You are the last line of defense before the user sees the result.
-You are a senior full-stack engineer with 15+ years of experience in React, TypeScript, Vite, Tailwind, and modern web development.
-You NEVER give up. You ALWAYS find a solution. You NEVER introduce new bugs while fixing existing ones.
 
-Output STRICT JSON only:
-{"frontendCode":"all frontend files as one string using // === FILE: <path> === separators"}
-
-═══════════════════════════════════════════════════════════
-LANGUAGE RULES
-═══════════════════════════════════════════════════════════
-- ALL user-visible copy MUST be in Spanish (es-ES). Preserve existing Spanish text exactly.
-- If you add new UI text, write it in natural Spanish ("Guardar cambios", "Sin resultados", etc.).
-- Code identifiers, variable names, file names → English only.
-
-═══════════════════════════════════════════════════════════
-SYNTAX REPAIR — MANDATORY CHECKS ON EVERY FILE YOU TOUCH
-═══════════════════════════════════════════════════════════
-${tsLine}
-- DOUBLE COMMAS: Remove every \`,,\`, \`,)\`, \`,]\`, \`,}\` pattern. These are fatal syntax errors.
-- NON-ASCII GARBAGE: Strip any non-ASCII characters from identifiers, keywords, or punctuation. Only allowed inside string literals and JSX text.
-- BRACE BALANCE: Every \`{\`, \`(\`, \`[\` MUST have a matching \`}\`, \`)\`, \`]\`. Count them.
-- JSX TAGS: Every opening JSX tag MUST have a matching closing tag or be self-closed.
-- STRING TERMINATION: Every string must end with the SAME quote it started with. Long URLs are common offenders.
-- IMPORT RESOLUTION: Every \`import { X } from './Y'\` must match an \`export { X }\` or \`export const X\` in file Y.
-- EXPORT CONSISTENCY: Components → default export. Hooks/utils/types → named export. Never mix.
-
-═══════════════════════════════════════════════════════════
-REACT & HOOKS RULES
-═══════════════════════════════════════════════════════════
-- Hooks (useState, useEffect, useMemo, useCallback, useRef) MUST be at the TOP of the component body, NEVER inside conditionals, loops, or callbacks.
-- Every \`.map(item => <El key={...} />)\` MUST have a stable \`key\` prop.
-- Never call a hook conditionally: \`if (x) { useState(...) }\` is FORBIDDEN.
-- useEffect cleanup: if the effect sets up a subscription/timer, return a cleanup function.
-
-═══════════════════════════════════════════════════════════
-WOUTER v3 RULES
-═══════════════════════════════════════════════════════════
-- \`<Link>\` in wouter v3 ALREADY renders as \`<a>\`. NEVER nest \`<a>\` or \`<button>\` inside \`<Link>\`.
-- WRONG: \`<Link href="/x"><a className="btn">Ir</a></Link>\`
-- RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
-- Move className, onClick, aria-label DIRECTLY onto \`<Link>\`.
-
-═══════════════════════════════════════════════════════════
-PACKAGE RULES
-═══════════════════════════════════════════════════════════
-- ONLY use packages that actually exist on npm. Allowed: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod, recharts, framer-motion.
-- NEVER invent package names. If a package is not in the allowed list, implement the functionality inline.
-- If an import fails because the package doesn't exist, replace it with an inline implementation.
-
-═══════════════════════════════════════════════════════════
-TAILWIND RULES
-═══════════════════════════════════════════════════════════
-- Use only standard Tailwind utility classes. No arbitrary values unless absolutely necessary.
-- For animations, use Tailwind's built-in \`animate-*\` classes or define keyframes in \`src/index.css\`.
-- Never use \`@apply\` outside of \`src/index.css\`.
-
-═══════════════════════════════════════════════════════════
-FINAL RULES
-═══════════════════════════════════════════════════════════
-- Return the FULL bundle (every file, not just the patched ones). Use '// === FILE: <path> ===' separators.
-- Do NOT truncate any file. Every file must be complete and functional.
-- Do NOT add placeholder comments like '// ... rest of component'. Write the actual code.
-- Do NOT introduce new bugs while fixing existing ones. Test your logic mentally before outputting.
-- Output ONLY the JSON object. No markdown, no explanation, no preamble.`;
-}
 
 export interface GeneratedAppPayload {
   title: string;
@@ -363,29 +304,7 @@ export interface GeneratedAppPayload {
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
 }
 
-export type GeneratePhase =
-  | "researching"
-  | "architecting"
-  | "integrating"
-  | "designing"
-  | "generating"
-  | "reviewing"
-  | "validating"
-  | "testing"
-  | "fixing"
-  | "parsing";
 
-export interface GenerateProgress {
-  phase: GeneratePhase;
-  progress: number;
-  note?: string;
-}
-
-export type AgentLog = (
-  agent: string,
-  message: string,
-  level?: "info" | "warn" | "error",
-) => void;
 
 export interface AttachmentContext {
   id: number;
@@ -460,16 +379,7 @@ interface IntegrationSpec {
   services: IntegrationService[];
 }
 
-interface QAIssue {
-  file: string;
-  problem: string;
-  fix: string;
-}
 
-interface QAReport {
-  ok: boolean;
-  issues: QAIssue[];
-}
 
 const CLONE_KEYWORDS = [
   "clon", "clone", "copia", "copy", "como ", "like ", "similar a", "similar to",
@@ -500,37 +410,7 @@ function shouldResearch(prompt: string): boolean {
 
 /* ----------------------------- helpers ------------------------------------ */
 
-function extractJsonObject<T = any>(raw: string): T | null {
-  let s = raw.trim();
-  if (s.startsWith("```")) s = s.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  const first = s.indexOf("{");
-  if (first === -1) return null;
-  // Parse char-by-char respecting strings — handles } inside string values correctly
-  let depth = 0, inString = false, escape = false;
-  for (let i = first; i < s.length; i++) {
-    const ch = s[i];
-    if (escape) { escape = false; continue; }
-    if (ch === '\\' && inString) { escape = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === '{') depth++;
-    if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        try { return JSON.parse(s.slice(first, i + 1)) as T; } catch {}
-      }
-    }
-  }
-  try { return JSON.parse(s) as T; } catch {}
-  return null;
-}
 
-async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
 
 async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   let timeoutId: NodeJS.Timeout;
@@ -684,7 +564,7 @@ interface CodeGenResult {
 
 type CoderProvider = "claude" | "gpt-5";
 type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
-type ComplexityTier = "basic" | "standard" | "robust" | "ultra";
+
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
 interface AgentModelChoice {
@@ -694,13 +574,7 @@ interface AgentModelChoice {
   reason: string;
 }
 
-interface AgentModelPlan {
-  tier: ComplexityTier;
-  score: number;
-  selectedCoderModel: string;
-  auto: boolean;
-  agents: Record<AgentRole, AgentModelChoice>;
-}
+
 
 const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"];
 
@@ -784,18 +658,7 @@ function fallbackClaudeModels(model: AgentModelChoice["model"]): ClaudeCoderMode
   return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
 }
 
-async function createClaudeMessageWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any): Promise<any> {
-  let lastError: unknown;
-  for (const candidate of fallbackClaudeModels(model)) {
-    try {
-      return await anthropic.messages.create({ ...params, model: candidate });
-    } catch (err) {
-      lastError = err;
-      logger.warn({ role, model: candidate, err }, "Agent model failed; trying fallback");
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
-}
+
 
 async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ClaudeCoderModel }> {
   let lastError: unknown;
@@ -1133,49 +996,7 @@ Return the JSON object with testCode.`,
 /**
  * Patcher — Gemini 2.0 Flash.
  */
-export async function patchBundle(
-  frontendCode: string,
-  issues: QAIssue[],
-  language: GenLanguage = "typescript",
-  memoryContext: string = "",
-  agentPlan = selectAgentModelPlan(frontendCode),
-): Promise<string | null> {
-  if (issues.length === 0) return null;
-  const issueList = issues
-    .map((i, idx) => `${idx + 1}. [${i.file}] Problem: ${i.problem}\n   Fix: ${i.fix}`)
-    .join("\n");
-  return withTimeout(
-    (async () => {
-      try {
-        const response = await createClaudeMessageWithFallback("patcher", agentPlan.agents.patcher.model, {
-          max_tokens: 32000, // testing-agent: aumentado para proyectos ultra-complejos
-          system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
-          messages: [
-            {
-              role: "user",
-              content: `ISSUES TO FIX:
-${issueList}
-${memoryContext}
-CURRENT FRONTEND BUNDLE:
-${frontendCode}
 
-Return the FULL patched bundle as JSON.`,
-            },
-          ],
-        });
-        const raw = (response.content[0] as any).text ?? "";
-        const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
-        if (!parsed || typeof parsed.frontendCode !== "string") return null;
-        if (parsed.frontendCode.length < frontendCode.length / 2) return null;
-        return parsed.frontendCode;
-      } catch {
-        return null;
-      }
-    })(),
-        120_000, // testing-agent: 2 minutos para reparaciones de proyectos ultra-complejos
-    null,
-  );
-}
 function buildSetupNotes(spec: IntegrationSpec): string {
   if (spec.services.length === 0) return "";
   const lines: string[] = [
@@ -1791,6 +1612,7 @@ export async function generateApp(
   onPhaseError?: PhaseErrorReporter,
   agentMemory?: AgentMemoryContext,
   requestContext?: RouteGenerationRequestContext,
+  jobId?: string,
 ): Promise<GeneratedAppPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
@@ -1850,11 +1672,21 @@ export async function generateApp(
 
     const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
     if (milestoneFrontend.length >= 200 && /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/.test(milestoneFrontend)) {
+      const testedMilestone = await runPhase("testing", () =>
+        runTestingAgent(milestoneFrontend, {
+          jobId: jobId || "unknown",
+          prompt,
+          plan: { title: "Hitos", description: "Construcción por hitos" },
+          language,
+          log: emit,
+          onProgress,
+        })
+      );
       return {
         title: "Proyecto Generado por Hitos",
         description: "App construida mediante Task Splitting y Milestone Forking",
         techStack: ["React", "Node", "TypeScript"],
-        frontendCode: milestoneFrontend,
+        frontendCode: testedMilestone,
         backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
       };
     }
@@ -2158,11 +1990,23 @@ Output STRICT JSON only, no markdown, no explanation.`,
   const issueCount = report.issues?.length ?? 0;
   await log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
 
-  /* === Phase 5: validate → patch loop === */
+  /* === Phase 5: Testing Agent (Systematic Validation & Repair) === */
+  const testedFrontend = await runPhase("testing", () =>
+    runTestingAgent(frontendResult.code, {
+      jobId: jobId || "unknown",
+      prompt,
+      plan,
+      language,
+      log: emit,
+      onProgress,
+    })
+  );
+
+  /* === Phase 6: validate → patch loop (Final Polish) === */
   await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
   const finalFrontend = await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
-      frontendResult.code,
+      testedFrontend,
       report,
       onProgress,
       80,
@@ -2901,6 +2745,7 @@ export async function runJobById(jobId: string): Promise<void> {
         detectedCountry: extractPromptContext(job.prompt, "country"),
         uiLanguage: extractPromptContext(job.prompt, "uiLanguage"),
       },
+      jobId,
     );
 
     if ((result as any).phase?.startsWith("awaiting_")) {

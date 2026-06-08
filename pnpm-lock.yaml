@@ -144,6 +144,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      esbuild:
+        specifier: 0.27.3
+        version: 0.27.3
     devDependencies:
       execa:
         specifier: ^9.6.1
