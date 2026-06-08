@@ -217,6 +217,8 @@ export function LivePreview({
         : msg;
       setErrorMsg(friendlyMsg);
       setPhase("error");
+      // Activar Sandpack como fallback automático cuando WebContainer falla
+      setUseSandpackFallback(true);
       appendLog(`✗ ${friendlyMsg}`);
     } finally {
       startingRef.current = false;
