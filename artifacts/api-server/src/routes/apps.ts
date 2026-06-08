@@ -2022,16 +2022,24 @@ Output STRICT JSON only, no markdown, no explanation.`,
   await log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
 
   /* === Phase 5: Testing Agent (Systematic Validation & Repair) === */
-  const testedFrontend = await runPhase("testing", () =>
-    runTestingAgent(frontendResult.code, {
+  const testedFrontend = await runPhase("testing", async () => {
+    const result = await runTestingAgent(frontendResult.code, {
       jobId: jobId || "unknown",
       prompt,
       plan,
       language,
       log: emit,
       onProgress,
-    })
-  );
+    });
+    
+    // Validación de Salud Post-Despliegue (Nivel 3 del plan)
+    logger.info(`[QA] Verificando salud de navegación para Job ${jobId}`);
+    const navIssues = await validateBundle(result);
+    if (navIssues.length > 0) {
+      logger.warn(`[QA] Se detectaron ${navIssues.length} problemas de navegación tras el Testing Agent.`);
+    }
+    return result;
+  });
 
   /* === Phase 6: validate → patch loop (Final Polish) === */
   await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");

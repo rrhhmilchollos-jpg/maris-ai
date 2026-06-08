@@ -1,6 +1,8 @@
 import { Router, type IRouter, type Response } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { isQueueReady } from "../lib/jobQueue";
+import fs from 'fs';
+import path from 'path';
 
 const router: IRouter = Router();
 
@@ -9,7 +11,17 @@ function sendHealth(res: Response) {
   // Surface degraded queue state so operators see when generations would
   // fall back to in-process setImmediate (no restart resilience).
   const queueReady = isQueueReady();
-  res.json({ ...data, queue: queueReady ? "ready" : "degraded" });
+  
+  // Verificar si el Testing Agent está cargado y disponible
+  const testerPath = path.join(process.cwd(), 'src/lib/tester.ts');
+  const testerExists = fs.existsSync(testerPath);
+
+  res.json({ 
+    ...data, 
+    queue: queueReady ? "ready" : "degraded",
+    testing_agent: testerExists ? "active" : "missing",
+    version: "2.1.0-monitored"
+  });
 }
 
 router.get("/healthz", (_req, res) => sendHealth(res));
