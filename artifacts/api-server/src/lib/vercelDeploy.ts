@@ -608,7 +608,7 @@ function sanitiseProjectName(raw: string): string {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
-  const trimmed = stripped.slice(0, 100) || "maris-app";
+  const trimmed = stripped.slice(0, 52) || "maris-app"; // Vercel hostname max 63 chars (.vercel.app = 11)
   // Vercel rejects names starting with a hyphen.
   return trimmed.replace(/^-+/, "");
 }
