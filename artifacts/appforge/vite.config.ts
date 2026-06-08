@@ -15,8 +15,8 @@ const clerkPubKeyFallback = process.env.CLERK_PUBLISHABLE_KEY ?? "";
 // En Vercel, estos headers se aplican solo a /app/* para no romper el login OAuth de Clerk
 // En desarrollo local (vite dev), los aplicamos globalmente ya que no hay login OAuth
 const ISOLATION_HEADERS = {
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "credentialless",
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  "Cross-Origin-Embedder-Policy": "unsafe-none",
 };
 
 export default defineConfig({
