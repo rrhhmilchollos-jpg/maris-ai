@@ -114,9 +114,24 @@ export function buildFileTree(flat: Record<string, string>): FileSystemTree {
  * Returns the (possibly patched) JSON string. Never throws — falls back to
  * a known-good minimal package.json if the input is unparseable.
  */
-export function ensureDevScript(rawPackageJson: string | undefined): string {
+export function isStaticHtmlProject(files: Record<string, string>): boolean {
+  const paths = Object.keys(files);
+  const hasHtml = paths.some(p => p.endsWith(".html") || p.endsWith("index.html"));
+  const hasReact = Object.values(files).some(c => c.includes("react") || c.includes("jsx") || c.includes("tsx"));
+  const hasPackageJson = paths.includes("package.json");
+  return hasHtml && !hasReact && !hasPackageJson;
+}
+
+export function ensureDevScript(rawPackageJson: string | undefined, isStatic = false): string {
   const FALLBACK = JSON.stringify(
-    {
+    isStatic ? {
+      name: "maris-live-preview",
+      private: true,
+      version: "0.0.0",
+      scripts: {
+        dev: "npx serve . --listen 5173 --no-clipboard",
+      },
+    } : {
       name: "maris-live-preview",
       private: true,
       version: "0.0.0",

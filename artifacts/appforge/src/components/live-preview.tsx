@@ -25,6 +25,7 @@ import { SandpackProvider, SandpackPreview } from "@codesandbox/sandpack-react";
 import {
   buildFileTree,
   ensureDevScript,
+  isStaticHtmlProject,
   patchViteConfig,
   getWebContainer,
   isWebContainerSupported,
@@ -126,7 +127,8 @@ export function LivePreview({
 
       setPhase("mounting");
       const parsed = parseBundle(frontendCode);
-      parsed["package.json"] = ensureDevScript(parsed["package.json"]);
+      const isStatic = isStaticHtmlProject(parsed);
+      parsed["package.json"] = ensureDevScript(parsed["package.json"], isStatic);
       // Desactivar el overlay de error de Vite HMR — los errores se muestran en la consola inferior
       const viteConfigKey = parsed["vite.config.ts"] !== undefined
         ? "vite.config.ts"
@@ -143,20 +145,24 @@ export function LivePreview({
       await wc.mount(tree);
       appendLog("✓ Archivos montados");
 
-      setPhase("installing");
-      appendLog("📦 Ejecutando npm install…");
-      const install = await wc.spawn("npm", ["install", "--no-audit", "--no-fund"]);
-      install.output.pipeTo(
-        new WritableStream({
-          write: (chunk) => {
-            const clean = chunk.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trimEnd();
-            if (clean) appendLog(clean);
-          },
-        }),
-      );
-      const installExit = await install.exit;
-      if (installExit !== 0) throw new Error(`npm install falló (exit ${installExit})`);
-      appendLog("✓ Instalación OK");
+      if (!isStatic) {
+        setPhase("installing");
+        appendLog("📦 Ejecutando npm install…");
+        const install = await wc.spawn("npm", ["install", "--no-audit", "--no-fund"]);
+        install.output.pipeTo(
+          new WritableStream({
+            write: (chunk) => {
+              const clean = chunk.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").trimEnd();
+              if (clean) appendLog(clean);
+            },
+          }),
+        );
+        const installExit = await install.exit;
+        if (installExit !== 0) throw new Error(`npm install falló (exit ${installExit})`);
+        appendLog("✓ Instalación OK");
+      } else {
+        appendLog("✓ Proyecto HTML estático — omitiendo npm install");
+      }
 
       setPhase("starting");
       appendLog("🚀 Iniciando npm run dev…");
