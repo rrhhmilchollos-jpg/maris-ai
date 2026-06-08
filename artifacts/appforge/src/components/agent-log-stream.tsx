@@ -5,40 +5,178 @@ import {
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@/lib/api-client";
-import { Bot, Code2, FlaskConical, Search, Layout, Sparkles, Database, Server, Zap, CheckCircle2, Rocket, Terminal, ShieldCheck, Wrench, Bug } from "lucide-react";
+import {
+  Bot, Code2, Search, Sparkles, Database, Server, Zap, CheckCircle2,
+  Terminal, ShieldCheck, Wrench, Bug, Eye, FolderOpen, ChevronDown, ChevronRight,
+  Layers, Puzzle,
+} from "lucide-react";
 
-const AGENT_CONFIG: Record<string, { label: string, icon: any, color: string }> = {
-  researcher:  { label: "Product Researcher",  icon: Search,       color: "text-blue-400" },
-  architect:   { label: "System Architect",     icon: Layout,       color: "text-purple-400" },
-  designer:    { label: "UI/UX Designer",        icon: Sparkles,     color: "text-pink-400" },
-  database:    { label: "Database Engineer",     icon: Database,     color: "text-amber-400" },
-  frontend:    { label: "Frontend Engineer",     icon: Code2,        color: "text-emerald-400" },
-  backend:     { label: "Backend Engineer",      icon: Server,       color: "text-indigo-400" },
-  integration: { label: "API Integrator",        icon: Zap,          color: "text-yellow-400" },
-  qa:          { label: "QA Specialist",          icon: CheckCircle2, color: "text-cyan-400" },
-  // testing-agent: experto técnico de reparación — nombre en azul cielo
-  patcher:     { label: "testing-agent",         icon: Bug,          color: "text-sky-400" },
-  testing:     { label: "testing-agent",         icon: Bug,          color: "text-sky-400" },
-  validator:   { label: "testing-agent",         icon: ShieldCheck,  color: "text-sky-400" },
-  repair:      { label: "testing-agent",         icon: Wrench,       color: "text-sky-400" },
-  coder:       { label: "Frontend Engineer",     icon: Code2,        color: "text-emerald-400" },
-  system:      { label: "Core System",           icon: Bot,          color: "text-white" },
+// ─── Configuración de agentes ────────────────────────────────────────────────
+const AGENT_CONFIG: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
+  researcher:   { label: "Researcher",          icon: Search,       color: "text-blue-400",    bgColor: "bg-blue-400/10" },
+  architect:    { label: "Architect",            icon: Layers,       color: "text-indigo-400",  bgColor: "bg-indigo-400/10" },
+  designer:     { label: "Designer",             icon: Sparkles,     color: "text-pink-400",    bgColor: "bg-pink-400/10" },
+  schema:       { label: "Database",             icon: Database,     color: "text-yellow-400",  bgColor: "bg-yellow-400/10" },
+  database:     { label: "Database",             icon: Database,     color: "text-yellow-400",  bgColor: "bg-yellow-400/10" },
+  frontend:     { label: "Frontend Engineer",    icon: Zap,          color: "text-emerald-400", bgColor: "bg-emerald-400/10" },
+  backend:      { label: "Backend Engineer",     icon: Server,       color: "text-cyan-400",    bgColor: "bg-cyan-400/10" },
+  integrations: { label: "API Integrator",       icon: Puzzle,       color: "text-orange-400",  bgColor: "bg-orange-400/10" },
+  integration:  { label: "API Integrator",       icon: Puzzle,       color: "text-orange-400",  bgColor: "bg-orange-400/10" },
+  qa:           { label: "QA Specialist",        icon: CheckCircle2, color: "text-cyan-400",    bgColor: "bg-cyan-400/10" },
+  // testing-agent — nombre en azul cielo
+  patcher:      { label: "testing-agent",        icon: Bug,          color: "text-sky-400",     bgColor: "bg-sky-400/10" },
+  testing:      { label: "testing-agent",        icon: Bug,          color: "text-sky-400",     bgColor: "bg-sky-400/10" },
+  validator:    { label: "testing-agent",        icon: ShieldCheck,  color: "text-sky-400",     bgColor: "bg-sky-400/10" },
+  repair:       { label: "testing-agent",        icon: Wrench,       color: "text-sky-400",     bgColor: "bg-sky-400/10" },
+  coder:        { label: "Frontend Engineer",    icon: Code2,        color: "text-emerald-400", bgColor: "bg-emerald-400/10" },
+  system:       { label: "Sistema",              icon: Bot,          color: "text-white/60",    bgColor: "bg-white/5" },
 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function timeOf(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("es-ES", {
-      hour12: false,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+    return d.toLocaleTimeString("es-ES", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
   } catch {
     return "";
   }
 }
 
+function extractFilePath(message: string): string | null {
+  const fileMatch = message.match(/FILE:\s*(.+)/);
+  if (fileMatch) return fileMatch[1].trim();
+  const pathMatch = message.match(/(?:Creando|Editando|Escribiendo|Created|Edited|Viewed|Writing)\s+([\/\w\-\.]+\.\w+)/i);
+  if (pathMatch) return pathMatch[1].trim();
+  return null;
+}
+
+function hasCodeContent(message: string): boolean {
+  return (
+    message.includes("```") ||
+    message.includes("FILE:") ||
+    message.includes("diff --") ||
+    (message.includes("import ") && message.length > 80) ||
+    (message.includes("{") && message.includes("}") && message.length > 150)
+  );
+}
+
+function getActionIcon(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes("view") || lower.includes("viendo") || lower.includes("leyendo")) return Eye;
+  if (lower.includes("edit") || lower.includes("crean") || lower.includes("escribi") || lower.includes("file:")) return FolderOpen;
+  if (lower.includes("ejecut") || lower.includes("exec") || lower.includes("run") || lower.includes("build")) return Terminal;
+  if (lower.includes("repar") || lower.includes("fix") || lower.includes("patch")) return Wrench;
+  if (lower.includes("test") || lower.includes("valid")) return ShieldCheck;
+  return Code2;
+}
+
+function extractCode(message: string): string {
+  const codeBlockMatch = message.match(/```[\w]*\n?([\s\S]*?)```/);
+  if (codeBlockMatch) return codeBlockMatch[1].trim();
+  const fileMatch = message.match(/FILE:\s*\S+\n([\s\S]+)/);
+  if (fileMatch) return fileMatch[1].trim();
+  return message;
+}
+
+// ─── Componente de entrada de log ─────────────────────────────────────────────
+interface LogEntryProps {
+  line: JobLogEntry;
+  isLatest: boolean;
+}
+
+function LogEntry({ line, isLatest }: LogEntryProps) {
+  const [expanded, setExpanded] = useState(false);
+  const config = AGENT_CONFIG[line.agent] || AGENT_CONFIG.system;
+  const Icon = config.icon;
+  const filePath = extractFilePath(line.message);
+  const isCodeBlock = hasCodeContent(line.message);
+  const ActionIcon = getActionIcon(line.message);
+  const isExpandable = isCodeBlock || filePath !== null;
+  const isError = line.level === "error";
+  const isWarn = line.level === "warn";
+
+  const summaryText = filePath
+    ? line.message.replace(/FILE:\s*\S+/, "").trim() || filePath
+    : line.message.length > 100
+    ? line.message.slice(0, 100) + "…"
+    : line.message;
+
+  return (
+    <div
+      className={`group rounded-lg border transition-all duration-200 animate-in fade-in slide-in-from-left-1 ${
+        isError
+          ? "border-red-500/20 bg-red-500/5"
+          : isWarn
+          ? "border-amber-500/20 bg-amber-500/5"
+          : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.035]"
+      } ${isLatest ? "ring-1 ring-[#7c3aed]/25" : ""}`}
+    >
+      {/* Cabecera del bloque */}
+      <div
+        className={`flex items-center gap-2 px-3 py-2 ${isExpandable ? "cursor-pointer select-none" : ""}`}
+        onClick={isExpandable ? () => setExpanded((v) => !v) : undefined}
+      >
+        {/* Icono del agente */}
+        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${config.bgColor}`}>
+          <Icon className={`h-3 w-3 ${config.color}`} />
+        </div>
+
+        {/* Nombre del agente */}
+        <span className={`text-[10px] font-black uppercase tracking-widest ${config.color} shrink-0`}>
+          {config.label}
+        </span>
+
+        {/* Icono de acción si hay ruta de archivo */}
+        {filePath && (
+          <ActionIcon className="h-3 w-3 text-white/25 shrink-0" />
+        )}
+
+        {/* Texto del mensaje */}
+        <span
+          className={`flex-1 truncate font-mono text-[10.5px] ${
+            isError ? "text-red-400" : isWarn ? "text-amber-400" : "text-white/50"
+          }`}
+        >
+          {filePath ? (
+            <span className="text-white/65">{filePath}</span>
+          ) : (
+            summaryText
+          )}
+        </span>
+
+        {/* Hora */}
+        <span className="shrink-0 font-mono text-[9px] text-white/20">{timeOf(line.createdAt)}</span>
+
+        {/* Indicador de activo */}
+        {isLatest && (
+          <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 animate-ping" />
+        )}
+
+        {/* Flecha expandir */}
+        {isExpandable && (
+          <div className="shrink-0 text-white/25 transition-transform duration-200">
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Contenido expandido */}
+      {isExpandable && expanded && (
+        <div className="border-t border-white/[0.05] bg-[#060810] px-4 py-3">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-white/65">
+            {extractCode(line.message)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 interface AgentLogStreamProps {
   jobId: string | null;
   isActive: boolean;
@@ -50,7 +188,7 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   const [streamPaused, setStreamPaused] = useState(false);
   const consecutiveErrorsRef = useRef(0);
   const lastJobIdRef = useRef<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (lastJobIdRef.current !== jobId) {
@@ -101,48 +239,38 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
   }, [data]);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }, [lines.length]);
 
   if (jobId === null) return null;
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d12] font-mono text-[11px] leading-relaxed custom-scrollbar overflow-auto p-4 space-y-3">
+    <div className="flex flex-col h-full overflow-auto custom-scrollbar bg-[#080a12] p-3 gap-1">
       {lines.length === 0 && isActive && (
-        <div className="flex flex-col items-center justify-center py-12 text-center animate-pulse">
-          <Terminal className="h-6 w-6 text-primary mb-2" />
-          <p className="text-white/40 uppercase tracking-widest font-black">Esperando señal de los agentes...</p>
-        </div>
-      )}
-      
-      {lines.map((line, idx) => {
-        const config = AGENT_CONFIG[line.agent] || AGENT_CONFIG.system;
-        const Icon = config.icon;
-        const isLatest = idx === lines.length - 1 && isActive;
-
-        return (
-          <div key={line.id} className={`group flex flex-col gap-1 animate-in fade-in slide-in-from-left-2 duration-300`}>
-            <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-              <Icon className={`h-3 w-3 ${config.color}`} />
-              <span className={`font-black uppercase tracking-tighter ${config.color}`}>{config.label}</span>
-              <span className="text-[9px] text-white/20">{timeOf(line.createdAt)}</span>
-              {isLatest && <div className="h-1 w-1 rounded-full bg-emerald-500 animate-ping" />}
-            </div>
-            <div className={`pl-5 border-l border-white/5 py-1 ${line.level === 'error' ? 'text-red-400' : line.level === 'warn' ? 'text-amber-400' : 'text-white/60'}`}>
-              {line.message.includes("FILE:") ? (
-                <div className="flex items-center gap-2 bg-white/[0.03] p-2 rounded-lg border border-white/5">
-                  <Code2 className="h-3 w-3 text-emerald-400" />
-                  <span className="text-emerald-400/80">{line.message.replace("FILE:", "📄")}</span>
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap">{line.message}</p>
-              )}
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 rounded-full bg-[#7c3aed]/20 blur-xl animate-pulse" />
+            <div className="relative grid h-12 w-12 place-items-center rounded-full border border-[#7c3aed]/30 bg-[#111827]">
+              <Terminal className="h-5 w-5 text-[#a78bfa] animate-pulse" />
             </div>
           </div>
-        );
-      })}
-      <div ref={scrollRef} />
+          <p className="text-[11px] font-black uppercase tracking-widest text-white/30">
+            Conectando con los agentes…
+          </p>
+        </div>
+      )}
+
+      {lines.map((line, idx) => (
+        <LogEntry
+          key={line.id}
+          line={line}
+          isLatest={idx === lines.length - 1 && isActive}
+        />
+      ))}
+
+      <div ref={bottomRef} />
     </div>
   );
 }

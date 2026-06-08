@@ -79,7 +79,7 @@ const SKIP_EXACT = new Set([
  * Parse the '// === FILE: <path> ===' bundle into a virtual filesystem map.
  * Drops build configs, tests, e2e and markdown — same rules as the Sandpack parser.
  */
-function parseBundleToVFS(bundle: string): Record<string, string> {
+export function parseBundleToVFS(bundle: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!bundle) return out;
   const matches: { path: string; index: number }[] = [];

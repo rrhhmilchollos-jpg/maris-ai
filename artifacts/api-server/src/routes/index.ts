@@ -13,6 +13,7 @@ import watermarkRouter from "./watermark";
 import stripeWatermarkWebhookRouter from "./stripe-watermark-webhook";
 import deploymentRouter from "./deployment";
 import importRouter from "./import";
+import githubRouter from "./github";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use(watermarkRouter);
 router.use(stripeWatermarkWebhookRouter);
 router.use(deploymentRouter);
 router.use(importRouter);
+router.use(githubRouter);
 router.use(adminRouter);
 
 export default router;
