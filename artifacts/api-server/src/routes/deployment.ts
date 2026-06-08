@@ -343,6 +343,40 @@ router.post("/apps/:appId/health", requireAuth, async (req: Request, res: Respon
 });
 
 /**
+ * POST /api/apps/:appId/code-review
+ * Revisión de calidad del código antes del deploy
+ */
+router.post("/apps/:appId/code-review", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { appId } = req.params;
+    const userId = getAuthenticatedUserId(req);
+    const appData = await GeneratedApp.findOne({ _id: appId, userId });
+    if (!appData) return res.status(404).json({ error: "App not found" });
+    const issues: string[] = [];
+    const suggestions: string[] = [];
+    const code = (appData.frontendCode || "") + (appData.backendCode || "");
+    if (code.includes("console.log")) suggestions.push("Elimina los console.log antes de producción");
+    if (code.includes("TODO") || code.includes("FIXME")) suggestions.push("Hay comentarios TODO/FIXME pendientes de resolver");
+    if (!appData.frontendCode || appData.frontendCode.length < 100) issues.push("Código frontend insuficiente o vacío");
+    if (code.includes("localhost")) issues.push("Referencias a localhost detectadas — usa variables de entorno para producción");
+    const missingEnvs = (appData.requiredEnvVars || []).filter((ev: any) => !ev.value);
+    if (missingEnvs.length > 0) suggestions.push(`Variables de entorno sin configurar: ${missingEnvs.map((e: any) => e.name).join(", ")}`);
+    const score = Math.max(0, 100 - issues.length * 20 - suggestions.length * 5);
+    return res.json({
+      ok: issues.length === 0,
+      score,
+      issues,
+      suggestions,
+      summary: issues.length === 0
+        ? `Código listo para producción (puntuación: ${score}/100)`
+        : `Se encontraron ${issues.length} problema(s) que deben corregirse antes del deploy`,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Error en la revisión de código" });
+  }
+});
+
+/**
  * POST /api/apps/:appId/github
  * Sincronización con GitHub
  */
