@@ -8,6 +8,7 @@
     "pnpm": ">=10"
   },
   "scripts": {
+    "validate-config": "tsx scripts/validate-config.ts",
     "build": "pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
