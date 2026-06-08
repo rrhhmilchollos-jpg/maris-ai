@@ -209,7 +209,12 @@ Output STRICT JSON only matching this schema:
   "title": "2-4 word product name in the project's domain language (Spanish if it's a Spanish-market product)",
   "description": "1-2 sentence pitch in Spanish — what it does and who it's for",
   "techStack": ["React","TypeScript","Tailwind", ...],
-  "pages": [{"name":"Home","route":"/","purpose":"specific user job — e.g. 'Browse the catalog and filter by category'"}],
+  "pages": [
+    {"name":"Home","route":"/","purpose":"Hero, features, social proof, and main CTAs"},
+    {"name":"Catalog","route":"/catalog","purpose":"Browse and filter products/services"},
+    {"name":"Contact","route":"/contact","purpose":"Contact form and company details"},
+    {"name":"Dashboard","route":"/dashboard","purpose":"User/Admin control panel"}
+  ],
   "components": [{"name":"ProductCard","purpose":"…"}],
   "hooks": [{"name":"useFilters","purpose":"…"}],
   "utils": [{"name":"formatPrice","purpose":"…"}],
@@ -222,7 +227,8 @@ Output STRICT JSON only matching this schema:
 PRODUCT THINKING — be ambitious about UX:
 - Always include a Home/Landing page that's COMPELLING (hero + features + social proof + CTA + footer). Not just a navbar with text.
 - For consumer apps: think Browse + Detail + Auth/Profile + Cart/Bookmarks + Settings. For SaaS: Dashboard + List + Detail + Settings + Onboarding. For tools: Workspace + History + Settings.
-- A real product has 4-6 pages minimum (unless it's a single-page tool/calculator). Don't ship 2-page apps when the domain calls for more.
+- A real product has 5-8 pages minimum. Every main button in the Navbar/Hero MUST have its own dedicated page and route.
+- If the app is about services (like alarms), include specific pages for: Home, Services/Alarms, Pricing/Kits, Contact, and a specialized page for the main value prop (e.g. "Escudo Vecinal").
 - Think about empty states, error states, loading states — they're real screens.
 
 COMPONENTS — model real reusable pieces:
