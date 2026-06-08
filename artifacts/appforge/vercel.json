@@ -27,8 +27,5 @@
         { "key": "Cross-Origin-Embedder-Policy", "value": "unsafe-none" }
       ]
     }
-  ],
-  "env": [
-    "VITE_CLERK_PUBLISHABLE_KEY"
   ]
 }
