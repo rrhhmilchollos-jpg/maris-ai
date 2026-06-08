@@ -13,11 +13,13 @@ function analyzeSystem() {
   const state = getState();
 
   const report = {
-    slowTasks: state.tasks?.filter
+    slowTasks: Array.isArray(state.tasks)
       ? state.tasks.filter((t) => t.time > 3000)
-      : [],
+      : Object.values(state.tasks || {}).filter((t) => t.time > 3000),
     failedTasks: state.issues,
-    load: Object.keys(state.tasks || {}).length,
+    load: Array.isArray(state.tasks)
+      ? state.tasks.length
+      : Object.keys(state.tasks || {}).length,
   };
 
   return report;

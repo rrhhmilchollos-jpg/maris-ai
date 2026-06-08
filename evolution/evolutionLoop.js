@@ -34,18 +34,25 @@ async function evolutionLoop() {
 let intervalHandle = null;
 
 function start(intervalMs = 30000) {
-  if (intervalHandle) return intervalHandle;
+  if (intervalHandle) {
+    console.log("⚠️ evolutionLoop ya está en ejecución.");
+    return intervalHandle;
+  }
+  console.log(`🚀 Iniciando evolutionLoop cada ${intervalMs}ms...`);
   intervalHandle = setInterval(() => {
     evolutionLoop().catch((err) =>
-      console.error("evolutionLoop error:", err),
+      console.error("❌ evolutionLoop error:", err),
     );
   }, intervalMs);
   return intervalHandle;
 }
 
 function stop() {
-  if (intervalHandle) clearInterval(intervalHandle);
-  intervalHandle = null;
+  if (intervalHandle) {
+    console.log("🛑 Deteniendo evolutionLoop...");
+    clearInterval(intervalHandle);
+    intervalHandle = null;
+  }
 }
 
 module.exports = { evolutionLoop, start, stop };
