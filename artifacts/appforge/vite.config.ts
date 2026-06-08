@@ -48,15 +48,20 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 500,
+    target: 'ES2020',
+    modulePreload: { polyfill: false },
     minify: "terser",
     terserOptions: {
       compress: {
         drop_console: true,
         drop_debugger: true,
-        passes: 2,
+        passes: 3,
+        pure_funcs: ['console.log', 'console.debug'],
+        unsafe: true,
+        unsafe_methods: true,
       },
-      mangle: true,
+      mangle: { toplevel: true },
       format: { comments: false },
     },
     cssMinify: true,
