@@ -17,9 +17,11 @@ import {
   Terminal,
   ChevronDown,
   ChevronUp,
+  Zap,
 } from "lucide-react";
 import { Button } from "./ui/button";
-import { parseBundle } from "@/lib/parseBundle";
+import { parseBundle, buildSandpackFiles, SANDPACK_DEPENDENCIES } from "@/lib/parseBundle";
+import { SandpackProvider, SandpackPreview } from "@codesandbox/sandpack-react";
 import {
   buildFileTree,
   ensureDevScript,
@@ -74,6 +76,8 @@ export function LivePreview({
   const [supported] = useState(() => isWebContainerSupported());
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConsole, setShowConsole] = useState(false);
+  // Sandpack fallback: se activa cuando WebContainer no está disponible
+  const [useSandpackFallback, setUseSandpackFallback] = useState(!isWebContainerSupported());
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const devProcRef = useRef<{ kill: () => void } | null>(null);
   const startingRef = useRef(false);
@@ -377,30 +381,42 @@ export function LivePreview({
       );
     }
 
-    if (phase === "idle") {
-      // Nota: no bloqueamos el preview por !supported porque crossOriginIsolated
-      // puede ser false en ciertos contextos aunque los headers COOP/COEP estén activos.
-      // Si el WebContainer no puede arrancar, el error real se mostrará en la fase "error".
-      if (false) {
-        return (
-          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
-            <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
-              <AlertTriangle className="h-6 w-6 text-amber-400" />
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-white font-semibold">Live Preview no disponible</h4>
-              <p className="text-xs text-slate-400 max-w-xs">
-                El Live Preview requiere que el sitio se sirva con los headers de aislamiento
-                (<code className="text-amber-400">COEP/COOP</code>). Despliega la app en Vercel
-                para verla en acción, o usa Chrome con los headers correctos.
-              </p>
-            </div>
-            <Button onClick={startWebContainer} variant="outline" className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10">
-              Intentar de todos modos
-            </Button>
+    // ── Sandpack fallback (cuando WebContainer no está disponible) ──────────
+    if (useSandpackFallback && frontendCode) {
+      const sandpackFiles = buildSandpackFiles(parseBundle(frontendCode));
+      return (
+        <div className="w-full h-full flex flex-col">
+          {/* Banner informativo */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-violet-500/10 border-b border-violet-500/20 shrink-0">
+            <Zap className="w-3.5 h-3.5 text-violet-400" />
+            <span className="text-[11px] text-violet-300">Preview rápido (Sandpack) — Para el preview completo con Node.js, despliega la app</span>
+            <button
+              onClick={() => { setUseSandpackFallback(false); startWebContainer(); }}
+              className="ml-auto text-[10px] text-violet-400 hover:text-violet-200 underline"
+            >
+              Intentar WebContainer
+            </button>
           </div>
-        );
-      }
+          <div className="flex-1 min-h-0">
+            <SandpackProvider
+              template="vite-react-ts"
+              files={sandpackFiles}
+              customSetup={{ dependencies: SANDPACK_DEPENDENCIES }}
+              options={{ externalResources: ["https://cdn.tailwindcss.com"] }}
+              theme="dark"
+            >
+              <SandpackPreview
+                style={{ height: "100%", minHeight: 0 }}
+                showNavigator={false}
+                showOpenInCodeSandbox={false}
+              />
+            </SandpackProvider>
+          </div>
+        </div>
+      );
+    }
+
+    if (phase === "idle") {
       return (
         <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
           <div className="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center">
