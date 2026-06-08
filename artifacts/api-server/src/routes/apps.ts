@@ -1321,13 +1321,38 @@ async function singleEditPass(
   log?: AgentLog,
 ): Promise<GeneratedAppPayload> {
   const emit: AgentLog = log ?? (() => {});
+  
+  // OPTIMIZACIÓN DE CONTEXTO: Si el código es muy grande, reducimos lo que enviamos
+  const MAX_CONTEXT_CHARS = 350000; // ~90k tokens
+  let frontendCodeToPass = previous.frontendCode;
+  let isContextOptimized = false;
+
+  if (previous.frontendCode.length > MAX_CONTEXT_CHARS) {
+    emit("system", "📦 El proyecto es muy grande. Optimizando contexto para el editor...");
+    const files = previous.frontendCode.split("// === FILE: ");
+    // Heurística: Mantener App.tsx, main.tsx, package.json y los archivos mencionados en el prompt
+    const promptLower = prompt.toLowerCase();
+    const filteredFiles = files.filter(f => {
+      if (!f.trim()) return false;
+      const path = f.split(" ===")[0].toLowerCase();
+      const isCritical = path.includes("app.") || path.includes("main.") || path.includes("package.json") || path.includes("index.");
+      const isRelevant = promptLower.includes(path.split(".")[0]);
+      return isCritical || isRelevant;
+    });
+    
+    // Si el filtro es demasiado agresivo, mantenemos al menos los primeros 15 archivos
+    const finalFiles = filteredFiles.length > 5 ? filteredFiles : files.slice(0, 15);
+    frontendCodeToPass = finalFiles.map(f => f.startsWith("// === FILE: ") ? f : "// === FILE: " + f).join("");
+    isContextOptimized = true;
+  }
+
   const userContent = `CURRENT APP:
 - Title: ${previous.title}
 - Description: ${previous.description}
 - Tech stack: ${previous.techStack.join(", ")}
 
-CURRENT FRONTEND CODE:
-${previous.frontendCode}
+CURRENT FRONTEND CODE${isContextOptimized ? " (OPTIMIZED CONTEXT)" : ""}:
+${frontendCodeToPass}
 
 CURRENT BACKEND CODE:
 ${previous.backendCode}
@@ -1335,7 +1360,7 @@ ${previous.backendCode}
 USER'S CHANGE REQUEST:
 ${prompt}
 
-Return the FULL updated app as JSON.`;
+Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque te he enviado un contexto optimizado, debes devolver el código COMPLETO de los archivos que modifiques." : ""}`;
 
   const provider = resolveCoderProvider(coderModel);
   const systemPrompt = buildEditSystemPrompt(language);
