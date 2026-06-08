@@ -127,6 +127,26 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
   let lastError: unknown;
   const MAX_RETRIES = 3;
   
+  // OPTIMIZACIÓN DE CONTEXTO: Si el historial de mensajes es muy largo, comprimimos el pasado
+  if (params.messages && params.messages.length > 10) {
+    logger.info({ role, originalLength: params.messages.length }, "CONTE TEXT OPTIMIZER: Comprimiendo historial de mensajes...");
+    const systemInstruction = params.messages[0].role === "system" ? params.messages.shift() : null;
+    const lastUserMessage = params.messages.pop();
+    
+    // Mantener solo los últimos 4 mensajes + el primero (contexto inicial) + el sistema
+    const middleMessages = params.messages.slice(-4);
+    const firstMessage = params.messages[0];
+    
+    params.messages = [
+      ...(systemInstruction ? [systemInstruction] : []),
+      firstMessage,
+      { role: "user", content: "... [Contexto antiguo comprimido para ahorrar tokens] ..." },
+      ...middleMessages,
+      lastUserMessage
+    ].filter(Boolean);
+    logger.info({ newLength: params.messages.length }, "CONTEXT OPTIMIZER: Historial comprimido.");
+  }
+
   // Try Anthropic first with exponential backoff
   for (const candidate of fallbackClaudeModels(model)) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
