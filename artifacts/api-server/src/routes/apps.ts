@@ -1881,40 +1881,39 @@ export async function generateApp(
   let lastLogChars = 0;
   // Shared accumulator so the timeout catch can recover partial code
   let frontendAccumulated = "";
-  const frontendPromise = runPhase("frontend", async () => {
+  if (!execPlan.phases.includes("frontend")) {
+    throw new Error(`El planificador devolvió un alcance sin fase 'frontend' (${execPlan.scope}). No es posible generar una app sin código de frontend.`);
+  }
+
+  // --- FASE 1: FRONTEND (SECUENCIAL) ---
+  const frontendResult = await runPhase("frontend", async () => {
     try {
-      // He eliminado el withTimeoutOrThrow porque causaba fallos en apps grandes (CRM, ERP, etc.)
-      // Ahora dejamos que la IA termine su trabajo sin importar el tiempo, evitando el error "Algo salió mal".
       return await generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 45), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `⚡ Ingeniero de frontend: ${Math.round(chars / 1000)} KB escritos…` });
         if (chars - lastLogChars >= 5000) {
           lastLogChars = chars;
-          void log("coder", `Construyendo... ${Math.round(chars / 1000)} KB y subiendo.`);
+          void log("coder", `Construyendo frontend... ${Math.round(chars / 1000)} KB.`);
         }
       }, coderModel, language, templateContextBlock, agentModelPlan,
       (partial) => { frontendAccumulated = partial; });
     } catch (err) {
-      // On timeout, return a partial result instead of throwing so Promise.all doesn't fail
-      // The retry logic below will handle it with a reduced plan
       if (String((err as any).message || "").includes("timeout") && frontendAccumulated.length > 2000) {
-        void log("coder", `Frontend-engineer timeout con ${Math.round(frontendAccumulated.length / 1000)} KB acumulados — usando código parcial para reintento.`, "warn");
+        void log("coder", `Frontend-engineer timeout con ${Math.round(frontendAccumulated.length / 1000)} KB acumulados — usando código parcial.`, "warn");
         return { code: "", truncated: true, error: (err as any).message, accumulated: frontendAccumulated } as CodeGenResult;
       }
       throw err;
     }
   });
 
+  // --- FASE 2: BACKEND (SECUENCIAL) ---
   const runBackend = execPlan.phases.includes("backend") && plan.backendNeeded;
-  const backendPromise = runBackend
-    ? runPhase("backend", () => generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan))
-    : Promise.resolve(null);
-
-  if (!execPlan.phases.includes("frontend")) {
-    throw new Error(`El planificador devolvió un alcance sin fase 'frontend' (${execPlan.scope}). No es posible generar una app sin código de frontend.`);
-  }
-
-  const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise]);
+  const backendResult = runBackend
+    ? await runPhase("backend", () => {
+        void log("coder", "Generando backend en secuencia para mayor estabilidad...");
+        return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan);
+      })
+    : null;
 
   // Si el frontend falló por timeout, tratarlo como truncado para reintentar con plan reducido
   // frontendResult.error comes from generateFrontendCode recovery, while frontendResult.code absence + catch in Promise.all handles the direct throw.
