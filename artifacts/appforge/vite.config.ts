@@ -48,7 +48,7 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    chunkSizeWarningLimit: 500,
+    chunkSizeWarningLimit: 300,
     target: 'ES2020',
     modulePreload: { polyfill: false },
     minify: "terser",
@@ -56,7 +56,7 @@ export default defineConfig({
       compress: {
         drop_console: true,
         drop_debugger: true,
-        passes: 3,
+        passes: 4,
         pure_funcs: ['console.log', 'console.debug'],
         unsafe: true,
         unsafe_methods: true,
@@ -65,6 +65,7 @@ export default defineConfig({
       format: { comments: false },
     },
     cssMinify: true,
+    cssCodeSplit: true,
     reportCompressedSize: false,
     sourcemap: false,
     rollupOptions: {
