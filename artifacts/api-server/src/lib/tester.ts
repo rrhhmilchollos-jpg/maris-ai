@@ -47,11 +47,41 @@ export async function runTestingAgent(
 
     // 1. RUN VALIDATION
     const report: ValidationReport = await validateBundle(currentBundle);
+    
+    // 1.1 DETECT BROKEN LINKS (Navegación)
+    const brokenLinks: BuildIssue[] = [];
+    const files = currentBundle.split("// === FILE: ");
+    const routes = new Set();
+    // Extraer rutas definidas en App.tsx
+    const appFile = files.find(f => f.includes("App.tsx") || f.includes("App.jsx"));
+    if (appFile) {
+      const routeMatches = appFile.matchAll(/path=["'](\/.*?)["']/g);
+      for (const m of routeMatches) routes.add(m[1]);
+    }
+    
+    // Buscar enlaces que apuntan a rutas no definidas
+    files.forEach(f => {
+      const path = f.split(" ===")[0];
+      const hrefMatches = f.matchAll(/href=["'](\/.*?)["']/g);
+      for (const m of hrefMatches) {
+        if (m[1] !== "/" && !routes.has(m[1]) && !m[1].startsWith("http")) {
+          brokenLinks.push({
+            file: path,
+            message: `Enlace roto: el botón apunta a "${m[1]}" pero esa ruta no está definida en App.tsx.`
+          });
+        }
+      }
+    });
 
-    if (report.ok) {
+    if (report.ok && brokenLinks.length === 0) {
       allPassing = true;
       log("testing", `✅ ¡Todas las pruebas pasaron tras ${cycle} ciclo(s)! La app está lista.`);
       break;
+    }
+    
+    if (brokenLinks.length > 0) {
+      log("testing", `🔗 Se detectaron ${brokenLinks.length} enlaces rotos. Forzando reparación de navegación...`);
+      report.issues.push(...brokenLinks);
     }
 
     // 2. ANALYZE ISSUES
