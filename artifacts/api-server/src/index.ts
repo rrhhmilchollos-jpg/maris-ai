@@ -20,7 +20,7 @@ app.listen(finalPort, async (err) => {
     process.exit(1);
   }
  
-  logger.info({ port: finalPort }, "Server listening");
+  logger.info({ port: finalPort }, "Server listening v2.1.0 (Testing Agent Active)");
  
   // 0) Connect to MongoDB before anything else.
   try {
