@@ -2299,6 +2299,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     });
 
     await enqueueGenerateJob(jobId);
+    runJobById(jobId).catch(err => logger.error({ err, jobId }, "Immediate job run error"));
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps error");
@@ -2530,6 +2531,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     });
 
     await enqueueGenerateJob(jobId);
+    runJobById(jobId).catch(err => logger.error({ err, jobId }, "Immediate job run error"));
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
@@ -2591,6 +2593,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     });
 
     await enqueueGenerateJob(jobId);
+    runJobById(jobId).catch(err => logger.error({ err, jobId }, "Immediate job run error"));
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/retry error");
