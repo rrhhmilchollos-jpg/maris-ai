@@ -378,8 +378,10 @@ export function LivePreview({
     }
 
     if (phase === "idle") {
-      // Si WebContainer no está soportado (faltan headers COEP/COOP), mostrar mensaje informativo
-      if (!supported) {
+      // Nota: no bloqueamos el preview por !supported porque crossOriginIsolated
+      // puede ser false en ciertos contextos aunque los headers COOP/COEP estén activos.
+      // Si el WebContainer no puede arrancar, el error real se mostrará en la fase "error".
+      if (false) {
         return (
           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center space-y-4">
             <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
