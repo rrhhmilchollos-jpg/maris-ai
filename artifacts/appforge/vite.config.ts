@@ -11,8 +11,11 @@ import path from "path";
 // Si CLERK_PUBLISHABLE_KEY está definida (sin el prefijo VITE_), la exponemos también.
 const clerkPubKeyFallback = process.env.CLERK_PUBLISHABLE_KEY ?? "";
 
+// COOP: same-origin + COEP: credentialless → habilita crossOriginIsolated = true en /app/*
+// En Vercel, estos headers se aplican solo a /app/* para no romper el login OAuth de Clerk
+// En desarrollo local (vite dev), los aplicamos globalmente ya que no hay login OAuth
 const ISOLATION_HEADERS = {
-  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "credentialless",
 };
 
