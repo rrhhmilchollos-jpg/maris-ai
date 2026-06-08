@@ -20,6 +20,7 @@ import {
 } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { DeployModal } from "@/components/deploy-modal";
+import { GitHubButton } from "@/components/github-button";
 import { LivePreview } from "@/components/live-preview";
 import { parseBundle } from "@/lib/parseBundle";
 import { Layout } from "@/components/layout";
@@ -1009,6 +1010,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <h1 className="text-[20px] font-bold tracking-tight">App Preview</h1>
             </div>
             <div className="flex items-center gap-3">
+              <GitHubButton
+                appId={id}
+                appTitle={app?.title ?? "app"}
+                appDescription={app?.description ?? ""}
+                githubRepoUrl={(app as any)?.githubRepoUrl}
+                onSuccess={(repoUrl) => {
+                  queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+                }}
+              />
               <TopActionButton icon={Share2} label="Share" onClick={handleShare} />
               <TopActionButton icon={Rocket} label={deployMutation.isPending ? "Deploying" : "Deploy"} onClick={handleDeploy} disabled={deployMutation.isPending} />
               <TopActionButton icon={RefreshCcw} label="Refresh" onClick={handleRefreshPreview} />

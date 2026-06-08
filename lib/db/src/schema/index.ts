@@ -27,6 +27,12 @@ export interface IUser {
   stripeSubscriptionId?: string;
   // Notas de admin
   adminNotes?: Array<{ text: string; createdAt: Date }>;
+  // GitHub OAuth
+  githubAccessToken?: string;
+  githubLogin?: string;
+  githubId?: string;
+  githubAvatarUrl?: string;
+  githubConnectedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +64,12 @@ const UserSchema = new Schema<IUser>(
     planCredits: { type: Number, default: 0 },
     planExpiresAt: { type: Date },
     stripeSubscriptionId: { type: String },
+    // GitHub OAuth
+    githubAccessToken: { type: String },
+    githubLogin: { type: String },
+    githubId: { type: String },
+    githubAvatarUrl: { type: String },
+    githubConnectedAt: { type: Date },
   },
   { timestamps: true },
 );
