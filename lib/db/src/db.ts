@@ -36,8 +36,12 @@ async function connectDB(): Promise<typeof mongoose> {
     try {
       console.log(`Connecting to MongoDB using ${candidate.name}`);
       const connection = mongoose.connect(candidate.uri, {
-        serverSelectionTimeoutMS: 10_000,
-        socketTimeoutMS: 45_000,
+        serverSelectionTimeoutMS: 30_000,
+        socketTimeoutMS: 60_000,
+        heartbeatFrequencyMS: 10_000,
+        retryWrites: true,
+        retryReads: true,
+        connectTimeoutMS: 30_000,
       });
       global._mongooseConnection = connection;
       global._mongooseConnectionSource = candidate.name;
