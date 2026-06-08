@@ -1,6 +1,11 @@
 /**
- * DeployModal — Panel de Deployments estilo Emergent.sh
- * Colores Maris AI (violeta/púrpura)
+ * DeployModal — Deployments estilo Emergent.sh con colores Maris AI (violeta/púrpura)
+ *
+ * Flujo de pantallas:
+ *  1. "initial"   → ¡Publica tu aplicación! (selector plan, toggle anual, créditos, Iniciar despliegue + tarjetas Revisión/Health)
+ *  2. "live"      → Estado Live (subdominio gratuito marisai.es, dominio personalizado, health check, re-deploy, apagar)
+ *  3. "providers" → Conectar dominio personalizado (input + grid de 8 proveedores)
+ *  4. "dns"       → Registros DNS de Maris AI (tabla A/CNAME/TXT + Verificar conexión)
  */
 import React, { useState, useCallback, useEffect } from "react";
 import {
@@ -10,57 +15,65 @@ import {
   Loader2,
   ExternalLink,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  Link2,
-  Link2Off,
   RotateCcw,
   PowerOff,
   ShieldCheck,
+  ArrowLeft,
+  Copy,
+  Code2,
+  Lock,
+  Sparkles,
+  Cpu,
+  Rocket,
+  ChevronDown,
   KeyRound,
-  Pencil,
-  ArrowRight,
+  ChevronUp,
 } from "lucide-react";
-import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-client";
 import { MatrixBackground } from "@/components/matrix-background";
 
 /* ─────────────────────────── Types ─────────────────────────── */
-
 interface DnsRecord {
   type: string;
   name: string;
   value: string;
   ttl?: string;
 }
-
 interface HealthCheckResponse {
   ok?: boolean;
-  status?: "pass" | "fail" | string;
+  status?: string;
   issues?: string[];
   error?: string;
 }
-
+interface CodeReviewResponse {
+  ok?: boolean;
+  score?: number;
+  issues?: string[];
+  suggestions?: string[];
+  summary?: string;
+}
 interface DeploymentStatusResponse {
   lastDeployedAt?: string;
   deploymentUrl?: string;
+  subdomain?: string;
+  customDomain?: string;
+  customDomainVerified?: boolean;
 }
-
 interface DeployResponse {
   success?: boolean;
   deploymentUrl?: string;
   url?: string;
+  subdomain?: string;
   error?: string;
 }
-
 interface CustomDomainResponse {
   verified?: boolean;
   dnsRecords?: DnsRecord[];
   recommendedDns?: DnsRecord[];
+  pendingVerification?: Array<{ type: string; domain: string; value: string }>;
   error?: string;
 }
-
 interface DeployModalProps {
   appId: string;
   appTitle: string;
@@ -71,11 +84,29 @@ interface DeployModalProps {
   onClose: () => void;
   onDeploySuccess: (url: string) => void;
 }
+type Screen = "initial" | "live" | "providers" | "dns";
+type PlanId = "starter" | "pro" | "enterprise";
 
-type DomainStep = "idle" | "input" | "dns" | "verified";
+/* ─────────────────────────── Plan data ─────────────────────────── */
+const PLANS: Array<{ id: PlanId; name: string; specs: string; credits: number; monthlyPrice: number }> = [
+  { id: "starter",    name: "Starter",    specs: "0.05 vCPU · 200 MB RAM",  credits: 50,  monthlyPrice: 0  },
+  { id: "pro",        name: "Pro",        specs: "0.5 vCPU · 1 GB RAM",     credits: 200, monthlyPrice: 19 },
+  { id: "enterprise", name: "Enterprise", specs: "2 vCPU · 4 GB RAM",       credits: 999, monthlyPrice: 79 },
+];
+
+/* ─────────────────────────── Domain providers ─────────────────────────── */
+const DOMAIN_PROVIDERS = [
+  { id: "godaddy",    name: "GoDaddy",       initials: "GD", color: "#1bdbad", connectUrl: "https://dcc.godaddy.com/control/portfolio" },
+  { id: "namecheap",  name: "Namecheap",     initials: "NC", color: "#de3723", connectUrl: "https://ap.www.namecheap.com/domains/list/" },
+  { id: "cloudflare", name: "Cloudflare",    initials: "CF", color: "#f6821f", connectUrl: "https://dash.cloudflare.com/" },
+  { id: "google",     name: "Google Domains",initials: "GG", color: "#4285f4", connectUrl: "https://domains.google.com/registrar/" },
+  { id: "ionos",      name: "IONOS",         initials: "IO", color: "#003d8f", connectUrl: "https://my.ionos.es/domains" },
+  { id: "hostinger",  name: "Hostinger",     initials: "HG", color: "#7c3aed", connectUrl: "https://hpanel.hostinger.com/domains" },
+  { id: "ovhcloud",   name: "OVHcloud",      initials: "OV", color: "#123f6d", connectUrl: "https://www.ovh.com/manager/#/web/domain" },
+  { id: "other",      name: "Otro proveedor",initials: "?",  color: "#6b7280", connectUrl: null },
+];
 
 /* ─────────────────────────── Helpers ─────────────────────────── */
-
 function timeAgo(dateStr?: string): string {
   if (!dateStr) return "";
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -84,16 +115,29 @@ function timeAgo(dateStr?: string): string {
   if (diff < 86400) return `${Math.floor(diff / 3600)}hr ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
+function toSubdomain(title: string, id: string): string {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+  return `${slug}-${id.slice(0, 8)}`;
+}
+function copyToClipboard(text: string, label: string, toast: any) {
+  navigator.clipboard.writeText(text).then(() => toast({ title: `✅ ${label} copiado` }));
+}
 
-function shortId(url?: string): string {
-  if (!url) return "";
-  // Extract something like "d4eskqk" from the vercel URL
-  const match = url.match(/([a-z0-9]{6,8})\./);
-  return match ? match[1] : url.replace(/https?:\/\//, "").slice(0, 8);
+/* ─────────────────────────── DNS badge ─────────────────────────── */
+function DnsBadge({ type }: { type: string }) {
+  const colors: Record<string, string> = {
+    A:     "bg-[#7c3aed]/20 text-[#c084fc] border-[#7c3aed]/40",
+    CNAME: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+    TXT:   "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  };
+  return (
+    <span className={`inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-bold font-mono ${colors[type] ?? "bg-white/10 text-white/60 border-white/20"}`}>
+      {type}
+    </span>
+  );
 }
 
 /* ─────────────────────────── Component ─────────────────────────── */
-
 export function DeployModal({
   appId,
   appTitle,
@@ -106,22 +150,32 @@ export function DeployModal({
 }: DeployModalProps) {
   const { toast } = useToast();
 
-  // Deploy state
+  /* ── Screen state ── */
+  const [screen, setScreen] = useState<Screen>(currentDeployUrl ? "live" : "initial");
+
+  /* ── Plan selector ── */
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("starter");
+  const [annualToggle, setAnnualToggle] = useState(false);
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+
+  /* ── Deploy state ── */
+  const [isDeploying, setIsDeploying] = useState(false);
   const [isRedeploying, setIsRedeploying] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
-  const [lastDeployedAt, setLastDeployedAt] = useState<string | undefined>();
   const [deployUrl, setDeployUrl] = useState(currentDeployUrl || "");
+  const [lastDeployedAt, setLastDeployedAt] = useState<string | undefined>();
+  const [subdomain, setSubdomain] = useState<string>("");
 
-  // Health check
-  const [healthExpanded, setHealthExpanded] = useState(false);
+  /* ── Health check ── */
   const [healthRunning, setHealthRunning] = useState(false);
   const [healthResult, setHealthResult] = useState<"pass" | "fail" | null>(null);
   const [healthIssues, setHealthIssues] = useState<string[]>([]);
 
-  // Custom domain
-  const [domainStep, setDomainStep] = useState<DomainStep>(
-    currentCustomDomain ? (customDomainVerified ? "verified" : "dns") : "idle"
-  );
+  /* ── Code review ── */
+  const [reviewRunning, setReviewRunning] = useState(false);
+  const [reviewResult, setReviewResult] = useState<CodeReviewResponse | null>(null);
+
+  /* ── Custom domain ── */
   const [domainInput, setDomainInput] = useState(currentCustomDomain || "");
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>([]);
   const [domainSaving, setDomainSaving] = useState(false);
@@ -129,26 +183,48 @@ export function DeployModal({
   const [domainUnlinking, setDomainUnlinking] = useState(false);
   const [verifiedDomain, setVerifiedDomain] = useState(customDomainVerified ? currentCustomDomain : "");
 
-  // Env vars
+  /* ── Env vars ── */
   const [envExpanded, setEnvExpanded] = useState(false);
 
-  // Fetch last deployed date on mount
+  /* ── Fetch deployment status on mount ── */
   useEffect(() => {
     apiFetch<DeploymentStatusResponse>(`/api/apps/${appId}/deployment-status`)
       .then((d) => {
         if (d.lastDeployedAt) setLastDeployedAt(d.lastDeployedAt);
-        if (d.deploymentUrl) setDeployUrl(d.deploymentUrl);
+        if (d.deploymentUrl) {
+          setDeployUrl(d.deploymentUrl);
+          setScreen("live");
+        }
+        if (d.subdomain) setSubdomain(d.subdomain);
       })
       .catch(() => {});
   }, [appId]);
+
+  /* ── Initial deploy ── */
+  const handleInitialDeploy = useCallback(async () => {
+    setIsDeploying(true);
+    try {
+      const data = await apiFetch<DeployResponse>(`/api/apps/${appId}/deploy`, { method: "POST" });
+      if (data.success === false) throw new Error(data.error || "Error al desplegar");
+      const url = data.deploymentUrl || data.url || "";
+      setDeployUrl(url);
+      if (data.subdomain) setSubdomain(data.subdomain);
+      setLastDeployedAt(new Date().toISOString());
+      onDeploySuccess(url);
+      setScreen("live");
+      toast({ title: "🚀 ¡App publicada!", description: url });
+    } catch (err: any) {
+      toast({ title: "Error al desplegar", description: err.message, variant: "destructive" });
+    } finally {
+      setIsDeploying(false);
+    }
+  }, [appId, onDeploySuccess, toast]);
 
   /* ── Re-deploy ── */
   const handleRedeploy = useCallback(async () => {
     setIsRedeploying(true);
     try {
-      const data = await apiFetch<DeployResponse>(`/api/apps/${appId}/deploy`, {
-        method: "POST",
-      });
+      const data = await apiFetch<DeployResponse>(`/api/apps/${appId}/deploy`, { method: "POST" });
       if (data.success === false) throw new Error(data.error || "Error al redesplegar");
       const url = data.deploymentUrl || data.url || "";
       setDeployUrl(url);
@@ -167,9 +243,7 @@ export function DeployModal({
     if (!confirm("¿Seguro que quieres apagar el deployment? La URL dejará de funcionar.")) return;
     setIsShuttingDown(true);
     try {
-      await apiFetch(`/api/apps/${appId}/deploy`, {
-        method: "DELETE",
-      });
+      await apiFetch(`/api/apps/${appId}/deploy`, { method: "DELETE" });
       toast({ title: "App apagada", description: "El deployment ha sido eliminado." });
       onClose();
     } catch {
@@ -183,30 +257,46 @@ export function DeployModal({
   const runHealthCheck = useCallback(async () => {
     setHealthRunning(true);
     setHealthResult(null);
+    setHealthIssues([]);
     try {
-      setHealthIssues([]);
-      const data = await apiFetch<HealthCheckResponse>(`/api/apps/${appId}/health`, {
-        method: "POST",
-      });
+      const data = await apiFetch<HealthCheckResponse>(`/api/apps/${appId}/health`, { method: "POST" });
       const passed = data.ok === true || data.status === "pass";
       setHealthResult(passed ? "pass" : "fail");
       setHealthIssues(Array.isArray(data.issues) ? data.issues : []);
       toast({
-        title: passed ? "Test superado" : "Test con incidencias",
-        description: passed ? "El health check real de la app ha finalizado correctamente." : (data.issues?.join(" · ") || data.error || "Revisa la configuración antes de desplegar."),
+        title: passed ? "✅ Health check superado" : "⚠️ Health check con incidencias",
+        description: passed ? "La app está lista para producción." : (data.issues?.join(" · ") || "Revisa la configuración."),
         variant: passed ? "default" : "destructive",
       });
     } catch (err: any) {
       setHealthResult("fail");
-      setHealthIssues([err?.message || "No se pudo ejecutar el health check"]);
-      toast({ title: "Error en el test", description: err?.message || "No se pudo ejecutar el health check", variant: "destructive" });
+      toast({ title: "Error en el health check", description: err?.message, variant: "destructive" });
     } finally {
       setHealthRunning(false);
     }
   }, [appId, toast]);
 
-  /* ── Custom domain: Next (submit domain) ── */
-  const handleDomainNext = useCallback(async () => {
+  /* ── Code review ── */
+  const runCodeReview = useCallback(async () => {
+    setReviewRunning(true);
+    setReviewResult(null);
+    try {
+      const data = await apiFetch<CodeReviewResponse>(`/api/apps/${appId}/code-review`, { method: "POST" });
+      setReviewResult(data);
+      toast({
+        title: data.ok ? `✅ Código listo (${data.score}/100)` : `⚠️ ${data.issues?.length} problema(s) encontrado(s)`,
+        description: data.summary,
+        variant: data.ok ? "default" : "destructive",
+      });
+    } catch (err: any) {
+      toast({ title: "Error en la revisión", description: err?.message, variant: "destructive" });
+    } finally {
+      setReviewRunning(false);
+    }
+  }, [appId, toast]);
+
+  /* ── Connect custom domain ── */
+  const handleConnectDomain = useCallback(async () => {
     const normalized = domainInput.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
     if (!normalized) return;
     setDomainSaving(true);
@@ -216,13 +306,15 @@ export function DeployModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain: normalized }),
       });
-      setDnsRecords(data.dnsRecords || data.recommendedDns || []);
+      const records = data.dnsRecords || data.recommendedDns || [];
+      setDnsRecords(records);
       setDomainInput(normalized);
       if (data.verified) {
         setVerifiedDomain(normalized);
-        setDomainStep("verified");
+        toast({ title: "✅ Dominio verificado", description: `${normalized} está activo.` });
+        setScreen("live");
       } else {
-        setDomainStep("dns");
+        setScreen("dns");
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -231,15 +323,15 @@ export function DeployModal({
     }
   }, [appId, domainInput, toast]);
 
-  /* ── Custom domain: Verify status ── */
+  /* ── Verify domain status ── */
   const handleVerifyStatus = useCallback(async () => {
     setDomainVerifying(true);
     try {
       const data = await apiFetch<CustomDomainResponse>(`/api/apps/${appId}/custom-domain`);
       if (data.verified) {
         setVerifiedDomain(domainInput);
-        setDomainStep("verified");
         toast({ title: "✅ Dominio verificado", description: `${domainInput} está activo.` });
+        setScreen("live");
       } else {
         toast({ title: "⏳ Aún pendiente", description: "El DNS todavía no ha propagado. Inténtalo en unos minutos.", variant: "destructive" });
       }
@@ -250,13 +342,12 @@ export function DeployModal({
     }
   }, [appId, domainInput, toast]);
 
-  /* ── Custom domain: Unlink ── */
+  /* ── Unlink domain ── */
   const handleUnlink = useCallback(async () => {
     if (!confirm("¿Desvincular el dominio personalizado?")) return;
     setDomainUnlinking(true);
     try {
       await apiFetch(`/api/apps/${appId}/custom-domain`, { method: "DELETE" });
-      setDomainStep("idle");
       setDomainInput("");
       setDnsRecords([]);
       setVerifiedDomain("");
@@ -268,16 +359,25 @@ export function DeployModal({
     }
   }, [appId, toast]);
 
-  const activeUrl = deployUrl || currentDeployUrl || "";
-  const isLive = !!activeUrl;
+  /* ── Computed values ── */
+  const activePlan = PLANS.find((p) => p.id === selectedPlan) ?? PLANS[0];
+  const freeSubdomain = subdomain
+    ? `https://${subdomain}.marisai.es`
+    : deployUrl || `https://${toSubdomain(appTitle, appId)}.marisai.es`;
+  const isLive = !!deployUrl;
+  const shortDeployId = subdomain?.slice(0, 12) || appId.slice(0, 8);
 
+  /* ════════════════════════════════════════════════════════════
+     RENDER
+  ════════════════════════════════════════════════════════════ */
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-end bg-black/60 backdrop-blur-sm p-4">
-      {/* Matrix overlay during deploy */}
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+
+      {/* Matrix overlay during redeploy */}
       {isRedeploying && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/90">
           <MatrixBackground opacity={0.7} />
-          <div className="relative z-10 flex flex-col items-center gap-6 text-center">
+          <div className="relative z-10 flex flex-col items-center gap-6 text-center px-8">
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-[0_0_60px_rgba(124,58,237,0.6)]">
               <svg viewBox="0 0 40 40" fill="none" className="h-10 w-10">
                 <path d="M8 32 L20 8 L32 32" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -298,330 +398,478 @@ export function DeployModal({
           </div>
         </div>
       )}
-      <div className="relative flex w-full max-w-sm flex-col rounded-2xl border border-white/[0.08] bg-[#0d0f16] shadow-[0_32px_80px_rgba(0,0,0,0.7)] h-fit mt-14 mr-2">
 
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-3.5">
-          <div className="flex items-center gap-2">
-            <div className="grid h-6 w-6 place-items-center rounded-md bg-violet-600/20">
-              <svg className="h-3.5 w-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-            </div>
-            <span className="text-[14px] font-bold text-white">Deployments</span>
-          </div>
-          <button onClick={onClose} className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      {/* Modal card */}
+      <div className="relative w-full max-w-[480px] rounded-2xl border border-white/[0.08] bg-[#0d0f16] shadow-2xl shadow-black/60 overflow-hidden max-h-[90vh] overflow-y-auto">
 
-        <div className="flex flex-col gap-0 overflow-y-auto max-h-[80vh]">
-
-          {/* ── Live status row ── */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.06]">
-            <div className="flex items-center gap-2.5">
-              {isLive ? (
-                <>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                    <span className="text-[13px] font-semibold text-white">Live</span>
-                  </span>
-                  <span className="font-mono text-[11px] text-white/35">{shortId(activeUrl)}</span>
-                  {lastDeployedAt && (
-                    <span className="text-[11px] text-white/30">| {timeAgo(lastDeployedAt)}</span>
-                  )}
-                </>
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-white/20" />
-                  <span className="text-[13px] font-semibold text-white/40">No desplegado</span>
-                </span>
-              )}
-            </div>
-            {isLive && (
-              <a
-                href={activeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-[12px] font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white transition"
-              >
-                Visit
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
-          </div>
-
-          {/* ── Pre-Deployment Health Check ── */}
-          <div className="border-b border-white/[0.06]">
-            <div className="flex items-center justify-between px-5 py-3">
-              <div className="flex items-center gap-2.5">
-                <ShieldCheck className="h-4 w-4 text-violet-400" />
-                <div>
-                  <p className="text-[13px] font-semibold text-white">Pre-Deployment Health Check</p>
-                  <p className="text-[11px] text-white/35">Análisis automático antes del deploy. Cuesta 2-3 créditos</p>
-                </div>
+        {/* ══════════════ SCREEN 1: INITIAL ══════════════ */}
+        {screen === "initial" && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#7c3aed]/20">
+                <Rocket className="h-4 w-4 text-[#c084fc]" />
               </div>
-              <div className="flex items-center gap-2">
+              <span className="text-base font-bold text-white">Deployments</span>
+              <button onClick={onClose} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Hero */}
+            <div className="px-6 pt-7 pb-4 text-center">
+              <h2 className="text-2xl font-black text-white">¡Publica tu aplicación!</h2>
+              <p className="mt-2 text-sm text-white/45 leading-relaxed">
+                Despliega en un entorno de producción alojado por<br />Maris AI y obtén una URL en vivo para tu app.
+              </p>
+            </div>
+
+            {/* Plan selector */}
+            <div className="mx-5 mb-4 rounded-xl border border-white/[0.08] bg-white/[0.03] overflow-hidden">
+              {/* Selected plan row */}
+              <button
+                onClick={() => setPlanDropdownOpen((v) => !v)}
+                className="flex w-full items-center gap-3 px-4 py-3.5 hover:bg-white/[0.03] transition"
+              >
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#7c3aed]/20">
+                  <Cpu className="h-4 w-4 text-[#c084fc]" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="text-sm font-bold text-white">{activePlan.name}</p>
+                  <p className="text-xs text-white/40">{activePlan.specs}</p>
+                </div>
+                <ChevronDown className={`h-4 w-4 text-white/40 transition-transform ${planDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Plan dropdown */}
+              {planDropdownOpen && (
+                <div className="border-t border-white/[0.07]">
+                  {PLANS.filter((p) => p.id !== selectedPlan).map((plan) => (
+                    <button
+                      key={plan.id}
+                      onClick={() => { setSelectedPlan(plan.id); setPlanDropdownOpen(false); }}
+                      className="flex w-full items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition"
+                    >
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/[0.05]">
+                        <Cpu className="h-3.5 w-3.5 text-white/50" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="text-sm font-semibold text-white">{plan.name}</p>
+                        <p className="text-xs text-white/35">{plan.specs}</p>
+                      </div>
+                      {plan.monthlyPrice > 0 && (
+                        <span className="text-xs font-bold text-[#c084fc]">{plan.monthlyPrice}€/mes</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Annual toggle */}
+              <div className="flex items-center gap-3 border-t border-white/[0.07] px-4 py-3">
+                <Sparkles className="h-4 w-4 text-[#c084fc] shrink-0" />
+                <span className="flex-1 text-sm text-white/55">2 meses gratis en el plan anual</span>
+                <button
+                  onClick={() => setAnnualToggle((v) => !v)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${annualToggle ? "bg-[#7c3aed]" : "bg-white/20"}`}
+                >
+                  <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${annualToggle ? "translate-x-4" : "translate-x-0"}`} />
+                </button>
+              </div>
+
+              {/* Credits */}
+              <div className="flex items-center justify-center gap-2 border-t border-white/[0.07] px-4 py-3">
+                <span className="text-lg">🪙</span>
+                <span className="text-sm font-bold text-yellow-400">{activePlan.credits} créditos / mes</span>
+              </div>
+            </div>
+
+            {/* Deploy button */}
+            <div className="px-5 pb-4">
+              <button
+                onClick={handleInitialDeploy}
+                disabled={isDeploying}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7c3aed] to-[#9333ea] py-3.5 text-sm font-bold text-white shadow-lg shadow-[#7c3aed]/30 hover:from-[#8b5cf6] hover:to-[#a855f7] transition disabled:opacity-60"
+              >
+                {isDeploying ? <><Loader2 className="h-4 w-4 animate-spin" /> Desplegando...</> : <><Rocket className="h-4 w-4" /> Iniciar despliegue</>}
+              </button>
+            </div>
+
+            {/* Action cards */}
+            <div className="grid grid-cols-2 gap-3 px-5 pb-6">
+              {/* Code review */}
+              <div className="flex flex-col gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+                <Code2 className="h-6 w-6 text-[#c084fc]" />
+                <div>
+                  <p className="text-sm font-bold text-white leading-tight">Mejorar la calidad del código</p>
+                  <p className="mt-0.5 text-xs text-white/40">Limpia y fortalece tu código</p>
+                </div>
+                {reviewResult && (
+                  <div className={`rounded-lg px-2.5 py-1.5 text-xs font-mono ${reviewResult.ok ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>
+                    {reviewResult.summary}
+                  </div>
+                )}
+                <button
+                  onClick={runCodeReview}
+                  disabled={reviewRunning}
+                  className="mt-auto rounded-lg border border-[#7c3aed]/50 px-3 py-2 text-xs font-semibold text-[#c084fc] hover:bg-[#7c3aed]/10 transition disabled:opacity-50"
+                >
+                  {reviewRunning
+                    ? <span className="flex items-center gap-1.5 justify-center"><Loader2 className="h-3 w-3 animate-spin" />Analizando...</span>
+                    : "Ejecutar revisión de código"}
+                </button>
+              </div>
+
+              {/* Health check */}
+              <div className="flex flex-col gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+                <ShieldCheck className="h-6 w-6 text-[#c084fc]" />
+                <div>
+                  <p className="text-sm font-bold text-white leading-tight">Verificar preparación para despliegue</p>
+                  <p className="mt-0.5 text-xs text-white/40">Detecta bloqueos antes de lanzar</p>
+                </div>
+                {healthResult && (
+                  <div className={`rounded-lg px-2.5 py-1.5 text-xs font-mono ${healthResult === "pass" ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>
+                    {healthResult === "pass" ? "✅ Lista para producción" : `⚠️ ${healthIssues.length} incidencia(s)`}
+                  </div>
+                )}
                 <button
                   onClick={runHealthCheck}
                   disabled={healthRunning}
-                  className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-500 disabled:opacity-60 transition"
+                  className="mt-auto rounded-lg border border-[#7c3aed]/50 px-3 py-2 text-xs font-semibold text-[#c084fc] hover:bg-[#7c3aed]/10 transition disabled:opacity-50"
                 >
-                  {healthRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-                  {healthRunning ? "Analizando…" : "Run Health Check"}
-                </button>
-                <button onClick={() => setHealthExpanded((v) => !v)} className="text-white/30 hover:text-white transition">
-                  {healthExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {healthRunning
+                    ? <span className="flex items-center gap-1.5 justify-center"><Loader2 className="h-3 w-3 animate-spin" />Verificando...</span>
+                    : "Ejecutar verificación de salud"}
                 </button>
               </div>
             </div>
-            {healthExpanded && (
-              <div className="px-5 pb-3">
-                {healthResult === null && !healthRunning && (
-                  <p className="text-[12px] text-white/35">Ejecuta el health check para detectar problemas antes de desplegar.</p>
-                )}
-                {healthRunning && (
-                  <div className="flex items-center gap-2 text-[12px] text-violet-300">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analizando dependencias, rutas y variables de entorno…
-                  </div>
-                )}
-                {healthResult === "pass" && (
-                  <div className="flex items-center gap-2 text-[12px] text-emerald-400">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Sin problemas detectados. Tu app está lista para desplegarse.
-                  </div>
-                )}
-                {healthResult === "fail" && (
-                  <div className="space-y-2 text-[12px] text-red-400">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5" /> Se encontraron problemas. Revisa los detalles antes de desplegar.
-                    </div>
-                    {healthIssues.length > 0 && (
-                      <ul className="list-disc space-y-1 pl-6 text-red-300/90">
-                        {healthIssues.map((issue, index) => (
-                          <li key={`${issue}-${index}`}>{issue}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          </>
+        )}
 
-          {/* ── Custom Domain ── */}
-          <div className="border-b border-white/[0.06]">
-            <div className="flex items-center justify-between px-5 py-3">
-              <div className="flex items-center gap-2.5">
-                <Globe className="h-4 w-4 text-violet-400" />
-                <div>
-                  <p className="text-[13px] font-semibold text-white">Custom Domain</p>
-                  <p className="text-[11px] text-white/35">
-                    {domainStep === "verified"
-                      ? verifiedDomain
-                      : "Conecta tu dominio personalizado a esta app"}
+        {/* ══════════════ SCREEN 2: LIVE ══════════════ */}
+        {screen === "live" && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#7c3aed]/20">
+                <Rocket className="h-4 w-4 text-[#c084fc]" />
+              </div>
+              <span className="text-base font-bold text-white">Deployments</span>
+              <button onClick={onClose} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Live status row */}
+            <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-3.5">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-sm font-bold text-white">Live</span>
+              <span className="font-mono text-xs text-white/35">{shortDeployId}</span>
+              {lastDeployedAt && <span className="text-xs text-white/25">| {timeAgo(lastDeployedAt)}</span>}
+              <a
+                href={deployUrl || freeSubdomain}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/[0.08] transition"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Visit
+              </a>
+            </div>
+
+            {/* Free subdomain */}
+            <div className="border-b border-white/[0.07] px-5 py-4">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#c084fc]">Tu subdominio gratuito</p>
+              <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
+                <span className="flex-1 truncate font-mono text-sm text-white">{freeSubdomain}</span>
+                <button
+                  onClick={() => copyToClipboard(freeSubdomain, "URL", toast)}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white/40 hover:bg-white/[0.08] hover:text-white transition"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <p className="mt-1.5 text-xs text-white/30">Incluido en todos los planes · marisai.es</p>
+            </div>
+
+            {/* Custom domain */}
+            <div className="border-b border-white/[0.07] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+                  <Globe className="h-4 w-4 text-[#c084fc]" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">Dominio personalizado</p>
+                  {verifiedDomain ? (
+                    <p className="text-xs text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />{verifiedDomain}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-white/35">Solo disponible en planes de pago</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    if (!isPremium) {
+                      toast({ title: "Plan de pago requerido", description: "Actualiza tu plan para conectar un dominio personalizado.", variant: "destructive" });
+                      return;
+                    }
+                    setScreen("providers");
+                  }}
+                  className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${isPremium ? "bg-[#7c3aed] text-white hover:bg-[#8b5cf6]" : "bg-white/[0.05] text-white/40 cursor-not-allowed"}`}
+                >
+                  {verifiedDomain ? "Cambiar dominio" : "Conectar dominio"}
+                </button>
+              </div>
+              {!isPremium && (
+                <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2">
+                  <Lock className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                  <p className="text-xs text-yellow-400">Actualiza tu plan para conectar tu propio dominio</p>
+                </div>
+              )}
+            </div>
+
+            {/* Health check */}
+            <div className="border-b border-white/[0.07] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+                  <ShieldCheck className={`h-4 w-4 ${healthResult === "pass" ? "text-emerald-400" : healthResult === "fail" ? "text-red-400" : "text-[#c084fc]"}`} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">Pre-Deployment Health Check</p>
+                  <p className="text-xs text-white/35">
+                    {healthResult === "pass" ? "✅ Superado — lista para producción" : healthResult === "fail" ? `⚠️ ${healthIssues.length} incidencia(s)` : "Análisis automático antes del deploy"}
                   </p>
                 </div>
+                <button
+                  onClick={runHealthCheck}
+                  disabled={healthRunning}
+                  className="rounded-lg bg-[#7c3aed] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
+                >
+                  {healthRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Run Health Check"}
+                </button>
               </div>
-
-              {/* Right side action */}
-              {domainStep === "idle" && (
-                <button
-                  onClick={() => isPremium ? setDomainStep("input") : window.open("/pricing", "_blank")}
-                  className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-400 hover:text-violet-300 transition"
-                >
-                  Connect
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {domainStep === "dns" && (
-                <button
-                  onClick={() => setDomainStep("input")}
-                  className="text-white/30 hover:text-white transition"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-              )}
-              {domainStep === "verified" && (
-                <button
-                  onClick={handleUnlink}
-                  disabled={domainUnlinking}
-                  className="flex items-center gap-1.5 text-[12px] font-semibold text-red-400 hover:text-red-300 transition disabled:opacity-50"
-                >
-                  {domainUnlinking ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2Off className="h-3 w-3" />}
-                  Unlink
-                </button>
-              )}
-              {(domainStep === "input" || domainStep === "dns") && (
-                <button onClick={() => setDomainStep("idle")} className="text-[12px] text-white/40 hover:text-white transition">
-                  Cancelar
-                </button>
+              {healthIssues.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {healthIssues.map((issue, i) => (
+                    <div key={i} className="flex items-start gap-2 rounded-lg bg-red-500/10 px-3 py-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-300">{issue}</p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            {/* Step: input domain */}
-            {domainStep === "input" && (
-              <div className="px-5 pb-4 flex flex-col gap-3">
-                <p className="text-[12px] text-white/50">Introduce tu nombre de dominio (ej: miapp.com)</p>
-                <div className="flex gap-2">
+            {/* Env vars */}
+            <div className="border-b border-white/[0.07]">
+              <button
+                onClick={() => setEnvExpanded((v) => !v)}
+                className="flex w-full items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition"
+              >
+                <div className="flex items-center gap-2.5">
+                  <KeyRound className="h-4 w-4 text-[#c084fc]" />
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-white">Variables de entorno</p>
+                    <p className="text-xs text-white/35">Secrets y claves de API para producción</p>
+                  </div>
+                </div>
+                {envExpanded ? <ChevronUp className="h-4 w-4 text-white/30" /> : <ChevronDown className="h-4 w-4 text-white/30" />}
+              </button>
+              {envExpanded && (
+                <div className="px-5 pb-4">
+                  <p className="text-xs text-white/40 mb-2">Las variables se sincronizan automáticamente con Vercel al hacer deploy.</p>
+                  <div className="rounded-lg border border-white/[0.06] bg-[#070910] p-3 font-mono text-xs text-white/40 space-y-1">
+                    <div><span className="text-[#c084fc]">VITE_CLERK_PUBLISHABLE_KEY</span> = ••••••••••••</div>
+                    <div><span className="text-[#c084fc]">VITE_API_URL</span> = auto-detected</div>
+                    <div><span className="text-[#c084fc]">NODE_ENV</span> = production</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Re-deploy + Shut down */}
+            <div className="grid grid-cols-2 gap-3 px-5 py-4">
+              <button
+                onClick={handleRedeploy}
+                disabled={isRedeploying || isShuttingDown}
+                className="flex items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.04] py-3 text-sm font-semibold text-white hover:bg-white/[0.08] transition disabled:opacity-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Re-deploy
+              </button>
+              <button
+                onClick={handleShutDown}
+                disabled={isShuttingDown || isRedeploying}
+                className="flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition disabled:opacity-50"
+              >
+                {isShuttingDown ? <Loader2 className="h-4 w-4 animate-spin" /> : <PowerOff className="h-4 w-4" />}
+                Apagar
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ══════════════ SCREEN 3: PROVIDERS ══════════════ */}
+        {screen === "providers" && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
+              <button onClick={() => setScreen("live")} className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <span className="text-base font-bold text-white">Conectar dominio personalizado</span>
+              <button onClick={onClose} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {/* Domain input */}
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-white/40">Tu dominio</p>
+                <div className="flex items-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.03] px-3 py-2.5">
+                  <Globe className="h-4 w-4 text-white/30 shrink-0" />
                   <input
                     type="text"
                     value={domainInput}
                     onChange={(e) => setDomainInput(e.target.value)}
-                    placeholder="example.com"
-                    className="flex-1 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 py-2 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/60 focus:ring-1 focus:ring-violet-500/30"
-                    onKeyDown={(e) => e.key === "Enter" && handleDomainNext()}
+                    placeholder="ej. midominio.com"
+                    className="flex-1 bg-transparent text-sm text-white placeholder:text-white/25 outline-none"
                   />
-                  <button
-                    onClick={handleDomainNext}
-                    disabled={domainSaving || !domainInput.trim()}
-                    className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-[13px] font-bold text-white hover:bg-violet-500 disabled:opacity-50 transition"
-                  >
-                    {domainSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Siguiente <ArrowRight className="h-3.5 w-3.5" /></>}
-                  </button>
+                </div>
+                <p className="mt-1 text-xs text-white/25">Introduce el dominio sin https://</p>
+              </div>
+
+              {/* Provider grid */}
+              <div>
+                <p className="mb-2.5 text-[10px] font-bold uppercase tracking-widest text-white/40">Selecciona tu proveedor</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {DOMAIN_PROVIDERS.map((provider) => (
+                    <div
+                      key={provider.id}
+                      className="flex flex-col items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-3.5 hover:border-[#7c3aed]/40 hover:bg-[#7c3aed]/5 transition"
+                    >
+                      <div
+                        className="grid h-10 w-10 place-items-center rounded-xl font-black text-sm"
+                        style={{ backgroundColor: provider.color + "22", border: `1px solid ${provider.color}44`, color: provider.color }}
+                      >
+                        {provider.initials}
+                      </div>
+                      <p className="text-xs font-semibold text-white text-center leading-tight">{provider.name}</p>
+                      <button
+                        onClick={() => {
+                          if (!domainInput.trim()) {
+                            toast({ title: "Introduce tu dominio primero", variant: "destructive" });
+                            return;
+                          }
+                          if (provider.connectUrl) {
+                            window.open(provider.connectUrl, "_blank");
+                          }
+                          handleConnectDomain();
+                        }}
+                        disabled={domainSaving}
+                        className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
+                      >
+                        {domainSaving ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : provider.id === "other" ? "Ver DNS" : "Conectar"}
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
 
-            {/* Step: DNS records */}
-            {domainStep === "dns" && (
-              <div className="px-5 pb-4 flex flex-col gap-3">
-                <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                  <p className="text-[12px] text-amber-300">Configura estos registros DNS en tu proveedor</p>
-                </div>
+              <p className="text-center text-xs italic text-white/25 pb-2">
+                Al hacer clic en Conectar serás redirigido a tu proveedor<br />para autorizar la conexión automáticamente
+              </p>
+            </div>
+          </>
+        )}
 
-                <div className="mb-1 space-y-2">
-                  <p className="text-[11px] text-white/50 leading-relaxed">
-                    Añade estos registros en tu proveedor de dominio (GoDaddy, Namecheap, Cloudflare, Arsys, etc.) para enlazar <strong>{domainInput}</strong> con Maris AI.
-                  </p>
-                  <div className="overflow-x-auto rounded-lg border border-white/[0.06] bg-[#070910]">
-                    <table className="w-full text-[11px]">
-                      <thead>
-                        <tr className="border-b border-white/[0.06]">
-                          <th className="px-3 py-2 text-left font-semibold text-white/30">Tipo</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white/30">Nombre</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white/30">Valor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dnsRecords.length > 0 ? dnsRecords.map((r, i) => (
-                          <tr key={i} className="border-b border-white/[0.04] last:border-0">
-                            <td className="px-3 py-2 font-mono font-bold text-violet-400">{r.type}</td>
-                            <td className="px-3 py-2 font-mono text-white/60">{r.name}</td>
-                            <td className="px-3 py-2 font-mono text-white/60 break-all">{r.value}</td>
-                          </tr>
-                        )) : (
-                          <>
-                            <tr className="border-b border-white/[0.04]">
-                              <td className="px-3 py-2 font-mono font-bold text-violet-400">A</td>
-                              <td className="px-3 py-2 font-mono text-white/60">@</td>
-                              <td className="px-3 py-2 font-mono text-white/60">76.76.21.21</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-2 font-mono font-bold text-violet-400">CNAME</td>
-                              <td className="px-3 py-2 font-mono text-white/60">www</td>
-                              <td className="px-3 py-2 font-mono text-white/60">cname.vercel-dns.com</td>
-                            </tr>
-                          </>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {/* Registrar Quick Links */}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <span className="text-[10px] text-white/20 uppercase font-bold w-full">Guías rápidas:</span>
-                    {[
-                      { name: "Arsys", url: "https://www.arsys.es/ayuda/dns" },
-                      { name: "GoDaddy", url: "https://www.godaddy.com/help/add-an-a-record-19238" },
-                      { name: "Cloudflare", url: "https://dash.cloudflare.com/" },
-                      { name: "Hostinger", url: "https://support.hostinger.com/en/articles/4738348-how-to-manage-dns-records-at-hostinger" }
-                    ].map(reg => (
-                      <a key={reg.name} href={reg.url} target="_blank" rel="noreferrer" className="text-[10px] text-violet-400/60 hover:text-violet-400 transition underline decoration-violet-400/20">
-                        {reg.name}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-                <p className="text-[10.5px] text-white/30">La propagación DNS puede tardar entre 5 minutos y 48 horas.</p>
+        {/* ══════════════ SCREEN 4: DNS ══════════════ */}
+        {screen === "dns" && (
+          <>
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
+              <button onClick={() => setScreen("providers")} className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <span className="text-base font-bold text-white truncate">DNS para {domainInput || "tu dominio"}</span>
+              <button onClick={onClose} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-                <button
-                  onClick={handleVerifyStatus}
-                  disabled={domainVerifying}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 py-2 text-[13px] font-bold text-violet-300 hover:bg-violet-500/20 disabled:opacity-50 transition"
-                >
-                  {domainVerifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  {domainVerifying ? "Verificando…" : "Verify Status"}
-                </button>
-              </div>
-            )}
-
-            {/* Step: verified */}
-            {domainStep === "verified" && (
-              <div className="px-5 pb-3">
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="text-[12px] font-semibold text-emerald-300">Verified</span>
-                  <span className="text-[12px] text-emerald-400/60">— {verifiedDomain}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Env Variables ── */}
-          <div className="border-b border-white/[0.06]">
-            <button
-              onClick={() => setEnvExpanded((v) => !v)}
-              className="flex w-full items-center justify-between px-5 py-3 hover:bg-white/[0.02] transition"
-            >
-              <div className="flex items-center gap-2.5">
-                <KeyRound className="h-4 w-4 text-violet-400" />
-                <div className="text-left">
-                  <p className="text-[13px] font-semibold text-white">Env Variables</p>
-                  <p className="text-[11px] text-white/35">Secrets y variables de entorno para APIs y servicios</p>
-                </div>
-              </div>
-              {envExpanded ? <ChevronUp className="h-4 w-4 text-white/30" /> : <ChevronDown className="h-4 w-4 text-white/30" />}
-            </button>
-            {envExpanded && (
-              <div className="px-5 pb-4">
-                <p className="text-[12px] text-white/40 mb-2">
-                  Las variables de entorno se sincronizan automáticamente con Vercel al hacer deploy.
-                  Las claves sensibles (Clerk, Stripe, OpenAI) se inyectan desde la configuración del servidor.
+            <div className="px-5 py-4 space-y-4">
+              {/* Warning */}
+              <div className="flex gap-3 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+                <AlertTriangle className="h-4 w-4 text-yellow-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-yellow-200/80 leading-relaxed">
+                  Añade los siguientes registros DNS en el panel de tu proveedor de dominios. Los cambios pueden tardar hasta 48h en propagarse.
                 </p>
-                <div className="rounded-lg border border-white/[0.06] bg-[#070910] p-3 font-mono text-[11px] text-white/40 space-y-1">
-                  <div><span className="text-violet-400">VITE_CLERK_PUBLISHABLE_KEY</span> = ••••••••••••</div>
-                  <div><span className="text-violet-400">VITE_API_URL</span> = auto-detected</div>
-                  <div><span className="text-violet-400">NODE_ENV</span> = production</div>
-                </div>
               </div>
-            )}
-          </div>
 
-          {/* ── Deploy time note ── */}
-          <div className="px-5 py-2.5 border-b border-white/[0.06]">
-            <p className="text-[11px] text-white/25">El deployment tarda aproximadamente 3-7 minutos</p>
-          </div>
+              {/* DNS records table */}
+              <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+                <div className="grid grid-cols-[60px_70px_1fr_36px] gap-2 border-b border-white/[0.07] px-3 py-2">
+                  {["TIPO", "NOMBRE", "VALOR", ""].map((h, i) => (
+                    <span key={i} className="text-[10px] font-bold uppercase tracking-widest text-white/30">{h}</span>
+                  ))}
+                </div>
+                {(dnsRecords.length > 0 ? dnsRecords : [
+                  { type: "A",     name: "@",   value: "76.76.21.21" },
+                  { type: "CNAME", name: "www", value: "cname.marisai.es" },
+                  { type: "TXT",   name: "@",   value: `marisai-verify=${appId.slice(0, 12)}` },
+                ]).map((record, i) => (
+                  <div key={i} className="grid grid-cols-[60px_70px_1fr_36px] gap-2 items-center border-b border-white/[0.04] last:border-0 px-3 py-2.5">
+                    <DnsBadge type={record.type} />
+                    <span className="font-mono text-xs text-white">{record.name}</span>
+                    <span className="font-mono text-xs text-white/70 truncate">{record.value}</span>
+                    <button
+                      onClick={() => copyToClipboard(record.value, record.type, toast)}
+                      className="grid h-7 w-7 place-items-center rounded-lg text-white/30 hover:bg-white/[0.08] hover:text-white transition"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
 
-          {/* ── Action buttons: Shut Down + Re-Deploy ── */}
-          <div className="flex gap-2.5 px-5 py-4">
-            <button
-              onClick={handleShutDown}
-              disabled={isShuttingDown || !isLive}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/25 bg-red-500/8 py-2.5 text-[13px] font-bold text-red-400 hover:bg-red-500/15 disabled:opacity-40 transition"
-            >
-              {isShuttingDown ? <Loader2 className="h-4 w-4 animate-spin" /> : <PowerOff className="h-4 w-4" />}
-              Shut Down
-            </button>
-            <button
-              onClick={handleRedeploy}
-              disabled={isRedeploying}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-2.5 text-[13px] font-bold text-white hover:from-violet-500 hover:to-purple-500 disabled:opacity-60 transition shadow-[0_4px_20px_rgba(124,58,237,0.3)]"
-            >
-              {isRedeploying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-              {isRedeploying ? "Desplegando…" : "Re-Deploy"}
-            </button>
-          </div>
+              {/* Maris AI branding */}
+              <div className="flex items-center gap-3 rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/10 px-4 py-3">
+                <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#7c3aed]/20 shrink-0">
+                  <span className="text-sm font-black text-[#c084fc]">M</span>
+                </div>
+                <p className="text-xs text-white/50">
+                  Infraestructura alojada por <span className="text-[#c084fc] font-semibold">Maris AI</span> · marisai.es
+                </p>
+              </div>
 
-        </div>
+              {/* Verify button */}
+              <button
+                onClick={handleVerifyStatus}
+                disabled={domainVerifying}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7c3aed] to-[#9333ea] py-3.5 text-sm font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7] transition disabled:opacity-60"
+              >
+                {domainVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Verificar conexión
+              </button>
+              <p className="text-center text-xs text-white/25">Verificaremos automáticamente cada 5 minutos</p>
+
+              {/* Pending status */}
+              <div className="flex items-center justify-center gap-2 pb-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-yellow-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-yellow-500" />
+                </span>
+                <span className="font-mono text-xs text-white/35">Pendiente de propagación DNS...</span>
+              </div>
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
