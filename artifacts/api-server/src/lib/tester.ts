@@ -57,24 +57,59 @@ export async function runTestingAgent(
     // 2. ANALYZE ISSUES
     log("testing", `🔧 Se encontraron ${report.issues.length} problema(s). Analizando reparaciones...`);
     
-    // 3. APPLY PATCHES
-    // We reuse the existing patchBundle logic but driven by the Testing Agent's findings
+    // 3. APPLY PATCHES (Optimización de Contexto)
+    const MAX_BUNDLE_SIZE = 400000; // ~100k tokens
+    let codeToPatch = currentBundle;
+    let isContextReduced = false;
+
+    if (currentBundle.length > MAX_BUNDLE_SIZE) {
+      log("testing", "📦 Bundle muy extenso. Reduciendo contexto para evitar errores de API...");
+      const errorFiles = new Set(report.issues.map(i => i.file));
+      const files = currentBundle.split("// === FILE: ");
+      const filteredFiles = files.filter(f => {
+        if (!f.trim()) return false;
+        const path = f.split(" ===")[0];
+        // Mantener archivos con errores + archivos raíz críticos
+        return errorFiles.has(path) || path.includes("App.") || path.includes("main.") || path.includes("package.json");
+      });
+      codeToPatch = filteredFiles.map(f => f.startsWith("// === FILE: ") ? f : "// === FILE: " + f).join("");
+      isContextReduced = true;
+    }
+
     const patched = await patchBundle(
-      currentBundle,
+      codeToPatch,
       report.issues.map(issue => ({
         file: issue.file,
         problem: issue.message,
-        fix: `Repara este error detectado por esbuild: "${issue.message}". Asegúrate de que todos los archivos necesarios existan y que los imports sean correctos.`
+        fix: `Repara este error: "${issue.message}".`
       })),
       language
     );
 
-    if (!patched || patched === currentBundle) {
-      log("testing", "⚠️ El reparador no pudo aplicar cambios adicionales o el bundle es idéntico.", "warn");
+    if (!patched) {
+      log("testing", "⚠️ El reparador no pudo generar una solución en este ciclo.", "warn");
       break;
     }
 
-    currentBundle = patched;
+    if (isContextReduced) {
+      // Reintegrar archivos parcheados en el bundle original
+      const originalFiles = currentBundle.split("// === FILE: ");
+      const patchedFiles = patched.split("// === FILE: ");
+      const patchedMap = new Map();
+      patchedFiles.forEach(f => {
+        if (!f.trim()) return;
+        const path = f.split(" ===")[0];
+        patchedMap.set(path, f);
+      });
+      
+      currentBundle = originalFiles.map(f => {
+        if (!f.trim()) return f;
+        const path = f.split(" ===")[0];
+        return patchedMap.has(path) ? patchedMap.get(path) : f;
+      }).join("// === FILE: ");
+    } else {
+      currentBundle = patched;
+    }
     log("testing", "✓ Reparaciones aplicadas — re-validando en el siguiente ciclo...");
     
     // Small delay to avoid hitting rate limits too fast
