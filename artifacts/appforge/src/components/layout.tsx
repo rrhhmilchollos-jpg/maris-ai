@@ -73,6 +73,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         <p className="text-xs leading-none text-muted-foreground">
                           {user?.primaryEmailAddress?.emailAddress}
                         </p>
+                        <p className="text-xs leading-none text-muted-foreground opacity-50 mt-1 font-mono select-all">
+                          ID: {user?.id}
+                        </p>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
