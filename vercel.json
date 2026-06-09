@@ -2,7 +2,7 @@
   "version": 2,
   "framework": "vite",
   "outputDirectory": "artifacts/appforge/dist",
-  "buildCommand": "pnpm --filter @workspace/appforge build",
+  "buildCommand": "cd artifacts/appforge && npx vite build",
   "headers": [
     {
       "source": "/:path*",
@@ -139,5 +139,6 @@
       "destination": "https://www.marisai.es/:path*",
       "permanent": true
     }
-  ]
+  ],
+  "installCommand": "pnpm install --no-frozen-lockfile"
 }
