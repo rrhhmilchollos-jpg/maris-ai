@@ -116,6 +116,7 @@ export async function planExecution(
   options: { hasExistingApp: boolean } = { hasExistingApp: false },
 ): Promise<ExecutionPlan> {
   const heuristic = heuristicPlan(prompt, options.hasExistingApp);
+  if (heuristic.scope === "fast-patch") return heuristic;
 
   try {
     const response = await Promise.race([
