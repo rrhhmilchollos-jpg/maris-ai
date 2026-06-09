@@ -2892,6 +2892,15 @@ export async function runJobById(jobId: string): Promise<void> {
           appTitle: previousApp?.title,
         }),
       });
+      try {
+        const updatedApp = await GeneratedApp.findById(job.editAppId).lean() as any;
+        if (updatedApp?.githubRepoFullName && finalResult.frontendCode) {
+          await pushAppToGitHub({ title: updatedApp.title || "App", description: updatedApp.description || "", frontendBundle: finalResult.frontendCode, existingRepoFullName: updatedApp.githubRepoFullName });
+          await log("system", `✅ Cambios subidos a GitHub (${updatedApp.githubRepoFullName})`);
+        }
+      } catch (ghErr) {
+        await log("system", `⚠️ GitHub push falló: ${ghErr instanceof Error ? ghErr.message : ghErr}`, "warn");
+      }
     } else {
       const app = await GeneratedApp.create({
         userId: job.userId,
