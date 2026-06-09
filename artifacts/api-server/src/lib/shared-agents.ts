@@ -201,6 +201,28 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
 
 /* ----------------------------- patcher ------------------------------------ */
 
+export function mergePatchIntoBundle(
+  originalBundle: string,
+  changedFiles: Record<string, string>
+): string {
+  const files: Record<string, string> = {};
+  // Parse original bundle
+  const parts = originalBundle.split(/\/\/ === FILE: /);
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    const nl = part.indexOf("\n");
+    if (nl === -1) continue;
+    const path = part.slice(0, nl).trim().replace(/ ===$/, "");
+    if (path) files[path] = "// === FILE: " + part;
+  }
+  // Apply changed files
+  for (const [path, content] of Object.entries(changedFiles)) {
+    const normalizedPath = path.replace(/^\//, "");
+    files[normalizedPath] = `// === FILE: ${normalizedPath} ===\n${content}`;
+  }
+  return Object.values(files).join("\n");
+}
+
 export function buildPatcherSystemPrompt(language: GenLanguage): string {
   const isTS = language === "typescript";
   const tsLine = isTS
@@ -224,6 +246,18 @@ ${tsLine}
 - Link in wouter v3 already renders as anchor. Never nest <a> inside <Link>.
 
 Return the FULL bundle. Output ONLY the JSON object.`;
+}
+
+export function buildFastPatchPrompt(): string {
+  return `You are Maris AI's Fast Patcher. Apply ONLY the requested change to the frontend bundle.
+Output STRICT JSON only:
+{"changedFiles":{"path/to/file.html":"full file content","path/to/file2.tsx":"full file content"}}
+
+RULES:
+- Only include files that actually change. Usually 1-2 files max.
+- Return the COMPLETE content of each changed file, not just the diff.
+- Keep ALL other files exactly as they are.
+- Output ONLY the JSON object, no markdown, no explanation.`;
 }
 
 export async function patchBundle(
