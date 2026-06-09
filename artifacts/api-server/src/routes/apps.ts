@@ -23,7 +23,9 @@ import {
   withTimeout,
   createClaudeMessageWithFallback,
   buildPatcherSystemPrompt,
-  patchBundle
+  patchBundle,
+  buildFastPatchPrompt,
+  mergePatchIntoBundle
 } from "../lib/shared-agents";
 import { validateBundleInE2B } from "../lib/e2bValidator";
 import { shouldValidateInE2B } from "../lib/e2bGate";
