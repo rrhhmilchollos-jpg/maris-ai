@@ -23,7 +23,9 @@ import {
   withTimeout,
   createClaudeMessageWithFallback,
   buildPatcherSystemPrompt,
-  patchBundle
+  patchBundle,
+  buildFastPatchPrompt,
+  mergePatchIntoBundle
 } from "../lib/shared-agents";
 import { validateBundleInE2B } from "../lib/e2bValidator";
 import { shouldValidateInE2B } from "../lib/e2bGate";
@@ -1577,48 +1579,7 @@ Return JSON with changedFiles only.` }]
   } catch(err) { log("patcher", `Parche quirúrgico falló: ${err}`, "warn"); }
   log("patcher", "Parche quirúrgico no convergió.", "warn");
   return null;
-  const patched = null;
-  if (!patched) {
-
-  onProgress?.({ phase: "validating", progress: 75, note: "Validando el parche…" });
-  const validation = await validateBundle(patched);
-  if (!validation.ok && validation.issues.length > 0) {
-    const repaired = await runValidatePatchLoop(patched, { ok: true, issues: [] }, onProgress, 70, language, log);
-    const finalValidation = await validateBundle(repaired);
-    if (!finalValidation.ok && finalValidation.issues.length > 0) {
-      log("patcher", `Parche directo no convergió tras auto-reparación (${finalValidation.issues.length} error(es)). Cayendo al flujo completo.`, "warn");
-      return null;
-    }
-    onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
-    return {
-      title: previous.title,
-      description: previous.description,
-      techStack: previous.techStack,
-      frontendCode: repaired,
-      backendCode: previous.backendCode,
-    };
-  }
-
-  rememberPatch({
-    errorMessage: redactSecrets(prompt).slice(0, 400),
-    errorContext: "fast-patch user request",
-    patch: "(fast-patch convergence; no code stored — recall by prompt only)",
-    language,
-  }).then((entry) => {
-    if (entry) log("memory", `🧠 aprendí este cambio (id ${entry.id})`);
-  }).catch(() => {});
-
-  onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
-  log("patcher", "✓ parche aplicado y validado.");
-  return {
-    title: previous.title,
-    description: previous.description,
-    techStack: previous.techStack,
-    frontendCode: patched,
-    backendCode: previous.backendCode,
-  };
-}
-
+ 
 export interface PreviousApp {
   title: string;
   description: string;
