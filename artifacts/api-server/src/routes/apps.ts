@@ -35,6 +35,7 @@ import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import { pushAppToGitHub } from "../lib/githubPush";
+import { startPreviewSandbox, updatePreviewSandbox, stopPreviewSandbox } from "../lib/e2bPreview";
 import { connectDB } from "@workspace/db";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
@@ -2814,6 +2815,54 @@ router.get("/templates", async (_req: any, res: any) => {
 });
 
 // ── Exports requeridos por index.ts ───────────────────────────────────────
+
+// ── POST /api/apps/:id/preview/start
+router.post("/apps/:id/preview/start", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!app.frontendCode) return res.status(400).json({ error: "App sin codigo frontend" });
+    const session = await startPreviewSandbox({
+      bundle: app.frontendCode,
+      existingSandboxId: (app as any).sandboxId || null,
+    });
+    await GeneratedApp.findByIdAndUpdate(req.params.id, {
+      sandboxId: session.sandboxId,
+      previewUrl: session.previewUrl,
+    });
+    res.json({ ok: true, sandboxId: session.sandboxId, previewUrl: session.previewUrl });
+  } catch (err) {
+    logger.error({ err }, "preview/start error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error preview" });
+  }
+});
+// ── POST /api/apps/:id/preview/update
+router.post("/apps/:id/preview/update", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!(app as any).sandboxId) return res.status(400).json({ error: "Sin sandbox activo" });
+    const result = await updatePreviewSandbox({ sandboxId: (app as any).sandboxId, bundle: app.frontendCode });
+    res.json({ ok: true, previewUrl: result.previewUrl });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error update" });
+  }
+});
+// ── DELETE /api/apps/:id/preview/stop
+router.delete("/apps/:id/preview/stop", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.json({ ok: true });
+    if ((app as any).sandboxId) await stopPreviewSandbox((app as any).sandboxId);
+    await GeneratedApp.findByIdAndUpdate(req.params.id, { sandboxId: null, previewUrl: null });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error stop" });
+  }
+});
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
   await connectDB();
   const STALE_MS = 15 * 60 * 1000;
@@ -2935,22 +2984,6 @@ export async function runJobById(jobId: string): Promise<void> {
           appTitle: previousApp?.title,
         }),
       });
-
-      // Auto-push to GitHub after every edit so Vercel redeploys automatically
-      try {
-        const updatedApp = await GeneratedApp.findById(job.editAppId).lean() as any;
-        if (updatedApp?.githubRepoFullName) {
-          await pushAppToGitHub({
-            title: updatedApp.title || "Maris AI App",
-            description: updatedApp.description || "",
-            frontendBundle: finalResult.frontendCode,
-            existingRepoFullName: updatedApp.githubRepoFullName,
-          });
-          await log("system", "✅ Cambios subidos a GitHub — Vercel redesplegará automáticamente.");
-        }
-      } catch (ghErr) {
-        await log("system", `⚠️ GitHub push falló (no crítico): ${ghErr instanceof Error ? ghErr.message : ghErr}`, "warn");
-      }
     } else {
       const app = await GeneratedApp.create({
         userId: job.userId,
