@@ -254,7 +254,7 @@ export async function patchBundle(
         const raw = (response.content[0] as any).text ?? "";
         const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
         if (!parsed || typeof parsed.frontendCode !== "string") return null;
-        if (parsed.frontendCode.length < frontendCode.length / 2) return null;
+        if (parsed.frontendCode.length < 100) return null;
         return parsed.frontendCode;
       } catch {
         return null;
