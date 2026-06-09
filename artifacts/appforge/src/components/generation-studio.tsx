@@ -16,6 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { useLocation } from "wouter";
+import { LivePreview } from "./live-preview";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetGenerationJobQueryKey, getGenerationJobLogs, getGetGenerationJobLogsQueryKey } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
@@ -876,16 +877,13 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
 
         {/* Right Panel: Preview */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#080810]">
-          <PreviewPane
-            code={partialCode}
-            isActive={isActive}
+          <LivePreview
+            appId={appId || ""}
+            appName={job?.title || "App Preview"}
+            frontendCode={partialCode || ""}
+            isBuilding={isActive}
             onDeploy={appId && isDone ? handleDeploy : undefined}
-            isDeploying={deployAppMutation.isPending}
-            viewMode={viewMode}
-            setViewMode={setViewMode}
-            phase={phaseLabel}
-            isExpanded={previewExpanded}
-            onToggleExpand={() => setPreviewExpanded(p => !p)}
+            onShare={() => {}}
           />
         </div>
       </div>
