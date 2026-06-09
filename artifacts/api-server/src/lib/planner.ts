@@ -69,7 +69,8 @@ const BUG_RX =
   /\b(error|errores|fallo|falla|fall[oó]|crash|crashea|excepci[oó]n|exception|stack trace|no funciona|no anda|no carga|no compila|build (failed|roto|fall[oó])|dependencia|dependencias|dependency|módulo no encontrado|modulo no encontrado|cannot find|module not found|undefined is not|null is not|reference ?error|type ?error|syntax ?error|unhandled|rejection|import faltante|paquete faltante|missing package|pantalla en blanco|blank page|white screen|roto|rota|reparar|arregla|arreglar|corrige|corregir|fix|debugg?ear|depurar)\b/i;
 
 function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
-  const trimmed = prompt.trim();
+  // Strip the MARIS AI locale/engine prefix before counting words
+  const trimmed = prompt.trim().replace(/^\[MARIS[^\]]*\]\s*/gi, "").replace(/^\[MARIS_ENGINE[^\]]*\]\s*/gi, "").trim();
   const wordCount = trimmed.split(/\s+/).length;
 
   if (FULL_BUILD_RX.test(trimmed) || !hasExistingApp) {
@@ -84,7 +85,7 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   if (FEATURE_RX.test(trimmed) && hasExistingApp) {
     return PLAN_FEATURE;
   }
-  if (COSMETIC_RX.test(trimmed) && hasExistingApp && wordCount <= 10 && !FEATURE_RX.test(trimmed)) {
+  if (COSMETIC_RX.test(trimmed) && hasExistingApp && wordCount <= 20 && !FEATURE_RX.test(trimmed)) {
     return PLAN_FAST_PATCH;
   }
   // Antes cualquier petición corta entraba en fast-patch. Eso hacía que mensajes
