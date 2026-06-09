@@ -81,11 +81,8 @@ router.get("/me/stats", requireAuth, async (req, res) => {
     ).lean();
 
     let creditsSpentTotal = 0;
-    for (const t of txns) {
-      if (t.kind === "usage") creditsSpentTotal += Math.abs(t.amount);
-    }
 
-    const recent = await GeneratedApp.find({ userId })
+    const recent = await GeneratedApp.find({ userId }, { frontendCode: 0, backendCode: 0 })
       .sort({ createdAt: -1 })
       .limit(5)
       .lean();
