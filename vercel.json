@@ -2,7 +2,7 @@
   "version": 2,
   "framework": "vite",
   "outputDirectory": "artifacts/appforge/dist",
-  "buildCommand": "cd artifacts/appforge && npx vite build",
+  "buildCommand": "pnpm --filter @workspace/appforge... build",
   "headers": [
     {
       "source": "/:path*",
