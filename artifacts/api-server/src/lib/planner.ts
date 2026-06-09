@@ -70,7 +70,7 @@ const BUG_RX =
 
 function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   // Strip the MARIS AI locale/engine prefix before counting words
-  const trimmed = prompt.trim().replace(/^\[MARIS[^\]]*\]\s*/gi, "").replace(/^\[MARIS_ENGINE[^\]]*\]\s*/gi, "").trim();
+  const trimmed = prompt.trim().replace(/^\[MARIS[^\]]*\][^\n]*\n/gi, "").replace(/^\[MARIS_ENGINE[^\]]*\][^\n]*\n/gi, "").trim();
   const wordCount = trimmed.split(/\s+/).length;
 
   if (FULL_BUILD_RX.test(trimmed) || !hasExistingApp) {
