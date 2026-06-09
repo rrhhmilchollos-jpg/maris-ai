@@ -1563,6 +1563,7 @@ async function fastPatchEdit(
     });
     const raw = (resp.content[0] as any).text ?? "";
     const parsed = extractJsonObject<{changedFiles?:Record<string,string>}>(raw);
+    log("patcher", `LLM raw (300): ${raw.slice(0,300)}`);
     if (parsed?.changedFiles && Object.keys(parsed.changedFiles).length > 0) {
       const merged = mergePatchIntoBundle(previous.frontendCode, parsed.changedFiles);
       if (merged && merged.length > 100) {
