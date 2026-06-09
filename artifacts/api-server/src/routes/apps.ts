@@ -2318,7 +2318,7 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
     const userId = req.userId as string;
-    const apps = await GeneratedApp.find({ userId }).sort({ createdAt: -1 }).lean();
+    const apps = await GeneratedApp.find({ userId }, { frontendCode: 0, backendCode: 0 }).sort({ createdAt: -1 }).lean();
     
     // Serializar fechas para evitar problemas de serialización
     const serializedApps = apps.map((app: any) => ({
