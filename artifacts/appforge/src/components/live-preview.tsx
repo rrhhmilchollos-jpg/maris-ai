@@ -241,6 +241,22 @@ export function LivePreview({
     };
   }, []);
 
+  // Llamar al backend para actualizar el sandbox E2B tras una edicion
+  const handleSandboxUpdate = async () => {
+    try {
+      const res = await fetch(`/api/apps/${appId}/preview/update`, { method: "POST" });
+      const data = await res.json();
+      if (data.previewUrl && iframeRef.current) {
+        iframeRef.current.src = data.previewUrl;
+        setServerUrl(data.previewUrl);
+      } else {
+        handleRefresh();
+      }
+    } catch {
+      handleRefresh();
+    }
+  };
+
   const handleRefresh = () => {
     if (iframeRef.current) {
       const currentSrc = iframeRef.current.src;
