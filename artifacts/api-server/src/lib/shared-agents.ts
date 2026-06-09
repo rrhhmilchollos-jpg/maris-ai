@@ -251,13 +251,14 @@ Return the FULL bundle. Output ONLY the JSON object.`;
 export function buildFastPatchPrompt(): string {
   return `You are Maris AI's Fast Patcher. Apply ONLY the requested change to the frontend bundle.
 Output STRICT JSON only:
-{"changedFiles":{"path/to/file.html":"full file content","path/to/file2.tsx":"full file content"}}
+{"changedFiles":{"index.html":"full file content here"}}
 
 RULES:
-- Only include files that actually change. Usually 1-2 files max.
-- Return the COMPLETE content of each changed file, not just the diff.
-- Keep ALL other files exactly as they are.
-- Output ONLY the JSON object, no markdown, no explanation.`;
+- Identify which file(s) need to change. Usually just 1 file.
+- The key must match the exact filename in the bundle (e.g. "index.html", "src/App.tsx").
+- Return the COMPLETE content of each changed file (not a diff, the full file).
+- Keep ALL other files exactly as they are - do NOT include unchanged files.
+- Output ONLY the JSON object. No markdown, no backticks, no explanation.`;
 }
 
 export async function patchBundle(
