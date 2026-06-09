@@ -15,7 +15,7 @@ COPY lib/services/package.json ./lib/services/
 RUN npm install -g pnpm
 RUN pnpm install --no-frozen-lockfile
 COPY . .
-ARG CACHE_BUST=1781035570
+ARG CACHE_BUST=1781037230
 RUN pnpm --filter @workspace/api-server run build
 EXPOSE 7860
 ENV NODE_PATH=/app/node_modules
