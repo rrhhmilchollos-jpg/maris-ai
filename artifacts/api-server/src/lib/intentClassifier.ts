@@ -1,74 +1,63 @@
 /**
- * Chat-intent classifier.
+ * Deterministic chat-intent router for Maris AI.
  *
- * Every message a user sends in the chat for an existing app used to enqueue
- * a full generation job — even when the message was a plain question
- * ("¿qué colores has usado?", "¿de qué va esta app?") or a research-only
- * request ("busca en stripe.com y dime cómo es su home"). That wasted
- * credits and made the agent feel dumb: it would regenerate the whole app
- * just to answer a question.
+ * The product must not spend credits or enqueue code-generation jobs when the
+ * user is asking for data/CRM/database operations, research, or plain answers.
+ * This classifier acts as the first gate before credits, queues, file writes or
+ * bundle generation. It deliberately separates two platform engines:
  *
- * This module asks Haiku to classify the intent BEFORE we touch credits or
- * the queue. Three buckets:
+ *   - ENGINE_DEV: build/edit code, UI, APIs, pages, components, workflows.
+ *   - ENGINE_EXEC: operate on data, credentials, CRM records, MongoDB/API state.
  *
- *   - "question": the user is asking about the existing app. Answer with
- *     plain text using app metadata + chat history. No code changes.
- *
- *   - "research": the user wants the agent to look something up on the web
- *     (URL, "busca en X.com…"). The route handler will call researchTopic()
- *     and return the brief as a chat reply. No code changes either.
- *
- *   - "edit": the user wants something built or changed. Goes through the
- *     normal generation pipeline (which decides patch vs full internally).
- *
- * The classifier is deliberately conservative: anything ambiguous defaults
- * to "edit" so we never silently refuse to build something the user asked
- * for. A short ≤500-char reply is included for the question case so the
- * route handler can save it directly without a second model call.
- *
- * Failure mode: if the API call throws or returns garbage, we fall back to
- * "edit" — better to do real work than to drop the message on the floor.
+ * The legacy buckets `question`, `research` and `edit` are kept for backward
+ * compatibility with existing route logic. `edit` maps to ENGINE_DEV and the new
+ * `execute` bucket maps to ENGINE_EXEC.
  */
 
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import type { Logger } from "pino";
 
-export type ChatIntent = "question" | "research" | "edit";
+export type ChatIntent = "question" | "research" | "edit" | "execute";
+export type ExecutionEngine = "ENGINE_DEV" | "ENGINE_EXEC" | "ENGINE_INFO" | "ENGINE_RESEARCH";
 
 export type ClassifiedIntent = {
   intent: ChatIntent;
+  engine: ExecutionEngine;
   /** Short Spanish reply for `intent === "question"`. Always empty for the others. */
   reply: string;
+  /** Deterministic reason useful for logs/UI badges. */
+  reason: string;
 };
 
 /**
- * Spanish imperative verbs that signal a real code change. If the user's
- * message contains ANY of these, we override the classifier and force
- * "edit" — even if the model thought it was a question. This is a hard
- * safety net: prompt injection in agent notes / chat history could trick
- * the classifier into "answering" a real edit request and silently
- * dropping the user's work. Better to spend 1 credit than to ignore them.
- *
- * Pattern uses word boundaries (\b...) to avoid matching inside other
- * words ("creas" → match, "creas que" → match, "increíble" → no match).
- * The trailing accent variants are listed explicitly because Spanish
- * imperatives often carry a written accent ("añádelo", "ponlo", etc.).
+ * Words that indicate the user is asking the running platform to operate on
+ * production data/state instead of rebuilding source files.
  */
-const EDIT_VERB_PATTERNS: RegExp[] = [
-  /\b(añad[eaií]|agreg[aeo]|sum[aeo]|incluy[ae])\b/i,
-  /\b(camb[iíí]a?|modif[ií]c[aeo]|edit[aeo]|ajust[aeo]|actualiz[aeo])\b/i,
-  /\b(haz|hac[eé]r?|crea|cre[aá]me|cre[aá]lo|construy[ae]|gener[aeo])\b/i,
-  /\b(arregl[aeo]|repar[aeo]|fix[ea]?|corrij[aeo]|debug)\b/i,
-  /\b(elimin[aeo]|borr[aeo]|quit[aeo]|remueve)\b/i,
-  /\b(rehaz|rehac[eé]r?|reescrib[ea]|redise[ñn][aeo]|refactoriz[aeo])\b/i,
-  /\b(pon|ponlo|ponle|p[oó]n[ml]e|colo[cq][aeo])\b/i,
-  /\b(reempl[aá]z[aeo]|sustituy[ea])\b/i,
-  /\b(ahora\s+(con|sin|usando|m[aá]s|menos))\b/i,
-  /\b(qu[ií]ero\s+que\b)/i,
+const EXEC_KEYWORD_PATTERNS: RegExp[] = [
+  /\b(registra|registrar|registro|alta|dar\s+de\s+alta)\b/i,
+  /\b(insertar|inserta|inyectar|guarda|guardar|persistir|grabar)\b/i,
+  /\b(mongodb|mongo\s*db|base\s+de\s+datos|bbdd|database|colecci[oó]n|collection)\b/i,
+  /\b(crm|ventas|comercial(?:es)?|agente\s+comercial|lead|cliente|pipeline)\b/i,
+  /\b(credenciales|password|contrase[ñn]a|email|correo|usuario|rol|permisos)\b/i,
+  /\b(eliminar|borra|borrar|desactivar|revocar)\b.*\b(usuario|cliente|registro|lead|credenciales|crm|mongodb|base\s+de\s+datos)\b/i,
 ];
 
+const DEV_KEYWORD_PATTERNS: RegExp[] = [
+  /\b(bot[oó]n|p[aá]gina|componente|dise[ñn]o|estilo|maquetaci[oó]n|layout|css|html|react|tailwind|frontend|backend|api|endpoint|workflow|flujo)\b/i,
+  /\b(a[ñn]ad[eaií]|agreg[aeo]|sum[aeo]|incluy[ae])\b.*\b(bot[oó]n|p[aá]gina|secci[oó]n|componente|campo|formulario|men[uú]|card|tarjeta|vista)\b/i,
+  /\b(camb[ií]a?|modif[ií]c[aeo]|edit[aeo]|ajust[aeo]|actualiz[aeo])\b.*\b(c[oó]digo|dise[ñn]o|texto|color|estilo|vista|app|web|frontend|backend)\b/i,
+  /\b(haz|hacer|crea|cr[eé]ame|construy[ae]|gener[aeo]|desarrolla|programa)\b.*\b(app|web|landing|dashboard|crm|panel|tienda|saas|juego|p[aá]gina)\b/i,
+  /\b(arregl[aeo]|repar[aeo]|fix(?:ea)?|corrij[aeo]|debug)\b/i,
+  /\b(rehaz|reescrib[ea]|redise[ñn][aeo]|refactoriz[aeo]|reempl[aá]z[aeo]|sustituy[ea])\b/i,
+];
+
+/** Legacy edit detector kept as a safety net for clear build requests. */
 function looksLikeEdit(message: string): boolean {
-  return EDIT_VERB_PATTERNS.some((re) => re.test(message));
+  return DEV_KEYWORD_PATTERNS.some((re) => re.test(message));
+}
+
+function looksLikeExecution(message: string): boolean {
+  return EXEC_KEYWORD_PATTERNS.some((re) => re.test(message));
 }
 
 export type ClassifierContext = {
@@ -76,18 +65,13 @@ export type ClassifierContext = {
   appDescription: string;
   /** Persistent agent notes for the app (best effort, may be empty). */
   agentNotes?: string;
-  /**
-   * Recent chat turns oldest → newest. Each entry is one prior message.
-   * Truncate to ~10 entries before passing in; we don't trim again here.
-   */
+  /** Recent chat turns oldest → newest. */
   recentMessages: { role: "user" | "assistant" | string; content: string }[];
   message: string;
   log: Logger;
 };
 
-/** Quick local heuristic so we can short-circuit obvious research requests
- *  without spending a model call. The classifier still handles the long
- *  tail; this is just for the cheap, unambiguous cases. */
+/** Quick local heuristic so we can short-circuit obvious research requests. */
 const URL_LIKE = /(https?:\/\/|www\.)\S+/i;
 const RESEARCH_TRIGGERS = [
   "busca en",
@@ -105,21 +89,33 @@ function looksLikeResearch(message: string): boolean {
   return RESEARCH_TRIGGERS.some((t) => lower.includes(t));
 }
 
-const SYSTEM_PROMPT = `Eres un clasificador de intención para Maris AI, un generador de apps web.
+const SYSTEM_PROMPT = `Eres el enrutador determinista de intención de Maris AI.
 
-Tu trabajo: leer el último mensaje del usuario en el chat de UNA app YA EXISTENTE y decidir qué quiere hacer. Devuelves SOLO un JSON:
+Tu trabajo: leer el último mensaje del usuario en el chat de UNA app YA EXISTENTE y decidir qué motor debe ejecutarlo. Devuelves SOLO un JSON:
 
-{"intent":"question"|"research"|"edit","reply":"..."}
+{"intent":"question"|"research"|"edit"|"execute","reply":"...","reason":"..."}
 
 Reglas estrictas:
 
-- "question": el usuario PREGUNTA algo sobre la app actual o sobre cómo funciona Maris AI ("¿qué colores has usado?", "¿de qué va esta app?", "¿cuántos créditos cuesta una edición?", "explícame el código", "¿cómo publico la app?"). NO pide cambios. En este caso "reply" debe contener una respuesta clara y útil en ESPAÑOL, máximo 500 caracteres, sin saludos ni cierres tipo "¿algo más?".
+- "execute" = ENGINE_EXEC. El usuario pide operar sobre datos o estado real: registrar/insertar/guardar/eliminar usuarios, leads, clientes, credenciales, CRM, ventas, MongoDB, APIs de producción o bases de datos. NO se modifica código, NO se genera bundle, NO se compila. "reply" debe ir vacío.
 
-- "research": el usuario pide explícitamente buscar en la web ("busca en stripe.com y dime cómo es su home", "investiga la competencia", "mira esta URL: https://..."). Pide INFORMACIÓN externa, no un cambio en la app. "reply" debe ir vacío "".
+- "edit" = ENGINE_DEV. El usuario quiere construir o cambiar código fuente: diseño, maquetación, lógica de negocio, botones, páginas, componentes, estilos, APIs, endpoints, workflows, deploy/preview o correcciones de la app. "reply" debe ir vacío.
 
-- "edit": el usuario quiere AÑADIR, MODIFICAR, ARREGLAR o REHACER algo en la app ("añade un botón verde", "cambia el título", "haz un dashboard", "no funciona el formulario, arréglalo", "ponlo más bonito", "ahora con login"). Cualquier petición de acción sobre el código va aquí. "reply" debe ir vacío "".
+- "research" = ENGINE_RESEARCH. El usuario pide buscar información externa o revisar una URL sin cambiar la app. "reply" debe ir vacío.
 
-En caso de duda, elige "edit". No inventes respuestas para preguntas que requieren mirar el código que no tienes — si la pregunta es sobre detalles internos del bundle, contesta con lo que sí sabes (título, descripción, notas del agente). Nunca uses Markdown en "reply"; texto plano. No expliques tu razonamiento, solo el JSON.`;
+- "question" = ENGINE_INFO. El usuario pregunta algo sobre la app o Maris AI y no pide ninguna operación. En este caso "reply" debe contener una respuesta clara y útil en ESPAÑOL, máximo 500 caracteres, sin saludos ni cierres tipo "¿algo más?".
+
+Prioridad: si hay una operación de datos/CRM/credenciales/MongoDB, elige "execute" aunque aparezcan verbos como añadir o eliminar. Si hay petición clara de código/UI/app, elige "edit". En caso de duda entre edit y question, elige "edit". No uses Markdown en "reply"; texto plano. No expliques tu razonamiento, solo el JSON.`;
+
+function engineForIntent(intent: ChatIntent): ExecutionEngine {
+  switch (intent) {
+    case "execute": return "ENGINE_EXEC";
+    case "research": return "ENGINE_RESEARCH";
+    case "question": return "ENGINE_INFO";
+    case "edit":
+    default: return "ENGINE_DEV";
+  }
+}
 
 function buildUserMessage(ctx: ClassifierContext): string {
   const lines: string[] = [];
@@ -128,7 +124,6 @@ function buildUserMessage(ctx: ClassifierContext): string {
     lines.push(`Descripción: ${ctx.appDescription}`);
   }
   if (ctx.agentNotes && ctx.agentNotes.trim().length > 0) {
-    // Keep notes short — the classifier doesn't need the full memory dump.
     const trimmed = ctx.agentNotes.trim().slice(0, 1500);
     lines.push(`Notas del agente sobre la app:\n${trimmed}`);
   }
@@ -137,7 +132,6 @@ function buildUserMessage(ctx: ClassifierContext): string {
     lines.push("Últimos mensajes del chat (orden cronológico):");
     for (const m of ctx.recentMessages) {
       const role = m.role === "user" ? "Usuario" : "Asistente";
-      // Hard-cap each message so a giant prior reply doesn't blow the prompt.
       const content = m.content.slice(0, 400).replace(/\s+/g, " ").trim();
       lines.push(`- ${role}: ${content}`);
     }
@@ -145,7 +139,7 @@ function buildUserMessage(ctx: ClassifierContext): string {
   lines.push("");
   lines.push(`Nuevo mensaje del usuario:\n"""${ctx.message}"""`);
   lines.push("");
-  lines.push('Devuelve SOLO el JSON descrito.');
+  lines.push("Devuelve SOLO el JSON descrito.");
   return lines.join("\n");
 }
 
@@ -164,46 +158,50 @@ function parseClassifierJson(raw: string): ClassifiedIntent | null {
     return null;
   }
   const intent = parsed?.intent;
-  if (intent !== "question" && intent !== "research" && intent !== "edit") {
+  if (intent !== "question" && intent !== "research" && intent !== "edit" && intent !== "execute") {
     return null;
   }
   const reply = typeof parsed?.reply === "string" ? parsed.reply.trim() : "";
+  const reason = typeof parsed?.reason === "string" ? parsed.reason.trim().slice(0, 180) : "model";
   return {
     intent,
+    engine: engineForIntent(intent),
     reply: intent === "question" ? reply.slice(0, 800) : "",
+    reason,
   };
 }
 
 const TIMEOUT_MS = 7_000;
 
-/**
- * Classify the user's chat message. Returns "edit" on any failure so we
- * never silently lose a build request. Also short-circuits to "edit"
- * deterministically when the message contains a Spanish imperative
- * verb — that hard override prevents prompt injection in chat history /
- * agent notes from tricking the model into "answering" a real edit
- * request.
- */
 export async function classifyChatIntent(
   ctx: ClassifierContext,
 ): Promise<ClassifiedIntent> {
-  // Hard safety net: if the message contains an imperative verb ("añade",
-  // "cambia", "haz", "arregla", …) the user clearly wants a build, not
-  // an answer. Skip the model entirely. Cheap, deterministic, immune to
-  // prompt injection. We still log what the heuristic saw so the
-  // breadcrumb chain stays intact.
-  if (looksLikeEdit(ctx.message)) {
-    ctx.log.info(
-      { reason: "edit-verb heuristic" },
-      "Intent classifier short-circuit → edit",
-    );
-    return { intent: "edit", reply: "" };
-  }
-  const heuristic = looksLikeResearch(ctx.message);
+  const execution = looksLikeExecution(ctx.message);
+  const edit = looksLikeEdit(ctx.message);
+  const research = looksLikeResearch(ctx.message);
 
-  // AbortController so the SDK actually cancels the upstream request when
-  // we hit the local timeout — otherwise a slow Haiku call keeps burning
-  // tokens after we've already moved on.
+  // ENGINE_EXEC has priority over generic edit verbs such as "añadir" when the
+  // object is a user, credential, CRM record, MongoDB row/document, etc.
+  if (execution && !edit) {
+    ctx.log.info({ reason: "exec-keyword heuristic" }, "Intent classifier short-circuit → execute");
+    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: "exec-keyword heuristic" };
+  }
+
+  if (execution && /\b(mongodb|base\s+de\s+datos|crm|credenciales|usuario|password|contrase[ñn]a|ventas|comercial|lead|cliente)\b/i.test(ctx.message)) {
+    ctx.log.info({ reason: "exec-priority heuristic" }, "Intent classifier short-circuit → execute");
+    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: "exec-priority heuristic" };
+  }
+
+  if (edit) {
+    ctx.log.info({ reason: "dev-keyword heuristic" }, "Intent classifier short-circuit → edit");
+    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "dev-keyword heuristic" };
+  }
+
+  if (research) {
+    ctx.log.info({ reason: "research heuristic" }, "Intent classifier short-circuit → research");
+    return { intent: "research", engine: "ENGINE_RESEARCH", reply: "", reason: "research heuristic" };
+  }
+
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -225,27 +223,14 @@ export async function classifyChatIntent(
       .trim();
     const parsed = parseClassifierJson(text);
     if (!parsed) {
-      ctx.log.warn(
-        { rawSnippet: text.slice(0, 200), heuristicResearch: heuristic },
-        "Intent classifier returned unparseable JSON — defaulting to edit",
-      );
-      return { intent: "edit", reply: "" };
+      ctx.log.warn({ rawSnippet: text.slice(0, 200), heuristicResearch: research }, "Intent classifier returned unparseable JSON — defaulting to edit");
+      return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-unparseable" };
     }
-    ctx.log.info(
-      {
-        intent: parsed.intent,
-        replyLen: parsed.reply.length,
-        heuristicResearch: heuristic,
-      },
-      "Intent classifier decision",
-    );
+    ctx.log.info({ intent: parsed.intent, engine: parsed.engine, replyLen: parsed.reply.length, reason: parsed.reason }, "Intent classifier decision");
     return parsed;
   } catch (err) {
-    ctx.log.warn(
-      { err, heuristicResearch: heuristic },
-      "Intent classifier failed — defaulting to edit",
-    );
-    return { intent: "edit", reply: "" };
+    ctx.log.warn({ err, heuristicResearch: research }, "Intent classifier failed — defaulting to edit");
+    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-error" };
   } finally {
     clearTimeout(timeoutHandle);
   }

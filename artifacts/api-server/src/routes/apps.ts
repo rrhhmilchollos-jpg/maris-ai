@@ -2099,6 +2099,7 @@ import {
 import { requireAuth } from "../lib/auth";
 import { generateRateLimiter } from "../middlewares/rateLimit";
 import { enqueueGenerateJob } from "../lib/jobQueue";
+import { classifyChatIntent, type ClassifiedIntent } from "../lib/intentClassifier";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -2488,6 +2489,45 @@ router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
   }
 });
 
+
+function redactOperationalSecrets(text: string): string {
+  return String(text || "")
+    .replace(/([Pp]assword|contrase[ñn]a|clave)\s*[:=]\s*([^\s/;]+)/g, "$1: [REDACTADO]")
+    .replace(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, (email) => {
+      const [name, domain] = email.split("@");
+      if (!name || !domain) return "[email-redactado]";
+      return `${name.slice(0, 2)}***@${domain}`;
+    });
+}
+
+function extractOperationalTargets(text: string): string[] {
+  const lower = text.toLowerCase();
+  const targets = new Set<string>();
+  if (/crm|ventas|comercial|lead|cliente/.test(lower)) targets.add("CRM / ventas");
+  if (/mongodb|mongo\s*db|base de datos|bbdd|database/.test(lower)) targets.add("MongoDB / base de datos");
+  if (/credenciales|password|contrase[ñn]a|usuario|rol|permisos/.test(lower)) targets.add("credenciales y permisos");
+  if (targets.size === 0) targets.add("operación de datos");
+  return Array.from(targets);
+}
+
+function buildEngineExecutionReply(content: string, classified: ClassifiedIntent): string {
+  const targets = extractOperationalTargets(content);
+  const safeSummary = redactOperationalSecrets(content).replace(/\s+/g, " ").trim();
+  return [
+    "---",
+    "**ENGINE_EXEC activado.**",
+    "",
+    "La petición se ha clasificado como operación de datos/CRM, por lo que Maris AI ha bloqueado el flujo de desarrollo: no se ha tocado HTML, CSS, JavaScript, Node.js, bundle, preview ni cola de compilación.",
+    "",
+    `**Destino detectado:** ${targets.join(", ")}.`,
+    `**Acción recibida:** ${safeSummary || "operación directa sobre datos"}.`,
+    `**Motivo de enrutamiento:** ${classified.reason}.`,
+    "",
+    "Para ejecutar una escritura real sobre una base de datos externa, configura un handler seguro del motor EXEC con variables de entorno de producción y reglas explícitas de colección/campos. Hasta entonces, esta ruta actúa como barrera determinista anti-recompilación y no simula cambios de código.",
+    "---",
+  ].join("\n");
+}
+
 // ── GET /api/apps/:id/messages ────────────────────────────────────────────
 router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {
@@ -2530,10 +2570,68 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       });
     }
 
-    // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) — MODIFICACIONES ────────────
-    // PLAN FREE: 0.2 créditos por modificación → 20 modificaciones con 4 créditos restantes
-    // PLAN PAID: 5 créditos por modificación
-    // ─────────────────────────────────────────────────────────────────────────
+    const recentMessages = await AppMessage.find({ appId: req.params.id })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+    const classified = await classifyChatIntent({
+      appTitle: app.title || "App sin título",
+      appDescription: app.description || "",
+      agentNotes: app.agentNotes || "",
+      recentMessages: recentMessages
+        .reverse()
+        .map((m: any) => ({ role: String(m.role || "assistant"), content: String(m.content || "") })),
+      message: trimmedContent,
+      log: req.log || logger,
+    });
+
+    if (classified.intent === "question") {
+      const reply = classified.reply || "Puedo ayudarte con la app actual. Si quieres modificar código, descríbeme el cambio exacto; si quieres operar datos o CRM, lo enrutaré por ENGINE_EXEC sin recompilar.";
+      await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
+      await AppMessage.create({ appId: req.params.id, role: "assistant", content: reply });
+      return res.status(200).json({
+        conversationOnly: true,
+        engine: classified.engine,
+        intent: classified.intent,
+        reply,
+        message: reply,
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+      });
+    }
+
+    if (classified.intent === "research") {
+      await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
+      const reply = await researchTopic(trimmedContent);
+      await AppMessage.create({ appId: req.params.id, role: "assistant", content: reply });
+      return res.status(200).json({
+        conversationOnly: true,
+        engine: classified.engine,
+        intent: classified.intent,
+        reply,
+        message: reply,
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+      });
+    }
+
+    if (classified.intent === "execute") {
+      await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
+      const reply = buildEngineExecutionReply(trimmedContent, classified);
+      await AppMessage.create({ appId: req.params.id, role: "assistant", content: reply });
+      return res.status(200).json({
+        operationOnly: true,
+        engine: classified.engine,
+        intent: classified.intent,
+        reply,
+        message: reply,
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+      });
+    }
+
+    // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) — ENGINE_DEV / MODIFICACIONES ─
+    // Solo se cobra cuando el clasificador ha decidido que la petición modifica código.
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const cost = isPaid ? 5 : 0.2;
 
@@ -2541,7 +2639,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       userId,
       isAdmin,
       amount: cost,
-      description: `Refinamiento de ingeniería: ${app.title}`,
+      description: `Refinamiento ENGINE_DEV: ${app.title}`,
     });
 
     if (!charge.ok) {
@@ -2556,10 +2654,10 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       });
     }
 
-    await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent });
+    await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
 
     const requestLocale = detectRequestLocale(req);
-    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${trimmedContent}`;
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n[MARIS_ENGINE=ENGINE_DEV; INTENT_REASON=${classified.reason}]\n${trimmedContent}`;
 
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
@@ -2579,7 +2677,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     await enqueueGenerateJob(jobId);
     runJobById(jobId).catch(err => logger.error({ err, jobId }, "Immediate job run error"));
-    res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
+    res.status(201).json({ id: jobId, engine: classified.engine, intent: classified.intent, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });

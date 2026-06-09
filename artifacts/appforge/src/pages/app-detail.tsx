@@ -375,8 +375,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-        if (nextJob?.conversationOnly) {
+        if (nextJob?.conversationOnly || nextJob?.operationOnly) {
           setActiveJobId(null);
+          const engine = String(nextJob?.engine || "");
+          if (engine === "ENGINE_EXEC") {
+            toast({ title: "ENGINE_EXEC activado", description: "Operación de datos enroutada sin recompilar ni consumir créditos." });
+          } else if (engine === "ENGINE_RESEARCH") {
+            toast({ title: "Investigación completada", description: "Respuesta generada sin modificar código ni lanzar build." });
+          }
           return;
         }
         if (nextJob?.id) {
@@ -839,6 +845,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     )}
                     <div className={`max-w-[78%] space-y-2 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
                       <div className={`whitespace-pre-wrap rounded-2xl px-5 py-4 text-[15px] leading-relaxed shadow-[0_12px_30px_rgba(0,0,0,0.18)] ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
+                        {!isUserMessage && String(message.content || "").includes("ENGINE_EXEC activado") && (
+                          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[12px] font-extrabold uppercase tracking-[0.18em] text-emerald-200">
+                            <Shield className="h-3.5 w-3.5" /> ENGINE_EXEC · sin recompilar
+                          </div>
+                        )}
                         {message.content}
                       </div>
                       <div className={`px-1 ${isUserMessage ? "text-right" : "text-left"}`}>
