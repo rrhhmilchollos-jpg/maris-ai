@@ -2935,6 +2935,22 @@ export async function runJobById(jobId: string): Promise<void> {
           appTitle: previousApp?.title,
         }),
       });
+
+      // Auto-push to GitHub after every edit so Vercel redeploys automatically
+      try {
+        const updatedApp = await GeneratedApp.findById(job.editAppId).lean() as any;
+        if (updatedApp?.githubRepoFullName) {
+          await pushAppToGitHub({
+            title: updatedApp.title || "Maris AI App",
+            description: updatedApp.description || "",
+            frontendBundle: finalResult.frontendCode,
+            existingRepoFullName: updatedApp.githubRepoFullName,
+          });
+          await log("system", "✅ Cambios subidos a GitHub — Vercel redesplegará automáticamente.");
+        }
+      } catch (ghErr) {
+        await log("system", `⚠️ GitHub push falló (no crítico): ${ghErr instanceof Error ? ghErr.message : ghErr}`, "warn");
+      }
     } else {
       const app = await GeneratedApp.create({
         userId: job.userId,
