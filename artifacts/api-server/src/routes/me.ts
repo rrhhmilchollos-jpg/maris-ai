@@ -102,8 +102,6 @@ router.get("/me/stats", requireAuth, async (req, res) => {
         prompt: r.prompt,
         description: r.description,
         techStack: r.techStack,
-        frontendCode: r.frontendCode,
-        backendCode: r.backendCode,
         status: r.status,
         createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
       })),
