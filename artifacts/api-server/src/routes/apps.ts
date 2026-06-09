@@ -1552,72 +1552,27 @@ async function fastPatchEdit(
   onProgress?: (p: GenerateProgress) => void,
 ): Promise<GeneratedAppPayload | null> {
   onProgress?.({ phase: "fixing", progress: 30, note: "Aplicando parche directo…" });
-  log("patcher", "Aplicando tu cambio directamente al bundle (modo rápido).");
-
-  let memoryBlock = "";
+  log("patcher", "⚡ Parche quirúrgico — solo archivos afectados.");
   try {
-    const matches = await recallSimilar(prompt, { limit: 2, threshold: 0.78, language });
-    if (matches.length > 0) {
-      log("memory", `🧠 recall · ${matches.length} cambio(s) similar(es) ya hechos`);
-      memoryBlock = buildRecallExamplesBlock(matches);
+    const resp = await createClaudeMessageWithFallback("patcher", "claude-sonnet-4-6", {
+      max_tokens: 8000,
+      system: buildFastPatchPrompt(),
+      messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,1200)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles only.` }]
+    });
+    const raw = (resp.content[0] as any).text ?? "";
+    const parsed = extractJsonObject<{changedFiles?:Record<string,string>}>(raw);
+    if (parsed?.changedFiles && Object.keys(parsed.changedFiles).length > 0) {
+      const merged = mergePatchIntoBundle(previous.frontendCode, parsed.changedFiles);
+      if (merged && merged.length > 100) {
+        log("patcher", `✓ Parche aplicado — ${Object.keys(parsed.changedFiles).length} archivo(s): ${Object.keys(parsed.changedFiles).join(", ")}`);
+        onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
+        return { title: previous.title, description: previous.description, techStack: previous.techStack, frontendCode: merged, backendCode: previous.backendCode };
+      }
     }
-  } catch {
-    /* best-effort */
-  }
-
-  const issues: QAIssue[] = [
-    {
-      file: "user-request",
-      problem: prompt.slice(0, 1500),
-      fix: "Aplica EXACTAMENTE lo que pide la usuaria, modificando solo lo mínimo necesario. NO reescribas archivos enteros si no hace falta. Conserva todo el resto del bundle intacto.",
-    },
-  ];
-
-  const patched = await patchBundle(previous.frontendCode, issues, language, memoryBlock);
-  if (!patched || patched.length < 100) {
-    log("patcher", "El parche directo devolvió un bundle vacío.", "warn");
-    return null;
-  }
-
-  onProgress?.({ phase: "validating", progress: 75, note: "Validando el parche…" });
-  const validation = await validateBundle(patched);
-  if (!validation.ok && validation.issues.length > 0) {
-    const repaired = await runValidatePatchLoop(patched, { ok: true, issues: [] }, onProgress, 70, language, log);
-    const finalValidation = await validateBundle(repaired);
-    if (!finalValidation.ok && finalValidation.issues.length > 0) {
-      log("patcher", `Parche directo no convergió tras auto-reparación (${finalValidation.issues.length} error(es)). Cayendo al flujo completo.`, "warn");
-      return null;
-    }
-    onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
-    return {
-      title: previous.title,
-      description: previous.description,
-      techStack: previous.techStack,
-      frontendCode: repaired,
-      backendCode: previous.backendCode,
-    };
-  }
-
-  rememberPatch({
-    errorMessage: redactSecrets(prompt).slice(0, 400),
-    errorContext: "fast-patch user request",
-    patch: "(fast-patch convergence; no code stored — recall by prompt only)",
-    language,
-  }).then((entry) => {
-    if (entry) log("memory", `🧠 aprendí este cambio (id ${entry.id})`);
-  }).catch(() => {});
-
-  onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
-  log("patcher", "✓ parche aplicado y validado.");
-  return {
-    title: previous.title,
-    description: previous.description,
-    techStack: previous.techStack,
-    frontendCode: patched,
-    backendCode: previous.backendCode,
-  };
+  } catch(err) { log("patcher", `Parche quirúrgico falló: ${err}`, "warn"); }
+  log("patcher", "Parche quirúrgico no convergíó.", "warn");
+  return null;
 }
-
 export interface PreviousApp {
   title: string;
   description: string;
