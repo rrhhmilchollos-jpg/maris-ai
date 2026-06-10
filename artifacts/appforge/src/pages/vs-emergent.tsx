@@ -14,7 +14,7 @@ export default function VsCompetidoresPage() {
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             El primer generador de apps con IA diseñado para el mercado hispanohablante.
-            Pipeline completo de 9 agentes especializados, desplegado en Vercel + Render + MongoDB.
+            Pipeline completo de 9 agentes especializados, desplegado en Vercel + Railway + MongoDB.
           </p>
         </div>
       </section>
@@ -39,7 +39,7 @@ export default function VsCompetidoresPage() {
                   { feature: "Agentes Especializados", maris: "9 Agentes (Pipeline Completo)", other: "Agente Único / Generalista" },
                   { feature: "Modelos de IA", maris: "Claude + Gemini + GPT (Multi-modelo)", other: "Modelo único / Limitado" },
                   { feature: "Calidad del Código", maris: "Arquitectura Senior (Vite + Tailwind)", other: "Código Estándar" },
-                  { feature: "Backend e Infraestructura", maris: "Express + MongoDB + Render", other: "Enfoque Principal Frontend" },
+                  { feature: "Backend e Infraestructura", maris: "Express + MongoDB + Railway", other: "Enfoque Principal Frontend" },
                   { feature: "Soporte en Español", maris: "Completo (Nativo)", other: "Limitado / Inglés" },
                   { feature: "Exportación a GitHub", maris: "Integración Directa", other: "Sujeto a Plan" },
                   { feature: "Revisión de QA", maris: "Agente QA dedicado", other: "Manual / No disponible" },
