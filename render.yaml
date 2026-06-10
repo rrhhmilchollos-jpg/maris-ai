@@ -38,9 +38,9 @@ services:
       - key: AI_INTEGRATIONS_GEMINI_API_KEY
         sync: false
       - key: FRONTEND_BASE_PATH
-        sync: false
+        value: "/"
       - key: FRONTEND_URL
-        sync: false
+        value: "https://www.marisai.es"
       - key: WEBHOOK_SECRET
         sync: false
       - key: REDIS_URL

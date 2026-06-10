@@ -154,10 +154,12 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
         "font-src https: data:",
         "img-src 'self' https: data: blob:",
         "connect-src https:",
-        "frame-src 'self' data: blob:",
-        "child-src 'self' data: blob:",
+        "frame-src 'self' data: blob: https:",
+        "child-src 'self' data: blob: https:",
+        "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://*.onrender.com https://*.vercel.app https://*.vercel.live",
       ].join("; "),
     );
+    res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.send(innerHtml);
@@ -206,10 +208,12 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
         "font-src https: data:",
         "img-src 'self' https: data: blob:",
         "connect-src https:",
-        "frame-src 'self' data: blob:",
-        "child-src 'self' data: blob:",
+        "frame-src 'self' data: blob: https:",
+        "child-src 'self' data: blob: https:",
+        "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://*.onrender.com https://*.vercel.app https://*.vercel.live",
       ].join("; "),
     );
+    res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
     res.send(wrapper);
