@@ -2,10 +2,18 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
 import { logger } from "./logger";
 
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-});
+// Lazy initialization — evita crash si OPENAI_API_KEY no está configurada al arrancar
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy";
+    _openai = new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey,
+    });
+  }
+  return _openai;
+}
 
 /* ----------------------------- types -------------------------------------- */
 
@@ -174,7 +182,7 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
   // Fallback to OpenAI if Anthropic fails
   try {
     logger.info({ role }, "Falling back to OpenAI (GPT-4o/5) for agent task");
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-4o", // or "gpt-5.4" if available
       messages: [
         { role: "system", content: params.system },
