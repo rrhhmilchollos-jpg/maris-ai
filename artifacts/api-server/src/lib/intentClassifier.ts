@@ -16,6 +16,7 @@
 
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import type { Logger } from "pino";
+import { analyzeSpanishIntent, firstMatchedTerm, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
 export type ChatIntent = "question" | "research" | "edit" | "execute";
 export type ExecutionEngine = "ENGINE_DEV" | "ENGINE_EXEC" | "ENGINE_INFO" | "ENGINE_RESEARCH";
@@ -119,7 +120,10 @@ Reglas estrictas:
 
 - "question" = ENGINE_INFO. El usuario pregunta algo sobre la app o Maris AI y no pide ninguna operación. En este caso "reply" debe contener una respuesta clara y útil en ESPAÑOL, máximo 500 caracteres, sin saludos ni cierres tipo "¿algo más?".
 
-Prioridad: si hay una operación de datos/CRM/credenciales/MongoDB, elige "execute" aunque aparezcan verbos como añadir o eliminar. Si hay petición clara de código/UI/app, elige "edit". En caso de duda entre edit y question, elige "edit". No uses Markdown en "reply"; texto plano. No expliques tu razonamiento, solo el JSON.`;
+Prioridad: si hay una operación de datos/CRM/credenciales/MongoDB, elige "execute" aunque aparezcan verbos como añadir o eliminar. Si hay petición clara de código/UI/app, elige "edit". En caso de duda entre edit y question, elige "edit". No uses Markdown en "reply"; texto plano. No expliques tu razonamiento, solo el JSON.
+
+Léxico español común:
+${SPANISH_LEXICON_PROMPT_SUMMARY}`;
 
 function engineForIntent(intent: ChatIntent): ExecutionEngine {
   switch (intent) {
@@ -190,26 +194,30 @@ const TIMEOUT_MS = 7_000;
 export async function classifyChatIntent(
   ctx: ClassifierContext,
 ): Promise<ClassifiedIntent> {
-  const execution = looksLikeExecution(ctx.message);
-  const edit = looksLikeEdit(ctx.message);
-  const research = looksLikeResearch(ctx.message);
+  const spanish = analyzeSpanishIntent(ctx.message);
+  const execution = spanish.isDataOperation || looksLikeExecution(ctx.message);
+  const edit = spanish.isDevOperation || looksLikeEdit(ctx.message);
+  const research = spanish.isResearch || looksLikeResearch(ctx.message);
 
   // REGLA CLAVE: ENGINE_EXEC SIEMPRE tiene prioridad sobre ENGINE_DEV cuando
   // la petición involucra datos/CRM/usuarios/registros, aunque también contenga
   // verbos de desarrollo. Esto evita que "añade un usuario a la CRM" regenere el frontend.
   if (execution) {
-    ctx.log.info({ reason: "exec-keyword heuristic", hasEdit: edit }, "Intent classifier short-circuit → execute");
-    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: "exec-keyword heuristic (datos/CRM/usuarios)" };
+    const term = firstMatchedTerm(spanish, ["action.", "domain."]) || "datos/CRM";
+    ctx.log.info({ reason: "spanish-lexicon exec", hasEdit: edit, spanish }, "Intent classifier short-circuit → execute");
+    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: `spanish-lexicon execute (${term})` };
   }
 
   if (edit) {
-    ctx.log.info({ reason: "dev-keyword heuristic" }, "Intent classifier short-circuit → edit");
-    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "dev-keyword heuristic" };
+    const term = firstMatchedTerm(spanish, ["action.", "domain."]) || "código/UI";
+    ctx.log.info({ reason: "spanish-lexicon dev", spanish }, "Intent classifier short-circuit → edit");
+    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: `spanish-lexicon edit (${term})` };
   }
 
   if (research) {
-    ctx.log.info({ reason: "research heuristic" }, "Intent classifier short-circuit → research");
-    return { intent: "research", engine: "ENGINE_RESEARCH", reply: "", reason: "research heuristic" };
+    const term = firstMatchedTerm(spanish, ["action.research", "domain.research"]) || "investigación";
+    ctx.log.info({ reason: "spanish-lexicon research", spanish }, "Intent classifier short-circuit → research");
+    return { intent: "research", engine: "ENGINE_RESEARCH", reply: "", reason: `spanish-lexicon research (${term})` };
   }
 
   const controller = new AbortController();

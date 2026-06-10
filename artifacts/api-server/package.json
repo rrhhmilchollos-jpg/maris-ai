@@ -13,7 +13,8 @@
     "test:queue": "tsx ./src/__tests__/queue-recovery.test.ts",
     "test:agent-memory": "tsx ./src/__tests__/agent-memory.test.ts",
     "test:evaluator": "tsx ./src/__tests__/evaluator.test.ts",
-    "test": "pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator"
+    "test": "pnpm run test:spanish-intent && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator",
+    "test:spanish-intent": "tsx ./src/__tests__/spanish-intent-lexicon.test.ts"
   },
   "dependencies": {
     "@clerk/express": "^2.1.19",

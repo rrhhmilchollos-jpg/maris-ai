@@ -9,6 +9,8 @@
  * frontend cuando el usuario pedía solo modificar un dato en la CRM.
  */
 
+import { analyzeSpanishIntent, firstMatchedTerm, hasSpanishDomain } from "./spanishIntentLexicon";
+
 export interface ProjectFile {
   path: string;
   type: "frontend" | "backend" | "database" | "config" | "style" | "test";
@@ -215,6 +217,75 @@ export function resolveTargetFromPrompt(
   reasoning: string;
 } {
   const lowerPrompt = prompt.toLowerCase();
+  const spanish = analyzeSpanishIntent(prompt);
+
+  if (spanish.isDataOperation) {
+    let targetModel: string | undefined;
+    let maxScore = 0;
+    for (const model of projectMap.dataModels) {
+      const score = scoreModelRelevance(spanish.normalized, model);
+      if (score > maxScore) {
+        maxScore = score;
+        targetModel = model.name;
+      }
+    }
+    if (!targetModel) {
+      if (hasSpanishDomain(spanish, ["crm"])) targetModel = "crm";
+      else if (hasSpanishDomain(spanish, ["user"])) targetModel = "usuarios";
+      else if (hasSpanishDomain(spanish, ["inventory"])) targetModel = "productos";
+      else if (hasSpanishDomain(spanish, ["sales"])) targetModel = "ventas";
+      else targetModel = "datos";
+    }
+    const term = firstMatchedTerm(spanish, ["action.", "domain."]) || "operación de datos";
+    return {
+      targetType: "data_record",
+      targetModel,
+      confidence: Math.max(0.95, spanish.confidence),
+      reasoning: `Léxico español detectó operación de datos (${term}). Ir directo al modelo "${targetModel}" sin tocar el frontend.`,
+    };
+  }
+
+  if (hasSpanishDomain(spanish, ["style"])) {
+    const cssFile = projectMap.files.find((f) => f.type === "style");
+    const term = firstMatchedTerm(spanish, ["domain.style", "action."]) || "estilo";
+    return {
+      targetType: "style",
+      targetPath: cssFile?.path || findBestMatchingFile(spanish.normalized, projectMap.files.filter((f) => f.type === "style" || f.type === "frontend"))?.path || "src/App.tsx",
+      confidence: Math.max(0.88, spanish.confidence),
+      reasoning: `Léxico español detectó cambio de estilo (${term}). Ir directo al archivo visual objetivo.`,
+    };
+  }
+
+  if (hasSpanishDomain(spanish, ["backend", "api"])) {
+    const targetFile = findBestMatchingFile(spanish.normalized, projectMap.files.filter((f) => f.type === "backend"));
+    const term = firstMatchedTerm(spanish, ["domain.backend", "domain.api", "action."]) || "backend/API";
+    return {
+      targetType: "backend_file",
+      targetPath: targetFile?.path || "server.js",
+      confidence: Math.max(0.84, spanish.confidence),
+      reasoning: `Léxico español detectó lógica backend/API (${term}). Ir directo al archivo backend.`,
+    };
+  }
+
+  if (spanish.isFullBuild) {
+    const term = firstMatchedTerm(spanish, ["domain.full_build", "action.create"]) || "reconstrucción";
+    return {
+      targetType: "full_rebuild",
+      confidence: Math.max(0.90, spanish.confidence),
+      reasoning: `Léxico español detectó reconstrucción completa (${term}). Regenerar todo el proyecto.`,
+    };
+  }
+
+  if (hasSpanishDomain(spanish, ["ui", "component", "frontend", "deployment"]) || spanish.isDirectEdit) {
+    const targetFile = findBestMatchingFile(spanish.normalized, projectMap.files.filter((f) => f.type === "frontend" || f.type === "style"));
+    const term = firstMatchedTerm(spanish, ["domain.ui", "domain.component", "domain.frontend", "domain.deployment", "action."]) || "frontend";
+    return {
+      targetType: "frontend_file",
+      targetPath: targetFile?.path || "src/App.tsx",
+      confidence: Math.max(0.80, spanish.confidence),
+      reasoning: `Léxico español detectó cambio de UI/frontend (${term}). Ir directo al archivo "${targetFile?.path || "src/App.tsx"}".`,
+    };
+  }
 
   // ── Operaciones de datos (máxima prioridad) ───────────────────────────────
   const dataKeywords = [
