@@ -22,24 +22,48 @@ type EmailRecipient = {
 
 type EmailLogPayload = {
   channel: "email";
-  template: "auto_publish_ready" | "needs_review";
+  template: "auto_publish_ready" | "needs_review" | "support_ticket_created";
   to: string | null;
   recipientName: string | null;
   subject: string;
   bodyText: string;
 };
 
-function emit(log: Logger, payload: EmailLogPayload): void {
-  // We intentionally use the `msg: "📬 email_pending"` literal so a future
-  // grep/Loki query has a single anchor to filter on.
+async function emit(log: Logger, payload: EmailLogPayload): Promise<void> {
   if (!payload.to) {
-    log.warn(
-      payload,
-      "📬 email_pending — no recipient address; falling back to log-only delivery",
-    );
+    log.warn(payload, "📬 email_pending — no recipient address; falling back to log-only delivery");
     return;
   }
-  log.info(payload, "📬 email_pending");
+
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (!resendApiKey) {
+    log.info(payload, "📬 email_pending — RESEND_API_KEY not configured");
+    return;
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: process.env.RESEND_FROM_EMAIL || "Maris AI <soporte@marisai.es>",
+        to: [payload.to],
+        subject: payload.subject,
+        text: payload.bodyText,
+      }),
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      log.warn({ ...payload, status: response.status, errBody }, "📬 email_failed — Resend rejected email");
+      return;
+    }
+    log.info(payload, "📬 email_sent");
+  } catch (err) {
+    log.warn({ ...payload, err }, "📬 email_failed — exception sending via Resend");
+  }
 }
 
 /**
@@ -61,7 +85,7 @@ export async function sendAutoPublishEmail(opts: EmailRecipient & {
     `entra al panel y la próxima vez que termines un cambio se volverá a ` +
     `desplegar sola.\n\n` +
     `— Maris AI`;
-  emit(log, {
+  await emit(log, {
     channel: "email",
     template: "auto_publish_ready",
     to,
@@ -88,12 +112,41 @@ export async function sendNeedsReviewEmail(opts: EmailRecipient & {
     `publicado.\n\nResumen del evaluador:\n${summary}\n\n` +
     `Entra al panel y pulsa "Reintentar generación" cuando quieras volver a ` +
     `intentarlo.\n\n— Maris AI`;
-  emit(log, {
+  await emit(log, {
     channel: "email",
     template: "needs_review",
     to,
     recipientName,
     subject: `⚠️ ${appTitle}: la evaluación visual la rechazó`,
+    bodyText: body,
+  });
+}
+
+/**
+ * Notify Maris AI owner/support when a user creates a support ticket.
+ */
+export async function sendSupportTicketCreatedEmail(opts: {
+  to: string | null;
+  userEmail?: string | null;
+  subject: string;
+  message: string;
+  ticketId: string;
+  log: Logger;
+}): Promise<void> {
+  const { to, userEmail, subject, message, ticketId, log } = opts;
+  const body =
+    `Nuevo ticket de soporte en Maris AI\n\n` +
+    `Ticket: ${ticketId}\n` +
+    `Cliente: ${userEmail || "(email no disponible)"}\n` +
+    `Asunto: ${subject}\n\n` +
+    `Mensaje:\n${message}\n\n` +
+    `Entra en el panel admin de Maris AI para responder.`;
+  await emit(log, {
+    channel: "email",
+    template: "support_ticket_created",
+    to,
+    recipientName: "Soporte Maris AI",
+    subject: `Nuevo ticket Maris AI: ${subject}`,
     bodyText: body,
   });
 }

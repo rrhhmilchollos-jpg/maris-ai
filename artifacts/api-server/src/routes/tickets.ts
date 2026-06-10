@@ -3,6 +3,7 @@ import { connectDB } from "../lib/db";
 import { requireAuth, requireAdmin } from "../lib/auth";
 import { Ticket, User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
+import { sendSupportTicketCreatedEmail } from "../lib/notify";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,15 @@ router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> =
       message,
       status: "open",
       responses: [],
+    });
+    const user = await User.findById(userId, { email: 1 }).lean().catch(() => null);
+    void sendSupportTicketCreatedEmail({
+      to: process.env.SUPPORT_EMAIL || "rrhh.milchollos@gmail.com",
+      userEmail: user?.email ?? null,
+      subject,
+      message,
+      ticketId: String(newTicket._id),
+      log: logger,
     });
     res.status(201).json(newTicket);
   } catch (error) {
