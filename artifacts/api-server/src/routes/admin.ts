@@ -332,6 +332,7 @@ router.get("/admin/apps", async (_req, res) => {
   await connectDB();
   const apps = await GeneratedApp.find({})
     .sort({ createdAt: -1 })
+    .allowDiskUse(true)
     .limit(200)
     .lean();
 
