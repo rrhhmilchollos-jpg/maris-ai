@@ -24,7 +24,7 @@ async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = await buildAuthHeaders(options);
-  const baseUrl = import.meta.env.VITE_API_URL || "https://maris-ai-api-server.onrender.com";
+  const baseUrl = import.meta.env.VITE_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app";
   const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path}`;
   const res = await fetch(fullPath, { credentials: "include", ...options, headers });
   if (!res.ok) {
