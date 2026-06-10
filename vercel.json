@@ -40,7 +40,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://cdn.jsdelivr.net https://js.stripe.com https://cdn.tailwindcss.com https://fonts.googleapis.com https://www.googletagmanager.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://ssl.google-analytics.com https://connect.facebook.net https://vercel.live https://*.vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.marisai.es; font-src 'self' data: https://fonts.gstatic.com https:; img-src 'self' data: blob: https:; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://api.marisai.es https://maris-ai-api-server.onrender.com https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.stripe.com wss: https://accounts.google.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.googletagmanager.com https://www.facebook.com https://*.vercel.live wss://*.vercel.live https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; frame-src 'self' https://maris-ai-api-server.onrender.com https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.vercel.app https://*.vercel.live https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://js.stripe.com https://hooks.stripe.com https://accounts.google.com https://www.googletagmanager.com https://vercel.live https://marisai.es https://*.marisai.es https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; worker-src 'self' blob:; object-src 'none';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://cdn.jsdelivr.net https://js.stripe.com https://cdn.tailwindcss.com https://fonts.googleapis.com https://www.googletagmanager.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://ssl.google-analytics.com https://connect.facebook.net https://vercel.live https://*.vercel.live; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.marisai.es; font-src 'self' data: https://fonts.gstatic.com https:; img-src 'self' data: blob: https:; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://api.marisai.es https://*.railway.app https://maris-ai-api-server.onrender.com https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.stripe.com wss: https://accounts.google.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://www.googletagmanager.com https://www.facebook.com https://*.vercel.live wss://*.vercel.live https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; frame-src 'self' https://maris-ai-api-server.onrender.com https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.railway.app https://*.vercel.app https://*.vercel.live https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://js.stripe.com https://hooks.stripe.com https://accounts.google.com https://www.googletagmanager.com https://vercel.live https://marisai.es https://*.marisai.es https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; worker-src 'self' blob:; object-src 'none';"
         }
       ]
     }
@@ -48,23 +48,23 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://maris-ai-api-server.onrender.com/api/:path*"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/:path*"
     },
     {
       "source": "/news-sitemap.xml",
-      "destination": "https://maris-ai-api-server.onrender.com/news-sitemap.xml"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/news-sitemap.xml"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "https://maris-ai-api-server.onrender.com/sitemap.xml"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/sitemap.xml"
     },
     {
       "source": "/rss",
-      "destination": "https://maris-ai-api-server.onrender.com/rss"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/rss"
     },
     {
       "source": "/rss/:path*",
-      "destination": "https://maris-ai-api-server.onrender.com/rss/:path*"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/rss/:path*"
     },
     {
       "source": "/news/:slug*",
@@ -75,7 +75,7 @@
           "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
         }
       ],
-      "destination": "https://maris-ai-api-server.onrender.com/bot-render/news/:slug*"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/news/:slug*"
     },
     {
       "source": "/news",
@@ -86,7 +86,7 @@
           "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
         }
       ],
-      "destination": "https://maris-ai-api-server.onrender.com/bot-render/news"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/news"
     },
     {
       "source": "/",
@@ -97,7 +97,7 @@
           "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
         }
       ],
-      "destination": "https://maris-ai-api-server.onrender.com/bot-render/"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/"
     },
     {
       "source": "/pricing",
@@ -108,7 +108,7 @@
           "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
         }
       ],
-      "destination": "https://maris-ai-api-server.onrender.com/bot-render/pricing"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/pricing"
     },
     {
       "source": "/vs-emergent",
@@ -119,7 +119,7 @@
           "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
         }
       ],
-      "destination": "https://maris-ai-api-server.onrender.com/bot-render/vs-emergent"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/vs-emergent"
     },
     {
       "source": "/(.*)",
