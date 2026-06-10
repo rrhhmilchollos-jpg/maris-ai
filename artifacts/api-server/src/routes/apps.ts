@@ -40,6 +40,7 @@ import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import { pushAppToGitHub } from "../lib/githubPush";
 import { executeDataOperation } from "../lib/dataOperationAgent";
+import { MarisId } from "../lib/universalId";
 import { connectDB } from "@workspace/db";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
@@ -2998,6 +2999,8 @@ export async function runJobById(jobId: string): Promise<void> {
         kind: job.kind,
         status: "ready",
         publicSlug: makeSlug(),
+        // ID Universal Maris AI — generado automáticamente al crear el proyecto
+        marisId: MarisId.project(),
       });
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
     }
