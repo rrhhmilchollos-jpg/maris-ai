@@ -18,10 +18,17 @@ import { connectDB } from "./db";
 import { logger } from "./logger";
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-});
+// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
+let _openaiCache: OpenAI | null = null;
+function getOpenAICache(): OpenAI {
+  if (!_openaiCache) {
+    _openaiCache = new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy",
+    });
+  }
+  return _openaiCache;
+}
 
 const EMBED_MODEL = "text-embedding-3-small";
 const EMBED_DIMS = 1536;
@@ -79,7 +86,7 @@ async function embedText(text: string): Promise<number[]> {
   const trimmed = text.trim().slice(0, 4000);
   if (embeddingsAvailable !== false) {
     try {
-      const res = await openai.embeddings.create({ model: EMBED_MODEL, input: trimmed });
+      const res = await getOpenAICache().embeddings.create({ model: EMBED_MODEL, input: trimmed });
       const vec = res.data[0]?.embedding;
       if (Array.isArray(vec) && vec.length === EMBED_DIMS) {
         embeddingsAvailable = true;
