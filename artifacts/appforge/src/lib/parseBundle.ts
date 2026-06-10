@@ -195,20 +195,97 @@ function normalizeForSandpack(path: string): string | null {
  * SandpackProvider.
  */
 export const SANDPACK_DEPENDENCIES: Record<string, string> = {
+  // ── Core React ────────────────────────────────────────────────────────────
   // React is already in the vite-react-ts template but we pin it explicitly
   // so customSetup.dependencies doesn't accidentally override with an older version.
   react: "^18.3.1",
   "react-dom": "^18.3.1",
-  "lucide-react": "^0.460.0",
-  clsx: "^2.1.1",
-  "tailwind-merge": "^2.5.4",
-  "date-fns": "^4.1.0",
-  zod: "^3.23.8",
+
+  // ── Routing ───────────────────────────────────────────────────────────────
   // wouter@2.x is pinned because it ships CommonJS (`main: "cjs/index.js"`).
   // wouter@3.x is pure ESM (`main: null, module: null`) which Sandpack v2's
   // bundler hangs on indefinitely. v2 has the SAME public API for what the
   // generator emits: useLocation/useRoute/Route/Switch/Link/Redirect.
   wouter: "^2.12.1",
+
+  // ── Icons & UI primitives ─────────────────────────────────────────────────
+  "lucide-react": "^0.460.0",
+  "react-icons": "^5.3.0",
+
+  // ── Utility CSS ───────────────────────────────────────────────────────────
+  clsx: "^2.1.1",
+  "tailwind-merge": "^2.5.4",
+  "class-variance-authority": "^0.7.1",
+
+  // ── Date & validation ─────────────────────────────────────────────────────
+  "date-fns": "^3.6.0",
+  zod: "^3.23.8",
+
+  // ── Radix UI (todos los primitivos usados por shadcn/ui) ─────────────────
+  "@radix-ui/react-accordion": "^1.2.0",
+  "@radix-ui/react-alert-dialog": "^1.1.0",
+  "@radix-ui/react-aspect-ratio": "^1.1.0",
+  "@radix-ui/react-avatar": "^1.1.0",
+  "@radix-ui/react-checkbox": "^1.1.0",
+  "@radix-ui/react-collapsible": "^1.1.0",
+  "@radix-ui/react-context-menu": "^2.2.0",
+  "@radix-ui/react-dialog": "^1.1.0",
+  "@radix-ui/react-dropdown-menu": "^2.1.0",
+  "@radix-ui/react-hover-card": "^1.1.0",
+  "@radix-ui/react-label": "^2.1.0",
+  "@radix-ui/react-menubar": "^1.1.0",
+  "@radix-ui/react-navigation-menu": "^1.2.0",
+  "@radix-ui/react-popover": "^1.1.0",
+  "@radix-ui/react-progress": "^1.1.0",
+  "@radix-ui/react-radio-group": "^1.2.0",
+  "@radix-ui/react-scroll-area": "^1.2.0",
+  "@radix-ui/react-select": "^2.1.0",
+  "@radix-ui/react-separator": "^1.1.0",
+  "@radix-ui/react-slider": "^1.2.0",
+  "@radix-ui/react-slot": "^1.1.0",
+  "@radix-ui/react-switch": "^1.1.0",
+  "@radix-ui/react-tabs": "^1.1.0",
+  "@radix-ui/react-toast": "^1.2.0",
+  "@radix-ui/react-toggle": "^1.1.0",
+  "@radix-ui/react-toggle-group": "^1.1.0",
+  "@radix-ui/react-tooltip": "^1.1.0",
+
+  // ── Charts & data visualization ───────────────────────────────────────────
+  recharts: "^2.13.0",
+
+  // ── Animation ─────────────────────────────────────────────────────────────
+  "framer-motion": "^11.3.0",
+
+  // ── Forms ─────────────────────────────────────────────────────────────────
+  "react-hook-form": "^7.53.0",
+  "@hookform/resolvers": "^3.9.0",
+
+  // ── Notifications & toasts ────────────────────────────────────────────────
+  sonner: "^1.5.0",
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
+  "@tanstack/react-query": "^5.56.0",
+
+  // ── Carousel ─────────────────────────────────────────────────────────────
+  "embla-carousel-react": "^8.3.0",
+
+  // ── Date picker ───────────────────────────────────────────────────────────
+  "react-day-picker": "^8.10.1",
+
+  // ── Drawer / Sheet ────────────────────────────────────────────────────────
+  vaul: "^0.9.9",
+
+  // ── OTP input ─────────────────────────────────────────────────────────────
+  "input-otp": "^1.2.4",
+
+  // ── Resizable panels ──────────────────────────────────────────────────────
+  "react-resizable-panels": "^2.1.3",
+
+  // ── Command palette ───────────────────────────────────────────────────────
+  cmdk: "^1.0.0",
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  "next-themes": "^0.3.0",
 };
 
 /**
