@@ -80,7 +80,7 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "frame-ancestors 'self' https://marisai.es https://www.marisai.es https://maris-ai-frontend.vercel.app"
+            "value": "frame-ancestors 'self' https://marisai.es https://www.marisai.es https://maris-ai-frontend.vercel.app https://maris-ai-api-server-6c5u.onrender.com"
           }
         ]
       }
@@ -2981,7 +2981,7 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     const ext = filePath.split(".").pop()?.toLowerCase();
     const mimeTypes: Record<string, string> = { html: "text/html; charset=utf-8", css: "text/css", js: "application/javascript", json: "application/json", xml: "application/xml", txt: "text/plain" };
     res.setHeader("Content-Type", mimeTypes[ext || ""] || "text/html; charset=utf-8");
-    res.setHeader("X-Frame-Options", "ALLOWALL");
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'self' https://marisai.es https://www.marisai.es https://maris-ai-api-server-6c5u.onrender.com");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(fileContent);
   } catch (err) {

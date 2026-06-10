@@ -72,7 +72,7 @@ app.use(
           "wss:",
         ],
         fontSrc: ["'self'", "data:", "https:"],
-        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
+        frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com", "https://marisai.es", "https://*.onrender.com"],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
       },
@@ -85,7 +85,7 @@ app.use(
     },
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     xContentTypeOptions: true,
-    xFrameOptions: { action: "DENY" },
+    xFrameOptions: false,
     xXssProtection: true,
     hidePoweredBy: true,
   })
