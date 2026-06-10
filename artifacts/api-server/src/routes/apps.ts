@@ -39,6 +39,7 @@ import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import { pushAppToGitHub } from "../lib/githubPush";
+import { executeDataOperation } from "../lib/dataOperationAgent";
 import { connectDB } from "@workspace/db";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
@@ -2403,11 +2404,30 @@ router.post("/apps/:id/github", requireAuth, async (req: any, res: any) => {
       return res.status(400).json({ error: "La app todavía no tiene frontend listo para subir." });
     }
 
+    // Cargar el usuario para obtener su token OAuth de GitHub
+    const dbUser = req.dbUser || await User.findById(userId).lean();
+    const userGitHubToken = (dbUser as any)?.githubAccessToken || null;
+
+    // Si no tiene GitHub conectado, devolver instrucciones claras
+    if (!userGitHubToken) {
+      return res.status(401).json({
+        error: "GitHub no conectado",
+        message: "Conecta tu cuenta de GitHub primero. Haz clic en el botón GitHub del proyecto para vincular tu cuenta.",
+        connectUrl: "/api/github/connect",
+        needsConnect: true,
+      });
+    }
+
+    const { repoName: customRepoName, isPrivate } = req.body || {};
+
     const result = await pushAppToGitHub({
       title: app.title || "Maris AI App",
       description: app.description || app.prompt || "Proyecto generado con Maris AI",
       frontendBundle: app.frontendCode,
       existingRepoFullName: app.githubRepoFullName || null,
+      userGitHubToken,
+      isPrivate: isPrivate ?? false,
+      repoName: customRepoName || undefined,
     });
 
     const updated = await GeneratedApp.findOneAndUpdate(
@@ -2620,7 +2640,23 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     if (classified.intent === "execute") {
       await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
-      const reply = buildEngineExecutionReply(trimmedContent, classified);
+      // ENGINE_EXEC: ejecutar la operación de datos REAL con el dataOperationAgent
+      let reply: string;
+      try {
+        const execResult = await executeDataOperation({
+          appId: req.params.id,
+          userId,
+          message: trimmedContent,
+          appTitle: app.title || "App sin título",
+          appDescription: app.description || "",
+          agentNotes: app.agentNotes || "",
+          log: req.log || logger,
+        });
+        reply = execResult.message;
+      } catch (execErr) {
+        logger.error({ execErr }, "ENGINE_EXEC error");
+        reply = `⚠️ Error ejecutando la operación: ${execErr instanceof Error ? execErr.message : String(execErr)}. Por favor, inténtalo de nuevo con más detalle.`;
+      }
       await AppMessage.create({ appId: req.params.id, role: "assistant", content: reply });
       return res.status(200).json({
         operationOnly: true,
