@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "framework": "vite",
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm --filter @workspace/appforge... build",
   "headers": [
