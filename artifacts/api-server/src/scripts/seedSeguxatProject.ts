@@ -277,16 +277,6 @@ export async function seedSeguxatProject(targetEmail: string = "rrhh.milchollos@
   }
 }
 
-// Ejecutar directamente si se llama como script
-if (require.main === module) {
-  seedSeguxatProject()
-    .then((result) => {
-      console.log(result.success ? "✅" : "❌", result.message);
-      if (result.appId) console.log("App ID:", result.appId);
-      process.exit(result.success ? 0 : 1);
-    })
-    .catch((err) => {
-      console.error("Error fatal:", err);
-      process.exit(1);
-    });
-}
+// Este archivo es un módulo ES — no se ejecuta directamente al importar.
+// Para ejecutarlo como script: node --loader ts-node/esm src/scripts/seedSeguxatProject.ts
+// O llamar a seedSeguxatProject() desde el endpoint de admin.
