@@ -17,6 +17,28 @@ import {
 } from "lucide-react";
 
 // ✅ Seguimiento 4: Pantalla de bienvenida/onboarding para nuevos usuarios
+
+// Función para disparar el evento de conversión de Google Ads al completar el registro
+function fireGoogleAdsConversion() {
+  try {
+    if (typeof (window as any).gtag === 'function') {
+      // ID de conversión: AW-8297041654 (cuenta de Google Ads de Maris AI)
+      (window as any).gtag('event', 'conversion', {
+        'send_to': 'AW-8297041654/sign_up',
+        'value': 1.0,
+        'currency': 'EUR',
+        'event_callback': () => console.log('[GoogleAds] Conversión de registro disparada'),
+      });
+      // También disparar evento de Meta Pixel
+      if (typeof (window as any).fbq === 'function') {
+        (window as any).fbq('track', 'CompleteRegistration', { value: 1.0, currency: 'EUR' });
+      }
+    }
+  } catch (e) {
+    console.warn('[GoogleAds] Error al disparar conversión:', e);
+  }
+}
+
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const { user } = useUser();
@@ -199,7 +221,7 @@ export default function OnboardingPage() {
 
             <Button
               size="lg"
-              onClick={() => setLocation("/dashboard")}
+              onClick={() => { fireGoogleAdsConversion(); setLocation("/dashboard"); }}
               className="h-14 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-base font-bold shadow-[0_0_30px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
             >
               <Sparkles className="mr-2 h-5 w-5" />
