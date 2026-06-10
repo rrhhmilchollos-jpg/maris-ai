@@ -93,14 +93,21 @@ export async function executeDataOperation(opts: {
   appTitle: string;
   appDescription?: string;
   agentNotes?: string;
+  projectMap?: string;  // JSON del mapa del proyecto para navegación directa
   log?: Logger;
 }): Promise<DataOperationResult> {
   const log = opts.log || rootLogger;
 
-  // 1. Interpretar la petición con IA
+  // 1. Interpretar la petición con IA (usando el Project Map si está disponible)
   let operation: DataOperation;
   try {
-    operation = await interpretDataRequest(opts.message, opts.appTitle, opts.agentNotes, log);
+    operation = await interpretDataRequest(
+      opts.message,
+      opts.appTitle,
+      opts.agentNotes,
+      log,
+      opts.projectMap
+    );
   } catch (err) {
     log.warn({ err }, "dataOperationAgent: error interpretando petición");
     return {
@@ -131,14 +138,32 @@ async function interpretDataRequest(
   appTitle: string,
   agentNotes: string | undefined,
   log: Logger,
+  projectMapJson?: string,
 ): Promise<DataOperation> {
+  // Extraer información relevante del Project Map para el agente
+  let projectMapContext = "";
+  if (projectMapJson) {
+    try {
+      const pm = JSON.parse(projectMapJson);
+      const models = pm.dataModels?.map((m: any) => `${m.name} (${m.location})`).join(", ") || "";
+      const routes = pm.routes?.map((r: any) => `${r.path}: ${r.description}`).join("; ") || "";
+      const files = pm.files?.map((f: any) => `${f.path} [${f.type}]`).join(", ") || "";
+      projectMapContext = [
+        models ? `Modelos de datos del proyecto: ${models}` : "",
+        routes ? `Rutas del proyecto: ${routes}` : "",
+        files ? `Archivos del proyecto: ${files}` : "",
+      ].filter(Boolean).join("\n");
+    } catch (_) {}
+  }
+
   const userContent = [
     `App: ${appTitle}`,
     agentNotes ? `Notas del agente: ${agentNotes.slice(0, 800)}` : "",
+    projectMapContext || "",
     ``,
     `Petición del usuario: "${message}"`,
     ``,
-    `Devuelve SOLO el JSON de la operación.`,
+    `Devuelve SOLO el JSON de la operación. Usa el mapa del proyecto para identificar la colección/entidad exacta donde operar.`,
   ].filter(Boolean).join("\n");
 
   const result = await anthropic.messages.create({

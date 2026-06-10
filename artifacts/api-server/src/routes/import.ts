@@ -13,10 +13,10 @@ import { makeSlug } from "../lib/deployBundle";
 
 const router = Router();
 
-// ── Multer: accept zip/rar up to 150MB ───────────────────────────────────
+// ── Multer: accept zip/rar up to 50MB (MongoDB tiene límite de 16MB por documento) ─
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 150 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB máximo para evitar timeout de MongoDB
   fileFilter: (_req, file, cb) => {
     const allowed = [
       "application/zip",
@@ -225,7 +225,14 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
     const title = detectProjectTitle(extracted.files);
     const description = detectDescription(extracted.files);
     const techStack = detectTechStack(extracted.files, extracted.allPaths);
-    const frontendCode = buildFrontendCode(extracted.files, extracted.allPaths);
+    let frontendCode = buildFrontendCode(extracted.files, extracted.allPaths);
+
+    // MongoDB tiene límite de 16MB por documento. Truncar si es necesario.
+    const MAX_CODE_BYTES = 12 * 1024 * 1024; // 12MB para dejar margen
+    if (Buffer.byteLength(frontendCode, 'utf8') > MAX_CODE_BYTES) {
+      logger.warn({ userId, title, frontendCodeLen: frontendCode.length }, "frontendCode demasiado grande, truncando a 12MB");
+      frontendCode = frontendCode.slice(0, MAX_CODE_BYTES / 2) + "\n\n// [TRUNCADO: proyecto demasiado grande para almacenar completo. Usa archivos más pequeños o divide el proyecto.]";
+    }
 
     logger.info({ userId, title, files: extracted.allPaths.length, frontendCodeLen: frontendCode.length }, "Proyecto extraído correctamente");
 

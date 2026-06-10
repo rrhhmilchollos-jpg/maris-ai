@@ -2105,6 +2105,7 @@ import { requireAuth } from "../lib/auth";
 import { generateRateLimiter } from "../middlewares/rateLimit";
 import { enqueueGenerateJob } from "../lib/jobQueue";
 import { classifyChatIntent, type ClassifiedIntent } from "../lib/intentClassifier";
+import { buildProjectMap, resolveTargetFromPrompt, type ProjectMap } from "../lib/projectMap";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -2642,6 +2643,24 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     if (classified.intent === "execute") {
       await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
       // ENGINE_EXEC: ejecutar la operación de datos REAL con el dataOperationAgent
+      // Primero construir el Project Map para saber exactamente dónde operar
+      let projectMapData: ProjectMap | null = null;
+      try {
+        const frontendCode = app.frontendCode || app.html || "";
+        const backendCode = app.backendCode || "";
+        projectMapData = buildProjectMap(
+          req.params.id,
+          app.title || "App sin título",
+          frontendCode,
+          backendCode
+        );
+        // Resolver el target exacto del prompt del usuario
+        const target = resolveTargetFromPrompt(trimmedContent, projectMapData);
+        logger.info({ target }, "PROJECT_MAP: target resuelto para ENGINE_EXEC");
+      } catch (mapErr) {
+        logger.warn({ mapErr }, "PROJECT_MAP: no se pudo construir el mapa, continuando sin él");
+      }
+
       let reply: string;
       try {
         const execResult = await executeDataOperation({
@@ -2651,6 +2670,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
           appTitle: app.title || "App sin título",
           appDescription: app.description || "",
           agentNotes: app.agentNotes || "",
+          projectMap: projectMapData ? JSON.stringify(projectMapData) : undefined,
           log: req.log || logger,
         });
         reply = execResult.message;
