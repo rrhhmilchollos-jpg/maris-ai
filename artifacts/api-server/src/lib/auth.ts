@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { getAuth, clerkClient } from "@clerk/express";
 import { connectDB } from "./db";
 import { User, type IUser } from "@workspace/db/schema";
+import { MarisId } from "./universalId";
  
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -99,6 +100,8 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
         planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 50 : 0),
         freeCreditsUsed: shouldGiveFreeCredits,
         registrationIp: ip,
+        // ID Universal Maris AI — generado automáticamente al crear el usuario
+        marisId: MarisId.user(),
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },

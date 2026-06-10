@@ -15,13 +15,11 @@
  * Responde con confirmación clara de lo que hizo o por qué no pudo hacerlo.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { connectDB } from "./db";
 import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
 import { logger as rootLogger } from "./logger";
 import type { Logger } from "pino";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 

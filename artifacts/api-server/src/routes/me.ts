@@ -38,6 +38,14 @@ router.get("/me", requireAuth, async (req, res) => {
     const currentPlan = SUBSCRIPTION_PLANS.find((p) => p.id === (u.plan ?? "free")) ?? SUBSCRIPTION_PLANS[0];
     const planActive = u.planExpiresAt ? new Date(u.planExpiresAt) > new Date() : false;
 
+    // Retrocompatibilidad: asegurar que el usuario tiene un marisId
+    let userMarisId = (u as any).marisId;
+    if (!userMarisId) {
+      const { MarisId } = await import("../lib/universalId");
+      const { User } = await import("@workspace/db/schema");
+      userMarisId = MarisId.user();
+      await User.findByIdAndUpdate(userId, { $set: { marisId: userMarisId } });
+    }
     res.json({
       id: u._id,
       email: u.email,
@@ -48,6 +56,8 @@ router.get("/me", requireAuth, async (req, res) => {
       isPremium,
       lifetimeCreditsPurchased,
       createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString(),
+      // ID Universal Maris AI del usuario
+      marisId: userMarisId,
       // Información del plan
       plan: u.plan ?? "free",
       planName: currentPlan.name,

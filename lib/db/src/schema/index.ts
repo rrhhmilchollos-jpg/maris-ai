@@ -33,6 +33,9 @@ export interface IUser {
   githubId?: string;
   githubAvatarUrl?: string;
   githubConnectedAt?: Date;
+  // ID Universal Maris AI — formato USR-<timestamp_base36>-<random6>
+  // Identifica al usuario de forma única en todo el ecosistema de Maris AI
+  marisId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +73,8 @@ const UserSchema = new Schema<IUser>(
     githubId: { type: String },
     githubAvatarUrl: { type: String },
     githubConnectedAt: { type: Date },
+    // ID Universal Maris AI
+    marisId: { type: String, unique: true, sparse: true, index: true },
   },
   { timestamps: true },
 );
@@ -112,6 +117,9 @@ export interface IGeneratedApp {
   lastDeployedAt?: Date;
   deploymentLogs?: string;
   requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
+  // ID Universal Maris AI — formato PRJ-<timestamp_base36>-<random6>
+  // Identifica al proyecto de forma única en todo el ecosistema de Maris AI
+  marisId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -153,9 +161,11 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
       {
         name: { type: String, required: true },
         why: { type: String },
-        value: { type: String }, // Opcional: para cuando Maris pueda proveer valores por defecto o el usuario los ingrese
+        value: { type: String },
       },
     ],
+    // ID Universal Maris AI
+    marisId: { type: String, unique: true, sparse: true, index: true },
   },
   { timestamps: true },
 );
