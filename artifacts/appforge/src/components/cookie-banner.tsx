@@ -4,6 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Cookie, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+function updateGoogleConsent(granted: boolean) {
+  try {
+    if (typeof (window as any).gtag === "function") {
+      (window as any).gtag("consent", "update", {
+        ad_storage: granted ? "granted" : "denied",
+        analytics_storage: granted ? "granted" : "denied",
+        ad_user_data: granted ? "granted" : "denied",
+        ad_personalization: granted ? "granted" : "denied",
+      });
+    }
+  } catch {
+    // Consent Mode debe ser best-effort y no bloquear la UI.
+  }
+}
+
 export function CookieBanner() {
   const [isVisible, setIsVisible] = useState(false);
 
@@ -17,11 +32,13 @@ export function CookieBanner() {
 
   const acceptCookies = () => {
     localStorage.setItem("maris-ai-cookie-consent", "accepted");
+    updateGoogleConsent(true);
     setIsVisible(false);
   };
 
   const declineCookies = () => {
     localStorage.setItem("maris-ai-cookie-consent", "declined");
+    updateGoogleConsent(false);
     setIsVisible(false);
   };
 
