@@ -35,15 +35,15 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
 
+# Copiar los módulos de comunicación y self-monitoring (requeridos por agentBusBridge.ts)
+COPY --from=builder /app/communication ./communication
+COPY --from=builder /app/self ./self
+
 # Railway inyecta PORT dinámicamente — NO fijar un puerto estático
-# El servidor lee process.env.PORT en index.ts
 ENV NODE_ENV=production
 ENV NODE_PATH=/app/node_modules
 
 # Exponer el puerto por defecto (Railway lo sobreescribe con $PORT)
 EXPOSE 8080
-
-# Sin HEALTHCHECK en Dockerfile — Railway gestiona el healthcheck via /api/health
-# Esto evita conflictos entre el healthcheck del Dockerfile y el de Railway
 
 CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
