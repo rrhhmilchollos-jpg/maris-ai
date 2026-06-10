@@ -1,17 +1,12 @@
 [build]
 # Railway detecta automáticamente el Dockerfile en la raíz del repo.
-# El Dockerfile construye el monorepo completo y expone el API server.
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Puerto que expone el API server (Express escucha en process.env.PORT)
 startCommand = "node --enable-source-maps /app/artifacts/api-server/dist/index.mjs"
 healthcheckPath = "/api/health"
+# 300 segundos = 5 minutos para que MongoDB conecte y el servidor esté listo
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
-
-[environments.production]
-# Variables de entorno específicas de producción
-# Las secretas se configuran en el dashboard de Railway
+restartPolicyMaxRetries = 5

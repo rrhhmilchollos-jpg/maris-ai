@@ -1,6 +1,4 @@
 # ── Build stage ──────────────────────────────────────────────────────────────
-# node:20-slim reduce el tamaño de imagen ~60% respecto a node:20 (Debian full).
-# Railway inyecta $PORT dinámicamente; Express lo lee de process.env.PORT.
 FROM node:20-slim AS builder
 WORKDIR /app
 
@@ -35,16 +33,17 @@ COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /app/artifacts/api-server/package.json ./artifacts/api-server/
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
 
-# Railway inyecta PORT dinámicamente; fallback a 7860 para Render/local
-ENV PORT=7860
+# Railway inyecta PORT dinámicamente — NO fijar un puerto estático
+# El servidor lee process.env.PORT en index.ts
 ENV NODE_ENV=production
 ENV NODE_PATH=/app/node_modules
 
-# Exponer el puerto (Railway lo sobreescribe con $PORT)
-EXPOSE 7860
+# Exponer el puerto por defecto (Railway lo sobreescribe con $PORT)
+EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT||7860) + '/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+# Sin HEALTHCHECK en Dockerfile — Railway gestiona el healthcheck via /api/health
+# Esto evita conflictos entre el healthcheck del Dockerfile y el de Railway
 
 CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
