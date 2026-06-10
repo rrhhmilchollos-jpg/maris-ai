@@ -5,7 +5,7 @@
  * a la cuenta de Maris AI del usuario rrhh.milchollos@gmail.com.
  *
  * Uso:
- *   npx ts-node -e "require('./src/scripts/seedSeguxatProject')"
+ *   npx tsx src/scripts/seedSeguxatProject.ts
  *   o desde el panel admin: POST /api/admin/seed-project
  *
  * El script:
