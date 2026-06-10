@@ -11,6 +11,7 @@ import newsSitemapRouter from "./routes/news-sitemap";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
+import adminRouter from "./routes/admin";
 import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
@@ -193,6 +194,7 @@ app.use("/api", metricsMiddleware);
 app.use("/api", router);
 app.use("/api", ticketsRouter);
 app.use("/api", newsRouter);
+app.use("/api", adminRouter);
 app.use("/", rssRouter);
 app.use("/", newsSitemapRouter);
  
