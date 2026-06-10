@@ -72,7 +72,22 @@ app.use(
           "wss:",
         ],
         fontSrc: ["'self'", "data:", "https:"],
-        frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com", "https://marisai.es", "https://*.onrender.com"],
+        frameSrc: [
+          "'self'",
+          "https://js.stripe.com",
+          "https://hooks.stripe.com",
+          "https://marisai.es",
+          "https://*.marisai.es",
+          "https://*.onrender.com",
+          "https://*.vercel.app",
+          "https://*.vercel.live",
+          "https://*.webcontainer.io",
+          "https://*.webcontainer-api.io",
+          "https://*.local.webcontainer.io",
+          "https://*.clerk.accounts.dev",
+          "https://*.clerk.com",
+          "https://clerk.marisai.es",
+        ],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
       },
@@ -130,7 +145,7 @@ app.use(cors({
 // Adjusted to be more permissive while maintaining isolation
 app.use((_req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   res.setHeader("Access-Control-Allow-Private-Network", "true");
   next();
