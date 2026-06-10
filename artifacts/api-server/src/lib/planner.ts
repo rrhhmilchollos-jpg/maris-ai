@@ -1,5 +1,6 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { logger } from "./logger";
+import { analyzeSpanishIntent, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
 export type Phase =
   | "research"
@@ -75,18 +76,19 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   // Strip the MARIS AI locale/engine prefix before counting words
   const trimmed = prompt.trim().replace(/^\[MARIS[^\]]*\][^\n]*\n/gi, "").replace(/^\[MARIS_ENGINE[^\]]*\][^\n]*\n/gi, "").trim();
   const wordCount = trimmed.split(/\s+/).length;
+  const spanish = analyzeSpanishIntent(trimmed);
 
-  if (FULL_BUILD_RX.test(trimmed) || !hasExistingApp) {
+  if (spanish.isFullBuild || FULL_BUILD_RX.test(trimmed) || !hasExistingApp) {
     return { ...PLAN_FULL, reason: !hasExistingApp ? "App nueva (sin código previo)." : "Petición describe una app entera." };
   }
   // Bug/dependency reports take precedence over the cosmetic regex so a
   // message like "arregla el error de dependencia" is treated as a bug, not
   // as a cosmetic tweak.
-  if (BUG_RX.test(trimmed) && hasExistingApp) {
+  if ((spanish.isBugFix || BUG_RX.test(trimmed)) && hasExistingApp) {
     return { ...PLAN_FEATURE, reason: "Reporte de error o dependencia — ejecuto arquitecto + validación completa." };
   }
-  if (DIRECT_EDIT_RX.test(trimmed) && hasExistingApp && wordCount <= 28 && !BUG_RX.test(trimmed) && !FULL_BUILD_RX.test(trimmed)) {
-    return { ...PLAN_FAST_PATCH, reason: "Petición directa de añadir/modificar/eliminar: tocar solo el archivo o elemento objetivo." };
+  if ((spanish.isDirectEdit || DIRECT_EDIT_RX.test(trimmed)) && hasExistingApp && wordCount <= 28 && !spanish.isBugFix && !BUG_RX.test(trimmed) && !spanish.isFullBuild && !FULL_BUILD_RX.test(trimmed)) {
+    return { ...PLAN_FAST_PATCH, reason: "Léxico español: petición directa de añadir/modificar/eliminar; tocar solo el archivo o elemento objetivo." };
   }
   if (FEATURE_RX.test(trimmed) && hasExistingApp) {
     return PLAN_FEATURE;
@@ -114,6 +116,9 @@ Reglas:
 - "full-build": el usuario pide una app entera desde cero ("crea un Spotify", "haz un marketplace").
 
 REGLA DE ORO: ante la duda, escala (fast-patch → feature → full-build). Es mejor "pasarse" haciendo más fases que entregar código roto.
+
+Léxico español común:
+${SPANISH_LEXICON_PROMPT_SUMMARY}
 
 NUNCA pongas comentarios, prosa, ni markdown alrededor del JSON.`;
 
