@@ -1282,7 +1282,10 @@ THINK BEFORE EDITING (do this internally, do not output the reasoning):
 4. After your edit, do all imports still resolve, do all routes still render?
 
 CHANGE DISCIPLINE — preserve unless asked to change:
-- Keep file count and file names as-is.
+- For ADD/AÑADIR/AGREGAR requests: add only the requested target. Do not rename, redesign, remove, or duplicate unrelated elements.
+- For MODIFY/MODIFICAR/CAMBIAR/EDITAR requests: modify the existing target in place. Do not create a second version and do not rebuild the app.
+- For DELETE/ELIMINAR/BORRAR/QUITAR requests: remove only the requested target. Do not remove neighboring features.
+- Keep file count and file names as-is unless the user explicitly asks to add/delete a file.
 - Keep the title, description, techStack, color palette and typography unless the user explicitly asks to change them.
 - NEVER replace a working page/component with a simpler version.
 - Preserve any \`/api/apps/<n>/images/<n>\` URLs and any \`https://\`-prefixed image URLs VERBATIM.
@@ -1569,15 +1572,17 @@ async function fastPatchEdit(
     const resp = await createClaudeMessageWithFallback("patcher", "claude-sonnet-4-6", {
       max_tokens: 8000,
       system: buildFastPatchPrompt(),
-      messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,1200)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles only.` }]
+      messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,1200)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles and deletedFiles only.` }]
     });
     const raw = (resp.content[0] as any).text ?? "";
-    const parsed = extractJsonObject<{changedFiles?:Record<string,string>}>(raw);
+    const parsed = extractJsonObject<{changedFiles?:Record<string,string>; deletedFiles?: string[]}>(raw);
     log("patcher", `LLM raw (300): ${raw.slice(0,300)}`);
-    if (parsed?.changedFiles && Object.keys(parsed.changedFiles).length > 0) {
-      const merged = mergePatchIntoBundle(previous.frontendCode, parsed.changedFiles);
+    const parsedChangedFiles = parsed?.changedFiles && typeof parsed.changedFiles === "object" ? parsed.changedFiles : {};
+    const parsedDeletedFiles = Array.isArray(parsed?.deletedFiles) ? parsed!.deletedFiles.filter(Boolean) : [];
+    if (Object.keys(parsedChangedFiles).length > 0 || parsedDeletedFiles.length > 0) {
+      const merged = mergePatchIntoBundle(previous.frontendCode, parsedChangedFiles, parsedDeletedFiles);
       if (merged && merged.length > 100) {
-        log("patcher", `✓ Parche aplicado — ${Object.keys(parsed.changedFiles).length} archivo(s): ${Object.keys(parsed.changedFiles).join(", ")}`);
+        log("patcher", `✓ Parche aplicado — ${Object.keys(parsedChangedFiles).length} modificado(s), ${parsedDeletedFiles.length} eliminado(s): ${[...Object.keys(parsedChangedFiles), ...parsedDeletedFiles].join(", ")}`);
         onProgress?.({ phase: "validating", progress: 100, note: "Parche aplicado." });
         return { title: previous.title, description: previous.description, techStack: previous.techStack, frontendCode: merged, backendCode: previous.backendCode };
       }

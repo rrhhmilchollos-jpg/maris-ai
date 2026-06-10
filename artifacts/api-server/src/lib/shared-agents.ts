@@ -212,7 +212,8 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
 
 export function mergePatchIntoBundle(
   originalBundle: string,
-  changedFiles: Record<string, string>
+  changedFiles: Record<string, string>,
+  deletedFiles: string[] = []
 ): string {
   const files: Record<string, string> = {};
   // Parse original bundle
@@ -224,9 +225,16 @@ export function mergePatchIntoBundle(
     const path = part.slice(0, nl).trim().replace(/ ===$/, "");
     if (path) files[path] = "// === FILE: " + part;
   }
-  // Apply changed files
+  // Delete files explicitly requested by the patcher.
+  for (const path of deletedFiles) {
+    const normalizedPath = path.replace(/^\//, "").trim();
+    if (normalizedPath) delete files[normalizedPath];
+  }
+
+  // Apply added/modified files. Existing paths are modified; new paths are added.
   for (const [path, content] of Object.entries(changedFiles)) {
-    const normalizedPath = path.replace(/^\//, "");
+    const normalizedPath = path.replace(/^\//, "").trim();
+    if (!normalizedPath) continue;
     files[normalizedPath] = `// === FILE: ${normalizedPath} ===\n${content}`;
   }
   return Object.values(files).join("\n");
@@ -260,13 +268,19 @@ Return the FULL bundle. Output ONLY the JSON object.`;
 export function buildFastPatchPrompt(): string {
   return `You are Maris AI's Fast Patcher. Apply ONLY the requested change to the frontend bundle.
 Output STRICT JSON only:
-{"changedFiles":{"index.html":"full file content here"}}
+{"changedFiles":{"src/App.tsx":"full file content here"},"deletedFiles":["src/OldComponent.tsx"]}
+
+OPERATION SEMANTICS — obey the user literally:
+- ADD / AÑADIR / AGREGAR means add the requested element/file/data only. Do not rewrite unrelated content.
+- MODIFY / MODIFICAR / CAMBIAR / EDITAR means alter the existing target only. Do not duplicate it and do not create replacements unless asked.
+- DELETE / ELIMINAR / BORRAR / QUITAR means remove the requested target only. Put removed file paths in deletedFiles; for inline removals, return only the file that contains the removal.
 
 RULES:
-- Identify which file(s) need to change. Usually just 1 file.
+- Identify the exact file(s) that need to change. Usually just 1 file.
 - The key must match the exact filename in the bundle (e.g. "index.html", "src/App.tsx").
 - Return the COMPLETE content of each changed file (not a diff, the full file).
 - Keep ALL other files exactly as they are - do NOT include unchanged files.
+- Never perform a full redesign/rebuild from a small add/modify/delete request.
 - Output ONLY the JSON object. No markdown, no backticks, no explanation.`;
 }
 

@@ -43,7 +43,10 @@ export function buildProjectMap(
 
   // ── Analizar el frontend ──────────────────────────────────────────────────
   if (frontendCode) {
-    // Detectar archivos HTML/CSS/JS en el bundle
+    // Detectar archivos en el formato real del bundle persistido por Maris AI:
+    // // === FILE: src/App.tsx ===
+    // También mantenemos compatibilidad con marcadores legacy.
+    const bundleFileMatches = Array.from(frontendCode.matchAll(/\/\/\s*===\s*FILE:\s*([^=\n]+?)\s*===/g)).map((m) => m[1].trim());
     const htmlFiles = frontendCode.match(/<!-- FILE: ([^\s]+) -->/g) || [];
     const jsFiles = frontendCode.match(/\/\/ FILE: ([^\s]+)/g) || [];
     const cssFiles = frontendCode.match(/\/\* FILE: ([^\s]+) \*\//g) || [];
@@ -103,11 +106,17 @@ export function buildProjectMap(
     }
 
     // Clasificar archivos detectados
-    for (const file of [...htmlFiles, ...jsFiles, ...cssFiles]) {
-      const path = file.replace(/(?:<!-- FILE: |\/\/ FILE: |\/\* FILE: )\s*/, "").replace(/\s*(?:-->|\*\/)/, "");
+    const detectedFrontendFiles = [
+      ...bundleFileMatches,
+      ...[...htmlFiles, ...jsFiles, ...cssFiles].map((file) =>
+        file.replace(/(?:<!-- FILE: |\/\/ FILE: |\/\* FILE: )\s*/, "").replace(/\s*(?:-->|\*\/)/, "").trim()
+      ),
+    ].filter(Boolean);
+
+    for (const path of Array.from(new Set(detectedFrontendFiles))) {
       files.push({
         path,
-        type: path.endsWith(".css") ? "style" : "frontend",
+        type: inferFileType(path),
         description: `Archivo de frontend: ${path}`,
         keywords: inferKeywordsFromPath(path),
       });
@@ -126,13 +135,16 @@ export function buildProjectMap(
 
   // ── Analizar el backend ───────────────────────────────────────────────────
   if (backendCode) {
-    const backendFileMatches = backendCode.matchAll(/\/\/ FILE: ([^\s]+)/g);
-    for (const match of backendFileMatches) {
+    const backendFileMatches = [
+      ...Array.from(backendCode.matchAll(/\/\/\s*===\s*FILE:\s*([^=\n]+?)\s*===/g)).map((m) => m[1].trim()),
+      ...Array.from(backendCode.matchAll(/\/\/ FILE: ([^\s]+)/g)).map((m) => m[1].trim()),
+    ];
+    for (const path of Array.from(new Set(backendFileMatches)).filter(Boolean)) {
       files.push({
-        path: match[1],
+        path,
         type: "backend",
-        description: `Archivo de backend: ${match[1]}`,
-        keywords: inferKeywordsFromPath(match[1]),
+        description: `Archivo de backend: ${path}`,
+        keywords: inferKeywordsFromPath(path),
       });
     }
 
@@ -366,6 +378,14 @@ function inferDescriptionFromPath(path: string): string {
     if (path.includes(key)) return desc;
   }
   return `Ruta: ${path}`;
+}
+
+function inferFileType(path: string): ProjectFile["type"] {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".css") || lower.includes("style") || lower.includes("tailwind")) return "style";
+  if (lower.includes("test") || lower.includes("spec")) return "test";
+  if (lower.includes("package.json") || lower.includes("vite.config") || lower.includes("tsconfig") || lower.includes("config")) return "config";
+  return "frontend";
 }
 
 function inferKeywordsFromPath(path: string): string[] {

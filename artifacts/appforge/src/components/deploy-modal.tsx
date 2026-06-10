@@ -45,6 +45,8 @@ interface HealthCheckResponse {
   status?: string;
   issues?: string[];
   error?: string;
+  warning?: string;
+  instructions?: string[];
 }
 interface CodeReviewResponse {
   ok?: boolean;
@@ -66,6 +68,8 @@ interface DeployResponse {
   url?: string;
   subdomain?: string;
   error?: string;
+  warning?: string;
+  instructions?: string[];
 }
 interface CustomDomainResponse {
   verified?: boolean;
@@ -73,6 +77,8 @@ interface CustomDomainResponse {
   recommendedDns?: DnsRecord[];
   pendingVerification?: Array<{ type: string; domain: string; value: string }>;
   error?: string;
+  warning?: string;
+  instructions?: string[];
 }
 interface DeployModalProps {
   appId: string;
@@ -102,6 +108,7 @@ const DOMAIN_PROVIDERS = [
   { id: "google",     name: "Google Domains",initials: "GG", color: "#4285f4", connectUrl: "https://domains.google.com/registrar/" },
   { id: "ionos",      name: "IONOS",         initials: "IO", color: "#003d8f", connectUrl: "https://my.ionos.es/domains" },
   { id: "hostinger",  name: "Hostinger",     initials: "HG", color: "#7c3aed", connectUrl: "https://hpanel.hostinger.com/domains" },
+  { id: "arsys",      name: "Arsys",         initials: "AR", color: "#e11d48", connectUrl: "https://www.arsys.es/clientes" },
   { id: "ovhcloud",   name: "OVHcloud",      initials: "OV", color: "#123f6d", connectUrl: "https://www.ovh.com/manager/#/web/domain" },
   { id: "other",      name: "Otro proveedor",initials: "?",  color: "#6b7280", connectUrl: null },
 ];
@@ -309,6 +316,9 @@ export function DeployModal({
       const records = data.dnsRecords || data.recommendedDns || [];
       setDnsRecords(records);
       setDomainInput(normalized);
+      if (data.warning) {
+        toast({ title: "Dominio pendiente en Vercel", description: data.warning, variant: "destructive" });
+      }
       if (data.verified) {
         setVerifiedDomain(normalized);
         toast({ title: "✅ Dominio verificado", description: `${normalized} está activo.` });
@@ -782,7 +792,7 @@ export function DeployModal({
               </div>
 
               <p className="text-center text-xs italic text-white/25 pb-2">
-                Al hacer clic en Conectar serás redirigido a tu proveedor<br />para autorizar la conexión automáticamente
+                En Arsys y otros proveedores puedes abrir el panel DNS y después Maris AI te mostrará los registros exactos
               </p>
             </div>
           </>
@@ -820,8 +830,7 @@ export function DeployModal({
                 </div>
                 {(dnsRecords.length > 0 ? dnsRecords : [
                   { type: "A",     name: "@",   value: "76.76.21.21" },
-                  { type: "CNAME", name: "www", value: "cname.marisai.es" },
-                  { type: "TXT",   name: "@",   value: `marisai-verify=${appId.slice(0, 12)}` },
+                  { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
                 ]).map((record, i) => (
                   <div key={i} className="grid grid-cols-[60px_70px_1fr_36px] gap-2 items-center border-b border-white/[0.04] last:border-0 px-3 py-2.5">
                     <DnsBadge type={record.type} />
@@ -835,6 +844,18 @@ export function DeployModal({
                     </button>
                   </div>
                 ))}
+              </div>
+
+
+
+              {/* Arsys quick guide */}
+              <div className="rounded-xl border border-[#e11d48]/25 bg-[#e11d48]/10 px-4 py-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-[#fb7185]">Guía rápida para Arsys</p>
+                <p className="mt-2 text-xs text-white/60 leading-relaxed">
+                  Entra en <span className="font-semibold text-white">Arsys Área de cliente</span> → <span className="font-semibold text-white">Dominios</span> → selecciona <span className="font-semibold text-white">{domainInput || "tu dominio"}</span> → <span className="font-semibold text-white">DNS / Zona DNS</span>.
+                  Crea el registro <span className="font-mono text-white">A @ → 76.76.21.21</span> y el registro <span className="font-mono text-white">CNAME www → cname.vercel-dns.com</span>.
+                </p>
+                <p className="mt-1.5 text-xs text-white/35">No añadas https:// ni barras. Si Arsys muestra el host vacío para el dominio raíz, equivale a @.</p>
               </div>
 
               {/* Maris AI branding */}

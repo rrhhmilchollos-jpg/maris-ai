@@ -51,8 +51,11 @@ export const PLAN_FULL: ExecutionPlan = {
 const COSMETIC_RX =
   /\b(color|colores|fondo|background|texto|tama[ñn]o|font|fuente|margen|padding|espac|alineaci[oó]n|centrar|alinear|redondeado|negrita|cursiva|borde|border|botón|boton|button|hover|sombra|shadow|opacidad|opacity|icono|emoji|titulo|título|subtítulo|subtitulo|placeholder|cambia|cambiar|ajusta|pon|poner|ponme|hazlo|hacerlo|m[aá]s grande|m[aá]s peque[ñn]o|typo)\b/i;
 
+const DIRECT_EDIT_RX =
+  /\b(a[ñn]ade|a[ñn]adir|agrega|agregar|agr[eé]gale|modifica|modificar|cambia|cambiar|edita|editar|elimina|eliminar|borra|borrar|quita|quitar|pon|poner|actualiza|actualizar)\b/i;
+
 const FEATURE_RX =
-  /\b(nueva pantalla|nueva p[aá]gina|nuevo componente|a[ñn]ade|a[ñn]adir|agrega|agregar|agr[eé]gale|crea una secci[oó]n|crea un componente|implementa|implementar|incluye un formulario|conecta con|integra con|backend para|API para|login|signup|registro|autenticaci[oó]n|stripe|pago|carrito|filtro|filtros|b[uú]squeda|search bar|navbar|footer|sidebar|dashboard nuevo)\b/i;
+  /\b(nueva pantalla|nueva p[aá]gina|nuevo componente|crea una secci[oó]n|crea un componente|implementa|implementar|incluye un formulario|conecta con|integra con|backend para|API para|login|signup|registro|autenticaci[oó]n|stripe|pago|carrito|filtro|filtros|b[uú]squeda|search bar|navbar|footer|sidebar|dashboard nuevo)\b/i;
 
 const FULL_BUILD_RX =
   /\b(crea una app|cr[eé]ame una app|construye una|haz una app|clona|clon de|tipo (instagram|tinder|wallapop|spotify|airbnb|uber|amazon|youtube|tiktok|whatsapp|netflix)|marketplace|red social|saas|mvp|landing completa|app completa|aplicaci[oó]n completa)\b/i;
@@ -82,6 +85,9 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   if (BUG_RX.test(trimmed) && hasExistingApp) {
     return { ...PLAN_FEATURE, reason: "Reporte de error o dependencia — ejecuto arquitecto + validación completa." };
   }
+  if (DIRECT_EDIT_RX.test(trimmed) && hasExistingApp && wordCount <= 28 && !BUG_RX.test(trimmed) && !FULL_BUILD_RX.test(trimmed)) {
+    return { ...PLAN_FAST_PATCH, reason: "Petición directa de añadir/modificar/eliminar: tocar solo el archivo o elemento objetivo." };
+  }
   if (FEATURE_RX.test(trimmed) && hasExistingApp) {
     return PLAN_FEATURE;
   }
@@ -103,8 +109,8 @@ Devuelve SOLO un JSON con la forma:
 { "scope": "fast-patch" | "feature" | "full-build", "reason": "explicación breve en castellano (1 frase)" }
 
 Reglas:
-- "fast-patch": SOLO cambios estrictamente visuales o de texto sobre una app que YA funciona (ej: "cambia el color del botón a azul", "pon el título en mayúsculas", "centra el logo"). Si hay la más mínima duda, NO uses fast-patch.
-- "feature": añadir nueva pantalla / componente / formulario / integración, O reportes de error / bug / dependencia / "no funciona" / "falla" / "está roto" / "arregla X". CUALQUIER reporte de problema técnico va aquí, NUNCA a fast-patch — el síntoma puede esconder un problema más amplio que requiere re-arquitectar imports o paquetes.
+- "fast-patch": cambios concretos sobre una app que YA funciona: textos, estilos, botones, secciones pequeñas, y peticiones literales de añadir/modificar/eliminar un elemento concreto. Debe tocar solo el archivo objetivo.
+- "feature": nueva pantalla grande / componente complejo / formulario / integración, O reportes de error / bug / dependencia / "no funciona" / "falla" / "está roto" / "arregla X". CUALQUIER reporte de problema técnico va aquí, NUNCA a fast-patch — el síntoma puede esconder un problema más amplio que requiere re-arquitectar imports o paquetes.
 - "full-build": el usuario pide una app entera desde cero ("crea un Spotify", "haz un marketplace").
 
 REGLA DE ORO: ante la duda, escala (fast-patch → feature → full-build). Es mejor "pasarse" haciendo más fases que entregar código roto.
