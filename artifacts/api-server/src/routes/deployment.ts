@@ -205,6 +205,30 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
 
     if (!domainResult.ok) {
       const msg = "message" in domainResult.failure ? domainResult.failure.message : "Error al añadir el dominio en Vercel";
+      const alreadyInUse = /already in use|pending verification|already exists|domain.*used/i.test(msg);
+      if (alreadyInUse) {
+        const recommendedDns = recommendedDnsFor(normalizedDomain);
+        await GeneratedApp.updateOne({ _id: appId, userId }, {
+          customDomain: normalizedDomain,
+          vercelCustomDomain: normalizedDomain,
+          customDomainVerified: false,
+        });
+        return res.status(200).json({
+          success: false,
+          domain: normalizedDomain,
+          customDomain: normalizedDomain,
+          verified: false,
+          dnsRecords: recommendedDns,
+          recommendedDns,
+          pendingVerification: [],
+          warning: `Vercel indica que ${normalizedDomain} ya está añadido o pendiente de verificación en un proyecto. No bloqueamos el flujo: configura estos DNS y, si sigue apareciendo, elimina el dominio del otro proyecto de Vercel o verifica la propiedad allí.`,
+          instructions: [
+            "En Arsys entra en tu dominio > DNS / Zona DNS y añade exactamente los registros indicados.",
+            "Si Arsys no permite CNAME en @, usa el registro A @ hacia 76.76.21.21 y CNAME www hacia cname.vercel-dns.com.",
+            "Cuando el DNS propague, pulsa Verificar conexión. Si Vercel dice que está en otro proyecto, quítalo primero de ese proyecto.",
+          ],
+        });
+      }
       return res.status(500).json({ error: `Error de Vercel: ${msg}`, hint: "El dominio puede estar vinculado a otro proyecto en Vercel." });
     }
 
@@ -224,9 +248,9 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
       recommendedDns: status.recommendedDns,
       pendingVerification: status.verification,
       instructions: status.verified ? [] : [
-        "Añade los registros DNS en tu proveedor (Arsys, GoDaddy, Cloudflare, Hostinger...)",
-        "Los cambios DNS pueden tardar entre 5 minutos y 48 horas en propagarse.",
-        "Cuando esten activos, vuelve a guardar el dominio para re-verificar.",
+        "En Arsys: Dominios > Gestionar DNS / Zona DNS > añade el registro A para @ y el CNAME para www.",
+        "Valores Vercel: A @ → 76.76.21.21; CNAME www → cname.vercel-dns.com.",
+        "Los cambios DNS pueden tardar entre 5 minutos y 48 horas en propagarse. Después pulsa Verificar conexión.",
       ],
     });
   } catch (error) {

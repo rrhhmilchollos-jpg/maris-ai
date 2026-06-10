@@ -237,6 +237,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [previewSize, setPreviewSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [darkModeEnabled, setDarkModeEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const lastPreviewRefreshSignatureRef = useRef<string>("");
 
   const { data: app, isLoading } = useGetApp(id, {
     query: {
@@ -358,8 +359,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: getListAppMessagesQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
+      queryClient.refetchQueries({ queryKey: getGetAppQueryKey(id) }).finally(() => {
+        setPreviewKey((value) => value + 1);
+      });
       setActiveJobId(null);
-      toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha actualizado." });
+      toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha recargado automáticamente con la actualización." });
     } else if (job?.status === "failed") {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
@@ -449,6 +453,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const deployedUrl = app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
   const showStaticBuildState = !hasRenderableCode;
   const renderedFileCount = hasRenderableCode ? parseBundle(frontendCode) ? Object.keys(parseBundle(frontendCode)).length : 0 : 0;
+  useEffect(() => {
+    if (!hasRenderableCode || isWorking) return;
+    const signature = `${app?._id || id}:${app?.updatedAt || ""}:${frontendCode.length}`;
+    if (!signature || signature === lastPreviewRefreshSignatureRef.current) return;
+    lastPreviewRefreshSignatureRef.current = signature;
+    setPreviewKey((value) => value + 1);
+  }, [app?._id, app?.updatedAt, frontendCode.length, hasRenderableCode, isWorking, id]);
+
   const createdAtLabel = app?.createdAt ? new Date(app.createdAt).toLocaleString("es-ES") : "Sin fecha";
   const updatedAtLabel = app?.updatedAt ? new Date(app.updatedAt).toLocaleString("es-ES") : "Sin fecha";
   const appStatusLabel = deployedUrl ? "Desplegada" : hasRenderableCode ? "Preview lista" : isWorking ? "Construyendo" : "Pendiente";
