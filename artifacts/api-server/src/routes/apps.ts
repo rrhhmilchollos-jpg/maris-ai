@@ -503,8 +503,8 @@ async function architectPlan(prompt: string, research: string, templateContext =
 
   const response = await withTimeoutOrThrow(
     anthropic.messages.create({
-      model: "claude-opus-4-7",
-      max_tokens: 8192,
+      model: "claude-sonnet-4-6",
+      max_tokens: 6000,
       system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
       messages: [{ role: "user", content: userContent }],
     }),
@@ -653,7 +653,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   const frontendModel: AgentModelChoice["model"] = auto
     ? "claude-sonnet-4-6" // Forzado a Sonnet por defecto para evitar timeouts de otros modelos
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
-  const architectModel: ClaudeCoderModel = complexity.tier === "ultra" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+  const architectModel: ClaudeCoderModel = "claude-sonnet-4-6"; // Optimización de coste: Sonnet suficiente para arquitectura
   const qualityModel: ClaudeCoderModel = complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
   const agents: Record<AgentRole, AgentModelChoice> = {
     researcher: makeAgentChoice("researcher", "Researcher", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "recopila contexto desde el primer prompt"),
@@ -665,7 +665,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
     integrator: makeAgentChoice("integrator", "Integrator", qualityModel, "detecta auth, pagos y servicios externos"),
     qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
     devops: makeAgentChoice("devops", "DevOps", qualityModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "testing-agent", complexity.tier === "ultra" ? "claude-opus-4-7" : "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
+    patcher: makeAgentChoice("patcher", "testing-agent", "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
     repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
@@ -779,7 +779,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     } catch (err) {
       logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
       const streamed = await streamClaudeTextWithFallback("frontend", "claude-sonnet-4-6", {
-        max_tokens: 128000,
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [{ role: "user", content: userContent }],
       }, (chars) => { onChars(chars); onPartial?.(accumulated); });
@@ -788,7 +788,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
   } else {
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
-      max_tokens: 128000,
+      max_tokens: 32000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     }, (chars) => { onChars(chars); onPartial?.(accumulated); });
@@ -1448,7 +1448,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
     } else if (provider === "claude") {
       const stream = anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 128000,
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
@@ -1465,7 +1465,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
 // Claude streaming según el modelo elegido en el selector.
       const stream = await anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 128000,
+        max_tokens: 32000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });

@@ -301,8 +301,8 @@ visibles, mala responsividad. NO marques preferencias estéticas menores.`,
   });
 
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-7",
-    max_tokens: 4000,
+    model: "claude-sonnet-4-6",
+    max_tokens: 2000,
     messages: [{ role: "user", content }],
   });
 
@@ -388,8 +388,8 @@ BUNDLE ACTUAL:
 ${trimmed}`;
 
   const response = await anthropic.messages.create({
-    model: "claude-opus-4-7",
-    max_tokens: 32_000,
+    model: "claude-sonnet-4-6",
+    max_tokens: 16000,
     messages: [{ role: "user", content: prompt }],
   });
 
