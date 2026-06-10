@@ -571,11 +571,36 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const pushToGitHubMutation = usePushAppToGitHub({
     mutation: {
       onSuccess: (data: any) => {
+        if (data?.needsConnect) {
+          // El usuario no tiene GitHub conectado — redirigir al OAuth
+          toast({ title: "Conecta tu GitHub", description: "Serás redirigido para conectar tu cuenta de GitHub." });
+          setTimeout(() => {
+            window.location.href = `${import.meta.env.VITE_API_URL ?? ""}/api/github/connect`;
+          }, 1200);
+          return;
+        }
         toast({
-          title: data?.updated ? "GitHub actualizado" : "Proyecto subido a GitHub",
-          description: "El repositorio ya está disponible.",
+          title: data?.updated ? "✅ GitHub actualizado" : "✅ Proyecto subido a GitHub",
+          description: data?.url
+            ? `Repositorio: ${data.url.replace("https://github.com/", "")}`
+            : "El repositorio ya está disponible.",
         });
         if (data?.url) window.open(data.url, "_blank", "noopener,noreferrer");
+      },
+      onError: (err: any) => {
+        const errData = (err as any)?.response?.data || err;
+        if (errData?.needsConnect) {
+          toast({ title: "Conecta tu GitHub", description: "Serás redirigido para conectar tu cuenta de GitHub." });
+          setTimeout(() => {
+            window.location.href = `${import.meta.env.VITE_API_URL ?? ""}/api/github/connect`;
+          }, 1200);
+          return;
+        }
+        toast({
+          title: "Error al subir a GitHub",
+          description: (errData as any)?.error || (errData as any)?.message || "No se pudo subir el proyecto.",
+          variant: "destructive",
+        });
       },
     },
   });

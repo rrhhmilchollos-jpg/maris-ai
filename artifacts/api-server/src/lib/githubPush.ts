@@ -1,18 +1,27 @@
-// import { Maris AIConnectors } from "@maris-ai/connectors-sdk";
-// Reemplazado por integración directa con GitHub API via Octokit para independencia total.
+/**
+ * githubPush.ts — Exportación de proyectos al GitHub del CLIENTE
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Cada usuario usa su propio token OAuth (githubAccessToken guardado en MongoDB
+ * tras el flujo /api/github/connect → /api/github/callback).
+ *
+ * El GITHUB_TOKEN del servidor solo se usa como fallback para operaciones admin.
+ * Si el usuario no ha conectado su GitHub, se lanza un error claro con instrucciones.
+ */
 import { Octokit } from "@octokit/rest";
 import { bundleToFiles } from "./exportZip";
 
-// GitHub blueprint integration — uses Maris AI's connector proxy to make
-// authenticated requests with the workspace owner's GitHub token (read:org,
-// read:project, read:user, repo, user:email scopes). For a multi-user SaaS
-// each end-user would need their own OAuth flow; this MVP scopes pushes to
-// the workspace owner's account, which is fine for personal use.
-
-// Usar Octokit directamente con el token del usuario (proporcionado via env o auth)
-const getOctokit = () => {
-  const token = process.env.GITHUB_TOKEN || process.env.MARIS_AI_GITHUB_TOKEN;
-  if (!token) throw new Error("GITHUB_TOKEN no configurado");
+/**
+ * Obtiene el Octokit autenticado con el token del usuario.
+ * Prioridad: token OAuth del usuario > GITHUB_TOKEN del servidor (solo admin).
+ */
+const getOctokit = (userToken?: string | null) => {
+  const token = userToken || process.env.GITHUB_TOKEN || process.env.MARIS_AI_GITHUB_TOKEN;
+  if (!token) {
+    throw new Error(
+      "No hay token de GitHub disponible. Conecta tu cuenta de GitHub en Maris AI " +
+      "haciendo clic en el botón GitHub del proyecto para exportarlo a tu repositorio personal."
+    );
+  }
   return new Octokit({ auth: token });
 };
 
@@ -46,17 +55,18 @@ type GhResult<T> =
 async function ghRaw<T>(
   path: string,
   init: { method?: string; body?: any } = {},
+  userToken?: string | null,
 ): Promise<GhResult<T>> {
-  const octokit = getOctokit();
+  const octokit = getOctokit(userToken);
   try {
     const method = (init.method ?? "GET").toUpperCase();
     const response = await octokit.request(`${method} ${path}`, init.body || {});
     return { ok: true, data: response.data as T, status: response.status };
   } catch (error: any) {
-    return { 
-      ok: false, 
-      status: error.status || 500, 
-      message: error.message || "Error en la petición a GitHub" 
+    return {
+      ok: false,
+      status: error.status || 500,
+      message: error.message || "Error en la petición a GitHub",
     };
   }
 }
@@ -64,8 +74,9 @@ async function ghRaw<T>(
 async function gh<T>(
   path: string,
   init: { method?: string; body?: unknown } = {},
+  userToken?: string | null,
 ): Promise<T> {
-  const r = await ghRaw<T>(path, init);
+  const r = await ghRaw<T>(path, init, userToken);
   if (!r.ok) {
     throw new Error(
       `GitHub ${init.method ?? "GET"} ${path} → HTTP ${r.status}${r.message ? `: ${r.message}` : ""}`,
@@ -75,13 +86,7 @@ async function gh<T>(
 }
 
 /**
- * Slugify an arbitrary title into a GitHub-safe repo name. Repo names are
- * limited to alphanumerics + hyphens + underscores + periods, 100 chars max.
- *
- * Stable: NO random suffix here. We want repeated pushes for the same app to
- * keep targeting the same repo. Collision handling (when another repo with
- * the same name already exists in the user's account) is done by the caller
- * with an incremental "-2", "-3" suffix.
+ * Slugify an arbitrary title into a GitHub-safe repo name.
  */
 function repoNameFromTitle(title: string): string {
   const base = title
@@ -96,10 +101,7 @@ function repoNameFromTitle(title: string): string {
 }
 
 /**
- * Build the file map (frontend/* + README.md + a top-level .gitignore
- * that keeps node_modules and build artefacts out of the repo). Returned shape
- * is deterministic: same app contents → same file list. This lets a re-push
- * produce a clean snapshot tree (no stale leftovers from previous pushes).
+ * Build the file map (frontend/* + README.md + .gitignore).
  */
 function buildFileMap(opts: {
   title: string;
@@ -113,7 +115,7 @@ function buildFileMap(opts: {
   }
   files["README.md"] =
     `# ${opts.title}\n\n${opts.description}\n\n` +
-    `Generado y mantenido automáticamente por **Maris AI**. ` +
+    `Generado y mantenido automáticamente por **[Maris AI](https://www.marisai.es)**. ` +
     `Cada vez que actualizas la app desde Maris AI, este repo recibe un ` +
     `commit nuevo en \`main\` con la versión actual del frontend.\n\n` +
     `## Estructura\n\n` +
@@ -126,15 +128,10 @@ function buildFileMap(opts: {
 }
 
 /**
- * Push the app to GitHub. Idempotent: if `existingRepoFullName` is given AND
- * the repo still exists, we add a NEW commit to the same `main` branch
- * (replacing the file tree with the current snapshot, which deletes obsolete
- * files). Otherwise we create a fresh repo with a stable slug derived from
- * the title (no random suffix), bumping `-2`, `-3`, … if a repo with that
- * exact name already exists in the authenticated user's account.
+ * Push the app to GitHub using the CLIENT's OAuth token.
  *
- * Caller is responsible for persisting `repoFullName` so the next push hits
- * the same repo. We always return both the URL and the full_name.
+ * @param opts.userGitHubToken - Token OAuth del usuario (de User.githubAccessToken en MongoDB).
+ *                               Si no se proporciona, se usa el GITHUB_TOKEN del servidor (solo admin).
  */
 export async function pushAppToGitHub(opts: {
   title: string;
@@ -143,8 +140,15 @@ export async function pushAppToGitHub(opts: {
   backendBundle?: string;
   /** Persisted from the last successful push. Null on first push. */
   existingRepoFullName?: string | null;
+  /** Token OAuth del usuario (de User.githubAccessToken). */
+  userGitHubToken?: string | null;
+  /** Si true, el repo se crea como privado. */
+  isPrivate?: boolean;
+  /** Nombre personalizado del repo (opcional, se deriva del título si no se da). */
+  repoName?: string;
 }): Promise<{ url: string; repoFullName: string; updated: boolean }> {
-  const user = await gh<GhUser>("/user");
+  const token = opts.userGitHubToken || null;
+  const user = await gh<GhUser>("/user", {}, token);
   const owner = user.login;
 
   const files = buildFileMap(opts);
@@ -152,30 +156,15 @@ export async function pushAppToGitHub(opts: {
     throw new Error("La app no tiene archivos que subir.");
   }
 
-  // 1. Resolve the target repo. Three paths:
-  //    a) caller passed an existing full_name and the repo still exists
-  //       on GitHub → reuse it (update path).
-  //    b) caller passed an existing full_name but the repo is gone (404)
-  //       → fall through to fresh-create with the SAME slug (so the user
-  //       gets back a repo with the expected name even after deleting it).
-  //    c) no existing full_name → fresh-create with a stable slug.
-  // `reusedExisting` tracks whether we ended up COMMITTING into a pre-existing
-  // repo. It must be set AFTER repo resolution (not derived from the input
-  // arg) because the "repo was deleted on GitHub → recreate fresh" path
-  // means we did not actually update anything — the user sees a brand-new
-  // commit history. Returning `updated: true` in that case would mislead
-  // both the toast copy and any caller that branches on it.
   let reusedExisting = false;
   let repo: GhRepo | null = null;
+
   if (opts.existingRepoFullName) {
-    const found = await ghRaw<GhRepo>(`/repos/${opts.existingRepoFullName}`);
+    const found = await ghRaw<GhRepo>(`/repos/${opts.existingRepoFullName}`, {}, token);
     if (found.ok) {
       repo = found.data;
       reusedExisting = true;
     } else if (found.status !== 404) {
-      // 401, 403, 5xx — surface as a real error rather than silently
-      // falling back to "create new repo", which would hide auth issues
-      // behind an unexpected fresh repo appearing in the user's account.
       throw new Error(
         `GitHub GET /repos/${opts.existingRepoFullName} → HTTP ${found.status}${found.message ? `: ${found.message}` : ""}`,
       );
@@ -183,32 +172,35 @@ export async function pushAppToGitHub(opts: {
   }
 
   if (!repo) {
+    const desiredSlug = opts.repoName
+      ? opts.repoName.toLowerCase().replace(/[^a-z0-9-_]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 90)
+      : (opts.existingRepoFullName?.split("/")[1] ?? repoNameFromTitle(opts.title));
+
     repo = await createFreshRepo({
       owner,
-      desiredSlug:
-        opts.existingRepoFullName?.split("/")[1] ??
-        repoNameFromTitle(opts.title),
+      desiredSlug,
       description: opts.description,
+      isPrivate: opts.isPrivate ?? false,
+      token,
     });
   }
 
   const repoName = repo.full_name.split("/")[1];
   const branch = repo.default_branch || "main";
 
-  // 2. Resolve the current branch HEAD. On a fresh `auto_init` repo this is
-  //    the auto-init commit. On an existing repo it's whatever the last
-  //    push left.
   const ref = await gh<GhRef>(
     `/repos/${owner}/${repoName}/git/ref/heads/${branch}`,
+    {},
+    token,
   );
   const baseCommit = await gh<GhCommit>(
     `/repos/${owner}/${repoName}/git/commits/${ref.object.sha}`,
+    {},
+    token,
   );
+  void baseCommit; // used for type safety
 
-  // 3. Create blobs for every file in the new snapshot. Sequential to stay
-  //    well under GitHub's secondary rate limit (~80 concurrent writes/min).
-  const tree: { path: string; mode: "100644"; type: "blob"; sha: string }[] =
-    [];
+  const tree: { path: string; mode: "100644"; type: "blob"; sha: string }[] = [];
   for (const [p, contents] of Object.entries(files)) {
     const blob = await gh<GhTreeNode>(
       `/repos/${owner}/${repoName}/git/blobs`,
@@ -219,25 +211,21 @@ export async function pushAppToGitHub(opts: {
           encoding: "base64",
         },
       },
+      token,
     );
     tree.push({ path: p, mode: "100644", type: "blob", sha: blob.sha });
   }
 
-  // 4. Build a tree WITHOUT base_tree so the new commit's tree contains
-  //    exactly the current snapshot — files removed from Maris AI between
-  //    pushes are also removed from `main` (otherwise GitHub merges with
-  //    the previous tree and old files linger forever).
   const newTree = await gh<GhTreeNode>(
     `/repos/${owner}/${repoName}/git/trees`,
     { method: "POST", body: { tree } },
+    token,
   );
 
-  // 5. Commit pointing at the new tree, parented on the previous HEAD so
-  //    the history is preserved (you can still see every Maris AI update
-  //    as a separate commit on `main`).
   const commitMessage = reusedExisting
     ? `Maris AI update: ${opts.title} — ${new Date().toISOString().slice(0, 19).replace("T", " ")}`
     : `Initial Maris AI export: ${opts.title}`;
+
   const newCommit = await gh<GhCommit>(
     `/repos/${owner}/${repoName}/git/commits`,
     {
@@ -248,25 +236,18 @@ export async function pushAppToGitHub(opts: {
         parents: [ref.object.sha],
       },
     },
+    token,
   );
 
-  // 6. Fast-forward the branch. force=false → fails if the branch moved
-  //    underneath us (e.g. user double-clicked "Actualizar" or pushed
-  //    manually). When that happens, the safe fix is NOT to force-push
-  //    (would silently overwrite user commits) but to re-read HEAD,
-  //    re-parent our commit on top, and PATCH again. Bounded retries
-  //    cap the cost; if we still race after a few rounds, surface the
-  //    error so the user can retry from the UI.
   const refPath = `/repos/${owner}/${repoName}/git/refs/heads/${branch}`;
   let commitToPush = newCommit;
   let attempt = 0;
-  // 5 attempts ≈ 5 lost races, far more than any realistic double-click.
-  // We catch ONLY the conflict case; auth/network errors propagate.
+
   while (true) {
     const patch = await ghRaw<unknown>(refPath, {
       method: "PATCH",
       body: { sha: commitToPush.sha, force: false },
-    });
+    }, token);
     if (patch.ok) break;
     const isFastFwdConflict =
       patch.status === 422 &&
@@ -277,11 +258,10 @@ export async function pushAppToGitHub(opts: {
       );
     }
     attempt += 1;
-    // Re-read HEAD and re-create the commit with the new parent. Tree is
-    // unchanged (it's a snapshot of the user's current bundle), so we
-    // only re-do the commit object.
     const freshRef = await gh<GhRef>(
       `/repos/${owner}/${repoName}/git/ref/heads/${branch}`,
+      {},
+      token,
     );
     commitToPush = await gh<GhCommit>(
       `/repos/${owner}/${repoName}/git/commits`,
@@ -293,6 +273,7 @@ export async function pushAppToGitHub(opts: {
           parents: [freshRef.object.sha],
         },
       },
+      token,
     );
   }
 
@@ -304,14 +285,14 @@ export async function pushAppToGitHub(opts: {
 }
 
 /**
- * Create a brand-new repo with the desired slug, retrying with `-2`, `-3`,
- * … if a repo with that exact name already exists in the user's account.
- * Caps at 10 attempts so we never spin forever on a misconfigured account.
+ * Create a brand-new repo with the desired slug.
  */
 async function createFreshRepo(opts: {
   owner: string;
   desiredSlug: string;
   description: string;
+  isPrivate?: boolean;
+  token?: string | null;
 }): Promise<GhRepo> {
   const baseSlug = opts.desiredSlug.slice(0, 90) || "maris-app";
   for (let attempt = 1; attempt <= 10; attempt++) {
@@ -321,13 +302,11 @@ async function createFreshRepo(opts: {
       body: {
         name: candidate,
         description: opts.description.slice(0, 350),
-        private: false,
+        private: opts.isPrivate ?? false,
         auto_init: true,
       },
-    });
+    }, opts.token);
     if (created.ok) return created.data;
-    // 422 with "name already exists" → try the next suffix. Anything else
-    // (auth, rate limit, server) is a real error and should surface.
     if (created.status === 422 && /already exists/i.test(created.message)) {
       continue;
     }

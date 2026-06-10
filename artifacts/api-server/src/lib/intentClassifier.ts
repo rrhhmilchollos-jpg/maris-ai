@@ -38,8 +38,15 @@ const EXEC_KEYWORD_PATTERNS: RegExp[] = [
   /\b(insertar|inserta|inyectar|guarda|guardar|persistir|grabar)\b/i,
   /\b(mongodb|mongo\s*db|base\s+de\s+datos|bbdd|database|colecci[oó]n|collection)\b/i,
   /\b(crm|ventas|comercial(?:es)?|agente\s+comercial|lead|cliente|pipeline)\b/i,
-  /\b(credenciales|password|contrase[ñn]a|email|correo|usuario|rol|permisos)\b/i,
+  /\b(credenciales|password|contrase[\u00f1n]a|email|correo|usuario|rol|permisos)\b/i,
   /\b(eliminar|borra|borrar|desactivar|revocar)\b.*\b(usuario|cliente|registro|lead|credenciales|crm|mongodb|base\s+de\s+datos)\b/i,
+  // Patrones adicionales para operaciones de datos sin ambigüedad
+  /\ba[\u00f1n]ade.*\b(usuario|trabajador|empleado|cliente|lead|contacto|registro|miembro|admin)\b/i,
+  /\b(a[\u00f1n]ade|a[\u00f1n]adir|agrega|agregar|a[\u00f1n]ade)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|colecci[oó]n))\b/i,
+  /\b(como\s+(?:trabajador|empleado|usuario|admin|cliente|lead|agente|comercial))\b/i,
+  /\b(muestra|mu[eé]strame|lista|listar|consulta|consultar|ver|visualiza)\b.*\b(usuarios|trabajadores|empleados|clientes|leads|registros|datos|crm)\b/i,
+  /\b(actualiza|actualizar|modifica|modificar|cambia|cambiar)\b.*\b(usuario|trabajador|empleado|cliente|lead|registro|dato|campo)\b/i,
+  /\b(borra|borrar|elimina|eliminar|quita|quitar|suprime|suprimir)\b.*\b(usuario|trabajador|empleado|cliente|lead|registro|dato)\b/i,
 ];
 
 const DEV_KEYWORD_PATTERNS: RegExp[] = [
@@ -180,16 +187,12 @@ export async function classifyChatIntent(
   const edit = looksLikeEdit(ctx.message);
   const research = looksLikeResearch(ctx.message);
 
-  // ENGINE_EXEC has priority over generic edit verbs such as "añadir" when the
-  // object is a user, credential, CRM record, MongoDB row/document, etc.
-  if (execution && !edit) {
-    ctx.log.info({ reason: "exec-keyword heuristic" }, "Intent classifier short-circuit → execute");
-    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: "exec-keyword heuristic" };
-  }
-
-  if (execution && /\b(mongodb|base\s+de\s+datos|crm|credenciales|usuario|password|contrase[ñn]a|ventas|comercial|lead|cliente)\b/i.test(ctx.message)) {
-    ctx.log.info({ reason: "exec-priority heuristic" }, "Intent classifier short-circuit → execute");
-    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: "exec-priority heuristic" };
+  // REGLA CLAVE: ENGINE_EXEC SIEMPRE tiene prioridad sobre ENGINE_DEV cuando
+  // la petición involucra datos/CRM/usuarios/registros, aunque también contenga
+  // verbos de desarrollo. Esto evita que "añade un usuario a la CRM" regenere el frontend.
+  if (execution) {
+    ctx.log.info({ reason: "exec-keyword heuristic", hasEdit: edit }, "Intent classifier short-circuit → execute");
+    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: "exec-keyword heuristic (datos/CRM/usuarios)" };
   }
 
   if (edit) {
