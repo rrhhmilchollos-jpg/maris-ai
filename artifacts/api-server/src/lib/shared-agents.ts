@@ -124,7 +124,8 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
   ]);
 }
 
-const CLAUDE_MODELS = ["claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-7"];
+// Orden de fallback optimizado para coste: Haiku primero para tareas simples, Sonnet para complejas
+const CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"];
 
 function fallbackClaudeModels(model: string): string[] {
   const primary = model === "gpt-5.4" ? "claude-sonnet-4-6" : model;
@@ -188,7 +189,7 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
         { role: "system", content: params.system },
         ...params.messages
       ],
-      max_tokens: params.max_tokens || 4096,
+      max_tokens: Math.min(params.max_tokens || 4096, 16000),
     });
     
     // Adapt OpenAI response to match Anthropic's structure for the rest of the code
@@ -285,8 +286,8 @@ export async function patchBundle(
     (async () => {
       try {
         const response = await createClaudeMessageWithFallback("patcher", model, {
-          max_tokens: 32000,
-          system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
+      max_tokens: 16000,
+      system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
             {
               role: "user",
