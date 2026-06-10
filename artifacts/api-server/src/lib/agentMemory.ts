@@ -6,14 +6,21 @@ import { logger } from "./logger";
 
 export type AgentMemoryEntry = IAgentMemory;
 
-const openai = new OpenAI({
-  apiKey:
-    process.env.OPENAI_API_KEY ??
-    process.env.MARIS_AI_OPENAI_API_KEY ??
-    process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
-    "sk-noop",
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL,
-});
+// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
+let _openaiMemory: OpenAI | null = null;
+function getOpenAIMemory(): OpenAI {
+  if (!_openaiMemory) {
+    _openaiMemory = new OpenAI({
+      apiKey:
+        process.env.OPENAI_API_KEY ??
+        process.env.MARIS_AI_OPENAI_API_KEY ??
+        process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
+        "sk-noop",
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL,
+    });
+  }
+  return _openaiMemory;
+}
 
 const EMBED_DIMS = 1536;
 const EMBED_MODEL = "text-embedding-3-small";
@@ -99,7 +106,7 @@ export async function embedText(text: string): Promise<number[]> {
 
   if (openAiEmbeddingsAvailable !== false) {
     try {
-      const response = await openai.embeddings.create({
+      const response = await getOpenAIMemory().embeddings.create({
         model: EMBED_MODEL,
         input: trimmed,
       });

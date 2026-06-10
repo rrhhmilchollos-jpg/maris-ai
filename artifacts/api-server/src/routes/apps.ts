@@ -3,11 +3,17 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
-// OpenAI client via Maris AI AI Integrations proxy.
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-});
+// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
+let _openaiApps: OpenAI | null = null;
+function getOpenAIApps(): OpenAI {
+  if (!_openaiApps) {
+    _openaiApps = new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy",
+    });
+  }
+  return _openaiApps;
+}
 import { makeSlug } from "../lib/deployBundle";
 import { validateBundle } from "../lib/validate";
 import { runTestingAgent } from "../lib/tester";
@@ -745,7 +751,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 
   if (provider === "gpt-5") {
     try {
-    const stream = await openai.chat.completions.create({
+    const stream = await getOpenAIApps().chat.completions.create({
       model: "gpt-5.4",
       max_completion_tokens: 128000,
       messages: [
@@ -1416,7 +1422,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
     try {
 
     if (provider === "gpt-5") {
-      const stream = await openai.chat.completions.create({
+      const stream = await getOpenAIApps().chat.completions.create({
         model: "gpt-5.4",
         max_completion_tokens: 128000,
         messages: [
