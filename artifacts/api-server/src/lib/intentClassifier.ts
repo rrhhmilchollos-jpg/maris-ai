@@ -40,13 +40,20 @@ const EXEC_KEYWORD_PATTERNS: RegExp[] = [
   /\b(crm|ventas|comercial(?:es)?|agente\s+comercial|lead|cliente|pipeline)\b/i,
   /\b(credenciales|password|contrase[\u00f1n]a|email|correo|usuario|rol|permisos)\b/i,
   /\b(eliminar|borra|borrar|desactivar|revocar)\b.*\b(usuario|cliente|registro|lead|credenciales|crm|mongodb|base\s+de\s+datos)\b/i,
-  // Patrones adicionales para operaciones de datos sin ambigüedad
+  // Patrones para operaciones de datos sin ambigüedad
   /\ba[\u00f1n]ade.*\b(usuario|trabajador|empleado|cliente|lead|contacto|registro|miembro|admin)\b/i,
-  /\b(a[\u00f1n]ade|a[\u00f1n]adir|agrega|agregar|a[\u00f1n]ade)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|colecci[oó]n))\b/i,
+  /\b(a[\u00f1n]ade|a[\u00f1n]adir|agrega|agregar)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|colecci[oó]n))\b/i,
   /\b(como\s+(?:trabajador|empleado|usuario|admin|cliente|lead|agente|comercial))\b/i,
   /\b(muestra|mu[eé]strame|lista|listar|consulta|consultar|ver|visualiza)\b.*\b(usuarios|trabajadores|empleados|clientes|leads|registros|datos|crm)\b/i,
   /\b(actualiza|actualizar|modifica|modificar|cambia|cambiar)\b.*\b(usuario|trabajador|empleado|cliente|lead|registro|dato|campo)\b/i,
   /\b(borra|borrar|elimina|eliminar|quita|quitar|suprime|suprimir)\b.*\b(usuario|trabajador|empleado|cliente|lead|registro|dato)\b/i,
+  // Patrones específicos para el caso: "añade en base de datos de la CRM de ventas como trabajador"
+  /\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb))\b.*\b(como\s+(?:trabajador|usuario|empleado|admin|cliente))\b/i,
+  /\b(a[\u00f1n]ade|agrega|inserta|registra)\b.*\b(con\s+(?:este|su|el)\s+(?:correo|email|usuario|contrase[\u00f1n]a))\b/i,
+  /\b(con\s+(?:correo|email|usuario)\b.*\b(?:y|e)\s+(?:contrase[\u00f1n]a|password))\b/i,
+  // Operaciones de estado/configuración del sistema
+  /\b(configura|configurar|activa|activar|desactiva|desactivar)\b.*\b(usuario|cuenta|acceso|permiso|rol|plan)\b/i,
+  /\b(asigna|asignar|otorga|otorgar)\b.*\b(rol|permiso|acceso|plan|crédito)\b/i,
 ];
 
 const DEV_KEYWORD_PATTERNS: RegExp[] = [

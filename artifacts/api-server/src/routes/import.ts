@@ -4,6 +4,8 @@ import path from "path";
 import fs from "fs";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
+import { createRequire } from "module";
+const _require = createRequire(import.meta.url);
 import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { GeneratedApp, connectDB } from "@workspace/db";
@@ -78,7 +80,7 @@ async function importAdmZip(): Promise<any> {
     "/app/node_modules/adm-zip",
   ];
   for (const p of candidates) {
-    try { return require(p); } catch {}
+    try { return _require(p); } catch {}
   }
   throw new Error("No se pudo cargar adm-zip. Reinicia el servicio e inténtalo de nuevo.");
 }
@@ -94,7 +96,7 @@ async function extractRarToBundle(buffer: Buffer): Promise<{ files: Record<strin
   const allPaths: string[] = [];
 
   try {
-    const { execSync } = require("child_process");
+    const { execSync } = _require("child_process");
     // Try system unrar
     execSync(`unrar x -y "${tmpRar}" "${tmpDir}/" 2>/dev/null || true`);
 
