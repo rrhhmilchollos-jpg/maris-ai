@@ -20,7 +20,8 @@ const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
 const APP_URL = process.env.APP_URL ?? "https://www.marisai.es";
 const DEFAULT_PUBLIC_API_URL = "https://maris-ai-api-server-production-fbad.up.railway.app";
-const GITHUB_CALLBACK_URL = `${process.env.API_URL ?? DEFAULT_PUBLIC_API_URL}/api/github/callback`;
+const configuredCallbackBase = process.env.GITHUB_CALLBACK_BASE_URL || process.env.PUBLIC_API_URL || DEFAULT_PUBLIC_API_URL;
+const GITHUB_CALLBACK_URL = `${configuredCallbackBase.replace(/\/$/, "")}/api/github/callback`;
 
 function safeReturnTo(raw?: string): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
