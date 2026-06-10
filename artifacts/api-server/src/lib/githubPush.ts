@@ -107,6 +107,7 @@ function buildFileMap(opts: {
   title: string;
   description: string;
   frontendBundle: string;
+  extraFiles?: Record<string, string>;
 }): Record<string, string> {
   const files: Record<string, string> = {};
   const frontendFiles = bundleToFiles(opts.frontendBundle);
@@ -124,6 +125,10 @@ function buildFileMap(opts: {
     `\`\`\`bash\ncd frontend\nnpm install\nnpm run dev\n\`\`\`\n`;
   files[".gitignore"] =
     `node_modules/\ndist/\nbuild/\n.next/\n.vercel/\n.env\n.env.local\n.DS_Store\n`;
+  for (const [path, contents] of Object.entries(opts.extraFiles || {})) {
+    const safePath = path.replace(/^\/+/, "").replace(/\.\./g, "_");
+    if (safePath) files[safePath] = contents;
+  }
   return files;
 }
 
@@ -146,6 +151,8 @@ export async function pushAppToGitHub(opts: {
   isPrivate?: boolean;
   /** Nombre personalizado del repo (opcional, se deriva del título si no se da). */
   repoName?: string;
+  /** Archivos adicionales persistidos fuera de frontend/ (por ejemplo maris-data-store.json). */
+  extraFiles?: Record<string, string>;
 }): Promise<{ url: string; repoFullName: string; updated: boolean }> {
   const token = opts.userGitHubToken || null;
   const user = await gh<GhUser>("/user", {}, token);

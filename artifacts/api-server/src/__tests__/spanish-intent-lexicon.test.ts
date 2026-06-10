@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { analyzeSpanishIntent } from "../lib/spanishIntentLexicon";
 import { buildProjectMap, resolveTargetFromPrompt } from "../lib/projectMap";
+import { interpretDataRequestDeterministic } from "../lib/dataOperationAgent";
 
 const frontendBundle = `// === FILE: src/App.tsx ===
 export default function App(){ return <button>Solicitar visita</button>; }
@@ -45,6 +46,14 @@ assert.equal(research.isResearch, true, "buscar en internet debe ser investigaci
 const projectMap = buildProjectMap("app1", "Demo", frontendBundle, backendBundle);
 const dataTarget = resolveTargetFromPrompt("añade un cliente en la CRM", projectMap);
 assert.equal(dataTarget.targetType, "data_record", "CRM debe ir a data_record");
+
+const directInsert = interpretDataRequestDeterministic("añade en la base de datos de la CRM de Seguxat como trabajador a Ivan con correo ivan@seguxat.com y contraseña 1234");
+assert.ok(directInsert, "la operación clara de alta de trabajador debe interpretarse sin LLM");
+assert.equal(directInsert?.type, "INSERT", "añade debe mapear a INSERT");
+assert.equal(directInsert?.collection, "trabajadores_seguxat", "debe ir a la colección directa de trabajadores de Seguxat");
+assert.equal(directInsert?.fields.email, "ivan@seguxat.com", "debe extraer email");
+assert.equal(directInsert?.fields.rol, "trabajador", "debe extraer rol trabajador");
+assert.equal(directInsert?.fields.password, "1234", "debe extraer contraseña para protegerla después en persistencia");
 
 const styleTarget = resolveTargetFromPrompt("cambia el color del botón", projectMap);
 assert.equal(styleTarget.targetType, "style", "color debe ir a estilo");

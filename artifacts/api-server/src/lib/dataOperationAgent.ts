@@ -16,6 +16,7 @@
  */
 
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { analyzeSpanishIntent, hasSpanishAction, hasSpanishDomain } from "./spanishIntentLexicon";
 import { connectDB } from "./db";
 import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
 import { logger as rootLogger } from "./logger";
@@ -48,6 +49,105 @@ export interface DataOperationResult {
   recordsAffected?: number;
   data?: any;               // Datos devueltos en QUERY
   error?: string;
+}
+
+
+const SUCCESS_CLOSING = "\n\nHe finalizado con éxito. ¿Deseas continuar?";
+
+function finishSuccess(message: string): string {
+  return message.includes("He finalizado con éxito") ? message : `${message}${SUCCESS_CLOSING}`;
+}
+
+function normalizeKey(value: string): string {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "datos";
+}
+
+function extractEmail(message: string): string | undefined {
+  return message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.toLowerCase();
+}
+
+function extractPassword(message: string): string | undefined {
+  const m = message.match(/(?:contrase[ñn]a|password|clave)\s*(?:es|:|=)?\s*([^,;\n]+)/i);
+  return m?.[1]?.trim().replace(/["'`]+/g, "").slice(0, 120);
+}
+
+function extractPersonName(message: string): string | undefined {
+  const patterns = [
+    /(?:a|para)\s+([A-ZÁÉÍÓÚÑ][\p{L}ÁÉÍÓÚÑáéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][\p{L}ÁÉÍÓÚÑáéíóúñ]+){0,3})/u,
+    /nombre\s*(?:es|:|=)?\s*([\p{L}ÁÉÍÓÚÑáéíóúñ]+(?:\s+[\p{L}ÁÉÍÓÚÑáéíóúñ]+){0,3})/iu,
+  ];
+  for (const re of patterns) {
+    const m = message.match(re);
+    if (m?.[1]) return m[1].trim();
+  }
+  return undefined;
+}
+
+function inferCollection(message: string): string {
+  const lower = message.toLowerCase();
+  const company = lower.match(/(?:de|para)\s+([a-z0-9-]+)\s+(?:como|en)/i)?.[1];
+  const suffix = company ? `_${normalizeKey(company)}` : "";
+  if (/trabajador|empleado/.test(lower)) return `trabajadores${suffix}`;
+  if (/cliente|contacto/.test(lower)) return `clientes${suffix}`;
+  if (/lead/.test(lower)) return `leads${suffix}`;
+  if (/usuario|admin|miembro/.test(lower)) return `usuarios${suffix}`;
+  if (/venta|crm/.test(lower)) return `crm_ventas${suffix}`;
+  return `registros${suffix}`;
+}
+
+export function interpretDataRequestDeterministic(message: string): DataOperation | null {
+  const spanish = analyzeSpanishIntent(message);
+  if (!spanish.isDataOperation) return null;
+
+  const email = extractEmail(message);
+  const password = extractPassword(message);
+  const name = extractPersonName(message);
+  const collection = inferCollection(message);
+  const lower = message.toLowerCase();
+  const fields: Record<string, any> = {};
+  const filter: Record<string, any> = {};
+
+  if (name) fields.nombre = name;
+  if (email) {
+    fields.email = email;
+    filter.email = email;
+  }
+  if (password) fields.password = password;
+  if (/trabajador/.test(lower)) fields.rol = "trabajador";
+  else if (/empleado/.test(lower)) fields.rol = "empleado";
+  else if (/admin|administrador/.test(lower)) fields.rol = "admin";
+  else if (/cliente/.test(lower)) fields.rol = "cliente";
+  if (/ventas/.test(lower)) fields.area = "ventas";
+  if (/crm/.test(lower)) fields.origen = "crm";
+
+  let type: DataOperationType = "UNKNOWN";
+  if (hasSpanishAction(spanish, ["add"])) type = "INSERT";
+  else if (hasSpanishAction(spanish, ["modify"])) type = "UPDATE";
+  else if (hasSpanishAction(spanish, ["delete"])) type = "DELETE";
+  else if (hasSpanishAction(spanish, ["query"])) type = "QUERY";
+  else if (hasSpanishAction(spanish, ["configure"])) type = "CONFIG";
+
+  if ((type === "UPDATE" || type === "DELETE" || type === "QUERY") && Object.keys(filter).length === 0) {
+    if (name) filter.nombre = name;
+  }
+
+  if (type === "INSERT" && Object.keys(fields).length === 0) return null;
+  if ((type === "UPDATE" || type === "DELETE") && Object.keys(filter).length === 0) return null;
+
+  return {
+    type,
+    collection,
+    fields,
+    filter,
+    rawRequest: message,
+    confidence: Math.max(0.9, spanish.confidence),
+    explanation: `Operación directa ${type} sobre ${collection}`,
+  };
 }
 
 // ─── Prompt del agente ────────────────────────────────────────────────────────
@@ -140,6 +240,12 @@ async function interpretDataRequest(
   log: Logger,
   projectMapJson?: string,
 ): Promise<DataOperation> {
+  const deterministic = interpretDataRequestDeterministic(message);
+  if (deterministic) {
+    log.info({ operation: deterministic }, "dataOperationAgent: interpretación determinista sin LLM");
+    return deterministic;
+  }
+
   // Extraer información relevante del Project Map para el agente
   let projectMapContext = "";
   if (projectMapJson) {
@@ -422,7 +528,7 @@ async function executeUpdateOperation(
   return {
     success: true,
     operation: op,
-    message: `✅ ${updated} registro(s) actualizado(s) en **${collectionKey}**.`,
+    message: finishSuccess(`✅ ${updated} registro(s) actualizado(s) en **${collectionKey}**.`),
     recordsAffected: updated,
   };
 }
@@ -488,7 +594,7 @@ async function executeDeleteOperation(
   return {
     success: true,
     operation: op,
-    message: `✅ ${deleted} registro(s) eliminado(s) de **${collectionKey}**.`,
+    message: finishSuccess(`✅ ${deleted} registro(s) eliminado(s) de **${collectionKey}**.`),
     recordsAffected: deleted,
   };
 }

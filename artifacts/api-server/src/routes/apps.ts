@@ -2685,6 +2685,31 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
           log: req.log || logger,
         });
         reply = execResult.message;
+
+        if (execResult.success) {
+          try {
+            const updatedApp = await GeneratedApp.findById(req.params.id).lean() as any;
+            const repoFullName = updatedApp?.githubRepoFullName || app.githubRepoFullName;
+            const frontendBundle = updatedApp?.frontendCode || app.frontendCode || app.html || "";
+            const dataMatch = String(updatedApp?.agentNotes || "").match(/<!-- DATA_STORE_START -->([\s\S]*?)<!-- DATA_STORE_END -->/);
+            if (repoFullName && frontendBundle && dataMatch?.[1]) {
+              await pushAppToGitHub({
+                title: updatedApp.title || app.title || "App",
+                description: updatedApp.description || app.description || "Datos actualizados por Maris AI",
+                frontendBundle,
+                existingRepoFullName: repoFullName,
+                userGitHubToken: req.dbUser?.githubAccessToken || null,
+                extraFiles: {
+                  "maris-data-store.json": dataMatch[1].trim(),
+                },
+              });
+              reply += "\n\nDatos sincronizados también en GitHub (`maris-data-store.json`).";
+            }
+          } catch (ghErr) {
+            logger.warn({ ghErr, appId: req.params.id }, "ENGINE_EXEC: no se pudo sincronizar GitHub");
+            reply += "\n\nLa operación quedó guardada en Maris AI; la sincronización con GitHub no se pudo completar automáticamente.";
+          }
+        }
       } catch (execErr) {
         logger.error({ execErr }, "ENGINE_EXEC error");
         reply = `⚠️ Error ejecutando la operación: ${execErr instanceof Error ? execErr.message : String(execErr)}. Por favor, inténtalo de nuevo con más detalle.`;
