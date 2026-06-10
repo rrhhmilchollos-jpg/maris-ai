@@ -12,6 +12,7 @@ import {
 import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
 import { bulkCreateProjectSeeds } from "../lib/projectSeeds";
+import { seedSeguxatProject } from "../scripts/seedSeguxatProject";
 import { IProjectSeed } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import { getMetricsSnapshot } from "../lib/metrics";
@@ -850,6 +851,20 @@ router.delete("/admin/my-projects/:id", async (req: any, res: any): Promise<void
   if (!app) { res.status(404).json({ error: "Not found" }); return; }
   await app.deleteOne();
   res.json({ ok: true });
+});
+
+// ─── Admin: Seed Seguxat Project (alarma-negocio-xativa) ────────────────────
+// POST /api/admin/seed-seguxat
+// Body: { "email": "rrhh.milchollos@gmail.com" } (opcional, usa el email por defecto)
+// Importa el proyecto Seguxat completo a la cuenta del usuario especificado.
+router.post("/admin/seed-seguxat", async (req: any, res: any): Promise<void> => {
+  const targetEmail = (req.query.email as string) || req.body?.email || "rrhh.milchollos@gmail.com";
+  try {
+    const result = await seedSeguxatProject(targetEmail);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: String(err) });
+  }
 });
 
 export default router;

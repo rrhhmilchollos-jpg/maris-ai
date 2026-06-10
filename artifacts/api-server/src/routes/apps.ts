@@ -11,6 +11,8 @@ const openai = new OpenAI({
 import { makeSlug } from "../lib/deployBundle";
 import { validateBundle } from "../lib/validate";
 import { runTestingAgent } from "../lib/tester";
+import { runPMAgent, type EmergentArchitectBlueprint } from "../lib/emergentAgentPipeline";
+import { detectIntegrations } from "../lib/fileToolsAgent";
 import { 
   type GenLanguage, 
   type QAIssue, 
@@ -2022,9 +2024,52 @@ Output STRICT JSON only, no markdown, no explanation.`,
     ),
   );
 
+  /* === Phase 7: PM Agent Quality Gate (Emergent.sh Style) === */
+  onProgress?.({ phase: "qa", progress: 95, note: "📋 PM Agent: verificando que la app cumple todos los requisitos del usuario…" });
+  await log("qa", "📋 PM Agent activado — Quality Gate final al estilo emergent.sh…");
+  const emergentBlueprint: EmergentArchitectBlueprint = {
+    title: plan.title,
+    description: plan.description,
+    pages: plan.pages.map(p => ({ name: p.name, route: p.route, purpose: p.purpose, components: [] })),
+    dataModels: plan.dataModels.map(m => ({ name: m.name, fields: [] })),
+    apiEndpoints: [],
+    backendNeeded: plan.backendNeeded,
+    techStack: plan.techStack,
+    frontendFiles: plan.frontendFiles,
+    backendFiles: plan.backendFiles ?? [],
+    integrations: integrationSpec.services.map(s => s.name),
+    complexity: agentModelPlan.tier === "ultra" ? "enterprise" : agentModelPlan.tier === "robust" ? "advanced" : agentModelPlan.tier === "standard" ? "standard" : "basic",
+  };
+  try {
+    const pmValidation = await runPMAgent(prompt, emergentBlueprint, finalFrontend, (msg) => void log("qa", msg));
+    if (pmValidation.score >= 80) {
+      await log("qa", `✅ PM Agent: app aprobada (${pmValidation.score}/100). ${pmValidation.summary}`);
+    } else if (pmValidation.score >= 60) {
+      await log("qa", `⚠️ PM Agent: score ${pmValidation.score}/100 — ${pmValidation.summary}`, "warn");
+    } else {
+      await log("qa", `🔧 PM Agent: score ${pmValidation.score}/100 — se recomienda revisar la app antes del deploy.`, "warn");
+    }
+    const blockers = pmValidation.issues.filter(i => i.severity === "blocker");
+    if (blockers.length > 0) {
+      await log("qa", `⚠️ PM Agent detectó ${blockers.length} blocker(s): ${blockers.map(b => b.requirement).join(", ")}`, "warn");
+    }
+  } catch (pmErr) {
+    await log("qa", "PM Agent: validación omitida por error interno.", "warn");
+  }
+
+  /* === Phase 7b: Integration Agent Enhanced (Emergent.sh Style) === */
+  const detectedIntegrations = detectIntegrations(prompt, plan.description);
+  if (detectedIntegrations.length > 0) {
+    await log("integration", `🔌 Integration Agent: ${detectedIntegrations.length} integración(es) detectada(s): ${detectedIntegrations.map(i => i.name).join(", ")}`);
+    for (const integration of detectedIntegrations) {
+      await log("integration", `  → ${integration.name} (${integration.type}): variables necesarias → ${integration.envVars.join(", ")}`);
+      await log("integration", `    Setup: ${integration.setupNotes}`);
+    }
+  }
+
   const testNote = testCode ? "✅ Tests generados. " : "";
   if (testCode) await log("qa", `Tests generados (${Math.round(testCode.length / 1000)} KB).`);
-  onProgress?.({ phase: "parsing", progress: 94, note: `${testNote}📦 Empaquetando archivos…` });
+  onProgress?.({ phase: "parsing", progress: 96, note: `${testNote}📦 Empaquetando archivos…` });
   await log("system", "Empaquetando archivos finales…");
 
   /* === Final assembly === */
