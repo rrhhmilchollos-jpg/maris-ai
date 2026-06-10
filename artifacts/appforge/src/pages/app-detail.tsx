@@ -446,7 +446,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const hasRenderableCode = frontendCode.length >= 20 && !hasMilestonePlaceholder;
   const API_BASE = import.meta.env.VITE_API_URL ?? "";
   const previewEndpointUrl = app?._id ? `${API_BASE}/api/apps/${app._id}/preview` : "";
-  const deployedUrl = app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
+  const deployedUrl = app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
   const showStaticBuildState = !hasRenderableCode;
   const renderedFileCount = hasRenderableCode ? parseBundle(frontendCode) ? Object.keys(parseBundle(frontendCode)).length : 0 : 0;
   const createdAtLabel = app?.createdAt ? new Date(app.createdAt).toLocaleString("es-ES") : "Sin fecha";
