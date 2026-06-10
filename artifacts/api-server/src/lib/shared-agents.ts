@@ -208,6 +208,60 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
   }
 }
 
+
+export function estimatePromptTokens(text: string): number {
+  return Math.ceil(String(text || "").length / 4);
+}
+
+function bundleFilesForPrompt(bundle: string): Array<{ path: string; content: string; raw: string }> {
+  const out: Array<{ path: string; content: string; raw: string }> = [];
+  const parts = String(bundle || "").split(/\/\/\s*===\s*FILE:\s*/);
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    const nl = part.indexOf("\n");
+    if (nl === -1) continue;
+    const path = part.slice(0, nl).trim().replace(/\s*===$/, "");
+    const content = part.slice(nl + 1);
+    if (path) out.push({ path, content, raw: `// === FILE: ${path} ===\n${content}` });
+  }
+  return out;
+}
+
+export function compactBundleForPrompt(bundle: string, hints: string[] = [], maxChars = 70_000): string {
+  const files = bundleFilesForPrompt(bundle);
+  if (files.length === 0) return String(bundle || "").slice(0, maxChars);
+  const normalizedHints = hints.join(" ").toLowerCase();
+  const critical = /(^|\/)(package\.json|vite\.config\.[jt]s|index\.html|src\/main\.[jt]sx?|src\/app\.[jt]sx?|src\/index\.(css|scss)|src\/styles?\.(css|scss))$/i;
+  const scored = files.map((file, index) => {
+    const haystack = `${file.path}\n${file.content.slice(0, 2000)}`.toLowerCase();
+    let score = critical.test(file.path) ? 100 : 0;
+    for (const hint of normalizedHints.split(/[^a-z0-9_\-/]+/).filter((h) => h.length >= 3)) {
+      if (haystack.includes(h)) score += 10;
+      if (file.path.toLowerCase().includes(h)) score += 25;
+    }
+    if (/component|page|route|modal|button|form|table|header|footer|navbar/i.test(file.path)) score += 5;
+    return { ...file, index, score };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const selected: typeof scored = [];
+  let used = 0;
+  for (const file of scored) {
+    const size = file.raw.length + 2;
+    if (selected.length > 0 && used + size > maxChars) continue;
+    selected.push(file);
+    used += size;
+    if (used >= maxChars) break;
+  }
+  selected.sort((a, b) => a.index - b.index);
+  const omitted = files.filter((f) => !selected.some((s) => s.path === f.path));
+  const header = [
+    `// === MARIS_PROMPT_CONTEXT: compacted bundle ===`,
+    `// Included ${selected.length}/${files.length} files. Approx input tokens saved: ${Math.max(0, estimatePromptTokens(bundle) - estimatePromptTokens(selected.map((f) => f.raw).join("\n")))}.`,
+    omitted.length ? `// Omitted files: ${omitted.map((f) => f.path).slice(0, 80).join(", ")}${omitted.length > 80 ? ", ..." : ""}` : `// No files omitted.`,
+  ].join("\n");
+  return `${header}\n${selected.map((f) => f.raw).join("\n")}`;
+}
+
 /* ----------------------------- patcher ------------------------------------ */
 
 export function mergePatchIntoBundle(
@@ -249,7 +303,7 @@ export function buildPatcherSystemPrompt(language: GenLanguage): string {
 Your mission: receive a list of errors detected in a React frontend bundle and FIX ALL OF THEM with surgical precision.
 You are a senior full-stack engineer with 15+ years of experience in React, TypeScript, Vite, Tailwind, and modern web development.
 Output STRICT JSON only:
-{"frontendCode":"all frontend files as one string using // === FILE: <path> === separators"}
+{"changedFiles":{"src/App.tsx":"full updated content for changed file only"},"deletedFiles":[]}
 
 LANGUAGE RULES:
 - ALL user-visible copy MUST be in Spanish (es-ES).
@@ -262,7 +316,7 @@ ${tsLine}
 - Match every import { X } to a named export and every import X from to a default export.
 - Link in wouter v3 already renders as anchor. Never nest <a> inside <Link>.
 
-Return the FULL bundle. Output ONLY the JSON object.`;
+Return ONLY changed files, not the full bundle. Output ONLY the JSON object.`;
 }
 
 export function buildFastPatchPrompt(): string {

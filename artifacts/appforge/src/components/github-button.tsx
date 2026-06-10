@@ -89,9 +89,18 @@ export function GitHubButton({ appId, appTitle, appDescription, githubRepoUrl, o
     }
   }, []);
 
-  const handleConnect = () => {
-    // Redirigir al OAuth de GitHub
-    window.location.href = `${import.meta.env.VITE_API_URL ?? ""}/api/github/connect`;
+  const handleConnect = async () => {
+    try {
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      const data = await apiFetch<{ url: string }>(`/api/github/connect-url?returnTo=${encodeURIComponent(returnTo)}`);
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast({
+        title: "No se pudo abrir GitHub",
+        description: err?.message ?? "Revisa que GitHub OAuth esté configurado en el backend.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDisconnect = async () => {
@@ -111,20 +120,20 @@ export function GitHubButton({ appId, appTitle, appDescription, githubRepoUrl, o
     if (!status?.connected) return;
     setPushing(true);
     try {
-      const result = await apiFetch<{ ok: boolean; repoUrl: string; repoFullName: string }>(
-        `/api/github/push/${appId}`,
+      const result = await apiFetch<{ ok?: boolean; url: string; repoFullName: string; updated?: boolean }>(
+        `/api/apps/${appId}/github`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repoName, isPrivate, description: appDescription ?? "" }),
         }
       );
-      setRepoUrl(result.repoUrl);
+      setRepoUrl(result.url);
       setPushed(true);
-      onSuccess?.(result.repoUrl);
+      onSuccess?.(result.url);
       toast({
-        title: "🐙 Proyecto subido a GitHub",
-        description: `Repositorio creado: ${result.repoFullName}`,
+        title: result.updated ? "🐙 Repositorio actualizado" : "🐙 Proyecto subido a GitHub",
+        description: `Repositorio: ${result.repoFullName}`,
       });
     } catch (err: any) {
       toast({
