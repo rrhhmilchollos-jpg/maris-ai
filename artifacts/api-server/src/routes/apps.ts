@@ -2961,13 +2961,13 @@ export async function runDeployForApp(args: {
 
 
 // ── PREVIEW ENDPOINT — sirve el bundle HTML directamente ──────────────
-router.get("/apps/:id/preview/:file(*)", async (req: any, res: any) => {
+router.get("/apps/:id/preview/:file+", async (req: any, res: any) => {
   try {
     await connectDB();
     const app = await GeneratedApp.findById(req.params.id).select("frontendCode").lean() as any;
     if (!app?.frontendCode) return res.status(404).send("App not found");
 
-    const filePath = (req.params.file || "index.html").replace(/^\//, "") || "index.html";
+    const filePath = (Array.isArray(req.params.file) ? req.params.file.join("/") : req.params.file || "index.html").replace(/^\//, "") || "index.html";
     
     // Parse bundle
     const files: Record<string, string> = {};
