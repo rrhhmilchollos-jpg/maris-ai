@@ -66,7 +66,7 @@ app.use(
         connectSrc: [
           "'self'",
           "https://api.marisai.es",
-          "https://maris-ai-api-server-6c5u.onrender.com",
+          "https://maris-ai-api-server-production-fbad.up.railway.app",
           "https://*.clerk.com",
           "https://*.stripe.com",
           "https://api.resend.com",
@@ -79,7 +79,7 @@ app.use(
           "https://hooks.stripe.com",
           "https://marisai.es",
           "https://*.marisai.es",
-          "https://*.onrender.com",
+          "https://*.railway.app",
           "https://*.vercel.app",
           "https://*.vercel.live",
           "https://*.webcontainer.io",

@@ -33,7 +33,9 @@ import {
   buildPatcherSystemPrompt,
   patchBundle,
   buildFastPatchPrompt,
-  mergePatchIntoBundle
+  mergePatchIntoBundle,
+  compactBundleForPrompt,
+  estimatePromptTokens
 } from "../lib/shared-agents";
 import { validateBundleInE2B } from "../lib/e2bValidator";
 import { shouldValidateInE2B } from "../lib/e2bGate";
@@ -90,7 +92,7 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.vercel.app https://*.vercel.live"
+            "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live"
           }
         ]
       }
@@ -1337,28 +1339,17 @@ async function singleEditPass(
 ): Promise<GeneratedAppPayload> {
   const emit: AgentLog = log ?? (() => {});
   
-  // OPTIMIZACIÓN DE CONTEXTO: Si el código es muy grande, reducimos lo que enviamos
-  const MAX_CONTEXT_CHARS = 350000; // ~90k tokens
+  // OPTIMIZACIÓN DE CONTEXTO: no enviar bundles completos salvo que sea imprescindible.
+  // Anthropic factura por tokens de entrada y aquí estaba el mayor consumo.
+  const MAX_CONTEXT_CHARS = 140000; // ~35k tokens de entrada como techo duro en edición completa
   let frontendCodeToPass = previous.frontendCode;
   let isContextOptimized = false;
 
   if (previous.frontendCode.length > MAX_CONTEXT_CHARS) {
-    emit("system", "📦 El proyecto es muy grande. Optimizando contexto para el editor...");
-    const files = previous.frontendCode.split("// === FILE: ");
-    // Heurística: Mantener App.tsx, main.tsx, package.json y los archivos mencionados en el prompt
-    const promptLower = prompt.toLowerCase();
-    const filteredFiles = files.filter(f => {
-      if (!f.trim()) return false;
-      const path = f.split(" ===")[0].toLowerCase();
-      const isCritical = path.includes("app.") || path.includes("main.") || path.includes("package.json") || path.includes("index.");
-      const isRelevant = promptLower.includes(path.split(".")[0]);
-      return isCritical || isRelevant;
-    });
-    
-    // Si el filtro es demasiado agresivo, mantenemos al menos los primeros 15 archivos
-    const finalFiles = filteredFiles.length > 5 ? filteredFiles : files.slice(0, 15);
-    frontendCodeToPass = finalFiles.map(f => f.startsWith("// === FILE: ") ? f : "// === FILE: " + f).join("");
+    emit("system", "📦 Optimizando contexto: envío solo archivos relevantes al editor para ahorrar tokens...");
+    frontendCodeToPass = compactBundleForPrompt(previous.frontendCode, [prompt], MAX_CONTEXT_CHARS);
     isContextOptimized = true;
+    emit("system", `📉 Contexto reducido aprox. de ${estimatePromptTokens(previous.frontendCode)} a ${estimatePromptTokens(frontendCodeToPass)} tokens.`);
   }
 
   const userContent = `CURRENT APP:
@@ -1370,7 +1361,7 @@ CURRENT FRONTEND CODE${isContextOptimized ? " (OPTIMIZED CONTEXT)" : ""}:
 ${frontendCodeToPass}
 
 CURRENT BACKEND CODE:
-${previous.backendCode}
+${previous.backendCode.length > 50000 ? previous.backendCode.slice(0, 50000) + "\n// [TRUNCADO: backend demasiado grande; conserva el backend existente salvo que el usuario pida backend explícitamente.]" : previous.backendCode}
 
 USER'S CHANGE REQUEST:
 ${prompt}
@@ -2095,7 +2086,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
     techStack: plan.techStack,
     frontendCode: (finalFrontend.includes('// === FILE: vercel.json ===') 
       ? finalFrontend 
-      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
+      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
   };
@@ -3128,7 +3119,7 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     const ext = filePath.split(".").pop()?.toLowerCase();
     const mimeTypes: Record<string, string> = { html: "text/html; charset=utf-8", css: "text/css", js: "application/javascript", json: "application/json", xml: "application/xml", txt: "text/plain" };
     res.setHeader("Content-Type", mimeTypes[ext || ""] || "text/html; charset=utf-8");
-    res.setHeader("Content-Security-Policy", "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-6c5u.onrender.com https://*.onrender.com https://*.vercel.app https://*.vercel.live");
+    res.setHeader("Content-Security-Policy", "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(fileContent);

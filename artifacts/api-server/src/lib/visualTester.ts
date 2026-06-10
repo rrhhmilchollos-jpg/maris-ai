@@ -4,6 +4,8 @@ import type { Logger } from "pino";
 import { GeneratedApp } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { validateBundle } from "./validate";
+import { compactBundleForPrompt, estimatePromptTokens, extractJsonObject, mergePatchIntoBundle } from "./shared-agents";
+import { logger as rootLogger } from "./logger";
 
 /**
  * Visual Testing Agent.
@@ -350,9 +352,8 @@ async function applyVisualFixes(opts: {
 }): Promise<string | null> {
   const { bundle, issues, app } = opts;
 
-  // Cap the bundle to avoid blowing the context window. Most generated apps
-  // are well under 60 KB; if larger, we still try but log a warning.
-  const trimmed = bundle.length > 80_000 ? bundle.slice(0, 80_000) : bundle;
+  const compactBundle = compactBundleForPrompt(bundle, issues.map((i) => `${i.type} ${i.description} ${i.cssfix}`), 65_000);
+  rootLogger.info({ originalTokens: estimatePromptTokens(bundle), compactTokens: estimatePromptTokens(compactBundle), issueCount: issues.length }, "TOKEN_OPTIMIZER: visual fixes compacted bundle");
 
   const fixList = issues
     .filter((i) => i.severity !== "minor")
@@ -375,21 +376,20 @@ PROBLEMAS A ARREGLAR:
 ${fixList}
 
 REGLAS ESTRICTAS:
-- Devuelve el bundle COMPLETO, con TODOS los archivos (los modificados y los
-  no modificados), respetando exactamente el separador '// === FILE: <path> ==='.
+- Devuelve SOLO JSON con changedFiles/deletedFiles. No devuelvas el bundle completo. Cada changedFiles[path] debe contener el archivo completo actualizado.
 - No cambies funcionalidad, lógica de negocio, ni nombres de funciones públicas.
 - Mantén las dependencias y los imports.
 - Si el archivo afectado es CSS, modifícalo. Si es JSX/TSX, ajusta solo las
   clases / estilos que arreglan el issue.
 - Hazlo responsive cuando aplique (breakpoints sm:/md:/lg: de Tailwind).
-- Devuelve SOLO el bundle, sin markdown, sin backticks, sin explicaciones.
+- Devuelve SOLO JSON, sin markdown, sin backticks, sin explicaciones.
 
-BUNDLE ACTUAL:
-${trimmed}`;
+ARCHIVOS RELEVANTES ACTUALES:
+${compactBundle}`;
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 16000,
+    max_tokens: 8000,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -402,8 +402,11 @@ ${trimmed}`;
     .replace(/\n?```$/, "")
     .trim();
 
-  // Sanity check: must still contain at least one FILE marker, otherwise we
-  // got garbage back and we shouldn't overwrite the bundle.
+  const parsed = extractJsonObject<{ changedFiles?: Record<string, string>; deletedFiles?: string[]; frontendCode?: string }>(text);
+  if (parsed?.changedFiles && Object.keys(parsed.changedFiles).length > 0) {
+    return mergePatchIntoBundle(bundle, parsed.changedFiles, Array.isArray(parsed.deletedFiles) ? parsed.deletedFiles : []);
+  }
+  if (parsed?.frontendCode && parsed.frontendCode.includes("// === FILE:")) return parsed.frontendCode;
   if (!text.includes("// === FILE:")) return null;
   if (text.length < bundle.length / 3) return null;
   return text;

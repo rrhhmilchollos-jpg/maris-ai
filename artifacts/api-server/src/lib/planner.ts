@@ -129,6 +129,20 @@ export async function planExecution(
   const heuristic = heuristicPlan(prompt, options.hasExistingApp);
   if (heuristic.scope === "fast-patch") return heuristic;
 
+  // TOKEN CONTROL: si las reglas españolas o regex deterministas ya han decidido
+  // claramente, no llamamos a Anthropic solo para confirmar. Esta llamada era
+  // pequeña, pero se ejecuta en cada mensaje y suma muchos tokens al mes.
+  const normalizedPrompt = prompt.trim();
+  const spanish = analyzeSpanishIntent(normalizedPrompt);
+  const deterministicFeature = options.hasExistingApp && (
+    spanish.isBugFix || spanish.isDevOperation || FEATURE_RX.test(normalizedPrompt) || BUG_RX.test(normalizedPrompt)
+  );
+  const deterministicFullBuild = !options.hasExistingApp || spanish.isFullBuild || FULL_BUILD_RX.test(normalizedPrompt);
+  if (deterministicFeature || deterministicFullBuild) {
+    logger.info({ scope: heuristic.scope, reason: heuristic.reason }, "TOKEN_OPTIMIZER: planner LLM skipped by deterministic Spanish rules");
+    return heuristic;
+  }
+
   try {
     const response = await Promise.race([
       anthropic.messages.create({

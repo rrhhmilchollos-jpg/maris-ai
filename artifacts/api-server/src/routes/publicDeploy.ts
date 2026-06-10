@@ -156,7 +156,7 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
         "connect-src https:",
         "frame-src 'self' data: blob: https:",
         "child-src 'self' data: blob: https:",
-        "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://*.onrender.com https://*.vercel.app https://*.vercel.live",
+        "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live",
       ].join("; "),
     );
     res.setHeader("X-Frame-Options", "ALLOWALL");
@@ -210,7 +210,7 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
         "connect-src https:",
         "frame-src 'self' data: blob: https:",
         "child-src 'self' data: blob: https:",
-        "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://*.onrender.com https://*.vercel.app https://*.vercel.live",
+        "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live",
       ].join("; "),
     );
     res.setHeader("X-Frame-Options", "ALLOWALL");

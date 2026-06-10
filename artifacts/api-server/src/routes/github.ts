@@ -21,14 +21,29 @@ const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
 const APP_URL = process.env.APP_URL ?? "https://www.marisai.es";
 const GITHUB_CALLBACK_URL = `${process.env.API_URL ?? "https://api.marisai.es"}/api/github/callback`;
 
-// ─── Paso 1: Redirigir a GitHub OAuth ────────────────────────────────────────
-router.get("/github/connect", requireAuth, (req, res) => {
-  const userId = req.userId!;
-  // state = userId codificado en base64 para verificar en el callback
-  const state = Buffer.from(JSON.stringify({ userId, ts: Date.now() })).toString("base64url");
+function safeReturnTo(raw?: string): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
+  return raw.slice(0, 300);
+}
+
+function buildGitHubAuthorizeUrl(userId: string, returnTo?: string): string {
+  const state = Buffer.from(JSON.stringify({ userId, ts: Date.now(), returnTo: safeReturnTo(returnTo) })).toString("base64url");
   const scope = "repo,read:user,user:email";
-  const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK_URL)}&scope=${scope}&state=${state}`;
-  res.redirect(url);
+  return `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK_URL)}&scope=${encodeURIComponent(scope)}&state=${state}`;
+}
+
+// ─── Paso 1A: URL OAuth para frontends con Bearer token (Clerk) ───────────────
+router.get("/github/connect-url", requireAuth, (req, res) => {
+  if (!GITHUB_CLIENT_ID) return res.status(500).json({ error: "GITHUB_CLIENT_ID no está configurado" });
+  const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/dashboard";
+  res.json({ url: buildGitHubAuthorizeUrl(req.userId!, returnTo) });
+});
+
+// ─── Paso 1B: compatibilidad: redirigir a GitHub OAuth ───────────────────────
+router.get("/github/connect", requireAuth, (req, res) => {
+  if (!GITHUB_CLIENT_ID) return res.status(500).send("GITHUB_CLIENT_ID no está configurado");
+  const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/dashboard";
+  res.redirect(buildGitHubAuthorizeUrl(req.userId!, returnTo));
 });
 
 // ─── Paso 2: Callback de GitHub OAuth ────────────────────────────────────────
@@ -45,13 +60,15 @@ router.get("/github/callback", async (req, res) => {
   }
 
   let userId: string;
+  let returnTo = "/dashboard";
   try {
     const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
     userId = decoded.userId;
+    returnTo = safeReturnTo(decoded.returnTo);
     if (!userId) throw new Error("userId vacío");
     // Verificar que el state no tiene más de 10 minutos
     if (Date.now() - decoded.ts > 10 * 60 * 1000) {
-      return res.redirect(`${APP_URL}/dashboard?github_error=expired`);
+      return res.redirect(`${APP_URL}${returnTo}?github_error=expired`);
     }
   } catch {
     return res.redirect(`${APP_URL}/dashboard?github_error=invalid_state`);
@@ -89,10 +106,10 @@ router.get("/github/callback", async (req, res) => {
     });
 
     logger.info({ userId, githubLogin: githubUser.login }, "GitHub conectado correctamente");
-    res.redirect(`${APP_URL}/dashboard?github_connected=1`);
+    res.redirect(`${APP_URL}${returnTo}?github_connected=1`);
   } catch (err) {
     logger.error({ err }, "Error en GitHub OAuth callback");
-    res.redirect(`${APP_URL}/dashboard?github_error=server_error`);
+    res.redirect(`${APP_URL}${returnTo}?github_error=server_error`);
   }
 });
 
