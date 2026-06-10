@@ -2959,4 +2959,54 @@ export async function runDeployForApp(args: {
   };
 }
 
+
+// ── PREVIEW ENDPOINT — sirve el bundle HTML directamente ──────────────
+router.get("/apps/:id/preview/*", async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const app = await GeneratedApp.findById(req.params.id).select("frontendCode").lean() as any;
+    if (!app?.frontendCode) return res.status(404).send("App not found");
+
+    const filePath = (req.params[0] || "index.html").replace(/^\//, "") || "index.html";
+    
+    // Parse bundle
+    const files: Record<string, string> = {};
+    const parts = app.frontendCode.split(/\/\/ === FILE: /);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf("\n");
+      if (nl === -1) continue;
+      const path = part.slice(0, nl).trim().replace(/ ===$/, "");
+      if (path) files[path] = part.slice(nl + 1);
+    }
+
+    const fileContent = files[filePath] || files["index.html"];
+    if (!fileContent) return res.status(404).send("File not found");
+
+    // Detectar content type
+    const ext = filePath.split(".").pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      html: "text/html; charset=utf-8",
+      css: "text/css",
+      js: "application/javascript",
+      json: "application/json",
+      xml: "application/xml",
+      txt: "text/plain",
+    };
+    const mime = mimeTypes[ext || ""] || "text/html; charset=utf-8";
+
+    res.setHeader("Content-Type", mime);
+    res.setHeader("X-Frame-Options", "ALLOWALL");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(fileContent);
+  } catch (err) {
+    res.status(500).send("Error loading preview");
+  }
+});
+
+router.get("/apps/:id/preview", async (req: any, res: any) => {
+  res.redirect(`/api/apps/${req.params.id}/preview/index.html`);
+});
+
+
 export default router;
