@@ -22,9 +22,9 @@ import {
 function fireGoogleAdsConversion() {
   try {
     if (typeof (window as any).gtag === 'function') {
-      // ID de conversión: AW-8297041654 (cuenta de Google Ads de Maris AI)
+      // ID de conversión: AW-18218229959/bd7tCPjYwbwcEMfBkO9D (acción Registro en Google Ads de Maris AI)
       (window as any).gtag('event', 'conversion', {
-        'send_to': 'AW-8297041654/sign_up',
+        'send_to': 'AW-18218229959/bd7tCPjYwbwcEMfBkO9D',
         'value': 1.0,
         'currency': 'EUR',
         'event_callback': () => console.log('[GoogleAds] Conversión de registro disparada'),
