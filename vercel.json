@@ -122,7 +122,7 @@
       "destination": "https://maris-ai-api-server.onrender.com/bot-render/vs-emergent"
     },
     {
-      "source": "/((?!assets/|_next/|favicon|.*\\.js$|.*\\.css$|.*\\.png$|.*\\.svg$|.*\\.ico$|.*\\.woff|.*\\.map$).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
