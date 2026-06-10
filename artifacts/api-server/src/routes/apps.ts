@@ -2961,15 +2961,12 @@ export async function runDeployForApp(args: {
 
 
 // ── PREVIEW ENDPOINT — sirve el bundle HTML directamente ──────────────
-router.get("/apps/:id/preview/:file+", async (req: any, res: any) => {
+router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();
     const app = await GeneratedApp.findById(req.params.id).select("frontendCode").lean() as any;
     if (!app?.frontendCode) return res.status(404).send("App not found");
-
-    const filePath = (Array.isArray(req.params.file) ? req.params.file.join("/") : req.params.file || "index.html").replace(/^\//, "") || "index.html";
-    
-    // Parse bundle
+    const filePath = (req.query.file as string || "index.html").replace(/^\//, "") || "index.html";
     const files: Record<string, string> = {};
     const parts = app.frontendCode.split(/\/\/ === FILE: /);
     for (const part of parts) {
@@ -2979,23 +2976,11 @@ router.get("/apps/:id/preview/:file+", async (req: any, res: any) => {
       const path = part.slice(0, nl).trim().replace(/ ===$/, "");
       if (path) files[path] = part.slice(nl + 1);
     }
-
     const fileContent = files[filePath] || files["index.html"];
-    if (!fileContent) return res.status(404).send("File not found");
-
-    // Detectar content type
+    if (!fileContent) return res.status(404).send("File not found: " + filePath);
     const ext = filePath.split(".").pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      html: "text/html; charset=utf-8",
-      css: "text/css",
-      js: "application/javascript",
-      json: "application/json",
-      xml: "application/xml",
-      txt: "text/plain",
-    };
-    const mime = mimeTypes[ext || ""] || "text/html; charset=utf-8";
-
-    res.setHeader("Content-Type", mime);
+    const mimeTypes: Record<string, string> = { html: "text/html; charset=utf-8", css: "text/css", js: "application/javascript", json: "application/json", xml: "application/xml", txt: "text/plain" };
+    res.setHeader("Content-Type", mimeTypes[ext || ""] || "text/html; charset=utf-8");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(fileContent);
