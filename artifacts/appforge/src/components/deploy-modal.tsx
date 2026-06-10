@@ -73,6 +73,7 @@ interface DeployResponse {
 }
 interface CustomDomainResponse {
   verified?: boolean;
+  provider?: string | null;
   dnsRecords?: DnsRecord[];
   recommendedDns?: DnsRecord[];
   pendingVerification?: Array<{ type: string; domain: string; value: string }>;
@@ -128,6 +129,10 @@ function toSubdomain(title: string, id: string): string {
 }
 function copyToClipboard(text: string, label: string, toast: any) {
   navigator.clipboard.writeText(text).then(() => toast({ title: `✅ ${label} copiado` }));
+}
+function displayDnsNameForProvider(name: string, domain: string, providerId?: string | null): string {
+  if (providerId === "arsys" && name === "@") return domain || "tu-dominio.es";
+  return name;
 }
 
 /* ─────────────────────────── DNS badge ─────────────────────────── */
@@ -189,6 +194,7 @@ export function DeployModal({
   const [domainVerifying, setDomainVerifying] = useState(false);
   const [domainUnlinking, setDomainUnlinking] = useState(false);
   const [verifiedDomain, setVerifiedDomain] = useState(customDomainVerified ? currentCustomDomain : "");
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
 
   /* ── Env vars ── */
   const [envExpanded, setEnvExpanded] = useState(false);
@@ -303,7 +309,7 @@ export function DeployModal({
   }, [appId, toast]);
 
   /* ── Connect custom domain ── */
-  const handleConnectDomain = useCallback(async () => {
+  const handleConnectDomain = useCallback(async (providerId?: string) => {
     const normalized = domainInput.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
     if (!normalized) return;
     setDomainSaving(true);
@@ -311,7 +317,7 @@ export function DeployModal({
       const data = await apiFetch<CustomDomainResponse>(`/api/apps/${appId}/custom-domain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: normalized }),
+        body: JSON.stringify({ domain: normalized, provider: providerId || selectedProvider || "other" }),
       });
       const records = data.dnsRecords || data.recommendedDns || [];
       setDnsRecords(records);
@@ -331,7 +337,7 @@ export function DeployModal({
     } finally {
       setDomainSaving(false);
     }
-  }, [appId, domainInput, toast]);
+  }, [appId, domainInput, selectedProvider, toast]);
 
   /* ── Verify domain status ── */
   const handleVerifyStatus = useCallback(async () => {
@@ -761,7 +767,7 @@ export function DeployModal({
                   {DOMAIN_PROVIDERS.map((provider) => (
                     <div
                       key={provider.id}
-                      className="flex flex-col items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-3.5 hover:border-[#7c3aed]/40 hover:bg-[#7c3aed]/5 transition"
+                      className={`flex flex-col items-center gap-2.5 rounded-xl border px-3 py-3.5 transition ${selectedProvider === provider.id ? "border-[#7c3aed]/70 bg-[#7c3aed]/10" : "border-white/[0.07] bg-white/[0.02] hover:border-[#7c3aed]/40 hover:bg-[#7c3aed]/5"}`}
                     >
                       <div
                         className="grid h-10 w-10 place-items-center rounded-xl font-black text-sm"
@@ -776,10 +782,11 @@ export function DeployModal({
                             toast({ title: "Introduce tu dominio primero", variant: "destructive" });
                             return;
                           }
-                          if (provider.connectUrl) {
+                          setSelectedProvider(provider.id);
+                          if (provider.connectUrl && provider.id !== "arsys" && provider.id !== "other") {
                             window.open(provider.connectUrl, "_blank");
                           }
-                          handleConnectDomain();
+                          handleConnectDomain(provider.id);
                         }}
                         disabled={domainSaving}
                         className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
@@ -829,12 +836,12 @@ export function DeployModal({
                   ))}
                 </div>
                 {(dnsRecords.length > 0 ? dnsRecords : [
-                  { type: "A",     name: "@",   value: "76.76.21.21" },
+                  { type: "A",     name: domainInput || "tu-dominio.es",   value: "76.76.21.21" },
                   { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
                 ]).map((record, i) => (
                   <div key={i} className="grid grid-cols-[60px_70px_1fr_36px] gap-2 items-center border-b border-white/[0.04] last:border-0 px-3 py-2.5">
                     <DnsBadge type={record.type} />
-                    <span className="font-mono text-xs text-white">{record.name}</span>
+                    <span className="font-mono text-xs text-white">{displayDnsNameForProvider(record.name, domainInput, selectedProvider)}</span>
                     <span className="font-mono text-xs text-white/70 truncate">{record.value}</span>
                     <button
                       onClick={() => copyToClipboard(record.value, record.type, toast)}
@@ -853,9 +860,9 @@ export function DeployModal({
                 <p className="text-xs font-bold uppercase tracking-widest text-[#fb7185]">Guía rápida para Arsys</p>
                 <p className="mt-2 text-xs text-white/60 leading-relaxed">
                   Entra en <span className="font-semibold text-white">Arsys Área de cliente</span> → <span className="font-semibold text-white">Dominios</span> → selecciona <span className="font-semibold text-white">{domainInput || "tu dominio"}</span> → <span className="font-semibold text-white">DNS / Zona DNS</span>.
-                  Crea el registro <span className="font-mono text-white">A @ → 76.76.21.21</span> y el registro <span className="font-mono text-white">CNAME www → cname.vercel-dns.com</span>.
+                  Crea el registro <span className="font-mono text-white">A {domainInput || "tu-dominio.es"} → 76.76.21.21</span> y el registro <span className="font-mono text-white">CNAME www → cname.vercel-dns.com</span>.
                 </p>
-                <p className="mt-1.5 text-xs text-white/35">No añadas https:// ni barras. Si Arsys muestra el host vacío para el dominio raíz, equivale a @.</p>
+                <p className="mt-1.5 text-xs text-white/35">No añadas https:// ni barras. En Arsys, para el dominio raíz normalmente no se escribe @: usa el dominio completo ({domainInput || "tu-dominio.es"}) o deja el campo Entrada DNS/Host vacío si el panel lo permite.</p>
               </div>
 
               {/* Maris AI branding */}

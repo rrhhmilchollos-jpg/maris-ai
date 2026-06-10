@@ -113,6 +113,7 @@ export interface IGeneratedApp {
   deploymentError?: string;
   marisaiSubdomain?: string;
   customDomain?: string;
+  customDomainProvider?: string;
   customDomainVerified?: boolean;
   lastDeployedAt?: Date;
   deploymentLogs?: string;
@@ -154,6 +155,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     deploymentError: { type: String },
     marisaiSubdomain: { type: String, unique: true, sparse: true },
     customDomain: { type: String },
+    customDomainProvider: { type: String },
     customDomainVerified: { type: Boolean, default: false },
     lastDeployedAt: { type: Date },
     deploymentLogs: { type: String },

@@ -184,11 +184,12 @@ router.get("/apps/:appId/deployment-status", requireAuth, async (req: Request, r
 router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const { domain } = req.body as { domain?: string };
+    const { domain, provider } = req.body as { domain?: string; provider?: string };
     const userId = getAuthenticatedUserId(req);
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
 
     const normalizedDomain = domain?.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
+    const normalizedProvider = String(provider || "other").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32) || "other";
     if (!normalizedDomain) return res.status(400).json({ error: "Domain is required" });
 
     const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
@@ -210,6 +211,7 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
         const recommendedDns = recommendedDnsFor(normalizedDomain);
         await GeneratedApp.updateOne({ _id: appId, userId }, {
           customDomain: normalizedDomain,
+          customDomainProvider: normalizedProvider,
           vercelCustomDomain: normalizedDomain,
           customDomainVerified: false,
         });
@@ -218,13 +220,15 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
           domain: normalizedDomain,
           customDomain: normalizedDomain,
           verified: false,
+          provider: normalizedProvider,
           dnsRecords: recommendedDns,
           recommendedDns,
           pendingVerification: [],
           warning: `Vercel indica que ${normalizedDomain} ya está añadido o pendiente de verificación en un proyecto. No bloqueamos el flujo: configura estos DNS y, si sigue apareciendo, elimina el dominio del otro proyecto de Vercel o verifica la propiedad allí.`,
           instructions: [
             "En Arsys entra en tu dominio > DNS / Zona DNS y añade exactamente los registros indicados.",
-            "Si Arsys no permite CNAME en @, usa el registro A @ hacia 76.76.21.21 y CNAME www hacia cname.vercel-dns.com.",
+            `En Arsys, para el dominio raíz no escribas @ si no lo acepta: usa ${normalizedDomain} como Entrada DNS/Host, o deja el campo vacío si el panel lo permite. Valor A: 76.76.21.21.`,
+            "Para www crea CNAME con Entrada DNS/Host www y destino cname.vercel-dns.com.",
             "Cuando el DNS propague, pulsa Verificar conexión. Si Vercel dice que está en otro proyecto, quítalo primero de ese proyecto.",
           ],
         });
@@ -234,7 +238,8 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
 
     const { status } = domainResult;
     await GeneratedApp.updateOne({ _id: appId, userId }, { 
-      customDomain: normalizedDomain, 
+      customDomain: normalizedDomain,
+      customDomainProvider: normalizedProvider,
       vercelCustomDomain: normalizedDomain,
       customDomainVerified: status.verified 
     });
@@ -244,12 +249,13 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
       domain: normalizedDomain,
       customDomain: normalizedDomain,
       verified: status.verified,
+      provider: normalizedProvider,
       dnsRecords: status.recommendedDns,
       recommendedDns: status.recommendedDns,
       pendingVerification: status.verification,
       instructions: status.verified ? [] : [
-        "En Arsys: Dominios > Gestionar DNS / Zona DNS > añade el registro A para @ y el CNAME para www.",
-        "Valores Vercel: A @ → 76.76.21.21; CNAME www → cname.vercel-dns.com.",
+        `En Arsys: Dominios > Gestionar DNS / Zona DNS > añade el registro A para el dominio raíz. Si no acepta @, escribe ${normalizedDomain} como Entrada DNS/Host o deja el campo vacío si Arsys lo permite.`,
+        "Valores Vercel: A dominio raíz → 76.76.21.21; CNAME www → cname.vercel-dns.com.",
         "Los cambios DNS pueden tardar entre 5 minutos y 48 horas en propagarse. Después pulsa Verificar conexión.",
       ],
     });
@@ -270,15 +276,15 @@ router.get("/apps/:appId/custom-domain", requireAuth, async (req: Request, res: 
     if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
     if (!appData) return res.status(404).json({ error: "App not found" });
-    if (!appData.customDomain || !appData.vercelProjectId) return res.json({ domain: null, verified: false, dnsRecords: [] });
+    if (!appData.customDomain || !appData.vercelProjectId) return res.json({ domain: null, provider: null, verified: false, dnsRecords: [] });
 
     const statusResult = await getVercelDomainStatus({ projectId: appData.vercelProjectId, domain: appData.customDomain, log: logger });
-    if (!statusResult.ok) return res.json({ domain: appData.customDomain, verified: appData.customDomainVerified ?? false, dnsRecords: recommendedDnsFor(appData.customDomain) });
+    if (!statusResult.ok) return res.json({ domain: appData.customDomain, provider: appData.customDomainProvider ?? null, verified: appData.customDomainVerified ?? false, dnsRecords: recommendedDnsFor(appData.customDomain) });
 
     const { status } = statusResult;
     if (status.verified !== appData.customDomainVerified) await GeneratedApp.updateOne({ _id: appId, userId }, { customDomainVerified: status.verified });
 
-    return res.json({ domain: status.domain, verified: status.verified, dnsRecords: status.recommendedDns, pendingVerification: status.verification });
+    return res.json({ domain: status.domain, provider: appData.customDomainProvider ?? null, verified: status.verified, dnsRecords: status.recommendedDns, pendingVerification: status.verification });
   } catch (error) {
     logger.error({ error }, "Get custom domain error");
     return res.status(500).json({ error: "Internal server error" });
@@ -298,7 +304,7 @@ router.delete("/apps/:appId/custom-domain", requireAuth, async (req: Request, re
     if (appData.vercelProjectId && appData.customDomain) {
       await removeVercelDomainForApp({ appId, projectId: appData.vercelProjectId, domain: appData.customDomain, log: logger });
     }
-    await GeneratedApp.updateOne({ _id: appId, userId }, { customDomain: null, customDomainVerified: false });
+    await GeneratedApp.updateOne({ _id: appId, userId }, { customDomain: null, customDomainProvider: null, customDomainVerified: false });
     return res.json({ success: true });
   } catch (error) {
     logger.error({ error }, "Delete custom domain error");
