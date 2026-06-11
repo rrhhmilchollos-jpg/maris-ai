@@ -172,6 +172,11 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
   { timestamps: true },
 );
 
+// Índices para queries frecuentes de ordenación y filtrado
+GeneratedAppSchema.index({ createdAt: -1 });
+GeneratedAppSchema.index({ userId: 1, createdAt: -1 });
+GeneratedAppSchema.index({ updatedAt: -1 });
+
 export const GeneratedApp: Model<IGeneratedApp> =
   mongoose.models.GeneratedApp ||
   mongoose.model<IGeneratedApp>("GeneratedApp", GeneratedAppSchema);
