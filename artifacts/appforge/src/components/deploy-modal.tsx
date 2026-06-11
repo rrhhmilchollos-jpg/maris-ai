@@ -191,7 +191,7 @@ export function DeployModal({
   const [domainInput, setDomainInput] = useState(currentCustomDomain || "");
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>([]);
   const [domainSaving, setDomainSaving] = useState(false);
-  const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+  const [loadingProvider, setLoadingProvider] = useState<string | null>(null); // FIX: track which provider is loading
   const [domainVerifying, setDomainVerifying] = useState(false);
   const [domainUnlinking, setDomainUnlinking] = useState(false);
   const [verifiedDomain, setVerifiedDomain] = useState(customDomainVerified ? currentCustomDomain : "");
@@ -305,9 +305,6 @@ export function DeployModal({
     } catch (err: any) {
       toast({ title: "Error en la revisión", description: err?.message, variant: "destructive" });
     } finally {
-  setDomainSaving(false);
-  setLoadingProvider(null);
-}
       setReviewRunning(false);
     }
   }, [appId, toast]);
@@ -317,7 +314,7 @@ export function DeployModal({
     const normalized = domainInput.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
     if (!normalized) return;
     setDomainSaving(true);
-setLoadingProvider(providerId || "other");
+    setLoadingProvider(providerId || "other"); // FIX: track which provider is loading
     try {
       const data = await apiFetch<CustomDomainResponse>(`/api/apps/${appId}/custom-domain`, {
         method: "POST",
@@ -341,6 +338,7 @@ setLoadingProvider(providerId || "other");
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setDomainSaving(false);
+      setLoadingProvider(null); // FIX: reset loading provider
     }
   }, [appId, domainInput, selectedProvider, toast]);
 
@@ -793,10 +791,12 @@ setLoadingProvider(providerId || "other");
                           }
                           handleConnectDomain(provider.id);
                         }}
-                        disabled={loadingProvider === provider.id}
-className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
->
-{loadingProvider === provider.id ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : provider.id === "other" ? "Ver DNS" : "Conectar"}
+                        disabled={loadingProvider === provider.id} // FIX: solo deshabilita el botón pulsado
+                        className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
+                      >
+                        {loadingProvider === provider.id // FIX: solo muestra spinner en el botón pulsado
+                          ? <Loader2 className="h-3 w-3 animate-spin mx-auto" />
+                          : provider.id === "other" ? "Ver DNS" : "Conectar"}
                       </button>
                     </div>
                   ))}
@@ -857,8 +857,6 @@ className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text
                   </div>
                 ))}
               </div>
-
-
 
               {/* Arsys quick guide */}
               <div className="rounded-xl border border-[#e11d48]/25 bg-[#e11d48]/10 px-4 py-3">
