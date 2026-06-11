@@ -191,6 +191,7 @@ export function DeployModal({
   const [domainInput, setDomainInput] = useState(currentCustomDomain || "");
   const [dnsRecords, setDnsRecords] = useState<DnsRecord[]>([]);
   const [domainSaving, setDomainSaving] = useState(false);
+  const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [domainVerifying, setDomainVerifying] = useState(false);
   const [domainUnlinking, setDomainUnlinking] = useState(false);
   const [verifiedDomain, setVerifiedDomain] = useState(customDomainVerified ? currentCustomDomain : "");
@@ -304,6 +305,9 @@ export function DeployModal({
     } catch (err: any) {
       toast({ title: "Error en la revisión", description: err?.message, variant: "destructive" });
     } finally {
+  setDomainSaving(false);
+  setLoadingProvider(null);
+}
       setReviewRunning(false);
     }
   }, [appId, toast]);
@@ -313,6 +317,7 @@ export function DeployModal({
     const normalized = domainInput.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "").toLowerCase();
     if (!normalized) return;
     setDomainSaving(true);
+setLoadingProvider(providerId || "other");
     try {
       const data = await apiFetch<CustomDomainResponse>(`/api/apps/${appId}/custom-domain`, {
         method: "POST",
