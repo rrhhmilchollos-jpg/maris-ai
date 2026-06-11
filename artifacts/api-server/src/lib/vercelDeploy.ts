@@ -137,7 +137,14 @@ export async function deployAppToVercel(opts: {
       body: isPython
         ? { name: projectName, ssoProtection: null }
         : isStaticHtml
-        ? { name: projectName, ssoProtection: null }
+        ? {
+            name: projectName,
+            ssoProtection: null,
+            framework: null,
+            installCommand: "",
+            buildCommand: "",
+            outputDirectory: ".",
+          }
         : { name: projectName, framework: "vite", ssoProtection: null },
       log,
     });
