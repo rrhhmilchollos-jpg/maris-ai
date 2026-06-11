@@ -95,6 +95,7 @@ router.get("/me/stats", requireAuth, async (req, res) => {
     const recent = await GeneratedApp.find({ userId }, { frontendCode: 0, backendCode: 0 })
       .sort({ createdAt: -1 })
       .limit(5)
+      .allowDiskUse(true)
       .lean();
 
     res.json({
