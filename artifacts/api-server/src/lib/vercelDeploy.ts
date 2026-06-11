@@ -74,17 +74,11 @@ export async function deployAppToVercel(opts: {
     return { ok: false, failure: { kind: "missing_token" } };
   }
 
-  // 1. Load and authorize the app row in one shot. Same ownership pattern
-  //    used by every other /apps/:id endpoint.
   const row = await GeneratedApp.findOne({ _id: appId, userId }).lean();
   if (!row) {
     return { ok: false, failure: { kind: "app_not_found" } };
   }
 
-  // 2. Materialise the full Vite project tree from the bundle. Each entry
-  //    becomes one file uploaded to Vercel. We refuse empty bundles so the
-  //    UI shows "build failed" instead of silently deploying nothing (which
-  //    would leave a broken white page on the user's vercel.app URL).
   const bundleFiles = bundleToFiles(row.frontendCode);
   if (Object.keys(bundleFiles).length === 0) {
     return {
@@ -96,22 +90,15 @@ export async function deployAppToVercel(opts: {
       },
     };
   }
-  // Pick the Vercel preset based on the app's stored kind. JS apps go through
-  // the Vite preset (npm install + vite build → dist). Python kinds get a
-  // vercel.json that wires up @vercel/python so FastAPI / Django run as
-  // serverless functions.
+
   const appKind = row.kind ?? "fullstack";
   const deployFiles =
     appKind === "python-api" || appKind === "django"
       ? preparePythonProjectForVercel(bundleFiles, appKind)
       : prepareViteProjectForVercel(bundleFiles);
 
-  // 3. Resolve (or create) the Vercel project for this app. Project name
-  //    must be lowercase, kebab-case, and stable across deploys so the
-  //    same URL stays valid. Prefix with "maris-" + appId so two apps
-  //    with the same title don't collide in the user's Vercel dashboard.
   let projectId = row.vercelProjectId;
-  const projectName = sanitiseProjectName(`maris-${appId}-${row.title}`);
+  const projectName = sanitiseProjectName(`maris-${appId.slice(0, 8)}-${row.title}`);
   const isPython = appKind === "python-api" || appKind === "django";
 
   if (!projectId) {
@@ -119,13 +106,6 @@ export async function deployAppToVercel(opts: {
       token,
       method: "POST",
       path: "/v9/projects",
-      // For JS apps, framework: "vite" → Vercel sets installCommand,
-      // buildCommand, outputDirectory automatically. For Python apps we omit
-      // the framework field; the runtime is selected by the vercel.json that
-      // ships in the bundle (functions = "@vercel/python").
-      // ssoProtection: null overrides team defaults that would otherwise put
-      // Vercel Authentication in front of generated apps, causing 401 pages
-      // with X-Frame-Options: DENY inside Maris AI previews.
       body: isPython
         ? { name: projectName, ssoProtection: null }
         : { name: projectName, framework: "vite", ssoProtection: null },
@@ -134,21 +114,11 @@ export async function deployAppToVercel(opts: {
     if (!created.ok) return { ok: false, failure: created.failure };
     projectId = created.data.id;
 
-    // Persist the new project id immediately so a crash between project
-    // creation and deployment doesn't strand an orphan project.
     await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: projectId });
   }
 
-  // Make existing projects public too. Older Maris deployments may have been
-  // created while the Vercel team default enabled Deployment Protection.
   await ensureVercelProjectIsPublic({ token, projectId, log });
 
-  // 4. Create a production deployment with the FULL project tree. Vercel
-  //    runs `npm install` + `vite build` on its build infrastructure and
-  //    serves the `dist/` output at the project's main URL.
-  //    `target: "production"` makes Vercel point the project's main URL
-  //    (e.g. <project>.vercel.app) at this build instead of giving us a
-  //    one-off preview URL.
   const deploy = await callVercel<{
     id: string;
     url: string;
@@ -162,10 +132,6 @@ export async function deployAppToVercel(opts: {
       project: projectId,
       target: "production",
       files: Object.entries(deployFiles).map(([file, data]) => ({ file, data })),
-      // Python deployments rely on the bundled vercel.json + requirements.txt
-      // (Vercel's @vercel/python runtime auto-installs from the latter). For
-      // JS apps we keep the explicit Vite build commands so a missing
-      // framework field on the project record doesn't break the deploy.
       projectSettings: isPython
         ? { framework: null }
         : {
@@ -185,12 +151,6 @@ export async function deployAppToVercel(opts: {
   const alias = await assignStableVercelAlias({ token, deploymentId: deploy.data.id, alias: `${projectName}.vercel.app`, log });
   if (!alias.ok) return { ok: false, failure: alias.failure };
 
-  // Vercel returns `deploy.data.url` as a one-off deployment URL. With Standard
-  // Deployment Protection, that generated deployment URL can be protected even
-  // when the production domain is public. Maris AI must store/open the stable
-  // production domain (<project>.vercel.app), not the protected deployment URL
-  // (<project>-<hash>.vercel.app), otherwise the preview iframe shows
-  // “rechazó la conexión” because Vercel serves an auth page with X-Frame-Options: DENY.
   const publicUrl = `https://${projectName}.vercel.app`;
 
   await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl });
@@ -202,10 +162,7 @@ export async function deployAppToVercel(opts: {
 }
 
 /**
- * Tiny fetch wrapper around the Vercel REST API. Centralises the bearer
- * header, JSON encoding, and error translation so the deploy function
- * above stays readable. Returns a typed failure on any non-2xx so callers
- * never throw on expected upstream errors.
+ * Tiny fetch wrapper around the Vercel REST API.
  */
 async function callVercel<T>(opts: {
   token: string;
@@ -359,9 +316,7 @@ async function waitForVercelDeploymentReady(opts: {
 }
 
 /**
- * Sync environment variables to the Vercel project. This ensures that third-party
- * integrations (Clerk, Stripe, etc.) work immediately after deploy without
- * manual configuration, matching the Emergent.sh experience.
+ * Sync environment variables to the Vercel project.
  */
 export async function syncVercelEnvironmentVariables(opts: {
   projectId: string;
@@ -375,7 +330,6 @@ export async function syncVercelEnvironmentVariables(opts: {
   log.info({ projectId, count: envVars.length }, "Syncing environment variables to Vercel");
 
   for (const env of envVars) {
-    // 1. Check if the variable already exists to avoid duplicates
     const existing = await callVercel<any>({
       token,
       method: "GET",
@@ -386,7 +340,6 @@ export async function syncVercelEnvironmentVariables(opts: {
     if (existing.ok) {
       const alreadyExists = existing.data.envs?.find((e: any) => e.key === env.name);
       if (alreadyExists) {
-        // Update existing variable
         const updated = await callVercel<any>({
           token,
           method: "PATCH",
@@ -402,7 +355,6 @@ export async function syncVercelEnvironmentVariables(opts: {
       }
     }
 
-    // 2. Create new variable
     const created = await callVercel<any>({
       token,
       method: "POST",
@@ -427,43 +379,18 @@ export async function syncVercelEnvironmentVariables(opts: {
 /* ----------------------- custom domain helpers ----------------------------- */
 
 export type VercelDomainRecord = {
-  /** "ALIAS" / "CNAME" / "A" — the DNS record type the user must create. */
   type: "A" | "CNAME";
-  /** Host part to set in the DNS zone. "@" for the apex domain. */
   name: string;
-  /** Target value for the record. */
   value: string;
 };
 
 export type VercelDomainStatus = {
   domain: string;
-  /** True once Vercel has confirmed both DNS resolution and ownership. */
   verified: boolean;
-  /**
-   * Pending verification challenges. When `verified` is false and this is
-   * non-empty, the user must add the listed TXT record(s) to their DNS
-   * before the domain works. When `verified` is true this is empty.
-   */
   verification: Array<{ type: string; domain: string; value: string; reason?: string }>;
-  /**
-   * DNS records the user must point at Vercel. Always returned so the UI
-   * can show clear instructions even before verification finishes.
-   */
   recommendedDns: VercelDomainRecord[];
 };
 
-/**
- * Decide which DNS records the registrar (Arsys, Hostinger, GoDaddy, IONOS,
- * Cloudflare, …) must serve so the domain points at the Vercel project.
- *
- * Convention used by Vercel's docs:
- *   - Apex domain (`mitienda.com`)  → A   record `@`     → 76.76.21.21
- *   - Sub domain (`www.mitienda.com`) → CNAME            → cname.vercel-dns.com
- *
- * Both are stable, documented Vercel endpoints. We always return both halves
- * (apex + www CNAME) for an apex domain so the user can wire the canonical
- * pair in one go.
- */
 export function recommendedDnsFor(domain: string): VercelDomainRecord[] {
   const parts = domain.split(".");
   const isApex = parts.length === 2;
@@ -473,17 +400,10 @@ export function recommendedDnsFor(domain: string): VercelDomainRecord[] {
       { type: "CNAME", name: "www", value: "cname.vercel-dns.com" },
     ];
   }
-  // Subdomain — single CNAME at the leaf.
   const host = parts.slice(0, -2).join(".");
   return [{ type: "CNAME", name: host || "@", value: "cname.vercel-dns.com" }];
 }
 
-/**
- * Attach a custom domain to the app's Vercel project. Caller is responsible
- * for ALL eligibility checks (project exists, user spend gate, etc.) — this
- * helper only talks to Vercel and persists the column. Returns the typed
- * failure verbatim so the route handler can surface Vercel's error message.
- */
 export async function addVercelDomainForApp(opts: {
   appId: string;
   userId: string;
@@ -524,11 +444,6 @@ export async function addVercelDomainForApp(opts: {
   };
 }
 
-/**
- * Read the current verification status of an existing domain on the project.
- * Used by the UI to refresh "still waiting on DNS…" → "✓ verificado" without
- * re-creating the domain.
- */
 export async function getVercelDomainStatus(opts: {
   projectId: string;
   domain: string;
@@ -564,11 +479,6 @@ export async function getVercelDomainStatus(opts: {
   };
 }
 
-/**
- * Detach a custom domain from the project AND clear it from the app row.
- * Tolerates "domain not found in project" (404) so calling DELETE twice
- * doesn't error out — we still want the local column cleared in that case.
- */
 export async function removeVercelDomainForApp(opts: {
   appId: string;
   projectId: string;
@@ -596,9 +506,9 @@ export async function removeVercelDomainForApp(opts: {
 
 /**
  * Convert a free-form string into a Vercel-legal project name: lowercase
- * letters, digits, hyphens; max 100 chars; must start with a letter or digit.
- * Strips diacritics first so Spanish titles like "Diseño" come out as
- * "diseno" instead of being lost entirely.
+ * letters, digits, hyphens; max 52 chars; must start with a letter or digit.
+ * FIX: usar solo 8 chars del appId para evitar nombres demasiado largos
+ * con caracteres especiales que generan secuencias '---' inválidas.
  */
 function sanitiseProjectName(raw: string): string {
   const stripped = raw
@@ -608,27 +518,15 @@ function sanitiseProjectName(raw: string): string {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
-  const trimmed = stripped.slice(0, 52) || "maris-app"; // Vercel hostname max 63 chars (.vercel.app = 11)
-  // Vercel rejects names starting with a hyphen.
-  return trimmed.replace(/^-+/, "");
+  const trimmed = stripped.slice(0, 52) || "maris-app";
+  return trimmed.replace(/^-+/, "").replace(/-+$/, "");
 }
 
 export function stableVercelProductionUrlForApp(appId: string, title: string): string {
-  const projectName = sanitiseProjectName(`maris-${appId}-${title}`);
+  const projectName = sanitiseProjectName(`maris-${appId.slice(0, 8)}-${title}`);
   return `https://${projectName}.vercel.app`;
 }
 
-/**
- * Normalise a generated Vite bundle into the file shape Vercel expects:
- *   - paths must NOT start with "/" or "./"
- *   - we drop tests/, e2e/, __tests__/, and editor noise (.maris-ai, .DS_Store)
- *   - we ensure a `package.json`, `vite.config.*` and an `index.html` exist;
- *     if any are missing we inject a minimal one so `vite build` succeeds.
- *
- * The Maris AI generator already follows this layout, but a future change in
- * the prompt could regress and we'd rather inject a tiny default than push a
- * broken project to the user's Vercel dashboard.
- */
 function prepareViteProjectForVercel(
   files: Record<string, string>,
 ): Record<string, string> {
@@ -639,8 +537,6 @@ function prepareViteProjectForVercel(
     if (p.startsWith("/")) p = p.slice(1);
     if (!p) continue;
     if (p.includes("..")) continue;
-    // Skip dirs that don't belong in a published bundle and would just slow
-    // down `npm install` or trip the build.
     if (
       p.startsWith("node_modules/") ||
       p.startsWith("dist/") ||
@@ -705,26 +601,6 @@ function prepareViteProjectForVercel(
   return out;
 }
 
-/**
- * Adapt a generated Python project tree for Vercel's @vercel/python serverless
- * runtime. Different conventions per kind:
- *
- *  - "python-api" (FastAPI): Vercel mounts each file under api/*.py as a
- *    serverless function. We require an `api/index.py` that re-exports the
- *    FastAPI `app` so every request hits it. If the bundle put the app in
- *    `main.py` at the root (which is the canonical layout the system prompt
- *    asks for), we synthesise a thin shim `api/index.py` that imports it.
- *
- *  - "django": Vercel runs Django via WSGI. We synthesise `api/index.py`
- *    that imports `application` from the project's `wsgi.py` (or
- *    `<project>/wsgi.py` when present). For projects that ship a
- *    single-file Django (no proper package), the user is told via README
- *    to deploy locally instead.
- *
- * In both cases we inject a `vercel.json` that routes ALL requests to
- * `api/index.py` so the framework handles its own routing internally
- * (FastAPI router / Django URLconf), and a `requirements.txt` if missing.
- */
 function preparePythonProjectForVercel(
   files: Record<string, string>,
   kind: "python-api" | "django",
@@ -748,8 +624,6 @@ function preparePythonProjectForVercel(
     out[p] = contents;
   }
 
-  // Always overwrite vercel.json so user changes don't accidentally break
-  // the routing — Maris owns the deploy config.
   out["vercel.json"] = JSON.stringify(
     {
       version: 2,
@@ -764,31 +638,22 @@ function preparePythonProjectForVercel(
     2,
   ) + "\n";
 
-  // Synthesise api/index.py if missing.
   if (!out["api/index.py"]) {
     if (kind === "python-api") {
-      // FastAPI: import the `app` from main.py at the project root. Vercel's
-      // Python runtime auto-detects ASGI apps named `app`, `application`,
-      // `handler`, `server`, etc.
       out["api/index.py"] =
         `# Auto-generated by Maris AI for Vercel deploys.\n` +
-        `# Re-exports the FastAPI app from main.py so @vercel/python can serve it.\n` +
         `import sys, os\n` +
         `sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n` +
         `from main import app  # noqa: F401,E402\n`;
     } else {
-      // Django: try to import the project's wsgi module. We attempt a few
-      // common names; if none exist the deploy will fail with a clear
-      // ImportError pointing the user at what to fix.
       out["api/index.py"] =
         `# Auto-generated by Maris AI for Vercel deploys.\n` +
-        `# Bridges Django's WSGI application to @vercel/python.\n` +
         `import os, sys\n` +
         `sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n` +
         `os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mysite.settings')\n` +
         `from django.core.wsgi import get_wsgi_application  # noqa: E402\n` +
         `application = get_wsgi_application()\n` +
-        `app = application  # @vercel/python detects either name\n`;
+        `app = application\n`;
     }
   }
 
