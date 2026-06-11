@@ -101,6 +101,22 @@ export async function deployAppToVercel(opts: {
   const projectName = sanitiseProjectName(`maris-${appId.slice(0, 8)}-${row.title}`);
   const isPython = appKind === "python-api" || appKind === "django";
 
+  // If we have a saved projectId, verify it still exists in Vercel.
+  // If not (project was deleted), clear it so we recreate below.
+  if (projectId) {
+    const check = await callVercel<{ id: string }>({
+      token,
+      method: "GET",
+      path: `/v9/projects/${projectId}`,
+      log,
+    });
+    if (!check.ok && "status" in check.failure && check.failure.status === 404) {
+      log.info({ projectId }, "Vercel project not found (deleted?), will recreate");
+      projectId = undefined as any;
+      await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: null });
+    }
+  }
+
   if (!projectId) {
     const created = await callVercel<{ id: string; name: string }>({
       token,
