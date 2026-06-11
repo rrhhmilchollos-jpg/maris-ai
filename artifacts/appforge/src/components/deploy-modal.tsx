@@ -793,10 +793,10 @@ setLoadingProvider(providerId || "other");
                           }
                           handleConnectDomain(provider.id);
                         }}
-                        disabled={domainSaving}
-                        className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
-                      >
-                        {domainSaving ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : provider.id === "other" ? "Ver DNS" : "Conectar"}
+                        disabled={loadingProvider === provider.id}
+className="w-full rounded-lg bg-[#7c3aed] px-2 py-1.5 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
+>
+{loadingProvider === provider.id ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : provider.id === "other" ? "Ver DNS" : "Conectar"}
                       </button>
                     </div>
                   ))}
