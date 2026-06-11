@@ -1573,7 +1573,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       <DeployModal
         appId={id}
         appTitle={app?.title || "App"}
-        isPremium={!!(me as any)?.isPremium}
+        isPremium={!!(me as any)?.isPremium || !!(me as any)?.isAdmin}
         currentDeployUrl={deployedUrl}
         currentCustomDomain={(app as any)?.customDomain}
         customDomainVerified={(app as any)?.customDomainVerified}
