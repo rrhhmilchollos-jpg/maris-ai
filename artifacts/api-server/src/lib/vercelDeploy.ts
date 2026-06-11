@@ -153,7 +153,7 @@ export async function deployAppToVercel(opts: {
         : {
             framework: "vite",
             installCommand: "npm install",
-            buildCommand: "vite build",
+            buildCommand: "npm run build",
             outputDirectory: "dist",
           },
     },
