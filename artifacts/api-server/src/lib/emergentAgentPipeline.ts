@@ -303,7 +303,6 @@ export async function runIntegrationAgent(
 
   log(`🔌 Integration Agent: configurando ${integrations.length} integración(es): ${integrations.map((i) => i.name).join(", ")}`);
 
-  // Validar que las integraciones detectadas son coherentes con el blueprint
   const blueprintIntegrations = blueprint.integrations.map((i) => i.toLowerCase());
   const confirmedIntegrations = integrations.filter((i) =>
     blueprintIntegrations.some((bi) => bi.includes(i.name.toLowerCase()) || bi.includes(i.type))
@@ -358,7 +357,6 @@ export async function runPMAgent(
   const plannedPages = blueprint.pages.map((p) => `${p.name} (${p.route}): ${p.purpose}`);
   const systemPrompt = buildPMAgentPrompt(originalPrompt, plannedPages);
 
-  // Analizar el bundle para ver qué archivos existen
   const existingFiles = frontendCode
     .split("// === FILE: ")
     .slice(1)
@@ -418,14 +416,6 @@ export async function runPMAgent(
 
 const MAX_PM_REPAIR_CYCLES = 3;
 
-/**
- * Bucle de reparación invisible inspirado en emergent.sh.
- *
- * Si el PM Agent detecta blockers, el Patcher Agent los corrige automáticamente
- * sin que el usuario vea nada. El pipeline no avanza hasta que:
- *   a) No hay blockers, o
- *   b) Se alcanza el máximo de ciclos de reparación.
- */
 export async function runInvisibleRepairLoop(
   frontendCode: string,
   blueprint: EmergentArchitectBlueprint,
@@ -440,7 +430,6 @@ export async function runInvisibleRepairLoop(
   while (cycles < MAX_PM_REPAIR_CYCLES) {
     cycles++;
 
-    // PM Agent valida el código actual
     pmValidation = await runPMAgent(originalPrompt, blueprint, currentCode, log);
 
     if (pmValidation.readyForDeploy && pmValidation.issues.filter((i) => i.severity === "blocker").length === 0) {
@@ -450,7 +439,6 @@ export async function runInvisibleRepairLoop(
 
     const blockers = pmValidation.issues.filter((i) => i.severity === "blocker");
     if (blockers.length === 0) {
-      // Solo hay issues menores, aceptar
       log(`✅ Bucle de reparación: solo issues menores, aceptando en ciclo ${cycles}`);
       return { finalCode: currentCode, pmValidation, cycles };
     }
@@ -462,7 +450,6 @@ export async function runInvisibleRepairLoop(
       note: `🔧 Reparando ${blockers.length} problema(s) (ciclo ${cycles}/${MAX_PM_REPAIR_CYCLES})...`,
     });
 
-    // Patcher Agent corrige los blockers
     const issuesList = blockers
       .map((b) => `- [${b.severity.toUpperCase()}] ${b.requirement}: ${b.found}. Fix: ${b.fix}`)
       .join("\n");
@@ -498,7 +485,6 @@ Responde SOLO JSON: {"frontendCode": "bundle completo corregido"}`,
     }
   }
 
-  // Última validación
   pmValidation = await runPMAgent(originalPrompt, blueprint, currentCode, log);
   log(`📊 Bucle de reparación completado: ${cycles} ciclo(s), score final ${pmValidation.score}/100`);
 
@@ -508,8 +494,7 @@ Responde SOLO JSON: {"frontendCode": "bundle completo corregido"}`,
 // ─── Función de resumen del pipeline para el usuario ─────────────────────────
 
 /**
- * Genera un resumen legible del pipeline para mostrar al usuario.
- * Estilo emergent.sh: transparente sobre lo que hicieron los agentes.
+ * Genera un mensaje simple y limpio para mostrar al usuario al finalizar.
  */
 export function buildPipelineSummary(
   blueprint: EmergentArchitectBlueprint,
@@ -519,46 +504,5 @@ export function buildPipelineSummary(
   patchCycles: number,
   durationMs: number
 ): string {
-  const durationSec = Math.round(durationMs / 1000);
-  const lines: string[] = [
-    `## ✅ ${blueprint.title} — Generado por Maris AI`,
-    "",
-    `**Tiempo total:** ${durationSec}s | **Score de calidad:** ${pmValidation.score}/100 | **Ciclos de reparación:** ${patchCycles}`,
-    "",
-    "### 🏗️ Architect Agent",
-    `- **${blueprint.pages.length} páginas** planificadas: ${blueprint.pages.map((p) => p.name).join(", ")}`,
-    `- **Complejidad:** ${blueprint.complexity} | **Backend:** ${blueprint.backendNeeded ? "Sí" : "No"}`,
-    `- **${blueprint.frontendFiles.length} archivos** frontend generados`,
-    "",
-    "### 🎨 Designer Agent",
-    `- **Vibe:** ${design.vibe} | **Tema:** ${design.theme}`,
-    `- **Paleta:** Primary ${design.palette.primary}, Secondary ${design.palette.secondary}`,
-    `- **Tipografía:** ${design.typography.sans}`,
-    "",
-  ];
-
-  if (integrations.length > 0) {
-    lines.push("### 🔌 Integration Agent");
-    for (const i of integrations) {
-      lines.push(`- **${i.name}** (${i.type}): ${i.description}`);
-    }
-    lines.push("");
-  }
-
-  lines.push("### 📋 PM Agent (Quality Gate)");
-  lines.push(`- **Resultado:** ${pmValidation.passed ? "✅ Aprobado" : "⚠️ Con advertencias"}`);
-  lines.push(`- **${pmValidation.summary}**`);
-
-  if (pmValidation.issues.length > 0) {
-    const minors = pmValidation.issues.filter((i) => i.severity === "minor");
-    if (minors.length > 0) {
-      lines.push(`- ${minors.length} issue(s) menor(es) no bloqueantes`);
-    }
-  }
-
-  lines.push("");
-  lines.push("---");
-  lines.push("*Generado con el sistema de agentes Maris AI × Emergent.sh*");
-
-  return lines.join("\n");
+  return `✅ He terminado. Compruébalo en la vista previa y si quieres continuamos.`;
 }
