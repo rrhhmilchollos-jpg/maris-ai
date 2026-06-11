@@ -92,10 +92,22 @@ export async function deployAppToVercel(opts: {
   }
 
   const appKind = row.kind ?? "fullstack";
+
+  // Detect plain HTML/CSS/JS bundles (no React/Vite entry point).
+  // These should be deployed as static sites, not built with Vite.
+  const isStaticHtml =
+    appKind !== "python-api" &&
+    appKind !== "django" &&
+    !bundleFiles["src/main.tsx"] &&
+    !bundleFiles["src/main.jsx"] &&
+    !bundleFiles["src/main.ts"] &&
+    !bundleFiles["src/main.js"] &&
+    bundleFiles["index.html"] != null;
+
   const deployFiles =
     appKind === "python-api" || appKind === "django"
       ? preparePythonProjectForVercel(bundleFiles, appKind)
-      : prepareViteProjectForVercel(bundleFiles);
+      : prepareViteProjectForVercel(bundleFiles, isStaticHtml);
 
   let projectId = row.vercelProjectId;
   const projectName = sanitiseProjectName(`maris-${appId.slice(0, 8)}-${row.title}`);
@@ -124,6 +136,8 @@ export async function deployAppToVercel(opts: {
       path: "/v9/projects",
       body: isPython
         ? { name: projectName, ssoProtection: null }
+        : isStaticHtml
+        ? { name: projectName, ssoProtection: null }
         : { name: projectName, framework: "vite", ssoProtection: null },
       log,
     });
@@ -150,6 +164,8 @@ export async function deployAppToVercel(opts: {
       files: Object.entries(deployFiles).map(([file, data]) => ({ file, data })),
       projectSettings: isPython
         ? { framework: null }
+        : isStaticHtml
+        ? { framework: null, installCommand: null, buildCommand: null, outputDirectory: "." }
         : {
             framework: "vite",
             installCommand: "npm install",
@@ -545,6 +561,7 @@ export function stableVercelProductionUrlForApp(appId: string, title: string): s
 
 function prepareViteProjectForVercel(
   files: Record<string, string>,
+  isStaticHtml = false,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [rawPath, contents] of Object.entries(files)) {
@@ -568,6 +585,9 @@ function prepareViteProjectForVercel(
     }
     out[p] = contents;
   }
+
+  // For plain HTML/CSS/JS bundles, skip injecting Vite boilerplate.
+  if (isStaticHtml) return out;
 
   if (!out["package.json"]) {
     out["package.json"] = JSON.stringify(
