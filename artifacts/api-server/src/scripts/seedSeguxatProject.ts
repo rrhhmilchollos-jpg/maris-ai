@@ -676,12 +676,15 @@ export async function seedSeguxatProject(targetEmail: string = "rrhh.milchollos@
     });
 
     if (existing) {
-      // Actualizar el existente
+      // Actualizar el existente — también limpiamos vercelProjectId para forzar
+      // recreación del proyecto Vercel sin el framework "vite" incorrecto del deploy anterior.
       await GeneratedApp.findByIdAndUpdate(existing._id, {
         frontendCode: SEGUXAT_FRONTEND_CODE,
         backendCode: SEGUXAT_BACKEND_CODE,
         status: "ready",
-        agentNotes: "Proyecto Seguxat importado desde alarma-negocio-xativa-5-senales.zip. Plataforma de seguridad integral para la Comunitat Valenciana.",
+        vercelProjectId: null,
+        vercelDeployUrl: null,
+        agentNotes: "Proyecto Seguxat importado desde alarma-negocio-xativa-5-senales.zip. Plataforma de seguridad integral para la Comunitat Valenciana. v2: SPA con hash routing, vercelProjectId reseteado para deploy limpio.",
         updatedAt: new Date(),
       });
       return {

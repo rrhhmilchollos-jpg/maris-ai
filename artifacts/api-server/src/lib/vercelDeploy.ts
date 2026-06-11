@@ -149,6 +149,26 @@ export async function deployAppToVercel(opts: {
 
   await ensureVercelProjectIsPublic({ token, projectId, log });
 
+  // For static HTML projects, also reset the framework on the Vercel project itself.
+  // If the project was previously created with framework: "vite", Vercel will keep
+  // running `vite build` even if the deployment sends framework: null in projectSettings.
+  // Patching the project before the deploy ensures the correct build configuration.
+  if (isStaticHtml) {
+    await callVercel<{ id: string }>({
+      token,
+      method: "PATCH",
+      path: `/v9/projects/${projectId}`,
+      body: {
+        framework: null,
+        installCommand: null,
+        buildCommand: null,
+        outputDirectory: ".",
+      },
+      log,
+    });
+    log.info({ projectId }, "Reset Vercel project to static HTML (no framework)");
+  }
+
   const deploy = await callVercel<{
     id: string;
     url: string;
