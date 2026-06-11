@@ -403,6 +403,7 @@ export default function DashboardPage() {
           job={job}
           phaseLabel={phaseInfo.label}
           PhaseIcon={PhaseIcon}
+          appId={job?.appId ?? undefined}
         />
       </div>
     );
