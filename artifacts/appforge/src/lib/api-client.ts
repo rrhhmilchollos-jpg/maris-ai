@@ -22,14 +22,31 @@ async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
   return headers;
 }
 
+// ApiError preserva todos los campos del cuerpo JSON del error (needsConnect, connectUrl, etc.)
+export class ApiError extends Error {
+  status: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(message: string, status: number, data: Record<string, any>) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
+  }
+}
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = await buildAuthHeaders(options);
-  const baseUrl = import.meta.env.VITE_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app";
+  // En producción (Vercel) usamos el proxy /api/* → Railway, por lo que baseUrl es vacío.
+  // En desarrollo local se puede definir VITE_API_URL para apuntar al servidor local.
+  const baseUrl = import.meta.env.VITE_API_URL || "";
   const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path}`;
   const res = await fetch(fullPath, { credentials: "include", ...options, headers });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-    throw new Error(err.error || err.message || `HTTP ${res.status}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const errData: Record<string, any> = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    const errMsg = (errData.error as string) || (errData.message as string) || `HTTP ${res.status}`;
+    throw new ApiError(errMsg, res.status, errData);
   }
 
   if (res.status === 204) return undefined as T;
