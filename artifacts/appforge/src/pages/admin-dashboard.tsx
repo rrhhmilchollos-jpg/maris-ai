@@ -176,16 +176,17 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
     setLoading(true);
     setApps([]);
     try {
-      // Usar el endpoint correcto de búsqueda por email
       const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
       if (!userData?.id) { toast({ title: "Usuario no encontrado", description: target, variant: "destructive" }); return; }
-      // userData.id ES el Clerk ID — el mismo que se usa como userId en las apps
       const appsData = await apiFetch<any>(`/api/admin/users/${userData.id}/apps?limit=20`);
-      setApps((appsData.apps ?? []).map((a: any) => ({ ...a, userEmail: target, userId: userData.id })));
-      if ((appsData.apps ?? []).length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps generadas aún` });
+      const list = appsData.apps ?? [];
+      setApps(list.map((a: any) => ({ ...a, userEmail: target, userId: userData.id })));
+      if (list.length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps generadas aún` });
     } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    } finally { setLoading(false); }
+      toast({ title: "Error", description: e.message || "Error de conexión", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Cargar faquiunmen al montar
@@ -213,6 +214,19 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
             <Button size="sm" onClick={() => searchApps()} disabled={loading} className="shrink-0">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               {loading ? "Buscando…" : "Ver apps"}
+            </Button>
+            <Button size="sm" variant="outline" className="shrink-0 text-[10px] border-yellow-500/30 text-yellow-400"
+              onClick={async () => {
+                const target = email.trim();
+                if (!target) return;
+                try {
+                  const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
+                  const debug = await apiFetch<any>(`/api/admin/users/${userData.id}/apps-debug`);
+                  toast({ title: "🔍 Debug", description: `userId:${userData.id} | appsByUserId:${debug.appsByUserId} | viaJobs:${debug.recentJobs?.length ?? 0}` });
+                  console.log("APPS DEBUG:", debug);
+                } catch (e: any) { toast({ title: "Debug error", description: e.message, variant: "destructive" }); }
+              }}>
+              🔍
             </Button>
           </div>
           {/* Accesos rápidos a clientes activos */}

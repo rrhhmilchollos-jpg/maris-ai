@@ -142,9 +142,9 @@ router.get("/admin/users/search", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const email = (req.query.email as string || "").trim().toLowerCase();
   if (!email) { res.status(400).json({ error: "Email requerido" }); return; }
-  const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } }).lean() as any;
+  // Búsqueda exacta por email con timeout de 5s
+  const user = await User.findOne({ email }).maxTimeMS(5000).lean() as any;
   if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
-  // En Maris AI el _id del User ES el Clerk ID (user_xxx) — es el mismo ID que se usa en todas las colecciones
   const userId = String(user._id);
   res.json({ id: userId, email: user.email, plan: user.plan, credits: user.credits });
 });
@@ -218,38 +218,30 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const id = req.params.id;
 
-  // El _id del User ES el Clerk ID — buscar apps por ese ID directamente
-  // También buscar por email por si acaso hay inconsistencia
-  const user = await User.findById(id).lean() as any;
-  const userEmail = user?.email;
-
-  // Buscar apps por userId (Clerk ID) O por email del usuario como fallback
+  // Buscar apps directamente por userId (Clerk ID = User._id)
   let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).lean();
 
-  // Si no hay apps y tenemos email, intentar buscar jobs del usuario y sus appIds
-  if (apps.length === 0 && userEmail) {
-    // Buscar via jobs — los jobs tienen el userId correcto y el appId
-    const jobs = await (mongoose.model("GenerationJob") as any)
+  // Fallback: buscar via jobs del usuario → appIds
+  if (apps.length === 0) {
+    const jobAppIds = await GenerationJob
       .find({ userId: id, appId: { $exists: true, $ne: null } })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-    const appIds = [...new Set(jobs.map((j: any) => j.appId).filter(Boolean))];
+      .sort({ createdAt: -1 }).limit(50).select("appId").lean();
+    const appIds = [...new Set(jobAppIds.map((j: any) => String(j.appId)).filter(Boolean))];
     if (appIds.length > 0) {
-      apps = await GeneratedApp.find({ _id: { $in: appIds } }).sort({ createdAt: -1 }).lean();
+      apps = await GeneratedApp.find({ _id: { $in: appIds } }).sort({ createdAt: -1 }).limit(limit).lean();
     }
   }
 
   res.json({
-    apps: apps.map(a => ({
+    apps: apps.map((a: any) => ({
       id: String(a._id),
       _id: String(a._id),
-      title: (a as any).title,
-      prompt: (a as any).prompt,
-      status: (a as any).status,
-      techStack: (a as any).techStack,
-      frontendCode: (a as any).frontendCode,
-      createdAt: (a as any).createdAt?.toISOString?.() ?? "",
+      title: a.title,
+      prompt: a.prompt,
+      status: a.status,
+      techStack: a.techStack,
+      frontendCode: a.frontendCode,
+      createdAt: a.createdAt?.toISOString?.() ?? "",
     }))
   });
 });
