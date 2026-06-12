@@ -88,39 +88,7 @@
       ],
       "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/news"
     },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/"
-    },
-    {
-      "source": "/pricing",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/pricing"
-    },
-    {
-      "source": "/vs-emergent",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/vs-emergent"
-    },
+
     { "source": "/robots.txt", "destination": "/robots.txt" },
     { "source": "/llms.txt", "destination": "/llms.txt" },
     { "source": "/llms-full.txt", "destination": "/llms-full.txt" },
