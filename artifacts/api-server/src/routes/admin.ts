@@ -1290,7 +1290,21 @@ router.post("/admin/recover-by-email", async (req: any, res: any): Promise<void>
   }).sort({ updatedAt: -1 }).lean() as any;
 
   if (!lastFailedJob) {
-    res.status(404).json({ error: `No hay jobs fallidos para ${email}` });
+    // No hay jobs fallidos — lanzar generación nueva desde cero
+    logger.info({ email }, "Admin recover-by-email: no failed jobs, launching fresh generation");
+    const newJobId = new mongoose.Types.ObjectId().toString();
+    await GenerationJob.create({
+      _id: newJobId,
+      userId: String(user._id),
+      prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. Crea una app web completa para gestión de alquileres de salones de eventos`,
+      coderModel: "claude-sonnet-4-6",
+      language: "typescript",
+      kind: "fullstack",
+      status: "queued", phase: "queued", progress: 0,
+      isAdmin: true, hasEverPaid: true,
+    });
+    await enqueueGenerateJob(newJobId);
+    res.status(201).json({ ok: true, jobId: newJobId, strategy: "fresh-generation", message: `Generando app nueva para ${email}` });
     return;
   }
 
