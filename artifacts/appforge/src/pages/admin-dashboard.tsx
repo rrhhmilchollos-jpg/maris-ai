@@ -177,24 +177,31 @@ function LiveMonitorPanel() {
   const fetchJobs = async () => {
     try {
       const d = await apiFetch<any>("/api/admin/jobs?limit=200");
+      
+      // Contar failed por usuario para limitar a los 5 más recientes por usuario
+      const failedCountByUser: Record<string, number> = {};
+      
       const active = (d.jobs ?? [])
         .map((j: any) => ({ ...j, id: String(j.id ?? j._id ?? ""), userId: String(j.userId ?? "") }))
-        .filter((j: any) =>
-          j.id && j.id !== "undefined" && (
-            j.status === "running" ||
-            j.status === "queued" ||
-            j.status === "failed" ||    // failed SIEMPRE visible — sin límite de tiempo
-            j.status === "reviewing" || // reviewing SIEMPRE visible
-            (j.status !== "succeeded" && j.ageMs < 48 * 60 * 60 * 1000) // otros: 48h
-          )
-        )
+        .filter((j: any) => {
+          if (!j.id || j.id === "undefined") return false;
+          if (j.status === "running" || j.status === "queued") return true;
+          if (j.status === "reviewing") return true; // reviewing siempre visible
+          if (j.status === "failed") {
+            // Máximo 5 failed por usuario para no llenar el panel
+            const key = j.userId || j.userEmail || "unknown";
+            failedCountByUser[key] = (failedCountByUser[key] || 0) + 1;
+            return failedCountByUser[key] <= 5;
+          }
+          // otros: 48h
+          return j.status !== "succeeded" && j.ageMs < 48 * 60 * 60 * 1000;
+        })
         .sort((a: any, b: any) => {
-          // Primero running, luego queued, luego failed/reviewing por más reciente
-          const order: Record<string, number> = { running: 0, queued: 1, failed: 2, reviewing: 3 };
+          const order: Record<string, number> = { running: 0, queued: 1, reviewing: 2, failed: 3 };
           const ao = order[a.status] ?? 4;
           const bo = order[b.status] ?? 4;
           if (ao !== bo) return ao - bo;
-          return b.ageMs - a.ageMs; // más reciente primero
+          return a.ageMs - b.ageMs; // más reciente primero dentro de cada grupo
         });
       setJobs(active);
       setFetchError(null);
