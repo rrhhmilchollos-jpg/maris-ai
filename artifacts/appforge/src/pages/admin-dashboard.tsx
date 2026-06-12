@@ -341,6 +341,23 @@ function LiveMonitorPanel() {
           >
             🧹 Limpiar reviewing
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+            title="Corregir jobs que muestran 'failed' pero completaron correctamente (failed·done → succeeded)"
+            onClick={async () => {
+              try {
+                const d = await apiFetch<any>("/api/admin/jobs/fix-false-failed", { method: "POST" });
+                toast({ title: "✅ Corrección completada", description: d.message });
+                await fetchJobs();
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            ✅ Corregir failed·done
+          </Button>
         </div>
       </div>
 

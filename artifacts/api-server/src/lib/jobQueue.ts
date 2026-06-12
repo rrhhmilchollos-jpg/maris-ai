@@ -165,6 +165,13 @@ export async function registerGenerateWorker(
           } catch (err) {
             logger.error({ err, jobId, attempt }, "Generation job worker threw");
 
+            // Verificar si el job ya completó exitosamente antes de marcar como fallido
+            const currentJob = await GenerationJob.findById(jobId).select("status").lean() as any;
+            if (currentJob?.status === "succeeded") {
+              logger.info({ jobId }, "Job already succeeded — ignoring worker catch");
+              return;
+            }
+
             if (attempt < MAX_ATTEMPTS) {
               // Re-queue for retry.
               await GenerationJob.findByIdAndUpdate(jobId, {
