@@ -126,6 +126,15 @@ export async function deployAppToVercel(opts: {
       log.info({ projectId }, "Vercel project not found (deleted?), will recreate");
       projectId = undefined as any;
       await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: null });
+    } else if (check.ok && isStaticHtml && !isPython) {
+      // Resetear framework a static — evita el error "dist not found" si estaba como Vite
+      await callVercel({
+        token, method: "PATCH",
+        path: `/v9/projects/${projectId}`,
+        body: { framework: null, installCommand: null, buildCommand: null, outputDirectory: "." },
+        log,
+      }).catch(() => {});
+      log.info({ projectId }, "Reset Vercel project to static before deploy");
     }
   }
 
@@ -205,6 +214,48 @@ export async function deployAppToVercel(opts: {
   if (!deploy.ok) return { ok: false, failure: deploy.failure };
 
   const ready = await waitForVercelDeploymentReady({ token, deploymentId: deploy.data.id, log });
+
+  // Si falla con "No Output Directory named 'dist'" — el proyecto estaba configurado como Vite
+  // pero el bundle es HTML estático. Resetear a static y redeployar.
+  if (!ready.ok && "message" in ready.failure && String(ready.failure.message).includes("dist")) {
+    log.warn({ projectId }, "Build failed: dist not found — resetting project to static HTML and retrying");
+
+    // Resetear proyecto a static en Vercel
+    await callVercel({
+      token,
+      method: "PATCH",
+      path: `/v9/projects/${projectId}`,
+      body: { framework: null, installCommand: null, buildCommand: null, outputDirectory: "." },
+      log,
+    });
+
+    // Redeployar como static
+    const staticDeploy = await callVercel<{ id: string; url: string }>({
+      token,
+      method: "POST",
+      path: `/v13/deployments?forceNew=1`,
+      body: {
+        name: projectName,
+        project: projectId,
+        target: "production",
+        files: Object.entries(deployFiles).map(([file, data]) => ({ file, data })),
+        projectSettings: { framework: null, installCommand: null, buildCommand: null, outputDirectory: "." },
+      },
+      log,
+    });
+    if (!staticDeploy.ok) return { ok: false, failure: staticDeploy.failure };
+
+    const staticReady = await waitForVercelDeploymentReady({ token, deploymentId: staticDeploy.data.id, log });
+    if (!staticReady.ok) return { ok: false, failure: staticReady.failure };
+
+    const staticAlias = await assignStableVercelAlias({ token, deploymentId: staticDeploy.data.id, alias: `${projectName}.vercel.app`, log });
+    if (!staticAlias.ok) return { ok: false, failure: staticAlias.failure };
+
+    const publicUrl = `https://${projectName}.vercel.app`;
+    await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl });
+    return { ok: true, result: { url: publicUrl, projectId, deploymentId: staticDeploy.data.id } };
+  }
+
   if (!ready.ok) return { ok: false, failure: ready.failure };
 
   const alias = await assignStableVercelAlias({ token, deploymentId: deploy.data.id, alias: `${projectName}.vercel.app`, log });
