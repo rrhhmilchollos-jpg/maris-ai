@@ -663,7 +663,8 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
 
   if (!jobId) return null;
 
-  const isActive = job?.status !== "succeeded" && job?.status !== "failed" && job?.status !== "awaiting_approval";
+  const isReviewing = job?.status === "reviewing";
+  const isActive = job?.status !== "succeeded" && job?.status !== "failed" && job?.status !== "awaiting_approval" && job?.status !== "reviewing";
   const isAwaitingApproval = job?.status === "awaiting_approval";
   const isDone = job?.status === "succeeded";
   const isFailed = job?.status === "failed";
@@ -781,6 +782,16 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
                   <div>
                     <p className="text-xs font-bold text-emerald-400">Generación completada</p>
                     <p className="text-[10px] text-white/30">Tu app está lista</p>
+                  </div>
+                </>
+              ) : isReviewing ? (
+                <>
+                  <div className="h-7 w-7 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+                    <svg className="h-3.5 w-3.5 text-blue-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-blue-400">Nuestro equipo lo está revisando</p>
+                    <p className="text-[10px] text-white/40 max-w-[220px]">{job?.errorMessage || "En breve tendrás tu app lista ✨"}</p>
                   </div>
                 </>
               ) : isFailed ? (

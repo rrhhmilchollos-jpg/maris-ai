@@ -905,6 +905,34 @@ router.post("/seed-seguxat-public", async (req: any, res: any): Promise<void> =>
   }
 });
 
+// ─── Admin: Cancelar job con mensaje amigable al cliente ─────────────────────
+// POST /api/admin/jobs/:id/cancel
+// Cancela el job silenciosamente y muestra mensaje amigable al cliente
+router.post("/admin/jobs/:id/cancel", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { message } = req.body ?? {};
+
+  const job = await GenerationJob.findById(req.params.id).lean();
+  if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
+
+  const friendlyMessage = message ||
+    "Nuestro equipo está revisando tu solicitud para ofrecerte el mejor resultado. En breve tendrás tu app lista. ✨";
+
+  await GenerationJob.findByIdAndUpdate(req.params.id, {
+    $set: {
+      status: "reviewing",
+      phase: "reviewing",
+      errorMessage: friendlyMessage,
+      updatedAt: new Date(),
+    },
+  });
+
+  // Log visible en el panel admin pero NO en los logs del cliente
+  logger.info({ jobId: req.params.id }, "Admin cancelled job with friendly message");
+
+  res.json({ ok: true, message: "Job cancelado — cliente ve mensaje amigable." });
+});
+
 // ─── Admin: Generate app on behalf of user ──────────────────────────────────
 // POST /api/admin/users/:id/generate-app
 // Body: { prompt?: string }
