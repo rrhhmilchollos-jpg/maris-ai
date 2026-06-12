@@ -10,6 +10,7 @@ import {
   AgentMemory,
   JobLog,
   UserNotification,
+  AppMessage,
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
@@ -1611,5 +1612,75 @@ router.post("/admin/generate-for-email", async (req: any, res: any): Promise<voi
   }
 });
 
+
+// ─── Admin: Operaciones de limpieza de apps por usuario ──────────────────────
+// POST /api/admin/apps/cleanup
+// Body: { userEmail: string, keepAppId: string, newTitle: string }
+// - Renombra la app keepAppId al newTitle
+// - Elimina TODAS las demás apps del usuario
+// - Limpia jobs failed/reviewing huérfanos del usuario
+// - Aplica a nivel general: cualquier admin puede usar esto para cualquier usuario
+router.post("/admin/apps/cleanup", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { userEmail, keepAppId, newTitle } = req.body ?? {};
+  if (!userEmail || !keepAppId || !newTitle) {
+    res.status(400).json({ error: "userEmail, keepAppId y newTitle son requeridos" });
+    return;
+  }
+
+  // Buscar usuario
+  const user = await User.findOne({ email: userEmail.trim().toLowerCase() }).lean() as any;
+  if (!user) {
+    res.status(404).json({ error: `Usuario ${userEmail} no encontrado` });
+    return;
+  }
+  const userId = String(user._id);
+
+  // Verificar que la app a conservar existe y pertenece al usuario
+  const keepApp = await GeneratedApp.findOne({ _id: keepAppId, userId }).lean() as any;
+  if (!keepApp) {
+    res.status(404).json({ error: `App ${keepAppId} no encontrada para el usuario ${userEmail}` });
+    return;
+  }
+
+  // 1. Renombrar la app a conservar
+  await GeneratedApp.findByIdAndUpdate(keepAppId, {
+    $set: { title: newTitle.trim(), updatedAt: new Date() },
+  });
+
+  // 2. Eliminar TODAS las demás apps del usuario (excepto la que conservamos)
+  const otherApps = await GeneratedApp.find(
+    { userId, _id: { $ne: keepAppId } },
+    { _id: 1, title: 1 }
+  ).lean() as any[];
+
+  const otherAppIds = otherApps.map((a: any) => String(a._id));
+
+  if (otherAppIds.length > 0) {
+    await GeneratedApp.deleteMany({ _id: { $in: otherAppIds } });
+    // Limpiar mensajes y logs de las apps eliminadas
+    await AppMessage.deleteMany({ appId: { $in: otherAppIds } });
+    logger.info({ userId, userEmail, deleted: otherAppIds.length }, "Admin cleanup: apps eliminadas");
+  }
+
+  // 3. Limpiar jobs fallidos/reviewing del usuario (no tocar los activos/succeeded)
+  const cleanedJobs = await GenerationJob.deleteMany({
+    userId,
+    status: { $in: ["failed", "reviewing"] },
+  });
+
+  logger.info(
+    { userId, userEmail, keepAppId, newTitle, deletedApps: otherAppIds.length, cleanedJobs: cleanedJobs.deletedCount },
+    "Admin cleanup: operación completada"
+  );
+
+  res.json({
+    ok: true,
+    keptApp: { id: keepAppId, title: newTitle },
+    deletedApps: otherAppIds.length,
+    deletedJobs: cleanedJobs.deletedCount,
+    message: `✅ Listo: "${newTitle}" conservada, ${otherAppIds.length} app(s) eliminada(s), ${cleanedJobs.deletedCount} job(s) limpiado(s).`,
+  });
+});
 
 export default router;
