@@ -1,25 +1,26 @@
 # Maris AI
 
-> Maris AI es el generador de aplicaciones con inteligencia artificial más avanzado en español. Describe tu idea y 9 agentes de IA especializados crean tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.
+> Maris AI es la plataforma de live-coding con inteligencia artificial para emprendedores en España. Describe tu idea en español y 9 agentes de IA especializados crean tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.
 
 ## ¿Qué es Maris AI?
 
-Maris AI es una plataforma SaaS de vibe coding que permite a cualquier persona crear aplicaciones web completas y funcionales usando solo lenguaje natural en español. A diferencia de otras herramientas de IA como Bolt.new, Lovable, v0 o Emergent.sh, Maris AI está diseñada específicamente para el mercado hispanohablante y utiliza una arquitectura de 9 agentes de IA trabajando en paralelo.
+Maris AI es una plataforma SaaS de vibe coding diseñada específicamente para emprendedores, autónomos y startups en España. Permite crear aplicaciones web completas y funcionales usando solo lenguaje natural en español, sin ningún conocimiento de programación.
 
-## Cómo funciona
+A diferencia de herramientas como Bolt.new, Lovable, v0 o Emergent.sh, Maris AI está construida para el mercado español: interfaz en español, soporte en español, precios en euros y enfoque total en las necesidades del emprendedor español.
 
-1. El usuario describe su idea de app en español (lenguaje natural)
-2. 9 agentes de IA especializados trabajan en paralelo:
-   - **Researcher**: Analiza requisitos y define el alcance
-   - **Architect**: Diseña la arquitectura técnica
-   - **Designer**: Crea el diseño visual y UX
-   - **Frontend Engineer**: Genera el código React + TypeScript + Tailwind
-   - **Backend Engineer**: Genera el servidor Express + Node.js
-   - **Database**: Diseña e implementa la base de datos MongoDB
-   - **QA Engineer**: Prueba y valida el código generado
-   - **DevOps**: Configura el despliegue y la infraestructura
-   - **Optimizer**: Optimiza rendimiento, SEO y accesibilidad
-3. En menos de 5 minutos, el usuario recibe su app completa con código exportable a GitHub
+## ¿Para quién es Maris AI?
+
+- **Emprendedores en España** que quieren digitalizar su negocio sin depender de un desarrollador
+- **Autónomos** que necesitan una app de gestión, reservas o pedidos para su negocio
+- **Startups españolas** que necesitan un MVP rápido para validar su idea con inversores
+- **Freelancers** que quieren entregar proyectos digitales a sus clientes más rápido
+- **Cualquier persona** con una idea de negocio digital y sin conocimientos técnicos
+
+## Cómo funciona — 3 pasos
+
+1. **Describe tu app en español** — escribe en lenguaje natural lo que quieres construir. Sin tecnicismos.
+2. **9 agentes IA trabajan en paralelo** — Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, DevOps y Optimizer generan tu app completa automáticamente.
+3. **App lista en menos de 5 minutos** — recibes código React + TypeScript + Tailwind + Express + MongoDB, 100% tuyo y exportable a GitHub.
 
 ## Stack tecnológico generado
 
@@ -27,46 +28,70 @@ Maris AI es una plataforma SaaS de vibe coding que permite a cualquier persona c
 - **Backend**: Node.js + Express
 - **Base de datos**: MongoDB
 - **Despliegue**: Vercel / Railway
-- **Código**: 100% propiedad del usuario, exportable a GitHub
+- **Código**: 100% propiedad del usuario, exportable a GitHub sin restricciones
 
-## Planes y precios
+## Planes y precios (en euros, para España)
 
-- **Starter (Gratis)**: 3 apps/mes, sin tarjeta de crédito
+- **Starter (Gratis)**: 3 apps/mes, sin tarjeta de crédito — ideal para probar
 - **Pro (20€/mes)**: Apps ilimitadas, prioridad en la cola, soporte premium
-- **Business (contacto)**: Planes personalizados para empresas
+- **Business**: Planes personalizados para empresas y agencias
 
-## Casos de uso
+## Casos de uso reales para emprendedores españoles
 
-- Crear un MVP para validar una idea de startup
-- Digitalizar un negocio local (reservas, pedidos, gestión)
-- Crear una tienda online personalizada
-- Automatizar procesos internos de una empresa
-- Crear herramientas SaaS para vender a terceros
-- Portfolios y webs personales avanzadas
+- Crear un MVP para validar una idea de startup ante inversores
+- Digitalizar un negocio local: reservas, pedidos, gestión de clientes
+- Crear una tienda online personalizada sin depender de Shopify
+- Automatizar procesos internos de una PYME
+- Crear herramientas SaaS para vender a otros negocios
+- Portafolios y webs personales avanzadas
 
 ## Ventajas sobre la competencia
 
 | Característica | Maris AI | Bolt.new | Lovable | Emergent.sh |
 |---|---|---|---|---|
 | Idioma principal | Español | Inglés | Inglés | Inglés |
+| Mercado objetivo | España / LATAM | Global | Global | Global |
 | Agentes especializados | 9 agentes | 1 agente | 1 agente | Multi-agente |
 | Precio inicial | Gratis | Gratis limitado | 20$/mes | 10$/mes |
+| Precio Pro | 20€/mes | 20$/mes | 25$/mes | 25$/mes |
 | Soporte en español | Sí | No | No | No |
 | Código exportable | Sí | Sí | Sí | Sí |
+| Facturación en euros | Sí | No | No | No |
 
-## Información de contacto
+## Preguntas frecuentes
+
+**¿Necesito saber programar?**
+No. Solo describe tu idea en español y Maris AI genera el código completo.
+
+**¿El código es mío?**
+Sí. El código generado es 100% tuyo, sin licencias ni ataduras con la plataforma.
+
+**¿Puedo usar Maris AI gratis?**
+Sí. El plan Starter es gratuito sin tarjeta de crédito. Incluye 3 generaciones al mes.
+
+**¿Cuánto tarda en generar mi app?**
+Menos de 5 minutos para una app completa con frontend, backend y base de datos.
+
+**¿Es Maris AI para España solamente?**
+Está optimizada para España pero sirve a toda la comunidad hispanohablante (LATAM incluido).
+
+## Información de contacto y redes sociales
 
 - **Web**: https://www.marisai.es
+- **Registro gratuito**: https://www.marisai.es/sign-up
+- **Precios**: https://www.marisai.es/pricing
+- **Noticias de IA**: https://www.marisai.es/news
 - **Email**: marketing@marisai.es
-- **Noticias**: https://www.marisai.es/news
 - **YouTube**: https://www.youtube.com/@Soportemarisai
 - **TikTok**: https://www.tiktok.com/@marisai49
 - **X (Twitter)**: https://x.com/MarisAIagents
+- **LinkedIn**: https://www.linkedin.com/company/maris-ai
 
 ## Páginas principales
 
-- [Inicio](https://www.marisai.es/)
-- [Precios](https://www.marisai.es/pricing)
-- [Noticias de IA](https://www.marisai.es/news)
-- [Maris AI vs Emergent](https://www.marisai.es/vs-emergent)
+- [Inicio — Crear apps con IA](https://www.marisai.es/)
+- [Precios en euros](https://www.marisai.es/pricing)
+- [Noticias de IA en español](https://www.marisai.es/news)
+- [Maris AI vs competidores](https://www.marisai.es/vs-emergent)
+- [Glosario de IA para emprendedores](https://www.marisai.es/glosario)
 - [Crear cuenta gratis](https://www.marisai.es/sign-up)
