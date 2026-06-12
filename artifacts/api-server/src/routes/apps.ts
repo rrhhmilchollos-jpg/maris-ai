@@ -3196,10 +3196,32 @@ router.get("/templates", async (_req: any, res: any) => {
 // ── Exports requeridos por index.ts ───────────────────────────────────────
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
   await connectDB();
-  const STALE_MS = 20 * 60 * 1000;  // 20 min — el architect puede tardar 10-15 min en apps complejas
-  const ZOMBIE_MS = 12 * 60 * 1000; // 12 min sin actividad = zombie real
+  const STALE_MS = 20 * 60 * 1000;
+  const ZOMBIE_MS = 12 * 60 * 1000;
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
+
+  // ── Auto-matar jobs duplicados por usuario ────────────────────────────────
+  // Si un usuario tiene más de 1 job running/queued, matar los más antiguos
+  // Esto ocurre cuando Railway reinicia y el Map en memoria se pierde
+  const runningJobsByUser = await GenerationJob.aggregate([
+    { $match: { status: { $in: ["running", "queued"] } } },
+    { $sort: { createdAt: -1 } }, // más reciente primero
+    { $group: { _id: "$userId", jobs: { $push: { id: "$_id", createdAt: "$createdAt" } } } },
+    { $match: { "jobs.1": { $exists: true } } }, // solo usuarios con 2+ jobs
+  ]);
+
+  for (const userGroup of runningJobsByUser) {
+    const toKill = userGroup.jobs.slice(1); // mantener el más reciente, matar el resto
+    if (toKill.length > 0) {
+      const ids = toKill.map((j: any) => j.id);
+      await GenerationJob.updateMany(
+        { _id: { $in: ids } },
+        { $set: { status: "failed", phase: "failed", errorMessage: "Job cancelado automáticamente — se detectaron múltiples jobs del mismo usuario en paralelo.", updatedAt: now } },
+      );
+      logger.warn({ userId: userGroup._id, killed: toKill.length }, "Watchdog: auto-killed duplicate jobs for user");
+    }
+  }
 
   const orphanedQueued = await GenerationJob.find({
     status: "queued",
