@@ -165,6 +165,8 @@ function JobLogsPanel({ jobId }: { jobId: string }) {
 function LiveMonitorPanel() {
   const { toast } = useToast();
   const [jobs, setJobs] = useState<any[]>([]);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [logs, setLogs] = useState<Record<string, any[]>>({});
   const [repairPrompt, setRepairPrompt] = useState<Record<string, string>>({});
@@ -173,13 +175,25 @@ function LiveMonitorPanel() {
 
   const fetchJobs = async () => {
     try {
-      const r = await apiFetch("/api/admin/jobs?limit=50");
+      const r = await apiFetch("/api/admin/jobs?limit=100");
+      if (!r.ok) {
+        setFetchError(`Error ${r.status}: no se pudo cargar los jobs`);
+        return;
+      }
       const d = await r.json();
+      // Incluir running, queued, failed Y cualquier job con menos de 2h de antigüedad que no sea succeeded
       const active = (d.jobs ?? []).filter((j: any) =>
-        j.status === "running" || j.status === "queued" || j.status === "failed"
+        j.status === "running" ||
+        j.status === "queued" ||
+        j.status === "failed" ||
+        (j.status !== "succeeded" && j.ageMs < 2 * 60 * 60 * 1000)
       );
       setJobs(active);
-    } catch { /* silent */ }
+      setFetchError(null);
+      setLastUpdate(new Date());
+    } catch (e: any) {
+      setFetchError(e?.message ?? "Error de red");
+    }
   };
 
   const fetchLogs = async (jobId: string) => {
@@ -266,11 +280,26 @@ function LiveMonitorPanel() {
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
           <span className="text-sm font-medium">Monitorización en vivo</span>
           <span className="text-xs text-muted-foreground">· actualiza cada 3s</span>
+          {lastUpdate && (
+            <span className="text-xs text-white/30">· última: {lastUpdate.toLocaleTimeString("es-ES")}</span>
+          )}
         </div>
-        <Badge variant="outline" className="text-xs">{jobs.length} activos</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">{jobs.length} activos</Badge>
+          <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={fetchJobs}>
+            <RefreshCw className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
 
-      {jobs.length === 0 ? (
+      {fetchError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {fetchError} — verifica que estás autenticado como admin
+        </div>
+      )}
+
+      {!fetchError && jobs.length === 0 ? (
         <div className="rounded-lg border border-white/5 bg-white/[0.02] p-8 text-center">
           <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Sin jobs activos ahora mismo.</p>
