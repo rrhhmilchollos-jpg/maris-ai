@@ -1937,12 +1937,19 @@ export async function generateApp(
   onProgress?.({ phase: "architecting", progress: 14, note: "🧠 Diseñando la arquitectura de tu app…" });
   await log("architect", "Diseñando estructura del proyecto…");
 
-  // Heartbeat silencioso durante el arquitecto — solo actualiza updatedAt, sin log visible al cliente
+  // Heartbeat del arquitecto — actualiza updatedAt cada 25s Y escribe log cada 90s
+  // Necesario porque el architect puede tardar 10-15 min en apps complejas
+  let architectHeartbeatCount = 0;
   const architectHeartbeat = setInterval(async () => {
     try {
+      architectHeartbeatCount++;
       if (jobId) await GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } });
+      // Escribir log visible cada 90s (3 ticks × 30s) para mantener vivo el zombie detector
+      if (architectHeartbeatCount % 3 === 0) {
+        await log("architect", "⏳ Diseñando estructura…");
+      }
     } catch { /* swallow */ }
-  }, 25_000);
+  }, 30_000);
 
   let plan: ProjectPlan;
   try {
@@ -3182,8 +3189,8 @@ router.get("/templates", async (_req: any, res: any) => {
 // ── Exports requeridos por index.ts ───────────────────────────────────────
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
   await connectDB();
-  const STALE_MS = 8 * 60 * 1000;   // Reducido de 15 a 8 minutos
-  const ZOMBIE_MS = 6 * 60 * 1000;  // 6 min sin logs = zombie real (Claude puede tardar hasta 5 min en empezar a streamear)
+  const STALE_MS = 20 * 60 * 1000;  // 20 min — el architect puede tardar 10-15 min en apps complejas
+  const ZOMBIE_MS = 12 * 60 * 1000; // 12 min sin actividad = zombie real
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
 
