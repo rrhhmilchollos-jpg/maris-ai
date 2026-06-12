@@ -388,6 +388,34 @@ function LiveMonitorPanel() {
                     <p className="text-xs text-white/60 truncate mt-0.5 max-w-[400px]">
                       {job.prompt?.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 100)}
                     </p>
+                    {/* IDs siempre visibles — para soporte */}
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span
+                        className="text-[9px] font-mono text-white/25 hover:text-white/60 cursor-pointer transition-colors"
+                        title={`Job ID completo: ${job.id}`}
+                        onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(job.id); }}
+                      >
+                        🔧 Job: {job.id}
+                      </span>
+                      {job.userId && (
+                        <span
+                          className="text-[9px] font-mono text-white/25 hover:text-white/60 cursor-pointer transition-colors"
+                          title={`User ID completo: ${job.userId}`}
+                          onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(job.userId); }}
+                        >
+                          👤 User: {job.userId.slice(0, 16)}…
+                        </span>
+                      )}
+                      {job.appId && (
+                        <span
+                          className="text-[9px] font-mono text-white/25 hover:text-white/60 cursor-pointer transition-colors"
+                          title={`App ID completo: ${job.appId}`}
+                          onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(job.appId); }}
+                        >
+                          📦 App: {job.appId}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Button
@@ -1294,9 +1322,31 @@ export default function AdminDashboardPage() {
                                 <TableRow key={`${job.id}-logs`} className="border-white/5 bg-black/30">
                                   <TableCell colSpan={8} className="p-0">
                                     <div className="border-t border-white/5">
-                                      <div className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground border-b border-white/5">
-                                        <Terminal className="h-3 w-3" />
-                                        <span className="font-medium">Logs del job #{job.id}</span>
+                                      <div className="flex items-center gap-3 px-4 py-2 text-xs text-muted-foreground border-b border-white/5 flex-wrap">
+                                        <Terminal className="h-3 w-3 shrink-0" />
+                                        <span
+                                          className="font-mono text-white/40 hover:text-white/70 cursor-pointer"
+                                          title="Click para copiar Job ID"
+                                          onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(String(job.id)); toast({ title: "Job ID copiado" }); }}
+                                        >
+                                          🔧 Job: {job.id}
+                                        </span>
+                                        <span
+                                          className="font-mono text-white/30 hover:text-white/60 cursor-pointer"
+                                          title="Click para copiar User ID"
+                                          onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(String(job.userId)); toast({ title: "User ID copiado" }); }}
+                                        >
+                                          👤 User: {job.userId}
+                                        </span>
+                                        {job.appId && (
+                                          <span
+                                            className="font-mono text-white/30 hover:text-white/60 cursor-pointer"
+                                            title="Click para copiar App ID"
+                                            onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(String(job.appId)); toast({ title: "App ID copiado" }); }}
+                                          >
+                                            📦 App: {job.appId}
+                                          </span>
+                                        )}
                                         {job.appId && (
                                           <Button
                                             variant="ghost"
