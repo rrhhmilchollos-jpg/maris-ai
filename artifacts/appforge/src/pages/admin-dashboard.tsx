@@ -351,15 +351,24 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                   </Button>
                 </div>
               </div>
-              {/* Preview iframe — usar endpoint /api/apps que ya funciona con esbuild */}
+              {/* Preview — abre en popup para evitar problemas CSP del iframe */}
               {isPreviewOpen && (
-                <div className="border-t border-white/5">
-                  <iframe
-                    src={`${apiBase}/api/apps/${appId}/preview`}
-                    className="w-full bg-white"
-                    style={{ height: 520, border: "none" }}
-                    title={app.title}
-                  />
+                <div className="border-t border-white/5 bg-black/20 p-4 text-center">
+                  <p className="text-xs text-white/50 mb-3">El preview se abre en una ventana nueva para garantizar que se vea correctamente</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white"
+                      onClick={() => {
+                        const url = `${apiBase}/api/apps/${appId}/preview`;
+                        const w = window.open(url, `preview_${appId}`, "width=430,height=750,left=100,top=50,resizable=yes,scrollbars=yes");
+                        if (!w) window.open(url, "_blank");
+                      }}>
+                      📱 Abrir preview (móvil)
+                    </Button>
+                    <Button size="sm" variant="outline" className="border-white/20 text-white/70"
+                      onClick={() => window.open(`${apiBase}/api/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
+                      🖥️ Pantalla completa
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -932,11 +941,10 @@ function LiveMonitorPanel() {
                             </button>
                           </div>
                           <iframe
-                            src={`/api/admin/apps/${job.appId}/preview`}
+                            src={`${import.meta.env.VITE_API_URL || ""}/api/apps/${job.appId}/preview`}
                             className="w-full bg-white"
                             style={{ height: 480, border: "none" }}
                             title={`Preview ${job.userEmail}`}
-                            sandbox="allow-scripts allow-same-origin allow-forms"
                           />
                         </div>
                       )}
