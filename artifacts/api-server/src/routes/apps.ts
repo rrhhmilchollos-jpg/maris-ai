@@ -2072,8 +2072,10 @@ export async function generateApp(
       return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan);
     });
   } else if (execPlan.phases.includes("backend") && plan.backendNeeded) {
-    // Usamos await log para asegurar que el mensaje se registre correctamente en la base de datos de logs
-    await log("coder", "Frontend terminado. El backend se ha pausado para tu revisión. Si te gusta el diseño, dime 'Continúa con el backend' y me pondré con ello.");
+    // Solo mostrar este mensaje si el frontend realmente terminó con código válido
+    if (frontendResult.code && !frontendResult.truncated) {
+      await log("coder", "Frontend terminado. El backend se ha pausado para tu revisión. Si te gusta el diseño, dime 'Continúa con el backend' y me pondré con ello.");
+    }
   }
 
   // Si el frontend falló por timeout, tratarlo como truncado para reintentar con plan reducido
@@ -2128,9 +2130,11 @@ export async function generateApp(
           if (landingResult.code && landingResult.code.length > 500) {
             await log("coder", `✅ Landing page lista (${Math.round(landingResult.code.length / 1000)} KB). Puedes pedirme que añada más funcionalidades paso a paso.`);
             frontendResult.code = landingResult.code;
+          } else {
+            await log("coder", "Landing page vacía. El Repair Agent intentará reconstruir…", "warn");
           }
         }
-      } catch (retryErr) {
+        // IMPORTANTE: no tocar frontendResult.code después de este punto en este bloque
         if ((frontendResult as any).accumulated?.length > 2000) {
           await log("coder", "Reintento fallido, recuperando código parcial del primer intento como último recurso...", "warn");
           frontendResult.code = (frontendResult as any).accumulated;
@@ -2156,9 +2160,13 @@ export async function generateApp(
     }
   }
 
-  if (!frontendResult.code) {
-    // 🔧 Repair Agent: intentar recuperar JSON malformado antes de cancelar
-    await log("coder", `Frontend falló (${frontendResult.error}), activando Repair Agent…`, "warn");
+  if (!frontendResult.code || frontendResult.code.length < 500) {
+    // Si hay código pero muy corto, logarlo antes de activar repair
+    if (frontendResult.code && frontendResult.code.length > 0) {
+      await log("coder", `Frontend demasiado corto (${frontendResult.code.length} chars) — activando Repair Agent…`, "warn");
+    } else {
+      await log("coder", `Frontend falló (${frontendResult.error || "sin código"}), activando Repair Agent…`, "warn");
+    }
     onProgress?.({ phase: "fixing", progress: 65, note: "🔧 Repair Agent: intentando recuperar código malformado…" });
     try {
       const repairResponse = await createClaudeMessageWithFallback("repair", agentModelPlan.agents.repair.model, {
@@ -2212,7 +2220,9 @@ Output STRICT JSON only, no markdown, no explanation.`,
       }
     }
   }
-  await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
+  if (frontendResult.code && frontendResult.code.length >= 500) {
+    await log("coder", `✅ Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
+  }
   if (plan.backendNeeded && backendResult?.code) {
     await log("coder", `Backend listo: ${Math.round(backendResult.code.length / 1000)} KB.`);
   }
