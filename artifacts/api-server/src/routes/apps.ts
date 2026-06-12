@@ -3198,6 +3198,13 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     await enqueueGenerateJob(String(job._id));
   }
 
+  // Limpiar jobs atascados en "reviewing" más de 4 horas — el cliente ya fue notificado
+  const reviewingCutoff = new Date(now.getTime() - 4 * 3600_000);
+  await GenerationJob.updateMany(
+    { status: "reviewing", updatedAt: { $lt: reviewingCutoff } },
+    { $set: { status: "failed", errorMessage: "Solicitud procesada por el equipo de soporte. Puedes hacer una nueva generación." } },
+  );
+
   const orphanedRunningJobs = await GenerationJob.find({
     status: "running",
     updatedAt: { $lt: staleDate },

@@ -303,6 +303,24 @@ function LiveMonitorPanel() {
           <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={fetchJobs}>
             <RefreshCw className="h-3 w-3" />
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+            title="Limpiar todos los jobs 'reviewing' atascados más de 2h"
+            onClick={async () => {
+              if (!window.confirm("¿Limpiar todos los jobs 'reviewing' atascados? Se marcarán como fallidos.")) return;
+              try {
+                const d = await apiFetch<any>("/api/admin/jobs/cleanup-reviewing", { method: "POST" });
+                toast({ title: "🧹 Limpieza completada", description: `${d.cleaned} job(s) limpiado(s)` });
+                await fetchJobs();
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            🧹 Limpiar reviewing
+          </Button>
         </div>
       </div>
 
@@ -434,6 +452,36 @@ function LiveMonitorPanel() {
                         <Zap className="h-3 w-3 text-violet-400" />
                         Acciones de recuperación
                       </p>
+                      {/* Borrar todos los jobs fallidos/reviewing de este usuario */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-7 text-xs border-red-900/40 text-red-500/70 hover:bg-red-500/10 hover:text-red-400"
+                        onClick={async e => {
+                          e.stopPropagation();
+                          if (!window.confirm(`¿Borrar TODOS los jobs failed/reviewing de ${job.userEmail}? Esta acción no se puede deshacer.`)) return;
+                          setActionLoading(p => ({ ...p, [`deljobs_${job.id}`]: true }));
+                          try {
+                            const d = await apiFetch<any>(`/api/admin/users/${job.userId}/jobs`, {
+                              method: "DELETE",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ statuses: ["failed", "reviewing"] }),
+                            });
+                            toast({ title: "🗑️ Jobs eliminados", description: `${d.deleted} job(s) de ${job.userEmail} eliminados` });
+                            await fetchJobs();
+                          } catch (e: any) {
+                            toast({ title: "Error", description: e.message, variant: "destructive" });
+                          } finally {
+                            setActionLoading(p => ({ ...p, [`deljobs_${job.id}`]: false }));
+                          }
+                        }}
+                        disabled={actionLoading[`deljobs_${job.id}`]}
+                      >
+                        {actionLoading[`deljobs_${job.id}`]
+                          ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Eliminando…</>
+                          : `🗑️ Borrar todos los jobs de ${job.userEmail?.split("@")[0]}`
+                        }
+                      </Button>
                       <div className="grid grid-cols-2 gap-2">
                         <Button
                           size="sm"
