@@ -699,6 +699,7 @@ function prepareViteProjectForVercel(
       `import react from "@vitejs/plugin-react";\n\n` +
       `export default defineConfig({\n` +
       `  plugins: [react()],\n` +
+      `  build: { outDir: "dist" },\n` +
       `});\n`;
   }
   if (!out["index.html"]) {
@@ -710,6 +711,17 @@ function prepareViteProjectForVercel(
       `  </head>\n  <body>\n    <div id="root"></div>\n` +
       `    <script type="module" src="/src/main.tsx"></script>\n` +
       `  </body>\n</html>\n`;
+  }
+
+  // Inyectar vercel.json para garantizar outputDirectory correcto
+  // Evita el error "No Output Directory named 'dist' found"
+  if (!out["vercel.json"]) {
+    out["vercel.json"] = JSON.stringify({
+      buildCommand: "npm run build",
+      outputDirectory: "dist",
+      installCommand: "npm install",
+      framework: "vite",
+    }, null, 2) + "\n";
   }
 
   return out;
