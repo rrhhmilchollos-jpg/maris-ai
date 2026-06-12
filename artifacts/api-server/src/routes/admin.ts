@@ -1167,7 +1167,98 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
   }
 });
 
-// ─── Admin: Cancelar job con mensaje amigable al cliente ─────────────────────
+// ─── Admin: Recuperar por email — busca el último job fallido del usuario ──────
+// POST /api/admin/recover-by-email  { email: "..." }
+router.post("/admin/recover-by-email", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { email } = req.body ?? {};
+  if (!email) { res.status(400).json({ error: "email requerido" }); return; }
+
+  // Buscar usuario por email
+  const user = await User.findOne({ email: email.trim().toLowerCase() }).lean() as any;
+  if (!user) { res.status(404).json({ error: `Usuario ${email} no encontrado` }); return; }
+
+  // Buscar el último job fallido del usuario — sin límite de tiempo
+  const lastFailedJob = await GenerationJob.findOne({
+    userId: String(user._id),
+    status: { $in: ["failed", "reviewing"] },
+  }).sort({ updatedAt: -1 }).lean() as any;
+
+  if (!lastFailedJob) {
+    res.status(404).json({ error: `No hay jobs fallidos para ${email}` });
+    return;
+  }
+
+  // Redirigir al endpoint de recover con el ID del job encontrado
+  req.params.id = String(lastFailedJob._id);
+  logger.info({ email, jobId: String(lastFailedJob._id) }, "Admin recover-by-email: found job");
+
+  // Ejecutar la misma lógica de recover
+  const jobId = String(lastFailedJob._id);
+  const failedJob = lastFailedJob;
+  const cleanPrompt = (failedJob.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
+
+  let partialCode = failedJob.partialFrontendCode || "";
+  let baseAppId = failedJob.appId || failedJob.editAppId || null;
+
+  if (!partialCode && !baseAppId) {
+    const relatedJobs = await GenerationJob.find({
+      userId: failedJob.userId,
+      _id: { $ne: failedJob._id },
+      $or: [
+        { partialFrontendCode: { $exists: true, $ne: "" } },
+        { appId: { $exists: true, $ne: null } },
+      ],
+    }).sort({ updatedAt: -1 }).limit(20).lean() as any[];
+
+    for (const j of relatedJobs) {
+      if (j.appId) { baseAppId = j.appId; break; }
+    }
+    if (!baseAppId) {
+      let bestPartial = "";
+      for (const j of relatedJobs) {
+        if ((j.partialFrontendCode || "").length > bestPartial.length) bestPartial = j.partialFrontendCode;
+      }
+      if (bestPartial.length > 500) partialCode = bestPartial;
+    }
+  }
+
+  // También buscar en GeneratedApp directamente
+  if (!baseAppId) {
+    const latestApp = await GeneratedApp.findOne({ userId: failedJob.userId }).sort({ createdAt: -1 }).lean() as any;
+    if (latestApp?._id) baseAppId = String(latestApp._id);
+  }
+
+  if (baseAppId) {
+    const existingApp = await GeneratedApp.findById(baseAppId).lean() as any;
+    if (existingApp?.frontendCode && existingApp.frontendCode.length > 500) {
+      const recoverPrompt = `[ADMIN RECOVERY] Continúa y completa esta app que quedó incompleta. Revisa el código existente, identifica qué falta y completa TODO para que sea funcional. NO rehagas lo que ya funciona. Prompt original: ${cleanPrompt.slice(0, 300)}`;
+      const newJobId = new mongoose.Types.ObjectId().toString();
+      await GenerationJob.create({
+        _id: newJobId, userId: failedJob.userId,
+        prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. ${recoverPrompt}`,
+        editAppId: String(baseAppId), coderModel: "claude-sonnet-4-6",
+        language: failedJob.language || "typescript", kind: "edit",
+        status: "queued", phase: "queued", progress: 0, isAdmin: true, hasEverPaid: true,
+      });
+      await enqueueGenerateJob(newJobId);
+      res.status(201).json({ ok: true, jobId: newJobId, strategy: "edit-existing", email, message: `Continuando desde la app existente de ${email} (${Math.round(existingApp.frontendCode.length / 1000)} KB).` });
+      return;
+    }
+  }
+
+  // Sin app — generar desde el prompt original
+  const newJobId = new mongoose.Types.ObjectId().toString();
+  await GenerationJob.create({
+    _id: newJobId, userId: failedJob.userId,
+    prompt: failedJob.prompt || `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. ${cleanPrompt}`,
+    coderModel: "claude-sonnet-4-6",
+    language: failedJob.language || "typescript", kind: failedJob.kind || "fullstack",
+    status: "queued", phase: "queued", progress: 0, isAdmin: true, hasEverPaid: true,
+  });
+  await enqueueGenerateJob(newJobId);
+  res.status(201).json({ ok: true, jobId: newJobId, strategy: "fresh-generation", email, message: `Generando de nuevo para ${email} con máxima calidad.` });
+});
 // POST /api/admin/jobs/:id/cancel
 // Cancela el job silenciosamente y muestra mensaje amigable al cliente
 router.post("/admin/jobs/:id/cancel", async (req: any, res: any): Promise<void> => {
