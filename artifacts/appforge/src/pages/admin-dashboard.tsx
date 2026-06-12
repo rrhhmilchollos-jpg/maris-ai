@@ -353,8 +353,40 @@ function LiveMonitorPanel() {
                       className="h-7 px-2 text-xs border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
                       onClick={e => { e.stopPropagation(); forceRetry(job.id); }}
                       disabled={actionLoading[job.id]}
+                      title="Forzar reintentar"
                     >
                       {actionLoading[job.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                      title="Cancelar — el cliente ve 'Nuestro equipo lo está revisando'"
+                      disabled={actionLoading[`cancel_${job.id}`]}
+                      onClick={async e => {
+                        e.stopPropagation();
+                        const msg = window.prompt(
+                          "Mensaje para el cliente:",
+                          "Nuestro equipo está revisando tu solicitud para ofrecerte el mejor resultado. En breve tendrás tu app lista. ✨"
+                        );
+                        if (msg === null) return;
+                        setActionLoading(p => ({ ...p, [`cancel_${job.id}`]: true }));
+                        try {
+                          await apiFetch<any>(`/api/admin/jobs/${job.id}/cancel`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ message: msg || undefined }),
+                          });
+                          toast({ title: "✅ Cancelado", description: "Cliente ve: 'Nuestro equipo lo está revisando'" });
+                          await fetchJobs();
+                        } catch (err: any) {
+                          toast({ title: "Error", description: err.message, variant: "destructive" });
+                        } finally {
+                          setActionLoading(p => ({ ...p, [`cancel_${job.id}`]: false }));
+                        }
+                      }}
+                    >
+                      {actionLoading[`cancel_${job.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                     </Button>
                     {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   </div>
