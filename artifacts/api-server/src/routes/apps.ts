@@ -2377,6 +2377,7 @@ import {
   AppImage,
   AppRuntimeError,
   AppRevision,
+  User,
 } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
 import { generateRateLimiter } from "../middlewares/rateLimit";
@@ -3227,15 +3228,13 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   }).lean();
 
   for (const job of runningJobs) {
-    const lastLog = await JobLog.findOne({ jobId: String(job._id) })
-      .sort({ _id: -1 })
-      .lean();
-    const lastLogAge = lastLog
-      ? now.getTime() - new Date((lastLog as any).createdAt).getTime()
-      : now.getTime() - new Date((job as any).createdAt).getTime();
+    // Usar updatedAt del job (actualizado por el heartbeat silencioso cada 30s)
+    // NO el último log — los heartbeats son silenciosos y no escriben logs
+    const jobUpdatedAt = new Date((job as any).updatedAt || (job as any).createdAt).getTime();
+    const jobAge = now.getTime() - jobUpdatedAt;
 
-    if (lastLogAge > ZOMBIE_MS) {
-      logger.warn({ jobId: job._id, lastLogAge }, "Zombie job detected — no logs for 6min, force re-queuing");
+    if (jobAge > ZOMBIE_MS) {
+      logger.warn({ jobId: job._id, jobAge }, "Zombie job detected — no activity for 6min, force re-queuing");
       await GenerationJob.updateOne(
         { _id: job._id },
         { $set: { status: "queued", phase: "queued", progress: 0, updatedAt: now } },
@@ -3290,6 +3289,26 @@ export async function runJobById(jobId: string): Promise<void> {
       previousApp = await GeneratedApp.findById(job.editAppId).lean();
     }
 
+    // Determinar si el usuario es FREE o PAID de forma robusta
+    // 1. Campo hasEverPaid del job (nuevo)
+    // 2. Campo hasEverPaid/isPremium del usuario en BD (fuente de verdad)
+    // 3. Si tiene apps previas generadas → ya no es cuenta nueva
+    // 4. isAdmin siempre tiene acceso completo
+    let hasEverPaid = !!(job as any).hasEverPaid || !!(job as any).isAdmin;
+    if (!hasEverPaid) {
+      try {
+        const dbUser = await User.findById(job.userId).lean() as any;
+        if (dbUser?.hasEverPaid || dbUser?.isPremium || (dbUser?.plan && dbUser?.plan !== "free")) {
+          hasEverPaid = true;
+        }
+        // Si tiene apps previas, no tratarlo como cuenta nueva
+        if (!hasEverPaid) {
+          const appCount = await GeneratedApp.countDocuments({ userId: job.userId });
+          if (appCount > 0) hasEverPaid = true;
+        }
+      } catch { /* si falla la consulta, usar el valor del job */ }
+    }
+
     const result = await generateApp(
       job.prompt,
       onProgress,
@@ -3305,7 +3324,7 @@ export async function runJobById(jobId: string): Promise<void> {
         detectedLocale: extractPromptContext(job.prompt, "locale"),
         detectedCountry: extractPromptContext(job.prompt, "country"),
         uiLanguage: extractPromptContext(job.prompt, "uiLanguage"),
-        hasEverPaid: !!(job as any).hasEverPaid || !!(job as any).isAdmin,
+        hasEverPaid,
       },
       jobId,
     );
