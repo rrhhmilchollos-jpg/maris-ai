@@ -1422,7 +1422,56 @@ export default function AdminDashboardPage() {
 
               {/* SYSTEM TAB */}
               <TabsContent value="system" className="space-y-4">
-                {/* E2B Card */}
+                {/* Email Alerts Card */}
+                <Card className="bg-card/40 border-white/5">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <span className="text-lg">📧</span>
+                      Alertas por email al admin
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <p>Recibes email automático en estos eventos:</p>
+                      <ul className="list-none space-y-1 mt-2">
+                        {[
+                          ["🔴", "Job fallido 2+ veces seguidas", "Urgente"],
+                          ["🔴", "Pago o suscripción fallida en Stripe", "Urgente"],
+                          ["🔴", "Error en webhook de Stripe", "Urgente"],
+                          ["🎫", "Nuevo ticket de soporte", "Aviso"],
+                        ].map(([emoji, desc, level]) => (
+                          <li key={desc} className="flex items-center gap-2 text-xs">
+                            <span>{emoji}</span>
+                            <span className="text-white/70">{desc}</span>
+                            <span className="text-white/30">— {level}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="flex items-center gap-3 pt-2 flex-wrap">
+                      <div className="flex gap-1 flex-wrap">
+                        {["soportemarisai@gmail.com", "rrhh.milchollos@gmail.com"].map(email => (
+                          <span key={email} className="text-[11px] px-2 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300">{email}</span>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 ml-auto"
+                        onClick={async () => {
+                          try {
+                            const d = await apiFetch<any>("/api/admin/test-email-alert", { method: "POST" });
+                            toast({ title: "📧 Email de prueba enviado", description: d.message });
+                          } catch (e: any) {
+                            toast({ title: "Error", description: e.message + " — ¿RESEND_API_KEY configurada en Railway?", variant: "destructive" });
+                          }
+                        }}
+                      >
+                        📧 Enviar email de prueba
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
                 <Card className="bg-card/40 border-white/5">
                   <CardHeader>
                     <CardTitle className="text-base flex items-center gap-2">

@@ -915,7 +915,24 @@ router.post("/admin/my-projects", async (req: any, res: any): Promise<void> => {
   res.json({ ok: true, app });
 });
 
-// ─── Admin: Borrar jobs por usuario (limpieza masiva) ────────────────────────
+// ─── Admin: Test de notificación por email ────────────────────────────────────
+router.post("/admin/test-email-alert", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  try {
+    const { notifyAdminJobFailed } = await import("../lib/notify");
+    await notifyAdminJobFailed({
+      userEmail: "test@marisai.es",
+      userId: "test-user-id",
+      jobId: "test-job-id-" + Date.now(),
+      prompt: "TEST: Este es un email de prueba del sistema de alertas de Maris AI",
+      errorMessage: "Este es un error de prueba — el sistema de alertas funciona correctamente ✅",
+      retryCount: 3, // >= 2 para que se envíe
+    });
+    res.json({ ok: true, message: "Email de prueba enviado a soportemarisai@gmail.com y rrhh.milchollos@gmail.com" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Error desconocido" });
+  }
+});
 router.delete("/admin/users/:id/jobs", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { statuses, olderThanHours } = req.body ?? {};
