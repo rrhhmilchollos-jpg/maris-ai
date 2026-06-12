@@ -144,10 +144,9 @@ router.get("/admin/users/search", async (req: any, res: any): Promise<void> => {
   if (!email) { res.status(400).json({ error: "Email requerido" }); return; }
   const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } }).lean() as any;
   if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
-  // Devolver tanto el _id de MongoDB como el clerkId para buscar apps correctamente
-  const mongoId = String(user._id);
-  const clerkId = user.clerkId || user.externalId || user.id || mongoId;
-  res.json({ id: mongoId, clerkId, email: user.email });
+  // En Maris AI el _id del User ES el Clerk ID (user_xxx) — es el mismo ID que se usa en todas las colecciones
+  const userId = String(user._id);
+  res.json({ id: userId, email: user.email, plan: user.plan, credits: user.credits });
 });
 
 // ─── Ban / Unban user ─────────────────────────────────────────────────────────
@@ -217,21 +216,9 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
 router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const limit = Math.min(Number(req.query.limit) || 20, 50);
-  const id = req.params.id;
-
-  // Las apps pueden estar guardadas con el _id de MongoDB O con el clerkId (user_xxx)
-  // Buscar por ambos para asegurar que encontramos las apps
-  const user = await User.findById(id).lean() as any;
-  const clerkId = user?.clerkId || user?.externalId || id;
-
-  const apps = await GeneratedApp.find({
-    $or: [
-      { userId: id },
-      { userId: clerkId },
-      { userId: String(user?._id ?? id) },
-    ]
-  }).sort({ createdAt: -1 }).limit(limit).lean();
-
+  // El _id del User ES el Clerk ID — es el mismo campo userId en GeneratedApp
+  const userId = req.params.id;
+  const apps = await GeneratedApp.find({ userId }).sort({ createdAt: -1 }).limit(limit).lean();
   res.json({
     apps: apps.map(a => ({
       id: String(a._id),

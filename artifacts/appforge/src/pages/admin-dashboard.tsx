@@ -179,10 +179,9 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
       // Usar el endpoint correcto de búsqueda por email
       const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
       if (!userData?.id) { toast({ title: "Usuario no encontrado", description: target, variant: "destructive" }); return; }
-      // Usar clerkId si existe (es el userId que se guarda en las apps), si no el mongoId
-      const lookupId = userData.clerkId || userData.id;
-      const appsData = await apiFetch<any>(`/api/admin/users/${lookupId}/apps?limit=20`);
-      setApps((appsData.apps ?? []).map((a: any) => ({ ...a, userEmail: target, userId: lookupId })));
+      // userData.id ES el Clerk ID — el mismo que se usa como userId en las apps
+      const appsData = await apiFetch<any>(`/api/admin/users/${userData.id}/apps?limit=20`);
+      setApps((appsData.apps ?? []).map((a: any) => ({ ...a, userEmail: target, userId: userData.id })));
       if ((appsData.apps ?? []).length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps generadas aún` });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
