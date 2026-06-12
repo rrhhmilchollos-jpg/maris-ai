@@ -162,6 +162,97 @@ function JobLogsPanel({ jobId }: { jobId: string }) {
   );
 }
 
+function GenerateForUserPanel() {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [foundUser, setFoundUser] = useState<{ id: string; email: string } | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  const searchUser = async () => {
+    if (!email.trim()) return;
+    setSearching(true);
+    setFoundUser(null);
+    try {
+      const r = await apiFetch(`/api/admin/overview`);
+      const d = await r.json();
+      // Buscar en topUsers por email
+      const match = d.topUsers?.find((u: any) => u.email?.toLowerCase() === email.trim().toLowerCase());
+      if (match) {
+        setFoundUser({ id: match.userId, email: match.email });
+      } else {
+        toast({ title: "No encontrado en top usuarios", description: "Prueba buscando en la lista de jobs por email.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "No se pudo buscar el usuario", variant: "destructive" });
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const generateApp = async () => {
+    if (!foundUser) return;
+    setLoading(true);
+    try {
+      const r = await apiFetch(`/api/admin/users/${foundUser.id}/generate-app`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.trim() || "" }),
+      });
+      const d = await r.json();
+      toast({ title: "✅ Landing page en cola", description: d.message ?? `Generando para ${foundUser.email}` });
+      setFoundUser(null);
+      setEmail("");
+      setPrompt("");
+    } catch {
+      toast({ title: "Error", description: "No se pudo generar la app", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Input
+          placeholder="email del usuario (ej: cliente@gmail.com)"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && searchUser()}
+          className="text-sm h-8"
+        />
+        <Button size="sm" variant="outline" onClick={searchUser} disabled={searching} className="h-8 shrink-0">
+          {searching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+        </Button>
+      </div>
+      {foundUser && (
+        <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-purple-400" />
+            <span className="text-sm font-medium text-purple-300">{foundUser.email}</span>
+            <span className="text-xs text-muted-foreground font-mono">{foundUser.id.slice(0, 12)}…</span>
+          </div>
+          <Input
+            placeholder="Prompt personalizado (opcional — deja vacío para landing page por defecto)"
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            className="text-xs h-8"
+          />
+          <Button
+            size="sm"
+            onClick={generateApp}
+            disabled={loading}
+            className="w-full h-8 bg-purple-600 hover:bg-purple-700 text-white text-xs"
+          >
+            {loading ? <><Loader2 className="h-3 w-3 animate-spin mr-2" />Generando…</> : <><Zap className="h-3 w-3 mr-2" />Generar landing page para este usuario</>}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -753,9 +844,28 @@ export default function AdminDashboardPage() {
                               <p className="text-sm font-medium truncate">{u.email}</p>
                               <p className="text-xs text-muted-foreground font-mono">{u.userId.slice(0, 16)}…</p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-primary">{u.creditsUsed}</p>
-                              <p className="text-xs text-muted-foreground">créditos</p>
+                            <div className="flex items-center gap-2">
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-primary">{u.creditsUsed}</p>
+                                <p className="text-xs text-muted-foreground">créditos</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7 px-2 border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                                onClick={async () => {
+                                  try {
+                                    const r = await apiFetch(`/api/admin/users/${u.userId}/generate-app`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "" }) });
+                                    const d = await r.json();
+                                    toast({ title: "✅ App en cola", description: d.message ?? "Landing page generándose para " + u.email });
+                                  } catch {
+                                    toast({ title: "Error", description: "No se pudo generar la app", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <Zap className="h-3 w-3 mr-1" />
+                                Generar
+                              </Button>
                             </div>
                           </div>
                         ))}
@@ -764,6 +874,20 @@ export default function AdminDashboardPage() {
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              {/* GENERAR APP PARA USUARIO */}
+              <Card className="bg-card/40 border-white/5">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-purple-400" />
+                    Generar landing page para un usuario
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <GenerateForUserPanel />
+                </CardContent>
+              </Card>
+            </TabsContent>
 
               {/* SYSTEM TAB */}
               <TabsContent value="system" className="space-y-4">
