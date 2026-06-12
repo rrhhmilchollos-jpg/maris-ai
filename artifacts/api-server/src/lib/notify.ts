@@ -283,6 +283,8 @@ export async function sendApologyEmail(opts: {
     text: `${greeting}\n\nQueremos pedirte disculpas sinceras por los problemas que experimentaste. ${appDesc} ya está lista y disponible en tu cuenta.\n\nAccede aquí: ${dashboardUrl}\n\nGracias por confiar en Maris AI.\n\nEl equipo de Maris AI`,
   });
 }
+
+export async function sendAutoPublishEmail(opts: {
   to: string | null; recipientName: string | null;
   appTitle: string; url: string; log: Logger;
 }): Promise<void> {
