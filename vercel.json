@@ -66,28 +66,6 @@
       "source": "/rss/:path*",
       "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/rss/:path*"
     },
-    {
-      "source": "/news/:slug*",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/news/:slug*"
-    },
-    {
-      "source": "/news",
-      "has": [
-        {
-          "type": "header",
-          "key": "user-agent",
-          "value": "(?i).*(googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|ia_archiver|twitterbot|linkedinbot|applebot|google-inspectiontool|googleother|google-extended|google-news|googlebot-news|feedfetcher-google).*"
-        }
-      ],
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/news"
-    },
 
     { "source": "/robots.txt", "destination": "/robots.txt" },
     { "source": "/llms.txt", "destination": "/llms.txt" },
