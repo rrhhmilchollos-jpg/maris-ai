@@ -2063,7 +2063,6 @@ export async function generateApp(
           lastLogChars = chars;
           logger.info({ kb: Math.round(chars / 1000) }, "coder: frontend progress");
         }
-        }
       }, turboModel, language, templateContextBlock, agentModelPlan,
       (partial) => { frontendAccumulated = partial; });
       clearInterval(coderHeartbeat);
