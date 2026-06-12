@@ -1018,6 +1018,32 @@ router.post("/admin/jobs/cleanup-reviewing", async (req: any, res: any): Promise
 });
 
 // ─── Admin: Corregir jobs failed·done (completaron pero status mal guardado) ──
+// ─── Admin: Enviar email de disculpas al cliente ──────────────────────────────
+router.post("/admin/jobs/:id/send-apology", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const job = await GenerationJob.findById(req.params.id).lean() as any;
+  if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
+
+  const dbUser = await User.findById(job.userId).lean() as any;
+  const userEmail = dbUser?.email;
+  if (!userEmail) { res.status(400).json({ error: "Usuario sin email" }); return; }
+
+  const app = job.appId
+    ? await GeneratedApp.findById(job.appId).select("title").lean() as any
+    : null;
+
+  const { sendApologyEmail } = await import("../lib/notify");
+  const sent = await sendApologyEmail({
+    userEmail,
+    userName: dbUser?.name || dbUser?.firstName,
+    appTitle: app?.title || req.body?.appTitle,
+    dashboardUrl: "https://www.marisai.es/dashboard",
+  });
+
+  logger.info({ jobId: req.params.id, userEmail, sent }, "Admin: sent apology email");
+  res.json({ ok: sent, userEmail, message: sent ? `Email de disculpas enviado a ${userEmail} ✅` : "Fallo al enviar — revisa RESEND_API_KEY" });
+});
+
 router.post("/admin/jobs/fix-false-failed", async (req: any, res: any): Promise<void> => {
   await connectDB();
   // Jobs con status=failed pero phase=done son jobs que completaron correctamente

@@ -237,7 +237,52 @@ export async function notifyAdminNewUser(opts: {
 
 // ─── Notificaciones al usuario ────────────────────────────────────────────────
 
-export async function sendAutoPublishEmail(opts: {
+/**
+ * Email de disculpas al cliente — se envía desde el panel admin
+ * cuando un proyecto ha tenido problemas y ya está resuelto
+ */
+export async function sendApologyEmail(opts: {
+  userEmail: string;
+  userName?: string;
+  appTitle?: string;
+  dashboardUrl?: string;
+}): Promise<boolean> {
+  const { userEmail, userName, appTitle, dashboardUrl = "https://www.marisai.es/dashboard" } = opts;
+  const greeting = userName ? `Hola ${userName.split(" ")[0]},` : "Hola,";
+  const appDesc = appTitle ? `tu app "${appTitle}"` : "tu proyecto";
+
+  return sendEmail({
+    to: [userEmail],
+    subject: `✅ ${appTitle ? appTitle + " lista" : "Tu app está lista"} — disculpa por la espera`,
+    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#0a0a0a;font-family:system-ui,sans-serif">
+<div style="max-width:540px;margin:32px auto;background:#111;border:1px solid #222;border-radius:12px;overflow:hidden">
+  <div style="background:linear-gradient(135deg,#7c3aed20,#0ea5e920);border-bottom:1px solid #333;padding:28px 32px">
+    <div style="font-size:32px;margin-bottom:8px">✨</div>
+    <div style="color:#f3f4f6;font-size:18px;font-weight:700">¡Tu app ya está lista!</div>
+    <div style="color:#9ca3af;font-size:13px;margin-top:4px">Gracias por tu paciencia</div>
+  </div>
+  <div style="padding:24px 32px;color:#d1d5db;font-size:14px;line-height:1.7">
+    <p>${greeting}</p>
+    <p>Queremos pedirte <strong style="color:#f3f4f6">disculpas sinceras</strong> por los problemas técnicos que experimentaste durante la generación de ${appDesc}. Sabemos que tu tiempo es valioso y lamentamos los inconvenientes.</p>
+    <p>Hemos trabajado para identificar y resolver el problema, y nos complace decirte que <strong style="color:#10b981">${appDesc} ya está completamente lista</strong> y disponible en tu cuenta.</p>
+    <div style="background:#10b98110;border:1px solid #10b98130;border-radius:8px;padding:16px;margin:20px 0">
+      <div style="color:#10b981;font-weight:600;margin-bottom:8px">✅ Tu proyecto está listo</div>
+      <div style="color:#9ca3af;font-size:13px">Puedes acceder, editar y publicar tu app cuando quieras.</div>
+    </div>
+    <div style="text-align:center;margin:24px 0">
+      <a href="${dashboardUrl}" style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block">Ir a mi panel →</a>
+    </div>
+    <p style="color:#9ca3af;font-size:13px">Como agradecimiento por tu paciencia, si necesitas cualquier ajuste en tu app responde a este email y te atenderemos de forma <strong style="color:#f3f4f6">prioritaria</strong>.</p>
+    <p>Gracias de corazón por confiar en Maris AI. 💜</p>
+    <p style="color:#9ca3af">Un saludo,<br><strong style="color:#f3f4f6">El equipo de Maris AI</strong></p>
+  </div>
+  <div style="padding:12px 32px;border-top:1px solid #222;color:#4b5563;font-size:11px">
+    Maris AI · <a href="https://www.marisai.es" style="color:#7c3aed">marisai.es</a> · Soporte: soportemarisai@gmail.com
+  </div>
+</div></body></html>`,
+    text: `${greeting}\n\nQueremos pedirte disculpas sinceras por los problemas que experimentaste. ${appDesc} ya está lista y disponible en tu cuenta.\n\nAccede aquí: ${dashboardUrl}\n\nGracias por confiar en Maris AI.\n\nEl equipo de Maris AI`,
+  });
+}
   to: string | null; recipientName: string | null;
   appTitle: string; url: string; log: Logger;
 }): Promise<void> {
