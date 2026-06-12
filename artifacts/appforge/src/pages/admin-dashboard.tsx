@@ -934,6 +934,16 @@ export default function AdminDashboardPage() {
                             className="pl-8 h-8 text-xs w-56 bg-black/20 border-white/10"
                           />
                         </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 px-2 gap-1.5 text-xs border-white/10 hover:border-white/20"
+                          disabled={jobsLoading}
+                          onClick={() => refetchJobs()}
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${jobsLoading ? "animate-spin" : ""}`} />
+                          {jobsLoading ? "Cargando…" : "Actualizar jobs"}
+                        </Button>
                         <div className="flex items-center gap-1">
                           {(["all", "running", "failed", "queued"] as const).map((f) => (
                             <Button
