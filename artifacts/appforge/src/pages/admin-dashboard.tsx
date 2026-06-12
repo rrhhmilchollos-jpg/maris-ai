@@ -175,13 +175,7 @@ function LiveMonitorPanel() {
 
   const fetchJobs = async () => {
     try {
-      const r = await apiFetch("/api/admin/jobs?limit=100");
-      if (!r.ok) {
-        setFetchError(`Error ${r.status}: no se pudo cargar los jobs`);
-        return;
-      }
-      const d = await r.json();
-      // Incluir running, queued, failed Y cualquier job con menos de 2h de antigüedad que no sea succeeded
+      const d = await apiFetch<any>("/api/admin/jobs?limit=100");
       const active = (d.jobs ?? []).filter((j: any) =>
         j.status === "running" ||
         j.status === "queued" ||
@@ -198,8 +192,7 @@ function LiveMonitorPanel() {
 
   const fetchLogs = async (jobId: string) => {
     try {
-      const r = await apiFetch(`/api/admin/jobs/${jobId}/logs?limit=100`);
-      const d = await r.json();
+      const d = await apiFetch<any>(`/api/admin/jobs/${jobId}/logs?limit=100`);
       setLogs(prev => ({ ...prev, [jobId]: d.logs ?? [] }));
     } catch { /* silent */ }
   };
@@ -221,13 +214,11 @@ function LiveMonitorPanel() {
   const forceRetry = async (jobId: string) => {
     setActionLoading(p => ({ ...p, [jobId]: true }));
     try {
-      const r = await apiFetch(`/api/admin/jobs/${jobId}/retry`, {
+      await apiFetch<any>(`/api/admin/jobs/${jobId}/retry`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: true }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
       toast({ title: "✅ Job reiniciado", description: `Job #${jobId.slice(-8)} vuelve a la cola.` });
       await fetchJobs();
     } catch (e: any) {
@@ -245,13 +236,11 @@ function LiveMonitorPanel() {
     }
     setActionLoading(p => ({ ...p, [`repair_${jobId}`]: true }));
     try {
-      const r = await apiFetch(`/api/admin/users/${userId}/generate-app`, {
+      const d = await apiFetch<any>(`/api/admin/users/${userId}/generate-app`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${prompt}` }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
       toast({ title: "✅ Reparación inyectada", description: d.message ?? "Nuevo job de reparación en cola." });
       setRepairPrompt(p => ({ ...p, [jobId]: "" }));
       await fetchJobs();
@@ -449,16 +438,10 @@ function GenerateForUserPanel() {
     setSearching(true);
     setFoundUser(null);
     try {
-      const r = await apiFetch(`/api/admin/users/search?email=${encodeURIComponent(email.trim())}`);
-      if (!r.ok) {
-        const d = await r.json();
-        toast({ title: "Usuario no encontrado", description: d.error ?? "No existe ninguna cuenta con ese email.", variant: "destructive" });
-        return;
-      }
-      const d = await r.json();
+      const d = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(email.trim())}`);
       setFoundUser({ id: d.id, email: d.email });
-    } catch {
-      toast({ title: "Error", description: "No se pudo buscar el usuario", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Usuario no encontrado", description: e?.message ?? "No existe ninguna cuenta con ese email.", variant: "destructive" });
     } finally {
       setSearching(false);
     }
@@ -468,18 +451,17 @@ function GenerateForUserPanel() {
     if (!foundUser) return;
     setLoading(true);
     try {
-      const r = await apiFetch(`/api/admin/users/${foundUser.id}/generate-app`, {
+      const d = await apiFetch<any>(`/api/admin/users/${foundUser.id}/generate-app`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: prompt.trim() || "" }),
       });
-      const d = await r.json();
       toast({ title: "✅ Landing page en cola", description: d.message ?? `Generando para ${foundUser.email}` });
       setFoundUser(null);
       setEmail("");
       setPrompt("");
-    } catch {
-      toast({ title: "Error", description: "No se pudo generar la app", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message ?? "No se pudo generar la app", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -1163,8 +1145,7 @@ export default function AdminDashboardPage() {
                                 className="text-xs h-7 px-2 border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
                                 onClick={async () => {
                                   try {
-                                    const r = await apiFetch(`/api/admin/users/${u.userId}/generate-app`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "" }) });
-                                    const d = await r.json();
+                                    const d = await apiFetch<any>(`/api/admin/users/${u.userId}/generate-app`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "" }) });
                                     toast({ title: "✅ App en cola", description: d.message ?? "Landing page generándose para " + u.email });
                                   } catch {
                                     toast({ title: "Error", description: "No se pudo generar la app", variant: "destructive" });
