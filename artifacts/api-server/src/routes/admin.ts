@@ -21,6 +21,8 @@ import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
 import { getE2BGateEnabled, setE2BGateEnabled } from "../lib/e2bGate";
 import { pingRedis, getRedisStatus } from "../lib/redisHealth";
 import mongoose from "mongoose";
+import { makeSlug } from "../lib/deployBundle";
+import { MarisId, generateAppId } from "../lib/universalId";
 
 const router: IRouter = Router();
 
@@ -903,6 +905,122 @@ router.post("/seed-seguxat-public", async (req: any, res: any): Promise<void> =>
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
   }
+});
+
+// ─── Admin: Recuperar job fallido y continuar desde el código parcial ────────
+// POST /api/admin/jobs/:id/recover
+// Usa el código parcial generado como base y lanza un job de edición para completarlo
+router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const failedJob = await GenerationJob.findById(req.params.id).lean() as any;
+  if (!failedJob) { res.status(404).json({ error: "Job no encontrado" }); return; }
+
+  // Buscar código parcial: primero en el job fallido, luego en la app si ya existe
+  let partialCode = failedJob.partialFrontendCode || "";
+  let baseAppId = failedJob.appId || failedJob.editAppId || null;
+
+  // Si no hay código parcial directo, buscar en otros jobs del mismo usuario/prompt
+  if (!partialCode && !baseAppId) {
+    const relatedJob = await GenerationJob.findOne({
+      userId: failedJob.userId,
+      prompt: failedJob.prompt,
+      _id: { $ne: failedJob._id },
+      $or: [
+        { partialFrontendCode: { $exists: true, $ne: "" } },
+        { appId: { $exists: true, $ne: null } },
+      ],
+    }).sort({ updatedAt: -1 }).lean() as any;
+
+    if (relatedJob?.appId) baseAppId = relatedJob.appId;
+    if (relatedJob?.partialFrontendCode) partialCode = relatedJob.partialFrontendCode;
+  }
+
+  // Si hay una app existente, usarla como base directamente
+  if (baseAppId) {
+    const existingApp = await GeneratedApp.findById(baseAppId).lean() as any;
+    if (existingApp?.frontendCode) {
+      const recoverPrompt = `[ADMIN RECOVERY] Continúa y completa esta app que quedó incompleta. Revisa el código existente, identifica qué falta (páginas sin implementar, componentes vacíos, imports rotos) y completa TODO lo que falta para que la app sea completamente funcional. NO rehagas lo que ya funciona. Prompt original: ${failedJob.prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 300)}`;
+
+      const newJobId = new mongoose.Types.ObjectId().toString();
+      await GenerationJob.create({
+        _id: newJobId,
+        userId: failedJob.userId,
+        prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. ${recoverPrompt}`,
+        editAppId: String(baseAppId),
+        coderModel: "claude-sonnet-4-6",
+        language: failedJob.language || "typescript",
+        kind: "edit",
+        status: "queued",
+        phase: "queued",
+        progress: 0,
+        isAdmin: true,
+      });
+      await enqueueGenerateJob(newJobId);
+      logger.info({ newJobId, baseAppId, userId: failedJob.userId }, "Admin recovery: continuing from existing app");
+      res.status(201).json({ ok: true, jobId: newJobId, strategy: "edit-existing", message: "Continuando desde la app existente. El cliente verá el progreso en tiempo real." });
+      return;
+    }
+  }
+
+  // Si hay código parcial pero no app, crear una app temporal con ese código y editarla
+  if (partialCode && partialCode.length > 500) {
+    try {
+      const owner = await User.findById(failedJob.userId).lean() as any;
+      const userMarisId = owner?.marisId ?? MarisId.user();
+      const appTitle = failedJob.prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 40).trim() || "App recuperada";
+
+      const recoveredApp = await GeneratedApp.create({
+        userId: failedJob.userId,
+        title: appTitle,
+        prompt: failedJob.prompt,
+        description: "App recuperada desde código parcial — en proceso de completado",
+        techStack: ["React", "TypeScript", "Tailwind"],
+        frontendCode: partialCode,
+        backendCode: "",
+        plannedPages: [],
+        requiredEnvVars: [],
+        language: failedJob.language || "typescript",
+        kind: failedJob.kind || "fullstack",
+        status: "ready",
+        publicSlug: makeSlug(),
+        marisId: await generateAppId(userMarisId).catch(() => MarisId.project(userMarisId)),
+      });
+
+      // Vincular el job fallido a la app recuperada
+      await GenerationJob.findByIdAndUpdate(failedJob._id, { $set: { appId: String(recoveredApp._id) } });
+
+      // Lanzar job de edición para completar la app
+      const recoverPrompt = `[ADMIN RECOVERY] Completa esta app que quedó incompleta por un timeout. Tienes ${Math.round(partialCode.length / 1000)}KB de código parcial como base. Identifica qué falta y complétalo todo. NO rehagas lo que ya funciona. Prompt original: ${failedJob.prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 300)}`;
+
+      const newJobId = new mongoose.Types.ObjectId().toString();
+      await GenerationJob.create({
+        _id: newJobId,
+        userId: failedJob.userId,
+        prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. ${recoverPrompt}`,
+        editAppId: String(recoveredApp._id),
+        coderModel: "claude-sonnet-4-6",
+        language: failedJob.language || "typescript",
+        kind: "edit",
+        status: "queued",
+        phase: "queued",
+        progress: 0,
+        isAdmin: true,
+      });
+      await enqueueGenerateJob(newJobId);
+      logger.info({ newJobId, recoveredAppId: String(recoveredApp._id), partialKb: Math.round(partialCode.length / 1000) }, "Admin recovery: created app from partial code");
+      res.status(201).json({ ok: true, jobId: newJobId, appId: String(recoveredApp._id), strategy: "partial-code", message: `App creada desde ${Math.round(partialCode.length / 1000)}KB de código parcial. Completando lo que falta.` });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Error creando app de recuperación" });
+    }
+    return;
+  }
+
+  // Sin código parcial ni app existente — no hay nada que recuperar
+  res.status(422).json({
+    error: "No hay código parcial ni app existente para este job. Usa 'Regenerar' para empezar de nuevo.",
+    hasPartialCode: !!partialCode,
+    hasExistingApp: !!baseAppId,
+  });
 });
 
 // ─── Admin: Cancelar job con mensaje amigable al cliente ─────────────────────
