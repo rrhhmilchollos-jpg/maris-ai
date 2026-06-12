@@ -225,6 +225,18 @@ stripeWebhookRouter.post(
 
           if (clerkUserId) {
             req.log.warn({ clerkUserId, subscriptionId }, "Subscription payment failed");
+            // Notificar al admin
+            try {
+              const { notifyAdminPaymentError } = await import("../lib/notify");
+              const dbUser = await User.findById(clerkUserId).lean() as any;
+              await notifyAdminPaymentError({
+                userEmail: dbUser?.email,
+                userId: clerkUserId,
+                event: "invoice.payment_failed",
+                error: `Pago de suscripción fallido. Stripe reintentará automáticamente.`,
+                stripeSessionId: subscriptionId,
+              });
+            } catch { /* swallow */ }
             // No quitamos créditos — Stripe reintentará el pago automáticamente
           }
         }
@@ -232,6 +244,14 @@ stripeWebhookRouter.post(
 
     } catch (err) {
       req.log.error({ err, eventType: event.type }, "Error processing Stripe webhook");
+      // Notificar al admin del error en webhook
+      try {
+        const { notifyAdminPaymentError } = await import("../lib/notify");
+        await notifyAdminPaymentError({
+          event: event.type,
+          error: err instanceof Error ? err.message : "Error desconocido en webhook Stripe",
+        });
+      } catch { /* swallow */ }
       res.status(500).json({ error: "internal" });
       return;
     }
