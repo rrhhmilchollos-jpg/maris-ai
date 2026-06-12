@@ -162,6 +162,162 @@ function JobLogsPanel({ jobId }: { jobId: string }) {
   );
 }
 
+function AppsClientesPanel({ apiBase }: { apiBase: string }) {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("faquiunmen@gmail.com");
+  const [apps, setApps] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [previewAppId, setPreviewAppId] = useState<string | null>(null);
+  const [apologyLoading, setApologyLoading] = useState<string | null>(null);
+
+  const searchApps = async (searchEmail?: string) => {
+    const target = searchEmail || email;
+    if (!target) return;
+    setLoading(true);
+    try {
+      // Buscar usuario por email y sus apps
+      const usersData = await apiFetch<any>(`/api/admin/users?search=${encodeURIComponent(target)}&limit=5`);
+      const user = (usersData.users ?? [])[0];
+      if (!user) { toast({ title: "Usuario no encontrado", variant: "destructive" }); setApps([]); return; }
+      const appsData = await apiFetch<any>(`/api/admin/users/${user.id || user._id}/apps?limit=20`);
+      setApps((appsData.apps ?? []).map((a: any) => ({ ...a, userEmail: target, userId: user.id || user._id })));
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  // Cargar faquiunmen por defecto al montar
+  useState(() => { searchApps("faquiunmen@gmail.com"); });
+
+  return (
+    <div className="space-y-4">
+      {/* Búsqueda por email */}
+      <Card className="bg-card/40 border-white/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Eye className="h-4 w-4 text-sky-400" />
+            Vista previa de apps por cliente
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email del cliente..."
+              className="bg-black/20 border-white/10 text-sm"
+              onKeyDown={e => e.key === "Enter" && searchApps()}
+            />
+            <Button size="sm" onClick={() => searchApps()} disabled={loading} className="shrink-0">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+              {loading ? "Buscando…" : "Ver apps"}
+            </Button>
+          </div>
+          {/* Accesos rápidos a clientes activos */}
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {["faquiunmen@gmail.com", "deliodiazmejia@gmail.com", "fedeler.correo@gmail.com", "alejandronopez@gmail.com"].map(e => (
+              <button key={e} onClick={() => { setEmail(e); searchApps(e); }}
+                className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors border border-white/10">
+                {e.split("@")[0]}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Lista de apps */}
+      {apps.length === 0 && !loading && (
+        <div className="text-center text-sm text-muted-foreground py-8">Sin apps generadas para este usuario</div>
+      )}
+      {apps.map((app: any) => {
+        const appId = app.id || app._id;
+        const isPreviewOpen = previewAppId === appId;
+        return (
+          <Card key={appId} className="bg-card/40 border-white/5 overflow-hidden">
+            <CardContent className="p-0">
+              {/* App header */}
+              <div className="flex items-center justify-between p-4 gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white/90 truncate">{app.title || "Sin título"}</p>
+                  <p className="text-[10px] text-white/40 truncate mt-0.5">{app.prompt?.slice(0, 80)}…</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[9px] font-mono text-white/25 cursor-pointer hover:text-white/50"
+                      onClick={() => navigator.clipboard?.writeText(appId)}
+                      title="Click para copiar App ID">
+                      📦 {appId}
+                    </span>
+                    <span className="text-[9px] text-white/20">
+                      {app.createdAt ? new Date(app.createdAt).toLocaleDateString("es-ES") : ""}
+                    </span>
+                    {app.frontendCode && (
+                      <span className="text-[9px] text-emerald-400/60">
+                        {Math.round(app.frontendCode.length / 1024)} KB
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Abrir en nueva pestaña */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
+                    onClick={() => window.open(`${apiBase}/api/admin/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
+                    🔗 Nueva pestaña
+                  </Button>
+                  {/* Toggle preview inline */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-sky-500/20 text-sky-300 hover:bg-sky-500/10"
+                    onClick={() => setPreviewAppId(isPreviewOpen ? null : appId)}>
+                    {isPreviewOpen ? "Cerrar" : <><Eye className="h-3 w-3 mr-1" />Preview</>}
+                  </Button>
+                  {/* Disculpas */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                    disabled={apologyLoading === appId}
+                    onClick={async () => {
+                      const recipient = window.prompt("Email del cliente:", app.userEmail || email);
+                      if (!recipient) return;
+                      if (!window.confirm(`¿Enviar email de disculpas a ${recipient}?`)) return;
+                      setApologyLoading(appId);
+                      try {
+                        // Buscar el último job fallido de este usuario para el endpoint
+                        const jobsData = await apiFetch<any>(`/api/admin/jobs?userId=${app.userId}&limit=1&status=failed`);
+                        const lastJob = (jobsData.jobs ?? [])[0];
+                        if (lastJob) {
+                          await apiFetch<any>(`/api/admin/jobs/${lastJob.id || lastJob._id}/send-apology`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ recipientEmail: recipient, appTitle: app.title }),
+                          });
+                        }
+                        toast({ title: "💜 Email enviado", description: `Disculpas enviadas a ${recipient}` });
+                      } catch (e: any) {
+                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                      } finally { setApologyLoading(null); }
+                    }}>
+                    {apologyLoading === appId ? <Loader2 className="h-3 w-3 animate-spin" /> : "💜 Disculpas"}
+                  </Button>
+                </div>
+              </div>
+              {/* Preview iframe */}
+              {isPreviewOpen && (
+                <div className="border-t border-white/5">
+                  <iframe
+                    src={`/api/admin/apps/${appId}/preview`}
+                    className="w-full bg-white"
+                    style={{ height: 520, border: "none" }}
+                    title={app.title}
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function LiveMonitorPanel() {
   const { toast } = useToast();
   const [jobs, setJobs] = useState<any[]>([]);
@@ -1175,6 +1331,10 @@ export default function AdminDashboardPage() {
                   <Users className="h-3.5 w-3.5" />
                   Top usuarios
                 </TabsTrigger>
+                <TabsTrigger value="apps" className="gap-2">
+                  <Eye className="h-3.5 w-3.5" />
+                  Apps clientes
+                </TabsTrigger>
                 <TabsTrigger value="system" className="gap-2">
                   <Cpu className="h-3.5 w-3.5" />
                   Sistema
@@ -1612,6 +1772,11 @@ export default function AdminDashboardPage() {
                     <GenerateForUserPanel />
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              {/* APPS CLIENTES TAB */}
+              <TabsContent value="apps" className="space-y-4">
+                <AppsClientesPanel apiBase={import.meta.env.VITE_API_URL || ""} />
               </TabsContent>
 
               {/* SYSTEM TAB */}
