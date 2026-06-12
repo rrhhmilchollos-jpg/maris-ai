@@ -142,9 +142,12 @@ router.get("/admin/users/search", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const email = (req.query.email as string || "").trim().toLowerCase();
   if (!email) { res.status(400).json({ error: "Email requerido" }); return; }
-  const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } }, { email: 1, createdAt: 1 }).lean();
+  const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } }).lean() as any;
   if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
-  res.json({ id: String((user as any)._id), email: (user as any).email });
+  // Devolver tanto el _id de MongoDB como el clerkId para buscar apps correctamente
+  const mongoId = String(user._id);
+  const clerkId = user.clerkId || user.externalId || user.id || mongoId;
+  res.json({ id: mongoId, clerkId, email: user.email });
 });
 
 // ─── Ban / Unban user ─────────────────────────────────────────────────────────
@@ -214,14 +217,30 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
 router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const limit = Math.min(Number(req.query.limit) || 20, 50);
-  const apps = await GeneratedApp.find({ userId: req.params.id }).sort({ createdAt: -1 }).limit(limit).lean();
+  const id = req.params.id;
+
+  // Las apps pueden estar guardadas con el _id de MongoDB O con el clerkId (user_xxx)
+  // Buscar por ambos para asegurar que encontramos las apps
+  const user = await User.findById(id).lean() as any;
+  const clerkId = user?.clerkId || user?.externalId || id;
+
+  const apps = await GeneratedApp.find({
+    $or: [
+      { userId: id },
+      { userId: clerkId },
+      { userId: String(user?._id ?? id) },
+    ]
+  }).sort({ createdAt: -1 }).limit(limit).lean();
+
   res.json({
     apps: apps.map(a => ({
       id: String(a._id),
       _id: String(a._id),
-      title: a.title,
-      status: a.status,
-      techStack: a.techStack,
+      title: (a as any).title,
+      prompt: (a as any).prompt,
+      status: (a as any).status,
+      techStack: (a as any).techStack,
+      frontendCode: (a as any).frontendCode,
       createdAt: (a as any).createdAt?.toISOString?.() ?? "",
     }))
   });
