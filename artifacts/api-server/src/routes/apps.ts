@@ -3006,9 +3006,11 @@ router.get("/templates", async (_req: any, res: any) => {
 // ── Exports requeridos por index.ts ───────────────────────────────────────
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
   await connectDB();
-  const STALE_MS = 15 * 60 * 1000;
+  const STALE_MS = 8 * 60 * 1000;   // Reducido de 15 a 8 minutos
+  const ZOMBIE_MS = 5 * 60 * 1000;  // Job running sin logs = zombie tras 5 min
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
+  const zombieDate = new Date(now.getTime() - ZOMBIE_MS);
 
   const orphanedQueued = await GenerationJob.find({
     status: "queued",
@@ -3037,6 +3039,38 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   }
   if (orphanedRunningJobs.length > 0) {
     logger.info({ count: orphanedRunningJobs.length }, "Re-enqueued stale running jobs");
+  }
+
+  // Detección de zombies: jobs running sin ningún log en los últimos 5 minutos
+  const runningJobs = await GenerationJob.find({
+    status: "running",
+    updatedAt: { $lt: zombieDate },
+    awaitingApproval: { $ne: true },
+    ...(opts.userId ? { userId: opts.userId } : {}),
+  }).lean();
+
+  for (const job of runningJobs) {
+    const lastLog = await JobLog.findOne({ jobId: String(job._id) })
+      .sort({ _id: -1 })
+      .lean();
+    const lastLogAge = lastLog
+      ? now.getTime() - new Date((lastLog as any).createdAt).getTime()
+      : Infinity;
+
+    if (lastLogAge > ZOMBIE_MS) {
+      logger.warn({ jobId: job._id, lastLogAge }, "Zombie job detected — no logs for 5min, force re-queuing");
+      await GenerationJob.updateOne(
+        { _id: job._id },
+        { $set: { status: "queued", phase: "queued", progress: 0, updatedAt: now } },
+      );
+      await JobLog.create({
+        jobId: String(job._id),
+        agent: "watchdog",
+        level: "warn",
+        message: "⚠️ Job sin actividad detectado por el watchdog. Reiniciando automáticamente…",
+      });
+      await enqueueGenerateJob(String(job._id));
+    }
   }
 }
 
