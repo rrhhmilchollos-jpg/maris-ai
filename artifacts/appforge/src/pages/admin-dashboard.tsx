@@ -170,6 +170,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   const [loading, setLoading] = useState(false);
   const [previewAppId, setPreviewAppId] = useState<string | null>(null);
   const [apologyLoading, setApologyLoading] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
   const searchApps = async (searchEmail?: string) => {
     const target = (searchEmail || email).trim();
@@ -323,6 +324,31 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                       }
                     }}>
                     ✂️ Editar código
+                  </Button>
+                  {/* Regenerar app */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                    disabled={actionLoading[`regenapp_${appId}`]}
+                    onClick={async () => {
+                      const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
+                      const promptToUse = window.prompt("Prompt para regenerar (puedes editarlo):", cleanPrompt);
+                      if (!promptToUse) return;
+                      if (!window.confirm(`¿Regenerar la app "${app.title}" para ${app.userEmail}?\n\nSe creará un nuevo job de generación.`)) return;
+                      setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: true }));
+                      try {
+                        const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6" }),
+                        });
+                        toast({ title: "🔄 Regenerando app", description: d.message || "Job en cola — el cliente verá el progreso en su panel" });
+                      } catch (e: any) {
+                        toast({ title: "Error al regenerar", description: e.message, variant: "destructive" });
+                      } finally {
+                        setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: false }));
+                      }
+                    }}>
+                    {actionLoading[`regenapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔄 Regenerar"}
                   </Button>
                   {/* Disculpas */}
                   <Button size="sm" variant="outline"
