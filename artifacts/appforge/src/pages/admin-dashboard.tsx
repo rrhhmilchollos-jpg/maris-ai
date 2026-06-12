@@ -524,7 +524,9 @@ function LiveMonitorPanel() {
                         className="w-full h-7 text-xs border-red-900/40 text-red-500/70 hover:bg-red-500/10 hover:text-red-400"
                         onClick={async e => {
                           e.stopPropagation();
-                          if (!window.confirm(`¿Borrar TODOS los jobs failed/reviewing de ${job.userEmail}? Esta acción no se puede deshacer.`)) return;
+                          const isOwnJob = job.userEmail === "rrhh.milchollos@gmail.com" || job.userEmail === "soportemarisai@gmail.com";
+                          const who = isOwnJob ? `tus propios jobs (${job.userEmail})` : `los jobs del cliente ${job.userEmail}`;
+                          if (!window.confirm(`¿Borrar TODOS los jobs failed/reviewing de ${who}? Esta acción no se puede deshacer.`)) return;
                           setActionLoading(p => ({ ...p, [`deljobs_${job.id}`]: true }));
                           try {
                             const d = await apiFetch<any>(`/api/admin/users/${job.userId}/jobs`, {
@@ -544,7 +546,7 @@ function LiveMonitorPanel() {
                       >
                         {actionLoading[`deljobs_${job.id}`]
                           ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Eliminando…</>
-                          : `🗑️ Borrar todos los jobs de ${job.userEmail?.split("@")[0]}`
+                          : `🗑️ Limpiar historial de jobs — ${job.userEmail?.split("@")[0]}`
                         }
                       </Button>
                       <div className="grid grid-cols-2 gap-2">
