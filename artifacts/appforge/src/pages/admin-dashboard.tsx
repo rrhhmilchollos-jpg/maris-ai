@@ -171,6 +171,7 @@ function LiveMonitorPanel() {
   const [logs, setLogs] = useState<Record<string, any[]>>({});
   const [repairPrompt, setRepairPrompt] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [previewAppId, setPreviewAppId] = useState<string | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchJobs = async () => {
@@ -485,6 +486,43 @@ function LiveMonitorPanel() {
                           }
                         </Button>
                       </div>
+                      {/* Vista previa — si el job tiene app asociada */}
+                      {job.appId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full h-8 text-xs border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
+                          onClick={() => setPreviewAppId(previewAppId === job.appId ? null : job.appId)}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {previewAppId === job.appId ? "Cerrar vista previa" : "Vista previa de la app generada"}
+                        </Button>
+                      )}
+                      {previewAppId === job.appId && job.appId && (
+                        <div className="rounded-lg border border-sky-500/20 overflow-hidden" style={{ height: 500 }}>
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-sky-500/10 border-b border-sky-500/20">
+                            <span className="text-[10px] text-sky-400 font-mono">Vista previa — {job.userEmail}</span>
+                            <div className="flex gap-2">
+                              <a
+                                href={`/api/admin/apps/${job.appId}/preview`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                              >
+                                <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" />
+                                Abrir en nueva pestaña
+                              </a>
+                            </div>
+                          </div>
+                          <iframe
+                            src={`/api/admin/apps/${job.appId}/preview`}
+                            className="w-full bg-white"
+                            style={{ height: 460, border: "none" }}
+                            title={`Vista previa — ${job.userEmail}`}
+                            sandbox="allow-scripts allow-same-origin allow-forms"
+                          />
+                        </div>
+                      )}
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1 pt-1">
                         <Zap className="h-3 w-3 text-violet-400" />
                         O inyecta instrucción específica
