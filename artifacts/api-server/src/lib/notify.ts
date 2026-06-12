@@ -1,152 +1,285 @@
 /**
- * Outbound notifications (Task #11).
+ * notify.ts — Sistema de notificaciones de Maris AI
  *
- * Maris AI does not currently have an email provider wired up — Resend is
- * mentioned in the architect prompt as the preferred service but no
- * credentials are configured. Rather than block auto-publish on that
- * integration, we expose a thin facade here that LOGS the email contents in
- * a structured, grep-friendly way and returns. The day a real provider lands
- * (Resend, SendGrid, SES, …) it slots in here without touching the
- * evaluator. See maris-ai.md → "Notificaciones (pendiente de email provider)".
+ * Envía emails via Resend a los admins cuando hay problemas urgentes:
+ *  - Generación fallida de un cliente
+ *  - Error de recarga de créditos
+ *  - Ticket de soporte nuevo
+ *  - Job zombie repetido
  *
- * Structured log shape (deliberately stable so an external pipeline can pick
- * it up without parsing free-form messages):
- *   level=info msg="📬 email_pending" channel="email" template=<...> ...
+ * Destinatarios admin: ADMIN_ALERT_EMAILS (var de entorno, separados por coma)
+ * Default: soportemarisai@gmail.com, rrhh.milchollos@gmail.com
  */
 import type { Logger } from "pino";
+import pino from "pino";
 
-type EmailRecipient = {
-  to: string | null;
-  recipientName: string | null;
-};
+const log = pino({ name: "notify" });
 
-type EmailLogPayload = {
-  channel: "email";
-  template: "auto_publish_ready" | "needs_review" | "support_ticket_created";
-  to: string | null;
-  recipientName: string | null;
+// ─── Destinatarios admin ─────────────────────────────────────────────────────
+
+function getAdminEmails(): string[] {
+  const env = process.env.ADMIN_ALERT_EMAILS;
+  if (env) return env.split(",").map(e => e.trim()).filter(Boolean);
+  return ["soportemarisai@gmail.com", "rrhh.milchollos@gmail.com"];
+}
+
+// ─── Envío base via Resend ───────────────────────────────────────────────────
+
+async function sendEmail(opts: {
+  to: string[];
   subject: string;
-  bodyText: string;
-};
-
-async function emit(log: Logger, payload: EmailLogPayload): Promise<void> {
-  if (!payload.to) {
-    log.warn(payload, "📬 email_pending — no recipient address; falling back to log-only delivery");
-    return;
-  }
-
-  const resendApiKey = process.env.RESEND_API_KEY;
-  if (!resendApiKey) {
-    log.info(payload, "📬 email_pending — RESEND_API_KEY not configured");
-    return;
+  html: string;
+  text: string;
+}): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    log.warn({ subject: opts.subject }, "notify: RESEND_API_KEY no configurada — email no enviado");
+    return false;
   }
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || "Maris AI <soporte@marisai.es>",
-        to: [payload.to],
-        subject: payload.subject,
-        text: payload.bodyText,
+        from: process.env.RESEND_FROM_EMAIL || "Maris AI Alertas <alertas@marisai.es>",
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text,
       }),
+      signal: AbortSignal.timeout(8_000),
     });
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      log.warn({ ...payload, status: response.status, errBody }, "📬 email_failed — Resend rejected email");
-      return;
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      log.warn({ status: res.status, err, subject: opts.subject }, "notify: Resend error");
+      return false;
     }
-    log.info(payload, "📬 email_sent");
+    log.info({ to: opts.to, subject: opts.subject }, "notify: email enviado ✅");
+    return true;
   } catch (err) {
-    log.warn({ ...payload, err }, "📬 email_failed — exception sending via Resend");
+    log.warn({ err, subject: opts.subject }, "notify: excepción enviando email");
+    return false;
   }
 }
 
+// ─── Template HTML base ───────────────────────────────────────────────────────
+
+function alertHtml(opts: {
+  emoji: string;
+  title: string;
+  urgency: "🔴 URGENTE" | "🟡 AVISO" | "🟢 INFO";
+  fields: Array<{ label: string; value: string }>;
+  actionUrl?: string;
+  actionLabel?: string;
+}): string {
+  const urgencyColor = opts.urgency.includes("URGENTE") ? "#ef4444" : opts.urgency.includes("AVISO") ? "#f59e0b" : "#10b981";
+  const fields = opts.fields.map(f =>
+    `<tr><td style="padding:4px 12px 4px 0;color:#9ca3af;font-size:13px;white-space:nowrap">${f.label}</td><td style="padding:4px 0;color:#f3f4f6;font-size:13px">${f.value}</td></tr>`
+  ).join("");
+  const action = opts.actionUrl
+    ? `<p style="margin:20px 0 0"><a href="${opts.actionUrl}" style="background:#7c3aed;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">${opts.actionLabel || "Ver en panel"}</a></p>`
+    : "";
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#0a0a0a;font-family:system-ui,sans-serif">
+<div style="max-width:540px;margin:32px auto;background:#111;border:1px solid #222;border-radius:12px;overflow:hidden">
+  <div style="background:${urgencyColor}20;border-bottom:1px solid ${urgencyColor}30;padding:16px 24px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:24px">${opts.emoji}</span>
+    <div>
+      <div style="color:${urgencyColor};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">${opts.urgency}</div>
+      <div style="color:#f3f4f6;font-size:15px;font-weight:600;margin-top:2px">${opts.title}</div>
+    </div>
+  </div>
+  <div style="padding:20px 24px">
+    <table style="width:100%;border-collapse:collapse">${fields}</table>
+    ${action}
+  </div>
+  <div style="padding:12px 24px;border-top:1px solid #222;color:#4b5563;font-size:11px">
+    Maris AI · Panel admin: <a href="https://www.marisai.es/admin" style="color:#7c3aed">marisai.es/admin</a>
+  </div>
+</div></body></html>`;
+}
+
+// ─── Notificaciones al admin ─────────────────────────────────────────────────
+
 /**
- * Notify the owner of an app that the autonomous evaluator approved their
- * generation and the app is now public at `url`.
+ * Generación fallida — se llama cuando un job termina en error
  */
-export async function sendAutoPublishEmail(opts: EmailRecipient & {
-  appTitle: string;
-  url: string;
-  log: Logger;
+export async function notifyAdminJobFailed(opts: {
+  userEmail: string;
+  userId: string;
+  jobId: string;
+  prompt: string;
+  errorMessage?: string;
+  retryCount?: number;
 }): Promise<void> {
-  const { to, recipientName, appTitle, url, log } = opts;
-  const greeting = recipientName ? `Hola ${recipientName.split(" ")[0]},` : "Hola,";
-  const body =
-    `${greeting}\n\n` +
-    `Tu app "${appTitle}" pasó la evaluación visual y la he publicado por ti.\n\n` +
-    `Ya está disponible aquí: ${url}\n\n` +
-    `Comparte el enlace con quien quieras. Si necesitas seguir editando, ` +
-    `entra al panel y la próxima vez que termines un cambio se volverá a ` +
-    `desplegar sola.\n\n` +
-    `— Maris AI`;
-  await emit(log, {
-    channel: "email",
-    template: "auto_publish_ready",
-    to,
-    recipientName,
-    subject: `🚀 ${appTitle} ya está publicada`,
-    bodyText: body,
+  const { userEmail, jobId, prompt, errorMessage, retryCount = 0 } = opts;
+  // Solo notificar si ha fallado más de 2 veces (evitar spam por fallos normales)
+  if (retryCount < 2) return;
+
+  const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 120);
+  const adminUrl = `https://www.marisai.es/admin`;
+
+  await sendEmail({
+    to: getAdminEmails(),
+    subject: `🔴 Generación fallida x${retryCount} — ${userEmail}`,
+    html: alertHtml({
+      emoji: "⚠️",
+      title: `Generación fallida repetida`,
+      urgency: "🔴 URGENTE",
+      fields: [
+        { label: "Cliente", value: userEmail },
+        { label: "Intentos", value: `${retryCount} fallidos` },
+        { label: "Prompt", value: cleanPrompt + (prompt.length > 120 ? "…" : "") },
+        { label: "Error", value: errorMessage?.slice(0, 200) || "desconocido" },
+        { label: "Job ID", value: jobId },
+        { label: "Hora", value: new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) },
+      ],
+      actionUrl: adminUrl,
+      actionLabel: "Ver en panel admin",
+    }),
+    text: `URGENTE: Generación fallida x${retryCount}\nCliente: ${userEmail}\nPrompt: ${cleanPrompt}\nError: ${errorMessage || "desconocido"}\nJob: ${jobId}\nPanel: ${adminUrl}`,
   });
 }
 
 /**
- * Notify the owner that the evaluator could not approve their app after the
- * retry budget; the app is now in needs_review state and waiting for them.
+ * Error de pago/créditos — fallo en recarga o webhook Stripe
  */
-export async function sendNeedsReviewEmail(opts: EmailRecipient & {
-  appTitle: string;
-  summary: string;
-  log: Logger;
+export async function notifyAdminPaymentError(opts: {
+  userEmail?: string;
+  userId?: string;
+  event: string;
+  error: string;
+  stripeSessionId?: string;
 }): Promise<void> {
-  const { to, recipientName, appTitle, summary, log } = opts;
-  const greeting = recipientName ? `Hola ${recipientName.split(" ")[0]},` : "Hola,";
-  const body =
-    `${greeting}\n\n` +
-    `Tu app "${appTitle}" no pasó la evaluación visual automática y no la he ` +
-    `publicado.\n\nResumen del evaluador:\n${summary}\n\n` +
-    `Entra al panel y pulsa "Reintentar generación" cuando quieras volver a ` +
-    `intentarlo.\n\n— Maris AI`;
-  await emit(log, {
-    channel: "email",
-    template: "needs_review",
-    to,
-    recipientName,
-    subject: `⚠️ ${appTitle}: la evaluación visual la rechazó`,
-    bodyText: body,
+  const { userEmail, event, error, stripeSessionId } = opts;
+
+  await sendEmail({
+    to: getAdminEmails(),
+    subject: `🔴 Error de pago — ${userEmail || "usuario desconocido"}`,
+    html: alertHtml({
+      emoji: "💳",
+      title: "Error en proceso de pago",
+      urgency: "🔴 URGENTE",
+      fields: [
+        { label: "Cliente", value: userEmail || "(desconocido)" },
+        { label: "Evento", value: event },
+        { label: "Error", value: error.slice(0, 300) },
+        { label: "Stripe Session", value: stripeSessionId || "—" },
+        { label: "Hora", value: new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) },
+      ],
+      actionUrl: "https://dashboard.stripe.com",
+      actionLabel: "Ver en Stripe",
+    }),
+    text: `ERROR DE PAGO\nCliente: ${userEmail}\nEvento: ${event}\nError: ${error}`,
   });
 }
 
 /**
- * Notify Maris AI owner/support when a user creates a support ticket.
+ * Nuevo ticket de soporte
  */
-export async function sendSupportTicketCreatedEmail(opts: {
-  to: string | null;
-  userEmail?: string | null;
+export async function notifyAdminSupportTicket(opts: {
+  userEmail?: string;
   subject: string;
   message: string;
   ticketId: string;
-  log: Logger;
 }): Promise<void> {
-  const { to, userEmail, subject, message, ticketId, log } = opts;
-  const body =
-    `Nuevo ticket de soporte en Maris AI\n\n` +
-    `Ticket: ${ticketId}\n` +
-    `Cliente: ${userEmail || "(email no disponible)"}\n` +
-    `Asunto: ${subject}\n\n` +
-    `Mensaje:\n${message}\n\n` +
-    `Entra en el panel admin de Maris AI para responder.`;
-  await emit(log, {
-    channel: "email",
-    template: "support_ticket_created",
-    to,
-    recipientName: "Soporte Maris AI",
-    subject: `Nuevo ticket Maris AI: ${subject}`,
-    bodyText: body,
+  const { userEmail, subject, message, ticketId } = opts;
+
+  await sendEmail({
+    to: getAdminEmails(),
+    subject: `🎫 Ticket soporte: ${subject}`,
+    html: alertHtml({
+      emoji: "🎫",
+      title: `Nuevo ticket de soporte`,
+      urgency: "🟡 AVISO",
+      fields: [
+        { label: "Cliente", value: userEmail || "(desconocido)" },
+        { label: "Asunto", value: subject },
+        { label: "Mensaje", value: message.slice(0, 400) },
+        { label: "Ticket ID", value: ticketId },
+        { label: "Hora", value: new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) },
+      ],
+      actionUrl: "https://www.marisai.es/admin",
+      actionLabel: "Ver en panel admin",
+    }),
+    text: `TICKET SOPORTE\nCliente: ${userEmail}\nAsunto: ${subject}\nMensaje: ${message}\nID: ${ticketId}`,
+  });
+}
+
+/**
+ * Usuario nuevo registrado (info)
+ */
+export async function notifyAdminNewUser(opts: {
+  userEmail: string;
+  userId: string;
+}): Promise<void> {
+  await sendEmail({
+    to: getAdminEmails(),
+    subject: `🟢 Nuevo usuario — ${opts.userEmail}`,
+    html: alertHtml({
+      emoji: "👤",
+      title: "Nuevo usuario registrado",
+      urgency: "🟢 INFO",
+      fields: [
+        { label: "Email", value: opts.userEmail },
+        { label: "ID", value: opts.userId },
+        { label: "Hora", value: new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) },
+      ],
+      actionUrl: "https://www.marisai.es/admin",
+    }),
+    text: `Nuevo usuario: ${opts.userEmail} (${opts.userId})`,
+  });
+}
+
+// ─── Notificaciones al usuario ────────────────────────────────────────────────
+
+export async function sendAutoPublishEmail(opts: {
+  to: string | null; recipientName: string | null;
+  appTitle: string; url: string; log: Logger;
+}): Promise<void> {
+  if (!opts.to) return;
+  const greeting = opts.recipientName ? `Hola ${opts.recipientName.split(" ")[0]},` : "Hola,";
+  await sendEmail({
+    to: [opts.to],
+    subject: `🚀 ${opts.appTitle} ya está publicada`,
+    html: alertHtml({
+      emoji: "🚀", title: `${opts.appTitle} ya está publicada`, urgency: "🟢 INFO",
+      fields: [{ label: "URL", value: opts.url }],
+      actionUrl: opts.url, actionLabel: "Ver tu app",
+    }),
+    text: `${greeting}\n\nTu app "${opts.appTitle}" está publicada: ${opts.url}\n\n— Maris AI`,
+  });
+}
+
+export async function sendNeedsReviewEmail(opts: {
+  to: string | null; recipientName: string | null;
+  appTitle: string; summary: string; log: Logger;
+}): Promise<void> {
+  if (!opts.to) return;
+  await sendEmail({
+    to: [opts.to],
+    subject: `⚠️ ${opts.appTitle}: revisión necesaria`,
+    html: alertHtml({
+      emoji: "⚠️", title: `Revisión necesaria`, urgency: "🟡 AVISO",
+      fields: [
+        { label: "App", value: opts.appTitle },
+        { label: "Resumen", value: opts.summary.slice(0, 300) },
+      ],
+      actionUrl: "https://www.marisai.es/dashboard", actionLabel: "Ir al panel",
+    }),
+    text: `Tu app "${opts.appTitle}" necesita revisión.\n\n${opts.summary}\n\n— Maris AI`,
+  });
+}
+
+export async function sendSupportTicketCreatedEmail(opts: {
+  to: string | null; userEmail?: string | null;
+  subject: string; message: string; ticketId: string; log: Logger;
+}): Promise<void> {
+  // Notificar también a los admins
+  await notifyAdminSupportTicket({
+    userEmail: opts.userEmail || undefined,
+    subject: opts.subject,
+    message: opts.message,
+    ticketId: opts.ticketId,
   });
 }

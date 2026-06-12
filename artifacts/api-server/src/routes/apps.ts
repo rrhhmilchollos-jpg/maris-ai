@@ -3424,15 +3424,31 @@ export async function runJobById(jobId: string): Promise<void> {
   } catch (err) {
     clearInterval(heartbeatInterval);
     logger.error({ err, jobId }, "runJobById: Generation failed");
+    const errorMessage = err instanceof Error ? err.message : "Error desconocido";
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: {
         status: "failed",
         phase: "failed",
-        errorMessage: err instanceof Error ? err.message : "Error desconocido",
+        errorMessage,
         updatedAt: new Date(),
       },
     });
-    await log("system", `Error: ${err instanceof Error ? err.message : "Error desconocido"}`, "error");
+    await log("system", `Error: ${errorMessage}`, "error");
+
+    // Notificar al admin si el job ha fallado varias veces
+    try {
+      const { notifyAdminJobFailed } = await import("../lib/notify");
+      const dbUser = await User.findById(job.userId).lean() as any;
+      const retryCount = (job as any).retryCount ?? 0;
+      await notifyAdminJobFailed({
+        userEmail: dbUser?.email || job.userId,
+        userId: job.userId,
+        jobId,
+        prompt: job.prompt || "",
+        errorMessage,
+        retryCount,
+      });
+    } catch { /* nunca crashear el pipeline por un fallo en la notificación */ }
   }
 }
 
