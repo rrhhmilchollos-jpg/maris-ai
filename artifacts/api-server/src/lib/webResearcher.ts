@@ -13,9 +13,11 @@
  * el texto limpio (sin scripts/estilos) para dárselo al LLM.
  */
 
-import puppeteer, { type Browser } from "puppeteer";
+// Puppeteer se importa de forma dinámica para no crashear Railway si no está instalado
 import { execSync } from "child_process";
 import pino from "pino";
+
+const logger = pino({ name: "webResearcher" });
 
 const logger = pino({ name: "webResearcher" });
 
@@ -55,14 +57,19 @@ function chromiumPath(): string | null {
   return cachedExec;
 }
 
-async function launchBrowser(): Promise<Browser | null> {
+async function launchBrowser(): Promise<any | null> {
   const exec = chromiumPath();
   if (!exec) {
     logger.warn("webResearcher: Chromium no encontrado, scraping deshabilitado");
     return null;
   }
   try {
-    return await puppeteer.launch({
+    const puppeteer = await import("puppeteer").catch(() => null);
+    if (!puppeteer) {
+      logger.warn("webResearcher: puppeteer no instalado, scraping deshabilitado");
+      return null;
+    }
+    return await puppeteer.default.launch({
       headless: true,
       executablePath: exec,
       args: [
