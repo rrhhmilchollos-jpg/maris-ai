@@ -2393,6 +2393,7 @@ import {
   AppRuntimeError,
   AppRevision,
   User,
+  UserNotification,
 } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
 import { generateRateLimiter } from "../middlewares/rateLimit";
@@ -3387,6 +3388,28 @@ export async function runJobById(jobId: string): Promise<void> {
           appTitle: previousApp?.title,
         }),
       });
+
+      // ── Corrección de soporte admin: marcar parche inmutable + notificar cliente ──
+      if ((job as any).isAdmin) {
+        const patchNote = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").replace(/\[ADMIN REPAIR\]/i, "").trim().slice(0, 200);
+        await GeneratedApp.findByIdAndUpdate(job.editAppId, {
+          $set: {
+            adminPatchedAt: new Date(),
+            adminPatchNote: patchNote,
+          },
+        });
+        const appTitle = finalResult.title || previousApp?.title || "Tu app";
+        await UserNotification.create({
+          userId: job.userId,
+          appId: String(job.editAppId),
+          appTitle,
+          type: "support_patch",
+          message: `✅ Tu app **${appTitle}** ha sido actualizada por el equipo de soporte y ya está lista. Puedes verla y continuar editándola desde tu panel. Si encuentras algún problema adicional o tienes algún error más complejo, no dudes en contactarnos abriendo un **ticket de soporte** — estaremos encantados de ayudarte. 💜`,
+          read: false,
+        });
+        await log("system", `✅ Corrección de soporte aplicada correctamente. El cliente ha sido notificado.`);
+      }
+
       // GitHub push eliminado — solo se sube a GitHub cuando el usuario lo solicita explícitamente
       // desde el botón "Subir a GitHub" en su panel de apps
     } else {
@@ -3479,6 +3502,49 @@ export async function runDeployForApp(args: {
   };
 }
 
+
+// ── NOTIFICACIONES DE SOPORTE — el cliente lee sus avisos de corrección ──────
+// GET /api/notifications — devuelve notificaciones no leídas del usuario autenticado
+router.get("/notifications", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const userId = req.auth?.userId;
+    const notifs = await UserNotification.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+    res.json({ notifications: notifs });
+  } catch (err) {
+    res.status(500).json({ error: "Error cargando notificaciones" });
+  }
+});
+
+// PATCH /api/notifications/:id/read — marcar como leída
+router.patch("/notifications/:id/read", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const userId = req.auth?.userId;
+    await UserNotification.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { $set: { read: true } }
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Error actualizando notificación" });
+  }
+});
+
+// PATCH /api/notifications/read-all — marcar todas como leídas
+router.patch("/notifications/read-all", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const userId = req.auth?.userId;
+    await UserNotification.updateMany({ userId, read: false }, { $set: { read: true } });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: "Error actualizando notificaciones" });
+  }
+});
 
 // ── PREVIEW ENDPOINT — sirve el bundle HTML directamente ──────────────
 router.get("/apps/:id/preview", async (req: any, res: any) => {
