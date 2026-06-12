@@ -26,6 +26,58 @@ import { MarisId, generateAppId } from "../lib/universalId";
 
 const router: IRouter = Router();
 
+// ─── Preview público — ANTES del middleware de auth ───────────────────────────
+// Esta ruta no requiere autenticación para poder abrirla directamente en el navegador
+router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const app = await GeneratedApp.findById(req.params.id).select("frontendCode title").lean() as any;
+  if (!app?.frontendCode) { res.status(404).send("App no encontrada o sin código generado"); return; }
+
+  res.setHeader("Content-Security-Policy", "frame-ancestors *");
+  res.setHeader("X-Frame-Options", "ALLOWALL");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+  const files: Record<string, string> = {};
+  const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    const nl = part.indexOf("\n");
+    if (nl === -1) continue;
+    const p = part.slice(0, nl).trim().replace(/ ===$/, "");
+    if (p) files[p] = part.slice(nl + 1);
+  }
+
+  const rawHtml = files["index.html"] || files["public/index.html"];
+  if (rawHtml && (rawHtml.includes("<html") || rawHtml.includes("<!DOCTYPE"))) {
+    res.send(rawHtml); return;
+  }
+
+  try {
+    const { buildDeployHtml } = await import("../lib/deployBundle");
+    const html = await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
+    res.send(html); return;
+  } catch (err) {
+    logger.warn({ err, appId: req.params.id }, "deployBundle failed for preview");
+  }
+
+  // Fallback: lista de archivos generados
+  const cssContent = files["src/index.css"] || files["src/App.css"] || "";
+  res.send(`<!DOCTYPE html><html lang="es"><head>
+    <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>${(app.title || "Preview").replace(/[<>]/g, "")}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>${cssContent}</style>
+  </head><body style="background:#0a0a0f;color:white;font-family:system-ui;padding:32px">
+    <h1 style="color:#7c3aed;font-size:24px;margin-bottom:8px">📦 ${(app.title || "App").replace(/[<>]/g, "")}</h1>
+    <p style="color:#9ca3af;margin-bottom:20px">${Math.round(app.frontendCode.length / 1024)} KB generados — ${Object.keys(files).length} archivos</p>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px">
+      ${Object.keys(files).map(f => `<span style="background:#1a1a2e;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-family:monospace">${f}</span>`).join("")}
+    </div>
+    <p style="color:#6b7280;font-size:12px">Para ver la app completa, despliégala desde el panel.</p>
+  </body></html>`);
+});
+
 router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 
 router.get("/admin/overview", async (_req, res) => {
@@ -1538,97 +1590,5 @@ router.post("/admin/generate-for-email", async (req: any, res: any): Promise<voi
   }
 });
 
-// ─── Admin: Preview de cualquier app sin auth de propietario ─────────────────
-router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> => {
-  await connectDB();
-  const app = await GeneratedApp.findById(req.params.id).select("frontendCode title").lean() as any;
-  if (!app?.frontendCode) { res.status(404).send("App no encontrada o sin código generado"); return; }
-
-  res.setHeader("Content-Security-Policy", "frame-ancestors *");
-  res.setHeader("X-Frame-Options", "ALLOWALL");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-
-  // Extraer archivos del bundle
-  const files: Record<string, string> = {};
-  const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    const nl = part.indexOf("\n");
-    if (nl === -1) continue;
-    const p = part.slice(0, nl).trim().replace(/ ===$/, "");
-    if (p) files[p] = part.slice(nl + 1);
-  }
-
-  // Si hay un index.html completo, usarlo directamente
-  const rawHtml = files["index.html"] || files["public/index.html"];
-  if (rawHtml && (rawHtml.includes("<html") || rawHtml.includes("<!DOCTYPE"))) {
-    res.send(rawHtml);
-    return;
-  }
-
-  // Intentar buildDeployHtml con esbuild
-  try {
-    const { buildDeployHtml } = await import("../lib/deployBundle");
-    const html = await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
-    res.send(html);
-    return;
-  } catch (err) {
-    logger.warn({ err, appId: req.params.id }, "deployBundle failed, using CDN fallback");
-  }
-
-  // Fallback final: HTML con Babel standalone + React CDN para renderizar JSX en el navegador
-  const appJsx = files["src/App.tsx"] || files["src/App.jsx"] || files["src/app.tsx"] || "";
-  const mainJsx = files["src/main.tsx"] || files["src/main.jsx"] || "";
-  const cssContent = files["src/index.css"] || files["src/App.css"] || "";
-
-  // Convertir imports de módulos a versiones CDN
-  const allCode = [appJsx, mainJsx].join("\n")
-    .replace(/import\s+.*?\s+from\s+['"][^'"]+['"]/g, "// import removed")
-    .replace(/export\s+default\s+/g, "window.__AppComponent = ");
-
-  const fallbackHtml = `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>${(app.title || "Preview").replace(/[<>]/g, "")}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <style>${cssContent}</style>
-</head>
-<body>
-  <div id="root"></div>
-  <div style="position:fixed;bottom:8px;right:8px;background:#7c3aed;color:white;padding:4px 8px;border-radius:4px;font-size:10px;font-family:mono">
-    Preview — ${app.title || "App"}
-  </div>
-  <script>
-    // Mostrar los archivos disponibles como fallback visual
-    const files = ${JSON.stringify(Object.keys(files))};
-    const appCode = ${JSON.stringify(appJsx.slice(0, 2000))};
-    document.getElementById('root').innerHTML = \`
-      <div style="font-family:system-ui;padding:32px;background:#0a0a0f;min-height:100vh;color:white">
-        <h1 style="color:#7c3aed;font-size:24px;margin-bottom:16px">📦 ${(app.title || "App").replace(/[<>]/g, "")}</h1>
-        <p style="color:#9ca3af;margin-bottom:24px">App generada correctamente (${Math.round(app.frontendCode.length/1024)} KB). Para ver la preview completa, despliega la app en Vercel.</p>
-        <div style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;margin-bottom:16px">
-          <p style="color:#10b981;font-size:12px;margin-bottom:8px">✅ Archivos generados (${files.length}):</p>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            \${files.map(f => \`<span style="background:#1a1a2e;color:#7c3aed;padding:2px 8px;border-radius:4px;font-size:11px;font-family:mono">\${f}</span>\`).join('')}
-          </div>
-        </div>
-        <button onclick="window.open('${process.env.APP_URL || 'https://www.marisai.es'}/dashboard','_blank')" 
-          style="background:#7c3aed;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">
-          Ver en mi panel →
-        </button>
-      </div>
-    \`;
-  </script>
-</body>
-</html>`;
-
-  res.send(fallbackHtml);
-});
 
 export default router;
-
