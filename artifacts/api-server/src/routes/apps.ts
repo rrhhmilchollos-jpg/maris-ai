@@ -3485,38 +3485,76 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();
     const app = await GeneratedApp.findById(req.params.id).select("frontendCode title").lean() as any;
-    if (!app?.frontendCode) return res.status(404).send("App not found");
+    if (!app?.frontendCode) return res.status(404).send("<h1>App no encontrada</h1>");
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Content-Security-Policy", "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live");
+    res.setHeader("Content-Security-Policy", "frame-ancestors *");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
 
+    // Intentar buildDeployHtml con esbuild
     try {
       const { buildDeployHtml } = await import("../lib/deployBundle");
       const html = await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
       return res.send(html);
-    } catch {
-      // Fallback al index.html raw
-      const files: Record<string, string> = {};
-      const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
-      for (const part of parts) {
-        if (!part.trim()) continue;
-        const nl = part.indexOf("\n");
-        if (nl === -1) continue;
-        const p = part.slice(0, nl).trim().replace(/ ===$/, "");
-        if (p) files[p] = part.slice(nl + 1);
-      }
-      return res.send(files["index.html"] || "<h1>Preview no disponible</h1>");
+    } catch (esbuildErr) {
+      logger.warn({ err: esbuildErr, appId: req.params.id }, "esbuild failed, using CDN fallback");
     }
+
+    // Extraer archivos del bundle
+    const files: Record<string, string> = {};
+    const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf("\n");
+      if (nl === -1) continue;
+      const p = part.slice(0, nl).trim().replace(/ ===$/, "");
+      if (p) files[p] = part.slice(nl + 1);
+    }
+
+    // Si hay index.html completo, servirlo
+    const rawHtml = files["index.html"] || files["public/index.html"];
+    if (rawHtml && rawHtml.includes("<html")) return res.send(rawHtml);
+
+    // Fallback: renderizar App.tsx/jsx con Babel + React CDN en el navegador
+    const appCode = files["src/App.tsx"] || files["src/App.jsx"] || files["src/App.js"] || "";
+    const cssCode = files["src/index.css"] || files["src/App.css"] || "";
+    const title = (app.title || "App").replace(/[<>"]/g, "");
+
+    const fallback = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${title}</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"/>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',sans-serif}${cssCode}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react,typescript">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+${appCode
+  .replace(/^import\s+.*?from\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
+  .replace(/^export\s+default\s+/m, "const __App = ")
+  .replace(/^export\s+\{[^}]+\}\s*;?\s*$/gm, "")
+}
+const __AppToRender = typeof __App !== 'undefined' ? __App : () => React.createElement('div', {style:{padding:'2rem',fontFamily:'sans-serif'}}, React.createElement('h2', null, '${title}'), React.createElement('p', {style:{color:'#666',marginTop:'0.5rem'}}, 'App generada correctamente. Despliega para verla completa.'));
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(__AppToRender));
+</script>
+</body>
+</html>`;
+
+    return res.send(fallback);
   } catch (err) {
-    res.status(500).send("Error loading preview");
+    logger.error({ err }, "Preview error");
+    res.status(500).send("<h1>Error cargando preview</h1>");
   }
 });
-
-router.get("/apps/:id/preview", async (req: any, res: any) => {
-  res.redirect(`/api/apps/${req.params.id}/preview/index.html`);
-});
-
 
 export default router;
