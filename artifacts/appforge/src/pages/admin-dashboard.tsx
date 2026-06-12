@@ -176,17 +176,26 @@ function LiveMonitorPanel() {
 
   const fetchJobs = async () => {
     try {
-      const d = await apiFetch<any>("/api/admin/jobs?limit=100");
+      const d = await apiFetch<any>("/api/admin/jobs?limit=200");
       const active = (d.jobs ?? [])
         .map((j: any) => ({ ...j, id: String(j.id ?? j._id ?? ""), userId: String(j.userId ?? "") }))
         .filter((j: any) =>
           j.id && j.id !== "undefined" && (
             j.status === "running" ||
             j.status === "queued" ||
-            j.status === "failed" ||
-            (j.status !== "succeeded" && j.ageMs < 2 * 60 * 60 * 1000)
+            j.status === "failed" ||    // failed SIEMPRE visible — sin límite de tiempo
+            j.status === "reviewing" || // reviewing SIEMPRE visible
+            (j.status !== "succeeded" && j.ageMs < 48 * 60 * 60 * 1000) // otros: 48h
           )
-        );
+        )
+        .sort((a: any, b: any) => {
+          // Primero running, luego queued, luego failed/reviewing por más reciente
+          const order: Record<string, number> = { running: 0, queued: 1, failed: 2, reviewing: 3 };
+          const ao = order[a.status] ?? 4;
+          const bo = order[b.status] ?? 4;
+          if (ao !== bo) return ao - bo;
+          return b.ageMs - a.ageMs; // más reciente primero
+        });
       setJobs(active);
       setFetchError(null);
       setLastUpdate(new Date());
@@ -282,23 +291,34 @@ function LiveMonitorPanel() {
           <Badge variant="outline" className="text-xs">{jobs.length} activos</Badge>
           <Button size="sm" variant="outline" className="h-6 px-2 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
             onClick={async () => {
-              const email = window.prompt("Email del usuario para regenerar app:");
+              const email = window.prompt("Email del usuario — recupera su último proyecto fallido (funciona aunque tenga 48h):");
               if (!email) return;
               try {
-                const d = await apiFetch<any>("/api/admin/generate-for-email", {
+                const d = await apiFetch<any>("/api/admin/recover-by-email", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ email }),
+                  body: JSON.stringify({ email: email.trim() }),
                 });
-                toast({ title: "✅ App en cola", description: d.message });
+                toast({ title: "✅ Recuperando proyecto", description: d.message });
                 await fetchJobs();
               } catch (e: any) {
-                toast({ title: "Error", description: e.message, variant: "destructive" });
+                // Si falla recover, intentar generar desde 0
+                try {
+                  const d2 = await apiFetch<any>("/api/admin/generate-for-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: email.trim() }),
+                  });
+                  toast({ title: "🔄 Generando nuevo proyecto", description: d2.message });
+                  await fetchJobs();
+                } catch (e2: any) {
+                  toast({ title: "Error", description: e2.message, variant: "destructive" });
+                }
               }
             }}
           >
             <Zap className="h-3 w-3 mr-1" />
-            Regenerar para usuario
+            Recuperar para usuario
           </Button>
           <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={fetchJobs}>
             <RefreshCw className="h-3 w-3" />
