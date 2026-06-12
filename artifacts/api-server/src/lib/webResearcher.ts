@@ -1,17 +1,10 @@
 // @ts-nocheck
 /**
  * webResearcher.ts
- * ─────────────────────────────────────────────────────────────────────────────
  * Búsqueda web silenciosa para el researcher de Maris AI.
- *
- * Proveedores (en orden):
- *  1. Serper API      (SERPER_API_KEY)   → Google Search JSON
- *  2. Brave Search    (BRAVE_API_KEY)    → Brave Search JSON
- *  3. DuckDuckGo      (sin key)          → DDG Instant Answer + HTML API
- *  4. Scraping directo de URLs encontradas via fetch (sin Puppeteer)
+ * Sin Puppeteer — funciona en Railway sin Chromium.
  */
 
-import { execSync } from "child_process";
 import pino from "pino";
 
 const logger = pino({ name: "webResearcher" });
