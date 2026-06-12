@@ -1832,7 +1832,7 @@ export async function generateApp(
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
-  await log("planner", planSummaryEs(execPlan));
+  logger.info({ plan: execPlan.scope }, "planner: plan listo");
 
   // ── SISTEMA DE NIVELES POR PAGO ──────────────────────────────────────────
   // FREE (sin haber pagado nunca): solo landing pages simples
@@ -1854,19 +1854,16 @@ export async function generateApp(
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
   });
-  await log(
-    "planner",
-    `Modelo automático: complejidad ${agentModelPlan.tier} (score ${agentModelPlan.score}). Frontend: ${agentModelPlan.agents.frontend.model}; Architect: ${agentModelPlan.agents.architect.model}; QA/Patcher: ${agentModelPlan.agents.qa.model}/${agentModelPlan.agents.patcher.model}.`,
-  );
+  logger.info({ tier: agentModelPlan.tier, score: agentModelPlan.score, frontend: agentModelPlan.agents.frontend.model }, "planner: modelo seleccionado");
 
   // Edit mode
   if (previous) {
     if (execPlan.scope === "fast-patch") {
       const fastResult = await fastPatchEdit(prompt, previous, language, log, onProgress);
       if (fastResult) return fastResult;
-      await log("planner", "El parche directo no convergió; vuelvo al flujo de edición completo.", "warn");
+      logger.warn("planner: parche directo no convergió");
       execPlan = { ...execPlan, scope: "feature", phases: PLAN_FEATURE.phases };
-      await log("planner", "Promovido a alcance 'feature' con validación y parche obligatorios.");
+      logger.info("planner: promovido a feature scope");
     }
 
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
@@ -1885,7 +1882,7 @@ export async function generateApp(
     };
 
     if (execPlan.scope === "feature") {
-      await log("planner", `Despachando fases del plan: ${execPlan.phases.join(" → ")}`);
+      logger.info({ phases: execPlan.phases }, "planner: despachando fases");
       if (execPlan.phases.includes("architect")) await log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
       if (execPlan.phases.includes("frontend")) await log("coder", "Frontend: aplicando la nueva funcionalidad…");
     } else {
@@ -1920,35 +1917,31 @@ export async function generateApp(
   /* === Phase 1: research + architect === */
   let research = "";
   if (runResearch && shouldResearch(prompt)) {
-    onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando en internet y visitando páginas…" });
-    await log("researcher", "🔍 Buscando en internet (Google/DuckDuckGo) y visitando páginas relevantes…");
+    onProgress?.({ phase: "researching", progress: 6, note: "Analizando tu proyecto…" });
+    logger.info("researcher: buscando contexto");
     research = await runPhase("researcher", () => researchTopic(prompt, agentModelPlan));
     if (research) {
-      const source = research.startsWith("[Fuente: búsqueda web]") ? "web real" : research.startsWith("[Brief mínimo") ? "brief mínimo (timeout)" : "conocimiento del modelo";
-      await log("researcher", `✅ Brief listo (${source}): ${Math.round(research.length / 100) / 10} KB para el arquitecto.`);
-    } else {
-      await log("researcher", "Investigación sin resultado — el arquitecto usará su conocimiento interno.", "warn");
+      logger.info({ kb: Math.round(research.length / 100) / 10 }, "researcher: brief listo");
     }
   } else if (!runResearch) {
-    await log("researcher", "Plan dice saltar investigación (alcance reducido).");
+    logger.info("researcher: saltando investigación (alcance reducido)");
   } else {
-    onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando contexto del mercado…" });
-    await log("researcher", "🔍 Buscando en internet y visitando páginas relevantes…");
+    onProgress?.({ phase: "researching", progress: 6, note: "Analizando tu proyecto…" });
+    logger.info("researcher: buscando contexto del mercado");
     research = await runPhase("researcher", () => researchTopic(prompt, agentModelPlan));
     if (research) {
-      const source = research.startsWith("[Fuente: búsqueda web]") ? "web real" : research.startsWith("[Brief mínimo") ? "brief mínimo (timeout)" : "conocimiento del modelo";
-      await log("researcher", `✅ Brief listo (${source}): ${Math.round(research.length / 100) / 10} KB para el arquitecto.`);
-    } else {
-      await log("researcher", "Investigación sin resultado — el arquitecto usará su conocimiento interno.", "warn");
+      logger.info({ kb: Math.round(research.length / 100) / 10 }, "researcher: brief listo");
     }
   }
 
-  onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
-  await log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
+  onProgress?.({ phase: "architecting", progress: 14, note: "🧠 Diseñando la arquitectura de tu app…" });
+  await log("architect", "Diseñando estructura del proyecto…");
 
-  // Heartbeat de logs durante el arquitecto — evita que el watchdog lo mate por silencio
+  // Heartbeat silencioso durante el arquitecto — solo actualiza updatedAt, sin log visible al cliente
   const architectHeartbeat = setInterval(async () => {
-    try { await log("architect", "⏳ Arquitecto trabajando — diseñando estructura del proyecto…"); } catch { /* swallow */ }
+    try {
+      if (jobId) await GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } });
+    } catch { /* swallow */ }
   }, 25_000);
 
   let plan: ProjectPlan;
@@ -2003,8 +1996,8 @@ export async function generateApp(
   }
 
   onProgress?.({ phase: "integrating", progress: 20, note: `Plan listo: ${plan.pages.length} página(s), ${plan.components.length} componente(s). 🔌 Integraciones + 🎨 diseño en paralelo…` });
-  if (runIntegration) await log("integration", "Analizando servicios externos necesarios…");
-  if (runDesign) await log("designer", "Eligiendo paleta y tipografía…");
+  if (runIntegration) logger.info("integration: analizando");
+  if (runDesign) logger.info("designer: eligiendo paleta");
 
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
@@ -2025,23 +2018,23 @@ export async function generateApp(
     : Promise.resolve(FALLBACK_DESIGN);
 
   const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
-  if (!runIntegration) await log("integration", "Plan dice saltar integraciones (alcance reducido).");
-  if (!runDesign) await log("designer", "Plan dice saltar diseño (uso paleta por defecto).");
+  if (!runIntegration) logger.info("integration: saltando");
+  if (!runDesign) logger.info("designer: saltando");
 
   const integrationsNote = integrationSpec.services.length > 0
     ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
     : "Sin servicios externos requeridos.";
 
   if (integrationSpec.services.length > 0) {
-    await log("integration", `${integrationSpec.services.length} servicio(s): ${integrationSpec.services.map((s) => s.name).join(", ")}.`);
+    logger.info({ services: integrationSpec.services.map((s: any) => s.name) }, "integration: servicios detectados");
   } else {
-    await log("integration", "Sin servicios externos requeridos.");
+    logger.info("integration: sin servicios externos");
   }
-  await log("designer", `Tema "${design.vibe}" listo (${Object.keys(design.palette).length} colores, fuente ${design.typography.sans}).`);
+  logger.info({ vibe: design.vibe }, "designer: tema listo");
 
-  onProgress?.({ phase: "generating", progress: 32, note: `${integrationsNote} Diseño "${design.vibe}" listo. ⚡ Ingeniero de frontend escribiendo ${plan.frontendFiles.length} archivo(s)…` });
-  await log("coder", `Generando frontend: objetivo ${plan.frontendFiles.length} archivo(s)…`);
-  if (plan.backendNeeded) await log("coder", "Generando backend en paralelo…");
+  onProgress?.({ phase: "generating", progress: 32, note: "⚡ Construyendo tu app…" });
+  logger.info({ files: plan.frontendFiles.length }, "coder: generando frontend");
+  if (plan.backendNeeded) logger.info("coder: generando backend en paralelo");
 
   /* === Phase 3 (parallel): frontend + backend === */
   const TARGET_CHARS = 60_000;
@@ -2056,24 +2049,20 @@ export async function generateApp(
   // Para apps complejas como Seguxat, usamos una estrategia de generación paralela de archivos
   // para reducir el tiempo de espera de 10 min a menos de 4 min.
   const frontendResult = await runPhase("frontend", async () => {
-    // Heartbeat cada 30s — escribe log directo a MongoDB Y actualiza updatedAt
-    // Esto mantiene vivo el job ante el watchdog durante el tiempo de espera
-    // inicial antes de que Claude empiece a enviar tokens
+    // Heartbeat silencioso cada 30s — mantiene vivo el job ante el watchdog
     const coderHeartbeat = setInterval(() => {
-      Promise.all([
-        JobLog.create({ jobId, agent: "coder", message: "⏳ Generando código…", level: "info" }),
-        GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }),
-      ]).catch(() => { /* nunca crashear el pipeline */ });
+      if (jobId) GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }).catch(() => {});
     }, 30_000);
     try {
       // Forzamos el uso de Sonnet 4.6 para máxima velocidad sin sacrificar inteligencia
       const turboModel = "claude-sonnet-4-6";
       const result = await generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
-        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `🚀 MODO TURBO: Generando frontend (${Math.round(chars / 1000)} KB)…` });
-        if (chars - lastLogChars >= 5000) {
+        onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `⚡ Construyendo tu app… ${Math.round(chars / 1000)} KB` });
+        if (chars - lastLogChars >= 10000) {
           lastLogChars = chars;
-          void log("coder", `🚀 Modo Turbo: Escribiendo código a máxima velocidad... ${Math.round(chars / 1000)} KB.`);
+          logger.info({ kb: Math.round(chars / 1000) }, "coder: frontend progress");
+        }
         }
       }, turboModel, language, templateContextBlock, agentModelPlan,
       (partial) => { frontendAccumulated = partial; });
@@ -2355,11 +2344,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
   /* === Phase 7b: Integration Agent Enhanced (Emergent.sh Style) === */
   const detectedIntegrations = detectIntegrations(prompt, plan.description);
   if (detectedIntegrations.length > 0) {
-    await log("integration", `🔌 Integration Agent: ${detectedIntegrations.length} integración(es) detectada(s): ${detectedIntegrations.map(i => i.name).join(", ")}`);
-    for (const integration of detectedIntegrations) {
-      await log("integration", `  → ${integration.name} (${integration.type}): variables necesarias → ${integration.envVars.join(", ")}`);
-      await log("integration", `    Setup: ${integration.setupNotes}`);
-    }
+    logger.info({ integrations: detectedIntegrations.map((i: any) => i.name) }, "integration: detectadas");
   }
 
   const testNote = testCode ? "✅ Tests generados. " : "";
