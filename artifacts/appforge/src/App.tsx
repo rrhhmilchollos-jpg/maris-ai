@@ -245,9 +245,9 @@ function AdminGuardInner({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
         <ShieldAlert className="h-10 w-10 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
+        <h2 className="text-2xl font-bold tracking-tight text-white mb-2">
           Acceso restringido
-        </h1>
+        </h2>
         <p className="text-sm text-muted-foreground max-w-md">
           Esta sección es solo para administradores. Si crees que es un error,
           contacta con el equipo de Maris AI.
