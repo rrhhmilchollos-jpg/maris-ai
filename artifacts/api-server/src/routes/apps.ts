@@ -1918,8 +1918,17 @@ export async function generateApp(
         }, retryModel, language, templateContextBlock, retryAgentPlan,
       );
       if (!retryResult.code) {
-        await log("coder", "Reintento con plan reducido también falló.", "error");
-      throw new Error("La app es demasiado compleja incluso con plan reducido (timeout 600s). Prueba con un prompt más concreto o selecciona el modelo Haiku para mayor velocidad.");
+        await log("coder", "Reintento con plan reducido también falló — intentando recuperar código parcial…", "warn");
+        // Intentar recuperar código del reintento acumulado, luego del primer intento
+        const recovery = (retryResult as any).accumulated || frontendResult.accumulated || frontendAccumulated;
+        if (recovery && recovery.length > 2000) {
+          await log("coder", `Recuperando ${Math.round(recovery.length / 1000)} KB de código parcial para continuar…`, "warn");
+          frontendResult.code = recovery;
+        } else {
+          // Sin código parcial suficiente — dejar que el Repair Agent lo intente en la siguiente fase
+          await log("coder", "Sin código parcial suficiente. El Repair Agent intentará reconstruir la app…", "warn");
+          frontendResult.code = "";
+        }
     }
     await log("coder", `Frontend listo (plan reducido): ${Math.round(retryResult.code.length / 1000)} KB.`);
       frontendResult.code = retryResult.code;
@@ -1953,7 +1962,7 @@ The frontendCode must use '// === FILE: <path> ===' separators between files.
 Output STRICT JSON only, no markdown, no explanation.`,
         messages: [{
           role: "user",
-          content: `Original user request: ${prompt}\n\nThe Frontend Engineer returned this malformed output (first 12000 chars):\n${(frontendResult as any)._raw?.slice(0, 12000) ?? "unavailable"}\n\nReconstruct a complete React+TypeScript+Tailwind frontend for the request above.\nReturn ONLY: {"frontendCode":"..."}`
+          content: `Original user request: ${prompt}\n\nThe Frontend Engineer returned this malformed output (first 12000 chars):\n${((frontendResult as any)._raw || frontendAccumulated || "unavailable").slice(0, 12000)}\n\nReconstruct a complete React+TypeScript+Tailwind frontend for the request above.\nReturn ONLY: {"frontendCode":"..."}`
         }]
       });
       const repairRaw = repairResponse.content[0].type === "text" ? repairResponse.content[0].text : "";
@@ -1965,8 +1974,25 @@ Output STRICT JSON only, no markdown, no explanation.`,
         throw new Error("Repair Agent no pudo recuperar el frontend.");
       }
     } catch (repairErr) {
-      await log("coder", `Repair Agent falló: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}`, "error");
-      throw new Error(`No pudimos analizar el frontend. Detalle: ${frontendResult.error ?? "desconocido"}`);
+      await log("coder", `Repair Agent falló: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}. Último intento con modelo rápido…`, "warn");
+      // Último recurso: generar una versión mínima con Haiku antes de rendirse
+      try {
+        const lastResortResult = await generateFrontendCode(
+          { ...plan, frontendFiles: plan.frontendFiles.slice(0, 3), pages: plan.pages.slice(0, 1), components: plan.components.slice(0, 4) },
+          design, research, prompt,
+          (chars) => { onProgress?.({ phase: "fixing", progress: 70, note: `🆘 Recuperación de emergencia: ${Math.round(chars / 1000)} KB…` }); },
+          "claude-haiku-4-5-20251001", language, templateContextBlock,
+        );
+        if (lastResortResult.code && lastResortResult.code.length > 500) {
+          await log("coder", `Recuperación de emergencia exitosa (${Math.round(lastResortResult.code.length / 1000)} KB). La app puede estar simplificada.`);
+          frontendResult.code = lastResortResult.code;
+        } else {
+          throw new Error("last-resort-empty");
+        }
+      } catch {
+        await log("coder", "No fue posible generar la app. Por favor intenta con un prompt más concreto.", "error");
+        throw new Error("Tu descripción es muy extensa para procesarla de una vez. Prueba dividiendo la app en partes: primero describe solo la pantalla principal, y luego añade más funcionalidades.");
+      }
     }
   }
   await log("coder", `Frontend listo: ${Math.round(frontendResult.code.length / 1000)} KB.`);
