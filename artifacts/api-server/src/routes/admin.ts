@@ -1025,7 +1025,8 @@ router.post("/admin/jobs/:id/send-apology", async (req: any, res: any): Promise<
   if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
 
   const dbUser = await User.findById(job.userId).lean() as any;
-  const userEmail = dbUser?.email;
+  // Permitir override del destinatario — cuando el admin trabajó en el job pero el cliente es otro
+  const userEmail = req.body?.recipientEmail || dbUser?.email;
   if (!userEmail) { res.status(400).json({ error: "Usuario sin email" }); return; }
 
   const app = job.appId

@@ -732,33 +732,42 @@ function LiveMonitorPanel() {
                           />
                         </div>
                       )}
-                      {/* Botón enviar disculpas — solo visible para jobs de clientes (no para rrhh.milchollos) */}
-                      {job.userEmail !== "rrhh.milchollos@gmail.com" && job.userEmail !== "soportemarisai@gmail.com" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full h-8 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
-                          disabled={actionLoading[`apology_${job.id}`]}
-                          onClick={async e => {
-                            e.stopPropagation();
-                            if (!window.confirm(`¿Enviar email de disculpas a ${job.userEmail}?\n\nSolo envíalo si has verificado que su app se ve correctamente en la vista previa.`)) return;
-                            setActionLoading(p => ({ ...p, [`apology_${job.id}`]: true }));
-                            try {
-                              const d = await apiFetch<any>(`/api/admin/jobs/${job.id}/send-apology`, { method: "POST" });
-                              toast({ title: "💜 Email de disculpas enviado", description: d.message });
-                            } catch (e: any) {
-                              toast({ title: "Error al enviar", description: e.message, variant: "destructive" });
-                            } finally {
-                              setActionLoading(p => ({ ...p, [`apology_${job.id}`]: false }));
-                            }
-                          }}
-                        >
-                          {actionLoading[`apology_${job.id}`]
-                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Enviando…</>
-                            : <>💜 Enviar disculpas a {job.userEmail?.split("@")[0]}</>
+                      {/* Botón enviar disculpas al cliente */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-8 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                        disabled={actionLoading[`apology_${job.id}`]}
+                        onClick={async e => {
+                          e.stopPropagation();
+                          const recipient = window.prompt(
+                            "Email del cliente al que enviar las disculpas:",
+                            job.userEmail !== "rrhh.milchollos@gmail.com" && job.userEmail !== "soportemarisai@gmail.com"
+                              ? job.userEmail
+                              : "faquiunmen@gmail.com"
+                          );
+                          if (!recipient) return;
+                          if (!window.confirm(`¿Enviar email de disculpas a ${recipient}?\n\nSolo envíalo si has verificado que su app se ve correctamente.`)) return;
+                          setActionLoading(p => ({ ...p, [`apology_${job.id}`]: true }));
+                          try {
+                            const d = await apiFetch<any>(`/api/admin/jobs/${job.id}/send-apology`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ recipientEmail: recipient }),
+                            });
+                            toast({ title: "💜 Email de disculpas enviado", description: d.message });
+                          } catch (e: any) {
+                            toast({ title: "Error al enviar", description: e.message, variant: "destructive" });
+                          } finally {
+                            setActionLoading(p => ({ ...p, [`apology_${job.id}`]: false }));
                           }
-                        </Button>
-                      )}
+                        }}
+                      >
+                        {actionLoading[`apology_${job.id}`]
+                          ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Enviando…</>
+                          : <>💜 Enviar disculpas al cliente</>
+                        }
+                      </Button>
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1 pt-1">
                         <Zap className="h-3 w-3 text-violet-400" />
                         O inyecta instrucción específica
