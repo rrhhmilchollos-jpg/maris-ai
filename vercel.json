@@ -121,6 +121,9 @@
       ],
       "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/vs-emergent"
     },
+    { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/llms.txt", "destination": "/llms.txt" },
+    { "source": "/llms-full.txt", "destination": "/llms-full.txt" },
     {
       "source": "/(.*)",
       "destination": "/index.html"
