@@ -71,7 +71,7 @@ router.get("/admin/users", async (_req, res) => {
 
   res.json(
     users.map((u) => ({
-      id: u._id,
+      id: String(u._id),
       email: u.email,
       fullName: u.fullName,
       imageUrl: u.imageUrl,
@@ -201,7 +201,7 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
   await connectDB();
   const txns = await CreditTransaction.find({ userId: req.params.id }).sort({ createdAt: -1 }).limit(50).lean();
   res.json(txns.map(t => ({
-    id: t._id,
+    id: String(t._id),
     kind: t.kind,
     amount: t.amount,
     description: t.description,
@@ -215,7 +215,7 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   await connectDB();
   const apps = await GeneratedApp.find({ userId: req.params.id }).sort({ createdAt: -1 }).lean();
   res.json(apps.map(a => ({
-    id: a._id,
+    id: String(a._id),
     title: a.title,
     status: a.status,
     techStack: a.techStack,
@@ -255,7 +255,7 @@ router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void
   const appsGenerated = await GeneratedApp.countDocuments({ userId: targetId });
 
   res.json({
-    id: user._id,
+    id: String(user._id),
     email: user.email,
     fullName: user.fullName,
     imageUrl: user.imageUrl,
@@ -378,7 +378,7 @@ router.get("/admin/apps", async (_req, res) => {
 
   res.json(
     apps.map((r) => ({
-      id: r._id,
+      id: String(r._id),
       userId: r.userId,
       userEmail: emailMap.get(r.userId) ?? null,
       title: r.title,
@@ -413,7 +413,7 @@ router.get("/admin/jobs", async (_req, res) => {
     failedLast24h: failed24,
     succeededLast24h: succ24,
     jobs: jobs.map((r) => ({
-      id: r._id,
+      id: String(r._id),
       userId: r.userId,
       userEmail: emailMap.get(r.userId) ?? null,
       appId: r.appId,
@@ -513,7 +513,7 @@ router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> =
   const ageMsAfter = Date.now() - new Date(updated.updatedAt).getTime();
 
   res.json({
-    id: updated._id,
+    id: String(updated._id),
     userId: updated.userId,
     userEmail: user?.email ?? null,
     appId: updated.appId,
@@ -562,7 +562,7 @@ router.get("/admin/memory", async (req: any, res: any): Promise<void> => {
     offset,
     q,
     entries: rows.map((r) => ({
-      id: r._id,
+      id: String(r._id),
       errorMessage: r.errorMessage,
       errorContext: r.errorContext,
       patchPreview: r.patch.slice(0, 600),
