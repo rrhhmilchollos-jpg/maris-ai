@@ -1016,6 +1016,18 @@ router.post("/admin/jobs/cleanup-reviewing", async (req: any, res: any): Promise
   logger.info({ updated: result.modifiedCount }, "Admin: cleaned up orphaned reviewing jobs");
   res.json({ ok: true, cleaned: result.modifiedCount });
 });
+
+// ─── Admin: Corregir jobs failed·done (completaron pero status mal guardado) ──
+router.post("/admin/jobs/fix-false-failed", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  // Jobs con status=failed pero phase=done son jobs que completaron correctamente
+  const result = await GenerationJob.updateMany(
+    { status: "failed", phase: "done" },
+    { $set: { status: "succeeded", updatedAt: new Date() } },
+  );
+  logger.info({ fixed: result.modifiedCount }, "Admin: fixed false-failed jobs");
+  res.json({ ok: true, fixed: result.modifiedCount, message: `${result.modifiedCount} job(s) corregidos de failed·done → succeeded` });
+});
 router.delete("/admin/my-projects/:id", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const app = await GeneratedApp.findOne({ _id: req.params.id, userId: req.dbUser._id.toString() });
