@@ -919,16 +919,47 @@ router.post("/admin/my-projects", async (req: any, res: any): Promise<void> => {
 router.post("/admin/test-email-alert", async (req: any, res: any): Promise<void> => {
   await connectDB();
   try {
+    // Buscar un job fallido reciente real para usar datos reales
+    const recentFailedJob = await GenerationJob.findOne({ status: "failed" })
+      .sort({ updatedAt: -1 }).lean() as any;
+
+    let testUserEmail = "test@marisai.es";
+    let testUserId = "test-user-id";
+    let testJobId = "test-job-" + Date.now();
+    let testAppId: string | undefined;
+    let testPrompt = "TEST: Email de prueba del sistema de alertas de Maris AI";
+    let testError = "Este es un error de prueba — el sistema de alertas funciona ✅";
+    let testRetry = 3;
+
+    if (recentFailedJob) {
+      // Buscar email del usuario
+      const dbUser = await User.findById(recentFailedJob.userId).lean() as any;
+      testUserEmail = dbUser?.email || recentFailedJob.userId;
+      testUserId = recentFailedJob.userId;
+      testJobId = String(recentFailedJob._id);
+      testAppId = recentFailedJob.appId || undefined;
+      testPrompt = recentFailedJob.prompt || testPrompt;
+      testError = recentFailedJob.errorMessage || testError;
+      testRetry = Math.max((recentFailedJob.retryCount || 0), 3);
+    }
+
     const { notifyAdminJobFailed } = await import("../lib/notify");
     await notifyAdminJobFailed({
-      userEmail: "test@marisai.es",
-      userId: "test-user-id",
-      jobId: "test-job-id-" + Date.now(),
-      prompt: "TEST: Este es un email de prueba del sistema de alertas de Maris AI",
-      errorMessage: "Este es un error de prueba — el sistema de alertas funciona correctamente ✅",
-      retryCount: 3, // >= 2 para que se envíe
+      userEmail: testUserEmail,
+      userId: testUserId,
+      jobId: testJobId,
+      appId: testAppId,
+      prompt: `[EMAIL DE PRUEBA] ${testPrompt}`,
+      errorMessage: testError,
+      retryCount: testRetry,
     });
-    res.json({ ok: true, message: "Email de prueba enviado a soportemarisai@gmail.com y rrhh.milchollos@gmail.com" });
+    res.json({
+      ok: true,
+      message: `Email enviado a ${["soportemarisai@gmail.com", "rrhh.milchollos@gmail.com"].join(" y ")} con datos ${recentFailedJob ? "reales del último job fallido" : "de prueba"}`,
+      usedRealJob: !!recentFailedJob,
+      userEmail: testUserEmail,
+      jobId: testJobId,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : "Error desconocido" });
   }
