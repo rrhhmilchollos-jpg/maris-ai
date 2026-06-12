@@ -9,7 +9,7 @@ import {
   CreditTransaction,
   AgentMemory,
 } from "@workspace/db/schema";
-import { reenqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
+import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
 import { bulkCreateProjectSeeds } from "../lib/projectSeeds";
 import { seedSeguxatProject } from "../scripts/seedSeguxatProject";
@@ -19,6 +19,7 @@ import { getMetricsSnapshot } from "../lib/metrics";
 import { isE2BEnabled, e2bSmokeTest } from "../lib/e2bValidator";
 import { getE2BGateEnabled, setE2BGateEnabled } from "../lib/e2bGate";
 import { pingRedis, getRedisStatus } from "../lib/redisHealth";
+import mongoose from "mongoose";
 
 const router: IRouter = Router();
 
@@ -866,6 +867,52 @@ router.post("/seed-seguxat-public", async (req: any, res: any): Promise<void> =>
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: String(err) });
+  }
+});
+
+// ─── Admin: Generate app on behalf of user ──────────────────────────────────
+// POST /api/admin/users/:id/generate-app
+// Body: { prompt?: string }
+// Genera una landing page funcional en la cuenta del usuario especificado.
+router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const targetId = req.params.id;
+  const prompt = req.body?.prompt || "Crea una landing page profesional moderna para un emprendedor en España. Hero con titular impactante y CTA, sección de 3 beneficios con iconos, cómo funciona en 3 pasos, FAQ con 3 preguntas y footer. Diseño limpio en español. Sin backend.";
+
+  const user = await User.findById(targetId, { email: 1 }).lean();
+  if (!user) {
+    res.status(404).json({ error: "Usuario no encontrado" });
+    return;
+  }
+
+  try {
+    const jobId = new mongoose.Types.ObjectId().toString();
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-inject. ${prompt}`;
+
+    await GenerationJob.create({
+      _id: jobId,
+      userId: targetId,
+      prompt: generationPrompt,
+      coderModel: "claude-haiku-4-5-20251001",
+      language: "typescript",
+      kind: "landing",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin: true,
+    });
+
+    await enqueueGenerateJob(jobId);
+    logger.info({ jobId, targetId, email: (user as any).email }, "Admin generated landing page for user");
+
+    res.status(201).json({
+      ok: true,
+      jobId,
+      message: `Landing page en cola para ${(user as any).email}. Estará lista en menos de 1 minuto.`,
+    });
+  } catch (err) {
+    logger.error({ err, targetId }, "Admin generate-app error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
   }
 });
 
