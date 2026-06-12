@@ -717,7 +717,7 @@ router.get("/admin/metrics", async (_req, res) => {
     })),
     credits: {
       today: creditsToday[0]?.total ?? 0,
-      month: creditsMonth[0]?.total ?? 0,
+      month: Math.min(creditsMonth[0]?.total ?? 0, 999_999_999), // cap para evitar overflow display
     },
     topUsers: topUsers.map((u: { _id: string; total: number }) => ({
       userId: u._id,
@@ -739,6 +739,34 @@ router.get("/admin/metrics", async (_req, res) => {
 router.post("/admin/redis-ping", async (_req, res) => {
   const result = await pingRedis();
   res.json(result);
+});
+
+// ─── Admin: Resetear créditos corruptos del mes ───────────────────────────────
+router.post("/admin/metrics/reset-monthly-credits", async (_req, res) => {
+  await connectDB();
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Encontrar transacciones con valores absurdamente grandes (overflow)
+  const corrupt = await CreditTransaction.find({
+    kind: "usage",
+    createdAt: { $gte: monthStart },
+    $or: [
+      { amount: { $lt: -100_000 } },  // cargo mayor de 100k créditos = corrupto
+      { amount: { $gt: 100_000 } },   // ingreso mayor de 100k = corrupto
+    ],
+  }).lean();
+
+  if (corrupt.length === 0) {
+    res.json({ ok: true, deleted: 0, message: "No se encontraron transacciones corruptas." });
+    return;
+  }
+
+  const ids = corrupt.map((t: any) => t._id);
+  await CreditTransaction.deleteMany({ _id: { $in: ids } });
+
+  logger.info({ deleted: corrupt.length }, "Admin: deleted corrupt credit transactions");
+  res.json({ ok: true, deleted: corrupt.length, message: `${corrupt.length} transacción(es) corrupta(s) eliminada(s).` });
 });
 
 router.post("/admin/e2b-smoke", async (_req, res) => {
