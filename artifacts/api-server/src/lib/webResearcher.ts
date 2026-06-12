@@ -94,15 +94,26 @@ async function searchWithBrave(query: string, num = 5): Promise<SearchResult[]> 
   try {
     const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${num}&country=es&search_lang=es`;
     const res = await fetch(url, {
-      headers: { "Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": apiKey },
+      headers: {
+        "Accept": "application/json",
+        "Accept-Encoding": "identity", // avoid gzip issues in Node
+        "X-Subscription-Token": apiKey,
+      },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      logger.warn({ status: res.status, body: body.slice(0, 200) }, "Brave API error");
+      return [];
+    }
     const data = await res.json() as any;
     return (data.web?.results || []).slice(0, num).map((r: any) => ({
       title: r.title || "", url: r.url || "", snippet: r.description || "",
     }));
-  } catch { return []; }
+  } catch (err) {
+    logger.warn({ err }, "webResearcher: Brave search failed");
+    return [];
+  }
 }
 
 /**
