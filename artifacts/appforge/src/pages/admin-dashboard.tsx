@@ -423,15 +423,71 @@ function LiveMonitorPanel() {
                       </div>
                     </div>
 
-                    {/* AI repair injection */}
+                    {/* Recover + AI repair injection */}
                     <div className="p-3 space-y-2">
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1">
                         <Zap className="h-3 w-3 text-violet-400" />
-                        Inyectar corrección IA para este usuario
+                        Acciones de recuperación
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={async () => {
+                            setActionLoading(p => ({ ...p, [`recover_${job.id}`]: true }));
+                            try {
+                              const d = await apiFetch<any>(`/api/admin/jobs/${job.id}/recover`, { method: "POST" });
+                              toast({ title: "✅ Recuperando app", description: d.message });
+                              await fetchJobs();
+                            } catch (e: any) {
+                              toast({ title: "Sin código parcial", description: e.message, variant: "destructive" });
+                            } finally {
+                              setActionLoading(p => ({ ...p, [`recover_${job.id}`]: false }));
+                            }
+                          }}
+                          disabled={actionLoading[`recover_${job.id}`]}
+                        >
+                          {actionLoading[`recover_${job.id}`]
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Recuperando…</>
+                            : <><RefreshCw className="h-3 w-3 mr-1" />Recuperar y continuar</>
+                          }
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10"
+                          onClick={async () => {
+                            if (!window.confirm("¿Regenerar desde 0? Se perderá el progreso actual.")) return;
+                            setActionLoading(p => ({ ...p, [`regen_${job.id}`]: true }));
+                            try {
+                              const d = await apiFetch<any>(`/api/admin/users/${job.userId}/generate-app`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ prompt: job.prompt?.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim() || "" }),
+                              });
+                              toast({ title: "🔄 Regenerando desde 0", description: d.message });
+                              await fetchJobs();
+                            } catch (e: any) {
+                              toast({ title: "Error", description: e.message, variant: "destructive" });
+                            } finally {
+                              setActionLoading(p => ({ ...p, [`regen_${job.id}`]: false }));
+                            }
+                          }}
+                          disabled={actionLoading[`regen_${job.id}`]}
+                        >
+                          {actionLoading[`regen_${job.id}`]
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Generando…</>
+                            : "Regenerar desde 0"
+                          }
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1 pt-1">
+                        <Zap className="h-3 w-3 text-violet-400" />
+                        O inyecta instrucción específica
                       </p>
                       <div className="flex gap-2">
                         <Input
-                          placeholder="Ej: La app falló en frontend, genera solo la landing page con los colores del prompt original"
+                          placeholder="Ej: Completa las páginas de reservas que faltan"
                           value={repairPrompt[job.id] ?? ""}
                           onChange={e => setRepairPrompt(p => ({ ...p, [job.id]: e.target.value }))}
                           className="text-xs h-8 bg-black/20"
@@ -451,9 +507,9 @@ function LiveMonitorPanel() {
                       </div>
                       <div className="flex gap-1 flex-wrap">
                         {[
+                          "Completa las páginas que faltan",
                           "Genera solo la landing page sin backend",
                           "Simplifica la app a las funciones básicas",
-                          "Regenera con modelo más rápido (Haiku)",
                           "Corrige errores de TypeScript del frontend",
                         ].map(s => (
                           <button
