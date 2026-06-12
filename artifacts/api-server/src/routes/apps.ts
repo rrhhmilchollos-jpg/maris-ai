@@ -182,7 +182,7 @@ Rules:
 - Real working code. No TODOs, no stubs, no lorem ipsum. Every page renders meaningful content with real interactions, not static markup.
 - Use the file list from the plan EXACTLY — split UI into the listed files, do not collapse them into App.${ext}.
 - Polished layout, accessible markup, semantic HTML, mobile-first responsive.
-- NO SIZE LIMIT — generate every file the plan needs, in full. This is a paid product; bigger apps deliver more value. Never truncate or "TODO" a file to save tokens.
+- CONCISE CODE: write clean, dense code without excessive comments, blank lines or padding. Each file should be as short as possible while being complete and functional. Avoid verbose JSDoc blocks. This maximises the number of files you can generate within the token budget.
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
@@ -556,11 +556,11 @@ async function architectPlan(prompt: string, research: string, templateContext =
   plan.backendFiles = plan.backendFiles ?? [];
   plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
 
-  // Límites hard en architectPlan — independiente del deploy
-  // Evita que el coder reciba planes que no puede procesar en 64K tokens
-  const HARD_MAX_PAGES = 8;
-  const HARD_MAX_COMPONENTS = 12;
-  const HARD_MAX_FILES = 40;
+  // Límites hard en architectPlan — 64K tokens = ~28 archivos medianos
+  // Con más archivos el coder se trunca y hay que reintentar
+  const HARD_MAX_PAGES = 6;
+  const HARD_MAX_COMPONENTS = 10;
+  const HARD_MAX_FILES = 28;
   if (plan.pages.length > HARD_MAX_PAGES) {
     logger.warn({ pages: plan.pages.length }, "Architect plan too large — truncating pages");
     plan.pages = plan.pages.slice(0, HARD_MAX_PAGES);
