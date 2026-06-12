@@ -5,7 +5,7 @@ Disallow: /dashboard
 Disallow: /admin
 Disallow: /billing
 Disallow: /sign-in
-Disallow: /sign-up
+
 Disallow: /debug-preview
 
 # Google News crawler — acceso completo a noticias
