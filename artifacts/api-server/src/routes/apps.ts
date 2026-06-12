@@ -527,9 +527,27 @@ Stay factual. Plain text only. ≤400 words. No preamble.`;
  */
 async function architectPlan(prompt: string, research: string, templateContext = "", agentPlan = selectAgentModelPlan(prompt)): Promise<ProjectPlan> {
   const templateNote = templateContext ? `\n\n${templateContext}` : "";
+
+  // Extrae lo que el usuario REALMENTE pide — quita los metadatos internos de Maris
+  const cleanPrompt = prompt
+    .replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "")
+    .replace(/\[MARIS_ENGINE=[^\]]*\]/g, "")
+    .replace(/\[ADMIN[^\]]*\]/g, "")
+    .trim();
+
+  // Analiza la complejidad real del prompt para dar instrucción de scope al arquitecto
+  const complexity = classifyPromptComplexity(cleanPrompt);
+  const scopeHint = complexity.tier === "basic"
+    ? "SCOPE: This is a simple/basic request. Maximum 4 pages, 6 components. Do NOT over-engineer."
+    : complexity.tier === "standard"
+    ? "SCOPE: Standard app. Maximum 6 pages, 10 components. Build exactly what is asked, nothing more."
+    : complexity.tier === "robust"
+    ? "SCOPE: Complex app. Up to 8 pages, 14 components. Focus on the user's core use cases."
+    : "SCOPE: Enterprise-level app. Up to 12 pages, 16 components. Prioritize the most critical modules first.";
+
   const userContent = research
-    ? `Design the file structure for this app:\n\n${prompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
-    : `Design the file structure for this app:\n\n${prompt}${templateNote}`;
+    ? `${scopeHint}\n\nDesign the file structure for this app:\n\n${cleanPrompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
+    : `${scopeHint}\n\nDesign the file structure for this app:\n\n${cleanPrompt}${templateNote}`;
 
   const response = await withTimeoutOrThrow(
     anthropic.messages.create({
@@ -1418,10 +1436,12 @@ Output STRICT JSON only matching:
 {"title":"…","description":"…","techStack":[…],"frontendCode":"…","backendCode":"…"}
 
 THINK BEFORE EDITING (do this internally, do not output the reasoning):
-1. What does the user want?
-2. Which files do I need to touch? Usually 1-4 files.
-3. What MUST stay the same?
-4. After your edit, do all imports still resolve, do all routes still render?
+1. What EXACTLY does the user want? Read the request literally. Do not add unrequested features.
+2. Is this ADD, MODIFY, DELETE, or FIX? Different operations, different scope.
+3. Which files do I need to touch? Usually 1-3 files. If touching more than 5 files, reconsider.
+4. What MUST stay exactly the same? Everything not mentioned in the request.
+5. Am I about to rebuild/redesign/rename things the user didn't ask about? STOP. Only do what was asked.
+6. After my edit, do all imports still resolve, do all routes still render?
 
 CHANGE DISCIPLINE — preserve unless asked to change:
 - For ADD/AÑADIR/AGREGAR requests: add only the requested target. Do not rename, redesign, remove, or duplicate unrelated elements.
