@@ -612,9 +612,17 @@ export default function AdminDashboardPage() {
               <span>Auto-refresh</span>
               <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
             </div>
-            <Button variant="outline" size="sm" onClick={() => { refetch(); refetchJobs(); }} className="gap-2">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Actualizar
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await Promise.all([refetch(), refetchJobs()]);
+              }}
+              disabled={isLoading || jobsLoading}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${(isLoading || jobsLoading) ? "animate-spin" : ""}`} />
+              {(isLoading || jobsLoading) ? "Actualizando…" : "Actualizar"}
             </Button>
             {dataUpdatedAt > 0 && (
               <Badge variant="outline" className="gap-1 text-xs">
@@ -1133,19 +1141,20 @@ export default function AdminDashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* GENERAR APP PARA USUARIO */}
-              <Card className="bg-card/40 border-white/5">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-purple-400" />
-                    Generar landing page para un usuario
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <GenerateForUserPanel />
-                </CardContent>
-              </Card>
-            </TabsContent>
+              {/* GENERAR APP PARA USUARIO — dentro del tab users */}
+              <TabsContent value="users" className="space-y-4 pt-0">
+                <Card className="bg-card/40 border-white/5">
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-purple-400" />
+                      Generar landing page para un usuario
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <GenerateForUserPanel />
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
               {/* SYSTEM TAB */}
               <TabsContent value="system" className="space-y-4">

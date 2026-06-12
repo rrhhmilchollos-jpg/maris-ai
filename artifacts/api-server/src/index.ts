@@ -75,8 +75,8 @@ app.listen(finalPort, async (err) => {
     logger.info("Redis not configured (REDIS_URL unset) — skipping ping");
   }
  
-  // 6) Periodic orphan job sweep every 2 minutes.
-  const RECLAIM_SWEEP_MS = Number(process.env.RECLAIM_SWEEP_MS) || 2 * 60 * 1000;
+  // 6) Periodic orphan job sweep every 1 minute (reduced from 2 for faster zombie detection).
+  const RECLAIM_SWEEP_MS = Number(process.env.RECLAIM_SWEEP_MS) || 1 * 60 * 1000;
   const sweep = setInterval(() => {
     reclaimOrphanedJobs().catch((reclaimErr) => {
       logger.warn({ err: reclaimErr }, "Periodic orphan job reclaim failed");
