@@ -1298,7 +1298,32 @@ router.post("/admin/jobs/:id/cancel", async (req: any, res: any): Promise<void> 
   res.json({ ok: true, message: "Job cancelado — cliente ve mensaje amigable." });
 });
 
-// ─── Admin: Generate app on behalf of user ──────────────────────────────────
+// ─── Admin: Cancelar jobs duplicados — deja solo el más reciente corriendo ────
+router.post("/admin/users/:id/kill-duplicates", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  // Buscar todos los jobs running del usuario
+  const runningJobs = await GenerationJob.find({
+    userId: req.params.id,
+    status: { $in: ["running", "queued"] },
+  }).sort({ createdAt: -1 }).lean() as any[];
+
+  if (runningJobs.length <= 1) {
+    res.json({ ok: true, killed: 0, message: "Sin duplicados — solo hay 1 job activo." });
+    return;
+  }
+
+  // Mantener el más reciente (primero), cancelar el resto silenciosamente
+  const toKill = runningJobs.slice(1);
+  const ids = toKill.map((j: any) => j._id);
+
+  await GenerationJob.updateMany(
+    { _id: { $in: ids } },
+    { $set: { status: "failed", phase: "failed", errorMessage: "Job cancelado — se estaba ejecutando en paralelo con otro job del mismo usuario.", updatedAt: new Date() } },
+  );
+
+  logger.info({ userId: req.params.id, killed: toKill.length }, "Admin: killed duplicate running jobs");
+  res.json({ ok: true, killed: toKill.length, kept: String(runningJobs[0]._id), message: `${toKill.length} job(s) duplicado(s) cancelados. Se mantiene el más reciente.` });
+});
 // POST /api/admin/users/:id/generate-app
 // Body: { prompt?: string }
 // Genera una landing page funcional en la cuenta del usuario especificado.

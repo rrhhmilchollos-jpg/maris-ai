@@ -523,7 +523,30 @@ function LiveMonitorPanel() {
                       </div>
                     </div>
 
-                    {/* Recover + AI repair injection */}
+                    {/* Alerta de jobs duplicados */}
+                    {jobs.filter((j: any) => j.userId === job.userId && (j.status === "running" || j.status === "queued")).length > 1 && (
+                      <div className="mx-3 mt-2 p-2 rounded bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-yellow-400">
+                          ⚠️ {jobs.filter((j: any) => j.userId === job.userId && (j.status === "running" || j.status === "queued")).length} jobs corriendo en paralelo para este usuario
+                        </span>
+                        <Button
+                          size="sm"
+                          className="h-6 text-[10px] bg-yellow-600 hover:bg-yellow-700 text-white shrink-0"
+                          onClick={async e => {
+                            e.stopPropagation();
+                            try {
+                              const d = await apiFetch<any>(`/api/admin/users/${job.userId}/kill-duplicates`, { method: "POST" });
+                              toast({ title: "✅ Duplicados cancelados", description: d.message });
+                              await fetchJobs();
+                            } catch (e: any) {
+                              toast({ title: "Error", description: e.message, variant: "destructive" });
+                            }
+                          }}
+                        >
+                          Cancelar duplicados
+                        </Button>
+                      </div>
+                    )}
                     <div className="p-3 space-y-2">
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1">
                         <Zap className="h-3 w-3 text-violet-400" />

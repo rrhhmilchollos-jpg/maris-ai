@@ -137,12 +137,22 @@ export async function registerGenerateWorker(
         .lean();
 
       for (const job of jobs) {
-        // Atomic claim — only one worker wins per job.
-        // Per-user concurrency limit (max 1 concurrent job per user)
+        // Per-user concurrency limit — check DB to survive Railway restarts
         const jobUserId = String(job.userId || "unknown");
         const userActive = activeJobsByUser.get(jobUserId) ?? 0;
         if (userActive >= 1) {
-          logger.info({ jobId: String(job._id), userId: jobUserId }, "User already has an active job — skipping for now");
+          logger.info({ jobId: String(job._id), userId: jobUserId }, "User already has an active job (memory) — skipping");
+          continue;
+        }
+
+        // Also check DB for running jobs (survives process restarts)
+        const runningInDB = await GenerationJob.countDocuments({
+          userId: jobUserId,
+          status: "running",
+          _id: { $ne: job._id },
+        });
+        if (runningInDB >= 1) {
+          logger.info({ jobId: String(job._id), userId: jobUserId, runningInDB }, "User already has running job in DB — skipping");
           continue;
         }
 
