@@ -915,7 +915,59 @@ router.post("/admin/my-projects", async (req: any, res: any): Promise<void> => {
   res.json({ ok: true, app });
 });
 
-// DELETE: remove an admin project
+// ─── Admin: Borrar jobs por usuario (limpieza masiva) ────────────────────────
+router.delete("/admin/users/:id/jobs", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { statuses, olderThanHours } = req.body ?? {};
+
+  const query: any = { userId: req.params.id };
+
+  // Por defecto borrar solo failed/reviewing/succeeded — nunca running/queued activos
+  const safeStatuses = Array.isArray(statuses)
+    ? statuses.filter((s: string) => ["failed", "reviewing", "succeeded"].includes(s))
+    : ["failed", "reviewing"];
+  query.status = { $in: safeStatuses };
+
+  if (olderThanHours) {
+    query.createdAt = { $lt: new Date(Date.now() - olderThanHours * 3600_000) };
+  }
+
+  const result = await GenerationJob.deleteMany(query);
+  // Borrar también los logs de esos jobs
+  await JobLog.deleteMany({ jobId: { $in: (await GenerationJob.find(query).select("_id")).map((j: any) => String(j._id)) } });
+
+  logger.info({ userId: req.params.id, deleted: result.deletedCount, statuses: safeStatuses }, "Admin: bulk deleted jobs");
+  res.json({ ok: true, deleted: result.deletedCount });
+});
+
+// ─── Admin: Borrar jobs concretos por IDs ────────────────────────────────────
+router.delete("/admin/jobs/bulk", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { jobIds } = req.body ?? {};
+  if (!Array.isArray(jobIds) || jobIds.length === 0) {
+    res.status(400).json({ error: "jobIds requerido" }); return;
+  }
+  // Solo borrar jobs no activos
+  const result = await GenerationJob.deleteMany({
+    _id: { $in: jobIds },
+    status: { $in: ["failed", "reviewing", "succeeded"] },
+  });
+  logger.info({ deleted: result.deletedCount }, "Admin: bulk deleted jobs by ids");
+  res.json({ ok: true, deleted: result.deletedCount });
+});
+
+// ─── Admin: Limpiar reviewing huérfanos (jobs atascados en reviewing) ─────────
+router.post("/admin/jobs/cleanup-reviewing", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  // Jobs en reviewing más de 2 horas = huérfanos, marcarlos como failed
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600_000);
+  const result = await GenerationJob.updateMany(
+    { status: "reviewing", updatedAt: { $lt: twoHoursAgo } },
+    { $set: { status: "failed", errorMessage: "Job cancelado por el equipo de soporte." } },
+  );
+  logger.info({ updated: result.modifiedCount }, "Admin: cleaned up orphaned reviewing jobs");
+  res.json({ ok: true, cleaned: result.modifiedCount });
+});
 router.delete("/admin/my-projects/:id", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const app = await GeneratedApp.findOne({ _id: req.params.id, userId: req.dbUser._id.toString() });
