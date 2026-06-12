@@ -295,7 +295,12 @@ function LiveMonitorPanel() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs">{jobs.length} activos</Badge>
+          <Badge variant="outline" className="text-xs">
+            {jobs.filter((j: any) => j.status === "running" || j.status === "queued").length} activos
+            {jobs.filter((j: any) => j.status === "failed").length > 0 && (
+              <span className="text-red-400 ml-1">· {jobs.filter((j: any) => j.status === "failed").length} fallidos</span>
+            )}
+          </Badge>
           <Button size="sm" variant="outline" className="h-6 px-2 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
             onClick={async () => {
               const email = window.prompt("Email del usuario — recupera su último proyecto fallido (funciona aunque tenga 48h):");
