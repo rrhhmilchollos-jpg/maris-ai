@@ -282,7 +282,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                   {/* Abrir en nueva pestaña */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
-                    onClick={() => window.open(`${apiBase}/api/admin/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
+                    onClick={() => window.open(`${apiBase}/api/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
                     🔗 Nueva pestaña
                   </Button>
                   {/* Toggle preview inline */}
@@ -347,15 +347,14 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                   </Button>
                 </div>
               </div>
-              {/* Preview iframe */}
+              {/* Preview iframe — usar endpoint /api/apps que ya funciona con esbuild */}
               {isPreviewOpen && (
                 <div className="border-t border-white/5">
                   <iframe
-                    src={`/api/admin/apps/${appId}/preview`}
+                    src={`${apiBase}/api/apps/${appId}/preview`}
                     className="w-full bg-white"
                     style={{ height: 520, border: "none" }}
                     title={app.title}
-                    sandbox="allow-scripts allow-same-origin allow-forms"
                   />
                 </div>
               )}
