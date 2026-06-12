@@ -112,6 +112,17 @@ router.post("/admin/users/:id/unsuspend", async (req: any, res: any): Promise<vo
   res.json({ ok: true, isSuspended: false });
 });
 
+// ─── Search user by email ─────────────────────────────────────────────────────
+// GET /api/admin/users/search?email=xxx
+router.get("/admin/users/search", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const email = (req.query.email as string || "").trim().toLowerCase();
+  if (!email) { res.status(400).json({ error: "Email requerido" }); return; }
+  const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } }, { email: 1, createdAt: 1 }).lean();
+  if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+  res.json({ id: String((user as any)._id), email: (user as any).email });
+});
+
 // ─── Ban / Unban user ─────────────────────────────────────────────────────────
 router.post("/admin/users/:id/ban", async (req: any, res: any): Promise<void> => {
   await connectDB();
