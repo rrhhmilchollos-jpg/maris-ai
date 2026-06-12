@@ -2972,28 +2972,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
         reply = execResult.message;
 
         if (execResult.success) {
-          try {
-            const updatedApp = await GeneratedApp.findById(req.params.id).lean() as any;
-            const repoFullName = updatedApp?.githubRepoFullName || app.githubRepoFullName;
-            const frontendBundle = updatedApp?.frontendCode || app.frontendCode || app.html || "";
-            const dataMatch = String(updatedApp?.agentNotes || "").match(/<!-- DATA_STORE_START -->([\s\S]*?)<!-- DATA_STORE_END -->/);
-            if (repoFullName && frontendBundle && dataMatch?.[1]) {
-              await pushAppToGitHub({
-                title: updatedApp.title || app.title || "App",
-                description: updatedApp.description || app.description || "Datos actualizados por Maris AI",
-                frontendBundle,
-                existingRepoFullName: repoFullName,
-                userGitHubToken: req.dbUser?.githubAccessToken || null,
-                extraFiles: {
-                  "maris-data-store.json": dataMatch[1].trim(),
-                },
-              });
-              reply += "\n\nDatos sincronizados también en GitHub (`maris-data-store.json`).";
-            }
-          } catch (ghErr) {
-            logger.warn({ ghErr, appId: req.params.id }, "ENGINE_EXEC: no se pudo sincronizar GitHub");
-            reply += "\n\nLa operación quedó guardada en Maris AI; la sincronización con GitHub no se pudo completar automáticamente.";
-          }
+          // GitHub sync eliminado — solo se sube a GitHub cuando el usuario lo solicita explícitamente
         }
       } catch (execErr) {
         logger.error({ execErr }, "ENGINE_EXEC error");
@@ -3421,15 +3400,8 @@ export async function runJobById(jobId: string): Promise<void> {
           appTitle: previousApp?.title,
         }),
       });
-      try {
-        const updatedApp = await GeneratedApp.findById(job.editAppId).lean() as any;
-        if (updatedApp?.githubRepoFullName && finalResult.frontendCode) {
-          await pushAppToGitHub({ title: updatedApp.title || "App", description: updatedApp.description || "", frontendBundle: finalResult.frontendCode, existingRepoFullName: updatedApp.githubRepoFullName });
-          await log("system", `✅ Cambios subidos a GitHub (${updatedApp.githubRepoFullName})`);
-        }
-      } catch (ghErr) {
-        await log("system", `⚠️ GitHub push falló: ${ghErr instanceof Error ? ghErr.message : ghErr}`, "warn");
-      }
+      // GitHub push eliminado — solo se sube a GitHub cuando el usuario lo solicita explícitamente
+      // desde el botón "Subir a GitHub" en su panel de apps
     } else {
       const app = await GeneratedApp.create({
         userId: job.userId,
