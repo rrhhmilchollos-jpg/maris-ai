@@ -1781,7 +1781,7 @@ export async function generateApp(
     try { await onAgentLog?.(agent, message, level); } catch { /* swallow */ }
   };
 
-  onProgress?.({ phase: "generating", progress: 5, note: "Planificando…" });
+  onProgress?.({ phase: "generating", progress: Math.max((await GenerationJob.findById(jobId).select("progress").lean() as any)?.progress ?? 5, 5), note: "Planificando…" });
 
   // El Core Orchestrator por hitos queda detrás de una feature flag porque su salida
   // sólo empaqueta archivos parciales y puede dejar la preview sin un App React completo.
@@ -3280,7 +3280,8 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
       logger.warn({ jobId: job._id, jobAge }, "Zombie job detected — no activity for 6min, force re-queuing");
       await GenerationJob.updateOne(
         { _id: job._id },
-        { $set: { status: "queued", phase: "queued", progress: 0, updatedAt: now } },
+        // NO resetear progress a 0 — mantener el último progreso conocido para que el cliente no vea retroceso
+        { $set: { status: "queued", phase: "queued", updatedAt: now } },
       );
       await JobLog.create({
         jobId: String(job._id),
