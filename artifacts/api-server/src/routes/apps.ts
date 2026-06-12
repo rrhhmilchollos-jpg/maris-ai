@@ -2521,45 +2521,32 @@ function buildAppUpdatedConsoleReply(args: {
   appTitle?: string;
   creditsRemaining?: number;
 }): string {
-  const { prompt, result, appTitle, creditsRemaining } = args;
-  const intent = summarizeUserIntentForConsole(prompt);
+  const { result, appTitle, creditsRemaining } = args;
   const title = result?.title || appTitle || "tu app";
-  const techStack = Array.isArray(result?.techStack) ? result.techStack.filter(Boolean).slice(0, 8) : [];
-  const pages = Array.isArray(result?.plannedPages) ? result.plannedPages.slice(0, 6) : [];
-  const envVars = Array.isArray(result?.requiredEnvVars) ? result.requiredEnvVars.filter(Boolean).slice(0, 8) : [];
   const frontendFiles = countBundleFiles(result?.frontendCode);
   const backendFiles = countBundleFiles(result?.backendCode);
-  const areas = detectConsoleChangeAreas(prompt, result);
-  const pageSummary = pages.length
-    ? pages.map((p: any) => `- ${p?.route || "/"} — ${p?.name || "Página"}${p?.purpose ? `: ${p.purpose}` : ""}`).join("\n")
-    : "- Estructura principal revisada y lista para la vista previa.";
-  const envSummary = envVars.length
-    ? envVars.map((v: any) => `- ${typeof v === "string" ? v : v?.name || String(v)}`).join("\n")
-    : "- No he detectado nuevas variables obligatorias en este cambio.";
-  const creditsLine = typeof creditsRemaining === "number"
-    ? `\n\n**Créditos restantes:** ${creditsRemaining}.`
+  const totalFiles = (frontendFiles || 0) + (backendFiles || 0);
+
+  const emojis = ["🎉", "✨", "🚀", "💫", "⚡", "🔥"];
+  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+  const mensajes = [
+    `${emoji} ¡Listo! He aplicado los cambios en **${title}**. Refresca la vista previa para verlos.`,
+    `${emoji} ¡Hecho! Tu app **${title}** ha sido actualizada. Dale a Refresh para verla al día.`,
+    `${emoji} ¡Ya está! He trabajado en **${title}** y todo queda guardado. Refresca para comprobar.`,
+    `${emoji} ¡Actualizado! **${title}** está lista con los últimos cambios. ¡Espero que te guste!`,
+  ];
+  const mensaje = mensajes[Math.floor(Math.random() * mensajes.length)];
+
+  const filesLine = totalFiles > 0
+    ? `\n\n_He modificado ${totalFiles} archivo${totalFiles > 1 ? "s" : ""}. Si algo no se ve bien, dímelo y lo corrijo._`
     : "";
 
-  return [
-    `**Actualización completada para ${title}.**`,
-    "",
-    `He interpretado tu prompt como: “${intent}”. No me he limitado a contestar con un OK: he vuelto a pasar la app por el flujo de generación y he guardado el nuevo bundle para que el preview cargue la versión más reciente.`,
-    "",
-    "**Agentes que han intervenido:** Researcher para entender el objetivo, Architect para reorganizar el alcance, Designer para mantener coherencia visual, Frontend Engineer para aplicar la interfaz, Backend Engineer cuando había lógica o integraciones, QA para revisar errores habituales y DevOps para dejar el bundle preparado para preview/despliegue.",
-    "",
-    `**Zonas trabajadas:** ${areas.join(", ")}.`,
-    techStack.length ? `\n**Stack actualizado:** ${techStack.join(", ")}.` : "",
-    `\n**Archivos generados o reempaquetados:** ${frontendFiles || "varios"} de frontend${backendFiles ? ` y ${backendFiles} de backend` : ""}.`,
-    "",
-    "**Páginas o rutas relevantes:**",
-    pageSummary,
-    "",
-    "**Variables y secretos:**",
-    envSummary,
-    "",
-    "**Siguiente paso recomendado:** pulsa **Refresh** en la vista previa para recargar el último build. Si el cambio incluye Stripe, dominios, Google Search Console o secretos, abre **Env Variables** y confirma que las claves reales estén configuradas antes de desplegar o probar pagos reales.",
-    creditsLine,
-  ].filter(Boolean).join("\n");
+  const creditsLine = typeof creditsRemaining === "number"
+    ? `\n\n_Créditos restantes: ${creditsRemaining}_`
+    : "";
+
+  return `${mensaje}${filesLine}${creditsLine}`;
 }
 
 // ── POST /api/apps ────────────────────────────────────────────────────────
