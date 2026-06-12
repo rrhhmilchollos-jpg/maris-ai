@@ -537,14 +537,14 @@ export default function AdminDashboardPage() {
   const [jobSearch, setJobSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  const { data, isLoading, error, dataUpdatedAt, refetch } = useQuery({
+  const { data, isLoading, isFetching: metricsFetching, error, dataUpdatedAt, refetch } = useQuery({
     queryKey: ["admin", "metrics"],
     queryFn: fetchMetrics,
     refetchInterval: autoRefresh ? 30_000 : false,
     refetchOnWindowFocus: true,
   });
 
-  const { data: jobsData, isLoading: jobsLoading, refetch: refetchJobs } = useListAdminJobs({
+  const { data: jobsData, isLoading: jobsLoading, isFetching: jobsFetching, refetch: refetchJobs } = useListAdminJobs({
     query: {
       refetchInterval: autoRefresh ? 15_000 : false,
     },
@@ -647,11 +647,11 @@ export default function AdminDashboardPage() {
               onClick={async () => {
                 await Promise.all([refetch(), refetchJobs()]);
               }}
-              disabled={isLoading || jobsLoading}
+              disabled={metricsFetching || jobsFetching}
               className="gap-2"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${(isLoading || jobsLoading) ? "animate-spin" : ""}`} />
-              {(isLoading || jobsLoading) ? "Actualizando…" : "Actualizar"}
+              <RefreshCw className={`h-3.5 w-3.5 ${(metricsFetching || jobsFetching) ? "animate-spin" : ""}`} />
+              {(metricsFetching || jobsFetching) ? "Actualizando…" : "Actualizar"}
             </Button>
             {dataUpdatedAt > 0 && (
               <Badge variant="outline" className="gap-1 text-xs">
@@ -967,11 +967,14 @@ export default function AdminDashboardPage() {
                           variant="outline"
                           size="sm"
                           className="h-8 px-2 gap-1.5 text-xs border-white/10 hover:border-white/20"
-                          disabled={jobsLoading}
-                          onClick={() => refetchJobs()}
+                          disabled={jobsFetching}
+                          onClick={async () => {
+                            await refetchJobs();
+                            toast({ title: "✅ Jobs actualizados", description: `${jobsData?.jobs?.length ?? 0} jobs cargados.` });
+                          }}
                         >
-                          <RefreshCw className={`h-3.5 w-3.5 ${jobsLoading ? "animate-spin" : ""}`} />
-                          {jobsLoading ? "Cargando…" : "Actualizar jobs"}
+                          <RefreshCw className={`h-3.5 w-3.5 ${jobsFetching ? "animate-spin" : ""}`} />
+                          {jobsFetching ? "Cargando…" : "Actualizar jobs"}
                         </Button>
                         <div className="flex items-center gap-1">
                           {(["all", "running", "failed", "queued"] as const).map((f) => (
