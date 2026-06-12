@@ -57,6 +57,7 @@ interface RouteGenerationRequestContext {
   detectedLocale?: string;
   detectedCountry?: string;
   uiLanguage?: string;
+  hasEverPaid?: boolean;  // false = usuario free → solo landing pages simples
 }
 
 /* ============================================================================
@@ -1808,6 +1809,22 @@ export async function generateApp(
   );
   await log("planner", planSummaryEs(execPlan));
 
+  // ── SISTEMA DE NIVELES POR PAGO ──────────────────────────────────────────
+  // FREE (sin haber pagado nunca): solo landing pages simples
+  //   - Máx 4 páginas, 6 componentes, sin backend, modelo Haiku
+  //   - El cliente puede seguir generando hasta agotar sus 50 créditos de bienvenida
+  //   - Al realizar su PRIMERA compra Stripe confirma el pago → hasEverPaid=true
+  //
+  // PAID (primera compra confirmada por Stripe):
+  //   - Sin límites de complejidad, Sonnet completo, proyectos grandes
+  // ─────────────────────────────────────────────────────────────────────────
+  const hasEverPaid = !!(requestContext?.hasEverPaid);
+  const isFreeUser = !hasEverPaid && !previous; // ediciones siempre permitidas
+
+  if (isFreeUser) {
+    await log("system", "✨ Cuenta nueva — generando landing page de demostración. Para proyectos más grandes, activa un plan.");
+  }
+
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
@@ -1922,24 +1939,37 @@ export async function generateApp(
 
   // Guardia de tamaño — si el arquitecto generó un plan demasiado grande, lo recortamos
   // antes de que llegue al frontend engineer para evitar timeouts
-  const MAX_PAGES = 8;
-  const MAX_COMPONENTS = 12;
-  const MAX_FILES = 45;
+  const MAX_PAGES = isFreeUser ? 4 : 8;
+  const MAX_COMPONENTS = isFreeUser ? 6 : 12;
+  const MAX_FILES = isFreeUser ? 20 : 45;
+
+  if (isFreeUser) {
+    // Usuario free: forzar landing page sin backend
+    plan.backendNeeded = false;
+    plan.backendFiles = [];
+    if (plan.pages.length > MAX_PAGES || plan.frontendFiles.length > MAX_FILES) {
+      await log("system", `⚡ Generando versión demo (${MAX_PAGES} páginas). Activa un plan para proyectos completos.`);
+    }
+  }
+
   if (plan.pages.length > MAX_PAGES || plan.frontendFiles.length > MAX_FILES) {
-    await log("architect", `⚠️ Plan demasiado grande (${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos) — reduciendo a MVP para evitar timeout.`, "warn");
+    if (!isFreeUser) {
+      await log("architect", `⚠️ Plan demasiado grande (${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos) — reduciendo a MVP para evitar timeout.`, "warn");
+    }
     plan.pages = plan.pages.slice(0, MAX_PAGES);
     plan.components = plan.components.slice(0, MAX_COMPONENTS);
-    plan.hooks = (plan.hooks ?? []).slice(0, 6);
-    plan.utils = (plan.utils ?? []).slice(0, 4);
-    // Reconstruir frontendFiles a partir de las páginas y componentes que quedan
+    plan.hooks = (plan.hooks ?? []).slice(0, isFreeUser ? 3 : 6);
+    plan.utils = (plan.utils ?? []).slice(0, isFreeUser ? 2 : 4);
     const keptPages = new Set(plan.pages.map((p: any) => p.name));
     const keptComponents = new Set(plan.components.map((c: any) => c.name));
     plan.frontendFiles = plan.frontendFiles.filter((f: string) => {
       if (f.includes("/pages/")) return [...keptPages].some(n => f.includes(n));
       if (f.includes("/components/")) return [...keptComponents].some(n => f.includes(n));
-      return true; // mantener archivos de configuración
+      return true;
     }).slice(0, MAX_FILES);
-    await log("architect", `✅ Plan reducido: ${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos — listo para generar.`);
+    if (!isFreeUser) {
+      await log("architect", `✅ Plan reducido: ${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos — listo para generar.`);
+    }
   }
 
   await log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
@@ -2553,6 +2583,8 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     const requestLocale = detectRequestLocale(req);
     const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n${prompt}`;
 
+    const hasEverPaid = !!(req.dbUser?.hasEverPaid || req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free"));
+
     const jobId = new mongoose.Types.ObjectId().toString();
     await GenerationJob.create({
       _id: jobId,
@@ -2565,6 +2597,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       phase: "queued",
       progress: 0,
       isAdmin,
+      hasEverPaid,
     });
 
     await enqueueGenerateJob(jobId);
@@ -3232,12 +3265,13 @@ export async function runJobById(jobId: string): Promise<void> {
       log,
       [],
       undefined,
-      undefined, // agentMemory — checkpointData NO es AgentMemoryContext (causaba TypeError en formatMemoryBlock)
+      undefined,
       {
         kind: job.kind,
         detectedLocale: extractPromptContext(job.prompt, "locale"),
         detectedCountry: extractPromptContext(job.prompt, "country"),
         uiLanguage: extractPromptContext(job.prompt, "uiLanguage"),
+        hasEverPaid: !!(job as any).hasEverPaid || !!(job as any).isAdmin,
       },
       jobId,
     );
@@ -3316,6 +3350,11 @@ export async function runJobById(jobId: string): Promise<void> {
         })(),
       });
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
+
+      // Mensaje de upgrade para usuarios free
+      if (!(job as any).hasEverPaid && !(job as any).isAdmin) {
+        await log("system", "🎉 ¡Tu app de demostración está lista! Para crear proyectos más grandes con backend, base de datos y más páginas, activa un plan desde la sección de precios.");
+      }
     }
 
     await GenerationJob.findByIdAndUpdate(jobId, {
