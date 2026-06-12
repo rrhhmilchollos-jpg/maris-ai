@@ -351,6 +351,27 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     }}>
                     {actionLoading[`cleanup_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🧹 Conservar esta"}
                   </Button>
+                  {/* Eliminar esta app */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-red-600/40 text-red-400 hover:bg-red-600/20 hover:border-red-600/60"
+                    disabled={actionLoading[`delapp_${appId}`]}
+                    title="Eliminar esta app definitivamente"
+                    onClick={async e => {
+                      e.stopPropagation();
+                      if (!window.confirm(`¿Eliminar la app "${app.title}" de ${app.userEmail}?\n\nEsta acción no se puede deshacer.`)) return;
+                      setActionLoading(p => ({ ...p, [`delapp_${appId}`]: true }));
+                      try {
+                        await apiFetch<any>(`/api/admin/apps/${appId}`, { method: "DELETE" });
+                        toast({ title: "🗑️ App eliminada", description: `"${app.title}" eliminada correctamente` });
+                        await searchApps(app.userEmail);
+                      } catch (e: any) {
+                        toast({ title: "Error al eliminar", description: e.message, variant: "destructive" });
+                      } finally {
+                        setActionLoading(p => ({ ...p, [`delapp_${appId}`]: false }));
+                      }
+                    }}>
+                    {actionLoading[`delapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                  </Button>
                   {/* Regenerar app */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
