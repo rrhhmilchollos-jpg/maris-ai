@@ -486,27 +486,26 @@ function LiveMonitorPanel() {
                           }
                         </Button>
                       </div>
-                      {/* Vista previa — siempre visible, busca el app del usuario si no hay appId directo */}
+                      {/* Vista previa — siempre visible */}
                       <Button
                         size="sm"
                         variant="outline"
                         className="w-full h-8 text-xs border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
                         disabled={actionLoading[`preview_${job.id}`]}
                         onClick={async () => {
-                          // Si ya tenemos appId, usarlo directamente
+                          const currentPreview = previewAppId === `job_${job.id}`;
+                          if (currentPreview) { setPreviewAppId(null); return; }
                           if (job.appId) {
-                            setPreviewAppId(previewAppId === job.appId ? null : job.appId);
+                            setPreviewAppId(`job_${job.id}`);
                             return;
                           }
-                          // Buscar el app más reciente del usuario
                           setActionLoading(p => ({ ...p, [`preview_${job.id}`]: true }));
                           try {
                             const d = await apiFetch<any>(`/api/admin/users/${job.userId}/apps?limit=1`);
-                            const apps = d.apps ?? d ?? [];
+                            const apps = d.apps ?? [];
                             const firstApp = Array.isArray(apps) ? apps[0] : null;
-                            if (firstApp?._id || firstApp?.id) {
-                              const aid = String(firstApp._id || firstApp.id);
-                              setPreviewAppId(previewAppId === aid ? null : aid);
+                            if (firstApp?.id || firstApp?._id) {
+                              setPreviewAppId(`job_${job.id}`);
                             } else {
                               toast({ title: "Sin app generada", description: "Este usuario aún no tiene ninguna app creada.", variant: "destructive" });
                             }
@@ -518,29 +517,33 @@ function LiveMonitorPanel() {
                         }}
                       >
                         {actionLoading[`preview_${job.id}`]
-                          ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Cargando…</>
-                          : <><Eye className="h-3 w-3 mr-1" />{previewAppId && (previewAppId === job.appId) ? "Cerrar vista previa" : "Vista previa de la app generada"}</>
+                          ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Buscando app…</>
+                          : previewAppId === `job_${job.id}`
+                            ? <><Eye className="h-3 w-3 mr-1" />Cerrar vista previa</>
+                            : <><Eye className="h-3 w-3 mr-1" />Vista previa de la app generada</>
                         }
                       </Button>
-                      {/* Panel de vista previa */}
-                      {previewAppId && (previewAppId === job.appId || (!job.appId)) && (
-                        <div className="rounded-lg border border-sky-500/20 overflow-hidden" style={{ height: 520 }}>
+                      {/* Panel de vista previa — solo para este job */}
+                      {previewAppId === `job_${job.id}` && (job.appId) && (
+                        <div className="rounded-lg border border-sky-500/20 overflow-hidden">
                           <div className="flex items-center justify-between px-3 py-1.5 bg-sky-500/10 border-b border-sky-500/20">
-                            <span className="text-[10px] text-sky-400 font-mono">Vista previa — {job.userEmail}</span>
+                            <span className="text-[10px] text-sky-400 font-mono truncate max-w-[200px]">
+                              {job.userEmail}
+                            </span>
                             <a
-                              href={`/api/admin/apps/${previewAppId}/preview`}
+                              href={`/api/admin/apps/${job.appId}/preview`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[10px] text-sky-400 hover:text-sky-300 underline"
+                              className="text-[10px] text-sky-400 hover:text-sky-300 underline shrink-0 ml-2"
                             >
-                              Abrir en nueva pestaña ↗
+                              Abrir en pestaña ↗
                             </a>
                           </div>
                           <iframe
-                            src={`/api/admin/apps/${previewAppId}/preview`}
+                            src={`/api/admin/apps/${job.appId}/preview`}
                             className="w-full bg-white"
                             style={{ height: 480, border: "none" }}
-                            title={`Vista previa — ${job.userEmail}`}
+                            title={`Preview ${job.userEmail}`}
                             sandbox="allow-scripts allow-same-origin allow-forms"
                           />
                         </div>
