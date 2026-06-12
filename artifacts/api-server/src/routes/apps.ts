@@ -3083,17 +3083,29 @@ export async function runJobById(jobId: string): Promise<void> {
     await JobLog.create({ jobId, agent, message, level });
   };
 
-    const onProgress = async (p: GenerateProgress) => {
-      await GenerationJob.findByIdAndUpdate(jobId, {
-        $set: { phase: p.phase, progress: p.progress, updatedAt: new Date() },
-      });
-    };
+  // Heartbeat inmediato — escribe el primer log antes de hacer cualquier cosa
+  // para que el watchdog y el admin puedan ver que el job está vivo
+  await log("system", `🚀 Job iniciado. Prompt: "${job.prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 80)}…"`);
 
-    const onPartialCode = async (code: string) => {
-      await GenerationJob.findByIdAndUpdate(jobId, {
-        $set: { partialFrontendCode: code, updatedAt: new Date() },
-      });
-    };
+  // Heartbeat periódico — actualiza updatedAt cada 30s para que el watchdog
+  // no lo marque como zombie mientras los agentes trabajan en silencio
+  const heartbeatInterval = setInterval(async () => {
+    try {
+      await GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } });
+    } catch { /* swallow — never crash the pipeline */ }
+  }, 30_000);
+
+  const onProgress = async (p: GenerateProgress) => {
+    await GenerationJob.findByIdAndUpdate(jobId, {
+      $set: { phase: p.phase, progress: p.progress, updatedAt: new Date() },
+    });
+  };
+
+  const onPartialCode = async (code: string) => {
+    await GenerationJob.findByIdAndUpdate(jobId, {
+      $set: { partialFrontendCode: code, updatedAt: new Date() },
+    });
+  };
 
   try {
     let previousApp: any = undefined;
@@ -3199,7 +3211,9 @@ export async function runJobById(jobId: string): Promise<void> {
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
+    clearInterval(heartbeatInterval);
   } catch (err) {
+    clearInterval(heartbeatInterval);
     logger.error({ err, jobId }, "runJobById: Generation failed");
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: {
