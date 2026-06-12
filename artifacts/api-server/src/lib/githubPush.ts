@@ -256,6 +256,13 @@ export async function pushAppToGitHub(opts: {
       body: { sha: commitToPush.sha, force: false },
     }, token);
     if (patch.ok) break;
+    // "Reference cannot be updated" = otro job duplicado ya pusheó este mismo commit — tratar como éxito
+    const isAlreadyUpdated =
+      patch.status === 422 &&
+      /reference cannot be updated/i.test(patch.message ?? "");
+    if (isAlreadyUpdated) {
+      break; // el código ya está en GitHub — éxito silencioso
+    }
     const isFastFwdConflict =
       patch.status === 422 &&
       /not a fast forward|update is not a fast forward/i.test(patch.message ?? "");
