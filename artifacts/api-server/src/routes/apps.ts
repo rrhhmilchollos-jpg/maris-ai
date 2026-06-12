@@ -555,6 +555,31 @@ async function architectPlan(prompt: string, research: string, templateContext =
   plan.dataModels = plan.dataModels ?? [];
   plan.backendFiles = plan.backendFiles ?? [];
   plan.techStack = plan.techStack ?? ["React", "TypeScript", "Tailwind"];
+
+  // Límites hard en architectPlan — independiente del deploy
+  // Evita que el coder reciba planes que no puede procesar en 64K tokens
+  const HARD_MAX_PAGES = 8;
+  const HARD_MAX_COMPONENTS = 12;
+  const HARD_MAX_FILES = 40;
+  if (plan.pages.length > HARD_MAX_PAGES) {
+    logger.warn({ pages: plan.pages.length }, "Architect plan too large — truncating pages");
+    plan.pages = plan.pages.slice(0, HARD_MAX_PAGES);
+  }
+  if (plan.components.length > HARD_MAX_COMPONENTS) {
+    plan.components = plan.components.slice(0, HARD_MAX_COMPONENTS);
+  }
+  if (plan.hooks.length > 6) plan.hooks = plan.hooks.slice(0, 6);
+  if (plan.utils.length > 4) plan.utils = plan.utils.slice(0, 4);
+  if (plan.frontendFiles.length > HARD_MAX_FILES) {
+    const keptPages = new Set(plan.pages.map((p: any) => p.name));
+    const keptComponents = new Set(plan.components.map((c: any) => c.name));
+    plan.frontendFiles = plan.frontendFiles.filter((f: string) => {
+      if (f.includes("/pages/")) return [...keptPages].some(n => f.includes(n));
+      if (f.includes("/components/")) return [...keptComponents].some(n => f.includes(n));
+      return true;
+    }).slice(0, HARD_MAX_FILES);
+  }
+
   return plan;
 }
 
@@ -2031,10 +2056,15 @@ export async function generateApp(
   // Para apps complejas como Seguxat, usamos una estrategia de generación paralela de archivos
   // para reducir el tiempo de espera de 10 min a menos de 4 min.
   const frontendResult = await runPhase("frontend", async () => {
-    // Heartbeat de logs cada 20s — evita que el watchdog mate el coder entre logs de KB
-    const coderHeartbeat = setInterval(async () => {
-      try { await log("coder", `⏳ Generando código…`); } catch { /* swallow */ }
-    }, 20_000);
+    // Heartbeat cada 30s — escribe log directo a MongoDB Y actualiza updatedAt
+    // Esto mantiene vivo el job ante el watchdog durante el tiempo de espera
+    // inicial antes de que Claude empiece a enviar tokens
+    const coderHeartbeat = setInterval(() => {
+      Promise.all([
+        JobLog.create({ jobId, agent: "coder", message: "⏳ Generando código…", level: "info" }),
+        GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }),
+      ]).catch(() => { /* nunca crashear el pipeline */ });
+    }, 30_000);
     try {
       // Forzamos el uso de Sonnet 4.6 para máxima velocidad sin sacrificar inteligencia
       const turboModel = "claude-sonnet-4-6";
@@ -3160,10 +3190,9 @@ router.get("/templates", async (_req: any, res: any) => {
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
   await connectDB();
   const STALE_MS = 8 * 60 * 1000;   // Reducido de 15 a 8 minutos
-  const ZOMBIE_MS = 3 * 60 * 1000;  // Job sin logs = zombie tras 3 min (heartbeat escribe cada 25s)
+  const ZOMBIE_MS = 6 * 60 * 1000;  // 6 min sin logs = zombie real (Claude puede tardar hasta 5 min en empezar a streamear)
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
-  const zombieDate = new Date(now.getTime() - ZOMBIE_MS);
 
   const orphanedQueued = await GenerationJob.find({
     status: "queued",
@@ -3194,10 +3223,13 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     logger.info({ count: orphanedRunningJobs.length }, "Re-enqueued stale running jobs");
   }
 
-  // Detección de zombies: jobs running sin ningún log en los últimos 5 minutos
+  // Detección de zombies: jobs running sin ningún log en los últimos 6 minutos
+  // IMPORTANTE: usamos la fecha del último log, NO updatedAt del job
+  // porque updatedAt se actualiza con el heartbeat pero el proceso puede estar colgado
+  const sixMinAgo = new Date(now.getTime() - ZOMBIE_MS);
   const runningJobs = await GenerationJob.find({
     status: "running",
-    updatedAt: { $lt: zombieDate },
+    createdAt: { $lt: sixMinAgo }, // solo jobs que llevan más de 6 min
     awaitingApproval: { $ne: true },
     ...(opts.userId ? { userId: opts.userId } : {}),
   }).lean();
@@ -3208,10 +3240,10 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
       .lean();
     const lastLogAge = lastLog
       ? now.getTime() - new Date((lastLog as any).createdAt).getTime()
-      : Infinity;
+      : now.getTime() - new Date((job as any).createdAt).getTime();
 
     if (lastLogAge > ZOMBIE_MS) {
-      logger.warn({ jobId: job._id, lastLogAge }, "Zombie job detected — no logs for 5min, force re-queuing");
+      logger.warn({ jobId: job._id, lastLogAge }, "Zombie job detected — no logs for 6min, force re-queuing");
       await GenerationJob.updateOne(
         { _id: job._id },
         { $set: { status: "queued", phase: "queued", progress: 0, updatedAt: now } },
