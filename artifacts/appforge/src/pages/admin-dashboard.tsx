@@ -352,24 +352,40 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                   </Button>
                 </div>
               </div>
-              {/* Preview — abre en popup para evitar problemas CSP del iframe */}
+              {/* Preview — iframe inline con botones externos */}
               {isPreviewOpen && (
-                <div className="border-t border-white/5 bg-black/20 p-4 text-center">
-                  <p className="text-xs text-white/50 mb-3">El preview se abre en una ventana nueva para garantizar que se vea correctamente</p>
-                  <div className="flex gap-2 justify-center">
-                    <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white"
-                      onClick={() => {
-                        const url = `${apiBase}/api/apps/${appId}/preview`;
-                        const w = window.open(url, `preview_${appId}`, "width=430,height=750,left=100,top=50,resizable=yes,scrollbars=yes");
-                        if (!w) window.open(url, "_blank");
-                      }}>
-                      📱 Abrir preview (móvil)
-                    </Button>
-                    <Button size="sm" variant="outline" className="border-white/20 text-white/70"
-                      onClick={() => window.open(`${apiBase}/api/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
-                      🖥️ Pantalla completa
-                    </Button>
+                <div className="border-t border-white/5 bg-black/30">
+                  {/* Barra de controles */}
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-black/40 border-b border-white/5">
+                    <span className="text-[10px] text-white/30 font-mono truncate max-w-[50%]">
+                      preview • {appId}
+                    </span>
+                    <div className="flex gap-1.5 shrink-0">
+                      <Button size="sm" variant="outline"
+                        className="h-6 px-2 text-[10px] border-white/10 text-white/50 hover:text-white/80"
+                        onClick={() => {
+                          const url = `${apiBase}/api/apps/${appId}/preview`;
+                          const w = window.open(url, `preview_${appId}`, "width=430,height=750,left=100,top=50,resizable=yes,scrollbars=yes");
+                          if (!w) window.open(url, "_blank");
+                        }}>
+                        📱 Móvil
+                      </Button>
+                      <Button size="sm" variant="outline"
+                        className="h-6 px-2 text-[10px] border-white/10 text-white/50 hover:text-white/80"
+                        onClick={() => window.open(`${apiBase}/api/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
+                        🖥️ Nueva pestaña
+                      </Button>
+                    </div>
                   </div>
+                  {/* iframe directo */}
+                  <iframe
+                    src={`${apiBase}/api/apps/${appId}/preview`}
+                    className="w-full border-0"
+                    style={{ height: "600px", background: "#0a0a0f" }}
+                    title={`Preview ${appId}`}
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                    allow="clipboard-read; clipboard-write"
+                  />
                 </div>
               )}
             </CardContent>
