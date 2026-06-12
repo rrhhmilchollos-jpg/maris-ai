@@ -35,26 +35,32 @@ export type ClassifiedIntent = {
  * production data/state instead of rebuilding source files.
  */
 const EXEC_KEYWORD_PATTERNS: RegExp[] = [
-  /\b(registra|registrar|registro|alta|dar\s+de\s+alta)\b/i,
-  /\b(insertar|inserta|inyectar|guarda|guardar|persistir|grabar)\b/i,
+  // Operaciones directas sobre BD/CRM — requieren contexto de datos REAL
   /\b(mongodb|mongo\s*db|base\s+de\s+datos|bbdd|database|colecci[oó]n|collection)\b/i,
-  /\b(crm|ventas|comercial(?:es)?|agente\s+comercial|lead|cliente|pipeline)\b/i,
-  /\b(credenciales|password|contrase[\u00f1n]a|email|correo|usuario|rol|permisos)\b/i,
-  /\b(eliminar|borra|borrar|desactivar|revocar)\b.*\b(usuario|cliente|registro|lead|credenciales|crm|mongodb|base\s+de\s+datos)\b/i,
-  // Patrones para operaciones de datos sin ambigüedad
-  /\ba[\u00f1n]ade.*\b(usuario|trabajador|empleado|cliente|lead|contacto|registro|miembro|admin)\b/i,
-  /\b(a[\u00f1n]ade|a[\u00f1n]adir|agrega|agregar)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|colecci[oó]n))\b/i,
-  /\b(como\s+(?:trabajador|empleado|usuario|admin|cliente|lead|agente|comercial))\b/i,
-  /\b(muestra|mu[eé]strame|lista|listar|consulta|consultar|ver|visualiza)\b.*\b(usuarios|trabajadores|empleados|clientes|leads|registros|datos|crm)\b/i,
-  /\b(actualiza|actualizar|modifica|modificar|cambia|cambiar)\b.*\b(usuario|trabajador|empleado|cliente|lead|registro|dato|campo)\b/i,
-  /\b(borra|borrar|elimina|eliminar|quita|quitar|suprime|suprimir)\b.*\b(usuario|trabajador|empleado|cliente|lead|registro|dato)\b/i,
-  // Patrones específicos para el caso: "añade en base de datos de la CRM de ventas como trabajador"
-  /\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb))\b.*\b(como\s+(?:trabajador|usuario|empleado|admin|cliente))\b/i,
-  /\b(a[\u00f1n]ade|agrega|inserta|registra)\b.*\b(con\s+(?:este|su|el)\s+(?:correo|email|usuario|contrase[\u00f1n]a))\b/i,
-  /\b(con\s+(?:correo|email|usuario)\b.*\b(?:y|e)\s+(?:contrase[\u00f1n]a|password))\b/i,
-  // Operaciones de estado/configuración del sistema
-  /\b(configura|configurar|activa|activar|desactiva|desactivar)\b.*\b(usuario|cuenta|acceso|permiso|rol|plan)\b/i,
-  /\b(asigna|asignar|otorga|otorgar)\b.*\b(rol|permiso|acceso|plan|crédito)\b/i,
+  /\b(insertar|inserta|inyectar|persistir|grabar)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|colecci[oó]n))\b/i,
+  /\b(registra|registrar|alta|dar\s+de\s+alta)\b.*\b(usuario|cliente|lead|trabajador|empleado)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|sistema))\b/i,
+  // CRM/pipeline de ventas — solo cuando hay contexto de operación sobre datos
+  /\b(crm|pipeline|leads?)\b.*\b(a[ñn]ade|agrega|inserta|registra|elimina|borra|actualiza)\b/i,
+  /\b(a[ñn]ade|agrega|inserta|registra)\b.*\b(crm|pipeline|leads?|base\s+de\s+datos|bbdd|mongodb)\b/i,
+  // Credenciales/acceso — solo cuando se pide operar sobre cuentas reales
+  /\b(credenciales|password|contrase[ñn]a)\b.*\b(a[ñn]ade|agrega|cambia|modifica|revocar|eliminar)\b/i,
+  /\b(asigna|otorga)\b.*\b(rol|permiso|acceso)\b.*\b(usuario|cuenta|admin)\b/i,
+  // Patrones inequívocos de operación de datos
+  /\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb))\b.*\b(como\s+(?:trabajador|empleado|admin|lead|agente|comercial))\b/i,
+  /\b(a[ñn]ade|agrega|inserta|registra)\b.*\b(con\s+(?:este|su|el)\s+(?:correo|email)\b.*\bcontrase[ñn]a)\b/i,
+  /\b(eliminar|borra|borrar|desactivar|revocar)\b.*\b(registro|lead|credenciales|mongodb|base\s+de\s+datos|crm)\b/i,
+  // Consultas sobre datos reales del sistema
+  /\b(muestra|lista|consulta)\b.*\b(todos\s+los|todas\s+las)\b.*\b(usuarios|clientes|leads|registros)\b.*\b((?:en|del?|de\s+la)\s+(?:crm|sistema|base\s+de\s+datos|bbdd))\b/i,
+];
+
+// Patrones que son SIEMPRE ENGINE_DEV aunque suenen a datos
+// (el usuario quiere un cambio en la UI/código, no operar sobre datos reales)
+const ALWAYS_DEV_PATTERNS: RegExp[] = [
+  /\b(ponme|hazme|quiero\s+que|necesito\s+que)\b.*\b(aparezca|muestre|se\s+vea|funcione)\b/i,
+  /\b(no\s+funciona|está\s+roto|hay\s+un\s+error|no\s+carga|pantalla\s+en\s+blanco|falla|crash)\b/i,
+  /\b(cambia|modifica|actualiza|arregla|corrige|añade|agrega|quita|elimina)\b.*\b(el\s+botón|la\s+página|el\s+color|el\s+diseño|el\s+menú|el\s+formulario|la\s+sección|el\s+componente|el\s+estilo|la\s+vista|el\s+texto)\b/i,
+  /\b(completa|termina|implementa|desarrolla)\b.*\b(la\s+app|la\s+web|las\s+páginas|el\s+backend|el\s+frontend)\b/i,
+  /\b(genera|crea|construye|haz)\b.*\b(una\s+(?:app|web|página|sección|pantalla|vista|panel|dashboard))\b/i,
 ];
 
 const DEV_KEYWORD_PATTERNS: RegExp[] = [
@@ -72,6 +78,8 @@ function looksLikeEdit(message: string): boolean {
 }
 
 function looksLikeExecution(message: string): boolean {
+  // Si el mensaje claramente quiere un cambio en la UI/código, NO es execute
+  if (ALWAYS_DEV_PATTERNS.some((re) => re.test(message))) return false;
   return EXEC_KEYWORD_PATTERNS.some((re) => re.test(message));
 }
 
@@ -110,19 +118,44 @@ Tu trabajo: leer el último mensaje del usuario en el chat de UNA app YA EXISTEN
 
 {"intent":"question"|"research"|"edit"|"execute","reply":"...","reason":"..."}
 
-Reglas estrictas:
+== MOTORES ==
 
-- "execute" = ENGINE_EXEC. El usuario pide operar sobre datos o estado real: registrar/insertar/guardar/eliminar usuarios, leads, clientes, credenciales, CRM, ventas, MongoDB, APIs de producción o bases de datos. NO se modifica código, NO se genera bundle, NO se compila. "reply" debe ir vacío.
+"execute" = ENGINE_EXEC.
+El usuario pide operar sobre DATOS REALES en producción: insertar/registrar/borrar usuarios, leads, clientes, credenciales, CRM, MongoDB, APIs externas. NO se toca código. "reply" vacío.
+Ejemplos: "registra a Juan como cliente", "borra el lead 42", "inserta este producto en la BD".
 
-- "edit" = ENGINE_DEV. El usuario quiere construir o cambiar código fuente: diseño, maquetación, lógica de negocio, botones, páginas, componentes, estilos, APIs, endpoints, workflows, deploy/preview o correcciones de la app. "reply" debe ir vacío.
+"edit" = ENGINE_DEV.
+El usuario quiere que Maris AI cambie/construya/arregle CÓDIGO FUENTE: diseño, páginas, componentes, botones, colores, lógica, rutas, backend, endpoints, correcciones de errores, añadir funcionalidades, cambiar textos en la UI. "reply" vacío.
+Ejemplos: "añade una página de contacto", "cambia el color del botón a azul", "arregla el error del login", "haz que el formulario valide el email", "pon el logo más grande", "crea la sección de precios".
 
-- "research" = ENGINE_RESEARCH. El usuario pide buscar información externa o revisar una URL sin cambiar la app. "reply" debe ir vacío.
+"research" = ENGINE_RESEARCH.
+El usuario pide buscar información externa o analizar una URL. No modifica la app. "reply" vacío.
 
-- "question" = ENGINE_INFO. El usuario pregunta algo sobre la app o Maris AI y no pide ninguna operación. En este caso "reply" debe contener una respuesta clara y útil en ESPAÑOL, máximo 500 caracteres, sin saludos ni cierres tipo "¿algo más?".
+"question" = ENGINE_INFO.
+El usuario solo pregunta algo, no pide ninguna acción. "reply" en ESPAÑOL, máximo 500 caracteres, sin saludos ni "¿algo más?".
 
-Prioridad: si hay una operación de datos/CRM/credenciales/MongoDB, elige "execute" aunque aparezcan verbos como añadir o eliminar. Si hay petición clara de código/UI/app, elige "edit". En caso de duda entre edit y question, elige "edit". No uses Markdown en "reply"; texto plano. No expliques tu razonamiento, solo el JSON.
+== REGLAS DE PRIORIDAD ==
+1. Si involucra datos reales de producción (CRM, MongoDB, usuarios reales) → "execute"
+2. Si pide cambiar/añadir/arreglar algo en la app o su código → "edit"
+3. Si pide investigar una URL o buscar en internet → "research"
+4. Si solo pregunta sin pedir acción → "question"
+5. En caso de duda entre "edit" y cualquier otro → siempre "edit"
 
-Léxico español común:
+== CASOS ESPECIALES — SIEMPRE "edit" ==
+- "ponme X", "hazme X", "quiero X en la app" → edit (el usuario quiere un cambio visual/funcional)
+- "no funciona X", "hay un error en X", "está roto X" → edit (arreglo de código)
+- "añade X" cuando X es una funcionalidad, sección o elemento UI → edit
+- "cambia X", "modifica X" cuando X es parte de la interfaz → edit
+- "completa las páginas", "termina la app", "implementa X" → edit
+
+== CASOS "execute" (SOLO si opera datos reales) ==
+- "registra/inserta/guarda [persona/lead] en [CRM/BD/MongoDB]" → execute
+- "borra el [usuario/cliente/registro] de [BD/CRM]" → execute
+- "actualiza el campo [X] del registro [Y] en [MongoDB/CRM]" → execute
+
+No uses Markdown en "reply". No expliques tu razonamiento. Solo el JSON.
+
+Léxico español:
 ${SPANISH_LEXICON_PROMPT_SUMMARY}`;
 
 function engineForIntent(intent: ChatIntent): ExecutionEngine {
