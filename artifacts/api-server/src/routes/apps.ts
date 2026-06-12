@@ -3408,7 +3408,7 @@ export async function runJobById(jobId: string): Promise<void> {
           message: `✅ Tu app **${appTitle}** ha sido actualizada por el equipo de soporte y ya está lista. Puedes verla y continuar editándola desde tu panel. Como compensación por las molestias, hemos añadido **10 créditos** a tu cuenta. Si encuentras algún problema adicional o tienes algún error más complejo, no dudes en contactarnos abriendo un **ticket de soporte** — estaremos encantados de ayudarte. 💜`,
           read: false,
         });
-        // Compensación: 10 créditos al cliente
+        // Compensación: 10 créditos + email de disculpas al cliente
         try {
           await User.findByIdAndUpdate(job.userId, { $inc: { credits: 10 } });
           await CreditTransaction.create({
@@ -3418,7 +3418,21 @@ export async function runJobById(jobId: string): Promise<void> {
             description: "Compensación por incidencia — corrección aplicada por el equipo de soporte",
           });
           await log("system", "🎁 10 créditos de compensación añadidos al cliente.");
-        } catch { /* no crashear el pipeline por esto */ }
+
+          // Email de disculpas automático
+          const dbUser = await User.findById(job.userId).lean() as any;
+          if (dbUser?.email) {
+            const { sendApologyEmail } = await import("../lib/notify");
+            await sendApologyEmail({
+              userEmail: dbUser.email,
+              userName: dbUser.fullName || undefined,
+              appTitle,
+              dashboardUrl: "https://www.marisai.es/dashboard",
+              creditsCompensation: 10,
+            });
+            await log("system", `📧 Email de disculpas enviado a ${dbUser.email}`);
+          }
+        } catch (e) { logger.warn({ e }, "Error en compensación/email post-corrección"); }
         await log("system", `✅ Corrección de soporte aplicada correctamente. El cliente ha sido notificado.`);
       }
 
