@@ -258,7 +258,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                   {/* Abrir en nueva pestaña */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
@@ -271,6 +271,34 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     onClick={() => setPreviewAppId(isPreviewOpen ? null : appId)}>
                     {isPreviewOpen ? "Cerrar" : <><Eye className="h-3 w-3 mr-1" />Preview</>}
                   </Button>
+                  {/* Editar código — eliminar textos del footer */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                    onClick={async () => {
+                      const search = window.prompt(
+                        "Texto a eliminar del código de la app (exacto):",
+                        " | Configurar dominio | Error en Google"
+                      );
+                      if (!search) return;
+                      try {
+                        const d = await apiFetch<any>(`/api/admin/apps/${appId}/patch-code`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ search, replace: "" }),
+                        });
+                        if (d.ok) {
+                          toast({ title: "✅ Código parcheado", description: d.message });
+                          setPreviewAppId(null);
+                          setTimeout(() => setPreviewAppId(appId), 100);
+                        } else {
+                          toast({ title: "⚠️ No encontrado", description: d.message, variant: "destructive" });
+                        }
+                      } catch (e: any) {
+                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                      }
+                    }}>
+                    ✂️ Editar código
+                  </Button>
                   {/* Disculpas */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
@@ -281,7 +309,6 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                       if (!window.confirm(`¿Enviar email de disculpas a ${recipient}?`)) return;
                       setApologyLoading(appId);
                       try {
-                        // Buscar el último job fallido de este usuario para el endpoint
                         const jobsData = await apiFetch<any>(`/api/admin/jobs?userId=${app.userId}&limit=1&status=failed`);
                         const lastJob = (jobsData.jobs ?? [])[0];
                         if (lastJob) {
