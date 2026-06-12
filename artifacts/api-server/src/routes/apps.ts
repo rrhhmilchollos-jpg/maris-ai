@@ -3488,23 +3488,27 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     if (!app?.frontendCode) return res.status(404).send("<h1>App no encontrada</h1>");
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Content-Security-Policy", "frame-ancestors *");
+    res.setHeader("Content-Security-Policy", "frame-ancestors *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; connect-src *; img-src * data: blob:; font-src *");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
 
-    // Intentar buildDeployHtml con esbuild
+    // Intentar buildDeployHtml con esbuild (mejor calidad)
     try {
       const { buildDeployHtml } = await import("../lib/deployBundle");
       const html = await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
-      return res.send(html);
+      // Parchear la CSP del HTML generado para permitir esm.sh en iframe
+      const patched = html.replace(
+        /Content-Security-Policy[^<]*/g, ""
+      );
+      return res.send(patched);
     } catch (esbuildErr) {
-      logger.warn({ err: esbuildErr, appId: req.params.id }, "esbuild failed, using CDN fallback");
+      logger.warn({ err: esbuildErr, appId: req.params.id }, "esbuild failed, using Babel fallback");
     }
 
     // Extraer archivos del bundle
     const files: Record<string, string> = {};
-    const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
-    for (const part of parts) {
+    const parts2 = (app.frontendCode as string).split(/\/\/ === FILE: /);
+    for (const part of parts2) {
       if (!part.trim()) continue;
       const nl = part.indexOf("\n");
       if (nl === -1) continue;
@@ -3516,10 +3520,25 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     const rawHtml = files["index.html"] || files["public/index.html"];
     if (rawHtml && rawHtml.includes("<html")) return res.send(rawHtml);
 
-    // Fallback: renderizar App.tsx/jsx con Babel + React CDN en el navegador
+    // Fallback con Babel — renderiza TSX en navegador limpiando imports externos
     const appCode = files["src/App.tsx"] || files["src/App.jsx"] || files["src/App.js"] || "";
+    const mainCode = files["src/main.tsx"] || files["src/main.jsx"] || "";
     const cssCode = files["src/index.css"] || files["src/App.css"] || "";
-    const title = (app.title || "App").replace(/[<>"]/g, "");
+    const appSizeKb = Math.round((app.frontendCode as string).length / 1024);
+    const title = (app.title || "App").replace(/[<>"&]/g, "");
+
+    // Limpiar imports externos — Babel en browser no puede resolverlos
+    const cleanForBabel = (code: string) => code
+      .replace(/^import\s+.*?\s+from\s+['"][^.\/][^'"]*['"]\s*;?\s*$/gm, "/* import externo eliminado */")
+      .replace(/^import\s+['"][^.\/][^'"]*['"]\s*;?\s*$/gm, "/* import side-effect eliminado */")
+      .replace(/^export\s+default\s+function\s+(\w+)/m, "function $1 /* default */")
+      .replace(/^export\s+default\s+class\s+(\w+)/m, "class $1 /* default */")
+      .replace(/^export\s+default\s+/m, "const __DefaultExport = ")
+      .replace(/^export\s+\{[^}]+\}\s*;?\s*$/gm, "")
+      .replace(/^export\s+(const|let|var|function|class|type|interface)\s+/gm, "$1 ");
+
+    const cleanApp = cleanForBabel(appCode);
+    const componentName = (appCode.match(/(?:function|class|const)\s+(App\w*)/)?.[1]) || "App";
 
     const fallback = `<!DOCTYPE html>
 <html lang="es">
@@ -3527,25 +3546,62 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${title}</title>
-<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"/>
-<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',sans-serif}${cssCode}</style>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Inter',sans-serif;min-height:100vh;margin:0}
+${cssCode}
+</style>
 </head>
 <body>
 <div id="root"></div>
+<script>
+/* Polyfills React hooks globals */
+const {useState,useEffect,useRef,useCallback,useMemo,useContext,useReducer,useLayoutEffect,useId,useTransition,useDeferredValue,forwardRef,createContext,memo,Fragment,lazy,Suspense} = React;
+/* Stubs para dependencias externas comunes */
+const clsx = (...a) => a.flat().filter(Boolean).join(' ');
+const cn = clsx;
+const classNames = clsx;
+/* lucide-react stub */
+const LucideIcon = ({size=24,color='currentColor',...p}) => React.createElement('svg',{width:size,height:size,viewBox:'0 0 24 24',fill:'none',stroke:color,strokeWidth:2,...p});
+window.lucideReact = new Proxy({default:LucideIcon},{get:(_,k)=>k==='default'?LucideIcon:LucideIcon});
+/* recharts stub */
+window.recharts = new Proxy({},{get:(_,k)=>()=>null});
+/* framer-motion stub */
+window.motion = {div:'div',span:'span',button:'button',section:'section',p:'p',h1:'h1',h2:'h2',h3:'h3',ul:'ul',li:'li'};
+window.AnimatePresence = ({children})=>children;
+</script>
 <script type="text/babel" data-presets="react,typescript">
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
-${appCode
-  .replace(/^import\s+.*?from\s+['"][^'"]+['"]\s*;?\s*$/gm, "")
-  .replace(/^export\s+default\s+/m, "const __App = ")
-  .replace(/^export\s+\{[^}]+\}\s*;?\s*$/gm, "")
+const {useState,useEffect,useRef,useCallback,useMemo,useContext,useReducer,forwardRef,createContext,memo,Fragment} = React;
+const clsx = (...a) => a.flat().filter(Boolean).join(' ');
+const cn = clsx;
+
+${cleanApp}
+
+/* Detectar y renderizar el componente principal */
+const __toRender = (
+  typeof ${componentName} !== 'undefined' ? ${componentName} :
+  typeof App !== 'undefined' ? App :
+  typeof __DefaultExport !== 'undefined' ? __DefaultExport :
+  () => React.createElement('div',{style:{padding:'2rem',maxWidth:'600px',margin:'4rem auto',fontFamily:'Inter,sans-serif'}},
+    React.createElement('h1',{style:{fontSize:'1.75rem',fontWeight:'700',marginBottom:'1rem'}},'${title}'),
+    React.createElement('p',{style:{color:'#6B7280',marginBottom:'1.5rem'}},'App de ${appSizeKb}KB generada correctamente.'),
+    React.createElement('div',{style:{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:'8px',padding:'1rem',color:'#1D4ED8',fontSize:'0.9rem'}},
+      'Para ver la app completa despliégala desde el panel con el botón Deploy.'
+    )
+  )
+);
+
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(React.createElement(__toRender));
+} catch(e) {
+  document.getElementById('root').innerHTML = '<div style="padding:2rem;font-family:Inter,sans-serif"><h2 style="color:#E63946">Error renderizando preview</h2><pre style="margin-top:1rem;font-size:12px;color:#666;white-space:pre-wrap">'+e.message+'</pre><p style="margin-top:1rem;color:#666">La app se generó correctamente. Despliégala para verla completa.</p></div>';
 }
-const __AppToRender = typeof __App !== 'undefined' ? __App : () => React.createElement('div', {style:{padding:'2rem',fontFamily:'sans-serif'}}, React.createElement('h2', null, '${title}'), React.createElement('p', {style:{color:'#666',marginTop:'0.5rem'}}, 'App generada correctamente. Despliega para verla completa.'));
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(__AppToRender));
 </script>
 </body>
 </html>`;
