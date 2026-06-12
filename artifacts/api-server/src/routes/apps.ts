@@ -2583,6 +2583,61 @@ router.get("/models", requireAuth, async (req: any, res: any) => {
   res.json(availableModels);
 });
 
+// ── PLAN PREVIEW — el arquitecto analiza el prompt y propone el plan al usuario ──
+// POST /api/apps/plan-preview
+// Devuelve un resumen del plan propuesto SIN generar código, para que el usuario
+// confirme qué quiere antes de gastar créditos
+router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const userId = req.auth?.userId;
+    const { prompt, kind } = req.body ?? {};
+    if (!prompt || typeof prompt !== "string") {
+      res.status(400).json({ error: "prompt requerido" }); return;
+    }
+
+    const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+
+    // Usar Claude para analizar el prompt y proponer un plan conversacional
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1000,
+      system: `Eres el Arquitecto de Maris AI. Analiza el prompt del usuario y responde en JSON con lo que vas a construir y qué extras podrías añadir que NO pidió explícitamente pero podrían ser útiles.
+
+Devuelve SOLO este JSON:
+{
+  "title": "nombre corto del proyecto",
+  "summary": "1-2 frases de qué vas a construir exactamente",
+  "included": ["funcionalidad 1 que SÍ pidió", "funcionalidad 2 que SÍ pidió"],
+  "extras": [
+    {"id": "auth", "label": "Sistema de login/registro", "why": "Para que los usuarios tengan cuentas personales"},
+    {"id": "payments", "label": "Pagos con Stripe", "why": "Para monetizar la plataforma"},
+    {"id": "analytics", "label": "Dashboard de analíticas", "why": "Para ver estadísticas de uso"}
+  ],
+  "estimatedPages": 5,
+  "backendNeeded": true
+}
+
+"extras" son SOLO funcionalidades que NO están en el prompt. Máximo 3 extras. Si no hay extras obvios, devuelve "extras": [].
+"included" son las funcionalidades que SÍ pidió el usuario, máximo 5.
+No incluyas extras triviales. Solo los que realmente añadirían valor.`,
+      messages: [{ role: "user", content: `Analiza este prompt y propón el plan:\n\n${cleanPrompt}\n\nTipo de app: ${kind || "fullstack"}` }],
+    });
+
+    const raw = (response.content[0] as any).text ?? "";
+    const first = raw.indexOf("{");
+    const last = raw.lastIndexOf("}");
+    if (first === -1 || last === -1) {
+      res.status(500).json({ error: "No se pudo analizar el plan" }); return;
+    }
+    const plan = JSON.parse(raw.slice(first, last + 1));
+    res.json({ ok: true, plan });
+  } catch (err) {
+    logger.error({ err }, "plan-preview error");
+    res.status(500).json({ error: "Error generando preview del plan" });
+  }
+});
+
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
     const { prompt, model, language, attachments, kind } = req.body;
