@@ -246,41 +246,115 @@ export async function sendApologyEmail(opts: {
   userName?: string;
   appTitle?: string;
   dashboardUrl?: string;
+  creditsCompensation?: number;
 }): Promise<boolean> {
-  const { userEmail, userName, appTitle, dashboardUrl = "https://www.marisai.es/dashboard" } = opts;
-  const greeting = userName ? `Hola ${userName.split(" ")[0]},` : "Hola,";
-  const appDesc = appTitle ? `tu app "${appTitle}"` : "tu proyecto";
+  const { userEmail, userName, appTitle, dashboardUrl = "https://www.marisai.es/dashboard", creditsCompensation = 0 } = opts;
+  const firstName = userName ? userName.split(" ")[0] : null;
+  const greeting = firstName ? `Hola ${firstName},` : "Hola,";
+  const appDesc = appTitle ? `tu app <strong style="color:#f3f4f6">"${appTitle}"</strong>` : "tu proyecto";
+  const appDescPlain = appTitle ? `"${appTitle}"` : "tu proyecto";
+  const creditsBlock = creditsCompensation > 0 ? `
+    <div style="background:linear-gradient(135deg,#7c3aed15,#a855f715);border:1px solid #7c3aed40;border-radius:10px;padding:18px 20px;margin:20px 0;display:flex;align-items:center;gap:14px">
+      <div style="font-size:28px;line-height:1">🎁</div>
+      <div>
+        <div style="color:#a78bfa;font-weight:700;font-size:14px;margin-bottom:3px">+${creditsCompensation} créditos añadidos a tu cuenta</div>
+        <div style="color:#9ca3af;font-size:13px">Como compensación por las molestias, hemos añadido créditos extra para que puedas seguir creando sin límites.</div>
+      </div>
+    </div>` : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#09090f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#09090f;padding:40px 16px">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%">
+
+      <!-- LOGO -->
+      <tr><td style="padding-bottom:28px;text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:32px;text-align:center">✦</div>
+          <span style="color:#f3f4f6;font-size:18px;font-weight:700;letter-spacing:-0.3px">Maris AI</span>
+        </div>
+      </td></tr>
+
+      <!-- CARD PRINCIPAL -->
+      <tr><td style="background:#111118;border:1px solid #1f1f2e;border-radius:16px;overflow:hidden">
+
+        <!-- HEADER GRADIENTE -->
+        <div style="background:linear-gradient(135deg,#7c3aed22 0%,#0ea5e915 50%,#10b98112 100%);border-bottom:1px solid #1f1f2e;padding:36px 36px 28px">
+          <div style="font-size:42px;margin-bottom:14px;line-height:1">✅</div>
+          <div style="color:#f3f4f6;font-size:22px;font-weight:800;letter-spacing:-0.5px;line-height:1.3;margin-bottom:6px">
+            Tu app está lista y funciona perfectamente
+          </div>
+          <div style="color:#6b7280;font-size:14px">Nuestro equipo de soporte ha resuelto el problema</div>
+        </div>
+
+        <!-- BODY -->
+        <div style="padding:32px 36px;color:#9ca3af;font-size:14px;line-height:1.8">
+
+          <p style="margin:0 0 16px;color:#d1d5db">${greeting}</p>
+
+          <p style="margin:0 0 16px">En primer lugar, queremos pedirte <strong style="color:#f3f4f6">disculpas sinceras</strong> por la experiencia que has tenido. Sabemos que tu tiempo es valioso y que confiar en Maris AI para construir ${appDesc} es algo que nos tomamos muy en serio.</p>
+
+          <p style="margin:0 0 20px">Nuestro equipo de soporte ha revisado el problema, aplicado las correcciones necesarias y verificado que todo funciona correctamente. <strong style="color:#10b981">${appDesc} ya está disponible en tu panel</strong>, lista para que la explores, edites y publiques.</p>
+
+          <!-- STATUS BOX -->
+          <div style="background:#10b98108;border:1px solid #10b98125;border-radius:10px;padding:16px 20px;margin:0 0 20px">
+            <div style="color:#10b981;font-weight:600;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+              <span>●</span> Estado del proyecto
+            </div>
+            <div style="color:#d1d5db;font-size:13px">
+              ${appTitle ? `"${appTitle}"` : "Tu proyecto"} — <span style="color:#10b981;font-weight:600">Activo y listo para usar</span>
+            </div>
+          </div>
+
+          ${creditsBlock}
+
+          <!-- CTA -->
+          <div style="text-align:center;margin:28px 0">
+            <a href="${dashboardUrl}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:-0.2px;box-shadow:0 4px 24px #7c3aed40">
+              Ver mi app en el panel →
+            </a>
+          </div>
+
+          <!-- FEATURES -->
+          <div style="background:#ffffff06;border:1px solid #1f1f2e;border-radius:10px;padding:20px;margin:0 0 24px">
+            <div style="color:#f3f4f6;font-weight:600;font-size:13px;margin-bottom:14px">Con Maris AI puedes seguir:</div>
+            <div style="display:grid;gap:10px">
+              <div style="color:#9ca3af;font-size:13px">🚀 <strong style="color:#d1d5db">Generando nuevas apps</strong> — desde landing pages hasta apps completas con backend</div>
+              <div style="color:#9ca3af;font-size:13px">✏️ <strong style="color:#d1d5db">Editando con IA</strong> — pide cualquier cambio en lenguaje natural</div>
+              <div style="color:#9ca3af;font-size:13px">🌐 <strong style="color:#d1d5db">Publicando en segundos</strong> — despliegue automático a Vercel con un clic</div>
+              <div style="color:#9ca3af;font-size:13px">💜 <strong style="color:#d1d5db">Soporte prioritario</strong> — responde a este email y te atendemos de inmediato</div>
+            </div>
+          </div>
+
+          <p style="margin:0 0 8px;color:#6b7280;font-size:13px">Si tienes cualquier otra duda o necesitas ayuda adicional, no dudes en abrir un ticket de soporte desde tu panel — estaremos encantados de ayudarte.</p>
+
+          <p style="margin:20px 0 0;color:#d1d5db">Gracias de corazón por confiar en Maris AI. 💜<br>
+          <span style="color:#6b7280">— El equipo de soporte de Maris AI</span></p>
+        </div>
+
+        <!-- FOOTER -->
+        <div style="border-top:1px solid #1f1f2e;padding:16px 36px;background:#0d0d15">
+          <div style="color:#374151;font-size:11px;text-align:center">
+            Maris AI · <a href="https://www.marisai.es" style="color:#7c3aed;text-decoration:none">marisai.es</a>
+            · <a href="https://www.marisai.es/dashboard" style="color:#7c3aed;text-decoration:none">Panel</a>
+            · Soporte: <a href="mailto:soportemarisai@gmail.com" style="color:#7c3aed;text-decoration:none">soportemarisai@gmail.com</a>
+          </div>
+        </div>
+
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
 
   return sendEmail({
     to: [userEmail],
-    subject: `✅ ${appTitle ? appTitle + " lista" : "Tu app está lista"} — disculpa por la espera`,
-    html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#0a0a0a;font-family:system-ui,sans-serif">
-<div style="max-width:540px;margin:32px auto;background:#111;border:1px solid #222;border-radius:12px;overflow:hidden">
-  <div style="background:linear-gradient(135deg,#7c3aed20,#0ea5e920);border-bottom:1px solid #333;padding:28px 32px">
-    <div style="font-size:32px;margin-bottom:8px">✨</div>
-    <div style="color:#f3f4f6;font-size:18px;font-weight:700">¡Tu app ya está lista!</div>
-    <div style="color:#9ca3af;font-size:13px;margin-top:4px">Gracias por tu paciencia</div>
-  </div>
-  <div style="padding:24px 32px;color:#d1d5db;font-size:14px;line-height:1.7">
-    <p>${greeting}</p>
-    <p>Queremos pedirte <strong style="color:#f3f4f6">disculpas sinceras</strong> por los problemas técnicos que experimentaste durante la generación de ${appDesc}. Sabemos que tu tiempo es valioso y lamentamos los inconvenientes.</p>
-    <p>Hemos trabajado para identificar y resolver el problema, y nos complace decirte que <strong style="color:#10b981">${appDesc} ya está completamente lista</strong> y disponible en tu cuenta.</p>
-    <div style="background:#10b98110;border:1px solid #10b98130;border-radius:8px;padding:16px;margin:20px 0">
-      <div style="color:#10b981;font-weight:600;margin-bottom:8px">✅ Tu proyecto está listo</div>
-      <div style="color:#9ca3af;font-size:13px">Puedes acceder, editar y publicar tu app cuando quieras.</div>
-    </div>
-    <div style="text-align:center;margin:24px 0">
-      <a href="${dashboardUrl}" style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block">Ir a mi panel →</a>
-    </div>
-    <p style="color:#9ca3af;font-size:13px">Como agradecimiento por tu paciencia, si necesitas cualquier ajuste en tu app responde a este email y te atenderemos de forma <strong style="color:#f3f4f6">prioritaria</strong>.</p>
-    <p>Gracias de corazón por confiar en Maris AI. 💜</p>
-    <p style="color:#9ca3af">Un saludo,<br><strong style="color:#f3f4f6">El equipo de Maris AI</strong></p>
-  </div>
-  <div style="padding:12px 32px;border-top:1px solid #222;color:#4b5563;font-size:11px">
-    Maris AI · <a href="https://www.marisai.es" style="color:#7c3aed">marisai.es</a> · Soporte: soportemarisai@gmail.com
-  </div>
-</div></body></html>`,
-    text: `${greeting}\n\nQueremos pedirte disculpas sinceras por los problemas que experimentaste. ${appDesc} ya está lista y disponible en tu cuenta.\n\nAccede aquí: ${dashboardUrl}\n\nGracias por confiar en Maris AI.\n\nEl equipo de Maris AI`,
+    subject: `✅ ${appTitle ? '"' + appTitle + '" lista' : "Tu app está lista"} — problema resuelto por soporte`,
+    html,
+    text: `${greeting}\n\nQueremos pedirte disculpas sinceras por los problemas que experimentaste. ${appDescPlain} ya está lista y disponible en tu panel.${creditsCompensation > 0 ? "\n\nComo compensación hemos añadido " + creditsCompensation + " créditos a tu cuenta." : ""}\n\nAccede aquí: ${dashboardUrl}\n\nGracias por confiar en Maris AI.\n\nEl equipo de Maris AI`,
   });
 }
 
