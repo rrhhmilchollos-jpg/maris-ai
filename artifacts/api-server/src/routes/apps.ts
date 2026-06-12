@@ -808,7 +808,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     } catch (err) {
       logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
       const streamed = await streamClaudeTextWithFallback("frontend", "claude-sonnet-4-6", {
-        max_tokens: 32000,
+        max_tokens: 64000,
         system: systemPrompt,
         messages: [{ role: "user", content: userContent }],
       }, (chars) => { onChars(chars); onPartial?.(accumulated); });
@@ -817,7 +817,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
   } else {
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
-      max_tokens: 32000,
+      max_tokens: 64000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     }, (chars) => { onChars(chars); onPartial?.(accumulated); });
@@ -829,11 +829,40 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   if (!raw) {
     return { code: "", truncated, error: "Frontend agent returned no text." };
   }
+
+  // Si el JSON está completo, parsearlo normalmente
   const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
-  if (!parsed || typeof parsed.frontendCode !== "string") {
-    return { code: "", truncated, error: "JSON inválido del Frontend Engineer.", _raw: raw } as any;
+  if (parsed && typeof parsed.frontendCode === "string" && parsed.frontendCode.length > 500) {
+    return { code: parsed.frontendCode, truncated };
   }
-  return { code: parsed.frontendCode, truncated };
+
+  // Si el JSON está truncado pero hay código acumulado (caso 82KB cortado),
+  // intentar extraer los archivos ya completos del JSON parcial
+  if (truncated && accumulated.length > 5000) {
+    // Buscar el frontendCode dentro del JSON parcial
+    const fcMatch = accumulated.match(/"frontendCode"\s*:\s*"([\s\S]*)/);
+    if (fcMatch) {
+      let partialCode = fcMatch[1];
+      // Desescapar las secuencias JSON básicas
+      partialCode = partialCode
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+      // Extraer solo los archivos completos (los que tienen el separador de inicio y fin)
+      const filePattern = /\/\/ === FILE: [^\n]+\n[\s\S]*?(?=\/\/ === FILE: |$)/g;
+      const completeFiles = partialCode.match(filePattern);
+      if (completeFiles && completeFiles.length >= 3) {
+        const extractedCode = completeFiles.join("\n");
+        logger.info({ files: completeFiles.length, kb: Math.round(extractedCode.length / 1000) }, "generateFrontendCode: extracted partial files from truncated JSON");
+        return { code: extractedCode, truncated: true };
+      }
+    }
+    // Si no se pueden extraer archivos, marcar como truncado con el raw para el Repair Agent
+    return { code: "", truncated: true, error: "JSON truncado — sin archivos extraíbles", _raw: accumulated } as any;
+  }
+
+  return { code: "", truncated, error: "JSON inválido del Frontend Engineer.", _raw: raw } as any;
 }
 
 /**
@@ -1972,10 +2001,14 @@ export async function generateApp(
   // Para apps complejas como Seguxat, usamos una estrategia de generación paralela de archivos
   // para reducir el tiempo de espera de 10 min a menos de 4 min.
   const frontendResult = await runPhase("frontend", async () => {
+    // Heartbeat de logs cada 20s — evita que el watchdog mate el coder entre logs de KB
+    const coderHeartbeat = setInterval(async () => {
+      try { await log("coder", `⏳ Generando código…`); } catch { /* swallow */ }
+    }, 20_000);
     try {
       // Forzamos el uso de Sonnet 4.6 para máxima velocidad sin sacrificar inteligencia
       const turboModel = "claude-sonnet-4-6";
-      return await generateFrontendCode(plan, design, research, prompt, (chars) => {
+      const result = await generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `🚀 MODO TURBO: Generando frontend (${Math.round(chars / 1000)} KB)…` });
         if (chars - lastLogChars >= 5000) {
@@ -1984,7 +2017,10 @@ export async function generateApp(
         }
       }, turboModel, language, templateContextBlock, agentModelPlan,
       (partial) => { frontendAccumulated = partial; });
+      clearInterval(coderHeartbeat);
+      return result;
     } catch (err) {
+      clearInterval(coderHeartbeat);
       if (String((err as any).message || "").includes("timeout") && frontendAccumulated.length > 2000) {
         void log("coder", `Frontend-engineer timeout — usando código parcial acumulado.`, "warn");
         return { code: "", truncated: true, error: (err as any).message, accumulated: frontendAccumulated } as CodeGenResult;
@@ -2019,45 +2055,58 @@ export async function generateApp(
   }
 
   if (!frontendResult.code && frontendResult.truncated) {
-    await log("coder", "Frontend truncado por tokens, reintentando con plan reducido…", "warn");
-    const reducedPlan = {
-      ...plan,
-      frontendFiles: plan.frontendFiles.slice(0, Math.ceil(plan.frontendFiles.length / 2)),
-      pages: plan.pages.slice(0, 2),
-      components: plan.components.slice(0, 6),
-    };
-    // Si hubo timeout, forzar modelo más rápido (Sonnet) para el reintento
-    const retryModel = frontendTimedOut ? "claude-sonnet-4-6" : coderModel;
-    const retryAgentPlan = frontendTimedOut ? selectAgentModelPlan(prompt, "claude-sonnet-4-6") : agentModelPlan;
-    try {
-      const retryResult = await generateFrontendCode(
-        reducedPlan, design, research, prompt,
-        (chars) => {
-          onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
-        }, retryModel, language, templateContextBlock, retryAgentPlan,
-      );
-      if (!retryResult.code) {
-        await log("coder", "Reintento con plan reducido también falló — generando landing page funcional como base…", "warn");
-        onProgress?.({ phase: "fixing", progress: 65, note: "🏗️ Generando landing page funcional como punto de partida…" });
-        const landingResult = await generateLandingPage(prompt, language, design, research);
-        if (landingResult.code && landingResult.code.length > 500) {
-          await log("coder", `✅ Landing page lista (${Math.round(landingResult.code.length / 1000)} KB). Puedes pedirme que añada más funcionalidades paso a paso.`);
-          frontendResult.code = landingResult.code;
-        } else {
-          // Sin landing page — dejar que el Repair Agent lo intente
-          await log("coder", "Landing page vacía. El Repair Agent intentará reconstruir…", "warn");
-          frontendResult.code = "";
+    // Si hay código acumulado en el streaming, intentar extraerlo antes de reintentar
+    const accumulated = frontendAccumulated || (frontendResult as any).accumulated || "";
+    if (accumulated.length > 10000) {
+      await log("coder", `Frontend truncado — intentando extraer archivos del streaming acumulado (${Math.round(accumulated.length / 1000)} KB)…`, "warn");
+      // Intentar extraer archivos completos del JSON parcial
+      const fcMatch = accumulated.match(/"frontendCode"\s*:\s*"([\s\S]*)/);
+      if (fcMatch) {
+        let partialCode = fcMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+        const filePattern = /\/\/ === FILE: [^\n]+\n[\s\S]*?(?=\/\/ === FILE: |$)/g;
+        const completeFiles = partialCode.match(filePattern);
+        if (completeFiles && completeFiles.length >= 3) {
+          await log("coder", `✅ Extraídos ${completeFiles.length} archivos del streaming. Usando código parcial como base.`);
+          frontendResult.code = completeFiles.join("\n");
         }
+      }
     }
-    await log("coder", `Frontend listo (plan reducido): ${Math.round(retryResult.code.length / 1000)} KB.`);
-      frontendResult.code = retryResult.code;
-    } catch (retryErr) {
-      // Si el reintento falla, pero tenemos código acumulado del primer intento (timeout), lo usamos como último recurso
-      if (frontendResult.accumulated && frontendResult.accumulated.length > 2000) {
-        await log("coder", "Reintento fallido, recuperando código parcial del primer intento como último recurso...", "warn");
-        frontendResult.code = frontendResult.accumulated;
-      } else {
-        throw retryErr;
+
+    // Si no se pudo extraer del streaming, reintentar con plan reducido
+    if (!frontendResult.code) {
+      await log("coder", "Frontend truncado por tokens, reintentando con plan reducido…", "warn");
+      const reducedPlan = {
+        ...plan,
+        frontendFiles: plan.frontendFiles.slice(0, Math.ceil(plan.frontendFiles.length / 2)),
+        pages: plan.pages.slice(0, 3),
+        components: plan.components.slice(0, 8),
+      };
+      try {
+        const retryResult = await generateFrontendCode(
+          reducedPlan, design, research, prompt,
+          (chars) => {
+            onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
+          }, "claude-sonnet-4-6", language, templateContextBlock, selectAgentModelPlan(prompt, "claude-sonnet-4-6"),
+        );
+        if (retryResult.code && retryResult.code.length > 500) {
+          await log("coder", `✅ Frontend listo con plan reducido: ${Math.round(retryResult.code.length / 1000)} KB.`);
+          frontendResult.code = retryResult.code;
+        } else {
+          await log("coder", "Reintento con plan reducido también falló — generando landing page funcional como base…", "warn");
+          onProgress?.({ phase: "fixing", progress: 65, note: "🏗️ Generando landing page funcional como punto de partida…" });
+          const landingResult = await generateLandingPage(prompt, language, design, research);
+          if (landingResult.code && landingResult.code.length > 500) {
+            await log("coder", `✅ Landing page lista (${Math.round(landingResult.code.length / 1000)} KB). Puedes pedirme que añada más funcionalidades paso a paso.`);
+            frontendResult.code = landingResult.code;
+          }
+        }
+      } catch (retryErr) {
+        if ((frontendResult as any).accumulated?.length > 2000) {
+          await log("coder", "Reintento fallido, recuperando código parcial del primer intento como último recurso...", "warn");
+          frontendResult.code = (frontendResult as any).accumulated;
+        } else {
+          throw retryErr;
+        }
       }
     }
   } else if (!frontendResult.code || frontendResult.error) {
