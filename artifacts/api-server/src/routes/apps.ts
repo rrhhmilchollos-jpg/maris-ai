@@ -2154,22 +2154,30 @@ export async function generateApp(
           await log("coder", `✅ Frontend listo con plan reducido: ${Math.round(retryResult.code.length / 1000)} KB.`);
           frontendResult.code = retryResult.code;
         } else {
+          // Reintento vacío — landing page como base
           await log("coder", "Reintento con plan reducido también falló — generando landing page funcional como base…", "warn");
           onProgress?.({ phase: "fixing", progress: 65, note: "🏗️ Generando landing page funcional como punto de partida…" });
           const landingResult = await generateLandingPage(prompt, language, design, research);
           if (landingResult.code && landingResult.code.length > 500) {
             await log("coder", `✅ Landing page lista (${Math.round(landingResult.code.length / 1000)} KB). Puedes pedirme que añada más funcionalidades paso a paso.`);
             frontendResult.code = landingResult.code;
-          } else {
-            await log("coder", "Landing page vacía. El Repair Agent intentará reconstruir…", "warn");
           }
+          // frontendResult.code puede ser "" aquí — el Repair Agent lo manejará abajo
         }
-        // IMPORTANTE: no tocar frontendResult.code después de este punto en este bloque
-        if ((frontendResult as any).accumulated?.length > 2000) {
-          await log("coder", "Reintento fallido, recuperando código parcial del primer intento como último recurso...", "warn");
-          frontendResult.code = (frontendResult as any).accumulated;
+      } catch (retryErr) {
+        // Si el reintento lanza excepción, usar código acumulado del primer intento
+        const accumulated = (frontendResult as any).accumulated || frontendAccumulated;
+        if (accumulated && accumulated.length > 2000) {
+          await log("coder", "Reintento fallido — recuperando código parcial del primer intento como último recurso…", "warn");
+          frontendResult.code = accumulated;
         } else {
-          throw retryErr;
+          await log("coder", "Reintento fallido sin código acumulado — intentando landing page de emergencia…", "warn");
+          try {
+            const emergencyLanding = await generateLandingPage(prompt, language, design, research);
+            if (emergencyLanding.code && emergencyLanding.code.length > 500) {
+              frontendResult.code = emergencyLanding.code;
+            }
+          } catch { /* swallow — Repair Agent lo intentará */ }
         }
       }
     }
