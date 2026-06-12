@@ -463,34 +463,58 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
  */
 export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt)): Promise<string> {
   const hasUrl = URL_LIKE.test(prompt);
+
+  // Extraer el prompt limpio sin el bloque de locale
+  const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
+
   return withTimeout(
     (async () => {
+      // Paso 1: intentar búsqueda web real (Serper / Brave / DuckDuckGo)
+      let webContext = "";
       try {
+        const { performWebResearch, formatWebResearchForLLM } = await import("../lib/webResearcher");
+        const webResult = await performWebResearch(cleanPrompt, 2, 15_000);
+        if (webResult.results.length > 0 || webResult.pages.length > 0) {
+          webContext = formatWebResearchForLLM(webResult);
+        }
+      } catch {
+        // Sin búsqueda web — seguimos con Claude solo
+      }
+
+      // Paso 2: Claude genera el brief de referencia (con o sin contexto web)
+      try {
+        const systemPrompt = `You are Maris AI's web researcher. Produce a concise reference brief in Spanish for the architect/designer who will build this product.
+Output format:
+- 1 paragraph: what the product does and who it's for
+- bullets: core pages/sections, key features, suggested colors and fonts
+- 1 paragraph: competitive context and differentiation ideas
+Stay factual. Plain text only. ≤400 words. No preamble.`;
+
+        const userContent = webContext
+          ? `Prompt del usuario: "${cleanPrompt}"\n\nContexto web encontrado:\n${webContext.slice(0, 3000)}\n\nGenera el brief de referencia basándote en el contexto web y tu conocimiento.`
+          : hasUrl
+          ? `Investiga las URLs de este encargo y genera un brief: "${cleanPrompt}"`
+          : `Genera un brief de referencia detallado para este encargo (usa tu conocimiento del dominio): "${cleanPrompt}"`;
+
         const response = await createClaudeMessageWithFallback("researcher", agentPlan.agents.researcher.model, {
           max_tokens: 1500,
-          system: `You are Maris AI's web researcher. Produce a concise reference brief for the architect/designer who will build a NEW, ORIGINAL product inspired by what you find. Output:
-- 1 short paragraph: what the source product/site does and who it's for.
-- bullets: core sections/pages, signature features, dominant brand colors (hex if you can read them), typography family, microcopy tone.
-- 1 short paragraph: differentiation suggestions — what an inspired-by product could do better or differently.
-
-ANTI-CLONE: Do NOT encourage cloning. Paraphrase slogans/taglines. Stay factual; no preamble; plain text only; ≤350 words.`,
-          messages: [
-            {
-              role: "user",
-              content: hasUrl
-                ? `Investiga la(s) URL(s) que aparecen en este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`
-                : `Haz una búsqueda rápida sobre este encargo y devuelve un brief de referencia conciso en español (máx 350 palabras):\n\n"${prompt}"`,
-            },
-          ],
+          system: systemPrompt,
+          messages: [{ role: "user", content: userContent }],
         });
         const text = (response.content[0] as any).text ?? "";
-        return text.trim().slice(0, 4000);
+        if (text.trim().length > 50) {
+          return (webContext ? `[Fuente: búsqueda web]\n` : `[Fuente: conocimiento del modelo]\n`) + text.trim().slice(0, 4000);
+        }
       } catch {
-        return "";
+        // Claude falló — usar brief mínimo generado localmente
       }
+
+      // Paso 3: brief mínimo de emergencia para que el arquitecto no trabaje a ciegas
+      return `[Brief de emergencia — conocimiento general]\nProducto: ${cleanPrompt.slice(0, 200)}\nTipo de aplicación web. Incluir páginas principales, formularios de entrada de datos, panel de gestión y diseño moderno responsivo. Usar colores neutros profesionales, tipografía sans-serif, diseño limpio con espaciado generoso.`;
     })(),
-    hasUrl ? 18_000 : 9_000,
-    "",
+    hasUrl ? 20_000 : 12_000,
+    // Si withTimeout agota el tiempo, devolver brief mínimo en vez de ""
+    `[Brief mínimo — timeout]\nProducto: ${cleanPrompt.slice(0, 200)}\nAplicación web profesional. Diseño moderno, responsivo, con navegación clara y formularios accesibles.`,
   );
 }
 
@@ -1826,21 +1850,22 @@ export async function generateApp(
     await log("researcher", "🔍 Buscando en internet (Google/DuckDuckGo) y visitando páginas relevantes…");
     research = await runPhase("researcher", () => researchTopic(prompt, agentModelPlan));
     if (research) {
-      await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
+      const source = research.startsWith("[Fuente: búsqueda web]") ? "web real" : research.startsWith("[Brief mínimo") ? "brief mínimo (timeout)" : "conocimiento del modelo";
+      await log("researcher", `✅ Brief listo (${source}): ${Math.round(research.length / 100) / 10} KB para el arquitecto.`);
     } else {
-      await log("researcher", "Sin resultados web, usando conocimiento general del modelo.", "warn");
+      await log("researcher", "Investigación sin resultado — el arquitecto usará su conocimiento interno.", "warn");
     }
   } else if (!runResearch) {
     await log("researcher", "Plan dice saltar investigación (alcance reducido).");
   } else {
-    // shouldResearch devolvió false (prompt muy corto) - investigar igualmente
     onProgress?.({ phase: "researching", progress: 6, note: "🔍 Investigador buscando contexto del mercado…" });
     await log("researcher", "🔍 Buscando en internet y visitando páginas relevantes…");
     research = await runPhase("researcher", () => researchTopic(prompt, agentModelPlan));
     if (research) {
-      await log("researcher", `Contexto recopilado: ${Math.round(research.length / 100) / 10} KB de notas para el arquitecto.`);
+      const source = research.startsWith("[Fuente: búsqueda web]") ? "web real" : research.startsWith("[Brief mínimo") ? "brief mínimo (timeout)" : "conocimiento del modelo";
+      await log("researcher", `✅ Brief listo (${source}): ${Math.round(research.length / 100) / 10} KB para el arquitecto.`);
     } else {
-      await log("researcher", "Sin resultados web, usando conocimiento general.", "warn");
+      await log("researcher", "Investigación sin resultado — el arquitecto usará su conocimiento interno.", "warn");
     }
   }
 
