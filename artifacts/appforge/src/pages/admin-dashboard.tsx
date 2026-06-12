@@ -325,6 +325,32 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     }}>
                     ✂️ Editar código
                   </Button>
+                  {/* Limpiar — conservar esta app, eliminar el resto */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
+                    disabled={actionLoading[`cleanup_${appId}`]}
+                    title="Renombrar esta app y eliminar todas las demás del usuario"
+                    onClick={async () => {
+                      const newTitle = window.prompt("Nuevo nombre para esta app:", app.title || "");
+                      if (!newTitle) return;
+                      if (!window.confirm(`¿Conservar "${newTitle}" y eliminar TODAS las demás apps de ${app.userEmail}?\n\nEsta acción no se puede deshacer.`)) return;
+                      setActionLoading(p => ({ ...p, [`cleanup_${appId}`]: true }));
+                      try {
+                        const d = await apiFetch<any>("/api/admin/apps/cleanup", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ userEmail: app.userEmail, keepAppId: appId, newTitle }),
+                        });
+                        toast({ title: "✅ Limpieza completada", description: d.message });
+                        await searchApps(app.userEmail);
+                      } catch (e: any) {
+                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                      } finally {
+                        setActionLoading(p => ({ ...p, [`cleanup_${appId}`]: false }));
+                      }
+                    }}>
+                    {actionLoading[`cleanup_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🧹 Conservar esta"}
+                  </Button>
                   {/* Regenerar app */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
