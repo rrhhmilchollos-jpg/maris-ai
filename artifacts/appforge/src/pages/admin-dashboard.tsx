@@ -175,22 +175,26 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
     if (!target) return;
     setLoading(true);
     setApps([]);
+    const timer = setTimeout(() => {
+      setLoading(false);
+      toast({ title: "Timeout", description: "La búsqueda tardó demasiado. Inténtalo de nuevo.", variant: "destructive" });
+    }, 8000);
     try {
       const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
       if (!userData?.id) { toast({ title: "Usuario no encontrado", description: target, variant: "destructive" }); return; }
       const appsData = await apiFetch<any>(`/api/admin/users/${userData.id}/apps?limit=20`);
       const list = appsData.apps ?? [];
       setApps(list.map((a: any) => ({ ...a, userEmail: target, userId: userData.id })));
-      if (list.length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps generadas aún` });
+      if (list.length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps aún` });
     } catch (e: any) {
       toast({ title: "Error", description: e.message || "Error de conexión", variant: "destructive" });
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   };
 
-  // Cargar faquiunmen al montar
-  useEffect(() => { searchApps("faquiunmen@gmail.com"); }, []);
+  // Sin autoload — el usuario pulsa el botón
 
   return (
     <div className="space-y-4">
