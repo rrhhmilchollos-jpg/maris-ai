@@ -213,14 +213,18 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
 // ─── Get user apps ────────────────────────────────────────────────────────────
 router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> => {
   await connectDB();
-  const apps = await GeneratedApp.find({ userId: req.params.id }).sort({ createdAt: -1 }).lean();
-  res.json(apps.map(a => ({
-    id: String(a._id),
-    title: a.title,
-    status: a.status,
-    techStack: a.techStack,
-    createdAt: a.createdAt.toISOString(),
-  })));
+  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  const apps = await GeneratedApp.find({ userId: req.params.id }).sort({ createdAt: -1 }).limit(limit).lean();
+  res.json({
+    apps: apps.map(a => ({
+      id: String(a._id),
+      _id: String(a._id),
+      title: a.title,
+      status: a.status,
+      techStack: a.techStack,
+      createdAt: (a as any).createdAt?.toISOString?.() ?? "",
+    }))
+  });
 });
 
 router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void> => {
