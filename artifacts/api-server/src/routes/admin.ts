@@ -940,7 +940,7 @@ router.post("/admin/test-email-alert", async (req: any, res: any): Promise<void>
       testAppId = recentFailedJob.appId || undefined;
       testPrompt = recentFailedJob.prompt || testPrompt;
       testError = recentFailedJob.errorMessage || testError;
-      testRetry = Math.max((recentFailedJob.retryCount || 0), 3);
+      testRetry = Math.max((recentFailedJob.retryCount || 0), 1);
     }
 
     const { notifyAdminJobFailed } = await import("../lib/notify");
