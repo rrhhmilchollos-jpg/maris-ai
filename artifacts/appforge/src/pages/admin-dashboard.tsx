@@ -171,23 +171,24 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   const [apologyLoading, setApologyLoading] = useState<string | null>(null);
 
   const searchApps = async (searchEmail?: string) => {
-    const target = searchEmail || email;
+    const target = (searchEmail || email).trim();
     if (!target) return;
     setLoading(true);
+    setApps([]);
     try {
-      // Buscar usuario por email y sus apps
-      const usersData = await apiFetch<any>(`/api/admin/users?search=${encodeURIComponent(target)}&limit=5`);
-      const user = (usersData.users ?? [])[0];
-      if (!user) { toast({ title: "Usuario no encontrado", variant: "destructive" }); setApps([]); return; }
-      const appsData = await apiFetch<any>(`/api/admin/users/${user.id || user._id}/apps?limit=20`);
-      setApps((appsData.apps ?? []).map((a: any) => ({ ...a, userEmail: target, userId: user.id || user._id })));
+      // Usar el endpoint correcto de búsqueda por email
+      const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
+      if (!userData?.id) { toast({ title: "Usuario no encontrado", description: target, variant: "destructive" }); return; }
+      const appsData = await apiFetch<any>(`/api/admin/users/${userData.id}/apps?limit=20`);
+      setApps((appsData.apps ?? []).map((a: any) => ({ ...a, userEmail: target, userId: userData.id })));
+      if ((appsData.apps ?? []).length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps generadas aún` });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally { setLoading(false); }
   };
 
-  // Cargar faquiunmen por defecto al montar
-  useState(() => { searchApps("faquiunmen@gmail.com"); });
+  // Cargar faquiunmen al montar
+  useEffect(() => { searchApps("faquiunmen@gmail.com"); }, []);
 
   return (
     <div className="space-y-4">
