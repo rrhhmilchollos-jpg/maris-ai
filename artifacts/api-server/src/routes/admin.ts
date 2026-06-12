@@ -1357,7 +1357,33 @@ router.post("/admin/users/:id/kill-duplicates", async (req: any, res: any): Prom
   logger.info({ userId: req.params.id, killed: toKill.length }, "Admin: killed duplicate running jobs");
   res.json({ ok: true, killed: toKill.length, kept: String(runningJobs[0]._id), message: `${toKill.length} job(s) duplicado(s) cancelados. Se mantiene el más reciente.` });
 });
-// POST /api/admin/users/:id/generate-app
+// ─── Admin: Lanzar proyecto completo para usuario (fullstack, Sonnet) ──────────
+router.post("/admin/users/:id/launch-project", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { prompt, kind = "fullstack" } = req.body ?? {};
+  if (!prompt) { res.status(400).json({ error: "prompt requerido" }); return; }
+
+  const user = await User.findById(req.params.id, { email: 1 }).lean() as any;
+  if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+
+  const jobId = new mongoose.Types.ObjectId().toString();
+  await GenerationJob.create({
+    _id: jobId,
+    userId: req.params.id,
+    prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-launch. ${prompt}`,
+    coderModel: "claude-sonnet-4-6",
+    language: "typescript",
+    kind,
+    status: "queued",
+    phase: "queued",
+    progress: 0,
+    isAdmin: true,
+    hasEverPaid: true,
+  });
+  await enqueueGenerateJob(jobId);
+  logger.info({ jobId, userId: req.params.id }, "Admin launched full project");
+  res.status(201).json({ ok: true, jobId, message: `Proyecto en cola para ${user.email}` });
+});
 // Body: { prompt?: string }
 // Genera una landing page funcional en la cuenta del usuario especificado.
 router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise<void> => {

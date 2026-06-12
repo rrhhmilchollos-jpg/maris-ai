@@ -985,6 +985,80 @@ function GenerateForUserPanel() {
   const [loading, setLoading] = useState(false);
   const [foundUser, setFoundUser] = useState<{ id: string; email: string } | null>(null);
   const [searching, setSearching] = useState(false);
+  const [launchingSeguxat, setLaunchingSeguxat] = useState<string | null>(null);
+
+  const SEGUXAT_USER_EMAIL = "rrhh.milchollos@gmail.com";
+
+  const SEGUXAT_PROJECTS = [
+    {
+      id: "cra",
+      label: "🚨 CRA Alarmas Seguxat",
+      kind: "fullstack",
+      prompt: `Crea una aplicación web profesional completa llamada "Seguxat CRA — Central Receptora de Alarmas" con diseño oscuro premium igual que seguxat.es (colores: rojo #e63946, negro #0a0a0a, blanco). FUNCIONALIDADES COMPLETAS:
+
+1. DASHBOARD PRINCIPAL: Mapa interactivo de Valencia con pins de alarmas activas, contadores en tiempo real (Alarmas nuevas/En gestión/Resueltas/Falsas alarmas), gráficas del día por tipo de alarma y hora, estado de operadores en turno.
+
+2. PANEL ALARMAS EN TIEMPO REAL: Tabla de señales recibidas con columnas (ID zona, Cliente, Dirección, Tipo alarma: intrusión/fuego/pánico/técnica, Hora recepción, Estado, Operador asignado), botones de acción: Verificar llamando, Despachar policía/bomberos, Marcar falsa alarma, Cerrar incidencia, campo de notas.
+
+3. GESTIÓN DE CLIENTES: Ficha completa con datos personales, dirección instalación, teléfonos de contacto ordenados por prioridad, código personal de verificación, zona y dispositivos instalados, historial de incidencias, estado del contrato, tipo de servicio (hogar/negocio/GPS/Escudo Vecinal).
+
+4. GESTIÓN DE OPERADORES Y TURNOS: Registro completo de trabajadores con nombre, DNI, email, teléfono, rol (Operador CRA / Supervisor / Técnico / Administrador), turno asignado (mañana 06-14h / tarde 14-22h / noche 22-06h), estado activo/inactivo, historial de incidencias gestionadas, estadísticas de rendimiento.
+
+5. REGISTRO DE INCIDENCIAS: Log completo con filtros por fecha, cliente, tipo, operador, estado. Cada incidencia con timeline completo de acciones tomadas. Exportación a PDF y Excel.
+
+6. CONFIGURACIÓN: Zonas de cobertura, tipos de dispositivos, protocolos de actuación, umbrales de alarma.
+
+LOGIN con roles diferenciados. Backend con base de datos MongoDB. Interfaz responsive con sidebar de navegación.`,
+    },
+    {
+      id: "crm",
+      label: "💼 CRM Ventas Seguxat",
+      kind: "fullstack",
+      prompt: `Crea una aplicación web profesional completa llamada "Seguxat CRM — Gestión Comercial" con diseño igual que seguxat.es (rojo #e63946, negro, blanco). FUNCIONALIDADES COMPLETAS:
+
+1. DASHBOARD VENTAS: KPIs principales (contratos firmados hoy/semana/mes, facturación acumulada, tasa de conversión por comercial, objetivos vs real), gráficas de rendimiento por comercial y zona geográfica, pipeline visual de oportunidades, próximas visitas del día.
+
+2. PIPELINE COMERCIAL: Vista Kanban con columnas (Nuevo lead → Contactado → Visita agendada → Presupuesto enviado → Negociación → Contrato firmado / Perdido). Cada tarjeta con datos del lead, valor estimado, comercial asignado, días en fase.
+
+3. GESTIÓN DE LEADS: Ficha completa (nombre, empresa, teléfono, email, dirección, origen del lead: web/referido/puerta fría/evento, producto de interés: alarma hogar/negocio/GPS SOS Sentinel/Escudo Vecinal/pack completo, temperatura: frío/tibio/caliente, notas de seguimiento, historial de contactos).
+
+4. CLIENTES ACTIVOS: Contrato activo con fecha inicio/fin, productos instalados, facturación mensual, historial de pagos, renovaciones pendientes, satisfacción del cliente (NPS), tickets de soporte abiertos.
+
+5. EQUIPO COMERCIAL: Registro de trabajadores (nombre completo, DNI, email corporativo, teléfono, zona asignada en Valencia/Comunitat, objetivos mensuales en número de contratos y €, comisión por tipo de producto, historial de ventas mes a mes, ranking en el equipo).
+
+6. AGENDA Y VISITAS: Calendario de visitas asignadas por comercial, confirmación de citas, registro de resultado de visita, generación automática de seguimiento.
+
+7. PRESUPUESTOS: Generador de presupuestos PDF con productos Seguxat (alarma hogar desde 9€/mes, alarma negocio, GPS SOS Sentinel, Escudo Vecinal), personalizable con datos del cliente, firma digital.
+
+8. INFORMES: Ventas por comercial/zona/producto/período, comparativas mensuales, exportación Excel/PDF.
+
+LOGIN con roles: Comercial / Supervisor de zona / Director comercial / Administrador. Backend MongoDB completo.`,
+    },
+    {
+      id: "revista",
+      label: "📰 Revista Digital Seguxat",
+      kind: "fullstack",
+      prompt: `Crea una revista digital online completa y profesional llamada "Seguxat Magazine" con el subtítulo "Seguridad Real para tu Hogar y Negocio" con diseño premium idéntico a seguxat.es (rojo #e63946, negro profundo, blanco, tipografía moderna Inter/Montserrat). La revista debe ser tan profesional como las de Securitas Direct o Verisure. ESTRUCTURA COMPLETA:
+
+1. PORTADA: Header animado con logo Seguxat, fecha del número actual, imagen hero de portada impactante, titular principal del mes, 6 miniaturas de artículos destacados con categoría y titular.
+
+2. SECCIÓN "SEGURIDAD EN EL HOGAR" (4 artículos completos): "10 puntos débiles de tu casa que los ladrones conocen", "Cómo preparar tu hogar antes de vacaciones", "Alarmas vs cámaras: qué necesitas realmente", "El protocolo que siguen nuestros operadores cuando salta tu alarma".
+
+3. SECCIÓN "SEGURIDAD EMPRESARIAL" (3 artículos): "Normativa de seguridad obligatoria para negocios en Valencia 2025", "Cómo una alarma evitó el robo de una joyería en Xàtiva", "ROI de instalar un sistema de seguridad en tu local".
+
+4. SECCIÓN "TECNOLOGÍA SEGUXAT" (3 artículos con infografías): "GPS SOS Sentinel: así funciona la localización en tiempo real", "Escudo Vecinal: la seguridad colectiva que cambia los barrios", "Nuestra CRA: 24/7 y en menos de 45 segundos respondemos".
+
+5. SECCIÓN "COMUNITAT VALENCIANA": Noticias de seguridad locales, estadísticas de robos en Valencia/Alicante/Castellón, reportaje de barrio protegido por Escudo Vecinal.
+
+6. COMPARATIVA: Tabla detallada Seguxat vs Securitas Direct vs Verisure (precio, permanencia, respuesta CRA, cobertura, valoraciones clientes). Seguxat destaca en sin permanencia y precio.
+
+7. "CÓMO FUNCIONA": Infografías animadas del proceso de instalación (3 pasos), cómo funciona la CRA, cómo funciona el GPS SOS.
+
+8. SUSCRIPCIÓN: Formulario de suscripción a la revista con email, CTA para solicitar presupuesto gratuito.
+
+Contenido 100% real y coherente con seguxat.es. Todos los artículos con texto completo de al menos 300 palabras. Diseño de revista real con tipografía editorial, fotografías de placeholder profesionales, numeración de páginas.`,
+    },
+  ];
 
   const searchUser = async () => {
     if (!email.trim()) return;
@@ -1000,28 +1074,67 @@ function GenerateForUserPanel() {
     }
   };
 
+  const launchSeguxatProject = async (project: typeof SEGUXAT_PROJECTS[0]) => {
+    setLaunchingSeguxat(project.id);
+    try {
+      // Buscar usuario de Seguxat
+      const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(SEGUXAT_USER_EMAIL)}`);
+      const d = await apiFetch<any>(`/api/admin/users/${userData.id}/launch-project`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: project.prompt, kind: project.kind }),
+      });
+      toast({ title: `🚀 ${project.label} en cola`, description: d.message });
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message, variant: "destructive" });
+    } finally {
+      setLaunchingSeguxat(null); }
+  };
+
   const generateApp = async () => {
     if (!foundUser) return;
     setLoading(true);
     try {
-      const d = await apiFetch<any>(`/api/admin/users/${foundUser.id}/generate-app`, {
+      const d = await apiFetch<any>(`/api/admin/users/${foundUser.id}/launch-project`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() || "" }),
+        body: JSON.stringify({ prompt: prompt.trim() || "", kind: "fullstack" }),
       });
-      toast({ title: "✅ Landing page en cola", description: d.message ?? `Generando para ${foundUser.email}` });
-      setFoundUser(null);
-      setEmail("");
-      setPrompt("");
+      toast({ title: "✅ Proyecto en cola", description: d.message ?? `Generando para ${foundUser.email}` });
+      setFoundUser(null); setEmail(""); setPrompt("");
     } catch (e: any) {
       toast({ title: "Error", description: e?.message ?? "No se pudo generar la app", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Proyectos Seguxat — lanzamiento rápido */}
+      <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 space-y-3">
+        <p className="text-xs font-semibold text-red-400 uppercase tracking-wider flex items-center gap-2">
+          <span className="text-lg">🔴</span> Proyectos Seguxat — Lanzamiento directo
+        </p>
+        <p className="text-xs text-white/40">Se generan en tu cuenta (rrhh.milchollos@gmail.com) con Sonnet completo</p>
+        <div className="grid gap-2">
+          {SEGUXAT_PROJECTS.map(project => (
+            <Button
+              key={project.id}
+              variant="outline"
+              className="w-full h-10 text-sm border-red-500/30 text-white hover:bg-red-500/10 justify-start gap-3"
+              disabled={launchingSeguxat !== null}
+              onClick={() => launchSeguxatProject(project)}
+            >
+              {launchingSeguxat === project.id
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Lanzando…</>
+                : <>{project.label}</>
+              }
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-white/5 pt-4">
+        <p className="text-xs text-muted-foreground mb-3">O genera un proyecto personalizado para cualquier usuario:</p>
       <div className="flex gap-2">
         <Input
           placeholder="email del usuario (ej: cliente@gmail.com)"
@@ -1053,10 +1166,11 @@ function GenerateForUserPanel() {
             disabled={loading}
             className="w-full h-8 bg-purple-600 hover:bg-purple-700 text-white text-xs"
           >
-            {loading ? <><Loader2 className="h-3 w-3 animate-spin mr-2" />Generando…</> : <><Zap className="h-3 w-3 mr-2" />Generar landing page para este usuario</>}
+            {loading ? <><Loader2 className="h-3 w-3 animate-spin mr-2" />Generando…</> : <><Zap className="h-3 w-3 mr-2" />Generar proyecto para este usuario</>}
           </Button>
         </div>
       )}
+      </div>
     </div>
   );
 }
