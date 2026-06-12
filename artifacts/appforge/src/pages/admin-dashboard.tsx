@@ -599,58 +599,92 @@ function LiveMonitorPanel() {
                           }
                         </Button>
                       </div>
-                      {/* Vista previa — siempre visible */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full h-8 text-xs border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
-                        disabled={actionLoading[`preview_${job.id}`]}
-                        onClick={async () => {
-                          const currentPreview = previewAppId === `job_${job.id}`;
-                          if (currentPreview) { setPreviewAppId(null); return; }
-                          if (job.appId) {
-                            setPreviewAppId(`job_${job.id}`);
-                            return;
-                          }
-                          setActionLoading(p => ({ ...p, [`preview_${job.id}`]: true }));
-                          try {
-                            const d = await apiFetch<any>(`/api/admin/users/${job.userId}/apps?limit=1`);
-                            const apps = d.apps ?? [];
-                            const firstApp = Array.isArray(apps) ? apps[0] : null;
-                            if (firstApp?.id || firstApp?._id) {
+                      {/* Vista previa — dos botones: iframe inline + abrir en nueva pestaña */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
+                          disabled={actionLoading[`preview_${job.id}`]}
+                          onClick={async () => {
+                            const currentPreview = previewAppId === `job_${job.id}`;
+                            if (currentPreview) { setPreviewAppId(null); return; }
+                            if (job.appId) {
                               setPreviewAppId(`job_${job.id}`);
-                            } else {
-                              toast({ title: "Sin app generada", description: "Este usuario aún no tiene ninguna app creada.", variant: "destructive" });
+                              return;
                             }
-                          } catch {
-                            toast({ title: "No se pudo cargar la vista previa", variant: "destructive" });
-                          } finally {
-                            setActionLoading(p => ({ ...p, [`preview_${job.id}`]: false }));
+                            setActionLoading(p => ({ ...p, [`preview_${job.id}`]: true }));
+                            try {
+                              const d = await apiFetch<any>(`/api/admin/users/${job.userId}/apps?limit=1`);
+                              const apps = d.apps ?? [];
+                              const firstApp = Array.isArray(apps) ? apps[0] : null;
+                              if (firstApp?.id || firstApp?._id) {
+                                setPreviewAppId(`job_${job.id}`);
+                              } else {
+                                toast({ title: "Sin app generada", description: "Este usuario aún no tiene ninguna app creada.", variant: "destructive" });
+                              }
+                            } catch {
+                              toast({ title: "No se pudo cargar la vista previa", variant: "destructive" });
+                            } finally {
+                              setActionLoading(p => ({ ...p, [`preview_${job.id}`]: false }));
+                            }
+                          }}
+                        >
+                          {actionLoading[`preview_${job.id}`]
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Buscando…</>
+                            : previewAppId === `job_${job.id}`
+                              ? <><Eye className="h-3 w-3 mr-1" />Cerrar preview</>
+                              : <><Eye className="h-3 w-3 mr-1" />Preview inline</>
                           }
-                        }}
-                      >
-                        {actionLoading[`preview_${job.id}`]
-                          ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Buscando app…</>
-                          : previewAppId === `job_${job.id}`
-                            ? <><Eye className="h-3 w-3 mr-1" />Cerrar vista previa</>
-                            : <><Eye className="h-3 w-3 mr-1" />Vista previa de la app generada</>
-                        }
-                      </Button>
-                      {/* Panel de vista previa — solo para este job */}
-                      {previewAppId === `job_${job.id}` && (job.appId) && (
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs border-sky-400/40 text-sky-300 hover:bg-sky-500/15 font-semibold"
+                          disabled={actionLoading[`previewtab_${job.id}`]}
+                          onClick={async () => {
+                            const apiBase = import.meta.env.VITE_API_URL || "";
+                            // Obtener appId — del job o buscando en BD
+                            let appId = job.appId;
+                            if (!appId) {
+                              setActionLoading(p => ({ ...p, [`previewtab_${job.id}`]: true }));
+                              try {
+                                const d = await apiFetch<any>(`/api/admin/users/${job.userId}/apps?limit=1`);
+                                const firstApp = (d.apps ?? [])[0];
+                                appId = firstApp?.id || firstApp?._id || null;
+                              } catch { /* swallow */ } finally {
+                                setActionLoading(p => ({ ...p, [`previewtab_${job.id}`]: false }));
+                              }
+                            }
+                            if (appId) {
+                              window.open(`${apiBase}/api/admin/apps/${appId}/preview`, "_blank", "noopener,noreferrer");
+                            } else {
+                              toast({ title: "Sin app generada", description: "Este usuario no tiene apps creadas.", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          {actionLoading[`previewtab_${job.id}`]
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Buscando…</>
+                            : <>🔗 Abrir en nueva pestaña</>
+                          }
+                        </Button>
+                      </div>
+                      {/* Panel de vista previa inline — solo para este job */}
+                      {previewAppId === `job_${job.id}` && job.appId && (
                         <div className="rounded-lg border border-sky-500/20 overflow-hidden">
                           <div className="flex items-center justify-between px-3 py-1.5 bg-sky-500/10 border-b border-sky-500/20">
                             <span className="text-[10px] text-sky-400 font-mono truncate max-w-[200px]">
                               {job.userEmail}
                             </span>
-                            <a
-                              href={`/api/admin/apps/${job.appId}/preview`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
                               className="text-[10px] text-sky-400 hover:text-sky-300 underline shrink-0 ml-2"
+                              onClick={() => {
+                                const apiBase = import.meta.env.VITE_API_URL || "";
+                                window.open(`${apiBase}/api/admin/apps/${job.appId}/preview`, "_blank", "noopener,noreferrer");
+                              }}
                             >
                               Abrir en pestaña ↗
-                            </a>
+                            </button>
                           </div>
                           <iframe
                             src={`/api/admin/apps/${job.appId}/preview`}
