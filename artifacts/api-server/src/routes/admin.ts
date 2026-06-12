@@ -1443,25 +1443,35 @@ router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> 
   await connectDB();
   const app = await GeneratedApp.findById(req.params.id).select("frontendCode title").lean() as any;
   if (!app?.frontendCode) { res.status(404).send("App no encontrada o sin código generado"); return; }
-  const filePath = (req.query.file as string || "index.html").replace(/^\//, "") || "index.html";
-  const files: Record<string, string> = {};
-  const parts = app.frontendCode.split(/\/\/ === FILE: /);
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    const nl = part.indexOf("\n");
-    if (nl === -1) continue;
-    const path = part.slice(0, nl).trim().replace(/ ===$/, "");
-    if (path) files[path] = part.slice(nl + 1);
-  }
-  const fileContent = files[filePath] || files["index.html"];
-  if (!fileContent) { res.status(404).send(`Archivo no encontrado: ${filePath}`); return; }
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  const mimeTypes: Record<string, string> = { html: "text/html; charset=utf-8", css: "text/css", js: "application/javascript", json: "application/json" };
-  res.setHeader("Content-Type", mimeTypes[ext || ""] || "text/html; charset=utf-8");
+
   res.setHeader("Content-Security-Policy", "frame-ancestors *");
   res.setHeader("X-Frame-Options", "ALLOWALL");
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.send(fileContent);
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+  try {
+    // Usar deployBundle para generar HTML compilado con todo inline
+    const { buildDeployHtml } = await import("../lib/deployBundle");
+    const html = await buildDeployHtml({
+      bundle: app.frontendCode,
+      title: app.title || "Preview",
+    });
+    res.send(html);
+  } catch (err) {
+    // Fallback: buscar index.html en el bundle raw
+    logger.warn({ err, appId: req.params.id }, "deployBundle failed for preview, falling back to raw");
+    const files: Record<string, string> = {};
+    const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf("\n");
+      if (nl === -1) continue;
+      const path = part.slice(0, nl).trim().replace(/ ===$/, "");
+      if (path) files[path] = part.slice(nl + 1);
+    }
+    const html = files["index.html"] || files["public/index.html"] || "<h1>Sin preview disponible</h1>";
+    res.send(html);
+  }
 });
 
 export default router;

@@ -3497,27 +3497,31 @@ export async function runDeployForApp(args: {
 router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();
-    const app = await GeneratedApp.findById(req.params.id).select("frontendCode").lean() as any;
+    const app = await GeneratedApp.findById(req.params.id).select("frontendCode title").lean() as any;
     if (!app?.frontendCode) return res.status(404).send("App not found");
-    const filePath = (req.query.file as string || "index.html").replace(/^\//, "") || "index.html";
-    const files: Record<string, string> = {};
-    const parts = app.frontendCode.split(/\/\/ === FILE: /);
-    for (const part of parts) {
-      if (!part.trim()) continue;
-      const nl = part.indexOf("\n");
-      if (nl === -1) continue;
-      const path = part.slice(0, nl).trim().replace(/ ===$/, "");
-      if (path) files[path] = part.slice(nl + 1);
-    }
-    const fileContent = files[filePath] || files["index.html"];
-    if (!fileContent) return res.status(404).send("File not found: " + filePath);
-    const ext = filePath.split(".").pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = { html: "text/html; charset=utf-8", css: "text/css", js: "application/javascript", json: "application/json", xml: "application/xml", txt: "text/plain" };
-    res.setHeader("Content-Type", mimeTypes[ext || ""] || "text/html; charset=utf-8");
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Content-Security-Policy", "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.send(fileContent);
+
+    try {
+      const { buildDeployHtml } = await import("../lib/deployBundle");
+      const html = await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
+      return res.send(html);
+    } catch {
+      // Fallback al index.html raw
+      const files: Record<string, string> = {};
+      const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
+      for (const part of parts) {
+        if (!part.trim()) continue;
+        const nl = part.indexOf("\n");
+        if (nl === -1) continue;
+        const p = part.slice(0, nl).trim().replace(/ ===$/, "");
+        if (p) files[p] = part.slice(nl + 1);
+      }
+      return res.send(files["index.html"] || "<h1>Preview no disponible</h1>");
+    }
   } catch (err) {
     res.status(500).send("Error loading preview");
   }
