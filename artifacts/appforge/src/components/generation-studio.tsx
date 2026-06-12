@@ -851,6 +851,33 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
             <ChatLogStream jobId={jobId} isActive={isActive || isAwaitingApproval} />
           </div>
 
+          {/* IDs del proyecto — siempre visibles para soporte */}
+          <div className="px-3 py-1.5 border-t border-white/[0.04] bg-[#0a0a10]/50 flex items-center gap-3 flex-wrap">
+            {jobId && (
+              <span
+                className="text-[9px] font-mono text-white/20 hover:text-white/40 cursor-pointer transition-colors"
+                title="Job ID — compártelo con soporte si tienes problemas"
+                onClick={() => { navigator.clipboard?.writeText(jobId); }}
+              >
+                Job: {jobId.slice(-8)}
+              </span>
+            )}
+            {appId && (
+              <span
+                className="text-[9px] font-mono text-white/20 hover:text-white/40 cursor-pointer transition-colors"
+                title="App ID — compártelo con soporte si tienes problemas"
+                onClick={() => { navigator.clipboard?.writeText(appId); }}
+              >
+                App: {appId.slice(-8)}
+              </span>
+            )}
+            {(jobId || appId) && (
+              <span className="text-[9px] text-white/10 ml-auto">
+                click para copiar
+              </span>
+            )}
+          </div>
+
           {/* Message input */}
           <div className="p-3 border-t border-white/[0.06] bg-[#0a0a10] shrink-0">
             {isDone && (
