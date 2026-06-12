@@ -9,6 +9,7 @@ import {
   CreditTransaction,
   AgentMemory,
   JobLog,
+  UserNotification,
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
@@ -1515,7 +1516,10 @@ router.post("/admin/users/:id/launch-project", async (req: any, res: any): Promi
 router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const targetId = req.params.id;
-  const prompt = req.body?.prompt || "Crea una landing page profesional moderna para un emprendedor en España. Hero con titular impactante y CTA, sección de 3 beneficios con iconos, cómo funciona en 3 pasos, FAQ con 3 preguntas y footer. Diseño limpio en español. Sin backend.";
+  const rawPrompt = req.body?.prompt || "";
+  const isRepair = rawPrompt.startsWith("[ADMIN REPAIR]") || rawPrompt.startsWith("[ADMIN RECOVERY]");
+  const defaultPrompt = "Crea una landing page profesional moderna para un emprendedor en España. Hero con titular impactante y CTA, sección de 3 beneficios con iconos, cómo funciona en 3 pasos, FAQ con 3 preguntas y footer. Diseño limpio en español. Sin backend.";
+  const prompt = rawPrompt || defaultPrompt;
 
   const user = await User.findById(targetId, { email: 1 }).lean();
   if (!user) {
@@ -1524,30 +1528,47 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
   }
 
   try {
+    // Si es una reparación (no regeneración desde 0), buscar la app más reciente del usuario
+    // y usar editAppId para que el resultado se guarde SOBRE la app existente
+    let editAppId: string | null = null;
+    let existingAppTitle = "";
+    if (isRepair) {
+      const latestApp = await GeneratedApp.findOne(
+        { userId: targetId },
+        { _id: 1, title: 1, frontendCode: 1 }
+      ).sort({ updatedAt: -1 }).lean() as any;
+      if (latestApp?._id) {
+        editAppId = String(latestApp._id);
+        existingAppTitle = latestApp.title || "";
+      }
+    }
+
     const jobId = new mongoose.Types.ObjectId().toString();
-    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-inject. ${prompt}`;
+    const source = isRepair ? "admin-repair" : "admin-inject";
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=${source}. ${prompt}`;
 
     await GenerationJob.create({
       _id: jobId,
       userId: targetId,
       prompt: generationPrompt,
-      coderModel: "claude-haiku-4-5-20251001",
+      ...(editAppId ? { editAppId, kind: "edit" } : { kind: "fullstack" }),
+      coderModel: "claude-sonnet-4-6",
       language: "typescript",
-      kind: "landing",
       status: "queued",
       phase: "queued",
       progress: 0,
       isAdmin: true,
+      hasEverPaid: true,
     });
 
     await enqueueGenerateJob(jobId);
-    logger.info({ jobId, targetId, email: (user as any).email }, "Admin generated landing page for user");
+    logger.info({ jobId, targetId, editAppId, email: (user as any).email }, "Admin generate-app for user");
 
-    res.status(201).json({
-      ok: true,
-      jobId,
-      message: `Landing page en cola para ${(user as any).email}. Estará lista en menos de 1 minuto.`,
-    });
+    const desc = editAppId
+      ? `Corrección aplicada sobre "${existingAppTitle}" — el cliente verá el resultado en su panel en cuanto termine.`
+      : `Nueva app en cola para ${(user as any).email}. Estará lista en breve.`;
+
+    res.status(201).json({ ok: true, jobId, editAppId, message: desc });
   } catch (err) {
     logger.error({ err, targetId }, "Admin generate-app error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });

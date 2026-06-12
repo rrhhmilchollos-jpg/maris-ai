@@ -38,6 +38,8 @@ export interface IUser {
   // ID Universal Maris AI — formato USR-<timestamp_base36>-<random6>
   // Identifica al usuario de forma única en todo el ecosistema de Maris AI
   marisId?: string;
+  adminPatchedAt?: Date;
+  adminPatchNote?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -79,6 +81,9 @@ const UserSchema = new Schema<IUser>(
     githubConnectedAt: { type: Date },
     // ID Universal Maris AI
     marisId: { type: String, unique: true, sparse: true, index: true },
+    // Correcciones de soporte admin — inmutables desde el cliente
+    adminPatchedAt: { type: Date },
+    adminPatchNote: { type: String }, // Descripción interna del parche
   },
   { timestamps: true },
 );
@@ -292,6 +297,34 @@ const AppMessageSchema = new Schema<IAppMessage>(
 export const AppMessage: Model<IAppMessage> =
   mongoose.models.AppMessage ||
   mongoose.model<IAppMessage>("AppMessage", AppMessageSchema);
+
+// ─── User Notifications (soporte admin → cliente) ────────────────────────────
+export interface IUserNotification extends Document {
+  userId: string;
+  appId?: string;
+  appTitle?: string;
+  type: string;       // "support_patch" | "support_regen" | "support_message"
+  message: string;
+  read: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const UserNotificationSchema = new Schema<IUserNotification>(
+  {
+    userId: { type: String, required: true, index: true },
+    appId:  { type: String },
+    appTitle: { type: String },
+    type:   { type: String, required: true, default: "support_patch" },
+    message: { type: String, required: true },
+    read:   { type: Boolean, default: false, index: true },
+  },
+  { timestamps: true },
+);
+
+export const UserNotification: Model<IUserNotification> =
+  mongoose.models.UserNotification ||
+  mongoose.model<IUserNotification>("UserNotification", UserNotificationSchema);
 
 // ─── App Images ──────────────────────────────────────────────────────────────
 export interface IAppImage extends Document {

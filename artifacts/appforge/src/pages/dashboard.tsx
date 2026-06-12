@@ -45,7 +45,8 @@ import {
   ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, 
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
-  Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2
+  Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
+  Bell, BellRing, ExternalLink
 } from "lucide-react";
 import {
   Dialog,
@@ -107,6 +108,28 @@ export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // ── Notificaciones de soporte ──
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifDismissed, setNotifDismissed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const fetchNotifs = async () => {
+      try {
+        const data = await apiFetch<any>("/notifications");
+        const unread = (data.notifications || []).filter((n: any) => !n.read);
+        setNotifications(unread);
+      } catch { /* silencioso */ }
+    };
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const dismissNotif = async (id: string) => {
+    setNotifDismissed(p => new Set([...p, id]));
+    try { await apiFetch<any>(`/notifications/${id}/read`, { method: "PATCH" }); } catch { /* silencioso */ }
+  };
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
@@ -412,6 +435,45 @@ export default function DashboardPage() {
   return (
     <Layout>
       <div className="container max-w-6xl mx-auto px-4 py-8 space-y-8">
+
+        {/* ── Notificaciones de soporte ── */}
+        {notifications.filter(n => !notifDismissed.has(n._id)).map((notif) => (
+          <div key={notif._id}
+            className="relative flex items-start gap-4 rounded-xl border border-violet-500/40 bg-violet-500/8 px-5 py-4 shadow-lg shadow-violet-500/10 animate-in slide-in-from-top-2">
+            <div className="shrink-0 mt-0.5">
+              <div className="h-9 w-9 rounded-full bg-violet-500/20 flex items-center justify-center">
+                <BellRing className="h-5 w-5 text-violet-400" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-violet-300 mb-1 flex items-center gap-2">
+                Actualización del equipo de soporte
+                {notif.appTitle && (
+                  <span className="text-[10px] font-mono bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full border border-violet-500/30">
+                    {notif.appTitle}
+                  </span>
+                )}
+              </p>
+              <p className="text-sm text-white/80 leading-relaxed">
+                {notif.message.replace(/\*\*/g, "")}
+              </p>
+              {notif.appId && (
+                <button
+                  onClick={() => setLocation(`/apps/${notif.appId}`)}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors">
+                  <ExternalLink className="h-3 w-3" />
+                  Ver mi app actualizada
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => dismissNotif(notif._id)}
+              className="shrink-0 text-white/30 hover:text-white/60 transition-colors mt-0.5">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
