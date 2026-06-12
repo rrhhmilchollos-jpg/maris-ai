@@ -2006,6 +2006,12 @@ export async function generateApp(
   if (runIntegration) logger.info("integration: analizando");
   if (runDesign) logger.info("designer: eligiendo paleta");
 
+  // Heartbeat entre fases — evita que el watchdog mate el job durante design+integration
+  if (jobId) GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }).catch(() => {});
+  const betweenPhasesHeartbeat = setInterval(() => {
+    if (jobId) GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }).catch(() => {});
+  }, 25_000);
+
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
     ? runPhase("integrations", () => specifyIntegrations(plan, prompt, agentModelPlan))
@@ -2039,6 +2045,7 @@ export async function generateApp(
   }
   logger.info({ vibe: design.vibe }, "designer: tema listo");
 
+  clearInterval(betweenPhasesHeartbeat);
   onProgress?.({ phase: "generating", progress: 32, note: "⚡ Construyendo tu app…" });
   logger.info({ files: plan.frontendFiles.length }, "coder: generando frontend");
   if (plan.backendNeeded) logger.info("coder: generando backend en paralelo");
