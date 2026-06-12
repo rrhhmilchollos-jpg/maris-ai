@@ -2030,21 +2030,22 @@ export async function generateApp(
     ? runPhase("design", () => designSystem(plan, research, templateContextBlock, agentModelPlan))
     : Promise.resolve(FALLBACK_DESIGN);
 
-  const [integrationSpec, design] = await Promise.all([integrationPromise, designPromise]);
-  if (!runIntegration) logger.info("integration: saltando");
-  if (!runDesign) logger.info("designer: saltando");
-
-  const integrationsNote = integrationSpec.services.length > 0
-    ? `Servicios sugeridos: ${integrationSpec.services.map((s) => s.name).join(", ")}.`
-    : "Sin servicios externos requeridos.";
-
-  if (integrationSpec.services.length > 0) {
-    logger.info({ services: integrationSpec.services.map((s: any) => s.name) }, "integration: servicios detectados");
-  } else {
-    logger.info("integration: sin servicios externos");
+  // Timeout duro de 3 minutos en design+integration — si se cuelgan, usar fallbacks
+  let integrationSpec: IntegrationSpec;
+  let design: DesignSystem;
+  try {
+    const results = await Promise.race([
+      Promise.all([integrationPromise, designPromise]),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("design+integration timeout")), 3 * 60_000)
+      ),
+    ]) as [IntegrationSpec, DesignSystem];
+    [integrationSpec, design] = results;
+  } catch (err) {
+    logger.warn({ err }, "design+integration timed out or failed — using fallbacks");
+    integrationSpec = { services: [], envVars: [] };
+    design = FALLBACK_DESIGN;
   }
-  logger.info({ vibe: design.vibe }, "designer: tema listo");
-
   clearInterval(betweenPhasesHeartbeat);
   onProgress?.({ phase: "generating", progress: 32, note: "⚡ Construyendo tu app…" });
   logger.info({ files: plan.frontendFiles.length }, "coder: generando frontend");
