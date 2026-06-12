@@ -44,6 +44,7 @@ import {
   Cpu,
   Database,
   Shield,
+  Trash2,
 } from "lucide-react";
 import { apiFetch, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs, useRetryAdminJob } from "@/lib/api-client";
 import { format, formatDistanceToNow } from "date-fns";
@@ -705,6 +706,35 @@ function LiveMonitorPanel() {
                     >
                       {actionLoading[`cancel_${job.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
                     </Button>
+                    {(job.status === "failed" || job.status === "reviewing") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs border-red-500/40 text-red-400 hover:bg-red-500/20 hover:border-red-500/60"
+                        title="Eliminar este job definitivamente"
+                        disabled={actionLoading[`del1_${job.id}`]}
+                        onClick={async e => {
+                          e.stopPropagation();
+                          if (!window.confirm(`¿Eliminar este job de ${job.userEmail}?\n\n"${job.prompt?.slice(0, 80)}..."\n\nEsta acción no se puede deshacer.`)) return;
+                          setActionLoading(p => ({ ...p, [`del1_${job.id}`]: true }));
+                          try {
+                            const d = await apiFetch<any>("/api/admin/jobs/bulk", {
+                              method: "DELETE",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ jobIds: [job.id] }),
+                            });
+                            toast({ title: "🗑️ Job eliminado", description: `Job de ${job.userEmail} eliminado correctamente` });
+                            await fetchJobs();
+                          } catch (err: any) {
+                            toast({ title: "Error al eliminar", description: err.message, variant: "destructive" });
+                          } finally {
+                            setActionLoading(p => ({ ...p, [`del1_${job.id}`]: false }));
+                          }
+                        }}
+                      >
+                        {actionLoading[`del1_${job.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      </Button>
+                    )}
                     {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   </div>
                 </div>
