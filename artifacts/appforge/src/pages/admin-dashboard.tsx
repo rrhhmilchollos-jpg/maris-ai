@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -159,6 +159,251 @@ function JobLogsPanel({ jobId }: { jobId: string }) {
         ))}
       </div>
     </ScrollArea>
+  );
+}
+
+function LiveMonitorPanel() {
+  const { toast } = useToast();
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [logs, setLogs] = useState<Record<string, any[]>>({});
+  const [repairPrompt, setRepairPrompt] = useState<Record<string, string>>({});
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchJobs = async () => {
+    try {
+      const r = await apiFetch("/api/admin/jobs?limit=50");
+      const d = await r.json();
+      const active = (d.jobs ?? []).filter((j: any) =>
+        j.status === "running" || j.status === "queued" || j.status === "failed"
+      );
+      setJobs(active);
+    } catch { /* silent */ }
+  };
+
+  const fetchLogs = async (jobId: string) => {
+    try {
+      const r = await apiFetch(`/api/admin/jobs/${jobId}/logs?limit=100`);
+      const d = await r.json();
+      setLogs(prev => ({ ...prev, [jobId]: d.logs ?? [] }));
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+    pollRef.current = setInterval(fetchJobs, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  useEffect(() => {
+    if (expandedJob) {
+      fetchLogs(expandedJob);
+      const t = setInterval(() => fetchLogs(expandedJob), 2000);
+      return () => clearInterval(t);
+    }
+  }, [expandedJob]);
+
+  const forceRetry = async (jobId: string) => {
+    setActionLoading(p => ({ ...p, [jobId]: true }));
+    try {
+      const r = await apiFetch(`/api/admin/jobs/${jobId}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast({ title: "✅ Job reiniciado", description: `Job #${jobId.slice(-8)} vuelve a la cola.` });
+      await fetchJobs();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setActionLoading(p => ({ ...p, [jobId]: false }));
+    }
+  };
+
+  const injectRepair = async (jobId: string, userId: string) => {
+    const prompt = repairPrompt[jobId]?.trim();
+    if (!prompt) {
+      toast({ title: "Escribe una instrucción de reparación", variant: "destructive" });
+      return;
+    }
+    setActionLoading(p => ({ ...p, [`repair_${jobId}`]: true }));
+    try {
+      const r = await apiFetch(`/api/admin/users/${userId}/generate-app`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${prompt}` }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast({ title: "✅ Reparación inyectada", description: d.message ?? "Nuevo job de reparación en cola." });
+      setRepairPrompt(p => ({ ...p, [jobId]: "" }));
+      await fetchJobs();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setActionLoading(p => ({ ...p, [`repair_${jobId}`]: false }));
+    }
+  };
+
+  const statusColor: Record<string, string> = {
+    running: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+    queued:  "text-yellow-400 border-yellow-500/30 bg-yellow-500/10",
+    failed:  "text-red-400 border-red-500/30 bg-red-500/10",
+  };
+  const statusDot: Record<string, string> = {
+    running: "bg-emerald-400 animate-pulse",
+    queued:  "bg-yellow-400",
+    failed:  "bg-red-400",
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+          <span className="text-sm font-medium">Monitorización en vivo</span>
+          <span className="text-xs text-muted-foreground">· actualiza cada 3s</span>
+        </div>
+        <Badge variant="outline" className="text-xs">{jobs.length} activos</Badge>
+      </div>
+
+      {jobs.length === 0 ? (
+        <div className="rounded-lg border border-white/5 bg-white/[0.02] p-8 text-center">
+          <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">Sin jobs activos ahora mismo.</p>
+          <p className="text-xs text-muted-foreground mt-1">Cuando un usuario genere una app aparecerá aquí en tiempo real.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {jobs.map((job) => {
+            const isExpanded = expandedJob === job.id;
+            const jobLogs = logs[job.id] ?? [];
+            const ageMin = Math.round((Date.now() - new Date(job.updatedAt).getTime()) / 60000);
+
+            return (
+              <div key={job.id} className={`rounded-lg border ${job.status === "failed" ? "border-red-500/30" : job.status === "running" ? "border-emerald-500/20" : "border-yellow-500/20"} bg-card/40 overflow-hidden`}>
+                {/* Job header */}
+                <div
+                  className="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
+                  onClick={() => setExpandedJob(isExpanded ? null : job.id)}
+                >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${statusDot[job.status] ?? "bg-gray-400"}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${statusColor[job.status] ?? ""}`}>
+                        {job.status} · {job.phase}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
+                        {job.userEmail ?? job.userId?.slice(0, 12)}
+                      </span>
+                      <span className="text-xs text-white/30">hace {ageMin}min</span>
+                      {job.progress > 0 && (
+                        <span className="text-xs text-violet-400">{job.progress}%</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/60 truncate mt-0.5 max-w-[400px]">
+                      {job.prompt?.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 100)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-2 text-xs border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
+                      onClick={e => { e.stopPropagation(); forceRetry(job.id); }}
+                      disabled={actionLoading[job.id]}
+                    >
+                      {actionLoading[job.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    </Button>
+                    {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                  </div>
+                </div>
+
+                {/* Expanded: logs + repair */}
+                {isExpanded && (
+                  <div className="border-t border-white/5">
+                    {/* Progress bar */}
+                    {job.progress > 0 && (
+                      <div className="h-1 bg-white/5">
+                        <div
+                          className="h-full bg-violet-500 transition-all duration-500"
+                          style={{ width: `${job.progress}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Live logs */}
+                    <div className="p-3 border-b border-white/5">
+                      <p className="text-[10px] text-muted-foreground mb-2 font-mono uppercase tracking-wider">Logs en vivo</p>
+                      <div className="bg-black/40 rounded-lg p-2 h-40 overflow-y-auto font-mono text-xs space-y-0.5">
+                        {jobLogs.length === 0 ? (
+                          <span className="text-white/30">Sin logs todavía…</span>
+                        ) : (
+                          [...jobLogs].reverse().map((log: any, i: number) => (
+                            <div key={i} className={`flex gap-2 ${log.level === "error" ? "text-red-400" : log.level === "warn" ? "text-yellow-400" : "text-white/60"}`}>
+                              <span className="text-white/20 shrink-0">{format(new Date(log.createdAt), "HH:mm:ss")}</span>
+                              <span className={`shrink-0 px-1 rounded text-[9px] uppercase ${log.level === "error" ? "bg-red-500/20 text-red-400" : log.level === "warn" ? "bg-yellow-500/20 text-yellow-400" : "bg-white/5 text-white/40"}`}>{log.agent}</span>
+                              <span className="break-all">{log.message}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* AI repair injection */}
+                    <div className="p-3 space-y-2">
+                      <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1">
+                        <Zap className="h-3 w-3 text-violet-400" />
+                        Inyectar corrección IA para este usuario
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Ej: La app falló en frontend, genera solo la landing page con los colores del prompt original"
+                          value={repairPrompt[job.id] ?? ""}
+                          onChange={e => setRepairPrompt(p => ({ ...p, [job.id]: e.target.value }))}
+                          className="text-xs h-8 bg-black/20"
+                          onKeyDown={e => e.key === "Enter" && injectRepair(job.id, job.userId)}
+                        />
+                        <Button
+                          size="sm"
+                          className="h-8 shrink-0 bg-violet-600 hover:bg-violet-700 text-white text-xs px-3"
+                          onClick={() => injectRepair(job.id, job.userId)}
+                          disabled={actionLoading[`repair_${job.id}`]}
+                        >
+                          {actionLoading[`repair_${job.id}`]
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <><Zap className="h-3 w-3 mr-1" />Aplicar</>
+                          }
+                        </Button>
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {[
+                          "Genera solo la landing page sin backend",
+                          "Simplifica la app a las funciones básicas",
+                          "Regenera con modelo más rápido (Haiku)",
+                          "Corrige errores de TypeScript del frontend",
+                        ].map(s => (
+                          <button
+                            key={s}
+                            className="text-[10px] px-2 py-1 rounded border border-violet-500/20 text-violet-400 hover:bg-violet-500/10 transition-colors"
+                            onClick={() => setRepairPrompt(p => ({ ...p, [job.id]: s }))}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -468,6 +713,15 @@ export default function AdminDashboardPage() {
             {/* Main content tabs */}
             <Tabs defaultValue="charts" className="space-y-4">
               <TabsList className="bg-black/20 border border-white/10">
+                <TabsTrigger value="live" className="gap-2">
+                  <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                  En vivo
+                  {(jobsData?.jobs?.filter((j: any) => j.status === "running").length ?? 0) > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold animate-pulse">
+                      {jobsData?.jobs?.filter((j: any) => j.status === "running").length}
+                    </span>
+                  )}
+                </TabsTrigger>
                 <TabsTrigger value="charts" className="gap-2">
                   <BarChart3 className="h-3.5 w-3.5" />
                   Gráficas
@@ -494,6 +748,11 @@ export default function AdminDashboardPage() {
                   Sistema
                 </TabsTrigger>
               </TabsList>
+
+              {/* LIVE MONITOR TAB */}
+              <TabsContent value="live" className="space-y-4">
+                <LiveMonitorPanel />
+              </TabsContent>
 
               {/* CHARTS TAB */}
               <TabsContent value="charts" className="space-y-4">

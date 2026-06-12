@@ -8,6 +8,7 @@ import {
   GenerationJob,
   CreditTransaction,
   AgentMemory,
+  JobLog,
 } from "@workspace/db/schema";
 import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
@@ -110,6 +111,27 @@ router.post("/admin/users/:id/unsuspend", async (req: any, res: any): Promise<vo
   ).lean();
   if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
   res.json({ ok: true, isSuspended: false });
+});
+
+// ─── Admin: logs de cualquier job ────────────────────────────────────────────
+// GET /api/admin/jobs/:id/logs
+router.get("/admin/jobs/:id/logs", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const limit = Math.min(200, Number(req.query.limit) || 100);
+  const logs = await JobLog.find({ jobId: req.params.id })
+    .sort({ _id: -1 })
+    .limit(limit)
+    .lean();
+  res.json({
+    logs: logs.map((l: any) => ({
+      id: String(l._id),
+      jobId: l.jobId,
+      agent: l.agent,
+      level: l.level,
+      message: l.message,
+      createdAt: l.createdAt,
+    })),
+  });
 });
 
 // ─── Search user by email ─────────────────────────────────────────────────────
@@ -426,6 +448,7 @@ router.post("/admin/project-seeds/bulk", requireAdmin, async (req: any, res: any
 router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const id = req.params.id;
+  const force = req.body?.force === true || req.query?.force === "true";
 
   const job = await GenerationJob.findById(id).lean();
   if (!job) {
@@ -436,12 +459,13 @@ router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> =
   const ageMs = Date.now() - new Date(job.updatedAt).getTime();
   const STALE_MS = 15 * 60 * 1000;
   const retryable =
+    force ||
     job.status === "failed" ||
     (job.status === "running" && ageMs > STALE_MS) ||
     (job.status === "queued" && ageMs > STALE_MS);
 
   if (!retryable) {
-    res.status(409).json({ error: `Job en estado '${job.status}' no es reintentable ahora.` });
+    res.status(409).json({ error: `Job en estado '${job.status}' no es reintentable ahora. Usa force=true para forzar.` });
     return;
   }
 
