@@ -1813,7 +1813,7 @@ export async function generateApp(
           prompt,
           plan: { title: "Hitos", description: "Construcción por hitos" },
           language,
-          log: emit,
+          log: log,
           onProgress,
         })
       );
@@ -2291,7 +2291,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
       prompt,
       plan,
       language,
-      log: emit,
+      log: log,
       onProgress,
     });
     
