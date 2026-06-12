@@ -3235,6 +3235,14 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     await enqueueGenerateJob(String(job._id));
   }
 
+  // Auto-corregir jobs que completaron bien pero tienen status incorrecto
+  // failed·done = completó correctamente, el jobQueue catch lo sobreescribió
+  // failed·reviewing = completó pero el 422 de GitHub lo marcó como failed
+  await GenerationJob.updateMany(
+    { status: { $in: ["failed", "reviewing"] }, phase: "done" },
+    { $set: { status: "succeeded", updatedAt: now } },
+  );
+
   // Limpiar jobs atascados en "reviewing" más de 30 minutos — el cliente ya fue notificado
   const reviewingCutoff = new Date(now.getTime() - 30 * 60_000);
   await GenerationJob.updateMany(
