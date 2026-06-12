@@ -1531,13 +1531,13 @@ export default function AdminDashboardPage() {
                         onClick={async () => {
                           try {
                             const d = await apiFetch<any>("/api/admin/test-email-alert", { method: "POST" });
-                            toast({ title: "📧 Email de prueba enviado", description: d.message });
+                            toast({ title: "📧 Email de soporte enviado", description: d.message });
                           } catch (e: any) {
                             toast({ title: "Error", description: e.message + " — ¿RESEND_API_KEY configurada en Railway?", variant: "destructive" });
                           }
                         }}
                       >
-                        📧 Enviar email de prueba
+                        📧 Enviar email de soporte
                       </Button>
                     </div>
                   </CardContent>

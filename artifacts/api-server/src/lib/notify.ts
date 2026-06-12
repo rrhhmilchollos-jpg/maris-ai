@@ -114,8 +114,8 @@ export async function notifyAdminJobFailed(opts: {
   retryCount?: number;
 }): Promise<void> {
   const { userEmail, userId, jobId, appId, prompt, errorMessage, retryCount = 0 } = opts;
-  // Solo notificar si ha fallado más de 2 veces (evitar spam por fallos normales)
-  if (retryCount < 2) return;
+  // Notificar desde el primer fallo — el admin debe saber inmediatamente
+  if (retryCount < 1) return;
 
   const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 200);
   const panelUrl = `https://www.marisai.es/admin`;
