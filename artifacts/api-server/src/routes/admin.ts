@@ -216,9 +216,30 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
 router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const limit = Math.min(Number(req.query.limit) || 20, 50);
-  // El _id del User ES el Clerk ID — es el mismo campo userId en GeneratedApp
-  const userId = req.params.id;
-  const apps = await GeneratedApp.find({ userId }).sort({ createdAt: -1 }).limit(limit).lean();
+  const id = req.params.id;
+
+  // El _id del User ES el Clerk ID — buscar apps por ese ID directamente
+  // También buscar por email por si acaso hay inconsistencia
+  const user = await User.findById(id).lean() as any;
+  const userEmail = user?.email;
+
+  // Buscar apps por userId (Clerk ID) O por email del usuario como fallback
+  let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).lean();
+
+  // Si no hay apps y tenemos email, intentar buscar jobs del usuario y sus appIds
+  if (apps.length === 0 && userEmail) {
+    // Buscar via jobs — los jobs tienen el userId correcto y el appId
+    const jobs = await (mongoose.model("GenerationJob") as any)
+      .find({ userId: id, appId: { $exists: true, $ne: null } })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    const appIds = [...new Set(jobs.map((j: any) => j.appId).filter(Boolean))];
+    if (appIds.length > 0) {
+      apps = await GeneratedApp.find({ _id: { $in: appIds } }).sort({ createdAt: -1 }).lean();
+    }
+  }
+
   res.json({
     apps: apps.map(a => ({
       id: String(a._id),
@@ -1024,7 +1045,33 @@ router.post("/admin/jobs/cleanup-reviewing", async (req: any, res: any): Promise
 });
 
 // ─── Admin: Corregir jobs failed·done (completaron pero status mal guardado) ──
-// ─── Admin: Parchear código de una app (buscar y reemplazar en frontendCode) ──
+// ─── Admin: Diagnóstico de IDs de apps de un usuario ─────────────────────────
+router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const id = req.params.id;
+  const user = await User.findById(id).lean() as any;
+
+  // Buscar apps con distintos criterios para ver cuál funciona
+  const byUserId = await GeneratedApp.countDocuments({ userId: id });
+  const byEmail = user?.email ? await GeneratedApp.countDocuments({ "userEmail": user.email }) : 0;
+
+  // Ver los últimos jobs del usuario y sus appIds
+  const jobs = await (mongoose.model("GenerationJob") as any)
+    .find({ userId: id }).sort({ createdAt: -1 }).limit(5).select("appId status prompt").lean();
+
+  // Ver una muestra de apps con su userId real
+  const sampleApps = await GeneratedApp.find({}).sort({ createdAt: -1 }).limit(3).select("userId title").lean();
+
+  res.json({
+    searchedUserId: id,
+    userFound: !!user,
+    userEmail: user?.email,
+    appsByUserId: byUserId,
+    appsByEmail: byEmail,
+    recentJobs: jobs.map((j: any) => ({ appId: j.appId, status: j.status, prompt: j.prompt?.slice(0, 50) })),
+    sampleAppsInDB: sampleApps.map((a: any) => ({ userId: a.userId, title: a.title })),
+  });
+});
 router.post("/admin/apps/:id/patch-code", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { search, replace } = req.body ?? {};

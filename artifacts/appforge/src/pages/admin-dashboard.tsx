@@ -217,7 +217,13 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
           </div>
           {/* Accesos rápidos a clientes activos */}
           <div className="flex gap-2 mt-3 flex-wrap">
-            {["faquiunmen@gmail.com", "deliodiazmejia@gmail.com", "fedeler.correo@gmail.com", "alejandronopez@gmail.com"].map(e => (
+            {[
+              "rrhh.milchollos@gmail.com",
+              "faquiunmen@gmail.com",
+              "deliodiazmejia@gmail.com",
+              "fedeler.correo@gmail.com",
+              "alejandronopez@gmail.com"
+            ].map(e => (
               <button key={e} onClick={() => { setEmail(e); searchApps(e); }}
                 className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors border border-white/10">
                 {e.split("@")[0]}
