@@ -175,15 +175,14 @@ function GenerateForUserPanel() {
     setSearching(true);
     setFoundUser(null);
     try {
-      const r = await apiFetch(`/api/admin/overview`);
-      const d = await r.json();
-      // Buscar en topUsers por email
-      const match = d.topUsers?.find((u: any) => u.email?.toLowerCase() === email.trim().toLowerCase());
-      if (match) {
-        setFoundUser({ id: match.userId, email: match.email });
-      } else {
-        toast({ title: "No encontrado en top usuarios", description: "Prueba buscando en la lista de jobs por email.", variant: "destructive" });
+      const r = await apiFetch(`/api/admin/users/search?email=${encodeURIComponent(email.trim())}`);
+      if (!r.ok) {
+        const d = await r.json();
+        toast({ title: "Usuario no encontrado", description: d.error ?? "No existe ninguna cuenta con ese email.", variant: "destructive" });
+        return;
       }
+      const d = await r.json();
+      setFoundUser({ id: d.id, email: d.email });
     } catch {
       toast({ title: "Error", description: "No se pudo buscar el usuario", variant: "destructive" });
     } finally {
