@@ -260,9 +260,12 @@ FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
 - Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
 
-NO LIMITS — be ambitious:
-- This is a paid product. Bigger apps = more value. Do NOT artificially shrink the plan.
-- Generate as many frontendFiles as the product genuinely needs. Quality AND quantity.
+SCOPE LIMITS — crítico para que el frontend pueda generarse sin timeout:
+- Apps standard (score 1-2): máximo 8 páginas, 12 componentes, 6 hooks. Si el prompt no menciona explícitamente decenas de funcionalidades, mantén el plan ajustado.
+- Apps complejas (score 3+): máximo 12 páginas, 16 componentes, 8 hooks.
+- NUNCA generes más de 50 frontendFiles en total — el frontend engineer no puede procesar más sin timeout.
+- Prioriza CALIDAD sobre CANTIDAD: 6 páginas bien hechas > 19 páginas a medias.
+- Si el producto genuinamente necesita más, indica en "description" que es una versión MVP y el usuario puede pedir más páginas después.
 
 Rules:
 - NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
@@ -1871,11 +1874,44 @@ export async function generateApp(
 
   onProgress?.({ phase: "architecting", progress: 14, note: research ? "🧠 Arquitecto diseñando estructura con contexto de la web…" : "🧠 Arquitecto diseñando la estructura del proyecto…" });
   await log("architect", research ? "Diseñando estructura con contexto de la web…" : "Diseñando estructura del proyecto…");
-  const plan = await runPhase("architect", () =>
-    withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock, agentModelPlan), 90_000, "architect"),
-  );
+
+  // Heartbeat de logs durante el arquitecto — evita que el watchdog lo mate por silencio
+  const architectHeartbeat = setInterval(async () => {
+    try { await log("architect", "⏳ Arquitecto trabajando — diseñando estructura del proyecto…"); } catch { /* swallow */ }
+  }, 25_000);
+
+  let plan: ProjectPlan;
+  try {
+    plan = await runPhase("architect", () =>
+      withTimeoutOrThrow(architectPlan(prompt, research, templateContextBlock, agentModelPlan), 90_000, "architect"),
+    );
+  } finally {
+    clearInterval(architectHeartbeat);
+  }
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
+
+  // Guardia de tamaño — si el arquitecto generó un plan demasiado grande, lo recortamos
+  // antes de que llegue al frontend engineer para evitar timeouts
+  const MAX_PAGES = 8;
+  const MAX_COMPONENTS = 12;
+  const MAX_FILES = 45;
+  if (plan.pages.length > MAX_PAGES || plan.frontendFiles.length > MAX_FILES) {
+    await log("architect", `⚠️ Plan demasiado grande (${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos) — reduciendo a MVP para evitar timeout.`, "warn");
+    plan.pages = plan.pages.slice(0, MAX_PAGES);
+    plan.components = plan.components.slice(0, MAX_COMPONENTS);
+    plan.hooks = (plan.hooks ?? []).slice(0, 6);
+    plan.utils = (plan.utils ?? []).slice(0, 4);
+    // Reconstruir frontendFiles a partir de las páginas y componentes que quedan
+    const keptPages = new Set(plan.pages.map((p: any) => p.name));
+    const keptComponents = new Set(plan.components.map((c: any) => c.name));
+    plan.frontendFiles = plan.frontendFiles.filter((f: string) => {
+      if (f.includes("/pages/")) return [...keptPages].some(n => f.includes(n));
+      if (f.includes("/components/")) return [...keptComponents].some(n => f.includes(n));
+      return true; // mantener archivos de configuración
+    }).slice(0, MAX_FILES);
+    await log("architect", `✅ Plan reducido: ${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos — listo para generar.`);
+  }
 
   await log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
   if (plan.pages.length > 0) {
@@ -3032,7 +3068,7 @@ router.get("/templates", async (_req: any, res: any) => {
 export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promise<void> {
   await connectDB();
   const STALE_MS = 8 * 60 * 1000;   // Reducido de 15 a 8 minutos
-  const ZOMBIE_MS = 5 * 60 * 1000;  // Job running sin logs = zombie tras 5 min
+  const ZOMBIE_MS = 3 * 60 * 1000;  // Job sin logs = zombie tras 3 min (heartbeat escribe cada 25s)
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
   const zombieDate = new Date(now.getTime() - ZOMBIE_MS);
