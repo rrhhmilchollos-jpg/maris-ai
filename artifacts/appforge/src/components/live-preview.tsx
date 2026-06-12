@@ -77,8 +77,9 @@ export function LivePreview({
   const [supported] = useState(() => isWebContainerSupported());
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConsole, setShowConsole] = useState(false);
-  // Sandpack fallback: se activa cuando WebContainer no está disponible
-  const [useSandpackFallback, setUseSandpackFallback] = useState(!isWebContainerSupported());
+  // Usar preview del servidor cuando hay appId — es el más fiable (esbuild compilado)
+  // Sandpack como fallback solo cuando no hay appId
+  const [useSandpackFallback, setUseSandpackFallback] = useState(!isWebContainerSupported() && !appId);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const devProcRef = useRef<{ kill: () => void } | null>(null);
   const startingRef = useRef(false);
@@ -407,6 +408,33 @@ export function LivePreview({
 
     // ── Sandpack fallback (cuando WebContainer no está disponible) ──────────
     if (useSandpackFallback && frontendCode) {
+      // Si tenemos appId, usar el endpoint del servidor que compila correctamente con esbuild
+      if (appId) {
+        const API_BASE = import.meta.env.VITE_API_URL || "";
+        return (
+          <div className="w-full h-full flex flex-col">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border-b border-emerald-500/20 shrink-0">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[11px] text-emerald-300">Vista previa en vivo</span>
+              <button
+                onClick={() => window.open(`${API_BASE}/api/apps/${appId}/preview`, "_blank")}
+                className="ml-auto text-[10px] text-emerald-400 hover:text-emerald-200 underline"
+              >
+                Abrir en nueva pestaña ↗
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <iframe
+                src={`${API_BASE}/api/apps/${appId}/preview`}
+                className="w-full h-full border-0"
+                title="App Preview"
+                allow="cross-origin-isolated"
+              />
+            </div>
+          </div>
+        );
+      }
+      // Sin appId — usar Sandpack
       const sandpackFiles = buildSandpackFiles(parseBundle(frontendCode));
       return (
         <div className="w-full h-full flex flex-col">
