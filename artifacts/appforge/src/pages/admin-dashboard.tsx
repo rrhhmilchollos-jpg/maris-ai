@@ -275,6 +275,26 @@ function LiveMonitorPanel() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">{jobs.length} activos</Badge>
+          <Button size="sm" variant="outline" className="h-6 px-2 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+            onClick={async () => {
+              const email = window.prompt("Email del usuario para regenerar app:");
+              if (!email) return;
+              try {
+                const d = await apiFetch<any>("/api/admin/generate-for-email", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email }),
+                });
+                toast({ title: "✅ App en cola", description: d.message });
+                await fetchJobs();
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            <Zap className="h-3 w-3 mr-1" />
+            Regenerar para usuario
+          </Button>
           <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={fetchJobs}>
             <RefreshCw className="h-3 w-3" />
           </Button>
@@ -730,7 +750,7 @@ export default function AdminDashboardPage() {
             </section>
 
             {/* Main content tabs */}
-            <Tabs defaultValue="charts" className="space-y-4">
+            <Tabs defaultValue="live" className="space-y-4">
               <TabsList className="bg-black/20 border border-white/10">
                 <TabsTrigger value="live" className="gap-2">
                   <Activity className="h-3.5 w-3.5 text-emerald-400" />

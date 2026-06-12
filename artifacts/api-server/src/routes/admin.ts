@@ -951,5 +951,41 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
   }
 });
 
+// ─── Admin: Generate app by email (shortcut) ────────────────────────────────
+// POST /api/admin/generate-for-email
+// Body: { email: string, prompt?: string }
+router.post("/admin/generate-for-email", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { email, prompt } = req.body ?? {};
+  if (!email) { res.status(400).json({ error: "Email requerido" }); return; }
+
+  const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, "i") } }, { _id: 1, email: 1 }).lean();
+  if (!user) { res.status(404).json({ error: `No existe cuenta con email ${email}` }); return; }
+
+  const targetId = String((user as any)._id);
+  const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-inject. ${prompt || "Crea una app web para la gestión de alquileres de salones de eventos. Incluye: listado de salones disponibles con filtros de fecha y capacidad, formulario de reserva, panel de gestión de reservas y página de inicio atractiva. Diseño moderno en español. Sin backend."}`;
+
+  try {
+    const jobId = new mongoose.Types.ObjectId().toString();
+    await GenerationJob.create({
+      _id: jobId,
+      userId: targetId,
+      prompt: generationPrompt,
+      coderModel: "claude-sonnet-4-6",
+      language: "typescript",
+      kind: "landing",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin: true,
+    });
+    await enqueueGenerateJob(jobId);
+    logger.info({ jobId, targetId, email: (user as any).email }, "Admin generate-for-email");
+    res.status(201).json({ ok: true, jobId, message: `App en cola para ${(user as any).email}. Lista en menos de 2 minutos.` });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
 export default router;
 
