@@ -176,12 +176,16 @@ function LiveMonitorPanel() {
   const fetchJobs = async () => {
     try {
       const d = await apiFetch<any>("/api/admin/jobs?limit=100");
-      const active = (d.jobs ?? []).filter((j: any) =>
-        j.status === "running" ||
-        j.status === "queued" ||
-        j.status === "failed" ||
-        (j.status !== "succeeded" && j.ageMs < 2 * 60 * 60 * 1000)
-      );
+      const active = (d.jobs ?? [])
+        .map((j: any) => ({ ...j, id: String(j.id ?? j._id ?? ""), userId: String(j.userId ?? "") }))
+        .filter((j: any) =>
+          j.id && j.id !== "undefined" && (
+            j.status === "running" ||
+            j.status === "queued" ||
+            j.status === "failed" ||
+            (j.status !== "succeeded" && j.ageMs < 2 * 60 * 60 * 1000)
+          )
+        );
       setJobs(active);
       setFetchError(null);
       setLastUpdate(new Date());

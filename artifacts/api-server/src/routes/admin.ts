@@ -911,8 +911,23 @@ router.post("/seed-seguxat-public", async (req: any, res: any): Promise<void> =>
 // POST /api/admin/jobs/:id/recover
 router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void> => {
   await connectDB();
-  const failedJob = await GenerationJob.findById(req.params.id).lean() as any;
-  if (!failedJob) { res.status(404).json({ error: "Job no encontrado" }); return; }
+  const rawId = req.params.id;
+  logger.info({ rawId }, "Admin recover: received request");
+
+  // Intentar limpiar el ID por si viene como [object Object]
+  let jobId = rawId;
+  if (!jobId || jobId === "undefined" || jobId === "null" || jobId === "[object Object]") {
+    logger.error({ rawId }, "Admin recover: invalid job ID");
+    res.status(400).json({ error: `ID de job inválido: "${rawId}". Refresca el panel e inténtalo de nuevo.` });
+    return;
+  }
+
+  const failedJob = await GenerationJob.findById(jobId).lean() as any;
+  if (!failedJob) {
+    logger.error({ jobId }, "Admin recover: job not found in DB");
+    res.status(404).json({ error: `Job ${jobId} no encontrado en la base de datos.` });
+    return;
+  }
 
   const cleanPrompt = (failedJob.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
 
