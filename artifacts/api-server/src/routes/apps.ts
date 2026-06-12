@@ -863,6 +863,64 @@ Now produce the JSON object with backendCode.`;
 }
 
 /**
+ * Landing Page Generator — Fallback de último recurso.
+ * Genera SIEMPRE una landing page funcional y visualmente atractiva
+ * sin backend ni base de datos. Es lo primero que el cliente debe ver.
+ * Se activa cuando cualquier agente falla o hace timeout.
+ */
+async function generateLandingPage(
+  prompt: string,
+  language: GenLanguage,
+  design?: DesignSystem,
+  research?: string,
+): Promise<CodeGenResult> {
+  const ext = language === "typescript" ? "tsx" : "jsx";
+  const utilExt = language === "typescript" ? "ts" : "js";
+  const isTS = language === "typescript";
+
+  const systemPrompt = `You are Maris AI's Emergency Landing Page Engineer.
+Your ONLY job: generate a beautiful, fully functional landing page in React + Tailwind.
+RULES — non-negotiable:
+- NO backend, NO database, NO API calls, NO authentication, NO complex state.
+- Pure frontend only: useState for basic interactions (tabs, accordion, mobile menu).
+- ONE file: src/App.${ext} contains everything. Keep it under 400 lines.
+- Include: hero section with headline + CTA button, features/benefits section (3 cards), how-it-works steps (3 steps), FAQ accordion (3 questions), footer.
+- Use the design system colors if provided, otherwise use a clean professional palette.
+- All text and copy in the same language as the user prompt.
+- The landing MUST look like a real product — not a template placeholder. Use the prompt to infer the product name, tagline, and copy.
+- Output STRICT JSON only: {"frontendCode":"..."}
+- Use '// === FILE: <path> ===' separators. Always include: index.html, package.json, vite.config.${utilExt}${isTS ? ", tsconfig.json" : ""}, tailwind.config.${utilExt}, postcss.config.js, src/main.${ext}, src/App.${ext}, src/index.css
+- Always add vercel.json with frame-ancestors: https://marisai.es https://www.marisai.es`;
+
+  const designNote = design
+    ? `\n\nDesign system to apply:\n${JSON.stringify({ colors: design.colors, fonts: design.fonts }, null, 2)}`
+    : "";
+  const researchNote = research
+    ? `\n\nReference brief (inspiration only):\n${research.slice(0, 800)}`
+    : "";
+
+  try {
+    const streamed = await streamClaudeTextWithFallback(
+      "frontend",
+      "claude-haiku-4-5-20251001",
+      {
+        max_tokens: 16000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: `Create a landing page for:\n\n${prompt}${designNote}${researchNote}\n\nReturn ONLY JSON: {"frontendCode":"..."}` }],
+      },
+      () => {},
+    );
+    const parsed = extractJsonObject<{ frontendCode?: string }>(streamed.text);
+    if (parsed?.frontendCode && parsed.frontendCode.length > 500) {
+      return { code: parsed.frontendCode, truncated: false };
+    }
+    return { code: "", truncated: false, error: "landing-page-empty" };
+  } catch (err) {
+    return { code: "", truncated: false, error: (err as Error).message };
+  }
+}
+
+/**
  * Integration Architect — Gemini 2.0 Flash.
  */
 async function specifyIntegrations(
@@ -1918,15 +1976,15 @@ export async function generateApp(
         }, retryModel, language, templateContextBlock, retryAgentPlan,
       );
       if (!retryResult.code) {
-        await log("coder", "Reintento con plan reducido también falló — intentando recuperar código parcial…", "warn");
-        // Intentar recuperar código del reintento acumulado, luego del primer intento
-        const recovery = (retryResult as any).accumulated || frontendResult.accumulated || frontendAccumulated;
-        if (recovery && recovery.length > 2000) {
-          await log("coder", `Recuperando ${Math.round(recovery.length / 1000)} KB de código parcial para continuar…`, "warn");
-          frontendResult.code = recovery;
+        await log("coder", "Reintento con plan reducido también falló — generando landing page funcional como base…", "warn");
+        onProgress?.({ phase: "fixing", progress: 65, note: "🏗️ Generando landing page funcional como punto de partida…" });
+        const landingResult = await generateLandingPage(prompt, language, design, research);
+        if (landingResult.code && landingResult.code.length > 500) {
+          await log("coder", `✅ Landing page lista (${Math.round(landingResult.code.length / 1000)} KB). Puedes pedirme que añada más funcionalidades paso a paso.`);
+          frontendResult.code = landingResult.code;
         } else {
-          // Sin código parcial suficiente — dejar que el Repair Agent lo intente en la siguiente fase
-          await log("coder", "Sin código parcial suficiente. El Repair Agent intentará reconstruir la app…", "warn");
+          // Sin landing page — dejar que el Repair Agent lo intente
+          await log("coder", "Landing page vacía. El Repair Agent intentará reconstruir…", "warn");
           frontendResult.code = "";
         }
     }
@@ -1946,6 +2004,15 @@ export async function generateApp(
     if (String(frontendResult.error || "").includes("timeout") && (frontendResult as any).accumulated?.length > 1000) {
       await log("coder", "Timeout detectado pero hay código parcial acumulado. Intentando recuperar...", "warn");
       frontendResult.code = (frontendResult as any).accumulated;
+    } else if (!frontendResult.code) {
+      // Sin nada acumulado — landing page directa
+      await log("coder", "Generando landing page funcional como base para continuar…", "warn");
+      onProgress?.({ phase: "fixing", progress: 60, note: "🏗️ Preparando landing page funcional…" });
+      const landingResult = await generateLandingPage(prompt, language, design, research);
+      if (landingResult.code && landingResult.code.length > 500) {
+        await log("coder", `✅ Landing page lista (${Math.round(landingResult.code.length / 1000)} KB). Puedes pedirme que añada más funcionalidades paso a paso.`);
+        frontendResult.code = landingResult.code;
+      }
     }
   }
 
@@ -1974,24 +2041,34 @@ Output STRICT JSON only, no markdown, no explanation.`,
         throw new Error("Repair Agent no pudo recuperar el frontend.");
       }
     } catch (repairErr) {
-      await log("coder", `Repair Agent falló: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}. Último intento con modelo rápido…`, "warn");
-      // Último recurso: generar una versión mínima con Haiku antes de rendirse
-      try {
-        const lastResortResult = await generateFrontendCode(
-          { ...plan, frontendFiles: plan.frontendFiles.slice(0, 3), pages: plan.pages.slice(0, 1), components: plan.components.slice(0, 4) },
-          design, research, prompt,
-          (chars) => { onProgress?.({ phase: "fixing", progress: 70, note: `🆘 Recuperación de emergencia: ${Math.round(chars / 1000)} KB…` }); },
-          "claude-haiku-4-5-20251001", language, templateContextBlock,
-        );
-        if (lastResortResult.code && lastResortResult.code.length > 500) {
-          await log("coder", `Recuperación de emergencia exitosa (${Math.round(lastResortResult.code.length / 1000)} KB). La app puede estar simplificada.`);
-          frontendResult.code = lastResortResult.code;
-        } else {
-          throw new Error("last-resort-empty");
+      await log("coder", `Repair Agent falló: ${repairErr instanceof Error ? repairErr.message : String(repairErr)}. Generando landing page funcional…`, "warn");
+      onProgress?.({ phase: "fixing", progress: 72, note: "🏗️ Entregando landing page funcional como base…" });
+      // Nivel 3: Landing page — siempre funciona, sin backend ni DB
+      const landingResult = await generateLandingPage(prompt, language, design, research);
+      if (landingResult.code && landingResult.code.length > 500) {
+        await log("coder", `✅ Landing page entregada (${Math.round(landingResult.code.length / 1000)} KB). El cliente puede verla ahora y pedir más funcionalidades paso a paso.`);
+        frontendResult.code = landingResult.code;
+      } else {
+        // Nivel 4: Haiku con plan mínimo absoluto — última red de seguridad
+        await log("coder", "Generando versión mínima de emergencia con modelo rápido…", "warn");
+        onProgress?.({ phase: "fixing", progress: 76, note: "⚡ Versión mínima de emergencia…" });
+        try {
+          const lastResortResult = await generateFrontendCode(
+            { ...plan, frontendFiles: plan.frontendFiles.slice(0, 3), pages: plan.pages.slice(0, 1), components: plan.components.slice(0, 4) },
+            design, research, prompt,
+            (chars) => { onProgress?.({ phase: "fixing", progress: 78, note: `⚡ Versión mínima: ${Math.round(chars / 1000)} KB…` }); },
+            "claude-haiku-4-5-20251001", language, templateContextBlock,
+          );
+          if (lastResortResult.code && lastResortResult.code.length > 500) {
+            await log("coder", `✅ Versión mínima lista (${Math.round(lastResortResult.code.length / 1000)} KB). Puedes ir añadiendo funcionalidades.`);
+            frontendResult.code = lastResortResult.code;
+          } else {
+            throw new Error("last-resort-empty");
+          }
+        } catch {
+          await log("coder", "No fue posible generar la app. Por favor intenta con un prompt más concreto.", "error");
+          throw new Error("Tu descripción es muy extensa para procesarla de una vez. Prueba describiendo solo la pantalla principal y luego vamos añadiendo funcionalidades.");
         }
-      } catch {
-        await log("coder", "No fue posible generar la app. Por favor intenta con un prompt más concreto.", "error");
-        throw new Error("Tu descripción es muy extensa para procesarla de una vez. Prueba dividiendo la app en partes: primero describe solo la pantalla principal, y luego añade más funcionalidades.");
       }
     }
   }
