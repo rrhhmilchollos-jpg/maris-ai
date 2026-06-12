@@ -1024,7 +1024,28 @@ router.post("/admin/jobs/cleanup-reviewing", async (req: any, res: any): Promise
 });
 
 // ─── Admin: Corregir jobs failed·done (completaron pero status mal guardado) ──
-// ─── Admin: Enviar email de disculpas al cliente ──────────────────────────────
+// ─── Admin: Parchear código de una app (buscar y reemplazar en frontendCode) ──
+router.post("/admin/apps/:id/patch-code", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { search, replace } = req.body ?? {};
+  if (!search) { res.status(400).json({ error: "search requerido" }); return; }
+
+  const app = await GeneratedApp.findById(req.params.id).lean() as any;
+  if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
+
+  const original = app.frontendCode || "";
+  const patched = original.split(search).join(replace ?? "");
+  const count = original.split(search).length - 1;
+
+  if (count === 0) {
+    res.json({ ok: false, message: "Texto no encontrado en el código", occurrences: 0 });
+    return;
+  }
+
+  await GeneratedApp.findByIdAndUpdate(req.params.id, { $set: { frontendCode: patched } });
+  logger.info({ appId: req.params.id, search, occurrences: count }, "Admin: patched app frontend code");
+  res.json({ ok: true, occurrences: count, message: `Reemplazado ${count} vez/veces correctamente` });
+});
 router.post("/admin/jobs/:id/send-apology", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const job = await GenerationJob.findById(req.params.id).lean() as any;
