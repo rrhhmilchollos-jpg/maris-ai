@@ -882,7 +882,25 @@ export default function AdminDashboardPage() {
               <MetricCard
                 icon={<CreditCard className="h-4 w-4 text-violet-400" />}
                 title="Créditos este mes"
-                value={data.credits.month.toLocaleString("es-ES")}
+                value={data.credits.month > 1_000_000 
+                  ? <span className="text-red-400 flex items-center gap-2">
+                      {data.credits.month.toLocaleString("es-ES")}
+                      <button
+                        className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 border border-red-500/30 text-red-300 hover:bg-red-500/30 transition-colors"
+                        onClick={async () => {
+                          if (!window.confirm("¿Eliminar transacciones corruptas del mes? Esto limpiará el contador.")) return;
+                          try {
+                            const r = await apiFetch<any>("/api/admin/metrics/reset-monthly-credits", { method: "POST" });
+                            alert(r.message);
+                            refetch?.();
+                          } catch (e: any) { alert("Error: " + e.message); }
+                        }}
+                      >
+                        🧹 Limpiar
+                      </button>
+                    </span>
+                  : data.credits.month.toLocaleString("es-ES")
+                }
                 hint="Consumidos en el mes actual"
                 color="violet"
               />
