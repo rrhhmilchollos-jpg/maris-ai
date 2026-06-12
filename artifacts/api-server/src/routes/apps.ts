@@ -2394,6 +2394,7 @@ import {
   AppRevision,
   User,
   UserNotification,
+  CreditTransaction,
 } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
 import { generateRateLimiter } from "../middlewares/rateLimit";
@@ -3404,9 +3405,20 @@ export async function runJobById(jobId: string): Promise<void> {
           appId: String(job.editAppId),
           appTitle,
           type: "support_patch",
-          message: `✅ Tu app **${appTitle}** ha sido actualizada por el equipo de soporte y ya está lista. Puedes verla y continuar editándola desde tu panel. Si encuentras algún problema adicional o tienes algún error más complejo, no dudes en contactarnos abriendo un **ticket de soporte** — estaremos encantados de ayudarte. 💜`,
+          message: `✅ Tu app **${appTitle}** ha sido actualizada por el equipo de soporte y ya está lista. Puedes verla y continuar editándola desde tu panel. Como compensación por las molestias, hemos añadido **10 créditos** a tu cuenta. Si encuentras algún problema adicional o tienes algún error más complejo, no dudes en contactarnos abriendo un **ticket de soporte** — estaremos encantados de ayudarte. 💜`,
           read: false,
         });
+        // Compensación: 10 créditos al cliente
+        try {
+          await User.findByIdAndUpdate(job.userId, { $inc: { credits: 10 } });
+          await CreditTransaction.create({
+            userId: job.userId,
+            kind: "refund",
+            amount: 10,
+            description: "Compensación por incidencia — corrección aplicada por el equipo de soporte",
+          });
+          await log("system", "🎁 10 créditos de compensación añadidos al cliente.");
+        } catch { /* no crashear el pipeline por esto */ }
         await log("system", `✅ Corrección de soporte aplicada correctamente. El cliente ha sido notificado.`);
       }
 

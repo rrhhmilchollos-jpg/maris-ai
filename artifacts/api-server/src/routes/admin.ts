@@ -1613,6 +1613,25 @@ router.post("/admin/generate-for-email", async (req: any, res: any): Promise<voi
 });
 
 
+// ─── Admin: Eliminar una app concreta ────────────────────────────────────────
+// DELETE /api/admin/apps/:id
+router.delete("/admin/apps/:id", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const appId = req.params.id;
+  const app = await GeneratedApp.findById(appId).lean() as any;
+  if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
+
+  await GeneratedApp.findByIdAndDelete(appId);
+  await AppMessage.deleteMany({ appId });
+  // Limpiar jobs asociados
+  await GenerationJob.updateMany(
+    { appId, status: { $in: ["failed", "reviewing"] } },
+    { $set: { status: "failed" } }
+  );
+  logger.info({ appId, userId: app.userId }, "Admin: app eliminada");
+  res.json({ ok: true, message: `App "${app.title}" eliminada` });
+});
+
 // ─── Admin: Operaciones de limpieza de apps por usuario ──────────────────────
 // POST /api/admin/apps/cleanup
 // Body: { userEmail: string, keepAppId: string, newTitle: string }
