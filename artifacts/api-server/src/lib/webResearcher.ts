@@ -2,22 +2,17 @@
 /**
  * webResearcher.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Módulo de búsqueda web real para el agente Investigador de Maris AI.
+ * Búsqueda web silenciosa para el researcher de Maris AI.
  *
- * Estrategia (en orden de preferencia):
- *  1. Serper API  (SERPER_API_KEY)  → Google Search JSON
- *  2. Brave Search API (BRAVE_API_KEY) → Brave Search JSON
- *  3. DuckDuckGo HTML scraping via Puppeteer (sin API key)
- *
- * Para cada resultado relevante, abre la página con Puppeteer y extrae
- * el texto limpio (sin scripts/estilos) para dárselo al LLM.
+ * Proveedores (en orden):
+ *  1. Serper API      (SERPER_API_KEY)   → Google Search JSON
+ *  2. Brave Search    (BRAVE_API_KEY)    → Brave Search JSON
+ *  3. DuckDuckGo      (sin key)          → DDG Instant Answer + HTML API
+ *  4. Scraping directo de URLs encontradas via fetch (sin Puppeteer)
  */
 
-// Puppeteer se importa de forma dinámica para no crashear Railway si no está instalado
 import { execSync } from "child_process";
 import pino from "pino";
-
-const logger = pino({ name: "webResearcher" });
 
 const logger = pino({ name: "webResearcher" });
 
@@ -32,7 +27,7 @@ export interface SearchResult {
 export interface PageContent {
   url: string;
   title: string;
-  text: string; // texto limpio extraído de la página
+  text: string;
 }
 
 export interface WebResearchResult {
@@ -42,361 +37,222 @@ export interface WebResearchResult {
   source: "serper" | "brave" | "duckduckgo" | "none";
 }
 
-// ─── Helpers de Puppeteer ────────────────────────────────────────────────────
-
-let cachedExec: string | null | undefined = undefined;
-
-function chromiumPath(): string | null {
-  if (cachedExec !== undefined) return cachedExec;
-  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH;
-  if (fromEnv) { cachedExec = fromEnv; return fromEnv; }
-  try {
-    const out = execSync("which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null", { encoding: "utf8" }).trim();
-    cachedExec = out || null;
-  } catch { cachedExec = null; }
-  return cachedExec;
-}
-
-async function launchBrowser(): Promise<any | null> {
-  const exec = chromiumPath();
-  if (!exec) {
-    logger.warn("webResearcher: Chromium no encontrado, scraping deshabilitado");
-    return null;
-  }
-  try {
-    const puppeteer = await import("puppeteer").catch(() => null);
-    if (!puppeteer) {
-      logger.warn("webResearcher: puppeteer no instalado, scraping deshabilitado");
-      return null;
-    }
-    return await puppeteer.default.launch({
-      headless: true,
-      executablePath: exec,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--hide-scrollbars",
-        "--disable-extensions",
-        "--disable-background-networking",
-        "--disable-sync",
-        "--disable-translate",
-        "--mute-audio",
-      ],
-    });
-  } catch (err) {
-    logger.warn({ err }, "webResearcher: No se pudo lanzar Puppeteer");
-    return null;
-  }
-}
+// ─── Scraping ligero sin Puppeteer ────────────────────────────────────────────
 
 /**
- * Extrae el texto limpio de una URL usando Puppeteer.
- * Elimina scripts, estilos, nav, footer, ads.
- * Máx 3000 caracteres para no saturar el contexto del LLM.
+ * Extrae texto limpio de una URL usando fetch + regex simple.
+ * Sin Puppeteer — funciona en Railway sin Chromium.
  */
-async function scrapePageText(browser: Browser, url: string, timeoutMs = 12_000): Promise<string> {
-  const page = await browser.newPage();
+async function scrapePageText(url: string, timeoutMs = 8_000): Promise<string> {
   try {
-    await page.setUserAgent(
-      "Mozilla/5.0 (compatible; MarisAI-Researcher/1.0; +https://marisai.es/bot)"
-    );
-    await page.setViewport({ width: 1280, height: 800 });
-    // Bloquear recursos pesados para ir más rápido
-    await page.setRequestInterception(true);
-    page.on("request", (req) => {
-      const type = req.resourceType();
-      if (["image", "media", "font", "stylesheet"].includes(type)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; MarisAI-Researcher/1.0; +https://marisai.es/bot)",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+      },
+      signal: AbortSignal.timeout(timeoutMs),
     });
-
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
-
-    // Extraer texto limpio eliminando elementos no informativos
-    // page.evaluate corre en el contexto del navegador (DOM disponible)
-    const text = await page.evaluate((): string => {
-      /* eslint-disable no-undef */
-      const doc = (window as any).document as Document;
-      // Eliminar elementos no útiles
-      const selectors = [
-        "script", "style", "noscript", "iframe", "nav", "footer",
-        "header", "aside", ".cookie", ".ad", ".ads", ".advertisement",
-        ".popup", ".modal", ".banner",
-      ];
-      selectors.forEach((sel) => {
-        doc.querySelectorAll(sel).forEach((el: Element) => el.remove());
-      });
-
-      // Intentar extraer el contenido principal
-      const mainEl: HTMLElement | null =
-        (doc.querySelector("main") as HTMLElement) ||
-        (doc.querySelector("article") as HTMLElement) ||
-        (doc.querySelector(".content") as HTMLElement) ||
-        (doc.querySelector("#content") as HTMLElement) ||
-        (doc.querySelector(".main") as HTMLElement) ||
-        doc.body;
-
-      return mainEl ? ((mainEl as any).innerText || mainEl.textContent || "") : "";
-      /* eslint-enable no-undef */
-    });
-
-    // Limpiar espacios múltiples y limitar longitud
-    return text
-      .replace(/\s{3,}/g, "\n\n")
-      .replace(/\n{4,}/g, "\n\n")
-      .trim()
-      .slice(0, 3000);
-  } catch (err) {
-    logger.warn({ err, url }, "webResearcher: Error scrapeando página");
+    if (!res.ok) return "";
+    const html = await res.text();
+    // Eliminar scripts, estilos, nav, footer
+    const clean = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+      .replace(/<header[\s\S]*?<\/header>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s{3,}/g, "\n")
+      .trim();
+    return clean.slice(0, 3000);
+  } catch {
     return "";
-  } finally {
-    await page.close().catch(() => {});
   }
 }
 
 // ─── Proveedores de búsqueda ─────────────────────────────────────────────────
 
-/**
- * Búsqueda con Serper API (Google Search).
- * Requiere SERPER_API_KEY en variables de entorno.
- */
 async function searchWithSerper(query: string, num = 5): Promise<SearchResult[]> {
   const apiKey = process.env.SERPER_API_KEY;
   if (!apiKey) return [];
-
   try {
     const res = await fetch("https://google.serper.dev/search", {
       method: "POST",
-      headers: {
-        "X-API-KEY": apiKey,
-        "Content-Type": "application/json",
-      },
+      headers: { "X-API-KEY": apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({ q: query, num, gl: "es", hl: "es" }),
       signal: AbortSignal.timeout(8_000),
     });
-
-    if (!res.ok) {
-      logger.warn({ status: res.status }, "Serper API error");
-      return [];
-    }
-
+    if (!res.ok) return [];
     const data = await res.json() as any;
-    const organic: any[] = data.organic || [];
-    return organic.slice(0, num).map((r: any) => ({
-      title: r.title || "",
-      url: r.link || "",
-      snippet: r.snippet || "",
+    return (data.organic || []).slice(0, num).map((r: any) => ({
+      title: r.title || "", url: r.link || "", snippet: r.snippet || "",
     }));
-  } catch (err) {
-    logger.warn({ err }, "webResearcher: Serper search failed");
-    return [];
-  }
+  } catch { return []; }
 }
 
-/**
- * Búsqueda con Brave Search API.
- * Requiere BRAVE_API_KEY en variables de entorno.
- */
 async function searchWithBrave(query: string, num = 5): Promise<SearchResult[]> {
   const apiKey = process.env.BRAVE_API_KEY;
   if (!apiKey) return [];
-
   try {
     const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${num}&country=es&search_lang=es`;
     const res = await fetch(url, {
-      headers: {
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "X-Subscription-Token": apiKey,
-      },
+      headers: { "Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": apiKey },
       signal: AbortSignal.timeout(8_000),
     });
-
-    if (!res.ok) {
-      logger.warn({ status: res.status }, "Brave API error");
-      return [];
-    }
-
+    if (!res.ok) return [];
     const data = await res.json() as any;
-    const webResults: any[] = data.web?.results || [];
-    return webResults.slice(0, num).map((r: any) => ({
-      title: r.title || "",
-      url: r.url || "",
-      snippet: r.description || "",
+    return (data.web?.results || []).slice(0, num).map((r: any) => ({
+      title: r.title || "", url: r.url || "", snippet: r.description || "",
     }));
-  } catch (err) {
-    logger.warn({ err }, "webResearcher: Brave search failed");
-    return [];
-  }
+  } catch { return []; }
 }
 
 /**
- * Búsqueda con DuckDuckGo usando Puppeteer (sin API key).
- * Fallback cuando no hay ninguna API key configurada.
+ * DuckDuckGo sin API key — usa el endpoint HTML público de DDG.
+ * No requiere Puppeteer, funciona en Railway.
  */
-async function searchWithDuckDuckGo(browser: Browser, query: string, num = 5): Promise<SearchResult[]> {
-  const page = await browser.newPage();
+async function searchWithDuckDuckGo(query: string, num = 5): Promise<SearchResult[]> {
   try {
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-    );
-    const searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&kl=es-es`;
-    await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 15_000 });
+    // DDG HTML endpoint
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=es-es`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html",
+        "Accept-Language": "es-ES,es;q=0.9",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
 
-    // Esperar a que aparezcan los resultados
-    await page.waitForSelector("[data-result='web']", { timeout: 8_000 }).catch(() => {});
+    // Extraer resultados del HTML con regex
+    const results: SearchResult[] = [];
+    // Patrón para links de resultados DDG
+    const linkPattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    const snippetPattern = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
 
-    const results = await page.evaluate((maxNum: number): Array<{title: string; url: string; snippet: string}> => {
-      /* eslint-disable no-undef */
-      const doc = (window as any).document as Document;
-      const items = Array.from(doc.querySelectorAll("[data-result='web']")).slice(0, maxNum);
-      return items.map((item: Element) => {
-        const titleEl = item.querySelector("h2 a") || item.querySelector("a[data-testid='result-title-a']");
-        const snippetEl = item.querySelector("[data-result='snippet']") || item.querySelector(".result__snippet");
-        const title = titleEl?.textContent?.trim() || "";
-        const url = (titleEl as any)?.href || "";
-        const snippet = snippetEl?.textContent?.trim() || "";
-        return { title, url, snippet };
-      }).filter((r: {title: string; url: string; snippet: string}) => r.url && r.title);
-      /* eslint-enable no-undef */
-    }, num);
+    const links: Array<{url: string; title: string}> = [];
+    let m: RegExpExecArray | null;
+    while ((m = linkPattern.exec(html)) !== null && links.length < num) {
+      const rawUrl = m[1];
+      const title = m[2].replace(/<[^>]+>/g, "").trim();
+      // DDG usa redirect URLs — extraer la URL real
+      const uddg = rawUrl.match(/uddg=([^&]+)/);
+      const realUrl = uddg ? decodeURIComponent(uddg[1]) : rawUrl;
+      if (realUrl.startsWith("http") && title) {
+        links.push({ url: realUrl, title });
+      }
+    }
 
-    return results as SearchResult[];
+    const snippets: string[] = [];
+    while ((m = snippetPattern.exec(html)) !== null) {
+      snippets.push(m[1].replace(/<[^>]+>/g, "").trim());
+    }
+
+    for (let i = 0; i < links.length; i++) {
+      results.push({
+        title: links[i].title,
+        url: links[i].url,
+        snippet: snippets[i] || "",
+      });
+    }
+
+    logger.info({ count: results.length, query }, "webResearcher: DuckDuckGo results");
+    return results;
   } catch (err) {
-    logger.warn({ err }, "webResearcher: DuckDuckGo search failed");
+    logger.warn({ err }, "webResearcher: DuckDuckGo HTML failed");
     return [];
-  } finally {
-    await page.close().catch(() => {});
   }
 }
 
 // ─── Función principal ────────────────────────────────────────────────────────
 
-/**
- * Genera una query de búsqueda relevante a partir del prompt del usuario.
- */
 function buildSearchQuery(prompt: string): string {
-  // Si el prompt tiene URL, usar la URL como query
   const urlMatch = prompt.match(/https?:\/\/[^\s)]+/);
   if (urlMatch) return urlMatch[0];
-
-  // Extraer las primeras palabras clave del prompt (máx 8 palabras)
+  // Para apps, buscar "app gestión X" o "plataforma X" para encontrar referencias
   const cleaned = prompt
+    .replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "")
+    .replace(/crea\s+una?\s+/i, "")
+    .replace(/app\s+web\s+para\s+/i, "")
     .replace(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-
-  const words = cleaned.split(" ").slice(0, 10);
-  return words.join(" ");
+  const words = cleaned.split(" ").slice(0, 8);
+  return `app web ${words.join(" ")} ejemplo diseño`;
 }
 
-/**
- * Función principal: realiza búsqueda web real y extrae contenido de páginas.
- *
- * @param prompt - El prompt del usuario
- * @param maxPages - Número máximo de páginas a scrapear (default: 3)
- * @param timeoutMs - Timeout total para toda la investigación (default: 25s)
- */
 export async function performWebResearch(
   prompt: string,
-  maxPages = 3,
-  timeoutMs = 25_000,
+  maxPages = 2,
+  timeoutMs = 20_000,
 ): Promise<WebResearchResult> {
   const query = buildSearchQuery(prompt);
-  logger.info({ query }, "webResearcher: iniciando búsqueda web");
+  logger.info({ query }, "webResearcher: iniciando búsqueda");
 
-  const result: WebResearchResult = {
-    query,
-    results: [],
-    pages: [],
-    source: "none",
-  };
+  const result: WebResearchResult = { query, results: [], pages: [], source: "none" };
 
-  const browser = await launchBrowser();
+  // 1. Serper (Google)
+  result.results = await searchWithSerper(query);
+  if (result.results.length > 0) {
+    result.source = "serper";
+    logger.info({ count: result.results.length }, "webResearcher: Serper OK");
+  }
 
-  try {
-    // 1. Intentar Serper (Google)
-    let searchResults = await searchWithSerper(query);
-    if (searchResults.length > 0) {
-      result.source = "serper";
-      result.results = searchResults;
-      logger.info({ count: searchResults.length }, "webResearcher: resultados Serper (Google)");
+  // 2. Brave
+  if (result.results.length === 0) {
+    result.results = await searchWithBrave(query);
+    if (result.results.length > 0) {
+      result.source = "brave";
+      logger.info({ count: result.results.length }, "webResearcher: Brave OK");
     }
+  }
 
-    // 2. Fallback a Brave
-    if (result.results.length === 0) {
-      searchResults = await searchWithBrave(query);
-      if (searchResults.length > 0) {
-        result.source = "brave";
-        result.results = searchResults;
-        logger.info({ count: searchResults.length }, "webResearcher: resultados Brave");
-      }
+  // 3. DuckDuckGo HTML (sin API key, sin Puppeteer)
+  if (result.results.length === 0) {
+    result.results = await searchWithDuckDuckGo(query);
+    if (result.results.length > 0) {
+      result.source = "duckduckgo";
+      logger.info({ count: result.results.length }, "webResearcher: DuckDuckGo OK");
     }
+  }
 
-    // 3. Fallback a DuckDuckGo con Puppeteer
-    if (result.results.length === 0 && browser) {
-      searchResults = await searchWithDuckDuckGo(browser, query);
-      if (searchResults.length > 0) {
-        result.source = "duckduckgo";
-        result.results = searchResults;
-        logger.info({ count: searchResults.length }, "webResearcher: resultados DuckDuckGo");
-      }
-    }
-
-    // 4. Si hay resultados, scrapear las primeras N páginas
-    if (result.results.length > 0 && browser) {
-      const pagesToScrape = result.results.slice(0, maxPages);
-      const scrapePromises = pagesToScrape.map(async (sr) => {
-        if (!sr.url) return null;
-        try {
-          const text = await scrapePageText(browser, sr.url, 12_000);
-          if (text.length > 100) {
-            return {
-              url: sr.url,
-              title: sr.title,
-              text,
-            } as PageContent;
-          }
-        } catch { /* ignorar errores individuales */ }
+  // 4. Scraping de las primeras N páginas con fetch simple
+  if (result.results.length > 0) {
+    const toScrape = result.results.slice(0, maxPages);
+    const scraped = await Promise.allSettled(
+      toScrape.map(async (sr) => {
+        if (!sr.url || !sr.url.startsWith("http")) return null;
+        const text = await scrapePageText(sr.url, 7_000);
+        if (text.length > 200) return { url: sr.url, title: sr.title, text } as PageContent;
         return null;
-      });
-
-      const scraped = await Promise.allSettled(scrapePromises);
-      result.pages = scraped
-        .filter((r): r is PromiseFulfilledResult<PageContent | null> => r.status === "fulfilled" && r.value !== null)
-        .map((r) => r.value as PageContent);
-
-      logger.info({ pages: result.pages.length }, "webResearcher: páginas scrapeadas");
-    }
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
+      })
+    );
+    result.pages = scraped
+      .filter((r): r is PromiseFulfilledResult<PageContent> => r.status === "fulfilled" && r.value !== null)
+      .map((r) => r.value);
+    logger.info({ pages: result.pages.length }, "webResearcher: páginas scrapeadas");
   }
 
   return result;
 }
 
-/**
- * Formatea el resultado de la investigación web en un bloque de texto
- * listo para inyectar en el prompt del LLM.
- */
 export function formatWebResearchForLLM(research: WebResearchResult): string {
-  if (research.results.length === 0 && research.pages.length === 0) {
-    return "";
-  }
+  if (research.results.length === 0 && research.pages.length === 0) return "";
 
   const lines: string[] = [];
-  lines.push(`=== INVESTIGACIÓN WEB (${research.source.toUpperCase()}) ===`);
+  lines.push(`=== REFERENCIAS WEB (${research.source.toUpperCase()}) ===`);
   lines.push(`Query: "${research.query}"`);
   lines.push("");
 
   if (research.results.length > 0) {
-    lines.push("--- RESULTADOS DE BÚSQUEDA ---");
+    lines.push("--- SITIOS DE REFERENCIA ---");
     research.results.slice(0, 5).forEach((r, i) => {
       lines.push(`${i + 1}. ${r.title}`);
       lines.push(`   URL: ${r.url}`);
@@ -406,15 +262,15 @@ export function formatWebResearchForLLM(research: WebResearchResult): string {
   }
 
   if (research.pages.length > 0) {
-    lines.push("--- CONTENIDO DE PÁGINAS VISITADAS ---");
+    lines.push("--- CONTENIDO EXTRAÍDO ---");
     research.pages.forEach((p, i) => {
-      lines.push(`[Página ${i + 1}] ${p.title}`);
+      lines.push(`[Referencia ${i + 1}] ${p.title}`);
       lines.push(`URL: ${p.url}`);
       lines.push(p.text.slice(0, 2000));
       lines.push("");
     });
   }
 
-  lines.push("=== FIN INVESTIGACIÓN WEB ===");
+  lines.push("=== FIN REFERENCIAS ===");
   return lines.join("\n");
 }
