@@ -3451,6 +3451,7 @@ export async function runJobById(jobId: string): Promise<void> {
         userEmail: dbUser?.email || job.userId,
         userId: job.userId,
         jobId,
+        appId: (job as any).appId || undefined,
         prompt: job.prompt || "",
         errorMessage,
         retryCount,

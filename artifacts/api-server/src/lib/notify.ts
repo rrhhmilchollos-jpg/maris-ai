@@ -108,16 +108,18 @@ export async function notifyAdminJobFailed(opts: {
   userEmail: string;
   userId: string;
   jobId: string;
+  appId?: string;
   prompt: string;
   errorMessage?: string;
   retryCount?: number;
 }): Promise<void> {
-  const { userEmail, jobId, prompt, errorMessage, retryCount = 0 } = opts;
+  const { userEmail, userId, jobId, appId, prompt, errorMessage, retryCount = 0 } = opts;
   // Solo notificar si ha fallado más de 2 veces (evitar spam por fallos normales)
   if (retryCount < 2) return;
 
-  const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 120);
-  const adminUrl = `https://www.marisai.es/admin`;
+  const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 200);
+  const panelUrl = `https://www.marisai.es/admin`;
+  const jobDirectUrl = `https://www.marisai.es/admin?jobId=${jobId}`;
 
   await sendEmail({
     to: getAdminEmails(),
@@ -127,17 +129,19 @@ export async function notifyAdminJobFailed(opts: {
       title: `Generación fallida repetida`,
       urgency: "🔴 URGENTE",
       fields: [
-        { label: "Cliente", value: userEmail },
-        { label: "Intentos", value: `${retryCount} fallidos` },
-        { label: "Prompt", value: cleanPrompt + (prompt.length > 120 ? "…" : "") },
-        { label: "Error", value: errorMessage?.slice(0, 200) || "desconocido" },
-        { label: "Job ID", value: jobId },
-        { label: "Hora", value: new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) },
+        { label: "📧 Email cliente", value: `<strong>${userEmail}</strong>` },
+        { label: "🆔 User ID", value: userId },
+        { label: "🔁 Intentos fallidos", value: `<strong style="color:#ef4444">${retryCount}x</strong>` },
+        { label: "📝 Prompt", value: cleanPrompt + (prompt.length > 200 ? "…" : "") },
+        { label: "❌ Error", value: `<code style="color:#f87171;font-size:12px">${(errorMessage || "desconocido").slice(0, 300)}</code>` },
+        { label: "🔧 Job ID", value: `<code style="font-size:11px">${jobId}</code>` },
+        ...(appId ? [{ label: "📦 App ID", value: `<code style="font-size:11px">${appId}</code>` }] : []),
+        { label: "🕐 Hora (España)", value: new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid", dateStyle: "short", timeStyle: "medium" }) },
       ],
-      actionUrl: adminUrl,
-      actionLabel: "Ver en panel admin",
+      actionUrl: panelUrl,
+      actionLabel: "🔍 Ir al panel admin",
     }),
-    text: `URGENTE: Generación fallida x${retryCount}\nCliente: ${userEmail}\nPrompt: ${cleanPrompt}\nError: ${errorMessage || "desconocido"}\nJob: ${jobId}\nPanel: ${adminUrl}`,
+    text: `🔴 URGENTE: Generación fallida x${retryCount}\n\nCliente: ${userEmail}\nUser ID: ${userId}\nJob ID: ${jobId}\n${appId ? `App ID: ${appId}\n` : ""}Prompt: ${cleanPrompt}\nError: ${errorMessage || "desconocido"}\n\nPanel: ${panelUrl}`,
   });
 }
 
