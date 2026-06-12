@@ -11,6 +11,8 @@ export interface IUser {
   isPremium?: boolean;
   isAdmin?: boolean;
   freeCreditsUsed?: boolean;
+  hasEverPaid?: boolean;       // true en cuanto Stripe confirma el primer pago
+  firstPaidAt?: Date;          // fecha del primer pago confirmado
   registrationIp?: string;
   // Moderación
   isSuspended?: boolean;
@@ -51,6 +53,8 @@ const UserSchema = new Schema<IUser>(
     isPremium: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
     freeCreditsUsed: { type: Boolean, default: false },
+    hasEverPaid: { type: Boolean, default: false },
+    firstPaidAt: { type: Date },
     registrationIp: { type: String },
     // Moderación
     isSuspended: { type: Boolean, default: false },
@@ -226,6 +230,7 @@ export interface IGenerationJob extends Document {
   kind: string;
   attachmentIds: number[];
   isAdmin: boolean;
+  hasEverPaid?: boolean;
   retryCount: number;
   workerId?: string | null;
   partialFrontendCode?: string | null;
@@ -252,6 +257,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     kind: { type: String, default: "fullstack" },
     attachmentIds: { type: [Number], default: [] },
     isAdmin: { type: Boolean, default: false },
+    hasEverPaid: { type: Boolean, default: false },
     retryCount: { type: Number, default: 0 },
     workerId: { type: String },
     partialFrontendCode: { type: String },

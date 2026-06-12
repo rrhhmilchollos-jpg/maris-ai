@@ -112,6 +112,13 @@ stripeWebhookRouter.post(
               stripeSessionId: session.id,
               description: `Top-up de ${credits} créditos`,
             });
+            // ✅ Marcar primer pago — desbloquea generación de proyectos complejos
+            await connectDB();
+            await User.findByIdAndUpdate(clerkUserId, {
+              $set: { hasEverPaid: true },
+              $setOnInsert: { firstPaidAt: new Date() },
+            });
+            req.log.info({ clerkUserId, credits }, "Top-up confirmado — hasEverPaid=true, acceso completo desbloqueado");
           }
         }
 
@@ -155,9 +162,11 @@ stripeWebhookRouter.post(
         });
 
         // ✅ Seguimiento 1: Marcar isPremium=true para desbloquear dominio personalizado
+        // ✅ Seguimiento 2: Marcar hasEverPaid=true para desbloquear proyectos complejos
         await connectDB();
         await User.findByIdAndUpdate(clerkUserId, {
-          $set: { isPremium: true },
+          $set: { isPremium: true, hasEverPaid: true },
+          $setOnInsert: { firstPaidAt: new Date() },
         });
 
         req.log.info(
