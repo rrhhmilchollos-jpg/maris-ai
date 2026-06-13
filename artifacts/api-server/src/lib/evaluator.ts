@@ -27,7 +27,7 @@
 import type { Logger } from "pino";
 import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { patchBundle, type GenLanguage } from "./generate";
+import { patchBundle, type GenLanguage } from "./shared-agents";
 import { validateBundle } from "./validate";
 import {
   takeScreenshots,
