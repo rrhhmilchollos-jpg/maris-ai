@@ -247,10 +247,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       // el frontendCode se actualice en cuanto el job termine (succeeded).
       // Una vez que hay código renderizable, reducimos a 10s para no saturar.
       refetchInterval: (data: any) => {
+        // Solo hacer polling si hay un job activo — sin job, no hay nada que actualizar
+        if (!effectiveJobId) return false;
         if (!data) return 3000;
         const code = String(data?.frontendCode ?? "").trim();
         const hasCode = code.length >= 20 && !code.includes("El código ha sido consolidado en disco por hitos");
-        return hasCode ? 10000 : 3000;
+        return hasCode ? 5000 : 2000;
       },
     },
   });
@@ -266,7 +268,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const { data: creditsHistory } = useGetCreditsHistory();
 
   const { data: messages } = useListAppMessages(id, {
-    query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: 3000 },
+    query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: effectiveJobId ? 3000 : false },
   });
 
   // ✅ activeAppJob siempre habilitado — necesario para detectar jobs en awaiting_approval
@@ -277,7 +279,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       queryKey: getGetActiveAppJobQueryKey(id),
       refetchInterval: (data: any) => {
         const status = data?.status;
-        return status && status !== "succeeded" && status !== "failed" ? 2000 : 5000;
+        // Si hay job activo → poll frecuente. Si no → poll lento solo para detectar nuevos jobs
+        if (status && status !== "succeeded" && status !== "failed") return 2000;
+        return effectiveJobId ? 3000 : 15000; // Sin job: cada 15s es suficiente
       },
     },
   });
@@ -455,7 +459,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const renderedFileCount = hasRenderableCode ? parseBundle(frontendCode) ? Object.keys(parseBundle(frontendCode)).length : 0 : 0;
   useEffect(() => {
     if (!hasRenderableCode || isWorking) return;
-    const signature = `${app?._id || id}:${app?.updatedAt || ""}:${frontendCode.length}`;
+    // Usar solo el hash del código — NO updatedAt que cambia con cada poll
+    // Esto evita que el preview se recargue cuando el polling actualiza la app sin cambiar el código
+    const codeHash = frontendCode.slice(0, 200) + frontendCode.slice(-200) + frontendCode.length;
+    const signature = `${app?._id || id}:${codeHash}`;
     if (!signature || signature === lastPreviewRefreshSignatureRef.current) return;
     lastPreviewRefreshSignatureRef.current = signature;
     setPreviewKey((value) => value + 1);
