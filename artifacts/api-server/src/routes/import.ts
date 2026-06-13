@@ -56,9 +56,25 @@ async function extractZipToBundle(buffer: Buffer): Promise<{ files: Record<strin
   const files: Record<string, string> = {};
   const allPaths: string[] = [];
 
+  // ── Anti zip-bomb: comprobar el tamaño descomprimido total declarado ──────
+  // antes de leer ningún contenido. Un ZIP de pocos KB puede declarar
+  // gigabytes de contenido descomprimido y agotar la memoria del servidor.
+  const MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024; // 200MB
+  const totalUncompressed = entries.reduce((sum: number, e: any) => sum + (e.header?.size ?? 0), 0);
+  if (totalUncompressed > MAX_UNCOMPRESSED_BYTES) {
+    throw new Error(
+      `El archivo ZIP contiene ${Math.round(totalUncompressed / 1024 / 1024)}MB descomprimidos, ` +
+      `supera el límite de ${MAX_UNCOMPRESSED_BYTES / 1024 / 1024}MB.`,
+    );
+  }
+
   for (const entry of entries) {
     if (entry.isDirectory) continue;
     const name = entry.entryName;
+    // Defensa en profundidad contra path traversal (zip slip) — aunque solo
+    // usamos entryName como clave de objeto (no se escribe a disco), se
+    // descarta cualquier entrada con .. o ruta absoluta por seguridad.
+    if (name.includes("..") || path.isAbsolute(name)) continue;
     allPaths.push(name);
     if (isTextFile(name)) {
       try {
@@ -104,6 +120,8 @@ async function extractRarToBundle(buffer: Buffer): Promise<{ files: Record<strin
       for (const entry of fs.readdirSync(dir)) {
         const full = path.join(dir, entry);
         const rel = path.join(base, entry);
+        // Defensa en profundidad: descartar cualquier ruta que escape de tmpDir
+        if (rel.includes("..") || path.isAbsolute(rel)) continue;
         const stat = fs.statSync(full);
         if (stat.isDirectory()) {
           walk(full, rel);
