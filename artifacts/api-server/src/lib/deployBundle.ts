@@ -557,9 +557,17 @@ function virtualFsPlugin(
         }
         const resolved = resolveInVfs(vfs, args.path, args.importer);
         if (!resolved) {
-          // Missing file → mark external rather than failing the build. Avoids
-          // hard crashes on minor bundle issues.
-          return { path: args.path, external: true };
+          // Missing file → generar stub automático en vez de marcar external.
+          // Marcar external causa errores de runtime porque el navegador no puede
+          // resolver imports relativos. Un stub vacío es siempre mejor.
+          const stubName = args.path.split("/").pop()?.replace(/\.[^.]+$/, "") || "Missing";
+          const stubContent = `export default function ${stubName}() {
+  return null;
+}
+export const ${stubName}Page = ${stubName};
+`;
+          vfs[args.path] = stubContent;
+          return { path: args.path, namespace: "vfs" };
         }
         return { path: resolved, namespace: "vfs" };
       });
