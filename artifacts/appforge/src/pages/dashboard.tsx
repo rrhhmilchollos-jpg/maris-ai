@@ -400,8 +400,8 @@ export default function DashboardPage() {
     // Palabras que SÍ indican intención de crear
     const buildWords = ["crea", "crear", "genera", "generar", "haz", "hacer", "construye", "construir", "desarrolla", "desarrollar", "app", "web", "página", "pagina", "landing", "tienda", "dashboard", "crm", "saas", "juego", "portal", "aplicación", "aplicacion", "quiero una", "necesito una", "quiero un", "necesito un"];
     if (buildWords.some(w => t.includes(w))) return true;
-    // Si tiene adjuntos y prompt largo → probablemente es una orden
-    if (attachments.length > 0 && t.length > 20) return true;
+    // Si tiene adjuntos → SIEMPRE es intención de generar (imagen de referencia, doc, etc.)
+    if (attachments.length > 0) return true;
     // Prompt largo sin negativas → asumir que sí quiere crear
     if (t.length > 40) return true;
     return false;
@@ -411,9 +411,10 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!prompt.trim()) return;
 
-    // Si el prompt no parece una orden de generación, responder conversacionalmente
-    if (!looksLikeBuildIntent(prompt)) {
-      setInlineHint('Escribe qué quieres construir y pulsa Generar. Ej: \"Crea una app de reservas para mi restaurante\"');
+    // Si hay adjuntos → siempre lanzar (imagen de referencia, fichero, etc.)
+    // Si el prompt no parece orden de generación → hint inline
+    if (attachments.length === 0 && !looksLikeBuildIntent(prompt)) {
+      setInlineHint('Escribe qué quieres construir y pulsa Generar. Ej: "Crea una app de reservas para mi restaurante"');
       setTimeout(() => setInlineHint(null), 4000);
       return;
     }
@@ -633,7 +634,7 @@ export default function DashboardPage() {
                   </Button>
                 </div>
               </div>
-              {attachments.length > 0 && <AttachmentChips attachments={attachments} onChange={setAttachments} />}
+              {attachments.length > 0 && <AttachmentChips attachments={attachments} onRemove={(id) => setAttachments((prev: any[]) => { const removed = prev.find((a:any) => a.id === id); if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl); return prev.filter((a:any) => a.id !== id); })} />}
 
               {/* Inline hint — dentro del panel de generación, NO como toast */}
               {inlineHint && (
