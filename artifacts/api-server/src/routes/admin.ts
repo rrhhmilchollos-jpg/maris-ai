@@ -271,18 +271,27 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   await connectDB();
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const id = req.params.id;
+  const emailHint = (req.query.email as string || "").trim().toLowerCase();
 
   // Buscar apps directamente por userId (Clerk ID = User._id)
-  let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).lean();
+  let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
 
-  // Fallback: buscar via jobs del usuario → appIds
+  // Fallback 1: buscar por email del usuario si se proporcionó
+  if (apps.length === 0 && emailHint) {
+    const userByEmail = await User.findOne({ email: emailHint }).select("_id").lean() as any;
+    if (userByEmail) {
+      apps = await GeneratedApp.find({ userId: String(userByEmail._id) }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+    }
+  }
+
+  // Fallback 2: buscar via jobs del usuario → appIds
   if (apps.length === 0) {
     const jobAppIds = await GenerationJob
       .find({ userId: id, appId: { $exists: true, $ne: null } })
-      .sort({ createdAt: -1 }).limit(50).select("appId").lean();
+      .sort({ createdAt: -1 }).limit(50).select("appId").maxTimeMS(8000).lean();
     const appIds = [...new Set(jobAppIds.map((j: any) => String(j.appId)).filter(Boolean))];
     if (appIds.length > 0) {
-      apps = await GeneratedApp.find({ _id: { $in: appIds } }).sort({ createdAt: -1 }).limit(limit).lean();
+      apps = await GeneratedApp.find({ _id: { $in: appIds } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
     }
   }
 

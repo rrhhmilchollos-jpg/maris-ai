@@ -179,12 +179,12 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
     setApps([]);
     const timer = setTimeout(() => {
       setLoading(false);
-      toast({ title: "Timeout", description: "La búsqueda tardó demasiado. Inténtalo de nuevo.", variant: "destructive" });
-    }, 8000);
+      toast({ title: "Timeout", description: "Railway tardó demasiado. Espera 10s y reintenta.", variant: "destructive" });
+    }, 20000);
     try {
       const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
       if (!userData?.id) { toast({ title: "Usuario no encontrado", description: target, variant: "destructive" }); return; }
-      const appsData = await apiFetch<any>(`/api/admin/users/${userData.id}/apps?limit=20`);
+      const appsData = await apiFetch<any>(`/api/admin/users/${userData.id}/apps?limit=20&email=${encodeURIComponent(target)}`);
       const list = appsData.apps ?? [];
       setApps(list.map((a: any) => ({ ...a, userEmail: target, userId: userData.id })));
       if (list.length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps aún` });
