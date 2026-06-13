@@ -462,6 +462,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         <TableHead className="text-right">Créditos</TableHead>
                         <TableHead className="text-right">Apps</TableHead>
                         <TableHead>Estado</TableHead>
+                        <TableHead>IP</TableHead>
                         <TableHead>Registrado</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
@@ -494,6 +495,14 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                                 <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Activo</Badge>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono text-muted-foreground/70">
+                            {u.lastLoginIp || u.registrationIp
+                              ? <span title={u.lastLoginIp ? `Última IP: ${u.lastLoginIp}` : `IP registro: ${u.registrationIp}`}>
+                                  {u.lastLoginIp || u.registrationIp}
+                                </span>
+                              : <span className="text-white/20">—</span>
+                            }
                           </TableCell>
                           <TableCell className="text-muted-foreground text-xs">{format(new Date(u.createdAt), "d MMM yyyy", { locale: es })}</TableCell>
                           <TableCell className="text-right">
