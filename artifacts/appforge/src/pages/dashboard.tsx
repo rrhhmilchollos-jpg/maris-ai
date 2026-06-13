@@ -447,8 +447,11 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!prompt.trim()) return;
 
+    // Prompts largos (>100 chars) son SIEMPRE intención de construir — sin análisis
+    const isLongPrompt = prompt.trim().length > 100;
+
     // Si no es intención de construir → responder como chat con Maris
-    if (!looksLikeBuildIntent(prompt)) {
+    if (!isLongPrompt && !looksLikeBuildIntent(prompt)) {
       const userMsg = prompt.trim();
       setPrompt("");
       setQuickChatLoading(true);
