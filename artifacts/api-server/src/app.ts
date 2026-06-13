@@ -17,6 +17,8 @@ import clerkWebhookRouter from "./routes/clerkWebhook";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import { metricsMiddleware } from "./lib/metrics";
+import mongoSanitize from "express-mongo-sanitize";
+import hpp from "hpp";
  
 initSentry();
  
@@ -168,11 +170,33 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Stripe webhook needs the raw body — mount BEFORE express.json()
 app.use("/api/billing/webhook", stripeWebhookRouter);
  
-// Ultra-permissive CORS for development and cross-origin communication
+// ── CORS — anti-hacking: allowlist en vez de "allow all" ───────────────────
+// Con credentials:true, permitir CUALQUIER origen (origin:'*') es un riesgo
+// de CORS+CSRF: un sitio malicioso podría hacer fetch con credentials:'include'
+// y, si el navegador adjunta cookies de sesión de Clerk, leer respuestas con
+// datos del usuario. Restringimos a los dominios legítimos de Maris AI:
+// - marisai.es / www.marisai.es (frontend de producción)
+// - *.vercel.app (previews de Vercel del propio appforge y de apps generadas)
+// - *.railway.app (backend y posibles previews)
+// - localhost / 127.0.0.1 (desarrollo local)
+const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
+  /^https?:\/\/(www\.)?marisai\.es$/,
+  /^https?:\/\/[a-z0-9-]+\.marisai\.es$/,
+  /^https?:\/\/([a-z0-9-]+\.)*vercel\.app$/,
+  /^https?:\/\/([a-z0-9-]+\.)*railway\.app$/,
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+];
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow all origins
-    callback(null, true);
+    // Peticiones sin origin (curl, server-to-server, healthchecks) se permiten.
+    if (!origin) { callback(null, true); return; }
+    if (ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin))) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -191,6 +215,23 @@ app.use((_req, res, next) => {
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// ── Anti-hacking: NoSQL injection + HTTP Parameter Pollution protection ────
+// express-mongo-sanitize: elimina claves que empiecen por '$' o contengan '.'
+// en req.body/query/params, evitando inyecciones de operadores Mongo
+// (ej: {"email": {"$ne": null}} para bypass de autenticación).
+app.use(
+  mongoSanitize({
+    replaceWith: "_",
+    onSanitize: ({ req, key }) => {
+      logger.warn({ path: req.path, key, ip: req.ip }, "mongoSanitize: clave sospechosa eliminada");
+    },
+  }),
+);
+// hpp: si un atacante envía el mismo parámetro de query repetido
+// (?id=1&id=2), express normalmente lo convierte en array — hpp se
+// queda con el último valor para evitar bypasses de validación.
+app.use(hpp());
  
 if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
   app.use(
