@@ -2846,11 +2846,12 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
     const cleanPrompt = prompt
       .replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "")
       .replace(/\[MARIS_ENGINE=[^\]]*\]/g, "")
-      .trim();
+      .trim()
+      .slice(0, 3000); // Limitar para no saturar Haiku
 
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 800,
+      max_tokens: 1000,
       system: `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
 {
   "title": "nombre corto del proyecto en español",
