@@ -1246,6 +1246,39 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
     sampleAppsInDB: sampleApps.map((a: any) => ({ userId: a.userId, title: a.title })),
   });
 });
+
+// POST /api/admin/apps/patch-by-slug — parchear app por slug público
+router.post("/admin/apps/patch-by-slug", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { slug, search, replace } = req.body ?? {};
+  if (!slug || !search) { res.status(400).json({ error: "slug y search requeridos" }); return; }
+
+  // Buscar por publicSlug o por vercelDeployUrl que contenga el slug
+  const app = await GeneratedApp.findOne({
+    $or: [
+      { publicSlug: slug },
+      { vercelDeployUrl: { $regex: slug, $options: "i" } },
+      { marisaiSubdomain: { $regex: slug, $options: "i" } }
+    ]
+  }).lean() as any;
+
+  if (!app) { res.status(404).json({ error: "App no encontrada con ese slug" }); return; }
+
+  const original = app.frontendCode || "";
+  const replaceWith = replace ?? "";
+  const patched = original.split(search).join(replaceWith);
+  const count = original.split(search).length - 1;
+
+  if (count === 0) {
+    res.json({ ok: false, appId: String(app._id), message: "Texto no encontrado en el código", occurrences: 0 });
+    return;
+  }
+
+  await GeneratedApp.findByIdAndUpdate(app._id, { $set: { frontendCode: patched } });
+  logger.info({ appId: String(app._id), slug, search, occurrences: count }, "Admin: patched app by slug");
+  res.json({ ok: true, appId: String(app._id), occurrences: count, message: `Eliminado ${count} vez/veces correctamente` });
+});
+
 router.post("/admin/apps/:id/patch-code", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { search, replace } = req.body ?? {};
