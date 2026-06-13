@@ -397,49 +397,54 @@ export default function DashboardPage() {
   // "hola" solo → CHAT
   const looksLikeBuildIntent = (text: string): boolean => {
     if (attachments.length > 0) return true;
+
+    // URL en el prompt = SIEMPRE BUILD (referencia visual o inspiración)
+    // ej: "algo como dejalia.com", "igual que airbnb.com", "https://..."
+    const hasUrl = /https?:\/\/|www\.|[a-zA-Z0-9-]+\.(com|es|io|app|net|org|co)([\/\s]|$)/.test(text);
+    if (hasUrl) return true;
+
+    // Prompt largo (>100 chars) = SIEMPRE BUILD
+    if (text.trim().length > 100) return true;
+
     const t = text.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    // 1. PRIMERO: comprobar palabras de construcción — tienen prioridad total
+    // Palabras de construcción — prioridad total sobre cualquier señal de chat
     const buildWords = [
-      "crea", "crear", "creaме", "genera", "generar", "haz ", "hazme", "hacer",
-      "construye", "construir", "desarrolla", "desarrollar", "diseña", "disenha",
-      "quiero una app", "quiero un app", "quiero una web", "quiero un sistema",
-      "necesito una app", "necesito un app", "necesito una web",
+      "crea", "crear", "genera", "generar", "haz ", "hazme", "hacer",
+      "construye", "construir", "desarrolla", "desarrollar", "diseña", "disenar",
+      "quiero una", "necesito una", "quiero un", "necesito un",
       "quiero que hagas", "quiero que crees", "quiero que generes",
-      "ayudame a crear", "ayudame a hacer", "ayudame a construir",
-      "ayudas a crear", "ayudas a hacer", "ayudas a construir",
+      "ayudame a crear", "ayudame a hacer", "ayudas a crear", "ayudas a hacer",
       "me puedes crear", "me puedes hacer", "me puedes generar",
       "puedes crear", "puedes hacer", "puedes generar", "puedes construir",
-      "puedes disenar", "puedes diseñar",
-      // Tipos de producto
-      " app", "aplicacion", "aplicación", " web ", "pagina web", "página web",
-      "landing", "tienda", "ecommerce", "e-commerce", "marketplace",
-      "dashboard", "panel", "crm", "saas", "plataforma", "sistema",
-      "juego", "game", "portal", "blog", "agenda", "calendario",
-      "ia telefonica", "bot ", "chatbot", "asistente", "herramienta",
-      "calculadora", "generador", "gestor", "gestión",
+      "algo como", "similar a", "igual que", "al estilo", "tipo ",
+      "inspirado en", "copia de", "version de", "versión de",
+      // Tipos de producto — su sola presencia indica build
+      " app", "aplicacion", "aplicación", " web", "pagina", "página",
+      "landing", "tienda", "ecommerce", "marketplace", "dashboard",
+      "crm", "saas", "plataforma", "sistema", "juego", "game",
+      "portal", "blog", "agenda", "calendario", "chatbot", "bot ",
+      "ia telefonica", "asistente", "herramienta", "calculadora",
+      "generador", "gestor", "gestion",
     ];
     if (buildWords.some(w => t.includes(w))) return true;
 
-    // 2. Prompt largo sin contexto de chat → probablemente quiere construir
-    if (t.length > 60 && quickChatHistory.length === 0) return true;
+    // Prompt medio sin historial → BUILD (beneficio de la duda)
+    if (t.length > 30 && quickChatHistory.length === 0) return true;
 
-    // 3. Solo si no hay señales de construcción → detectar si es chat puro
-    const chatOnlySignals = [
-      // Solo saludo sin nada más
-      "cuanto cuesta", "cuánto cuesta", "precio", "precios",
-      "como funciona maris", "que es maris", "qué es maris",
-      "cuantos creditos", "cuántos creditos",
-      "no quiero", "cancelar", "olvidalo", "olvídalo",
-      "solo quiero preguntar", "tengo una pregunta",
-      "no crear", "no generar",
+    // Señales inequívocas de chat — solo estas bloquean
+    const chatOnly = [
+      "cuanto cuesta", "cuánto cuesta", "precio", "cuantos creditos",
+      "como funciona maris", "que es maris",
+      "no quiero", "cancelar", "olvidalo", "no crear", "no generar",
+      "solo quiero preguntar",
     ];
-    if (chatOnlySignals.some(s => t.includes(s))) return false;
+    if (chatOnly.some(s => t.includes(s))) return false;
 
-    // 4. Mensaje muy corto sin palabras de construcción → chat
+    // Muy corto y ambiguo → chat
     if (t.length < 15) return false;
 
-    // 5. Por defecto: si tiene contenido descriptivo → generar
+    // Default → BUILD
     return true;
   };
 
