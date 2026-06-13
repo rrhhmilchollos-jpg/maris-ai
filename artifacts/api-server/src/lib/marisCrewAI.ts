@@ -247,7 +247,7 @@ OUTPUT ESPERADO: ${task.expectedOutput}${contextBlocks ? `\n\nCONTEXTO DE TAREAS
 
     const response = await anthropic.messages.create({
       model: agent.model,
-      max_tokens: 4096,
+      max_tokens: 2048,
       system: systemPrompt,
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? { type: "auto" } : undefined,
