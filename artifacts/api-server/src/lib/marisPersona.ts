@@ -107,7 +107,7 @@ function fallbackReply(message: string, appTitle?: string): string {
  * terminan de actualizar/generar una app. Más rico que el antiguo buildAppUpdatedConsoleReply.
  */
 export async function generateUpdateCompleteMessage(opts: {
-  userRequest: string;  // Qué pidió el usuario
+  userRequest: string;
   appTitle: string;
   filesChanged: number;
   hasBackend: boolean;
@@ -117,48 +117,60 @@ export async function generateUpdateCompleteMessage(opts: {
 
   const clean = userRequest
     .replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "")
-    .replace(/\[ADMIN[^\]]*\]/g, "")
+    .replace(/\[ADMIN[^\]]*\]/gi, "")
+    .replace(/\[EXTRAS CONFIRMADOS[^\]]*\]/gi, "")
+    .replace(/\[MARIS_ENGINE=[^\]]*\]/gi, "")
     .trim()
-    .slice(0, 200);
+    .slice(0, 300);
+
+  const creditsLine = typeof creditsRemaining === "number" && creditsRemaining < 10
+    ? `\n\n_Créditos restantes: ${creditsRemaining}. Considera recargar para seguir._`
+    : "";
+
+  // Si el prompt quedó vacío tras limpiar — usar fallback directo sin llamar a IA
+  if (!clean || clean.length < 5) {
+    const msg = filesChanged > 0
+      ? `${appTitle} actualizado con ${filesChanged} archivo${filesChanged > 1 ? "s" : ""} modificado${filesChanged > 1 ? "s" : ""}. Refresca el preview para ver los cambios.`
+      : `Los cambios en **${appTitle}** están guardados. Refresca el preview para verlos.`;
+    return msg + creditsLine;
+  }
 
   try {
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 250,
-      system: MARIS_PERSONA,
+      max_tokens: 200,
+      system: `Eres Maris, asistente de Maris AI. Generas mensajes de confirmación breves tras actualizar una app.
+REGLAS:
+- 1-2 frases máximo. En español.
+- Confirma lo que se hizo basándote en la petición.
+- Añade algo útil: qué probar, qué refrescar, qué verificar.
+- NUNCA preguntes qué se hizo — ya lo sabes (te lo dan).
+- Sin "¡Listo!" genérico. Sin saludos. Directo.`,
       messages: [{
         role: "user",
-        content: `El usuario pidió: "${clean}"
+        content: `Petición del usuario: "${clean}"
 App: "${appTitle}"
-Archivos modificados: ${filesChanged}${hasBackend ? " (incluye backend)" : ""}
+Archivos modificados: ${filesChanged}${hasBackend ? " (frontend + backend)" : " (frontend)"}
 
-Genera un mensaje de confirmación de 1-2 frases que:
-1. Confirme que se hizo lo que pidió (sin repetir la petición verbatim)
-2. Mencione algo específico y útil (qué refrescar, qué probar, qué tener en cuenta)
-Sin emojis al principio. Sin "¡Listo!" genérico. Directo y concreto.`,
+Escribe el mensaje de confirmación ahora. Solo el mensaje, nada más.`,
       }],
     });
     const text = (response.content[0] as any).text?.trim() ?? "";
-    if (!text) throw new Error("empty");
-
-    const creditsLine = typeof creditsRemaining === "number" && creditsRemaining < 10
-      ? `\n\n_Créditos restantes: ${creditsRemaining}. Considera recargar para seguir._`
-      : "";
-
+    if (!text || text.length < 5) throw new Error("empty");
     return text + creditsLine;
   } catch {
-    // Fallback sencillo y mejor que el actual
-    const actions: Record<string, string> = {
-      login: "Prueba el flujo completo en el preview — entra con un usuario de prueba.",
-      pago: "Verifica con una tarjeta de test de Stripe (4242 4242 4242 4242).",
-      diseño: "Refresca el preview para ver los cambios visuales.",
-      color: "Los colores se aplican globalmente — refresca para verlos.",
-      página: "La nueva página ya tiene su ruta activa en el menú.",
-      formulario: "El formulario valida en tiempo real — pruébalo con datos reales.",
-    };
-    const hint = Object.entries(actions).find(([k]) => clean.toLowerCase().includes(k))?.[1]
-      ?? "Refresca el preview para ver los cambios.";
-    return `Hecho. ${hint}`;
+    // Fallback basado en palabras clave del prompt
+    const t = clean.toLowerCase();
+    let hint = "Refresca el preview para ver los cambios.";
+    if (/login|auth|sesion|contraseña/.test(t)) hint = "Prueba el flujo de login en el preview.";
+    else if (/pago|stripe|precio|plan/.test(t)) hint = "Verifica el pago con tarjeta de test 4242 4242 4242 4242.";
+    else if (/color|fondo|tema|dark|oscuro/.test(t)) hint = "Los colores se aplican globalmente — refresca para verlos.";
+    else if (/mapa|map|gps|ubicacion/.test(t)) hint = "El mapa carga en el preview — puede tardar unos segundos.";
+    else if (/formulario|form|campo/.test(t)) hint = "Prueba el formulario con datos reales en el preview.";
+    else if (/boton|btn|cta|click/.test(t)) hint = "Los botones están activos — pruébalos en el preview.";
+    else if (/pagina|página|ruta|nav/.test(t)) hint = "La nueva página ya tiene su ruta activa en el menú.";
+    else if (filesChanged > 0) hint = `${filesChanged} archivo${filesChanged > 1 ? "s" : ""} modificado${filesChanged > 1 ? "s" : ""}. Refresca el preview.`;
+    return `Hecho en **${appTitle}**. ${hint}${creditsLine}`;
   }
 }
 
