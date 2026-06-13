@@ -469,60 +469,57 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
 /**
  * Researcher — Gemini 2.0 Flash con google_search tool.
  */
-export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt)): Promise<string> {
+export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt), logFn?: (agent: string, msg: string) => Promise<void>): Promise<string> {
   const hasUrl = URL_LIKE.test(prompt);
-
-  // Extraer el prompt limpio sin el bloque de locale
   const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
 
   return withTimeout(
     (async () => {
-      // Paso 1: intentar búsqueda web real (Serper / Brave / DuckDuckGo)
-      let webContext = "";
       try {
-        const { performWebResearch, formatWebResearchForLLM } = await import("../lib/webResearcher");
-        const webResult = await performWebResearch(cleanPrompt, 2, 15_000);
-        if (webResult.results.length > 0 || webResult.pages.length > 0) {
-          webContext = formatWebResearchForLLM(webResult);
+        // Tool calling real: el agente decide cuándo y qué buscar
+        const { runAgentWithTools } = await import("../lib/agentTools");
+        const result = await runAgentWithTools({
+          role: "researcher",
+          model: "claude-haiku-4-5-20251001", // Haiku es suficiente y más rápido para research
+          systemPrompt: `Eres el agente investigador de Maris AI. Tu objetivo: producir un brief conciso en español para que el arquitecto diseñe la app correctamente.
+
+USA la herramienta web_search si el prompt menciona una tecnología específica, un sector de negocio, una empresa real, o necesita datos actualizados. No busques para prompts genéricos como "crea una app de tareas".
+
+OUTPUT: texto plano ≤400 palabras con:
+- Qué hace el producto y para quién
+- Páginas/secciones clave, funcionalidades principales
+- Colores y fuentes sugeridos para el sector
+- Contexto competitivo si aplica
+Sin preámbulos, sin markdown pesado.`,
+          userMessage: hasUrl
+            ? `Investiga y genera brief para: "${cleanPrompt}"`
+            : `Genera brief de referencia para: "${cleanPrompt}"`,
+          maxIterations: 3,
+          ctx: { log: logFn },
+        });
+        if (result.text.trim().length > 50) {
+          const src = result.toolsUsed.includes("web_search") ? "[Fuente: búsqueda web en tiempo real]\n" : "[Fuente: conocimiento del modelo]\n";
+          return src + result.text.trim().slice(0, 4000);
         }
-      } catch {
-        // Sin búsqueda web — seguimos con Claude solo
+      } catch (err) {
+        logger.warn({ err }, "researcher tool-calling failed, falling back to direct call");
       }
 
-      // Paso 2: Claude genera el brief de referencia (con o sin contexto web)
+      // Fallback: llamada directa sin tools
       try {
-        const systemPrompt = `You are Maris AI's web researcher. Produce a concise reference brief in Spanish for the architect/designer who will build this product.
-Output format:
-- 1 paragraph: what the product does and who it's for
-- bullets: core pages/sections, key features, suggested colors and fonts
-- 1 paragraph: competitive context and differentiation ideas
-Stay factual. Plain text only. ≤400 words. No preamble.`;
-
-        const userContent = webContext
-          ? `Prompt del usuario: "${cleanPrompt}"\n\nContexto web encontrado:\n${webContext.slice(0, 3000)}\n\nGenera el brief de referencia basándote en el contexto web y tu conocimiento.`
-          : hasUrl
-          ? `Investiga las URLs de este encargo y genera un brief: "${cleanPrompt}"`
-          : `Genera un brief de referencia detallado para este encargo (usa tu conocimiento del dominio): "${cleanPrompt}"`;
-
         const response = await createClaudeMessageWithFallback("researcher", agentPlan.agents.researcher.model, {
           max_tokens: 1500,
-          system: systemPrompt,
-          messages: [{ role: "user", content: userContent }],
+          system: `You are Maris AI's web researcher. Produce a concise reference brief in Spanish. Plain text only. ≤400 words.`,
+          messages: [{ role: "user", content: `Brief for: "${cleanPrompt}"` }],
         });
         const text = (response.content[0] as any).text ?? "";
-        if (text.trim().length > 50) {
-          return (webContext ? `[Fuente: búsqueda web]\n` : `[Fuente: conocimiento del modelo]\n`) + text.trim().slice(0, 4000);
-        }
-      } catch {
-        // Claude falló — usar brief mínimo generado localmente
-      }
+        if (text.trim().length > 50) return `[Fuente: conocimiento del modelo]\n${text.trim().slice(0, 4000)}`;
+      } catch { /* continuar al fallback final */ }
 
-      // Paso 3: brief mínimo de emergencia para que el arquitecto no trabaje a ciegas
-      return `[Brief de emergencia — conocimiento general]\nProducto: ${cleanPrompt.slice(0, 200)}\nTipo de aplicación web. Incluir páginas principales, formularios de entrada de datos, panel de gestión y diseño moderno responsivo. Usar colores neutros profesionales, tipografía sans-serif, diseño limpio con espaciado generoso.`;
+      return `[Brief de emergencia]\nProducto: ${cleanPrompt.slice(0, 200)}\nApp web profesional, moderna y responsiva con las funcionalidades solicitadas.`;
     })(),
-    hasUrl ? 20_000 : 12_000,
-    // Si withTimeout agota el tiempo, devolver brief mínimo en vez de ""
-    `[Brief mínimo — timeout]\nProducto: ${cleanPrompt.slice(0, 200)}\nAplicación web profesional. Diseño moderno, responsivo, con navegación clara y formularios accesibles.`,
+    hasUrl ? 20_000 : 15_000,
+    `[Brief mínimo — timeout]\nProducto: ${cleanPrompt.slice(0, 200)}\nAplicación web profesional. Diseño moderno y responsivo.`,
   );
 }
 
@@ -1493,6 +1490,78 @@ function friendlyFileLabel(rawPath: string, isBackend: boolean): string {
 /**
  * Single edit pass — Gemini 2.5 Flash streaming (default) o GPT-5.
  */
+/**
+ * surgicalEditWithTools — Edición quirúrgica con tool calling real.
+ * Para cambios pequeños (color, texto, un componente) usa read_file + patch_file
+ * en vez de mandar todo el bundle. Ahorra tokens y es más precisa.
+ * Solo se usa cuando el cambio parece pequeño (score < 3 en complejidad).
+ */
+async function surgicalEditWithTools(
+  prompt: string,
+  previous: PreviousApp,
+  log: AgentLog,
+): Promise<{ success: boolean; bundleUpdated?: string; filesChanged: string[] }> {
+  try {
+    const { runAgentWithTools } = await import("../lib/agentTools");
+    const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+
+    // Lista de archivos disponibles para orientar al agente
+    const fileList = previous.frontendCode
+      .split(/\/\/ === FILE: /)
+      .slice(1)
+      .map(p => p.split("\n")[0].trim().replace(/ ===$/, ""))
+      .filter(Boolean)
+      .slice(0, 30)
+      .join(", ");
+
+    await log("coder", `🔧 Aplicando cambio quirúrgico: "${cleanPrompt.slice(0, 60)}…"`);
+
+    const result = await runAgentWithTools({
+      role: "editor",
+      model: "claude-sonnet-4-6",
+      maxIterations: 6,
+      systemPrompt: `Eres el agente de edición quirúrgica de Maris AI.
+
+Tu trabajo: aplicar EXACTAMENTE el cambio que pide el usuario usando herramientas, sin tocar nada más.
+
+PROCESO OBLIGATORIO:
+1. Lee el archivo relevante con read_file
+2. Identifica el fragmento exacto a cambiar
+3. Usa patch_file para el cambio (NUNCA write_file a menos que sea un archivo nuevo)
+4. Si hay varios archivos afectados, repite para cada uno
+5. Valida con validate_code si el cambio es código complejo
+
+Archivos disponibles: ${fileList}
+
+REGLAS:
+- read_file ANTES de patch_file siempre
+- patch_file usa texto EXACTO del archivo — cópialo textualmente del read_file
+- Si el cambio afecta a más de 5 archivos → responde "COMPLEX" y no hagas nada
+- Preserva TODO lo que no se pidió cambiar`,
+      userMessage: `App: "${previous.title}"\n\nCambio solicitado: "${cleanPrompt}"`,
+      ctx: {
+        bundle: previous.frontendCode,
+        appTitle: previous.title,
+        log: async (agent, msg) => log(agent, msg),
+      },
+    });
+
+    if (result.text.includes("COMPLEX") || !result.bundleUpdated) {
+      return { success: false, filesChanged: [] };
+    }
+
+    await log("coder", `✅ Cambio aplicado en ${result.toolsUsed.filter(t => t === "patch_file" || t === "write_file").length} archivo(s) usando herramientas`);
+    return {
+      success: true,
+      bundleUpdated: result.bundleUpdated,
+      filesChanged: result.toolsUsed.filter(t => t === "patch_file" || t === "write_file"),
+    };
+  } catch (err) {
+    logger.warn({ err }, "surgicalEditWithTools failed — falling back to singleEditPass");
+    return { success: false, filesChanged: [] };
+  }
+}
+
 async function singleEditPass(
   prompt: string,
   previous: PreviousApp,
@@ -1912,7 +1981,33 @@ export async function generateApp(
     } else {
       await log("coder", "Aplicando los cambios solicitados…");
     }
-    const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+    // Para cambios simples → intentar edición quirúrgica con tool calling primero
+    const cleanedPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+    const complexity = classifyPromptComplexity(cleanedPrompt, { hasExistingApp: true });
+    let result: GeneratedAppPayload;
+
+    if (complexity.score <= 2 && previous.frontendCode.length > 1000) {
+      // Cambio simple → edición quirúrgica con tools (más precisa, menos tokens)
+      const surgical = await surgicalEditWithTools(prompt, previous, log);
+      if (surgical.success && surgical.bundleUpdated) {
+        // Construir resultado compatible con GeneratedAppPayload
+        result = {
+          title: previous.title,
+          description: previous.description,
+          techStack: previous.techStack,
+          frontendCode: surgical.bundleUpdated,
+          backendCode: previous.backendCode,
+          plannedPages: (previous as any).plannedPages || [],
+          requiredEnvVars: (previous as any).requiredEnvVars || [],
+        };
+      } else {
+        // Fallback al método completo si la edición quirúrgica falla
+        result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+      }
+    } else {
+      // Cambio complejo → pipeline completo
+      result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+    }
     log("coder", "Código listo, comprobando que todo encaje…");
 
     const fixedFrontend = await runValidatePatchLoop(
