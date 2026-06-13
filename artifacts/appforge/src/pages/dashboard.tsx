@@ -468,7 +468,7 @@ export default function DashboardPage() {
         `"${a.title}" — ${a.description?.slice(0, 60) || "sin descripción"}`
       ).join("; ");
       try {
-        const data = await apiFetch<any>("/apps/quick-chat", {
+        const data = await apiFetch<any>("/api/apps/quick-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -482,7 +482,7 @@ export default function DashboardPage() {
         setQuickChatHistory([...newHistory, { role: "maris" as const, text: reply }]);
         // Feedback loop: si detectamos insatisfacción, guardar el patrón
         if (data.feedbackDetected) {
-          apiFetch("/apps/feedback", {
+          apiFetch("/api/apps/feedback", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ message: userMsg, type: data.feedbackType }),
