@@ -2183,13 +2183,49 @@ export async function generateApp(
   // Para apps complejas como Seguxat, usamos una estrategia de generación paralela de archivos
   // para reducir el tiempo de espera de 10 min a menos de 4 min.
   const frontendResult = await runPhase("frontend", async () => {
-    // Heartbeat silencioso cada 30s — mantiene vivo el job ante el watchdog
     const coderHeartbeat = setInterval(() => {
       if (jobId) GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }).catch(() => {});
     }, 30_000);
     try {
-      // Forzamos el uso de Sonnet 4.6 para máxima velocidad sin sacrificar inteligencia
       const turboModel = "claude-sonnet-4-6";
+      const complexity = classifyPromptComplexity(prompt, { kind });
+
+      // ── SPECULATIVE GENERATION — para apps básicas/standard lanzamos 2 variantes en paralelo
+      // La más rápida y válida gana. Reduce tiempo de generación ~40%.
+      if (complexity.score <= 3 && !previous) {
+        try {
+          const { speculativeRace, buildStrategyModifier } = await import("../lib/speculativeGeneration");
+          void log("system", "⚡ Generación especulativa activa — 2 variantes en paralelo para mayor velocidad…");
+
+          const specResult = await speculativeRace(
+            async (strategy) => {
+              const strategyMod = buildStrategyModifier(strategy);
+              const modifiedPrompt = prompt + strategyMod;
+              const r = await generateFrontendCode(
+                plan, design, research, modifiedPrompt,
+                (chars) => {
+                  const ratio = Math.min(1, chars / TARGET_CHARS);
+                  onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30) });
+                },
+                turboModel, language, templateContextBlock, agentModelPlan,
+              );
+              return r.code;
+            },
+            async (code) => code.length > 5000 && code.includes("// === FILE:"),
+            (variant) => {
+              void log("coder", `⚡ Variante ${variant.strategy} completada en ${Math.round(variant.durationMs / 1000)}s`);
+            },
+          );
+
+          clearInterval(coderHeartbeat);
+          void log("system", `✅ Generación especulativa completada — variante "${specResult.winner.strategy}" ganó en ${Math.round(specResult.totalDurationMs / 1000)}s`);
+          return { code: specResult.winner.frontendCode, truncated: false };
+        } catch (specErr) {
+          logger.warn({ specErr }, "Speculative generation failed — falling back to standard");
+        }
+      }
+
+      // ── GENERACIÓN ESTÁNDAR (fallback o apps complejas) ──────────────────
       const result = await generateFrontendCode(plan, design, research, prompt, (chars) => {
         const ratio = Math.min(1, chars / TARGET_CHARS);
         onProgress?.({ phase: "generating", progress: 32 + Math.round(ratio * 30), note: `⚡ Construyendo tu app… ${Math.round(chars / 1000)} KB` });
@@ -3665,8 +3701,52 @@ export async function runJobById(jobId: string): Promise<void> {
       logger.warn({ attachErr, jobId }, "Error cargando adjuntos — continuando sin ellos");
     }
 
+    // ── AGENT MEMORY — cargar preferencias del usuario antes de generar ──────
+    let jobAgentMemory: import("../lib/agentMemoryContext").AgentMemoryContext | undefined;
+    try {
+      const { loadAgentMemory } = await import("../lib/agentMemoryContext");
+      const editAppId = (job as any).editAppId ? String((job as any).editAppId) : undefined;
+      jobAgentMemory = await loadAgentMemory(job.userId, editAppId);
+      if (jobAgentMemory.userPreferences) {
+        await log("system", `🧠 Preferencias del usuario cargadas — personalizando generación…`);
+      }
+    } catch (memErr) {
+      logger.warn({ memErr, jobId }, "Error cargando agent memory — continuando sin ella");
+    }
+
+    // ── RAG — buscar apps similares del usuario para reutilizar componentes ──
+    let ragContextBlock = "";
+    if (!job.editAppId) { // Solo en generaciones nuevas, no en ediciones
+      try {
+        const { findSimilarApps, buildRAGContextBlock } = await import("../lib/ragApps");
+        const cleanForRag = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+        const similar = await findSimilarApps(job.userId, cleanForRag, 2);
+        if (similar.length > 0) {
+          ragContextBlock = buildRAGContextBlock(similar);
+          await log("system", `🔍 ${similar.length} app(s) similar(es) encontrada(s) — reutilizando patrones…`);
+        }
+      } catch (ragErr) {
+        logger.warn({ ragErr, jobId }, "RAG lookup failed — continuing without context");
+      }
+    }
+
+    // ── A/B TESTING — seleccionar variante de system prompt óptima ───────────
+    let abVariantId = "default";
+    let abPromptModifier = "";
+    try {
+      const { selectPromptVariant } = await import("../lib/promptABTesting");
+      const ab = await selectPromptVariant(job.kind || "fullstack");
+      abVariantId = ab.variantId;
+      abPromptModifier = ab.modifier;
+    } catch { /* no bloquear */ }
+
+    // Enriquecer el prompt con RAG + A/B modifier
+    const enrichedJobPrompt = job.prompt +
+      (ragContextBlock ? `\n\n${ragContextBlock}` : "") +
+      abPromptModifier;
+
     const result = await generateApp(
-      job.prompt,
+      enrichedJobPrompt, // ← Prompt enriquecido con RAG + A/B testing
       onProgress,
       previousApp,
       job.coderModel,
@@ -3674,7 +3754,7 @@ export async function runJobById(jobId: string): Promise<void> {
       log,
       jobAttachments,
       undefined,
-      undefined,
+      jobAgentMemory,  // ← Memoria del usuario para personalizar generación
       {
         kind: job.kind,
         detectedLocale: extractPromptContext(job.prompt, "locale"),
@@ -3806,33 +3886,80 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
 
-    // Evaluación de calidad IA — si score < 65 lanza patcher antes de succeeded
-    try {
-      if (finalResult?.frontendCode && finalResult.frontendCode.length > 1000) {
-        const { evaluateJobQuality } = await import("../lib/aiAutopilot");
-        const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
-        if (savedAppId) {
-          const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
-          if (!qeval.pass) {
-            await log("system", `⚠️ Calidad insuficiente (score: ${qeval.score}/100). Lanzando patcher automático...`);
-            // Lanzar patcher con los issues detectados
-            const patchPrompt = `[ADMIN REPAIR] La app generada tiene problemas de calidad: ${qeval.issues.slice(0, 3).join(", ")}. Corrígelos sin modificar lo que ya funciona. Prompt original: ${(job.prompt || "").slice(0, 200)}`;
-            const patchJobId = new (await import("mongoose")).default.Types.ObjectId().toString();
-            await GenerationJob.create({
-              _id: patchJobId, userId: job.userId,
-              prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-quality. ${patchPrompt}`,
-              editAppId: String(savedAppId), coderModel: "claude-sonnet-4-6",
-              language: job.language || "typescript", kind: "edit",
-              status: "queued", phase: "queued", progress: 0,
-              isAdmin: true, hasEverPaid: true, autoFixedFromJobId: jobId,
-            });
-            await enqueueGenerateJob(patchJobId);
-          } else {
-            await log("system", `✅ Calidad aprobada (score: ${qeval.score}/100)`);
-          }
+    // ════════════════════════════════════════════════════════════════
+    // POST-GENERACIÓN: Image Agent + Visual Tester + Quality Check
+    // ════════════════════════════════════════════════════════════════
+    const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
+
+    // ── 1. IMAGE AGENT — reemplaza placeholders Unsplash con imágenes reales ─
+    if (savedAppId && finalResult?.frontendCode && process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
+      try {
+        await log("system", "🎨 Generando imágenes reales para tu app…");
+        const { generateAppImages } = await import("../lib/imageAgent");
+        const imgResult = await generateAppImages(savedAppId as any);
+        if (imgResult.generated > 0) {
+          await log("system", `✅ ${imgResult.generated} imagen(es) generada(s) y aplicadas en la app.`);
         }
+      } catch (imgErr) {
+        logger.warn({ imgErr, jobId }, "Image agent failed — continuing with placeholders");
       }
-    } catch { /* nunca bloquear el succeeded por esto */ }
+    }
+
+    // ── 2. QUALITY CHECK — evaluación de calidad con IA ──────────────────────
+    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000) {
+      try {
+        const { evaluateJobQuality } = await import("../lib/aiAutopilot");
+        const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
+        if (!qeval.pass) {
+          await log("system", `⚠️ Calidad insuficiente (score: ${qeval.score}/100). Lanzando corrección automática…`);
+          const patchPrompt = `[ADMIN REPAIR] La app generada tiene problemas de calidad: ${qeval.issues.slice(0, 3).join(", ")}. Corrígelos sin modificar lo que ya funciona. Prompt original: ${(job.prompt || "").slice(0, 200)}`;
+          const patchJobId = new (await import("mongoose")).default.Types.ObjectId().toString();
+          await GenerationJob.create({
+            _id: patchJobId, userId: job.userId,
+            prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-quality. ${patchPrompt}`,
+            editAppId: String(savedAppId), coderModel: "claude-sonnet-4-6",
+            language: job.language || "typescript", kind: "edit",
+            status: "queued", phase: "queued", progress: 0,
+            isAdmin: true, hasEverPaid: true, autoFixedFromJobId: jobId,
+          });
+          await enqueueGenerateJob(patchJobId);
+        } else {
+          await log("system", `✅ Calidad aprobada (score: ${qeval.score}/100)`);
+        }
+      } catch { /* nunca bloquear el succeeded */ }
+    }
+
+    // ── 3. VISUAL TESTER — screenshot + Claude Vision (solo apps desplegadas) ─
+    // Solo corre si la app tiene un publicSlug (está accesible como URL pública)
+    if (savedAppId && !!(job as any).autoPublish) {
+      try {
+        const freshApp = await GeneratedApp.findById(savedAppId).select("publicSlug userId").lean() as any;
+        if (freshApp?.publicSlug) {
+          const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
+          const { runAutoEvaluator } = await import("../lib/evaluator");
+          const dbUser = await User.findById(job.userId).lean() as any;
+          await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
+          runAutoEvaluator({
+            appId: savedAppId as any,
+            userId: job.userId,
+            userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
+            jobId: jobId as any,
+            baseUrl,
+            log: logger,
+          }).catch(evalErr => logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready"));
+        }
+      } catch (evalErr) {
+        logger.warn({ evalErr }, "Visual tester hook failed");
+      }
+    }
+
+    // ── A/B TESTING — registrar resultado para mejorar futuros prompts ────────
+    try {
+      const { recordVariantResult } = await import("../lib/promptABTesting");
+      const finalScore = typeof (finalResult as any)?.qualityScore === "number"
+        ? (finalResult as any).qualityScore : 80;
+      await recordVariantResult(abVariantId, true, finalScore);
+    } catch { /* nunca bloquear */ }
 
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
@@ -3940,6 +4067,100 @@ router.patch("/notifications/read-all", requireAuth, async (req: any, res: any) 
     res.status(500).json({ error: "Error actualizando notificaciones" });
   }
 });
+
+// ── SSE STREAMING — código en tiempo real mientras se genera ────────────────
+// GET /api/apps/:id/stream-code
+// Emite eventos SSE con el código parcial generado en tiempo real
+// El cliente puede mostrar el código apareciendo archivo por archivo
+router.get("/apps/:id/stream-code", requireAuth, async (req: any, res: any) => {
+  const userId = req.userId as string;
+  const appId = req.params.id;
+
+  // Verificar que la app pertenece al usuario
+  const app = await GeneratedApp.findOne({ _id: appId, userId }, { _id: 1 }).lean();
+  if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
+
+  // Headers SSE
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event: string, data: any) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Buscar el job activo para esta app
+  let lastCode = "";
+  let lastJobId = "";
+  let ticks = 0;
+  const MAX_TICKS = 120; // 2 min máx
+
+  const interval = setInterval(async () => {
+    ticks++;
+    if (ticks > MAX_TICKS) {
+      send("done", { reason: "timeout" });
+      clearInterval(interval);
+      res.end();
+      return;
+    }
+
+    try {
+      // Buscar job activo para esta app
+      const activeJob = await GenerationJob.findOne({
+        $or: [{ appId }, { editAppId: appId }],
+        status: { $in: ["running", "queued"] },
+      }).select("_id partialFrontendCode phase progress").lean() as any;
+
+      if (!activeJob) {
+        // No hay job activo — app completada
+        const finalApp = await GeneratedApp.findById(appId).select("frontendCode").lean() as any;
+        if (finalApp?.frontendCode && finalApp.frontendCode !== lastCode) {
+          send("complete", {
+            code: finalApp.frontendCode.slice(0, 50000), // Limitar tamaño
+            files: extractFileList(finalApp.frontendCode),
+          });
+        }
+        send("done", { reason: "completed" });
+        clearInterval(interval);
+        res.end();
+        return;
+      }
+
+      // Hay job activo — emitir progreso parcial
+      if (activeJob._id !== lastJobId) lastJobId = String(activeJob._id);
+
+      const partialCode = activeJob.partialFrontendCode || "";
+      if (partialCode && partialCode !== lastCode && partialCode.length > lastCode.length) {
+        lastCode = partialCode;
+        const files = extractFileList(partialCode);
+        send("partial", {
+          phase: activeJob.phase,
+          progress: activeJob.progress,
+          files,
+          latestFile: files[files.length - 1] || null,
+          totalSize: Math.round(partialCode.length / 1024),
+        });
+      } else {
+        // Solo emitir progreso si cambió
+        send("progress", { phase: activeJob.phase, progress: activeJob.progress });
+      }
+    } catch (err) {
+      logger.warn({ err }, "SSE stream-code error");
+    }
+  }, 1000);
+
+  // Cleanup al desconectar
+  req.on("close", () => {
+    clearInterval(interval);
+  });
+});
+
+function extractFileList(bundle: string): string[] {
+  const matches = bundle.match(/\/\/ === FILE: ([^=\n]+) ===/g) || [];
+  return matches.map(m => m.replace("// === FILE: ", "").replace(" ===", "").trim()).slice(0, 30);
+}
 
 // ── PREVIEW ENDPOINT — sirve el bundle HTML directamente ──────────────
 router.get("/apps/:id/preview", async (req: any, res: any) => {
