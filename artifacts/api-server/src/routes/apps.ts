@@ -2601,47 +2601,58 @@ router.get("/models", requireAuth, async (req: any, res: any) => {
 router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
-    const userId = req.auth?.userId;
     const { prompt, kind } = req.body ?? {};
     if (!prompt || typeof prompt !== "string") {
       res.status(400).json({ error: "prompt requerido" }); return;
     }
 
-    const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+    const cleanPrompt = prompt
+      .replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "")
+      .replace(/\[MARIS_ENGINE=[^\]]*\]/g, "")
+      .trim();
 
-    // Usar Claude para analizar el prompt y proponer un plan conversacional
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1000,
-      system: `Eres el Arquitecto de Maris AI. Analiza el prompt del usuario y responde en JSON con lo que vas a construir y qué extras podrías añadir que NO pidió explícitamente pero podrían ser útiles.
-
-Devuelve SOLO este JSON:
+      max_tokens: 800,
+      system: `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
 {
-  "title": "nombre corto del proyecto",
+  "title": "nombre corto del proyecto en español",
   "summary": "1-2 frases de qué vas a construir exactamente",
-  "included": ["funcionalidad 1 que SÍ pidió", "funcionalidad 2 que SÍ pidió"],
-  "extras": [
-    {"id": "auth", "label": "Sistema de login/registro", "why": "Para que los usuarios tengan cuentas personales"},
-    {"id": "payments", "label": "Pagos con Stripe", "why": "Para monetizar la plataforma"},
-    {"id": "analytics", "label": "Dashboard de analíticas", "why": "Para ver estadísticas de uso"}
-  ],
-  "estimatedPages": 5,
-  "backendNeeded": true
+  "included": ["funcionalidad que SÍ pidió el usuario (máx 4)"],
+  "extras": [{"id": "id_unico", "label": "Nombre del extra", "why": "Por qué sería útil"}],
+  "estimatedPages": 4,
+  "backendNeeded": false
 }
 
-"extras" son SOLO funcionalidades que NO están en el prompt. Máximo 3 extras. Si no hay extras obvios, devuelve "extras": [].
-"included" son las funcionalidades que SÍ pidió el usuario, máximo 5.
-No incluyas extras triviales. Solo los que realmente añadirían valor.`,
-      messages: [{ role: "user", content: `Analiza este prompt y propón el plan:\n\n${cleanPrompt}\n\nTipo de app: ${kind || "fullstack"}` }],
+REGLAS:
+- "included": solo lo que EXPLÍCITAMENTE pidió. Máx 4 items.
+- "extras": funcionalidades útiles que NO pidió. Máx 3. Si no hay extras claros, devuelve [].
+- "backendNeeded": true solo si el prompt pide auth, pagos, BD real, API propia.
+- Devuelve ÚNICAMENTE el JSON. Nada más.`,
+      messages: [{ role: "user", content: `Prompt: "${cleanPrompt}"
+Tipo: ${kind || "fullstack"}` }],
     });
 
-    const raw = (response.content[0] as any).text ?? "";
+    const raw = (response.content[0] as any).text?.trim() ?? "";
+    // Extraer JSON aunque venga con markdown o texto extra
     const first = raw.indexOf("{");
     const last = raw.lastIndexOf("}");
     if (first === -1 || last === -1) {
-      res.status(500).json({ error: "No se pudo analizar el plan" }); return;
+      logger.warn({ raw: raw.slice(0, 200) }, "plan-preview: no JSON found in response");
+      res.status(500).json({ error: "No se pudo generar el plan" }); return;
     }
-    const plan = JSON.parse(raw.slice(first, last + 1));
+    let plan: any;
+    try {
+      plan = JSON.parse(raw.slice(first, last + 1));
+    } catch (parseErr) {
+      logger.warn({ raw: raw.slice(0, 200), parseErr }, "plan-preview: JSON parse failed");
+      res.status(500).json({ error: "Plan malformado" }); return;
+    }
+    // Garantizar estructura mínima
+    plan.title = plan.title || cleanPrompt.slice(0, 40);
+    plan.summary = plan.summary || `App de tipo ${kind || "web"} basada en: ${cleanPrompt.slice(0, 80)}`;
+    plan.included = Array.isArray(plan.included) ? plan.included : [];
+    plan.extras = Array.isArray(plan.extras) ? plan.extras : [];
     res.json({ ok: true, plan });
   } catch (err) {
     logger.error({ err }, "plan-preview error");
