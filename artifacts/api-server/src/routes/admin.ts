@@ -1484,11 +1484,8 @@ router.delete("/admin/my-projects/:id", async (req: any, res: any): Promise<void
 });
 
 // ─── Admin: Seed Seguxat Project (alarma-negocio-xativa) ────────────────────
-// POST /api/admin/seed-seguxat
-// Body: { "email": "rrhh.milchollos@gmail.com" } (opcional, usa el email por defecto)
-// Importa el proyecto Seguxat completo a la cuenta del usuario especificado.
-// Temporalmente desprotegido para el seed manual
-router.post("/seed-seguxat-public", async (req: any, res: any): Promise<void> => {
+// POST /api/admin/seed-seguxat — requiere autenticación admin (middleware /admin)
+router.post("/admin/seed-seguxat", async (req: any, res: any): Promise<void> => {
   const targetEmail = (req.query.email as string) || req.body?.email || "rrhh.milchollos@gmail.com";
   try {
     const result = await seedSeguxatProject(targetEmail);

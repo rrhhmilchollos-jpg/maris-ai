@@ -92,7 +92,6 @@ interface AdminUser {
   registrationIp?: string | null;
   lastLoginIp?: string | null;
   lastLoginAt?: string | null;
-  lastLoginAt?: string | null;
   totalSpent?: number;
   plan?: string;
 }
@@ -1433,7 +1432,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                   if (!emailDialog) return;
                   setEmailSending(true);
                   try {
-                    const result = await apiFetch(`/api/admin/users/${emailDialog.user.id}/send-compensation-email`, {
+                    const result = await apiFetch<{ emailSent?: boolean; note?: string }>(`/api/admin/users/${emailDialog.user.id}/send-compensation-email`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({

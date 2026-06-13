@@ -287,11 +287,18 @@ function AdminGated({ children }: { children: React.ReactNode }) {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  // __internal_clerkJSUrl es una prop real de IsomorphicClerkOptions (carga el JS de Clerk
+  // desde el tenant clerk.marisai.es para habilitar Google OAuth) pero @clerk/react v6
+  // la excluye deliberadamente del tipo público ClerkProviderProps. Sigue funcionando
+  // en runtime; usamos un alias tipado para no perder la verificación de tipos del resto de props.
+  const ClerkProviderInternal = ClerkProvider as React.ComponentType<
+    React.ComponentProps<typeof ClerkProvider> & { __internal_clerkJSUrl?: string }
+  >;
 
   return (
-    <ClerkProvider
+    <ClerkProviderInternal
       publishableKey={clerkPubKey}
-      clerkJSUrl={clerkJsUrl}
+      __internal_clerkJSUrl={clerkJsUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
@@ -404,7 +411,7 @@ function ClerkProviderWithRoutes() {
         </Switch>
         </Suspense>
       </QueryClientProvider>
-    </ClerkProvider>
+    </ClerkProviderInternal>
   );
 }
 

@@ -1454,12 +1454,14 @@ export default function AdminDashboardPage() {
   });
 
   const retryJob = useRetryAdminJob({
-    onSuccess: () => {
-      toast({ title: "Job reintentado", description: "El job ha sido re-encolado correctamente." });
-      queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Error al reintentar", description: err?.message ?? "Error desconocido", variant: "destructive" });
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Job reintentado", description: "El job ha sido re-encolado correctamente." });
+        queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+      },
+      onError: (err: any) => {
+        toast({ title: "Error al reintentar", description: err?.message ?? "Error desconocido", variant: "destructive" });
+      },
     },
   });
 
@@ -2337,7 +2339,7 @@ function MetricCard({
 }: {
   icon: React.ReactNode;
   title: string;
-  value: string;
+  value: React.ReactNode;
   hint: string;
   trend?: "up" | "down" | "neutral";
   color?: string;

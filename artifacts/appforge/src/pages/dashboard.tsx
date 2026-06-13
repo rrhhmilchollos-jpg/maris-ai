@@ -1023,7 +1023,7 @@ export default function DashboardPage() {
               {visibleApps.map((app: any) => (
                 <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group relative" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
                   <button
-                    className="absolute top-2 right-2 z-10 p-1 rounded-full bg-black/40 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
                     onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)}
                     disabled={deletingId === (app.id || app._id)}
                     title="Eliminar proyecto"

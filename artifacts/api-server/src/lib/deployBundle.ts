@@ -95,7 +95,7 @@ export async function buildDeployHtml(opts: {
   }
   if (!result) throw new Error("No se pudo compilar el bundle.");
 
-  const code = result.outputFiles[0]?.text ?? "";
+  const code = result.outputFiles?.[0]?.text ?? "";
   if (!code.trim()) {
     throw new Error("El bundler no produjo código.");
   }
@@ -393,7 +393,7 @@ export async function buildDeployHtml(opts: {
   }, 12000);
 })();`;
 
-  return `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
