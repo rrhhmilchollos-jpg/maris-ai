@@ -3174,9 +3174,9 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
 
 // POST /api/apps/inject — inyección directa de bundle via API key (solo desarrollo)
 router.post("/apps/inject", async (req: any, res: any): Promise<void> => {
-  const key = req.headers["x-inject-key"] || req.body?.key;
+  const key = req.body?.key || req.headers["x-inject-key"];
   if (key !== "maris-inject-2024-seguxat") {
-    res.status(403).json({ error: "Unauthorized" }); return;
+    res.status(403).json({ error: "Unauthorized", receivedKey: key, hasBody: !!req.body }); return;
   }
   await connectDB();
   const { appId, frontendCode, title, deleteImported, userId } = req.body ?? {};
