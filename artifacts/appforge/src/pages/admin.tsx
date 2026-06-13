@@ -114,7 +114,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const queryClient = useQueryClient();
 
   const { data: overview, isLoading: overviewLoading } = useGetAdminOverview();
-  const { data: users, isLoading: usersLoading } = useListAdminUsers();
+  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useListAdminUsers({ query: { refetchInterval: 30_000 } });
   const { data: apps, isLoading: appsLoading } = useListAdminApps();
   const {
     data: jobsData,
@@ -447,7 +447,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
               <CardHeader>
                 <CardTitle className="text-lg flex items-center">
                   <Users className="h-5 w-5 mr-2 text-muted-foreground" />
-                  Usuarios ({filteredUsers.length})
+                  Usuarios ({filteredUsers.length}) <button onClick={() => refetchUsers()} className="ml-1 text-xs opacity-50 hover:opacity-100" title="Actualizar">↻</button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
