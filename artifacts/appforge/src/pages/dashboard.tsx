@@ -159,6 +159,7 @@ export default function DashboardPage() {
   const [preGenChatOpen, setPreGenChatOpen] = useState(false);
   const [preGenChatGenerating, setPreGenChatGenerating] = useState(false);
   const [inlineHint, setInlineHint] = useState<string | null>(null);
+  const [quickChatHistory, setQuickChatHistory] = useState<{role:"user"|"maris", text:string}[]>([]);
   const [quickChatReply, setQuickChatReply] = useState<string | null>(null);
   const [quickChatLoading, setQuickChatLoading] = useState(false);
 
@@ -392,15 +393,49 @@ export default function DashboardPage() {
     }
   }, [job, queryClient, setLocation, toast, activeJobId]);
 
-  // Solo bloquea si el prompt contiene señales EXPLÍCITAS de que NO quiere generar
+  // Detecta si el prompt es intención de construir una app o una consulta/pregunta
   const looksLikeBuildIntent = (text: string): boolean => {
     if (attachments.length > 0) return true; // adjuntos → siempre generar
     const t = text.toLowerCase().trim();
-    // Solo bloquear si es explícitamente negativo
-    const hardNegatives = ["no quiero crear", "no quiero generar", "no crear", "cancelar", "cancel", "olvídalo", "olvidalo", "no es para crear", "solo estoy probando", "solo quiero preguntar"];
-    if (hardNegatives.some(n => t.includes(n))) return false;
-    // Todo lo demás → lanzar el Arquitecto (él sabrá preguntar si es necesario)
-    return true;
+
+    // Señales CLARAS de NO querer construir → ir al chat
+    const chatSignals = [
+      // Preguntas directas
+      "¿", "cuánto", "cuanto", "cómo", "como funciona", "qué es", "que es",
+      "qué hace", "que hace", "qué incluye", "que incluye", "cuál es", "cual es",
+      "puedo", "puedes", "tienes", "tienen", "hay ", "existe",
+      // Saludos y conversación
+      "hola", "buenos días", "buenas tardes", "buenas noches", "hey", "hi",
+      "gracias", "muchas gracias", "de nada", "ok", "vale", "perfecto",
+      // Negaciones explícitas
+      "no quiero", "no quiero crear", "cancelar", "olvídalo", "olvidalo",
+      "no crear", "no generar", "solo estoy", "solo quiero preguntar",
+      // Consultas sobre Maris
+      "cuánto cuesta", "cuanto cuesta", "precio", "precios", "plan ", "planes",
+      "cuántos créditos", "cuantos creditos", "qué modelos", "que modelos",
+      "soporte", "ayuda", "problema", "error ", "no funciona", "fallo",
+      // Comentarios y feedback
+      "me gusta", "está bien", "no está bien", "no era", "no es lo que",
+      "esto no", "mal", "bien hecho", "genial",
+    ];
+    if (chatSignals.some(s => t.includes(s))) return false;
+
+    // Si hay historial de chat activo y el mensaje es corto → continuar chat
+    if (quickChatHistory.length > 0 && t.length < 30) return false;
+
+    // Señales CLARAS de querer construir
+    const buildWords = ["crea", "crear", "genera", "generar", "haz", "hacer",
+      "construye", "construir", "desarrolla", "desarrollar", "app", "web",
+      "página", "pagina", "landing", "tienda", "dashboard", "crm", "saas",
+      "juego", "portal", "aplicación", "aplicacion", "quiero una", "necesito una",
+      "quiero un", "necesito un", "hazme", "ponme", "diseña"];
+    if (buildWords.some(w => t.includes(w))) return true;
+
+    // Prompt largo sin señales de chat → probablemente quiere construir
+    if (t.length > 50) return true;
+
+    // Por defecto: si es corto y ambiguo → mejor preguntar via chat
+    return false;
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -411,23 +446,45 @@ export default function DashboardPage() {
     if (!looksLikeBuildIntent(prompt)) {
       const userMsg = prompt.trim();
       setPrompt("");
-      setQuickChatReply(null);
       setQuickChatLoading(true);
+      // Añadir mensaje del usuario al historial
+      const newHistory = [...quickChatHistory, { role: "user" as const, text: userMsg }];
+      setQuickChatHistory(newHistory);
+      // Contexto de apps del usuario para respuestas contextuales
+      const appContext = (apps ?? []).slice(0, 5).map((a: any) =>
+        `"${a.title}" — ${a.description?.slice(0, 60) || "sin descripción"}`
+      ).join("; ");
       try {
         const data = await apiFetch<any>("/apps/quick-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userMsg }),
+          body: JSON.stringify({
+            message: userMsg,
+            history: quickChatHistory.slice(-6), // últimos 6 mensajes
+            appContext: appContext || null,
+          }),
         });
-        setQuickChatReply(data.reply || "¡Hola! Cuéntame qué quieres construir y lo hago ahora.");
+        const reply = data.reply || "Cuéntame más, ¿en qué puedo ayudarte?";
+        setQuickChatReply(reply);
+        setQuickChatHistory([...newHistory, { role: "maris" as const, text: reply }]);
+        // Feedback loop: si detectamos insatisfacción, guardar el patrón
+        if (data.feedbackDetected) {
+          apiFetch("/apps/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userMsg, type: data.feedbackType }),
+          }).catch(() => {});
+        }
       } catch {
-        setQuickChatReply("¡Hola! Estoy aquí para ayudarte. Si quieres construir algo, descríbemelo y lo hago en minutos.");
+        const fallback = "Estoy aquí. ¿Tienes alguna duda sobre Maris AI o quieres construir algo?";
+        setQuickChatReply(fallback);
+        setQuickChatHistory([...newHistory, { role: "maris" as const, text: fallback }]);
       } finally {
         setQuickChatLoading(false);
       }
       return;
     }
-    setQuickChatReply(null);
+    setQuickChatHistory([]); // limpiar historial al lanzar generación
 
     if (!isAdmin && stats && stats.credits < kindCost) {
       toast({ title: "Créditos insuficientes", description: kindCost > 1 ? `Este tipo de proyecto cuesta ${kindCost} créditos y solo tienes ${stats.credits}. Compra más para continuar.` : "Compra más créditos para seguir generando apps.", variant: "destructive" });
@@ -594,7 +651,7 @@ export default function DashboardPage() {
                   placeholder={kindMeta.placeholder}
                   className="min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm text-white placeholder:text-white/20 p-4 pb-14"
                   value={prompt}
-                  onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); if (quickChatReply) setQuickChatReply(null); }}
+                  onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); }}
                   disabled={isWorking}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && e.metaKey) {
@@ -645,25 +702,43 @@ export default function DashboardPage() {
               </div>
               {attachments.length > 0 && <AttachmentChips attachments={attachments} onRemove={(id) => setAttachments((prev: any[]) => { const removed = prev.find((a:any) => a.id === id); if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl); return prev.filter((a:any) => a.id !== id); })} />}
 
-              {/* Respuesta rápida de Maris — chat inline sin generar */}
-              {(quickChatLoading || quickChatReply) && (
-                <div className="mt-2 flex items-start gap-3 bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="h-3.5 w-3.5 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {quickChatLoading ? (
-                      <div className="flex items-center gap-2 text-[12px] text-white/40">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        <span>Maris está pensando...</span>
+              {/* Chat inline con Maris — historial completo */}
+              {(quickChatHistory.length > 0 || quickChatLoading) && (
+                <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04]">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-5 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
+                        <Sparkles className="h-3 w-3 text-white" />
                       </div>
-                    ) : (
-                      <p className="text-[13px] text-white/80 leading-relaxed">{quickChatReply}</p>
+                      <span className="text-[11px] font-medium text-white/50">Maris</span>
+                    </div>
+                    <button onClick={() => { setQuickChatHistory([]); setQuickChatReply(null); }} className="text-white/20 hover:text-white/50">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {/* Mensajes */}
+                  <div className="px-3 py-2 space-y-2 max-h-48 overflow-y-auto">
+                    {quickChatHistory.map((msg, i) => (
+                      <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div className={`text-[12px] leading-relaxed px-3 py-1.5 rounded-lg max-w-[85%] ${
+                          msg.role === "user"
+                            ? "bg-primary/15 text-primary border border-primary/20"
+                            : "bg-white/[0.05] text-white/80 border border-white/[0.05]"
+                        }`}>
+                          {msg.text}
+                        </div>
+                      </div>
+                    ))}
+                    {quickChatLoading && (
+                      <div className="flex justify-start">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.05] border border-white/[0.05] rounded-lg">
+                          <Loader2 className="h-3 w-3 animate-spin text-white/30" />
+                          <span className="text-[12px] text-white/30">escribiendo...</span>
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <button onClick={() => setQuickChatReply(null)} className="text-white/20 hover:text-white/50 shrink-0 mt-0.5">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
                 </div>
               )}
             </div>
