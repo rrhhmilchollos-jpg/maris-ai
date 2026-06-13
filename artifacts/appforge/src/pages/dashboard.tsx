@@ -271,10 +271,8 @@ export default function DashboardPage() {
   };
 
   const openOnboarding = () => {
-    console.log("[Maris] openOnboarding called, setting preGenChatOpen=true");
-    generateMutation.reset(); // Limpiar estado atascado antes de abrir
+    generateMutation.reset();
     setPreGenChatOpen(true);
-    console.log("[Maris] preGenChatOpen state update queued");
   };
 
   const handlePreGenConfirm = (enrichedPrompt: string) => {
@@ -452,15 +450,10 @@ export default function DashboardPage() {
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("[Maris] handleGenerate fired, prompt length:", prompt.length, "isWorking:", isWorking);
-    if (!prompt.trim()) {
-      console.log("[Maris] prompt vacío — saliendo");
-      return;
-    }
+    if (!prompt.trim()) return;
 
     // Prompts largos (>100 chars) son SIEMPRE intención de construir — sin análisis
     const isLongPrompt = prompt.trim().length > 100;
-    console.log("[Maris] isLongPrompt:", isLongPrompt, "looksLikeBuild:", looksLikeBuildIntent(prompt));
 
     // Si no es intención de construir → responder como chat con Maris
     if (!isLongPrompt && !looksLikeBuildIntent(prompt)) {
@@ -511,7 +504,6 @@ export default function DashboardPage() {
       setLocation("/billing");
       return;
     }
-    console.log("[Maris] → calling openOnboarding()");
     openOnboarding();
   };
 
@@ -711,12 +703,6 @@ export default function DashboardPage() {
                   <Button
                     type="submit"
                     disabled={isWorking || !prompt.trim()}
-                    onClick={(e) => {
-                      // Fallback directo — por si el form submit falla
-                      if (!isWorking && prompt.trim()) {
-                        console.log("[Maris] Button onClick direct, prompt:", prompt.length, "chars");
-                      }
-                    }}
                     className="h-8 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-[12px] font-bold"
                   >
                     {isWorking ? (
