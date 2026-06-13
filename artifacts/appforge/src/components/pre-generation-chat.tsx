@@ -113,13 +113,13 @@ export function PreGenerationChat({
       setIsTyping(false);
       setMessages([{
         role: "architect",
-        content: `¡Hola! Soy el **Arquitecto de Maris AI**. Estoy analizando tu proyecto para preparar el plan más adecuado... Dame un momento. 🔍`,
+        content: `Analizando tu idea… dame un segundo. 🔍`,
         timestamp: new Date(),
       }]);
     }, 400);
 
     try {
-      const data = await apiFetch<any>("/apps/plan-preview", {
+      const data = await apiFetch<any>("/api/apps/plan-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: initialPrompt, kind: appKind }),
@@ -132,19 +132,27 @@ export function PreGenerationChat({
       // Mostrar el plan al usuario
       setTimeout(() => {
         addArchitectMsg(
-          `He analizado tu prompt. Esto es lo que voy a construir para **"${p.title}"**:\n\n${p.summary}\n\n¿Todo correcto o quieres añadir algo?`,
+          `He preparado el plan para **${p.title}**. ${p.summary}\n\n¿Quieres cambiar el nombre del proyecto o añadir algo antes de empezar?`,
           p.extras.length > 0 ? p.extras : undefined,
           p.included,
         );
         setPhase(p.extras.length > 0 ? "plan" : "ready");
       }, 1200);
     } catch (err) {
-      // Fallback: generar directamente sin mostrar error técnico al usuario
+      // Fallback: limpiar el prompt y preguntar el nombre del proyecto
       setIsTyping(false);
+      const cleanPrompt = initialPrompt
+        .replace(/^hola[,.]?\s*/i, "")
+        .replace(/^me ayudas a /i, "")
+        .replace(/^puedes /i, "")
+        .replace(/^quiero /i, "")
+        .replace(/^necesito /i, "")
+        .replace(/[?¿!¡]+/g, "")
+        .trim();
       setTimeout(() => {
         setMessages(prev => [...prev, {
           role: "architect",
-          content: `Perfecto, entendido. Voy a construir **"${initialPrompt.slice(0, 60)}${initialPrompt.length > 60 ? '…' : ''}"**. ¿Añades algún detalle más o empezamos ya?`,
+          content: `Entendido, vamos a construir **${cleanPrompt.slice(0, 80)}**. ¿Cómo quieres llamar al proyecto? Y si tienes algún detalle más, cuéntame.`,
           timestamp: new Date(),
         }]);
         setPhase("ready");
