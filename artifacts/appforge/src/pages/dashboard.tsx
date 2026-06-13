@@ -271,7 +271,7 @@ export default function DashboardPage() {
   };
 
   const openOnboarding = () => {
-    // Use new PreGenerationChat instead of old modal
+    generateMutation.reset(); // Limpiar estado atascado antes de abrir
     setPreGenChatOpen(true);
   };
 
@@ -502,7 +502,7 @@ export default function DashboardPage() {
     openOnboarding();
   };
 
-  const isWorking = generateMutation.isPending || activeJobId !== null;
+  const isWorking = activeJobId !== null; // isPending puede atascarse — solo bloquear si hay job real
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
 
