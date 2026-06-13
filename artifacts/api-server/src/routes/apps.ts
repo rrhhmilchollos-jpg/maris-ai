@@ -2188,6 +2188,7 @@ export async function generateApp(
     }, 30_000);
     try {
       const turboModel = "claude-sonnet-4-6";
+      const kind = requestContext?.kind || "fullstack";
       const complexity = classifyPromptComplexity(prompt, { kind });
 
       // ── SPECULATIVE GENERATION — para apps básicas/standard lanzamos 2 variantes en paralelo
