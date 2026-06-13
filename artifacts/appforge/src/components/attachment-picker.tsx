@@ -19,8 +19,13 @@ export interface UploadedAttachment {
   previewUrl?: string;
 }
 
-const ACCEPT_ATTR =
-  "image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.md,.csv,.json,.txt";
+// Acepta todo — el antivirus del servidor filtra lo malicioso
+const ACCEPT_ATTR = "*/*";
+
+const isVideoMime = (mime: string) => mime.startsWith("video/");
+const isImageMime = (mime: string) => mime.startsWith("image/");
+const isTextMime  = (mime: string) => mime.startsWith("text/") || mime === "application/json" || mime === "application/xml";
+const isPdfMime   = (mime: string) => mime === "application/pdf";
 
 /**
  * The "+" picker that lives inside a chat input. Lets the user attach images,
@@ -100,7 +105,7 @@ export function AttachmentPicker({
           };
           // Build a local preview URL for images so the chip can show the
           // thumbnail instantly without a round-trip to /api/uploads/:id.
-          const previewUrl = body.isImage ? URL.createObjectURL(file) : undefined;
+          const previewUrl = (body.isImage || (body as any).isVideo) ? URL.createObjectURL(file) : undefined;
           next.push({ ...body, previewUrl });
         } catch (err) {
           toast({
@@ -182,11 +187,9 @@ export function AttachmentChips({
           data-testid={`${testIdPrefix}-chip-${a.id}`}
         >
           {a.isImage && a.previewUrl ? (
-            <img
-              src={a.previewUrl}
-              alt={a.filename}
-              className="h-8 w-8 rounded object-cover"
-            />
+            <img src={a.previewUrl} alt={a.filename} className="h-8 w-8 rounded object-cover" />
+          ) : (a as any).isVideo && a.previewUrl ? (
+            <video src={a.previewUrl} className="h-8 w-8 rounded object-cover" muted playsInline />
           ) : (
             <span className="flex h-8 w-8 items-center justify-center rounded bg-muted text-muted-foreground">
               {iconFor(a.mimeType)}
@@ -213,8 +216,14 @@ export function AttachmentChips({
 
 function iconFor(mime: string) {
   if (mime.startsWith("image/")) return <ImageIcon className="h-4 w-4" />;
+  if (mime.startsWith("video/")) return <span className="text-[10px]">🎬</span>;
   if (mime === "application/json" || mime === "application/xml") return <FileJson className="h-4 w-4" />;
   if (mime.startsWith("text/")) return <FileText className="h-4 w-4" />;
+  if (mime === "application/pdf") return <span className="text-[10px]">📄</span>;
+  if (mime.includes("word") || mime.includes("document")) return <span className="text-[10px]">📝</span>;
+  if (mime.includes("sheet") || mime.includes("excel")) return <span className="text-[10px]">📊</span>;
+  if (mime.includes("presentation") || mime.includes("powerpoint")) return <span className="text-[10px]">📊</span>;
+  if (mime === "application/zip") return <span className="text-[10px]">🗜️</span>;
   return <FileIcon className="h-4 w-4" />;
 }
 

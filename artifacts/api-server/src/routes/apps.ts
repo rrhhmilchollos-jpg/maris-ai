@@ -331,11 +331,12 @@ export interface GeneratedAppPayload {
 
 
 export interface AttachmentContext {
-  id: number;
+  id: number | string;
   filename: string;
   mimeType: string;
   sizeBytes: number;
   textContent?: string;
+  dataBase64?: string; // Para imágenes — se pasa como vision a Claude
 }
 
 export function buildAttachmentBlock(attachments: AttachmentContext[] | undefined): string {
@@ -356,8 +357,11 @@ export function buildAttachmentBlock(attachments: AttachmentContext[] | undefine
       if (used >= MAX_TOTAL) break;
     } else {
       const isImg = a.mimeType.startsWith("image/");
+      const isVideo = a.mimeType.startsWith("video/");
       const note = isImg
-        ? `imagen de referencia visual — replica su estilo/colores/layout cuando sea relevante`
+        ? `imagen de referencia visual adjuntada por el usuario — analiza su estilo, colores, layout y estructura y replica/inspírate en ella para la app`
+        : isVideo
+        ? `vídeo de referencia adjuntado por el usuario — usa su contenido como contexto visual y funcional`
         : `documento de referencia — usa su contenido como contexto`;
       const line = `\n- ${a.filename} (${a.mimeType}, ${sizeKb} KB): ${note}.`;
       parts.push(line);
@@ -2416,6 +2420,7 @@ import {
   UserNotification,
   CreditTransaction,
 } from "@workspace/db/schema";
+import { ChatAttachment } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
 import { generateRateLimiter } from "../middlewares/rateLimit";
 import { enqueueGenerateJob } from "../lib/jobQueue";
@@ -3405,6 +3410,31 @@ export async function runJobById(jobId: string): Promise<void> {
       } catch { /* si falla la consulta, usar el valor del job */ }
     }
 
+    // Cargar adjuntos del job desde la BD y convertirlos a AttachmentContext
+    let jobAttachments: AttachmentContext[] = [];
+    try {
+      const attachmentIds = (job as any).attachmentIds ?? [];
+      if (attachmentIds.length > 0) {
+        const rows = await ChatAttachment.find({ _id: { $in: attachmentIds } }).lean() as any[];
+        jobAttachments = rows.map((row: any) => ({
+          id: row._id,
+          filename: row.filename,
+          mimeType: row.mimeType,
+          sizeBytes: row.sizeBytes,
+          textContent: row.mimeType.startsWith("text/") || row.mimeType === "application/json"
+            ? Buffer.from(row.dataBase64, "base64").toString("utf8").slice(0, 30000)
+            : undefined,
+          // Para imágenes: pasar base64 para que Claude pueda verlas directamente
+          dataBase64: row.mimeType.startsWith("image/") ? row.dataBase64 : undefined,
+        }));
+        if (jobAttachments.length > 0) {
+          await log("system", `📎 ${jobAttachments.length} archivo(s) adjunto(s) cargado(s): ${jobAttachments.map((a: any) => a.filename).join(", ")}`);
+        }
+      }
+    } catch (attachErr) {
+      logger.warn({ attachErr, jobId }, "Error cargando adjuntos — continuando sin ellos");
+    }
+
     const result = await generateApp(
       job.prompt,
       onProgress,
@@ -3412,7 +3442,7 @@ export async function runJobById(jobId: string): Promise<void> {
       job.coderModel,
       (job.language as any) || "typescript",
       log,
-      [],
+      jobAttachments,
       undefined,
       undefined,
       {
