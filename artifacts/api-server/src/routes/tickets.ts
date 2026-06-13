@@ -28,16 +28,45 @@ router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> =
       status: "open",
       responses: [],
     });
-    const user = await User.findById(userId, { email: 1 }).lean().catch(() => null);
-    void sendSupportTicketCreatedEmail({
-      to: process.env.SUPPORT_EMAIL || "rrhh.milchollos@gmail.com",
-      userEmail: user?.email ?? null,
-      subject,
-      message,
-      ticketId: String(newTicket._id),
-      log: logger,
-    });
-    res.status(201).json(newTicket);
+    const ticketId = String(newTicket._id);
+    const user = await User.findById(userId, { email: 1, credits: 1 }).lean().catch(() => null) as any;
+
+    // ── IA Autopilot: intenta resolver el ticket automáticamente ──
+    let aiResolved = false;
+    try {
+      const { handleSupportTicketWithAI } = await import("../lib/aiAutopilot");
+      const result = await handleSupportTicketWithAI({
+        userEmail: user?.email || "",
+        userId,
+        subject,
+        message,
+        ticketId,
+      });
+      if (result.resolved) {
+        // Marcar ticket como resuelto por IA
+        await Ticket.findByIdAndUpdate(ticketId, {
+          $set: { status: "resolved" },
+          $push: { responses: { role: "assistant", content: `🤖 Respuesta automática del sistema:
+
+${result.reply}`, createdAt: new Date() } },
+        });
+        aiResolved = true;
+        logger.info({ ticketId }, "Ticket resuelto automáticamente por IA Autopilot");
+      }
+    } catch { /* no bloquear si falla la IA */ }
+
+    // Solo notificar a Ivan si la IA no pudo resolverlo
+    if (!aiResolved) {
+      void sendSupportTicketCreatedEmail({
+        to: process.env.SUPPORT_EMAIL || "rrhh.milchollos@gmail.com",
+        userEmail: user?.email ?? null,
+        subject,
+        message,
+        ticketId,
+        log: logger,
+      });
+    }
+    res.status(201).json({ ...newTicket.toObject(), aiResolved });
   } catch (error) {
     logger.error({ error }, "Error al crear ticket");
     res.status(500).json({ error: "Error interno del servidor" });

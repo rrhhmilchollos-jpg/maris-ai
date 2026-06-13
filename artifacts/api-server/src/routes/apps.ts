@@ -3546,6 +3546,34 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
 
+    // Evaluación de calidad IA — si score < 65 lanza patcher antes de succeeded
+    try {
+      if (finalResult?.frontendCode && finalResult.frontendCode.length > 1000) {
+        const { evaluateJobQuality } = await import("../lib/aiAutopilot");
+        const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
+        if (savedAppId) {
+          const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
+          if (!qeval.pass) {
+            await log("system", `⚠️ Calidad insuficiente (score: ${qeval.score}/100). Lanzando patcher automático...`);
+            // Lanzar patcher con los issues detectados
+            const patchPrompt = `[ADMIN REPAIR] La app generada tiene problemas de calidad: ${qeval.issues.slice(0, 3).join(", ")}. Corrígelos sin modificar lo que ya funciona. Prompt original: ${(job.prompt || "").slice(0, 200)}`;
+            const patchJobId = new (await import("mongoose")).default.Types.ObjectId().toString();
+            await GenerationJob.create({
+              _id: patchJobId, userId: job.userId,
+              prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-quality. ${patchPrompt}`,
+              editAppId: String(savedAppId), coderModel: "claude-sonnet-4-6",
+              language: job.language || "typescript", kind: "edit",
+              status: "queued", phase: "queued", progress: 0,
+              isAdmin: true, hasEverPaid: true, autoFixedFromJobId: jobId,
+            });
+            await enqueueGenerateJob(patchJobId);
+          } else {
+            await log("system", `✅ Calidad aprobada (score: ${qeval.score}/100)`);
+          }
+        }
+      }
+    } catch { /* nunca bloquear el succeeded por esto */ }
+
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
@@ -3563,6 +3591,12 @@ export async function runJobById(jobId: string): Promise<void> {
       },
     });
     await log("system", `Error: ${errorMessage}`, "error");
+
+    // Auto-diagnóstico IA — intenta corregir automáticamente
+    try {
+      const { autoDiagnoseFailedJob } = await import("../lib/aiAutopilot");
+      autoDiagnoseFailedJob(jobId).catch(() => {}); // fire-and-forget
+    } catch { /* nunca crashear el pipeline */ }
 
     // Notificar al admin si el job ha fallado varias veces
     try {
