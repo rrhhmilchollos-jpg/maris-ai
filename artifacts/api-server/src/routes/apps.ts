@@ -1988,7 +1988,7 @@ export async function generateApp(
   const isFreeUser = !hasEverPaid && !previous; // ediciones siempre permitidas
 
   if (isFreeUser) {
-    await log("system", "✨ Cuenta nueva — generando landing page de demostración. Para proyectos más grandes, activa un plan.");
+    await log("system", "✨ Generando tu landing page gratuita. Para apps completas con backend, dashboard y sin límites → activa un plan.");
   }
 
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
@@ -2132,9 +2132,11 @@ export async function generateApp(
 
   // Guardia de tamaño — si el arquitecto generó un plan demasiado grande, lo recortamos
   // antes de que llegue al frontend engineer para evitar timeouts
-  const MAX_PAGES = isFreeUser ? 4 : 8;
-  const MAX_COMPONENTS = isFreeUser ? 6 : 12;
-  const MAX_FILES = isFreeUser ? 20 : 45;
+  // FREE: solo landing page — 1 página, sin backend, sin complejidad
+  // PAID: app completa sin límites
+  const MAX_PAGES = isFreeUser ? 1 : 8;
+  const MAX_COMPONENTS = isFreeUser ? 4 : 12;
+  const MAX_FILES = isFreeUser ? 8 : 45;
 
   if (isFreeUser) {
     // Usuario free: forzar landing page sin backend

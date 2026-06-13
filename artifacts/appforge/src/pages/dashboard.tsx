@@ -764,6 +764,14 @@ export default function DashboardPage() {
               )}
             </div>
 
+            {/* AVISO PLAN FREE */}
+            {!me?.isPremium && !isAdmin && (
+              <div className="mx-6 mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-400/90 flex items-center gap-2">
+                <Sparkles className="h-3 w-3 flex-shrink-0" />
+                <span>Plan gratuito — genera una <strong>landing page</strong> de demostración con tus 50 créditos. <button onClick={() => setLocation("/billing")} className="underline hover:text-amber-300 transition-colors">Activa un plan</button> para apps completas con backend y sin límites.</span>
+              </div>
+            )}
+
             {/* Quick suggestions */}
             <div className="px-6 pb-5">
               <p className="text-[10px] text-white/20 uppercase tracking-widest font-bold mb-2">Sugerencias rápidas</p>
