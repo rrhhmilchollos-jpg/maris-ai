@@ -32,6 +32,7 @@ interface JobState {
   partialFrontendCode?: string | null;
   errorMessage?: string | null;
   awaitingApproval?: boolean;
+  title?: string;
 }
 
 interface GenerationStudioProps {

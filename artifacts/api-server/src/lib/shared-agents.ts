@@ -247,8 +247,8 @@ export function compactBundleForPrompt(bundle: string, hints: string[] = [], max
     const haystack = `${file.path}\n${file.content.slice(0, 2000)}`.toLowerCase();
     let score = critical.test(file.path) ? 100 : 0;
     for (const hint of normalizedHints.split(/[^a-z0-9_\-/]+/).filter((h) => h.length >= 3)) {
-      if (haystack.includes(h)) score += 10;
-      if (file.path.toLowerCase().includes(h)) score += 25;
+      if (haystack.includes(hint)) score += 10;
+      if (file.path.toLowerCase().includes(hint)) score += 25;
     }
     if (/component|page|route|modal|button|form|table|header|footer|navbar/i.test(file.path)) score += 5;
     return { ...file, index, score };

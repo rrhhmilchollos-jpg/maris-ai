@@ -29,12 +29,12 @@ export function AppointmentManager() {
 
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Omit<Appointment, "id">>({
     patient: "",
     date: "",
     time: "",
     type: "Sesión Manual",
-    status: "confirmed" as const,
+    status: "confirmed",
     notes: "",
   });
 

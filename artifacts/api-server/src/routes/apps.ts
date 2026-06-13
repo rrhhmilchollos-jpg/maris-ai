@@ -2803,17 +2803,6 @@ async function buildAppUpdatedConsoleReply(args: {
     // Fallback si la IA falla
     return `Hecho. Los cambios en **${title}** están guardados. Refresca el preview para verlos.`;
   }
-
-  // Legacy code kept for reference (unreachable):
-  const filesLine = totalFiles > 0
-    ? `\n\n_He modificado ${totalFiles} archivo${totalFiles > 1 ? "s" : ""}. Si algo no se ve bien, dímelo y lo corrijo._`
-    : "";
-
-  const creditsLine = typeof creditsRemaining === "number"
-    ? `\n\n_Créditos restantes: ${creditsRemaining}_`
-    : "";
-
-  return `${mensaje}${filesLine}${creditsLine}`;
 }
 
 // ── POST /api/apps ────────────────────────────────────────────────────────
