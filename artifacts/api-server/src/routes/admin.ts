@@ -1248,6 +1248,30 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
 });
 
 // POST /api/admin/apps/patch-by-slug — parchear app por slug público
+
+// POST /api/admin/apps/patch-all — parchear todas las apps que contengan un texto
+router.post("/admin/apps/patch-all", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { search, replace } = req.body ?? {};
+  if (!search) { res.status(400).json({ error: "search requerido" }); return; }
+
+  const apps = await GeneratedApp.find({
+    frontendCode: { $regex: search, $options: "i" }
+  }).select("_id title").lean();
+
+  let patched = 0;
+  for (const app of apps) {
+    const full = await GeneratedApp.findById(app._id).select("frontendCode").lean() as any;
+    if (!full?.frontendCode) continue;
+    const newCode = full.frontendCode.split(search).join(replace ?? "");
+    await GeneratedApp.findByIdAndUpdate(app._id, { $set: { frontendCode: newCode } });
+    patched++;
+  }
+
+  res.json({ ok: true, patched, total: apps.length,
+    message: `Parcheadas ${patched} apps que contenían el texto` });
+});
+
 router.post("/admin/apps/patch-by-slug", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { slug, search, replace } = req.body ?? {};
