@@ -2863,9 +2863,10 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
 }
 
 REGLAS:
-- "included": solo lo que EXPLÍCITAMENTE pidió. Máx 4 items.
-- "extras": funcionalidades útiles que NO pidió. Máx 3. Si no hay extras claros, devuelve [].
-- "backendNeeded": true solo si el prompt pide auth, pagos, BD real, API propia.
+- Si el prompt menciona una URL o web de referencia (ej: "algo como dejalia.com", "al estilo airbnb"), úsala como inspiración para el title y summary. El title debe ser original, NO el nombre de la web de referencia.
+- "included": las funcionalidades clave que el usuario pidió o que tiene la web de referencia. Máx 4 items.
+- "extras": funcionalidades útiles que NO mencionó. Máx 3. Si no hay extras claros, devuelve [].
+- "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
 - Devuelve ÚNICAMENTE el JSON. Nada más.`,
       messages: [{ role: "user", content: `Prompt: "${cleanPrompt}"
 Tipo: ${kind || "fullstack"}` }],
