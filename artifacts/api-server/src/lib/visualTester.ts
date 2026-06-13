@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
-import puppeteer, { type Browser, type Page } from "puppeteer";
+// puppeteer importado dinámicamente para evitar crash al arrancar si no está instalado
+type Browser = any; type Page = any;
 import type { Logger } from "pino";
 import { GeneratedApp } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -112,6 +113,7 @@ async function launchBrowser(): Promise<Browser> {
       "Chromium no está instalado. Instálalo via Nix (paquete 'chromium').",
     );
   }
+  const { default: puppeteer } = await import("puppeteer");
   return await puppeteer.launch({
     headless: true,
     executablePath: exec,
