@@ -296,7 +296,7 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
-  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDeleteApp = async (e: React.MouseEvent, id: string, title: string) => {
     e.stopPropagation();
