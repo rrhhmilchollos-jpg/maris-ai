@@ -158,6 +158,7 @@ export default function DashboardPage() {
   // ─── Pre-Generation Chat (Emergent.sh style) ────────────────────────────────
   const [preGenChatOpen, setPreGenChatOpen] = useState(false);
   const [preGenChatGenerating, setPreGenChatGenerating] = useState(false);
+  const [inlineHint, setInlineHint] = useState<string | null>(null);
 
   // Legacy onboarding state (kept for reference, replaced by PreGenerationChat)
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -412,12 +413,11 @@ export default function DashboardPage() {
 
     // Si el prompt no parece una orden de generación, responder conversacionalmente
     if (!looksLikeBuildIntent(prompt)) {
-      toast({
-        title: "¿Quieres crear algo?",
-        description: 'Escribe qué app, web o landing page quieres construir y pulsa Generar. Por ejemplo: "Crea una tienda online de ropa".',
-      });
+      setInlineHint('Escribe qué quieres construir y pulsa Generar. Ej: \"Crea una app de reservas para mi restaurante\"');
+      setTimeout(() => setInlineHint(null), 4000);
       return;
     }
+    setInlineHint(null);
 
     if (!isAdmin && stats && stats.credits < kindCost) {
       toast({ title: "Créditos insuficientes", description: kindCost > 1 ? `Este tipo de proyecto cuesta ${kindCost} créditos y solo tienes ${stats.credits}. Compra más para continuar.` : "Compra más créditos para seguir generando apps.", variant: "destructive" });
@@ -584,7 +584,7 @@ export default function DashboardPage() {
                   placeholder={kindMeta.placeholder}
                   className="min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm text-white placeholder:text-white/20 p-4 pb-14"
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); }}
                   disabled={isWorking}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && e.metaKey) {
@@ -634,6 +634,14 @@ export default function DashboardPage() {
                 </div>
               </div>
               {attachments.length > 0 && <AttachmentChips attachments={attachments} onChange={setAttachments} />}
+
+              {/* Inline hint — dentro del panel de generación, NO como toast */}
+              {inlineHint && (
+                <div className="mx-0 mt-2 flex items-start gap-2 text-[12px] text-white/50 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <span className="shrink-0 mt-px">💡</span>
+                  <span>{inlineHint}</span>
+                </div>
+              )}
             </div>
 
             {/* Quick suggestions */}
