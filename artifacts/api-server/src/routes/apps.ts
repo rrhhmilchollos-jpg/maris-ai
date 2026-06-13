@@ -2594,6 +2594,40 @@ router.get("/models", requireAuth, async (req: any, res: any) => {
   res.json(availableModels);
 });
 
+// ── QUICK CHAT — Maris responde sin generar nada (para consultas en el dashboard) ──
+// POST /api/apps/quick-chat
+router.post("/apps/quick-chat", requireAuth, async (req: any, res: any) => {
+  try {
+    const { message } = req.body ?? {};
+    if (!message || typeof message !== "string") {
+      res.status(400).json({ error: "message requerido" }); return;
+    }
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      system: `Eres Maris, la IA de Maris AI — plataforma española para crear apps con IA.
+
+El usuario está en el dashboard principal y ha escrito algo que NO es una orden de generación. Respóndele de forma útil, cercana y directa en español.
+
+CONTEXTO: El dashboard sirve para crear apps. Si el usuario pregunta algo relacionado con crear apps, orléntale. Si pregunta algo general, respóndele con naturalidad.
+
+TONO: Como un asistente técnico amigable. Máximo 2-3 frases. Sin saludos formales. Sin "¿en qué más puedo ayudarte?".
+
+Si el usuario NO quiere crear nada ahora mismo → respóndele con normalidad sin insistir en que cree algo.
+Si tiene una duda técnica → resuélvela brevemente.
+Si saluda → responde brevemente y ofrece ayuda concreta.`,
+      messages: [{ role: "user", content: message.slice(0, 500) }],
+    });
+
+    const reply = (response.content[0] as any).text?.trim() ?? "¡Hola! Cuéntame qué necesitas.";
+    res.json({ ok: true, reply });
+  } catch (err) {
+    logger.error({ err }, "quick-chat error");
+    res.json({ ok: true, reply: "¡Hola! Estoy aquí. Si en algún momento quieres construir algo, solo descríbemelo." });
+  }
+});
+
 // ── PLAN PREVIEW — el arquitecto analiza el prompt y propone el plan al usuario ──
 // POST /api/apps/plan-preview
 // Devuelve un resumen del plan propuesto SIN generar código, para que el usuario
