@@ -270,12 +270,12 @@ Tienes acceso al estado de sus jobs recientes. Devuelve SOLO JSON:
   "canResolve": true/false,
   "confidence": 0-100,
   "reply": "respuesta completa en español al usuario (si canResolve=true)",
-  "action": "none|refund_credits|notify_team|auto_fix",
+  "action": "none|escalate|notify_team|auto_fix", // NUNCA refund_credits — los reembolsos requieren aprobación manual del admin
   "actionDetails": "detalles de la acción si aplica",
   "escalateReason": "por qué escalar si canResolve=false"
 }
 
-Resuelve si: el usuario pregunta cómo usar algo, hay un error en su app que puedes explicar, necesita saber el estado de su job, pide un reembolso pequeño (<20 créditos).
+Resuelve si: el usuario pregunta cómo usar algo, hay un error en su app que puedes explicar, necesita saber el estado de su job, el usuario tiene dudas operativas (NUNCA reembolsar automáticamente — escalar siempre al admin).
 Escala si: bug crítico de la plataforma, fraude, petición técnica compleja, queja grave.`,
       `Usuario: ${userEmail} | Plan: ${user?.plan || "free"} | Créditos: ${user?.credits || 0}
 
@@ -294,16 +294,12 @@ Mensaje: ${message}`
     } catch { /* escalar */ }
 
     if (parsed.canResolve && parsed.confidence >= 75 && parsed.reply) {
-      // Aplicar acción si se indica
-      if (parsed.action === "refund_credits") {
-        const amount = parseInt(parsed.actionDetails?.match(/\d+/)?.[0] || "5");
-        if (amount <= 20) {
-          await User.findByIdAndUpdate(userId, { $inc: { credits: amount } });
-          await CreditTransaction.create({
-            userId, kind: "refund", amount,
-            description: `Compensación automática por ticket #${ticketId}`,
-          });
-        }
+      // Los reembolsos NUNCA son automáticos — siempre requieren aprobación del admin.
+      // Si el sistema detecta que el usuario pide reembolso → escalar a soporte humano.
+      if (parsed.action === "refund_credits" || parsed.action === "refund") {
+        // Marcar el ticket como escalado en vez de reembolsar
+        parsed.action = "escalate";
+        parsed.reply = "Hemos recibido tu solicitud de reembolso. Nuestro equipo de soporte la revisará y te responderá en 24-48h. Por favor, espera nuestra respuesta.";
       }
 
       // Notificar al usuario con la respuesta

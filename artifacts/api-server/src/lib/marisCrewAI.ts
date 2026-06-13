@@ -380,7 +380,7 @@ export class MarisSuportCrew {
 Usuario: ${opts.userEmail}
 Asunto: ${opts.subject}
 Mensaje: ${opts.message}${opts.appContext ? `\nApps del usuario: ${opts.appContext}` : ""}`,
-      expectedOutput: `JSON: {"canResolve": bool, "confidence": 0-100, "reply": "respuesta si canResolve", "action": "none|refund|escalate", "reason": "por qué"}`,
+      expectedOutput: `JSON: {"canResolve": bool, "confidence": 0-100, "reply": "respuesta si canResolve", "action": "none|escalate" // Los reembolsos NUNCA son automáticos — siempre escalar al admin, "reason": "por qué"}`,
       agent: "pm_agent",
     };
 
