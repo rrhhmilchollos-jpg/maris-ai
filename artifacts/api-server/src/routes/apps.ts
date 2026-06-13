@@ -4297,6 +4297,48 @@ router.get("/apps/:id/styles/:file", async (req: any, res: any) => {
   }
 });
 
+// GET /api/apps/:id/preview-debug — diagnóstico del preview
+router.get("/apps/:id/preview-debug", async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const app = await GeneratedApp.findById(req.params.id).select("frontendCode title kind").lean() as any;
+    if (!app?.frontendCode) return res.status(404).json({ error: "App no encontrada" });
+
+    const bundleSize = app.frontendCode.length;
+    const files: string[] = [];
+    const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf("\n");
+      if (nl === -1) continue;
+      const p = part.slice(0, nl).trim().replace(/ ===$/, "");
+      if (p) files.push(p);
+    }
+
+    let esbuildError = null;
+    try {
+      const { buildDeployHtml } = await import("../lib/deployBundle");
+      await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
+    } catch (err: any) {
+      esbuildError = err?.message || String(err);
+    }
+
+    res.json({
+      appId: req.params.id,
+      title: app.title,
+      kind: app.kind,
+      bundleSize,
+      files,
+      hasMainTsx: files.some(f => f.includes("main.tsx") || f.includes("main.jsx")),
+      hasAppTsx: files.some(f => f.includes("App.tsx") || f.includes("App.jsx")),
+      esbuildError,
+      esbuildOk: !esbuildError,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();
@@ -4317,8 +4359,11 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
         /Content-Security-Policy[^<]*/g, ""
       );
       return res.send(patched);
-    } catch (esbuildErr) {
-      logger.warn({ err: esbuildErr, appId: req.params.id }, "esbuild failed, using Babel fallback");
+    } catch (esbuildErr: any) {
+      logger.warn({ err: esbuildErr?.message, appId: req.params.id }, "esbuild failed, using Babel fallback");
+      // Si esbuild falla, añadir header para debug
+      res.setHeader("X-Preview-Mode", "babel-fallback");
+      res.setHeader("X-Preview-Error", (esbuildErr?.message || "unknown").slice(0, 200));
     }
 
     // Extraer archivos del bundle
