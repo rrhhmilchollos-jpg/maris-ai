@@ -551,7 +551,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                       {(apps as any[]).map(a => (
                         <TableRow key={a.id} className="border-white/5 hover:bg-white/[0.02]">
                           <TableCell className="font-medium max-w-xs truncate">{a.title}</TableCell>
-                          <TableCell className="text-muted-foreground text-sm font-mono">{a.userEmail || a.userId.slice(0, 12)}</TableCell>
+                          <TableCell className="text-muted-foreground text-sm font-mono">{a.userEmail || a.userId}</TableCell>
                           <TableCell>
                             <div className="flex gap-1 flex-wrap">{a.techStack?.slice(0,3).map((t: string) => <Badge key={t} variant="outline" className="text-[10px] font-mono border-white/10">{t}</Badge>)}</div>
                           </TableCell>
@@ -699,7 +699,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                               <TableCell className="font-mono text-xs text-muted-foreground">{j.id.slice(0, 8)}…</TableCell>
                               <TableCell><JobStatusBadge status={j.status} stale={isStale} /></TableCell>
                               <TableCell className="font-mono text-xs text-muted-foreground">{j.phase}</TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground max-w-[160px] truncate">{j.userEmail || j.userId?.slice(0, 12)}</TableCell>
+                              <TableCell className="font-mono text-xs text-muted-foreground max-w-[160px] truncate">{j.userEmail || j.userId}</TableCell>
                               <TableCell className="max-w-xs truncate text-sm">{j.prompt}</TableCell>
                               <TableCell className="text-right font-mono text-xs">{j.retryCount}</TableCell>
                               <TableCell className="text-muted-foreground text-xs font-mono">{ageStr}</TableCell>
@@ -811,7 +811,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                     </div>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Registrado {format(new Date(selectedUser.createdAt), "d MMM yyyy", { locale: es })}</span>
-                      <span className="flex items-center gap-1"><Hash className="h-3 w-3" /> {selectedUser.id.slice(0, 16)}…</span>
+                      <span className="flex items-center gap-1 font-mono select-all cursor-text" title="Clic para seleccionar"><Hash className="h-3 w-3" /> {selectedUser.id}</span>
                     </div>
                   </div>
                   {/* Quick stats */}
