@@ -1304,7 +1304,7 @@ router.post("/admin/users/:id/regenerate-and-apologize", async (req: any, res: a
   });
 
   const { enqueueGenerateJob } = await import("../lib/jobQueue");
-  const { runJobById } = await import("../lib/jobRunner");
+  const { runJobById } = await import("./apps");
   await enqueueGenerateJob(jobId);
   runJobById(jobId).catch((err: any) => logger.error({ err, jobId }, "Admin regen job error"));
 
