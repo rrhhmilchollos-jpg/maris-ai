@@ -302,7 +302,7 @@ SCOPE LIMITS — crítico para que el frontend pueda generarse sin timeout:
 - Si el producto genuinamente necesita más, indica en "description" que es una versión MVP y el usuario puede pedir más páginas después.
 
 Rules:
-- NEVER collapse everything into one file. Each page/component/hook/util gets its own file.
+- File structure: each page/component/hook/util gets its own file. EXCEPTION: if the total planned files exceed 25, consolidate all hooks into one src/hooks/index.ts, all utils into src/utils/index.ts, and all small components (under 50 lines each) into src/components/ui.tsx. This prevents token limit truncation on large apps.
 - techStack: 4-8 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
 - Output ONLY the JSON object.`;
 
@@ -853,10 +853,23 @@ async function generateFrontendCode(
   });
   const designSummary = JSON.stringify(design);
 
+  // Para apps con muchos archivos, consolidar todo en App.tsx para evitar truncación
+  const totalFiles = plan.frontendFiles?.length || 0;
+  const useSingleFile = totalFiles > 20 || isFreeUser;
+  const fileStrategyNote = useSingleFile
+    ? `
+
+CRITICAL FILE STRATEGY — esta app tiene ${totalFiles} archivos planificados. Para evitar truncación por límite de tokens:
+- Pon TODO el código React en src/App.tsx (tipos, utils, hooks, componentes, páginas, router — TODO en un solo archivo)
+- Los únicos archivos separados permitidos son: index.html, package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, postcss.config.js, src/main.tsx, src/index.css
+- NUNCA crees archivos separados para hooks, componentes o páginas
+- El App.tsx puede tener 1500-2000 líneas — eso está bien y es preferible a truncarse`
+    : "";
+
   const userContent = `User request: ${prompt}
 ${templateContext ? `\n${templateContext}\n` : ""}
 Project plan (you MUST implement every listed file):
-${planSummary}
+${planSummary}${fileStrategyNote}
 
 Design system (apply EXACTLY in tailwind.config.ts theme.extend and src/index.css):
 ${designSummary}
