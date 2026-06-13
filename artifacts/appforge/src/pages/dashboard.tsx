@@ -295,6 +295,10 @@ export default function DashboardPage() {
     if (me?.isPremium && coderModel === "auto") setCoderModel("auto");
   }, [me?.isPremium, coderModel]);
 
+  const { data: stats, isLoading: statsLoading } = useGetMyStats();
+  const { data: apps, isLoading: appsLoading } = useListApps();
+  const isAdmin = !!me?.isAdmin;
+
   // Mostrar overlay automáticamente si los créditos llegan a 0
   useEffect(() => {
     if (!isAdmin && stats && stats.credits <= 0) {
@@ -303,9 +307,6 @@ export default function DashboardPage() {
       setShowNoCredits(false);
     }
   }, [stats?.credits, isAdmin]);
-  const { data: stats, isLoading: statsLoading } = useGetMyStats();
-  const { data: apps, isLoading: appsLoading } = useListApps();
-  const isAdmin = !!me?.isAdmin;
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDeleteApp = async (e: React.MouseEvent, id: string, title: string) => {
