@@ -31,29 +31,34 @@ router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> =
     const ticketId = String(newTicket._id);
     const user = await User.findById(userId, { email: 1, credits: 1 }).lean().catch(() => null) as any;
 
-    // ── IA Autopilot: intenta resolver el ticket automáticamente ──
+    // ── MarisCrewAI + Autopilot: resuelve el ticket automáticamente ──
     let aiResolved = false;
     try {
-      const { handleSupportTicketWithAI } = await import("../lib/aiAutopilot");
-      const result = await handleSupportTicketWithAI({
-        userEmail: user?.email || "",
-        userId,
-        subject,
-        message,
-        ticketId,
-      });
-      if (result.resolved) {
-        // Marcar ticket como resuelto por IA
+      const { MarisSuportCrew } = await import("../lib/marisCrewAI");
+      const crew = new MarisSuportCrew();
+      const crewResult = await crew.handleTicket({ userId, userEmail: user?.email || "", subject, message });
+      if (crewResult.resolved && crewResult.reply) {
         await Ticket.findByIdAndUpdate(ticketId, {
           $set: { status: "resolved" },
-          $push: { responses: { role: "assistant", content: `🤖 Respuesta automática del sistema:
-
-${result.reply}`, createdAt: new Date() } },
+          $push: { responses: { role: "assistant", content: `🤖 ${crewResult.reply}`, createdAt: new Date() } },
         });
         aiResolved = true;
-        logger.info({ ticketId }, "Ticket resuelto automáticamente por IA Autopilot");
+        logger.info({ ticketId }, "Ticket resuelto por MarisCrewAI");
       }
-    } catch { /* no bloquear si falla la IA */ }
+    } catch (crewErr) {
+      logger.warn({ crewErr }, "CrewAI failed, fallback to Autopilot");
+      try {
+        const { handleSupportTicketWithAI } = await import("../lib/aiAutopilot");
+        const result = await handleSupportTicketWithAI({ userEmail: user?.email || "", userId, subject, message, ticketId });
+        if (result.resolved) {
+          await Ticket.findByIdAndUpdate(ticketId, {
+            $set: { status: "resolved" },
+            $push: { responses: { role: "assistant", content: `🤖 ${result.reply}`, createdAt: new Date() } },
+          });
+          aiResolved = true;
+        }
+      } catch { /* no bloquear */ }
+    }
 
     // Solo notificar a Ivan si la IA no pudo resolverlo
     if (!aiResolved) {
