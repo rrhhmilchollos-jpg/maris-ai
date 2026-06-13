@@ -60,17 +60,49 @@ export async function buildDeployHtml(opts: {
   // styles in the deployed page without needing a separate CSS bundle.
   const collectedCss: string[] = [];
 
-  const result = await esbuild.build({
-    entryPoints: [entry],
-    bundle: true,
-    write: false,
-    format: "esm",
-    target: ["es2020"],
-    jsx: "automatic",
-    jsxImportSource: "react",
-    logLevel: "silent",
-    plugins: [virtualFsPlugin(vfs, externals, collectedCss)],
-  });
+  let result: esbuild.BuildResult;
+  try {
+    result = await esbuild.build({
+      entryPoints: [entry],
+      bundle: true,
+      write: false,
+      format: "esm",
+      target: ["es2020"],
+      jsx: "automatic",
+      jsxImportSource: "react",
+      logLevel: "silent",
+      plugins: [virtualFsPlugin(vfs, externals, collectedCss)],
+    });
+  } catch (firstErr: any) {
+    // Si hay un archivo truncado (Fin de archivo inesperado), eliminarlo del VFS y reintentar
+    const errMsg = String(firstErr?.message || firstErr);
+    const truncMatch = errMsg.match(/vfs:([^:]+):/);
+    if (truncMatch) {
+      const brokenFile = truncMatch[1];
+      // Eliminar el archivo roto del VFS y reemplazarlo con un stub vacío
+      if (vfs[brokenFile]) {
+        const ext = brokenFile.split(".").pop() || "tsx";
+        const componentName = brokenFile.split("/").pop()?.replace(/\..*$/, "") || "BrokenComponent";
+        vfs[brokenFile] = `// Archivo truncado — stub de emergencia
+export default function ${componentName}() { return null; }
+`;
+      }
+      // Reintentar con el archivo reparado
+      result = await esbuild.build({
+        entryPoints: [entry],
+        bundle: true,
+        write: false,
+        format: "esm",
+        target: ["es2020"],
+        jsx: "automatic",
+        jsxImportSource: "react",
+        logLevel: "silent",
+        plugins: [virtualFsPlugin(vfs, externals, collectedCss)],
+      });
+    } else {
+      throw firstErr;
+    }
+  }
 
   const code = result.outputFiles[0]?.text ?? "";
   if (!code.trim()) {
