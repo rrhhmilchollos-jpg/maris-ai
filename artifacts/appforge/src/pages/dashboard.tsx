@@ -116,7 +116,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchNotifs = async () => {
       try {
-        const data = await apiFetch<any>("/notifications");
+        const data = await apiFetch<any>("/api/notifications");
         const unread = (data.notifications || []).filter((n: any) => !n.read);
         setNotifications(unread);
       } catch { /* silencioso */ }
@@ -128,7 +128,7 @@ export default function DashboardPage() {
 
   const dismissNotif = async (id: string) => {
     setNotifDismissed(p => new Set([...p, id]));
-    try { await apiFetch<any>(`/notifications/${id}/read`, { method: "PATCH" }); } catch { /* silencioso */ }
+    try { await apiFetch<any>(`/api/notifications/${id}/read`, { method: "PATCH" }); } catch { /* silencioso */ }
   };
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
