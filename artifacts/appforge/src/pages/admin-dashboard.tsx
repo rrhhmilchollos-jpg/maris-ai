@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -1352,6 +1352,83 @@ Contenido 100% real y coherente con seguxat.es. Todos los artículos con texto c
   );
 }
 
+function ClerkSyncPanel() {
+  const [clerkData, setClerkData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+  const { toast } = useToast();
+
+  const loadClerkCount = async () => {
+    setLoading(true);
+    try {
+      const d = await apiFetch<any>("/api/admin/clerk-users");
+      setClerkData(d);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  const syncUsers = async () => {
+    setSyncing(true);
+    try {
+      const d = await apiFetch<any>("/api/admin/sync-clerk-users", { method: "POST" });
+      toast({ title: "Sincronización completada", description: d.message });
+      await loadClerkCount();
+    } catch (e: any) {
+      toast({ title: "Error al sincronizar", description: e.message, variant: "destructive" });
+    } finally { setSyncing(false); }
+  };
+
+  return (
+    <Card className="bg-card/40 border-white/5">
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="h-4 w-4 text-violet-400" />
+          Usuarios Clerk vs MongoDB
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Clerk tiene todos los registrados. MongoDB solo los que han interactuado con la app.
+        </p>
+        {clerkData && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-background/40 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-violet-400">{clerkData.clerkTotal}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">En Clerk</div>
+            </div>
+            <div className="bg-background/40 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold">{clerkData.mongoTotal}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">En MongoDB</div>
+            </div>
+            <div className={`bg-background/40 rounded-lg p-3 text-center border ${clerkData.diff > 0 ? "border-amber-500/30" : "border-green-500/30"}`}>
+              <div className={`text-2xl font-bold ${clerkData.diff > 0 ? "text-amber-400" : "text-green-400"}`}>
+                {clerkData.diff > 0 ? `+${clerkData.diff}` : "✓"}
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                {clerkData.diff > 0 ? "Sin sincronizar" : "Sincronizado"}
+              </div>
+            </div>
+          </div>
+        )}
+        {clerkData?.diff > 0 && (
+          <p className="text-xs text-amber-400/80">{clerkData.message}</p>
+        )}
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant="outline" onClick={loadClerkCount} disabled={loading} className="text-xs">
+            {loading ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Consultando...</> : "🔍 Ver recuento Clerk"}
+          </Button>
+          {clerkData?.diff > 0 && (
+            <Button size="sm" onClick={syncUsers} disabled={syncing} className="text-xs bg-violet-600 hover:bg-violet-700 text-white">
+              {syncing ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Sincronizando...</> : `⚡ Sincronizar ${clerkData.diff} nuevos`}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2074,6 +2151,9 @@ export default function AdminDashboardPage() {
 
               {/* SYSTEM TAB */}
               <TabsContent value="system" className="space-y-4">
+                {/* Clerk Users Sync Panel */}
+                <ClerkSyncPanel />
+
                 {/* Email Alerts Card */}
                 <Card className="bg-card/40 border-white/5">
                   <CardHeader>
