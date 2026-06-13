@@ -4164,6 +4164,42 @@ function extractFileList(bundle: string): string[] {
 }
 
 // ── PREVIEW ENDPOINT — sirve el bundle HTML directamente ──────────────
+// ── Sirve archivos individuales del bundle (CSS, assets) ─────────────────────
+// GET /api/apps/:id/styles/:file  (ej: animations.css)
+// GET /api/apps/:id/assets/:file
+router.get("/apps/:id/styles/:file", async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const app = await GeneratedApp.findById(req.params.id).select("frontendCode").lean() as any;
+    if (!app?.frontendCode) return res.status(404).type("text/css").send("/* not found */");
+
+    const filename = req.params.file;
+    const files: Record<string, string> = {};
+    const parts = (app.frontendCode as string).split(/\/\/ === FILE: /);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf("\n");
+      if (nl === -1) continue;
+      const p = part.slice(0, nl).trim().replace(/ ===$/, "");
+      if (p) files[p] = part.slice(nl + 1);
+    }
+
+    // Buscar el archivo por nombre exacto o por path parcial
+    const cssContent = files[`src/styles/${filename}`]
+      || files[`styles/${filename}`]
+      || files[filename]
+      || Object.entries(files).find(([k]) => k.endsWith(`/${filename}`) || k.endsWith(filename))?.[1]
+      || "";
+
+    res.setHeader("Content-Type", "text/css; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.send(cssContent || `/* ${filename} not found in bundle */`);
+  } catch (err) {
+    res.status(500).type("text/css").send("/* error */");
+  }
+});
+
 router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();
