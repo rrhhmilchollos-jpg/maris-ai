@@ -677,27 +677,17 @@ router.get("/admin/clerk-users", async (_req, res): Promise<void> => {
     await connectDB();
     const { clerkClient } = await import("@clerk/express");
 
-    // Contar usuarios en Clerk (paginando de 100 en 100)
-    let clerkTotal = 0;
-    let offset = 0;
-    const limit = 100;
-    while (true) {
-      const page = await clerkClient.users.getUserList({ limit, offset });
-      clerkTotal += page.data.length;
-      if (page.data.length < limit) break;
-      offset += limit;
-      if (offset > 10000) break; // safety cap
-    }
-
+    // Usar getCount() — más rápido que paginar
+    const clerkTotal = await clerkClient.users.getCount();
     const mongoTotal = await User.countDocuments();
-    const newInClerkNotMongo = clerkTotal - mongoTotal;
+    const diff = Math.max(0, clerkTotal - mongoTotal);
 
     res.json({
       clerkTotal,
       mongoTotal,
-      diff: newInClerkNotMongo,
-      message: newInClerkNotMongo > 0
-        ? `Hay ${newInClerkNotMongo} usuario(s) en Clerk que aún no han interactuado con la app`
+      diff,
+      message: diff > 0
+        ? `Hay ${diff} usuario(s) en Clerk que aún no han interactuado con la app`
         : "MongoDB está sincronizado con Clerk"
     });
   } catch (err) {
