@@ -14,6 +14,8 @@ export interface IUser {
   hasEverPaid?: boolean;       // true en cuanto Stripe confirma el primer pago
   firstPaidAt?: Date;          // fecha del primer pago confirmado
   registrationIp?: string;
+  lastLoginIp?: string;
+  lastLoginAt?: Date;
   // Moderación
   isSuspended?: boolean;
   suspendedAt?: Date;
@@ -58,6 +60,8 @@ const UserSchema = new Schema<IUser>(
     hasEverPaid: { type: Boolean, default: false },
     firstPaidAt: { type: Date },
     registrationIp: { type: String },
+    lastLoginIp: { type: String },
+    lastLoginAt: { type: Date },
     // Moderación
     isSuspended: { type: Boolean, default: false },
     suspendedAt: { type: Date },

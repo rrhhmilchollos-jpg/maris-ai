@@ -52,6 +52,12 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
   // Ruta principal: el usuario actual ya está guardado con el ID de Clerk como _id.
   const existing = await User.findById(clerkUserId).lean<IUser>();
   if (existing) {
+    // Actualizar IP y timestamp del último login
+    if (ip && (existing.lastLoginIp !== ip || !existing.lastLoginAt)) {
+      await User.findByIdAndUpdate(clerkUserId, {
+        $set: { lastLoginIp: ip, lastLoginAt: new Date() }
+      });
+    }
     return ensureAdminCredits(existing);
   }
  

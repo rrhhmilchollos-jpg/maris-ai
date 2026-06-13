@@ -90,6 +90,8 @@ interface AdminUser {
   suspendReason?: string | null;
   banReason?: string | null;
   registrationIp?: string | null;
+  lastLoginIp?: string | null;
+  lastLoginAt?: string | null;
   lastLoginAt?: string | null;
   totalSpent?: number;
   plan?: string;
@@ -878,6 +880,9 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                           <InfoRow label="Email" value={selectedUser.email} />
                           <InfoRow label="Plan" value={<Badge variant="outline" className="text-[10px] border-white/10">{selectedUser.plan || "free"}</Badge>} />
                           <InfoRow label="Registrado" value={format(new Date(selectedUser.createdAt), "d MMM yyyy 'a las' HH:mm", { locale: es })} />
+                          {selectedUser.lastLoginIp && (
+                            <InfoRow label="Última IP" value={<span className="font-mono text-xs">{selectedUser.lastLoginIp}</span>} />
+                          )}
                           {selectedUser.registrationIp && (
                             <InfoRow label="IP de registro" value={<span className="font-mono text-xs">{selectedUser.registrationIp}</span>} />
                           )}
