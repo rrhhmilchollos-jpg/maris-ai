@@ -1891,8 +1891,8 @@ export async function generateApp(
     }
 
     onProgress?.({ phase: "generating", progress: 20, note: "Aplicando cambios al código…" });
-    await log("system", `Empezando a editar tu app (${Math.round(previous.frontendCode.length / 1000)} KB de código).`);
-    await log("coder", "Calentando motores…");
+    await log("system", `Revisando el código de tu app (${Math.round(previous.frontendCode.length / 1000)} KB) antes de aplicar los cambios…`);
+    await log("coder", "Empezando a escribir el código de tu app…");
     const TARGET = 50_000;
     let lastHeartbeatAt = Date.now();
     const onChars = (chars: number) => {
@@ -1910,7 +1910,7 @@ export async function generateApp(
       if (execPlan.phases.includes("architect")) await log("architect", "Re-arquitectando para acomodar la nueva funcionalidad…");
       if (execPlan.phases.includes("frontend")) await log("coder", "Frontend: aplicando la nueva funcionalidad…");
     } else {
-      await log("coder", "Pensando…");
+      await log("coder", "Aplicando los cambios solicitados…");
     }
     const result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
     log("coder", "Código listo, comprobando que todo encaje…");
@@ -1959,7 +1959,7 @@ export async function generateApp(
   }
 
   onProgress?.({ phase: "architecting", progress: 14, note: "🧠 Diseñando la arquitectura de tu app…" });
-  await log("architect", "Diseñando estructura del proyecto…");
+  await log("architect", "Analizando tu idea y diseñando la estructura de la app…");
 
   // Heartbeat del arquitecto — actualiza updatedAt cada 25s Y escribe log cada 90s
   // Necesario porque el architect puede tardar 10-15 min en apps complejas
@@ -1970,7 +1970,7 @@ export async function generateApp(
       if (jobId) await GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } });
       // Escribir log visible cada 90s (3 ticks × 30s) para mantener vivo el zombie detector
       if (architectHeartbeatCount % 3 === 0) {
-        await log("architect", "⏳ Diseñando estructura…");
+        await log("architect", "Planificando páginas y componentes…");
       }
     } catch { /* swallow */ }
   }, 30_000);
@@ -2125,7 +2125,7 @@ export async function generateApp(
   let backendResult = null;
   if (runBackend) {
     backendResult = await runPhase("backend", async () => {
-      await log("coder", "Generando backend a petición del usuario para mayor control...");
+      await log("coder", "Construyendo el backend — API, rutas y base de datos…");
       return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan);
     });
   } else if (execPlan.phases.includes("backend") && plan.backendNeeded) {
@@ -2598,33 +2598,105 @@ router.get("/models", requireAuth, async (req: any, res: any) => {
 // POST /api/apps/quick-chat
 router.post("/apps/quick-chat", requireAuth, async (req: any, res: any) => {
   try {
-    const { message } = req.body ?? {};
+    const { message, history = [], appContext } = req.body ?? {};
     if (!message || typeof message !== "string") {
       res.status(400).json({ error: "message requerido" }); return;
     }
 
+    // Detectar feedback negativo para el loop de mejora
+    const msgLower = message.toLowerCase();
+    const negativeFeedback = /no era lo que|no es lo que|esto no está bien|esto no esta bien|no me gusta|está mal|esta mal|no funciona bien|no es correcto|incorrecto|equivocado|mal resultado/.test(msgLower);
+    const positiveFeedback = /muy bien|perfecto|excelente|genial|me gusta|está bien|esta bien|bien hecho|gracias|funciona bien/.test(msgLower);
+    const feedbackType = negativeFeedback ? "negative" : positiveFeedback ? "positive" : null;
+
+    // Construir historial para contexto
+    const historyMessages = (Array.isArray(history) ? history : [])
+      .slice(-6)
+      .map((m: any) => ({
+        role: m.role === "user" ? "user" as const : "assistant" as const,
+        content: String(m.text || "").slice(0, 300),
+      }));
+
+    const appContextBlock = appContext
+      ? `\n\nApps del usuario: ${appContext}`
+      : "";
+
+    const systemPrompt = `Eres Maris, la IA de Maris AI — plataforma española para crear apps con IA.
+
+El usuario está en el panel principal. Respóndele de forma útil, cercana y directa en español.${appContextBlock}
+
+PRECIOS ACTUALES DE MARIS AI (úsalos si pregunta):
+- Plan Gratuito: 3 créditos al registrarse, sin tarjeta
+- Plan Pro: 20€/mes — 50 créditos/mes
+- Plan Startup: 49€/mes — 150 créditos/mes
+- Coste por generación: 1-5 créditos según tipo (landing=1cr, app completa=3cr, juego 3D=5cr)
+
+CAPACIDADES:
+- Genera apps React + TypeScript + Tailwind completas
+- Frontend + Backend (Node/Express) + MongoDB
+- Deploy a Vercel con un clic
+- 9 agentes IA especializados trabajando en paralelo
+
+TONO: Cercano, directo, máximo 2-3 frases. Sin "¿en qué más puedo ayudarte?". Sin saludos formales. Si el usuario tiene apps, úsalas como contexto.`;
+
+    const messages: any[] = [
+      ...historyMessages,
+      { role: "user", content: message.slice(0, 500) },
+    ];
+
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
-      system: `Eres Maris, la IA de Maris AI — plataforma española para crear apps con IA.
-
-El usuario está en el dashboard principal y ha escrito algo que NO es una orden de generación. Respóndele de forma útil, cercana y directa en español.
-
-CONTEXTO: El dashboard sirve para crear apps. Si el usuario pregunta algo relacionado con crear apps, orléntale. Si pregunta algo general, respóndele con naturalidad.
-
-TONO: Como un asistente técnico amigable. Máximo 2-3 frases. Sin saludos formales. Sin "¿en qué más puedo ayudarte?".
-
-Si el usuario NO quiere crear nada ahora mismo → respóndele con normalidad sin insistir en que cree algo.
-Si tiene una duda técnica → resuélvela brevemente.
-Si saluda → responde brevemente y ofrece ayuda concreta.`,
-      messages: [{ role: "user", content: message.slice(0, 500) }],
+      max_tokens: 350,
+      system: systemPrompt,
+      messages,
     });
 
     const reply = (response.content[0] as any).text?.trim() ?? "¡Hola! Cuéntame qué necesitas.";
-    res.json({ ok: true, reply });
+    res.json({
+      ok: true,
+      reply,
+      feedbackDetected: !!feedbackType,
+      feedbackType,
+    });
   } catch (err) {
     logger.error({ err }, "quick-chat error");
-    res.json({ ok: true, reply: "¡Hola! Estoy aquí. Si en algún momento quieres construir algo, solo descríbemelo." });
+    res.json({ ok: true, reply: "¡Hola! Estoy aquí. ¿Tienes alguna duda o quieres construir algo?" });
+  }
+});
+
+// ── FEEDBACK LOOP — guarda patrones de insatisfacción para mejorar generaciones ──
+router.post("/apps/feedback", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const userId = req.userId!;
+    const { message, type, appId } = req.body ?? {};
+    if (!message || !type) { res.json({ ok: true }); return; }
+
+    // Guardar en agentMemory para que futuras generaciones del usuario sean mejores
+    const { AgentMemory } = await import("@workspace/db/schema");
+    const existing = await AgentMemory.findOne({ userId }).lean() as any;
+    const feedbackKey = type === "negative" ? "negativeFeedback" : "positiveFeedback";
+    const entry = { message: message.slice(0, 200), appId, createdAt: new Date().toISOString() };
+
+    if (existing) {
+      const current = existing[feedbackKey] || [];
+      current.push(entry);
+      // Máximo 20 entradas por tipo
+      await AgentMemory.findByIdAndUpdate(existing._id, {
+        $set: { [feedbackKey]: current.slice(-20), updatedAt: new Date() }
+      });
+    } else {
+      await AgentMemory.create({
+        userId,
+        [feedbackKey]: [entry],
+      });
+    }
+
+    logger.info({ userId, type, messagePreview: message.slice(0, 50) }, "feedback loop: entrada guardada");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.warn({ err }, "feedback loop error — ignorando");
+    res.json({ ok: true });
   }
 });
 
