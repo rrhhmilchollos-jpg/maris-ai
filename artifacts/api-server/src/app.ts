@@ -13,6 +13,7 @@ import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
 import adminRouter from "./routes/admin";
 import { logger } from "./lib/logger";
+import clerkWebhookRouter from "./routes/clerkWebhook";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import { metricsMiddleware } from "./lib/metrics";
@@ -227,6 +228,8 @@ app.use("/api", apiRateLimiter);
 // In-memory request/error/duration counters for /api/admin/metrics.
 app.use("/api", metricsMiddleware);
  
+// Clerk webhook — sin auth, con firma propia
+app.use("/api", clerkWebhookRouter);
 app.use("/api", router);
 app.use("/api", ticketsRouter);
 app.use("/api", newsRouter);
