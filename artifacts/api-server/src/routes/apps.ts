@@ -4001,7 +4001,9 @@ export async function runJobById(jobId: string): Promise<void> {
     }
 
     // ── 2. QUALITY CHECK — evaluación de calidad con IA ──────────────────────
-    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000) {
+    // NUNCA ejecutar en jobs de reparación automática — evita bucle infinito
+    const isAutoRepairJob = (job.prompt || "").includes("[ADMIN REPAIR]") || (job as any).autoFixedFromJobId;
+    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000 && !isAutoRepairJob) {
       try {
         const { evaluateJobQuality } = await import("../lib/aiAutopilot");
         const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
