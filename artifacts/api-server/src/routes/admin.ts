@@ -302,6 +302,7 @@ router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<
 
 // ─── Get user apps ────────────────────────────────────────────────────────────
 router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> => {
+  try {
   await connectDB();
   const limit = Math.min(Number(req.query.limit) || 20, 50);
   const id = req.params.id;
@@ -341,6 +342,10 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
       createdAt: a.createdAt?.toISOString?.() ?? "",
     }))
   });
+  } catch (err: any) {
+    logger.error({ err: err?.message, userId: req.params.id }, "admin/users/:id/apps error");
+    res.status(500).json({ error: err?.message || "Error interno" });
+  }
 });
 
 router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void> => {
@@ -488,7 +493,6 @@ router.get("/admin/apps", async (_req, res) => {
   await connectDB();
   const apps = await GeneratedApp.find({})
     .sort({ createdAt: -1 })
-    .allowDiskUse(true)
     .limit(200)
     .lean();
 
