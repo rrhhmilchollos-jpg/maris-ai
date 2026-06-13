@@ -204,6 +204,38 @@ router.get("/admin/users/search", async (req: any, res: any): Promise<void> => {
 });
 
 // ─── Ban / Unban user ─────────────────────────────────────────────────────────
+
+// DELETE /api/admin/users/:id — eliminar usuario y todos sus datos
+router.delete("/admin/users/:id", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { id } = req.params;
+
+  try {
+    const user = await User.findById(id).lean() as any;
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+
+    if (isAdminEmail(user.email)) {
+      res.status(403).json({ error: "No se puede eliminar una cuenta de administrador" });
+      return;
+    }
+
+    // Eliminar en orden: jobs → apps → transacciones → usuario
+    const jobs = await GenerationJob.find({ userId: id }).select("appId").lean();
+    const appIds = [...new Set(jobs.map((j: any) => j.appId).filter(Boolean))];
+
+    await GenerationJob.deleteMany({ userId: id });
+    if (appIds.length > 0) await GeneratedApp.deleteMany({ _id: { $in: appIds } });
+    await CreditTransaction.deleteMany({ userId: id });
+    await User.findByIdAndDelete(id);
+
+    logger.info({ userId: id, email: user.email, appsDeleted: appIds.length }, "Admin: usuario eliminado permanentemente");
+    res.json({ ok: true, email: user.email, appsDeleted: appIds.length, jobsDeleted: jobs.length });
+  } catch (err) {
+    logger.error({ err, userId: id }, "Admin: error eliminando usuario");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 router.post("/admin/users/:id/ban", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { reason } = req.body;

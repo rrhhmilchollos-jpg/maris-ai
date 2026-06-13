@@ -1144,9 +1144,16 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                             variant="outline"
                             size="sm"
                             className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                            onClick={() => {
-                              if (confirm(`¿Eliminar PERMANENTEMENTE la cuenta de ${selectedUser.email}? Esta acción no se puede deshacer.`)) {
-                                toast({ title: "Función en desarrollo", description: "La eliminación de cuentas requiere confirmación adicional.", variant: "destructive" });
+                            onClick={async () => {
+                              if (!confirm(`¿Eliminar PERMANENTEMENTE la cuenta de ${selectedUser.email}?\n\nEsto borrará todas sus apps, jobs y créditos. No se puede deshacer.`)) return;
+                              if (!confirm(`Segunda confirmación: ¿estás seguro de eliminar a ${selectedUser.email}?`)) return;
+                              try {
+                                const d = await apiFetch<any>(`/api/admin/users/${selectedUser.id}`, { method: "DELETE" });
+                                toast({ title: "Cuenta eliminada", description: `${d.email} eliminado. ${d.appsDeleted} apps y ${d.jobsDeleted} jobs borrados.` });
+                                setSelectedUser(null);
+                                queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+                              } catch (e: any) {
+                                toast({ title: "Error al eliminar", description: e.message, variant: "destructive" });
                               }
                             }}
                           >
