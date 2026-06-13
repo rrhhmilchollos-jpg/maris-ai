@@ -283,7 +283,7 @@ export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<Agent
     systemPrompt,
     userMessage,
     model = "claude-sonnet-4-6",
-    maxIterations = 8,
+    maxIterations = 5,
     ctx = {},
     onToolCall,
   } = opts;
@@ -299,7 +299,7 @@ export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<Agent
 
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: 2048,
       system: systemPrompt,
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? { type: "auto" } : undefined,

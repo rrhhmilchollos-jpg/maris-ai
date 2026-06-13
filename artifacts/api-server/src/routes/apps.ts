@@ -853,8 +853,8 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     } catch (err) {
       logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
       const streamed = await streamClaudeTextWithFallback("frontend", "claude-sonnet-4-6", {
-        max_tokens: 64000,
-        system: systemPrompt,
+        max_tokens: 28000,
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userContent }],
       }, (chars) => { onChars(chars); onPartial?.(accumulated); });
       accumulated = streamed.text;
@@ -862,8 +862,8 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
   } else {
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
-      max_tokens: 64000,
-      system: systemPrompt,
+      max_tokens: 28000,
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userContent }],
     }, (chars) => { onChars(chars); onPartial?.(accumulated); });
     accumulated = streamed.text;
@@ -1005,7 +1005,7 @@ RULES — non-negotiable:
       "frontend",
       "claude-haiku-4-5-20251001",
       {
-        max_tokens: 16000,
+        max_tokens: 10000,
         system: systemPrompt,
         messages: [{ role: "user", content: `Create a landing page for:\n\n${prompt}${designNote}${researchNote}\n\nReturn ONLY JSON: {"frontendCode":"..."}` }],
       },
@@ -1675,7 +1675,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
     } else if (provider === "claude") {
       const stream = anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 32000,
+        max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
@@ -1692,7 +1692,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
 // Claude streaming según el modelo elegido en el selector.
       const stream = await anthropic.messages.stream({
         model: resolveClaudeCoderModel(coderModel),
-        max_tokens: 32000,
+        max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
       });
@@ -2192,7 +2192,7 @@ export async function generateApp(
 
       // ── SPECULATIVE GENERATION — para apps básicas/standard lanzamos 2 variantes en paralelo
       // La más rápida y válida gana. Reduce tiempo de generación ~40%.
-      if (complexity.score <= 3 && !previous) {
+      if (complexity.score <= 1 && !previous) { // Solo landing pages — score ≤ 1 para ahorrar tokens
         try {
           const { speculativeRace, buildStrategyModifier } = await import("../lib/speculativeGeneration");
           void log("system", "⚡ Generación especulativa activa — 2 variantes en paralelo para mayor velocidad…");
@@ -2366,7 +2366,7 @@ export async function generateApp(
     onProgress?.({ phase: "fixing", progress: 65, note: "🔧 Repair Agent: intentando recuperar código malformado…" });
     try {
       const repairResponse = await createClaudeMessageWithFallback("repair", agentModelPlan.agents.repair.model, {
-        max_tokens: 16000,
+        max_tokens: 10000,
         system: `You are a JSON Repair Agent. The Frontend Engineer returned malformed JSON.
 Your job: extract or reconstruct the frontendCode and return ONLY valid JSON: {"frontendCode":"..."}
 The frontendCode must use '// === FILE: <path> ===' separators between files.
