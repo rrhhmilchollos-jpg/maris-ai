@@ -1,4 +1,5 @@
 import { useEffect, useRef, lazy, Suspense } from "react";
+import { trackPageView } from "@/lib/analytics";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
@@ -192,6 +193,17 @@ function ClerkQueryClientCacheInvalidator() {
             }
           : null,
       );
+
+      // Trackear registro nuevo — si la cuenta tiene menos de 2 minutos
+      if (user) {
+        const createdAt = user.createdAt ? new Date(user.createdAt).getTime() : 0;
+        const isNewUser = Date.now() - createdAt < 2 * 60 * 1000;
+        if (isNewUser) {
+          import("@/lib/analytics").then(({ trackSignUp }) => {
+            trackSignUp(user.id, user.externalAccounts?.[0]?.provider || "email");
+          });
+        }
+      }
     });
     return unsubscribe;
   }, [addListener, queryClient]);
@@ -225,6 +237,12 @@ function Gated({ children }: { children: React.ReactNode }) {
 
 function AdminGuardInner({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser();
+  const [location] = useLocation();
+
+  // Trackear page views en SPA — GA4 no las detecta automáticamente con wouter
+  useEffect(() => {
+    trackPageView(location);
+  }, [location]);
   // ✅ CORREGIDO: retry 3 veces con 2s de delay para que Clerk tenga tiempo de autenticarse al recargar
   const { data: me, isLoading, isError } = useGetMe({
     query: { enabled: isLoaded && !!user, queryKey: getGetMeQueryKey(), retry: 3, retryDelay: 2000 },

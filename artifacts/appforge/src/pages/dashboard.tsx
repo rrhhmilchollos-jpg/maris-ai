@@ -384,6 +384,9 @@ export default function DashboardPage() {
       attachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
       setAttachments([]);
       toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
+      import("@/lib/analytics").then(({ trackAppSucceeded }) => {
+        trackAppSucceeded(kind, 0);
+      });
       setLocation(`/app/${appId}`);
     } else if (job.status === "failed") {
       toast({ title: "Falló la generación", description: job.errorMessage || "Inténtalo otra vez o ajusta el prompt.", variant: "destructive" });
@@ -504,6 +507,11 @@ export default function DashboardPage() {
       setLocation("/billing");
       return;
     }
+    // Trackear intención de generar
+    import("@/lib/analytics").then(({ trackGenerateApp }) => {
+      const isFirst = !apps || (apps as any[]).length === 0;
+      trackGenerateApp(kind, isFirst);
+    });
     openOnboarding();
   };
 
