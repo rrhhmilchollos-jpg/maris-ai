@@ -81,37 +81,6 @@ router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> 
 });
 
 
-// POST /api/inject-bundle — endpoint especial para inyección directa de bundle (requiere API key)
-// SOLO para uso interno de desarrollo — protegido por API key
-router.post("/inject-bundle", async (req: any, res: any): Promise<void> => {
-  const apiKey = req.headers["x-inject-key"] || req.body?.apiKey;
-  if (apiKey !== "maris-inject-2024-seguxat") {
-    res.status(403).json({ error: "Unauthorized" });
-    return;
-  }
-  await connectDB();
-  const { appId, frontendCode, title } = req.body ?? {};
-  if (!appId || !frontendCode) {
-    res.status(400).json({ error: "appId y frontendCode requeridos" });
-    return;
-  }
-  const update: any = { frontendCode };
-  if (title) update.title = title;
-  await GeneratedApp.findByIdAndUpdate(appId, { $set: update });
-  
-  // También eliminar apps de proyectos importados del usuario
-  if (req.body.deleteImported) {
-    const deleted = await GeneratedApp.deleteMany({
-      userId: req.body.userId,
-      title: { $regex: "Proyecto Importado", $options: "i" }
-    });
-    res.json({ ok: true, appId, size: frontendCode.length, deletedImported: deleted.deletedCount });
-    return;
-  }
-  
-  res.json({ ok: true, appId, size: frontendCode.length, title });
-});
-
 router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 
 router.get("/admin/overview", async (_req, res) => {
