@@ -139,16 +139,16 @@ export function PreGenerationChat({
         setPhase(p.extras.length > 0 ? "plan" : "ready");
       }, 1200);
     } catch (err) {
-      setLoadError("No pude analizar el prompt. ¿Generamos directamente?");
+      // Fallback: generar directamente sin mostrar error técnico al usuario
       setIsTyping(false);
       setTimeout(() => {
         setMessages(prev => [...prev, {
           role: "architect",
-          content: "No pude analizar el prompt automáticamente. ¿Tienes algún detalle extra que añadir antes de generar, o empezamos ya?",
+          content: `Perfecto, entendido. Voy a construir **"${initialPrompt.slice(0, 60)}${initialPrompt.length > 60 ? '…' : ''}"**. ¿Añades algún detalle más o empezamos ya?`,
           timestamp: new Date(),
         }]);
         setPhase("ready");
-      }, 800);
+      }, 600);
     }
   };
 
