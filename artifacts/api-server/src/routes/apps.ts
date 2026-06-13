@@ -3815,10 +3815,14 @@ export async function runJobById(jobId: string): Promise<void> {
         if (dbUser?.hasEverPaid || dbUser?.isPremium || (dbUser?.plan && dbUser?.plan !== "free")) {
           hasEverPaid = true;
         }
+        // Admin emails siempre tienen acceso completo
+        if (!hasEverPaid && dbUser?.email && isAdminEmail(dbUser.email)) {
+          hasEverPaid = true;
+        }
         // Si tiene apps previas, no tratarlo como cuenta nueva
         if (!hasEverPaid) {
           const appCount = await GeneratedApp.countDocuments({ userId: job.userId });
-          if (appCount > 0) hasEverPaid = true;
+          if (appCount > 1) hasEverPaid = true; // >1 porque esta misma generación puede contar
         }
       } catch { /* si falla la consulta, usar el valor del job */ }
     }

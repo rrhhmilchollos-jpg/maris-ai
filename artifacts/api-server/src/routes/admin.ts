@@ -348,6 +348,21 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   }
 });
 
+
+// POST /api/admin/users/:id/set-paid — marcar usuario como paid/free
+router.post("/admin/users/:id/set-paid", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { hasEverPaid = true, isPremium = true, plan = "paid" } = req.body ?? {};
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    { $set: { hasEverPaid, isPremium, plan } },
+    { new: true }
+  ).lean() as any;
+  if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+  logger.info({ userId: req.params.id, hasEverPaid, isPremium }, "Admin: usuario marcado como paid");
+  res.json({ ok: true, userId: req.params.id, hasEverPaid, isPremium, plan });
+});
+
 router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const targetId = req.params.id;
