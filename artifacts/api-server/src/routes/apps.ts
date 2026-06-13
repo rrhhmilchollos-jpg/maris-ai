@@ -2503,11 +2503,12 @@ function getConversationalOnlyReply(content: string, hasAttachments = false): st
 
   if (!isGreeting && !isVeryShortSmallTalk) return null;
 
-  return [
-    "¡Hola! Soy Maris AI. Estoy lista para construir contigo, pero no voy a gastar créditos por un saludo o una prueba corta.",
-    "",
-    "Si quieres que trabaje como consola de generación, dime qué cambio necesitas con contexto concreto. Por ejemplo: \"arregla el preview en móvil\", \"conecta estos botones a Stripe\" o \"añade una sección de planes de pago\".",
-  ].join("\n");
+  const replies = [
+    "Dime qué quieres cambiar en la app y lo hago. Por ejemplo: \"arregla el login\", \"añade un modo oscuro\" o \"conecta Stripe al botón de pago\".",
+    "Estoy aquí. Cuéntame qué necesitas — un cambio de diseño, una nueva función, algo que no funciona...",
+    "Listo para trabajar. ¿Qué modificamos?",
+  ];
+  return replies[Math.floor(Math.random() * replies.length)];
 }
 
 function stripRequestLocalePrefix(prompt: string | undefined): string {
@@ -2542,29 +2543,34 @@ function detectConsoleChangeAreas(prompt: string, result: any): string[] {
   return Array.from(areas).slice(0, 5);
 }
 
-function buildAppUpdatedConsoleReply(args: {
+async function buildAppUpdatedConsoleReply(args: {
   prompt: string;
   result: any;
   appTitle?: string;
   creditsRemaining?: number;
-}): string {
-  const { result, appTitle, creditsRemaining } = args;
+}): Promise<string> {
+  const { prompt, result, appTitle, creditsRemaining } = args;
   const title = result?.title || appTitle || "tu app";
   const frontendFiles = countBundleFiles(result?.frontendCode);
   const backendFiles = countBundleFiles(result?.backendCode);
   const totalFiles = (frontendFiles || 0) + (backendFiles || 0);
+  const hasBackend = (backendFiles || 0) > 0;
 
-  const emojis = ["🎉", "✨", "🚀", "💫", "⚡", "🔥"];
-  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+  try {
+    const { generateUpdateCompleteMessage } = await import("../lib/marisPersona");
+    return await generateUpdateCompleteMessage({
+      userRequest: prompt,
+      appTitle: title,
+      filesChanged: totalFiles,
+      hasBackend,
+      creditsRemaining,
+    });
+  } catch {
+    // Fallback si la IA falla
+    return `Hecho. Los cambios en **${title}** están guardados. Refresca el preview para verlos.`;
+  }
 
-  const mensajes = [
-    `${emoji} ¡Listo! He aplicado los cambios en **${title}**. Refresca la vista previa para verlos.`,
-    `${emoji} ¡Hecho! Tu app **${title}** ha sido actualizada. Dale a Refresh para verla al día.`,
-    `${emoji} ¡Ya está! He trabajado en **${title}** y todo queda guardado. Refresca para comprobar.`,
-    `${emoji} ¡Actualizado! **${title}** está lista con los últimos cambios. ¡Espero que te guste!`,
-  ];
-  const mensaje = mensajes[Math.floor(Math.random() * mensajes.length)];
-
+  // Legacy code kept for reference (unreachable):
   const filesLine = totalFiles > 0
     ? `\n\n_He modificado ${totalFiles} archivo${totalFiles > 1 ? "s" : ""}. Si algo no se ve bien, dímelo y lo corrijo._`
     : "";
@@ -2976,7 +2982,19 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
     });
 
     if (classified.intent === "question") {
-      const reply = classified.reply || "Puedo ayudarte con la app actual. Si quieres modificar código, descríbeme el cambio exacto; si quieres operar datos o CRM, lo enrutaré por ENGINE_EXEC sin recompilar.";
+      // Usar la persona unificada de Maris para responder con tono humano
+      let reply: string;
+      try {
+        const { generateMarisReply } = await import("../lib/marisPersona");
+        reply = await generateMarisReply({
+          userMessage: trimmedContent,
+          appTitle: app.title,
+          appDescription: app.description,
+          recentMessages: recentMessages.reverse().map((m: any) => ({ role: String(m.role), content: String(m.content || "").slice(0, 300) })),
+        });
+      } catch {
+        reply = classified.reply || "Dime qué quieres cambiar en la app y me pongo a ello.";
+      }
       await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
       await AppMessage.create({ appId: req.params.id, role: "assistant", content: reply });
       return res.status(200).json({
@@ -3488,7 +3506,7 @@ export async function runJobById(jobId: string): Promise<void> {
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",
-        content: buildAppUpdatedConsoleReply({
+        content: await buildAppUpdatedConsoleReply({
           prompt: job.prompt,
           result: finalResult,
           appTitle: previousApp?.title,
