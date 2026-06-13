@@ -11,7 +11,6 @@ import {
   useUpdateMyPreferences,
   useListTemplates,
   useCreateCheckoutSession,
-  useDeleteApp,
   getGetGenerationJobQueryKey,
   getGetMyStatsQueryKey,
   getListAppsQueryKey,
@@ -297,23 +296,22 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
-  const deleteMutation = useDeleteApp({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
-        toast({ title: "App eliminada", description: "La aplicación ha sido borrada permanentemente." });
-      },
-      onError: (error: any) => {
-        toast({ title: "Error al eliminar", description: error?.message || "No se pudo eliminar la aplicación.", variant: "destructive" });
-      },
-    },
-  });
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
-  const handleDeleteApp = (e: React.MouseEvent, id: string, title: string) => {
+  const handleDeleteApp = async (e: React.MouseEvent, id: string, title: string) => {
     e.stopPropagation();
-    if (confirm(`¿Estás seguro de que quieres eliminar permanentemente "${title}"? Esta acción no se puede deshacer.`)) {
-      deleteMutation.mutate({ id });
+    e.preventDefault();
+    if (!confirm(`¿Eliminar permanentemente "${title}"? Esta acción no se puede deshacer.`)) return;
+    setDeletingId(id);
+    try {
+      await apiFetch<void>(`/api/apps/${id}`, { method: "DELETE" });
+      queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+      toast({ title: "App eliminada", description: `"${title}" ha sido borrada permanentemente.` });
+    } catch (error: any) {
+      toast({ title: "Error al eliminar", description: error?.message || "No se pudo eliminar la aplicación.", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -937,7 +935,7 @@ export default function DashboardPage() {
                   <button
                     className="absolute top-2 right-2 z-10 p-1 rounded-full bg-black/40 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-0 group-hover:opacity-100"
                     onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)}
-                    disabled={deleteMutation.isPending}
+                    disabled={deletingId === (app.id || app._id)}
                     title="Eliminar proyecto"
                   >
                     <X className="h-3.5 w-3.5" />
