@@ -86,10 +86,11 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
   }
  
   // Lógica anti-abuso: verificar si el email o la IP ya han recibido créditos gratuitos.
-  const alreadyUsed = await User.findOne({
-    $or: [{ email }, { registrationIp: ip }],
-    freeCreditsUsed: true,
-  }).lean();
+  // NOTA: Solo bloqueamos si hay 3+ cuentas desde la misma IP (permite familias/hogares).
+  // El email sí bloquea siempre (no debería haber dos cuentas con el mismo email).
+  const emailAlreadyUsed = await User.findOne({ email, freeCreditsUsed: true }).lean();
+  const ipAbuseCount = ip ? await User.countDocuments({ registrationIp: ip, freeCreditsUsed: true }) : 0;
+  const alreadyUsed = emailAlreadyUsed || ipAbuseCount >= 3;
 
   const shouldGiveFreeCredits = !isAdminEmail(email) && !alreadyUsed;
 
