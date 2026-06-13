@@ -85,12 +85,13 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
     return ensureAdminCredits(existingByEmail);
   }
  
-  // Lógica anti-abuso: verificar si el email o la IP ya han recibido créditos gratuitos.
-  // NOTA: Solo bloqueamos si hay 3+ cuentas desde la misma IP (permite familias/hogares).
-  // El email sí bloquea siempre (no debería haber dos cuentas con el mismo email).
+  // Lógica anti-abuso:
+  // - Email: 1 cuenta por email, sin excepciones. Si el mismo email ya tiene créditos usados → 0 créditos.
+  // - IP: NO bloqueamos por IP en el registro. Una familia puede tener N cuentas desde la misma IP.
+  //   El bloqueo por IP solo se aplica manualmente por el admin (en casos de reembolso o abuso evidente).
+  // - Una vez gastados los 50 créditos gratuitos, el usuario DEBE pagar para seguir generando.
   const emailAlreadyUsed = await User.findOne({ email, freeCreditsUsed: true }).lean();
-  const ipAbuseCount = ip ? await User.countDocuments({ registrationIp: ip, freeCreditsUsed: true }) : 0;
-  const alreadyUsed = emailAlreadyUsed || ipAbuseCount >= 3;
+  const alreadyUsed = !!emailAlreadyUsed;
 
   const shouldGiveFreeCredits = !isAdminEmail(email) && !alreadyUsed;
 
