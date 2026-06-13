@@ -420,6 +420,13 @@ ${code}
   </script>
 </body>
 </html>`;
+
+  // Limpiar referencias a assets externos incorrectos (marisai.es/assets)
+  // que pueden aparecer si el bundle fue desplegado previamente en Vercel
+  return html.replace(
+    /<link[^>]+href="https?:\/\/(?:www\.)?marisai\.es\/assets\/[^"]*"[^>]*>/gi,
+    "<!-- asset eliminado -->"
+  );
 }
 
 function pickEntry(vfs: Record<string, string>): string | null {
