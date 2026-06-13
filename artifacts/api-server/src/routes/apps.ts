@@ -840,6 +840,7 @@ async function generateFrontendCode(
   templateContext = "",
   agentPlan = selectAgentModelPlan(prompt, coderModel),
   onPartial?: (text: string) => void,
+  isFreeUser = false,
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -2286,7 +2287,7 @@ export async function generateApp(
           logger.info({ kb: Math.round(chars / 1000) }, "coder: frontend progress");
         }
       }, turboModel, language, templateContextBlock, agentModelPlan,
-      (partial) => { frontendAccumulated = partial; });
+      (partial) => { frontendAccumulated = partial; }, isFreeUser);
       clearInterval(coderHeartbeat);
       return result;
     } catch (err) {
@@ -2358,7 +2359,7 @@ export async function generateApp(
           reducedPlan, design, research, prompt,
           (chars) => {
             onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
-          }, "claude-sonnet-4-6", language, templateContextBlock, selectAgentModelPlan(prompt, "claude-sonnet-4-6"),
+          }, "claude-sonnet-4-6", language, templateContextBlock, selectAgentModelPlan(prompt, "claude-sonnet-4-6"), undefined, isFreeUser,
         );
         if (retryResult.code && retryResult.code.length > 500) {
           await log("coder", `✅ Frontend listo con plan reducido: ${Math.round(retryResult.code.length / 1000)} KB.`);
