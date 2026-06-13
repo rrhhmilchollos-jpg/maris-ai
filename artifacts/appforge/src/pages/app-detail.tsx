@@ -821,14 +821,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
     return (
       <>
-        <div className="px-6 pt-6">
-          <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-6 py-3.5 text-center text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-            <div className="flex items-center justify-center gap-3">
-              <Info className="h-5 w-5" />
-              <span>Maris AI seguirá trabajando después de tu respuesta</span>
+        {/* Banner: solo visible cuando los agentes esperan respuesta del usuario */}
+        {isAwaitingApproval && (
+          <div className="px-6 pt-6">
+            <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-6 py-3.5 text-center text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div className="flex items-center justify-center gap-3">
+                <Info className="h-5 w-5" />
+                <span>Maris AI seguirá trabajando después de tu respuesta</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
           {visibleMessages.length === 0 ? (
             <div className="flex items-start gap-5">
