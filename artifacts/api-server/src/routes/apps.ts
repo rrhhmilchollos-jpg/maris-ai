@@ -909,7 +909,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
   } else {
     // FREE: max 12k tokens (landing simple), PAID: 28k tokens (app completa)
-    const maxTokensFrontend = isFreeUser ? 12000 : 28000;
+    const maxTokensFrontend = isFreeUser ? 12000 : 32000; // paid: 32k para apps complejas como CRA
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
@@ -948,7 +948,44 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       const completeFiles = partialCode.match(filePattern);
       if (completeFiles && completeFiles.length >= 3) {
         const extractedCode = completeFiles.join("\n");
+        const extractedFiles = completeFiles.map((f: string) => {
+          const nl = f.indexOf("\n");
+          return nl !== -1 ? f.slice(0, nl).replace("// === FILE: ", "").replace(" ===", "").trim() : "";
+        }).filter(Boolean);
         logger.info({ files: completeFiles.length, kb: Math.round(extractedCode.length / 1000) }, "generateFrontendCode: extracted partial files from truncated JSON");
+
+        // Intentar continuar la generación pidiendo los archivos que faltan
+        const plannedFiles = plan.frontendFiles || [];
+        const missingFiles = plannedFiles.filter((f: string) => !extractedFiles.some((ef: string) => ef.includes(f.split("/").pop() || "")));
+
+        if (missingFiles.length > 0 && extractedCode.length > 5000) {
+          try {
+            logger.info({ missingFiles: missingFiles.slice(0, 5) }, "Requesting missing files continuation");
+            const continuationPrompt = `CONTINUACIÓN: El bundle anterior fue truncado. Ya tienes estos archivos completos:
+${extractedFiles.join(", ")}
+
+Genera SOLO los archivos que faltan en el mismo formato // === FILE: path ===:
+${missingFiles.slice(0, 10).join(", ")}
+
+Devuelve SOLO el código de los archivos faltantes, sin JSON wrapper, empezando directamente con // === FILE:`;
+            const cont = await streamClaudeTextWithFallback("frontend", frontendModel, {
+              max_tokens: isFreeUser ? 6000 : 16000,
+              system: [{ type: "text", text: systemPrompt.slice(0, 2000) }] as any,
+              messages: [
+                { role: "user", content: userContent },
+                { role: "assistant", content: JSON.stringify({ frontendCode: extractedCode.slice(0, 100) + "..." }) },
+                { role: "user", content: continuationPrompt }
+              ],
+            }, () => {});
+            if (cont.text && cont.text.length > 500) {
+              const combined = extractedCode + "\n" + cont.text;
+              return { code: combined, truncated: false };
+            }
+          } catch (contErr) {
+            logger.warn({ contErr }, "Continuation request failed, using partial bundle");
+          }
+        }
+
         return { code: extractedCode, truncated: true };
       }
     }
