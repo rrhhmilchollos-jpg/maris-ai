@@ -16,6 +16,39 @@ function getOpenAIApps(): OpenAI {
 }
 import { makeSlug } from "../lib/deployBundle";
 import { validateBundle } from "../lib/validate";
+
+// ── Validación de integridad del bundle ──────────────────────────────────────
+// Detecta archivos TSX/TS truncados que pasan el QA pero fallan en el preview.
+// Un archivo está truncado si: el JSX tiene tags abiertos sin cerrar al final,
+// o si termina en mitad de una expresión (sin punto y coma, sin })
+function detectTruncatedFiles(bundle: string): string[] {
+  const truncated: string[] = [];
+  const parts = bundle.split(/\/\/ === FILE: /);
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    const nl = part.indexOf("\n");
+    if (nl === -1) continue;
+    const filename = part.slice(0, nl).trim().replace(/ ===$/, "");
+    const code = part.slice(nl + 1).trimEnd();
+    if (!filename.match(/\.(tsx?|jsx?)$/)) continue;
+    // Detectar truncación: el archivo no termina con }, ), ; o un string
+    const lastChar = code[code.length - 1];
+    const lastLine = code.split("\n").pop() || "";
+    const isTruncated = (
+      (!["}", ")", ";", '"', "'", "`", ">"].includes(lastChar)) ||
+      (lastLine.trim().endsWith("...") || lastLine.trim() === "") && code.length < 500
+    );
+    // También detectar JSX abierto: contar < y > de forma simple
+    const openJSX = (code.match(/<[A-Z]/g) || []).length;
+    const closeJSX = (code.match(/<\/[A-Z]/g) || []).length;
+    if (Math.abs(openJSX - closeJSX) > 5) {
+      truncated.push(filename);
+    } else if (isTruncated && code.length > 100) {
+      truncated.push(filename);
+    }
+  }
+  return truncated;
+}
 import { runTestingAgent } from "../lib/tester";
 import { runPMAgent, type EmergentArchitectBlueprint } from "../lib/emergentAgentPipeline";
 import { detectIntegrations } from "../lib/fileToolsAgent";
@@ -3950,6 +3983,17 @@ export async function runJobById(jobId: string): Promise<void> {
       // GitHub push eliminado — solo se sube a GitHub cuando el usuario lo solicita explícitamente
       // desde el botón "Subir a GitHub" en su panel de apps
     } else {
+      // ── INTEGRIDAD DEL BUNDLE — detectar archivos truncados antes de guardar ──
+      if (finalResult.frontendCode) {
+        const truncatedFiles = detectTruncatedFiles(finalResult.frontendCode);
+        if (truncatedFiles.length > 0) {
+          await log("coder", `⚠️ ${truncatedFiles.length} archivo(s) truncado(s) detectado(s): ${truncatedFiles.join(", ")} — lanzando repair automático…`, "warn");
+          // Marcar para que el repair agent lo arregle después de guardar
+          (finalResult as any)._hasTruncatedFiles = true;
+          (finalResult as any)._truncatedFiles = truncatedFiles;
+        }
+      }
+
       const app = await GeneratedApp.create({
         userId: job.userId,
         title: finalResult.title,
