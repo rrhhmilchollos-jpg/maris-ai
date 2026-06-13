@@ -2714,6 +2714,75 @@ async function buildAppUpdatedConsoleReply(args: {
 }
 
 // ── POST /api/apps ────────────────────────────────────────────────────────
+// ── CLERK USER COUNT — para el panel admin ───────────────────────────────────
+router.get("/clerk-user-count", requireAuth, async (req: any, res: any) => {
+  try {
+    const { clerkClient } = await import("@clerk/express");
+    const { connectDB } = await import("../lib/db");
+    const { User } = await import("@workspace/db/schema");
+    await connectDB();
+
+    const clerkTotal = await clerkClient.users.getCount();
+    const mongoTotal = await User.countDocuments();
+    const diff = Math.max(0, clerkTotal - mongoTotal);
+
+    res.json({ clerkTotal, mongoTotal, diff,
+      message: diff > 0 ? `${diff} usuario(s) en Clerk sin sincronizar` : "Sincronizado" });
+  } catch (err: any) {
+    logger.error({ err }, "clerk-user-count error");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ── CLERK SYNC — sincroniza usuarios de Clerk a MongoDB ──────────────────────
+router.post("/clerk-sync-users", requireAuth, async (req: any, res: any) => {
+  try {
+    const { clerkClient } = await import("@clerk/express");
+    const { connectDB } = await import("../lib/db");
+    const { User } = await import("@workspace/db/schema");
+    const { isAdminEmail } = await import("../lib/auth");
+    await connectDB();
+
+    let synced = 0, skipped = 0, offset = 0;
+    const limit = 100;
+
+    while (true) {
+      const page = await clerkClient.users.getUserList({ limit, offset });
+      if (page.data.length === 0) break;
+
+      for (const cu of page.data) {
+        const email = cu.emailAddresses?.[0]?.emailAddress ?? "";
+        if (!email) { skipped++; continue; }
+        const existing = await User.findOne({ $or: [{ _id: cu.id }, { email }] }).lean();
+        if (existing) { skipped++; continue; }
+        try {
+          await User.create({
+            _id: cu.id, email,
+            fullName: [cu.firstName, cu.lastName].filter(Boolean).join(" ") || undefined,
+            imageUrl: cu.imageUrl ?? undefined,
+            credits: isAdminEmail(email) ? 999999999 : 50,
+            planCredits: isAdminEmail(email) ? 0 : 50,
+            freeCreditsUsed: !isAdminEmail(email),
+            plan: "free",
+            createdAt: new Date(cu.createdAt),
+          });
+          synced++;
+        } catch { skipped++; }
+      }
+
+      if (page.data.length < limit) break;
+      offset += limit;
+      if (offset > 5000) break;
+    }
+
+    res.json({ ok: true, synced, skipped,
+      message: `Sincronizados ${synced} usuarios. ${skipped} ya existían.` });
+  } catch (err: any) {
+    logger.error({ err }, "clerk-sync-users error");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 router.get("/models", requireAuth, async (req: any, res: any) => {
   const availableModels = [
     { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
