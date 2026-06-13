@@ -391,49 +391,56 @@ export default function DashboardPage() {
     }
   }, [job, queryClient, setLocation, toast, activeJobId]);
 
-  // Detecta si el prompt es intención de construir una app o una consulta/pregunta
+  // Detecta si el prompt es intención de construir una app o una consulta
+  // REGLA PRINCIPAL: las palabras de construcción tienen PRIORIDAD ABSOLUTA
+  // "hola me ayudas a crear una IA" → BUILD (tiene "crear")
+  // "hola" solo → CHAT
   const looksLikeBuildIntent = (text: string): boolean => {
-    if (attachments.length > 0) return true; // adjuntos → siempre generar
-    const t = text.toLowerCase().trim();
+    if (attachments.length > 0) return true;
+    const t = text.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    // Señales CLARAS de NO querer construir → ir al chat
-    const chatSignals = [
-      // Preguntas directas
-      "¿", "cuánto", "cuanto", "cómo", "como funciona", "qué es", "que es",
-      "qué hace", "que hace", "qué incluye", "que incluye", "cuál es", "cual es",
-      "puedo", "puedes", "tienes", "tienen", "hay ", "existe",
-      // Saludos y conversación
-      "hola", "buenos días", "buenas tardes", "buenas noches", "hey", "hi",
-      "gracias", "muchas gracias", "de nada", "ok", "vale", "perfecto",
-      // Negaciones explícitas
-      "no quiero", "no quiero crear", "cancelar", "olvídalo", "olvidalo",
-      "no crear", "no generar", "solo estoy", "solo quiero preguntar",
-      // Consultas sobre Maris
-      "cuánto cuesta", "cuanto cuesta", "precio", "precios", "plan ", "planes",
-      "cuántos créditos", "cuantos creditos", "qué modelos", "que modelos",
-      "soporte", "ayuda", "problema", "error ", "no funciona", "fallo",
-      // Comentarios y feedback
-      "me gusta", "está bien", "no está bien", "no era", "no es lo que",
-      "esto no", "mal", "bien hecho", "genial",
+    // 1. PRIMERO: comprobar palabras de construcción — tienen prioridad total
+    const buildWords = [
+      "crea", "crear", "creaме", "genera", "generar", "haz ", "hazme", "hacer",
+      "construye", "construir", "desarrolla", "desarrollar", "diseña", "disenha",
+      "quiero una app", "quiero un app", "quiero una web", "quiero un sistema",
+      "necesito una app", "necesito un app", "necesito una web",
+      "quiero que hagas", "quiero que crees", "quiero que generes",
+      "ayudame a crear", "ayudame a hacer", "ayudame a construir",
+      "ayudas a crear", "ayudas a hacer", "ayudas a construir",
+      "me puedes crear", "me puedes hacer", "me puedes generar",
+      "puedes crear", "puedes hacer", "puedes generar", "puedes construir",
+      "puedes disenar", "puedes diseñar",
+      // Tipos de producto
+      " app", "aplicacion", "aplicación", " web ", "pagina web", "página web",
+      "landing", "tienda", "ecommerce", "e-commerce", "marketplace",
+      "dashboard", "panel", "crm", "saas", "plataforma", "sistema",
+      "juego", "game", "portal", "blog", "agenda", "calendario",
+      "ia telefonica", "bot ", "chatbot", "asistente", "herramienta",
+      "calculadora", "generador", "gestor", "gestión",
     ];
-    if (chatSignals.some(s => t.includes(s))) return false;
-
-    // Si hay historial de chat activo y el mensaje es corto → continuar chat
-    if (quickChatHistory.length > 0 && t.length < 30) return false;
-
-    // Señales CLARAS de querer construir
-    const buildWords = ["crea", "crear", "genera", "generar", "haz", "hacer",
-      "construye", "construir", "desarrolla", "desarrollar", "app", "web",
-      "página", "pagina", "landing", "tienda", "dashboard", "crm", "saas",
-      "juego", "portal", "aplicación", "aplicacion", "quiero una", "necesito una",
-      "quiero un", "necesito un", "hazme", "ponme", "diseña"];
     if (buildWords.some(w => t.includes(w))) return true;
 
-    // Prompt largo sin señales de chat → probablemente quiere construir
-    if (t.length > 50) return true;
+    // 2. Prompt largo sin contexto de chat → probablemente quiere construir
+    if (t.length > 60 && quickChatHistory.length === 0) return true;
 
-    // Por defecto: si es corto y ambiguo → mejor preguntar via chat
-    return false;
+    // 3. Solo si no hay señales de construcción → detectar si es chat puro
+    const chatOnlySignals = [
+      // Solo saludo sin nada más
+      "cuanto cuesta", "cuánto cuesta", "precio", "precios",
+      "como funciona maris", "que es maris", "qué es maris",
+      "cuantos creditos", "cuántos creditos",
+      "no quiero", "cancelar", "olvidalo", "olvídalo",
+      "solo quiero preguntar", "tengo una pregunta",
+      "no crear", "no generar",
+    ];
+    if (chatOnlySignals.some(s => t.includes(s))) return false;
+
+    // 4. Mensaje muy corto sin palabras de construcción → chat
+    if (t.length < 15) return false;
+
+    // 5. Por defecto: si tiene contenido descriptivo → generar
+    return true;
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
