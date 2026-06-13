@@ -207,6 +207,16 @@ export function PreGenerationChat({
   };
 
   const handleBuild = (extraDetails?: string) => {
+    // Si el usuario escribe algo que indica que no quiere crear, cancelar
+    if (extraDetails) {
+      const t = extraDetails.toLowerCase().trim();
+      const cancelSignals = ["no quiero", "no crear", "no generar", "cancelar", "cancel", "salir", "exit", "olvídalo", "olvidalo", "déjalo", "dejalo", "no importa"];
+      if (cancelSignals.some(s => t.includes(s))) {
+        onCancel();
+        return;
+      }
+    }
+
     setPhase("generating");
     const chosen = plan?.extras.filter(e => selectedExtras.has(e.id)) ?? [];
 

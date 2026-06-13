@@ -389,15 +389,41 @@ export default function DashboardPage() {
     }
   }, [job, queryClient, setLocation, toast, activeJobId]);
 
+  // Detecta si el prompt es realmente una orden de construcción de app
+  const looksLikeBuildIntent = (text: string): boolean => {
+    const t = text.toLowerCase().trim();
+    // Muy corto y negativo → no es una orden de generación
+    if (t.length < 8) return false;
+    const negatives = ["no quiero", "no quiero crear", "no crear", "no generar", "solo quiero", "solo ver", "solo probar", "solo pregunto", "no es para crear", "esto no es", "quiero preguntar", "una pregunta", "me puedes", "puedes decirme", "qué es", "que es", "cómo funciona", "como funciona"];
+    if (negatives.some(n => t.includes(n))) return false;
+    // Palabras que SÍ indican intención de crear
+    const buildWords = ["crea", "crear", "genera", "generar", "haz", "hacer", "construye", "construir", "desarrolla", "desarrollar", "app", "web", "página", "pagina", "landing", "tienda", "dashboard", "crm", "saas", "juego", "portal", "aplicación", "aplicacion", "quiero una", "necesito una", "quiero un", "necesito un"];
+    if (buildWords.some(w => t.includes(w))) return true;
+    // Si tiene adjuntos y prompt largo → probablemente es una orden
+    if (attachments.length > 0 && t.length > 20) return true;
+    // Prompt largo sin negativas → asumir que sí quiere crear
+    if (t.length > 40) return true;
+    return false;
+  };
+
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
+
+    // Si el prompt no parece una orden de generación, responder conversacionalmente
+    if (!looksLikeBuildIntent(prompt)) {
+      toast({
+        title: "¿Quieres crear algo?",
+        description: 'Escribe qué app, web o landing page quieres construir y pulsa Generar. Por ejemplo: "Crea una tienda online de ropa".',
+      });
+      return;
+    }
+
     if (!isAdmin && stats && stats.credits < kindCost) {
       toast({ title: "Créditos insuficientes", description: kindCost > 1 ? `Este tipo de proyecto cuesta ${kindCost} créditos y solo tienes ${stats.credits}. Compra más para continuar.` : "Compra más créditos para seguir generando apps.", variant: "destructive" });
       setLocation("/billing");
       return;
     }
-    // Open onboarding questions before generating
     openOnboarding();
   };
 
