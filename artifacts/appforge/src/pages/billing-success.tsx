@@ -17,10 +17,17 @@ export default function BillingSuccessPage() {
 
   const confirmMutation = useConfirmCheckout({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data: any) => {
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
+        // Trackear conversión de compra en GA4 y Google Ads
+        import("@/lib/analytics").then(({ trackPurchase }) => {
+          const amount = data?.amountEur || data?.amount || 0;
+          const credits = data?.credits || data?.creditsAdded || 0;
+          const plan = data?.plan || "credits";
+          trackPurchase(amount, credits, plan);
+        });
       }
     }
   });
