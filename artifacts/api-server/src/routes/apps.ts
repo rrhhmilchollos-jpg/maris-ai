@@ -4360,10 +4360,21 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
       );
       return res.send(patched);
     } catch (esbuildErr: any) {
-      logger.warn({ err: esbuildErr?.message, appId: req.params.id }, "esbuild failed, using Babel fallback");
-      // Si esbuild falla, añadir header para debug
+      const errMsg = esbuildErr?.message || String(esbuildErr);
+      logger.warn({ err: errMsg, appId: req.params.id }, "esbuild failed, using Babel fallback");
       res.setHeader("X-Preview-Mode", "babel-fallback");
-      res.setHeader("X-Preview-Error", (esbuildErr?.message || "unknown").slice(0, 200));
+      res.setHeader("X-Preview-Error", errMsg.slice(0, 200));
+      // Si el error es de CSS import, intentar de nuevo sin CSS
+      if (errMsg.includes("CSS") || errMsg.includes("css")) {
+        try {
+          const { buildDeployHtml } = await import("../lib/deployBundle");
+          const bundleNoCss = (app.frontendCode as string).replace(/^import\s+['"][^'"]*\.css['"]\s*;?\s*$/gm, "// css removed");
+          const html = await buildDeployHtml({ bundle: bundleNoCss, title: app.title || "Preview" });
+          return res.send(html);
+        } catch (e2) {
+          logger.warn({ err: (e2 as any)?.message }, "esbuild retry without CSS also failed");
+        }
+      }
     }
 
     // Extraer archivos del bundle
