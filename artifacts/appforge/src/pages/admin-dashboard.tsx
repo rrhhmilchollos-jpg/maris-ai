@@ -1361,7 +1361,7 @@ function ClerkSyncPanel() {
   const loadClerkCount = async () => {
     setLoading(true);
     try {
-      const d = await apiFetch<any>("/api/admin/clerk-users");
+      const d = await apiFetch<any>("/api/clerk-user-count");
       setClerkData(d);
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -1371,7 +1371,7 @@ function ClerkSyncPanel() {
   const syncUsers = async () => {
     setSyncing(true);
     try {
-      const d = await apiFetch<any>("/api/admin/sync-clerk-users", { method: "POST" });
+      const d = await apiFetch<any>("/api/clerk-sync-users", { method: "POST" });
       toast({ title: "Sincronización completada", description: d.message });
       await loadClerkCount();
     } catch (e: any) {
