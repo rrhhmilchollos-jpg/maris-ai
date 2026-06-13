@@ -4110,16 +4110,25 @@ export async function runJobById(jobId: string): Promise<void> {
   } catch (err) {
     clearInterval(heartbeatInterval);
     logger.error({ err, jobId }, "runJobById: Generation failed");
-    const errorMessage = err instanceof Error ? err.message : "Error desconocido";
+    const rawMessage = err instanceof Error ? err.message : "Error desconocido";
+    
+    // Mensaje amigable para el usuario cuando los créditos de API se agotan
+    const isCreditsError = rawMessage.includes("API_CREDITS_EXHAUSTED");
+    const errorMessage = isCreditsError
+      ? "Las generaciones están temporalmente en pausa por mantenimiento del sistema. Tu créditos NO han sido consumidos. Inténtalo de nuevo en unos minutos."
+      : rawMessage;
+    
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: {
-        status: "failed",
-        phase: "failed",
+        status: isCreditsError ? "reviewing" : "failed",
+        phase: isCreditsError ? "reviewing" : "failed",
         errorMessage,
         updatedAt: new Date(),
       },
     });
-    await log("system", `Error: ${errorMessage}`, "error");
+    await log("system", isCreditsError 
+      ? "⏸️ Generación pausada temporalmente por mantenimiento del sistema. Tus créditos están seguros. Reintentaremos automáticamente." 
+      : `Error: ${errorMessage}`, "error");
 
     // Auto-diagnóstico IA — intenta corregir automáticamente
     try {

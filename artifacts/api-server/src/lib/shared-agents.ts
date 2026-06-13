@@ -166,6 +166,17 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
+        // Límite de créditos de la organización — no tiene sentido reintentar
+        const isOutOfCredits = err?.status === 529 || 
+          String(err).includes("credit_balance") || 
+          String(err).includes("insufficient_quota") ||
+          String(err?.message || "").includes("credit") ||
+          String(err?.error?.message || "").includes("credit");
+        
+        if (isOutOfCredits) {
+          logger.error({ role, err: err?.message }, "Anthropic API: créditos agotados — pausando generaciones");
+          throw new Error("API_CREDITS_EXHAUSTED: Los créditos de la API de Anthropic se han agotado temporalmente. Las generaciones se reanudarán automáticamente cuando se recarguen. Disculpa las molestias.");
+        }
         
         if (isRateLimit && attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
