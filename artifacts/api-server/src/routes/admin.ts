@@ -1303,6 +1303,24 @@ router.post("/admin/apps/patch-by-slug", async (req: any, res: any): Promise<voi
   res.json({ ok: true, appId: String(app._id), occurrences: count, message: `Eliminado ${count} vez/veces correctamente` });
 });
 
+
+// POST /api/admin/apps/:id/replace-bundle — reemplazar bundle completo de una app
+router.post("/admin/apps/:id/replace-bundle", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { frontendCode, title } = req.body ?? {};
+  if (!frontendCode) { res.status(400).json({ error: "frontendCode requerido" }); return; }
+
+  const app = await GeneratedApp.findById(req.params.id).lean() as any;
+  if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
+
+  const update: any = { frontendCode };
+  if (title) update.title = title;
+
+  await GeneratedApp.findByIdAndUpdate(req.params.id, { $set: update });
+  logger.info({ appId: req.params.id, size: frontendCode.length, title }, "Admin: bundle reemplazado completamente");
+  res.json({ ok: true, appId: req.params.id, size: frontendCode.length, message: "Bundle reemplazado correctamente" });
+});
+
 router.post("/admin/apps/:id/patch-code", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { search, replace } = req.body ?? {};
