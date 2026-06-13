@@ -3171,6 +3171,25 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
 });
 
 // ── GET /api/apps ─────────────────────────────────────────────────────────
+
+// POST /api/apps/inject — inyección directa de bundle via API key (solo desarrollo)
+router.post("/apps/inject", async (req: any, res: any): Promise<void> => {
+  const key = req.headers["x-inject-key"] || req.body?.key;
+  if (key !== "maris-inject-2024-seguxat") {
+    res.status(403).json({ error: "Unauthorized" }); return;
+  }
+  await connectDB();
+  const { appId, frontendCode, title, deleteImported, userId } = req.body ?? {};
+  if (!appId || !frontendCode) { res.status(400).json({ error: "appId y frontendCode requeridos" }); return; }
+  await GeneratedApp.findByIdAndUpdate(appId, { $set: { frontendCode, ...(title && { title }) } });
+  let deletedCount = 0;
+  if (deleteImported && userId) {
+    const r = await GeneratedApp.deleteMany({ userId, title: { $regex: "Proyecto Importado", $options: "i" } });
+    deletedCount = r.deletedCount;
+  }
+  res.json({ ok: true, appId, size: frontendCode.length, deletedImported: deletedCount });
+});
+
 router.get("/apps", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
