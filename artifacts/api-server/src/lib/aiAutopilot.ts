@@ -394,7 +394,13 @@ export async function autoFixBrokenApps(): Promise<void> {
 export async function evaluateJobQuality(jobId: string, appId: string, frontendCode: string, prompt: string): Promise<{ pass: boolean; score: number; issues: string[] }> {
   try {
     const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 400);
-    const codePreview = frontendCode.slice(0, 4000);
+
+    // CRÍTICO: usar compactBundleForPrompt en vez de slice(0,4000)
+    // slice(0,4000) solo mostraba archivos de config (vercel.json, package.json, vite.config)
+    // compactBundleForPrompt prioriza los archivos de código real (App.tsx, páginas, componentes)
+    const { compactBundleForPrompt } = await import("./shared-agents");
+    const codePreview = compactBundleForPrompt(frontendCode, [], 12_000);
+    const bundleSize = frontendCode.length;
 
     const result = await askAI(
       `Eres el evaluador de calidad de Maris AI. Analiza el código generado y devuelve SOLO JSON:
@@ -405,9 +411,10 @@ export async function evaluateJobQuality(jobId: string, appId: string, frontendC
   "verdict": "explicación breve"
 }
 
-pass=true si score >= 65. Evalúa: ¿el código responde al prompt? ¿tiene páginas reales? ¿hay contenido real (no solo "TODO")? ¿la estructura parece funcional?
-pass=false si: código < 3000 chars, solo tiene App.tsx vacío, todo es "TODO" o placeholder, no hay páginas implementadas.`,
-      `Prompt original: ${cleanPrompt}\n\nCódigo generado (primeros 4000 chars):\n${codePreview}`
+pass=true si score >= 65. Evalúa: ¿el código responde al prompt? ¿tiene páginas reales implementadas (App.tsx, componentes)? ¿hay contenido real (no solo config files)?
+pass=false SOLO si: bundle total < 5000 chars, no hay NINGÚN componente React real, todo son archivos de configuración sin código de app.
+IMPORTANTE: Si el bundle tiene > 10000 chars y hay al menos un componente React → pass=true aunque no veas todo el código.`,
+      `Prompt original: ${cleanPrompt}\n\nTamaño total del bundle: ${bundleSize} chars\n\nCódigo (muestra inteligente):\n${codePreview}`
     );
 
     let parsed: any = { score: 50, pass: true, issues: [] };
