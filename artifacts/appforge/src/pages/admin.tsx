@@ -811,7 +811,11 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                     </div>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> Registrado {format(new Date(selectedUser.createdAt), "d MMM yyyy", { locale: es })}</span>
-                      <span className="flex items-center gap-1 font-mono select-all cursor-text" title="Clic para seleccionar"><Hash className="h-3 w-3" /> {selectedUser.id}</span>
+                      <span
+                        className="flex items-center gap-1 font-mono cursor-pointer hover:text-white transition-colors"
+                        title="Clic para copiar ID"
+                        onClick={() => { navigator.clipboard.writeText(selectedUser.id); toast({ title: "ID copiado", description: selectedUser.id }); }}
+                      ><Hash className="h-3 w-3" /> {selectedUser.id}</span>
                     </div>
                   </div>
                   {/* Quick stats */}
