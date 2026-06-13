@@ -857,6 +857,26 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                   >
                     <Mail className="h-3.5 w-3.5" /> Email compensación
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 text-xs border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                    onClick={async () => {
+                      if (!confirm(`¿Regenerar la última app de ${selectedUser.email} y enviarle email de disculpas con 10 créditos de compensación?`)) return;
+                      try {
+                        const d = await apiFetch<any>(`/api/admin/users/${selectedUser.id}/regenerate-and-apologize`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ compensationCredits: 10 }),
+                        });
+                        toast({ title: "✅ Regeneración iniciada", description: d.message });
+                      } catch (e: any) {
+                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Regenerar + disculpa
+                  </Button>
                 </div>
 
                 {/* Tabs */}
