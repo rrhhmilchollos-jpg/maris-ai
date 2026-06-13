@@ -60,34 +60,12 @@ export async function buildDeployHtml(opts: {
   // styles in the deployed page without needing a separate CSS bundle.
   const collectedCss: string[] = [];
 
-  let result: esbuild.BuildResult;
-  try {
-    result = await esbuild.build({
-      entryPoints: [entry],
-      bundle: true,
-      write: false,
-      format: "esm",
-      target: ["es2020"],
-      jsx: "automatic",
-      jsxImportSource: "react",
-      logLevel: "silent",
-      plugins: [virtualFsPlugin(vfs, externals, collectedCss)],
-    });
-  } catch (firstErr: any) {
-    // Si hay un archivo truncado (Fin de archivo inesperado), eliminarlo del VFS y reintentar
-    const errMsg = String(firstErr?.message || firstErr);
-    const truncMatch = errMsg.match(/vfs:([^:]+):/);
-    if (truncMatch) {
-      const brokenFile = truncMatch[1];
-      // Eliminar el archivo roto del VFS y reemplazarlo con un stub vacío
-      if (vfs[brokenFile]) {
-        const ext = brokenFile.split(".").pop() || "tsx";
-        const componentName = brokenFile.split("/").pop()?.replace(/\..*$/, "") || "BrokenComponent";
-        vfs[brokenFile] = `// Archivo truncado — stub de emergencia
-export default function ${componentName}() { return null; }
-`;
-      }
-      // Reintentar con el archivo reparado
+  // Compilar con retry automático — repara archivos truncados uno por uno hasta 10 intentos
+  let result: esbuild.BuildResult | null = null;
+  const repairedFiles = new Set<string>();
+
+  for (let _attempt = 0; _attempt <= 10; _attempt++) {
+    try {
       result = await esbuild.build({
         entryPoints: [entry],
         bundle: true,
@@ -99,10 +77,23 @@ export default function ${componentName}() { return null; }
         logLevel: "silent",
         plugins: [virtualFsPlugin(vfs, externals, collectedCss)],
       });
-    } else {
-      throw firstErr;
+      break; // éxito
+    } catch (err: any) {
+      const errMsg = String(err?.message || err);
+      // Detectar archivo roto por nombre en el error
+      const m = errMsg.match(/vfs:(src\/[^:]+\.[tj]sx?)/);
+      if (m && !repairedFiles.has(m[1])) {
+        const brokenFile = m[1];
+        repairedFiles.add(brokenFile);
+        const name = brokenFile.split("/").pop()?.replace(/\..*$/, "") || "Stub";
+        const safeName = name.replace(/[^a-zA-Z0-9_$]/g, "_");
+        vfs[brokenFile] = `// stub — archivo truncado\nexport default function ${safeName}() { return null; }\n`;
+        continue;
+      }
+      throw err;
     }
   }
+  if (!result) throw new Error("No se pudo compilar el bundle.");
 
   const code = result.outputFiles[0]?.text ?? "";
   if (!code.trim()) {
