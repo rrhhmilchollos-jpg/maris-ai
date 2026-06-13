@@ -247,8 +247,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       // el frontendCode se actualice en cuanto el job termine (succeeded).
       // Una vez que hay código renderizable, reducimos a 10s para no saturar.
       refetchInterval: (data: any) => {
-        // Solo hacer polling si hay un job activo — sin job, no hay nada que actualizar
-        if (!effectiveJobId) return false;
+        // Solo hacer polling si hay un job activo — usar activeJobId (disponible antes que effectiveJobId)
+        if (!activeJobId) return false;
         if (!data) return 3000;
         const code = String(data?.frontendCode ?? "").trim();
         const hasCode = code.length >= 20 && !code.includes("El código ha sido consolidado en disco por hitos");
@@ -268,7 +268,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const { data: creditsHistory } = useGetCreditsHistory();
 
   const { data: messages } = useListAppMessages(id, {
-    query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: effectiveJobId ? 3000 : false },
+    query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: activeJobId ? 3000 : false },
   });
 
   // ✅ activeAppJob siempre habilitado — necesario para detectar jobs en awaiting_approval
@@ -281,7 +281,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         const status = data?.status;
         // Si hay job activo → poll frecuente. Si no → poll lento solo para detectar nuevos jobs
         if (status && status !== "succeeded" && status !== "failed") return 2000;
-        return effectiveJobId ? 3000 : 15000; // Sin job: cada 15s es suficiente
+        return activeJobId ? 3000 : 15000; // Sin job: cada 15s es suficiente
       },
     },
   });
