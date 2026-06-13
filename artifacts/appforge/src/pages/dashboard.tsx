@@ -134,6 +134,7 @@ export default function DashboardPage() {
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [showNoCredits, setShowNoCredits] = useState(false);
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django";
   const [kind, setKind] = useState<Kind>("fullstack");
@@ -293,6 +294,15 @@ export default function DashboardPage() {
   useEffect(() => {
     if (me?.isPremium && coderModel === "auto") setCoderModel("auto");
   }, [me?.isPremium, coderModel]);
+
+  // Mostrar overlay automáticamente si los créditos llegan a 0
+  useEffect(() => {
+    if (!isAdmin && stats && stats.credits <= 0) {
+      setShowNoCredits(true);
+    } else if (stats && stats.credits > 0) {
+      setShowNoCredits(false);
+    }
+  }, [stats?.credits, isAdmin]);
   const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
@@ -502,9 +512,14 @@ export default function DashboardPage() {
     }
     setQuickChatHistory([]); // limpiar historial al lanzar generación
 
+    if (!isAdmin && stats && stats.credits <= 0) {
+      // Bloqueo total — mostrar overlay de sin créditos
+      setShowNoCredits(true);
+      return;
+    }
     if (!isAdmin && stats && stats.credits < kindCost) {
-      toast({ title: "Créditos insuficientes", description: kindCost > 1 ? `Este tipo de proyecto cuesta ${kindCost} créditos y solo tienes ${stats.credits}. Compra más para continuar.` : "Compra más créditos para seguir generando apps.", variant: "destructive" });
-      setLocation("/billing");
+      toast({ title: "Créditos insuficientes", description: `Este proyecto necesita ${kindCost} crédito(s) y solo tienes ${stats.credits}. Recarga para continuar.`, variant: "destructive" });
+      setShowNoCredits(true);
       return;
     }
     // Trackear intención de generar
@@ -516,6 +531,22 @@ export default function DashboardPage() {
   };
 
   const isWorking = activeJobId !== null; // isPending puede atascarse — solo bloquear si hay job real
+
+  // Auto-detectar recarga de créditos — cuando el usuario paga, los créditos suben automáticamente
+  useEffect(() => {
+    if (!showNoCredits || isAdmin) return;
+    const interval = setInterval(async () => {
+      try {
+        const fresh = await apiFetch<any>("/api/me/stats");
+        if (fresh?.credits > 0) {
+          setShowNoCredits(false);
+          toast({ title: "✅ ¡Créditos recargados!", description: `Tienes ${fresh.credits} créditos. ¡Ya puedes seguir generando!` });
+          queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+        }
+      } catch { /* silencioso */ }
+    }, 8000); // Comprobar cada 8 segundos
+    return () => clearInterval(interval);
+  }, [showNoCredits, isAdmin]);
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
 
@@ -665,6 +696,33 @@ export default function DashboardPage() {
           </div>
 
           {/* Textarea */}
+          {/* OVERLAY SIN CRÉDITOS — bloquea el textarea como Emergent.sh */}
+          {showNoCredits && !isAdmin && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-background/95 backdrop-blur-sm border border-destructive/20">
+              <div className="text-center px-6 max-w-sm">
+                <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="h-7 w-7 text-destructive" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Te has quedado sin créditos</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  Recarga ahora para seguir generando apps. En cuanto completes la compra, tu cuenta se desbloqueará automáticamente.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    className="w-full bg-primary hover:bg-primary/90 font-bold"
+                    onClick={() => setLocation("/billing")}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Recargar créditos
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground/60 animate-pulse">
+                    Detectando recarga automáticamente...
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleGenerate}>
             <div className="px-6 pb-3">
               <div className="relative bg-[#0a0a10] border border-white/[0.07] rounded-xl focus-within:border-primary/40 transition-all">
