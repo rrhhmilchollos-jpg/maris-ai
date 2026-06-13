@@ -753,26 +753,39 @@ function makeAgentChoice(role: AgentRole, label: string, model: AgentModelChoice
   return { role, label, model, reason };
 }
 
-function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean }): AgentModelPlan {
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; isPaidUser?: boolean }): AgentModelPlan {
   const normalized = normalizeCoderModel(requestedModel);
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
+  const isPaid = !!(context?.isPaidUser);
+
+  // ── ESTRATEGIA DE MODELOS POR PLAN ───────────────────────────────────────
+  // FREE: Haiku para todo excepto frontend (Sonnet mínimo para calidad aceptable)
+  //       Límites de complejidad estrictos (4 páginas, 6 componentes, 20 archivos)
+  // PAID: Sonnet para todo, sin límites de complejidad
+  // ─────────────────────────────────────────────────────────────────────────
   const frontendModel: AgentModelChoice["model"] = auto
-    ? "claude-sonnet-4-6" // Forzado a Sonnet por defecto para evitar timeouts de otros modelos
+    ? "claude-sonnet-4-6" // Frontend siempre Sonnet — calidad mínima aceptable
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
-  const architectModel: ClaudeCoderModel = "claude-sonnet-4-6"; // Optimización de coste: Sonnet suficiente para arquitectura
-  const qualityModel: ClaudeCoderModel = complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
+
+  // Usuarios free usan Haiku en agentes auxiliares — ahorro del ~80% en tokens
+  const auxModel: ClaudeCoderModel = isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
+  const architectModel: ClaudeCoderModel = isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
+  const qualityModel: ClaudeCoderModel = isPaid
+    ? (complexity.tier === "basic" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6")
+    : "claude-haiku-4-5-20251001"; // Free siempre Haiku en QA
+
   const agents: Record<AgentRole, AgentModelChoice> = {
-    researcher: makeAgentChoice("researcher", "Researcher", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "recopila contexto desde el primer prompt"),
+    researcher: makeAgentChoice("researcher", "Researcher", auxModel, "recopila contexto desde el primer prompt"),
     architect: makeAgentChoice("architect", "Architect", architectModel, "decide estructura, páginas y alcance"),
-    designer: makeAgentChoice("designer", "Designer", complexity.tier === "robust" ? "claude-sonnet-4-6" : "claude-haiku-4-5", "define sistema visual"),
+    designer: makeAgentChoice("designer", "Designer", auxModel, "define sistema visual"),
     frontend: makeAgentChoice("frontend", "Frontend", frontendModel, auto ? `auto por complejidad ${complexity.tier}` : "selección manual del usuario"),
-    backend: makeAgentChoice("backend", "Backend", complexity.tier === "basic" ? "claude-haiku-4-5" : "claude-sonnet-4-6", "implementa API cuando el plan la necesita"),
+    backend: makeAgentChoice("backend", "Backend", isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001", "implementa API cuando el plan la necesita"),
     database: makeAgentChoice("database", "Database", qualityModel, "modela datos y semillas"),
-    integrator: makeAgentChoice("integrator", "Integrator", qualityModel, "detecta auth, pagos y servicios externos"),
+    integrator: makeAgentChoice("integrator", "Integrator", auxModel, "detecta auth, pagos y servicios externos"),
     qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
-    devops: makeAgentChoice("devops", "DevOps", qualityModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "testing-agent", "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
+    devops: makeAgentChoice("devops", "DevOps", auxModel, "verifica despliegue, scripts y configuración"),
+    patcher: makeAgentChoice("patcher", "testing-agent", isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001", "testing-agent: experto técnico en reparación de errores de build/runtime"),
     repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
@@ -894,8 +907,10 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       truncated = streamed.truncated;
     }
   } else {
+    // FREE: max 12k tokens (landing simple), PAID: 28k tokens (app completa)
+    const maxTokensFrontend = isFreeUser ? 12000 : 28000;
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
-      max_tokens: 28000,
+      max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userContent }],
     }, (chars) => { onChars(chars); onPartial?.(accumulated); });
@@ -1979,6 +1994,7 @@ export async function generateApp(
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
+    isPaidUser: hasEverPaid,
   });
   logger.info({ tier: agentModelPlan.tier, score: agentModelPlan.score, frontend: agentModelPlan.agents.frontend.model }, "planner: modelo seleccionado");
 
