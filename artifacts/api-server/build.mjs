@@ -36,6 +36,7 @@ const SHARED_CONFIG = {
     "ref-napi", "rocksdb", "sass-embedded", "sequelize", "serialport", "snappy",
     "tinypool", "usb", "workerd", "wrangler", "zeromq", "zeromq-prebuilt",
     "playwright", "puppeteer", "puppeteer-core", "electron",
+    "svix",
   ],
   sourcemap: "linked",
   plugins: [
