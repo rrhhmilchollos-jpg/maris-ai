@@ -913,7 +913,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     } catch (err) {
       logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
       const streamed = await streamClaudeTextWithFallback("frontend", "claude-sonnet-4-6", {
-        max_tokens: 28000,
+        max_tokens: 40000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userContent }],
       }, (chars) => { onChars(chars); onPartial?.(accumulated); });
@@ -922,7 +922,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
   } else {
     // FREE: max 12k tokens (landing simple), PAID: 28k tokens (app completa)
-    const maxTokensFrontend = isFreeUser ? 12000 : 32000; // paid: 32k para apps complejas como CRA
+    const maxTokensFrontend = isFreeUser ? 12000 : 40000; // paid: 40k para apps complejas como CRA
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
