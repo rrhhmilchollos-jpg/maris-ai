@@ -390,30 +390,23 @@ export default function DashboardPage() {
     }
   }, [job, queryClient, setLocation, toast, activeJobId]);
 
-  // Detecta si el prompt es realmente una orden de construcción de app
+  // Solo bloquea si el prompt contiene señales EXPLÍCITAS de que NO quiere generar
   const looksLikeBuildIntent = (text: string): boolean => {
+    if (attachments.length > 0) return true; // adjuntos → siempre generar
     const t = text.toLowerCase().trim();
-    // Muy corto y negativo → no es una orden de generación
-    if (t.length < 8) return false;
-    const negatives = ["no quiero", "no quiero crear", "no crear", "no generar", "solo quiero", "solo ver", "solo probar", "solo pregunto", "no es para crear", "esto no es", "quiero preguntar", "una pregunta", "me puedes", "puedes decirme", "qué es", "que es", "cómo funciona", "como funciona"];
-    if (negatives.some(n => t.includes(n))) return false;
-    // Palabras que SÍ indican intención de crear
-    const buildWords = ["crea", "crear", "genera", "generar", "haz", "hacer", "construye", "construir", "desarrolla", "desarrollar", "app", "web", "página", "pagina", "landing", "tienda", "dashboard", "crm", "saas", "juego", "portal", "aplicación", "aplicacion", "quiero una", "necesito una", "quiero un", "necesito un"];
-    if (buildWords.some(w => t.includes(w))) return true;
-    // Si tiene adjuntos → SIEMPRE es intención de generar (imagen de referencia, doc, etc.)
-    if (attachments.length > 0) return true;
-    // Prompt largo sin negativas → asumir que sí quiere crear
-    if (t.length > 40) return true;
-    return false;
+    // Solo bloquear si es explícitamente negativo
+    const hardNegatives = ["no quiero crear", "no quiero generar", "no crear", "cancelar", "cancel", "olvídalo", "olvidalo", "no es para crear", "solo estoy probando", "solo quiero preguntar"];
+    if (hardNegatives.some(n => t.includes(n))) return false;
+    // Todo lo demás → lanzar el Arquitecto (él sabrá preguntar si es necesario)
+    return true;
   };
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
 
-    // Si hay adjuntos → siempre lanzar (imagen de referencia, fichero, etc.)
-    // Si el prompt no parece orden de generación → hint inline
-    if (attachments.length === 0 && !looksLikeBuildIntent(prompt)) {
+    // Solo bloquear si es explícitamente negativo
+    if (!looksLikeBuildIntent(prompt)) {
       setInlineHint('Escribe qué quieres construir y pulsa Generar. Ej: "Crea una app de reservas para mi restaurante"');
       setTimeout(() => setInlineHint(null), 4000);
       return;
