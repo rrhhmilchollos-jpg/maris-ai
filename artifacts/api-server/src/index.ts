@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
+import { runAutopilotTick } from "./lib/aiAutopilot";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
  
@@ -53,6 +54,16 @@ app.listen(finalPort, async (err) => {
     startSelfMonitor();
   } catch (selfErr) {
     logger.error({ err: selfErr }, "Failed to start self-monitor");
+  }
+
+  // 5) AI Autopilot — monitor de salud, auto-fix, resumen diario.
+  try {
+    // Primer tick inmediato, luego cada 5 minutos
+    runAutopilotTick().catch(() => {});
+    setInterval(() => runAutopilotTick().catch(() => {}), 5 * 60 * 1000);
+    logger.info("AI Autopilot started (health monitor, auto-fix, daily summary)");
+  } catch (autopilotErr) {
+    logger.error({ err: autopilotErr }, "Failed to start AI Autopilot");
   }
  
   // 5) Best-effort Redis ping at boot.
