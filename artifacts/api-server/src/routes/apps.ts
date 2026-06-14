@@ -76,7 +76,7 @@ import { shouldValidateInE2B } from "../lib/e2bGate";
 import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
-import { planExecution, planSummaryEs, PLAN_FEATURE, PLAN_LANDING_FAST, isSimpleLandingRequest } from "../lib/planner";
+import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
@@ -91,7 +91,7 @@ interface RouteGenerationRequestContext {
   detectedLocale?: string;
   detectedCountry?: string;
   uiLanguage?: string;
-  hasEverPaid?: boolean;  // false = usuario free → solo landing pages simples
+  hasEverPaid?: boolean;  // usado para coste en créditos, no para limitar el alcance de la app generada
 }
 
 /* ============================================================================
@@ -765,39 +765,44 @@ function makeAgentChoice(role: AgentRole, label: string, model: AgentModelChoice
   return { role, label, model, reason };
 }
 
-function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; isPaidUser?: boolean }) {
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean }) {
   const normalized = normalizeCoderModel(requestedModel);
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
-  const isPaid = !!(context?.isPaidUser);
 
-  // ── ESTRATEGIA DE MODELOS POR PLAN ───────────────────────────────────────
-  // FREE: Haiku para todo excepto frontend (Sonnet mínimo para calidad aceptable)
-  //       Límites de complejidad estrictos (4 páginas, 6 componentes, 20 archivos)
-  // PAID: Sonnet para todo, sin límites de complejidad
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── ESTRATEGIA DE MODELOS (mismo motor para todos los planes) ────────────
+  // La selección de modelo depende SOLO de la complejidad de la tarea, NO del
+  // plan del usuario — igual que Lovable/Base44/Emergent, que usan el mismo
+  // motor para free y paid (la diferencia entre planes es el coste en
+  // créditos, no la calidad del modelo).
+  // - "basic" (landing simple sin backend/datos): Haiku en agentes
+  //   auxiliares/QA por eficiencia — no aporta valor usar Sonnet ahí.
+  // - resto de tiers (standard/robust/ultra): Sonnet en todos los agentes.
+  // - Architect y Backend SIEMPRE Sonnet: el Architect decide backendNeeded
+  //   y el alcance del plan (una mala decisión aquí = app incompleta), y el
+  //   Backend escribe el CRUD/auth/BD real — son los dos puntos donde un
+  //   modelo más débil produce justo el síntoma de "falta backend".
   const frontendModel: AgentModelChoice["model"] = auto
     ? "claude-sonnet-4-6" // Frontend siempre Sonnet — calidad mínima aceptable
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
 
-  // Usuarios free usan Haiku en agentes auxiliares — ahorro del ~80% en tokens
-  const auxModel: ClaudeCoderModel = isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
-  const architectModel: ClaudeCoderModel = isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
-  const qualityModel: ClaudeCoderModel = isPaid
-    ? (complexity.tier === "basic" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6")
-    : "claude-haiku-4-5-20251001"; // Free siempre Haiku en QA
+  const isBasic = complexity.tier === "basic";
+  const auxModel: ClaudeCoderModel = isBasic ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+  const architectModel: ClaudeCoderModel = "claude-sonnet-4-6";
+  const qualityModel: ClaudeCoderModel = isBasic ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+  const backendModel: ClaudeCoderModel = "claude-sonnet-4-6";
 
   const agents: Record<AgentRole, AgentModelChoice> = {
     researcher: makeAgentChoice("researcher", "Researcher", auxModel, "recopila contexto desde el primer prompt"),
     architect: makeAgentChoice("architect", "Architect", architectModel, "decide estructura, páginas y alcance"),
     designer: makeAgentChoice("designer", "Designer", auxModel, "define sistema visual"),
     frontend: makeAgentChoice("frontend", "Frontend", frontendModel, auto ? `auto por complejidad ${complexity.tier}` : "selección manual del usuario"),
-    backend: makeAgentChoice("backend", "Backend", isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001", "implementa API cuando el plan la necesita"),
+    backend: makeAgentChoice("backend", "Backend", backendModel, "implementa API cuando el plan la necesita"),
     database: makeAgentChoice("database", "Database", qualityModel, "modela datos y semillas"),
     integrator: makeAgentChoice("integrator", "Integrator", auxModel, "detecta auth, pagos y servicios externos"),
     qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
     devops: makeAgentChoice("devops", "DevOps", auxModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "testing-agent", isPaid ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001", "testing-agent: experto técnico en reparación de errores de build/runtime"),
+    patcher: makeAgentChoice("patcher", "testing-agent", "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
     repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
@@ -867,7 +872,7 @@ async function generateFrontendCode(
 
   // Para apps con muchos archivos, consolidar todo en App.tsx para evitar truncación
   const totalFiles = plan.frontendFiles?.length || 0;
-  const useSingleFile = totalFiles > 20 || isFreeUser;
+  const useSingleFile = totalFiles > 20;
   const fileStrategyNote = useSingleFile
     ? `
 
@@ -933,8 +938,11 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       truncated = streamed.truncated;
     }
   } else {
-    // FREE: max 12k tokens (landing simple), PAID: 28k tokens (app completa)
-    const maxTokensFrontend = isFreeUser ? 12000 : 40000; // paid: 40k para apps complejas como CRA
+    // Mismo motor para todos los planes (free y paid) — la diferencia entre
+    // niveles es el coste en créditos de la generación, no la capacidad del
+    // motor (estrategia Lovable/Base44/Emergent: 1 app completa gratis, luego
+    // créditos limitados para seguir iterando).
+    const maxTokensFrontend = 40000; // suficiente para apps completas con backend (CRA, CRM, etc.)
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
@@ -994,7 +1002,7 @@ ${missingFiles.slice(0, 10).join(", ")}
 
 Devuelve SOLO el código de los archivos faltantes, sin JSON wrapper, empezando directamente con // === FILE:`;
             const cont = await streamClaudeTextWithFallback("frontend", frontendModel, {
-              max_tokens: isFreeUser ? 6000 : 16000,
+              max_tokens: 16000,
               system: [{ type: "text", text: systemPrompt.slice(0, 2000) }] as any,
               messages: [
                 { role: "user", content: userContent },
@@ -2046,39 +2054,28 @@ export async function generateApp(
   );
   logger.info({ plan: execPlan.scope }, "planner: plan listo");
 
-  // ── SISTEMA DE NIVELES POR PAGO ──────────────────────────────────────────
-  // FREE (sin haber pagado nunca): solo landing pages simples
-  //   - Máx 4 páginas, 6 componentes, sin backend, modelo Haiku
-  //   - El cliente puede seguir generando hasta agotar sus 50 créditos de bienvenida
-  //   - Al realizar su PRIMERA compra Stripe confirma el pago → hasEverPaid=true
-  //
-  // PAID (primera compra confirmada por Stripe):
-  //   - Sin límites de complejidad, Sonnet completo, proyectos grandes
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── SISTEMA DE CRÉDITOS POR PAGO (estrategia Lovable/Base44/Emergent) ────
+  // Un único motor para TODOS los planes: la primera generación SIEMPRE
+  // produce una app completa (frontend + backend + BD si aplica), sin
+  // recortar páginas/componentes/backend para usuarios free — exactamente
+  // igual que Lovable, Base44 o Emergent, que generan el mismo full-stack
+  // para free y paid. La diferencia free/paid está en el COSTE EN CRÉDITOS
+  // (ver POST /api/apps más abajo): la generación inicial gratis consume la
+  // mayor parte de los 50 créditos de bienvenida — el usuario obtiene UNA app
+  // completa y funcional, y a partir de ahí modifica/añade/elimina con los
+  // créditos que le queden. Al realizar su primera compra Stripe,
+  // hasEverPaid=true.
   const hasEverPaid = !!(requestContext?.hasEverPaid);
   const isFreeUser = !hasEverPaid && !previous; // ediciones siempre permitidas
 
   if (isFreeUser) {
-    await log("system", "✨ Generando tu landing page gratuita. Para apps completas con backend, dashboard y sin límites → activa un plan.");
-    // La primera generación de un usuario free se reduce a una landing de 1
-    // página sin backend SOLO cuando el prompt describe eso — una landing de
-    // presentación. Si describe un CRM/dashboard/panel/gestión de datos,
-    // PLAN_LANDING_FAST (sin research/integration/backend/tests) entregaría
-    // una app visualmente completa pero vacía (todo mockData, sin
-    // persistencia), así que mantenemos PLAN_FULL en ese caso aunque
-    // MAX_PAGES/backendNeeded sigan recortando el alcance más abajo.
-    if (execPlan.scope === "full-build" && isSimpleLandingRequest(prompt)) {
-      execPlan = { ...PLAN_LANDING_FAST };
-      logger.info("planner: usuario free + landing simple — pipeline reducido a PLAN_LANDING_FAST");
-    } else if (execPlan.scope === "full-build") {
-      logger.info("planner: usuario free pero prompt requiere backend/datos — mantengo PLAN_FULL");
-    }
+    await log("system", "✨ Generando tu app completa — frontend, backend y base de datos incluidos. A partir de aquí puedes seguir modificándola con tus créditos.");
   }
+
 
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
-    isPaidUser: hasEverPaid,
   });
   logger.info({ tier: agentModelPlan.tier, score: agentModelPlan.score, frontend: agentModelPlan.agents.frontend.model }, "planner: modelo seleccionado");
 
@@ -2214,31 +2211,21 @@ export async function generateApp(
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
 
-  // Guardia de tamaño — si el arquitecto generó un plan demasiado grande, lo recortamos
-  // antes de que llegue al frontend engineer para evitar timeouts
-  // FREE: solo landing page — 1 página, sin backend, sin complejidad
-  // PAID: app completa sin límites
-  const MAX_PAGES = isFreeUser ? 1 : 8;
-  const MAX_COMPONENTS = isFreeUser ? 4 : 12;
-  const MAX_FILES = isFreeUser ? 8 : 45;
-
-  if (isFreeUser) {
-    // Usuario free: forzar landing page sin backend
-    plan.backendNeeded = false;
-    plan.backendFiles = [];
-    if (plan.pages.length > MAX_PAGES || plan.frontendFiles.length > MAX_FILES) {
-      await log("system", `⚡ Generando versión demo (${MAX_PAGES} páginas). Activa un plan para proyectos completos.`);
-    }
-  }
+  // Guardia de tamaño — si el arquitecto generó un plan demasiado grande, lo
+  // recortamos antes de que llegue al frontend engineer para evitar timeouts.
+  // MISMO límite para TODOS los planes (free y paid) — el motor es idéntico;
+  // lo que cambia entre planes es el coste en créditos (ver POST /api/apps),
+  // no la completitud de la app generada (estrategia Lovable/Base44/Emergent).
+  const MAX_PAGES = 8;
+  const MAX_COMPONENTS = 12;
+  const MAX_FILES = 45;
 
   if (plan.pages.length > MAX_PAGES || plan.frontendFiles.length > MAX_FILES) {
-    if (!isFreeUser) {
-      await log("architect", `⚠️ Plan demasiado grande (${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos) — reduciendo a MVP para evitar timeout.`, "warn");
-    }
+    await log("architect", `⚠️ Plan demasiado grande (${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos) — reduciendo a MVP para evitar timeout.`, "warn");
     plan.pages = plan.pages.slice(0, MAX_PAGES);
     plan.components = plan.components.slice(0, MAX_COMPONENTS);
-    plan.hooks = (plan.hooks ?? []).slice(0, isFreeUser ? 3 : 6);
-    plan.utils = (plan.utils ?? []).slice(0, isFreeUser ? 2 : 4);
+    plan.hooks = (plan.hooks ?? []).slice(0, 6);
+    plan.utils = (plan.utils ?? []).slice(0, 4);
     const keptPages = new Set(plan.pages.map((p: any) => p.name));
     const keptComponents = new Set(plan.components.map((c: any) => c.name));
     plan.frontendFiles = plan.frontendFiles.filter((f: string) => {
@@ -2246,9 +2233,7 @@ export async function generateApp(
       if (f.includes("/components/")) return [...keptComponents].some(n => f.includes(n));
       return true;
     }).slice(0, MAX_FILES);
-    if (!isFreeUser) {
-      await log("architect", `✅ Plan reducido: ${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos — listo para generar.`);
-    }
+    await log("architect", `✅ Plan reducido: ${plan.pages.length} páginas, ${plan.frontendFiles.length} archivos — listo para generar.`);
   }
 
   await log("architect", `Plan "${plan.title}" — ${plan.pages.length} página(s), ${plan.components.length} componente(s), ${plan.hooks.length} hook(s), backend: ${plan.backendNeeded ? "sí" : "no"}.`);
@@ -3110,23 +3095,33 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     }
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
-    // ── SISTEMA DE CRÉDITOS DUAL (Free vs Paid) ──────────────────────────────
-    // PLAN FREE (prueba generosa de 10 créditos):
-    //   - 1 app = 6 créditos fijos (cualquier tipo de app)
-    //   - 20 modificaciones = 0.2 créditos c/u = 4 créditos
-    //   - Total: 6 + (20 × 0.2) = 10 créditos exactos
+    // ── SISTEMA DE CRÉDITOS (estrategia Lovable/Base44/Emergent) ─────────────
+    // Mismo motor para todos — la primera generación SIEMPRE es una app
+    // completa (frontend + backend + BD). El plan free/paid solo cambia el
+    // COSTE en créditos, no la completitud:
     //
-    // PLAN PAID (verificado por Stripe — quema rápida):
+    // PAID (verificado por Stripe):
     //   - Coste = KIND_COSTS[kind] × 10
-    //   - landing   = 1 × 10 = 10 créditos
-    //   - vue/svelte = 2 × 10 = 20 créditos
-    //   - fullstack  = 3 × 10 = 30 créditos
-    //   - game-3d    = 5 × 10 = 50 créditos
+    //   - landing    = 1 × 10 = 10 créditos
+    //   - vue/svelte  = 2 × 10 = 20 créditos
+    //   - fullstack   = 3 × 10 = 30 créditos
+    //   - game-3d     = 5 × 10 = 50 créditos
+    //
+    // FREE (50 créditos de bienvenida):
+    //   - Coste = min(KIND_COSTS[kind] × 13, 50) — consume la MAYOR PARTE del
+    //     saldo en ESA primera app completa (igual que "1 deploy = 50
+    //     créditos" en Emergent con solo 5-10 gratis): el usuario obtiene UNA
+    //     app completa y funcional, y le quedan pocos créditos para seguir
+    //     iterando (a 0.2/edición) antes de necesitar plan de pago.
+    //   - landing    = min(1 × 13, 50) = 13 créditos → quedan 37 (≈185 ediciones)
+    //   - vue/svelte  = min(2 × 13, 50) = 26 créditos → quedan 24 (≈120 ediciones)
+    //   - fullstack   = min(3 × 13, 50) = 39 créditos → quedan 11 (≈55 ediciones)
+    //   - game-3d     = min(5 × 13, 50) = 50 créditos → quedan 0
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;
     const baseCost = KIND_COSTS[kindKey] ?? 3;
-    const cost = isPaid ? (baseCost * 10) : 6;
+    const cost = isPaid ? (baseCost * 10) : Math.min(baseCost * 13, 50);
 
     const charge = await chargeCredits({
       userId,
@@ -4351,9 +4346,11 @@ export async function runJobById(jobId: string): Promise<void> {
       });
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
 
-      // Mensaje de upgrade para usuarios free
+      // Mensaje de upgrade para usuarios free — la app YA es completa
+      // (frontend + backend + BD); el upsell es sobre créditos restantes
+      // para seguir iterando, no sobre funcionalidades que falten.
       if (!(job as any).hasEverPaid && !(job as any).isAdmin) {
-        await log("system", "🎉 ¡Tu app de demostración está lista! Para crear proyectos más grandes con backend, base de datos y más páginas, activa un plan desde la sección de precios.");
+        await log("system", "🎉 ¡Tu app completa está lista, con backend y base de datos incluidos! Sigue modificándola con tus créditos restantes — cuando se agoten, activa un plan desde la sección de precios para más créditos y funciones extra.");
       }
     }
 
