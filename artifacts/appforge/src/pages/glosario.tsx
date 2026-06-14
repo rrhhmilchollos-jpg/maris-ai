@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { BookOpen, Search, Zap, Code2, Cpu, Globe } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const GLOSSARY_TERMS = [
   {
@@ -34,6 +34,63 @@ const GLOSSARY_TERMS = [
 
 export default function GlossaryPage() {
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    // SEO: título y meta description específicos del glosario — apunta a
+    // búsquedas tipo "qué es vibe coding", "qué es un agente de IA", etc.
+    document.title = "Glosario de Vibe Coding e IA — Términos clave | Maris AI";
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute(
+        "content",
+        "Glosario en español de Vibe Coding e Inteligencia Artificial: qué es un agente de IA, qué es el vibe coding, LLM, MVP y más términos clave del desarrollo de software con IA.",
+      );
+    }
+
+    // Canonical
+    let canonicalLink = document.getElementById("canonical-tag") as HTMLLinkElement | null;
+    if (!canonicalLink) {
+      canonicalLink = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+    }
+    if (!canonicalLink) {
+      canonicalLink = document.createElement("link") as HTMLLinkElement;
+      canonicalLink.setAttribute("rel", "canonical");
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.setAttribute("href", "https://www.marisai.es/glosario");
+
+    // Schema.org — DefinedTermSet: ayuda a Google a entender esta página
+    // como contenido de referencia/glosario (mejora E-E-A-T y puede generar
+    // rich results para búsquedas tipo "qué es X").
+    const existingJsonLd = document.querySelector('script[data-glossary-schema]');
+    if (existingJsonLd) existingJsonLd.remove();
+
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@type": "DefinedTermSet",
+      "name": "Glosario de Vibe Coding e Inteligencia Artificial",
+      "description": "Definiciones de los términos clave del desarrollo de software asistido por IA (vibe coding, agentes de IA, LLM, MVP y más).",
+      "url": "https://www.marisai.es/glosario",
+      "inLanguage": "es",
+      "hasDefinedTerm": GLOSSARY_TERMS.map((t) => ({
+        "@type": "DefinedTerm",
+        "name": t.term,
+        "description": t.definition,
+        "inDefinedTermSet": "https://www.marisai.es/glosario",
+      })),
+    };
+
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.setAttribute("data-glossary-schema", "true");
+    script.textContent = JSON.stringify(jsonLd);
+    document.head.appendChild(script);
+
+    return () => {
+      const el = document.querySelector('script[data-glossary-schema]');
+      if (el) el.remove();
+    };
+  }, []);
 
   const filteredTerms = GLOSSARY_TERMS.filter(t => 
     t.term.toLowerCase().includes(search.toLowerCase()) || 
