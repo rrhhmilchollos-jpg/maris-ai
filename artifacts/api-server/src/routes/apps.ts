@@ -76,7 +76,7 @@ import { shouldValidateInE2B } from "../lib/e2bGate";
 import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
-import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
+import { planExecution, planSummaryEs, PLAN_FEATURE, PLAN_LANDING_FAST } from "../lib/planner";
 import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
@@ -2060,6 +2060,14 @@ export async function generateApp(
 
   if (isFreeUser) {
     await log("system", "✨ Generando tu landing page gratuita. Para apps completas con backend, dashboard y sin límites → activa un plan.");
+    // La primera generación de un usuario free SIEMPRE se reduce a una
+    // landing de 1 página sin backend (ver MAX_PAGES/backendNeeded más abajo).
+    // Usamos un pipeline más corto (sin research/integration/tests) para que
+    // esa primera vista llegue rápido — es el momento clave de conversión.
+    if (execPlan.scope === "full-build") {
+      execPlan = { ...PLAN_LANDING_FAST };
+      logger.info("planner: usuario free — pipeline reducido a PLAN_LANDING_FAST");
+    }
   }
 
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
