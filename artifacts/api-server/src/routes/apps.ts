@@ -76,7 +76,7 @@ import { shouldValidateInE2B } from "../lib/e2bGate";
 import { logger } from "../lib/logger";
 import { recallSimilar, rememberPatch, buildRecallExamplesBlock, extractFixHint, redactSecrets } from "../lib/agentMemory";
 import { formatMemoryBlock, type AgentMemoryContext } from "../lib/agentMemoryContext";
-import { planExecution, planSummaryEs, PLAN_FEATURE, PLAN_LANDING_FAST } from "../lib/planner";
+import { planExecution, planSummaryEs, PLAN_FEATURE, PLAN_LANDING_FAST, isSimpleLandingRequest } from "../lib/planner";
 import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
@@ -2060,13 +2060,18 @@ export async function generateApp(
 
   if (isFreeUser) {
     await log("system", "✨ Generando tu landing page gratuita. Para apps completas con backend, dashboard y sin límites → activa un plan.");
-    // La primera generación de un usuario free SIEMPRE se reduce a una
-    // landing de 1 página sin backend (ver MAX_PAGES/backendNeeded más abajo).
-    // Usamos un pipeline más corto (sin research/integration/tests) para que
-    // esa primera vista llegue rápido — es el momento clave de conversión.
-    if (execPlan.scope === "full-build") {
+    // La primera generación de un usuario free se reduce a una landing de 1
+    // página sin backend SOLO cuando el prompt describe eso — una landing de
+    // presentación. Si describe un CRM/dashboard/panel/gestión de datos,
+    // PLAN_LANDING_FAST (sin research/integration/backend/tests) entregaría
+    // una app visualmente completa pero vacía (todo mockData, sin
+    // persistencia), así que mantenemos PLAN_FULL en ese caso aunque
+    // MAX_PAGES/backendNeeded sigan recortando el alcance más abajo.
+    if (execPlan.scope === "full-build" && isSimpleLandingRequest(prompt)) {
       execPlan = { ...PLAN_LANDING_FAST };
-      logger.info("planner: usuario free — pipeline reducido a PLAN_LANDING_FAST");
+      logger.info("planner: usuario free + landing simple — pipeline reducido a PLAN_LANDING_FAST");
+    } else if (execPlan.scope === "full-build") {
+      logger.info("planner: usuario free pero prompt requiere backend/datos — mantengo PLAN_FULL");
     }
   }
 
