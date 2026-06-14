@@ -534,7 +534,7 @@ function LiveMonitorPanel() {
   useEffect(() => {
     if (expandedJob) {
       fetchLogs(expandedJob);
-      const t = setInterval(() => fetchLogs(expandedJob), 2000);
+      const t = setInterval(() => fetchLogs(expandedJob), 4000);
       return () => clearInterval(t);
     }
   }, [expandedJob]);

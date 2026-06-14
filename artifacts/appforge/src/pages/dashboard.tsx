@@ -776,7 +776,7 @@ export default function DashboardPage() {
                   onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); }}
                   disabled={isWorking}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && e.metaKey) {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault();
                       if (prompt.trim() && !isWorking) handleGenerate(e as any);
                     }
@@ -918,7 +918,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <p className="text-[10px] text-white/20 italic hidden sm:block">
-                ⌘+Enter para generar rápido
+                ⌘/Ctrl + Enter para generar rápido
               </p>
             </div>
           </form>
