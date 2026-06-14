@@ -1149,7 +1149,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <span className="max-w-[180px] truncate">{app?.title || "Sin título"}</span>
                 <X className="ml-1 h-3.5 w-3.5 text-white/35 hover:text-white/70 cursor-pointer" onClick={(e) => { e.stopPropagation(); setLocation("/dashboard"); }} />
               </div>
-              <button onClick={() => setLocation("/dashboard")} className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.065] bg-white/[0.04] text-white/60 hover:bg-white/[0.07] hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition">
+              <button
+                onClick={() => window.open("/dashboard", "_blank", "noopener,noreferrer")}
+                title="Abrir Maris AI en una pestaña nueva para empezar otro proyecto"
+                aria-label="Abrir Maris AI en una pestaña nueva"
+                className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.065] bg-white/[0.04] text-white/60 hover:bg-white/[0.07] hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition"
+              >
                 <span className="text-lg leading-none font-bold">+</span>
               </button>
             </div>
