@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
 import {
+  apiFetch,
   useGetApp,
   useListAppMessages,
   useSendAppMessage,
@@ -455,6 +456,34 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const API_BASE = import.meta.env.VITE_API_URL ?? "";
   const previewEndpointUrl = app?._id ? `${API_BASE}/api/apps/${app._id}/preview` : "";
   const deployedUrl = app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
+
+  // Showcase público (/showcase): el usuario decide si este proyecto aparece
+  // en la galería pública de Maris AI. Requiere que la app esté desplegada
+  // (deployedUrl real, no el endpoint de preview interno).
+  const isDeployedForShowcase = !!(app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || app?.marisaiSubdomain);
+  const [showcasePending, setShowcasePending] = useState(false);
+  const handleToggleShowcase = async (checked: boolean) => {
+    if (!app?._id) return;
+    setShowcasePending(true);
+    try {
+      const result = await apiFetch<{ ok: boolean; isPublic: boolean; publicSlug?: string }>(`/api/apps/${app._id}/showcase`, {
+        method: "PATCH",
+        body: JSON.stringify({ isPublic: checked }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+      toast({
+        title: result.isPublic ? "Publicado en la galería" : "Retirado de la galería",
+        description: result.isPublic
+          ? `Tu proyecto ya es visible en marisai.es/showcase/${result.publicSlug}`
+          : "Tu proyecto ya no aparece en la galería pública.",
+      });
+    } catch (error: any) {
+      toast({ title: "Error", description: error?.message || "No se pudo actualizar la galería.", variant: "destructive" });
+    } finally {
+      setShowcasePending(false);
+    }
+  };
+
   const showStaticBuildState = !hasRenderableCode;
   const renderedFileCount = hasRenderableCode ? parseBundle(frontendCode) ? Object.keys(parseBundle(frontendCode)).length : 0 : 0;
   useEffect(() => {
@@ -751,6 +780,33 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 {deployMutation.isPending ? "Desplegando" : "Deploy app"}
               </Button>
             </div>
+
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Galería pública de Maris AI</p>
+                  <p className="mt-1 text-xs text-white/50">
+                    Muestra este proyecto en{" "}
+                    <a href="https://www.marisai.es/showcase" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">marisai.es/showcase</a>
+                    {" "}con su enlace de demo en vivo. Solo se comparte el título, la descripción y el enlace — nunca el código ni tus datos.
+                  </p>
+                  {app?.isPublic && app?.publicSlug && (
+                    <a href={`https://www.marisai.es/showcase/${app.publicSlug}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline underline-offset-2 break-all">
+                      Ver tu ficha pública →
+                    </a>
+                  )}
+                </div>
+                <Switch
+                  checked={!!app?.isPublic}
+                  onCheckedChange={handleToggleShowcase}
+                  disabled={showcasePending || (!isDeployedForShowcase && !app?.isPublic)}
+                />
+              </div>
+              {!isDeployedForShowcase && !app?.isPublic && (
+                <p className="mt-2 text-xs text-amber-400/80">Despliega la app primero para poder publicarla en la galería.</p>
+              )}
+            </div>
+
           </div>
         </>
       );

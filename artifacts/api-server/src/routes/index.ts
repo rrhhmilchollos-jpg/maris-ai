@@ -14,6 +14,7 @@ import stripeWatermarkWebhookRouter from "./stripe-watermark-webhook";
 import deploymentRouter from "./deployment";
 import importRouter from "./import";
 import githubRouter from "./github";
+import showcaseRouter from "./showcase";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,9 @@ router.use(debugBundleRouter);
 // Mount images BEFORE apps so the public GET /apps/:appId/images/:imageId
 // route is matched without `requireAuth` middleware kicking in from apps.ts.
 router.use(imagesRouter);
+// Showcase es público (sin auth) — montarlo antes de appsRouter por claridad,
+// no hay colisión de rutas (/showcase vs /apps/...).
+router.use(showcaseRouter);
 router.use(appsRouter);
 router.use(uploadsRouter);
 router.use(jobsRouter);
