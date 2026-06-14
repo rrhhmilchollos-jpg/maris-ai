@@ -995,6 +995,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   testing:      { label: "TESTING",      color: "text-sky-400",     bg: "bg-sky-500/10",      border: "border-sky-500/25",     Icon: Terminal },
                   planner:      { label: "PLANNER",      color: "text-amber-400",   bg: "bg-amber-500/10",    border: "border-amber-500/25",   Icon: Sparkles },
                   orchestrator: { label: "ORCHESTRATOR", color: "text-violet-400",  bg: "bg-violet-500/10",   border: "border-violet-500/25",  Icon: Cpu },
+                  coder:        { label: "CODER",        color: "text-violet-400",  bg: "bg-violet-500/10",   border: "border-violet-500/25",  Icon: Code },
+                  architect:    { label: "ARCHITECT",    color: "text-amber-400",   bg: "bg-amber-500/10",    border: "border-amber-500/25",   Icon: Sparkles },
+                  qa:           { label: "QA",           color: "text-sky-400",     bg: "bg-sky-500/10",      border: "border-sky-500/25",     Icon: Terminal },
+                  patcher:      { label: "PATCHER",      color: "text-teal-400",    bg: "bg-teal-500/10",     border: "border-teal-500/25",    Icon: Code },
+                  validator:    { label: "VALIDATOR",    color: "text-cyan-400",    bg: "bg-cyan-500/10",     border: "border-cyan-500/25",    Icon: Shield },
+                  memory:       { label: "MEMORY",       color: "text-indigo-400",  bg: "bg-indigo-500/10",   border: "border-indigo-500/25",  Icon: Cpu },
                   system:       { label: "SYSTEM",       color: "text-red-400",     bg: "bg-red-500/10",      border: "border-red-500/25",     Icon: AlertCircle },
                 };
                 const cfg = agentCfg[agentKey] || agentCfg.system;

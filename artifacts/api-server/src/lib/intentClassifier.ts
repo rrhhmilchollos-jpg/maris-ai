@@ -74,7 +74,16 @@ const DEV_KEYWORD_PATTERNS: RegExp[] = [
 
 /** Legacy edit detector kept as a safety net for clear build requests. */
 function looksLikeEdit(message: string): boolean {
-  return DEV_KEYWORD_PATTERNS.some((re) => re.test(message));
+  // ALWAYS_DEV_PATTERNS cubre frases inequívocas de desarrollo
+  // ("continúa/termina la app", "no funciona X", "pantalla en blanco",
+  // "cambia el botón"...). Antes solo se usaban para VETAR "execute" dentro
+  // de looksLikeExecution, pero nunca disparaban "edit" por sí mismas — si
+  // tampoco matcheaban DEV_KEYWORD_PATTERNS, la petición caía al clasificador
+  // LLM, que podía (y lo hizo, p.ej. con "continúa/termina la app")
+  // devolver "question" y NO crear ningún job, dejando al usuario sin
+  // respuesta real. Ahora estos patrones bastan por sí solos para "edit",
+  // de forma determinista y sin coste de LLM.
+  return DEV_KEYWORD_PATTERNS.some((re) => re.test(message)) || ALWAYS_DEV_PATTERNS.some((re) => re.test(message));
 }
 
 function looksLikeExecution(message: string): boolean {
