@@ -49,34 +49,13 @@ export const PLAN_FULL: ExecutionPlan = {
   scope: "full-build",
 };
 
-// Primera generación de un usuario FREE (siempre se reduce a una landing page
-// de 1 página sin backend, vía MAX_PAGES/backendNeeded en apps.ts). Para esta
-// landing demo, "research"/"integration"/"tests" aportan poco valor frente al
-// tiempo que añaden — el objetivo es una primera vista RÁPIDA e impactante
-// que convenza al usuario de pasar a un plan de pago. Se mantiene "qa" para
-// que el resultado no salga roto (la primera impresión no puede fallar).
-export const PLAN_LANDING_FAST: ExecutionPlan = {
-  phases: ["architect", "design", "frontend", "qa", "validate", "patch"],
-  reason: "Landing page gratuita — pipeline reducido para una primera vista rápida.",
-  scope: "full-build",
-};
-
-// Señales de que el usuario pide algo MÁS que una landing estática de
-// presentación: un CRM, dashboard, panel con datos, login, gestión de
-// entidades (leads/clientes/pedidos/inventario/citas...), e-commerce, etc.
-// En estos casos PLAN_LANDING_FAST (sin research/integration/backend/tests)
-// produce una app visualmente completa pero funcionalmente vacía — todo
-// mockData, sin persistencia ni backend real. Si el prompt matchea esto,
-// SIEMPRE usar PLAN_FULL aunque sea la primera generación de un usuario free.
-const NEEDS_BACKEND_RX =
-  /\b(crm|erp|dashboard|panel\s+de\s+(control|administraci[oó]n)|base\s+de\s+datos|bbdd|database|backend|login|iniciar\s+sesi[oó]n|signup|registro|autenticaci[oó]n|usuarios|clientes|leads?|pedidos?|inventario|reservas?|citas|tareas|gesti[oó]n|administraci[oó]n|e-?commerce|tienda|carrito|checkout|pagos?|stripe|marketplace|booking|crud|api)\b/i;
-
-/** True solo si el prompt describe una landing/página de presentación simple
- * sin necesidad de datos/backend — el único caso seguro para PLAN_LANDING_FAST. */
-export function isSimpleLandingRequest(prompt: string): boolean {
-  const trimmed = prompt.trim().replace(/^\[MARIS[^\]]*\][^\n]*\n/gi, "").replace(/^\[MARIS_ENGINE[^\]]*\][^\n]*\n/gi, "").trim();
-  return !NEEDS_BACKEND_RX.test(trimmed);
-}
+// NOTA (2026-06-14): PLAN_LANDING_FAST e isSimpleLandingRequest() — que
+// reducían el pipeline y forzaban "sin backend" para la primera generación
+// de usuarios free — se ELIMINARON. Estrategia actual (Lovable/Base44/
+// Emergent): un único motor para todos los planes; la primera generación
+// SIEMPRE es PLAN_FULL (app completa con backend si aplica). La diferencia
+// free/paid es el COSTE EN CRÉDITOS de esa generación (ver KIND_COSTS y el
+// cálculo de `cost` en POST /api/apps), no la completitud del resultado.
 
 const COSMETIC_RX =
   /\b(color|colores|fondo|background|texto|tama[ñn]o|font|fuente|margen|padding|espac|alineaci[oó]n|centrar|alinear|redondeado|negrita|cursiva|borde|border|botón|boton|button|hover|sombra|shadow|opacidad|opacity|icono|emoji|titulo|título|subtítulo|subtitulo|placeholder|cambia|cambiar|ajusta|pon|poner|ponme|hazlo|hacerlo|m[aá]s grande|m[aá]s peque[ñn]o|typo)\b/i;
