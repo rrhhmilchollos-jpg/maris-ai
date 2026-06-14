@@ -65,12 +65,17 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
 });
 
 /**
- * Admin-endpoint limiter — 60 req / min per user/IP.
- * Extra protection for sensitive admin operations.
+ * Admin-endpoint limiter — 240 req / min per user/IP.
+ * El panel de admin hace polling de jobs (cada 3s) + logs del job
+ * expandido (cada 2s) + otros refetches periódicos: ~58 req/min en estado
+ * normal con UNA pestaña. Con varias pestañas del mismo admin (la clave es
+ * por usuario, no por pestaña) se superaba fácilmente el límite anterior
+ * de 60/min, causando 429 espurios en uso normal. 240/min sigue protegiendo
+ * frente a bucles fuera de control sin bloquear el uso legítimo.
  */
 export const adminRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 60_000,
-  limit: 60,
+  limit: 240,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   keyGenerator: keyGen,
