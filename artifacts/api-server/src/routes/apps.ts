@@ -3623,7 +3623,8 @@ router.get("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const { content, attachmentIds } = req.body;
+    const { content, attachmentIds, isAutoRepair: isAutoRepairRaw } = req.body;
+    const isAutoRepair = isAutoRepairRaw === true;
     if (!content || typeof content !== "string" || !content.trim()) return res.status(400).json({ error: "content es requerido" });
     const trimmedContent = content.trim();
     const safeAttachmentIds = Array.isArray(attachmentIds)
@@ -3633,6 +3634,45 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
 
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    // ── AUTO-REPARACIÓN ──────────────────────────────────────────────────────
+    // El frontend dispara esto cuando el iframe de preview reporta "página en
+    // blanco" (#root nunca montó nada). Es un fallo NUESTRO (de la generación
+    // anterior), así que: no se cobran créditos, se avisa de inmediato en el
+    // chat ("voy a revisarlo…"), se salta la clasificación de intención
+    // (sabemos que es un arreglo de código) y al terminar el job se publica
+    // un mensaje de cierre (éxito o petición de más información).
+    if (isAutoRepair) {
+      await AppMessage.create({
+        appId: req.params.id,
+        role: "assistant",
+        content: "He detectado un problema cargando la vista previa de tu app. Dame un momento, voy a revisarlo y solucionarlo automáticamente…",
+      });
+
+      const requestLocale = detectRequestLocale(req);
+      const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n[MARIS_ENGINE=ENGINE_DEV; INTENT_REASON=auto-repair: preview report\u00f3 p\u00e1gina en blanco]\n${trimmedContent}`;
+
+      const jobId = new mongoose.Types.ObjectId().toString();
+      await GenerationJob.create({
+        _id: jobId,
+        userId,
+        prompt: generationPrompt,
+        editAppId: req.params.id,
+        attachmentIds: [],
+        coderModel: app.coderModel || "auto",
+        language: app.language || "typescript",
+        kind: app.kind || "fullstack",
+        status: "queued",
+        phase: "queued",
+        progress: 0,
+        isAdmin,
+        isAutoRepair: true,
+      });
+
+      await enqueueGenerateJob(jobId);
+      runJobById(jobId).catch(err => logger.error({ err, jobId }, "Auto-repair job run error"));
+      return res.status(201).json({ id: jobId, engine: "ENGINE_DEV", intent: "edit", creditsCost: 0, creditsRemaining: req.dbUser?.credits, isAutoRepair: true });
+    }
 
     const conversationalReply = getConversationalOnlyReply(trimmedContent, safeAttachmentIds.length > 0);
     if (conversationalReply) {
@@ -4392,6 +4432,13 @@ export async function runJobById(jobId: string): Promise<void> {
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
+    if ((job as any).isAutoRepair && job.editAppId) {
+      await AppMessage.create({
+        appId: job.editAppId,
+        role: "assistant",
+        content: "¡Listo! He solucionado el problema — la vista previa de tu app ya está disponible. 🎉",
+      }).catch(() => {});
+    }
     clearInterval(heartbeatInterval);
   } catch (err) {
     clearInterval(heartbeatInterval);
@@ -4415,6 +4462,14 @@ export async function runJobById(jobId: string): Promise<void> {
     await log("system", isCreditsError 
       ? "⏸️ Generación pausada temporalmente por mantenimiento del sistema. Tus créditos están seguros. Reintentaremos automáticamente." 
       : `Error: ${errorMessage}`, "error");
+
+    if ((job as any).isAutoRepair && job.editAppId && !isCreditsError) {
+      await AppMessage.create({
+        appId: job.editAppId,
+        role: "assistant",
+        content: "He intentado solucionar el problema de la vista previa, pero necesito más información. ¿Qué ves exactamente en la vista previa (pantalla en blanco, un mensaje de error concreto…)? Dime si quieres que repare, modifique, elimine o añada algo y sigo desde ahí.",
+      }).catch(() => {});
+    }
 
     // Auto-diagnóstico IA — intenta corregir automáticamente
     try {

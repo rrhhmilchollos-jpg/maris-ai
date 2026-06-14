@@ -210,6 +210,13 @@ export async function buildDeployHtml(opts: {
       if (detail) card.appendChild(detailEl);
       box.appendChild(card);
       document.body.appendChild(box);
+      // Avisa a la ventana padre (el editor de Maris AI) de que la preview
+      // no renderizó nada, para que pueda disparar una auto-reparación.
+      // En apps desplegadas (/p/<slug>, sin iframe padre) esto es un no-op
+      // inofensivo: window.parent === window y nadie escucha el mensaje.
+      try {
+        window.parent.postMessage({ __marisPreview: true, type: "fatal-error", detail: detail || "" }, "*");
+      } catch (e) {}
     } catch (e) { /* ignore — we tried */ }
   }
 
