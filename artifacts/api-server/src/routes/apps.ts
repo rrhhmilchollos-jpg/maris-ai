@@ -1860,7 +1860,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         description: previous?.description || "",
         techStack: previous?.techStack || [],
         frontendCode: (err as any).accumulated,
-        backendCode: "",
+        backendCode: previous?.backendCode || "",
         error: (err as any).message,
         accumulated: (err as any).accumulated
       } as any;
@@ -4236,9 +4236,37 @@ export async function runJobById(jobId: string): Promise<void> {
     }
 
     const finalResult = result as any;
+    let editResultInvalid = false;
 
     if (job.editAppId) {
-      await GeneratedApp.findByIdAndUpdate(job.editAppId, {
+      // ── VALIDACIÓN DEL RESULTADO ANTES DE SOBRESCRIBIR ─────────────────────
+      // generateApp() en modo edición puede devolver, en caso de error parcial,
+      // { frontendCode: <texto crudo/acumulado>, backendCode: "", error: "..." }
+      // (ver el catch en el wrapper de streaming). Si guardamos esto sin
+      // validar, sobrescribimos un bundle BUENO con uno roto/vacío — y aun así
+      // el mensaje de chat decía "✅ Se actualizaron N archivos…", dando una
+      // falsa sensación de éxito mientras la vista previa queda en blanco
+      // ("App no encontrada" / "Algo salió mal"). Por eso: si el resultado no
+      // parece un bundle válido, NO tocamos frontendCode/backendCode — la app
+      // sigue funcionando con la versión anterior — y avisamos honestamente.
+      const fc = finalResult.frontendCode;
+      const hasError = !!finalResult.error;
+      const validFrontend = typeof fc === "string" && fc.includes("// === FILE:") && fc.length > 200;
+
+      if (hasError || !validFrontend) {
+        logger.warn(
+          { jobId, editAppId: job.editAppId, error: finalResult.error, fcLen: typeof fc === "string" ? fc.length : -1 },
+          "Edit job produjo un resultado inválido/incompleto — se preserva la app anterior sin sobrescribir",
+        );
+        await GeneratedApp.findByIdAndUpdate(job.editAppId, { $set: { status: "ready" } });
+        await AppMessage.create({
+          appId: job.editAppId,
+          role: "assistant",
+          content: `⚠️ No pude completar este cambio correctamente${finalResult.error ? ` (${String(finalResult.error).slice(0, 200)})` : " (la respuesta del modelo no tenía el formato esperado)"}. Para proteger tu trabajo, NO he sobrescrito tu app — sigue funcionando con la versión anterior, sin cambios perdidos ni créditos descontados de más. Intenta de nuevo, quizá reformulando la petición o dividiéndola en pasos más pequeños.`,
+        });
+        editResultInvalid = true;
+      } else {
+        await GeneratedApp.findByIdAndUpdate(job.editAppId, {
         $set: {
           title: finalResult.title,
           description: finalResult.description,
@@ -4308,6 +4336,7 @@ export async function runJobById(jobId: string): Promise<void> {
 
       // GitHub push eliminado — solo se sube a GitHub cuando el usuario lo solicita explícitamente
       // desde el botón "Subir a GitHub" en su panel de apps
+      }
     } else {
       // ── INTEGRIDAD DEL BUNDLE — detectar archivos truncados antes de guardar ──
       if (finalResult.frontendCode) {
@@ -4360,7 +4389,7 @@ export async function runJobById(jobId: string): Promise<void> {
     const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
 
     // ── 1. IMAGE AGENT — reemplaza placeholders Unsplash con imágenes reales ─
-    if (savedAppId && finalResult?.frontendCode && process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
+    if (savedAppId && finalResult?.frontendCode && !editResultInvalid && process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
       try {
         await log("system", "🎨 Generando imágenes reales para tu app…");
         const { generateAppImages } = await import("../lib/imageAgent");
@@ -4376,7 +4405,7 @@ export async function runJobById(jobId: string): Promise<void> {
     // ── 2. QUALITY CHECK — evaluación de calidad con IA ──────────────────────
     // NUNCA ejecutar en jobs de reparación automática — evita bucle infinito
     const isAutoRepairJob = (job.prompt || "").includes("[ADMIN REPAIR]") || (job as any).autoFixedFromJobId;
-    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000 && !isAutoRepairJob) {
+    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000 && !isAutoRepairJob && !editResultInvalid) {
       try {
         const { evaluateJobQuality } = await import("../lib/aiAutopilot");
         const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
@@ -4434,7 +4463,7 @@ export async function runJobById(jobId: string): Promise<void> {
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
-    if ((job as any).isAutoRepair && job.editAppId) {
+    if ((job as any).isAutoRepair && job.editAppId && !editResultInvalid) {
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",
