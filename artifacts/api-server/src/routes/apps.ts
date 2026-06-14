@@ -60,7 +60,6 @@ import {
   type AgentLog,
   type GeneratePhase,
   type GenerateProgress,
-  type AgentModelPlan,
   type ComplexityTier,
   extractJsonObject,
   withTimeout,
@@ -691,7 +690,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-opus-4-7";
 
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
@@ -756,7 +755,7 @@ function makeAgentChoice(role: AgentRole, label: string, model: AgentModelChoice
   return { role, label, model, reason };
 }
 
-function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; isPaidUser?: boolean }): AgentModelPlan {
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; isPaidUser?: boolean }) {
   const normalized = normalizeCoderModel(requestedModel);
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
@@ -1096,7 +1095,7 @@ RULES — non-negotiable:
 - Always add vercel.json with frame-ancestors: https://marisai.es https://www.marisai.es`;
 
   const designNote = design
-    ? `\n\nDesign system to apply:\n${JSON.stringify({ colors: design.colors, fonts: design.fonts }, null, 2)}`
+    ? `\n\nDesign system to apply:\n${JSON.stringify({ colors: design.palette, fonts: design.typography }, null, 2)}`
     : "";
   const researchNote = research
     ? `\n\nReference brief (inspiration only):\n${research.slice(0, 800)}`
@@ -1129,7 +1128,7 @@ RULES — non-negotiable:
 async function specifyIntegrations(
   plan: ProjectPlan,
   prompt: string,
-  agentModelPlan?: AgentModelPlan,
+  agentModelPlan?: ReturnType<typeof selectAgentModelPlan>,
 ): Promise<IntegrationSpec> {
   const agentPlan = agentModelPlan ?? selectAgentModelPlan(prompt);
   return withTimeout(
@@ -3583,7 +3582,7 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       // Primero construir el Project Map para saber exactamente dónde operar
       let projectMapData: ProjectMap | null = null;
       try {
-        const frontendCode = app.frontendCode || app.html || "";
+        const frontendCode = app.frontendCode || "";
         const backendCode = app.backendCode || "";
         projectMapData = buildProjectMap(
           req.params.id,
@@ -4271,7 +4270,7 @@ export async function runJobById(jobId: string): Promise<void> {
           const dbUser = await User.findById(job.userId).lean() as any;
           await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
           runAutoEvaluator({
-            appId: savedAppId as any,
+            appId: savedAppId,
             userId: job.userId,
             userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
             jobId: jobId as any,
@@ -4349,7 +4348,7 @@ export async function runJobById(jobId: string): Promise<void> {
  * Exported so evaluator.ts can call it via lazy import to avoid circular deps.
  */
 export async function runDeployForApp(args: {
-  appId: number;
+  appId: string;
   userId: string;
   log: import("pino").Logger;
 }): Promise<{ url: string; slug: string }> {

@@ -26,7 +26,6 @@ import {
   JobLog,
 } from "@workspace/db/schema";
 import { enqueueGenerateJob } from "./jobQueue";
-import { sendEmail as _sendEmail } from "./notify";
 
 const AI_MODEL = "claude-haiku-4-5-20251001"; // Rápido y barato para diagnóstico
 const AI_MODEL_SMART = "claude-sonnet-4-6";   // Para análisis complejos

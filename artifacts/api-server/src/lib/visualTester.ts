@@ -134,7 +134,7 @@ async function captureViewport(
 ): Promise<ViewportShot> {
   const page: Page = await browser.newPage();
   const consoleErrors: string[] = [];
-  page.on("console", (msg) => {
+  page.on("console", (msg: any) => {
     if (msg.type() === "error") consoleErrors.push(msg.text().slice(0, 500));
   });
   page.on("pageerror", (err: Error) => consoleErrors.push(err.message.slice(0, 500)));

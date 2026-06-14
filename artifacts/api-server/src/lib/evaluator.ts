@@ -317,7 +317,7 @@ export async function evaluateApp(opts: {
 
 /** Persistence-light helper: assign a slug if missing, returns slug or null. */
 async function ensurePublicSlug(
-  appId: number,
+  appId: string,
   userId: string,
   log: Logger,
   existingSlug: string | null,
@@ -363,7 +363,7 @@ export type AutoEvaluatorResult = {
 };
 
 export async function runAutoEvaluator(opts: {
-  appId: number;
+  appId: string;
   userId: string;
   userIntent: string;
   /**
@@ -386,7 +386,7 @@ export async function runAutoEvaluator(opts: {
    * `runDeployForApp` from routes/apps.ts (lazy require to avoid a cycle).
    */
   __deploy?: (args: {
-    appId: number;
+    appId: string;
     userId: string;
     log: Logger;
   }) => Promise<{ url: string; slug: string }>;

@@ -56,7 +56,7 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
 
     await GeneratedApp.updateOne({ _id: appId, userId }, { deploymentStatus: "deploying", deploymentError: null });
 
-    const deploymentResult = await deployAppToVercel({ appId, userId, log: logger });
+    const deploymentResult = await deployAppToVercel({ appId: String(appId), userId, log: logger });
 
     if (!deploymentResult.ok) {
       const errorMsg = "failure" in deploymentResult ? JSON.stringify(deploymentResult.failure) : "Unknown error";
@@ -203,7 +203,7 @@ router.post("/apps/:appId/custom-domain", requireAuth, async (req: Request, res:
     if (!appData) return res.status(404).json({ error: "App not found" });
     if (!appData.vercelProjectId) return res.status(400).json({ error: "Despliega la app primero antes de añadir un dominio personalizado" });
 
-    const domainResult = await addVercelDomainForApp({ appId, userId, projectId: appData.vercelProjectId, domain: normalizedDomain, log: logger });
+    const domainResult = await addVercelDomainForApp({ appId: String(appId), userId, projectId: appData.vercelProjectId, domain: normalizedDomain, log: logger });
 
     if (!domainResult.ok) {
       const msg = "message" in domainResult.failure ? domainResult.failure.message : "Error al añadir el dominio en Vercel";
@@ -303,7 +303,7 @@ router.delete("/apps/:appId/custom-domain", requireAuth, async (req: Request, re
     const appData = await GeneratedApp.findOne({ _id: appId, userId });
     if (!appData) return res.status(404).json({ error: "App not found" });
     if (appData.vercelProjectId && appData.customDomain) {
-      await removeVercelDomainForApp({ appId, projectId: appData.vercelProjectId, domain: appData.customDomain, log: logger });
+      await removeVercelDomainForApp({ appId: String(appId), projectId: appData.vercelProjectId, domain: appData.customDomain, log: logger });
     }
     await GeneratedApp.updateOne({ _id: appId, userId }, { customDomain: null, customDomainProvider: null, customDomainVerified: false });
     return res.json({ success: true });
