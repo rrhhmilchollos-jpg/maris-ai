@@ -41,14 +41,14 @@ function buildGitHubAuthorizeUrl(userId: string, returnTo?: string): string {
 router.get("/github/connect-url", requireAuth, (req, res) => {
   if (!GITHUB_CLIENT_ID) return res.status(500).json({ error: "GITHUB_CLIENT_ID no está configurado" });
   const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/dashboard";
-  res.json({ url: buildGitHubAuthorizeUrl(req.userId!, returnTo) });
+  return res.json({ url: buildGitHubAuthorizeUrl(req.userId!, returnTo) });
 });
 
 // ─── Paso 1B: compatibilidad: redirigir a GitHub OAuth ───────────────────────
 router.get("/github/connect", requireAuth, (req, res) => {
   if (!GITHUB_CLIENT_ID) return res.status(500).send("GITHUB_CLIENT_ID no está configurado");
   const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/dashboard";
-  res.redirect(buildGitHubAuthorizeUrl(req.userId!, returnTo));
+  return res.redirect(buildGitHubAuthorizeUrl(req.userId!, returnTo));
 });
 
 // ─── Paso 2: Callback de GitHub OAuth ────────────────────────────────────────
@@ -302,10 +302,10 @@ router.post("/github/push/:appId", requireAuth, async (req, res) => {
     await GeneratedApp.findByIdAndUpdate(appId, { githubRepoUrl: repoUrl, githubRepoFullName: repoFullName });
 
     logger.info({ userId: req.userId!, appId, repoFullName }, "Proyecto subido a GitHub correctamente");
-    res.json({ ok: true, repoUrl, repoFullName });
+    return res.json({ ok: true, repoUrl, repoFullName });
   } catch (err) {
     logger.error({ err }, "POST /github/push error");
-    res.status(500).json({ error: "Error interno al subir el proyecto a GitHub" });
+    return res.status(500).json({ error: "Error interno al subir el proyecto a GitHub" });
   }
 });
 

@@ -1330,7 +1330,12 @@ async function runValidatePatchLoop(
   language: GenLanguage,
   log?: AgentLog,
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
+  agentModelPlan?: ReturnType<typeof selectAgentModelPlan>,
 ): Promise<string> {
+  // Modelo del agente "patcher" según el plan (Sonnet para paid, Haiku para
+  // free). Si no se pasa plan, patchBundle usa su valor por defecto
+  // (claude-sonnet-4-6), igual que antes de este fix.
+  const patcherModel = agentModelPlan?.agents.patcher.model;
   const MAX_ITERATIONS = 5; // testing-agent: hasta 5 rondas de reparación para proyectos ultra-complejos
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
@@ -1439,6 +1444,7 @@ async function runValidatePatchLoop(
       })),
       language,
       memoryBlock,
+      patcherModel,
     );
     if (!patched) {
       onProgress?.({
@@ -1493,6 +1499,7 @@ async function runValidatePatchLoop(
             [{ file: "package.json", problem: issue.message, fix: "Fix the package name(s), version(s), build config or imports so `npm install && npm run build` succeeds in a clean Linux microVM." }],
             language,
             "",
+            patcherModel,
           );
           if (repaired && repaired !== finalFrontend) {
             try {
