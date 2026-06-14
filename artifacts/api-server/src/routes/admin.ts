@@ -449,7 +449,6 @@ router.post("/admin/users/:id/stripe-refund", async (req: any, res: any): Promis
     const refund = await stripe.refunds.create(refundParams);
 
     // Log the refund in credit transactions
-    const CreditTransaction = (await import("@maris-ai/db")).CreditTransaction;
     await CreditTransaction.create({
       userId: targetId,
       kind: "admin_stripe_refund",
@@ -497,8 +496,21 @@ router.post("/admin/users/:id/refund", async (req: any, res: any): Promise<void>
   }
 
   try {
-    const result = await refundCredits(targetId, amount, reason || "Reembolso administrativo");
-    res.json({ ok: true, newBalance: result.credits });
+    const targetUser = await User.findById(targetId).lean();
+    if (!targetUser) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+
+    await refundCredits({
+      userId: targetId,
+      isAdmin: isAdminEmail(targetUser.email),
+      amount,
+      description: reason || "Reembolso administrativo",
+    });
+
+    const updated = await User.findById(targetId).select("credits").lean();
+    res.json({ ok: true, newBalance: updated?.credits ?? null });
   } catch (err) {
     logger.error({ err, userId: targetId }, "Error processing refund");
     res.status(500).json({ error: "Error al procesar el reembolso" });

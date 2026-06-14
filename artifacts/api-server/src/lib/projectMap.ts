@@ -23,7 +23,7 @@ export interface ProjectMap {
   appName: string;
   files: ProjectFile[];
   routes: { path: string; component: string; description: string }[];
-  dataModels: { name: string; fields: string[]; location: string }[];
+  dataModels: { name: string; fields: string[]; location: string; keywords?: string[] }[];
   apiEndpoints: { method: string; path: string; description: string }[];
   generatedAt: string;
 }

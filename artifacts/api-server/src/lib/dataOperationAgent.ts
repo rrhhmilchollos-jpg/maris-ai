@@ -421,7 +421,7 @@ async function executeInsertOperation(
     dataStore[collectionKey] = [];
   }
 
-  const newRecord = {
+  const newRecord: Record<string, any> = {
     ...op.fields,
     _id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     _createdAt: new Date().toISOString(),
