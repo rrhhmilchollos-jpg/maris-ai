@@ -49,6 +49,18 @@ export const PLAN_FULL: ExecutionPlan = {
   scope: "full-build",
 };
 
+// Primera generación de un usuario FREE (siempre se reduce a una landing page
+// de 1 página sin backend, vía MAX_PAGES/backendNeeded en apps.ts). Para esta
+// landing demo, "research"/"integration"/"tests" aportan poco valor frente al
+// tiempo que añaden — el objetivo es una primera vista RÁPIDA e impactante
+// que convenza al usuario de pasar a un plan de pago. Se mantiene "qa" para
+// que el resultado no salga roto (la primera impresión no puede fallar).
+export const PLAN_LANDING_FAST: ExecutionPlan = {
+  phases: ["architect", "design", "frontend", "qa", "validate", "patch"],
+  reason: "Landing page gratuita — pipeline reducido para una primera vista rápida.",
+  scope: "full-build",
+};
+
 const COSMETIC_RX =
   /\b(color|colores|fondo|background|texto|tama[ñn]o|font|fuente|margen|padding|espac|alineaci[oó]n|centrar|alinear|redondeado|negrita|cursiva|borde|border|botón|boton|button|hover|sombra|shadow|opacidad|opacity|icono|emoji|titulo|título|subtítulo|subtitulo|placeholder|cambia|cambiar|ajusta|pon|poner|ponme|hazlo|hacerlo|m[aá]s grande|m[aá]s peque[ñn]o|typo)\b/i;
 
