@@ -58,6 +58,13 @@
     <xhtml:link rel="alternate" hreflang="es-ES" href="https://www.marisai.es/desarrollo-no-code-guia"/>
   </url>
   <url>
+    <loc>https://www.marisai.es/showcase</loc>
+    <lastmod>2026-06-14</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="es-ES" href="https://www.marisai.es/showcase"/>
+  </url>
+  <url>
     <loc>https://www.marisai.es/legal/privacidad</loc>
     <lastmod>2026-06-12</lastmod>
     <changefreq>yearly</changefreq>

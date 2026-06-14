@@ -39,6 +39,8 @@ const GlossaryPage = lazy(() => import("@/pages/glosario"));
 const QueEsVibeCodingPage = lazy(() => import("@/pages/que-es-vibe-coding"));
 const QueEsAgenteIaPage = lazy(() => import("@/pages/que-es-un-agente-de-ia"));
 const DesarrolloNoCodeGuiaPage = lazy(() => import("@/pages/desarrollo-no-code-guia"));
+const ShowcasePage = lazy(() => import("@/pages/showcase"));
+const ShowcaseDetailPage = lazy(() => import("@/pages/showcase-detail"));
 const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding")); // ✅ Seguimiento 4
 
@@ -401,6 +403,14 @@ function ClerkProviderWithRoutes() {
 
           <Route path="/desarrollo-no-code-guia">
             <DesarrolloNoCodeGuiaPage />
+          </Route>
+
+          <Route path="/showcase/:slug">
+            <ShowcaseDetailPage />
+          </Route>
+
+          <Route path="/showcase">
+            <ShowcasePage />
           </Route>
 
           <Route path="/crm/fisioterapeuta">

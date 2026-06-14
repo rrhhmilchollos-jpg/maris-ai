@@ -3365,6 +3365,39 @@ router.post("/apps/:id/fork", requireAuth, async (req: any, res: any) => {
   }
 });
 
+// ── PATCH /api/apps/:id/showcase ─────────────────────────────────────────────
+// Publica o retira un proyecto de la galería pública /showcase. Gratis.
+// Para publicar, la app debe estar desplegada (tiene una URL de demo en vivo)
+// — no tiene sentido mostrar un proyecto sin demo funcional.
+router.patch("/apps/:id/showcase", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const isPublic = !!req.body?.isPublic;
+
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    if (isPublic) {
+      const hasDemoUrl = !!(app.vercelDeployUrl || app.vercelCustomDomain || app.customDomain);
+      if (!hasDemoUrl) {
+        return res.status(400).json({ error: "Despliega la app antes de publicarla en la galería pública." });
+      }
+      if (!app.publicSlug) app.publicSlug = makeSlug();
+      app.isPublic = true;
+      app.showcasePublishedAt = new Date();
+    } else {
+      app.isPublic = false;
+    }
+    await app.save();
+
+    logger.info({ userId, appId: req.params.id, isPublic: app.isPublic }, "Showcase toggle");
+    res.json({ ok: true, isPublic: app.isPublic, publicSlug: app.publicSlug });
+  } catch (err) {
+    logger.error({ err }, "PATCH /api/apps/:id/showcase error");
+    res.status(500).json({ error: "Error al actualizar el estado de la galería." });
+  }
+});
+
 
 // Pre-Deployment Health Check (estilo Emergent.sh): valida el bundle completo
 // (frontend + backend) buscando errores de build/runtime, y si encuentra

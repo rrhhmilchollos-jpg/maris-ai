@@ -110,6 +110,11 @@ export interface IGeneratedApp {
   language: string;
   kind?: string;
   publicSlug?: string;
+  // Showcase público (galería /showcase): el usuario opta por mostrar este
+  // proyecto en la galería pública de Maris AI. Solo se exponen campos
+  // seguros (title, description, techStack, kind, enlace de demo).
+  isPublic?: boolean;
+  showcasePublishedAt?: Date;
   githubRepoUrl?: string;
   githubRepoFullName?: string;
   vercelDeployUrl?: string;
@@ -161,6 +166,8 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     language: { type: String, default: "typescript" },
     kind: { type: String, default: "fullstack" },
     publicSlug: { type: String, unique: true, sparse: true },
+    isPublic: { type: Boolean, default: false, index: true },
+    showcasePublishedAt: { type: Date },
     githubRepoUrl: { type: String },
     githubRepoFullName: { type: String },
     vercelDeployUrl: { type: String },

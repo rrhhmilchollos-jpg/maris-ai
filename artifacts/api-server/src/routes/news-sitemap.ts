@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
-import { NewsArticle } from "@workspace/db/schema";
+import { NewsArticle, GeneratedApp } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -77,6 +77,10 @@ router.get("/sitemap.xml", async (_req, res) => {
   await connectDB();
   try {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(1000).lean();
+    const showcaseApps = await GeneratedApp.find(
+      { isPublic: true, publicSlug: { $exists: true, $ne: null } },
+      { publicSlug: 1, showcasePublishedAt: 1, createdAt: 1, updatedAt: 1 },
+    ).sort({ showcasePublishedAt: -1 }).limit(1000).lean();
 
     const today = new Date().toISOString().split("T")[0];
     const staticPages = [
@@ -85,6 +89,7 @@ router.get("/sitemap.xml", async (_req, res) => {
       { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly", lastmod: today },
       { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly", lastmod: today },
       { url: "https://www.marisai.es/glosario", priority: "0.7", changefreq: "monthly", lastmod: today },
+      { url: "https://www.marisai.es/showcase", priority: "0.8", changefreq: "daily", lastmod: today },
       { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly", lastmod: "2026-05-28" },
       { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly", lastmod: "2026-05-28" },
       { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly", lastmod: "2026-05-28" },
@@ -109,6 +114,16 @@ router.get("/sitemap.xml", async (_req, res) => {
       sitemap += `    <lastmod>${lastmod}</lastmod>\n`;
       sitemap += `    <changefreq>never</changefreq>\n`;
       sitemap += `    <priority>0.7</priority>\n`;
+      sitemap += `  </url>\n`;
+    }
+
+    for (const app of showcaseApps) {
+      const lastmod = new Date((app as any).updatedAt || app.showcasePublishedAt || (app as any).createdAt).toISOString();
+      sitemap += `  <url>\n`;
+      sitemap += `    <loc>https://www.marisai.es/showcase/${app.publicSlug}</loc>\n`;
+      sitemap += `    <lastmod>${lastmod}</lastmod>\n`;
+      sitemap += `    <changefreq>monthly</changefreq>\n`;
+      sitemap += `    <priority>0.6</priority>\n`;
       sitemap += `  </url>\n`;
     }
 
