@@ -40,7 +40,7 @@ import { es } from "date-fns/locale";
 import { 
   Sparkles, Code2, Plus, ArrowRight, Loader2, Cpu, Search, Wand2, 
   FileCheck2, Compass, Palette, ShieldCheck, Plug, Wrench, Bug, 
-  Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, 
+  Layers, Smartphone, Rocket, Gamepad2, Box, Globe, X, LayoutDashboard, Copy,
   ShoppingBag, Notebook, Joystick, Cat, Zap, Atom, Component, Flame, 
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
@@ -323,6 +323,23 @@ export default function DashboardPage() {
       toast({ title: "Error al eliminar", description: error?.message || "No se pudo eliminar la aplicación.", variant: "destructive" });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const [forkingId, setForkingId] = useState<string | null>(null);
+
+  const handleForkApp = async (e: React.MouseEvent, id: string, title: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setForkingId(id);
+    try {
+      const result = await apiFetch<{ ok: boolean; id: string; title: string }>(`/api/apps/${id}/fork`, { method: "POST" });
+      queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+      toast({ title: "Proyecto duplicado", description: `Se creó una copia: "${result.title}". Puedes experimentar libremente sin afectar al original.` });
+    } catch (error: any) {
+      toast({ title: "Error al duplicar", description: error?.message || "No se pudo duplicar la aplicación.", variant: "destructive" });
+    } finally {
+      setForkingId(null);
     }
   };
 
@@ -1029,6 +1046,14 @@ export default function DashboardPage() {
                     title="Eliminar proyecto"
                   >
                     <X className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    className="absolute top-2 right-10 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-primary/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
+                    onClick={(e) => handleForkApp(e, app.id || app._id, app.title)}
+                    disabled={forkingId === (app.id || app._id)}
+                    title="Duplicar proyecto (fork) — crea una copia para experimentar sin riesgo"
+                  >
+                    {forkingId === (app.id || app._id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-6">{app.title}</CardTitle>

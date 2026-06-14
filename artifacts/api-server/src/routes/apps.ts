@@ -3290,7 +3290,72 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
   }
 });
 
-// ── POST /api/apps/:id/health ────────────────────────────────────────────────
+// ── POST /api/apps/:id/fork ──────────────────────────────────────────────────
+// Fork / duplicar proyecto (estilo Emergent.sh): crea una copia exacta del
+// código actual (frontend + backend + páginas planificadas) como un nuevo
+// proyecto independiente del mismo usuario. Útil como "punto de restauración"
+// antes de pedir un cambio grande/arriesgado — si la IA rompe algo en el
+// proyecto original, el fork queda intacto.
+// No cuesta créditos: es una copia en base de datos, sin generación de IA.
+router.post("/apps/:id/fork", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const original = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean() as any;
+    if (!original) return res.status(404).json({ error: "App no encontrada" });
+    if (!original.frontendCode) {
+      return res.status(400).json({ error: "Esta app no tiene código generado todavía, no se puede duplicar." });
+    }
+
+    const customTitle = typeof req.body?.title === "string" && req.body.title.trim()
+      ? req.body.title.trim().slice(0, 200)
+      : `${original.title} (copia)`;
+
+    // ID Universal Maris AI para el fork — vinculado al mismo usuario propietario
+    let marisId: string;
+    try {
+      const owner = await User.findById(userId).lean() as any;
+      const userMarisId = owner?.marisId ?? MarisId.user();
+      marisId = await generateAppId(userMarisId);
+    } catch {
+      marisId = MarisId.project(MarisId.user());
+    }
+
+    const fork = await GeneratedApp.create({
+      userId,
+      title: customTitle,
+      prompt: original.prompt,
+      description: original.description,
+      techStack: original.techStack,
+      frontendCode: original.frontendCode,
+      backendCode: original.backendCode,
+      status: "ready",
+      coderModel: original.coderModel,
+      language: original.language,
+      kind: original.kind,
+      plannedPages: original.plannedPages ?? [],
+      requiredEnvVars: original.requiredEnvVars ?? [],
+      hasWatermark: original.hasWatermark,
+      // Identidad de despliegue propia — el fork NO comparte dominio,
+      // repo de GitHub ni estado de despliegue del original.
+      publicSlug: makeSlug(),
+      marisId,
+    });
+
+    logger.info({ userId, originalAppId: req.params.id, forkAppId: String(fork._id) }, "App duplicada (fork)");
+
+    res.json({
+      ok: true,
+      id: String(fork._id),
+      title: fork.title,
+      marisId: fork.marisId,
+    });
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/fork error");
+    res.status(500).json({ error: "Error al duplicar la app." });
+  }
+});
+
+
 // Pre-Deployment Health Check (estilo Emergent.sh): valida el bundle completo
 // (frontend + backend) buscando errores de build/runtime, y si encuentra
 // problemas reparables intenta arreglarlos automáticamente con el patcher
