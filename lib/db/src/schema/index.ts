@@ -134,6 +134,15 @@ export interface IGeneratedApp {
   // ID Universal Maris AI — formato PRJ-<timestamp_base36>-<random6>
   // Identifica al proyecto de forma única en todo el ecosistema de Maris AI
   marisId?: string;
+  // Pre-Deployment Health Check — último resultado guardado
+  lastHealthCheckAt?: Date;
+  lastHealthCheckReport?: {
+    ok: boolean;
+    frontendIssues: Array<{ file: string; message: string; line?: number }>;
+    backendIssues: Array<{ file: string; message: string; line?: number }>;
+    repaired: boolean;
+    checkedAt: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -181,6 +190,21 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     ],
     // ID Universal Maris AI
     marisId: { type: String, unique: true, sparse: true, index: true },
+    // Pre-Deployment Health Check
+    lastHealthCheckAt: { type: Date },
+    lastHealthCheckReport: {
+      type: new Schema(
+        {
+          ok: { type: Boolean, required: true },
+          frontendIssues: { type: [{ file: String, message: String, line: Number }], default: [] },
+          backendIssues: { type: [{ file: String, message: String, line: Number }], default: [] },
+          repaired: { type: Boolean, default: false },
+          checkedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      required: false,
+    },
   },
   { timestamps: true },
 );
