@@ -49,6 +49,10 @@ interface LivePreviewProps {
   onShare?: () => void;
   onDeploy?: () => void;
   onClose?: () => void;
+  /** Se llama cuando el iframe de preview reporta que #root quedó vacío
+   *  (la app no renderizó nada) — permite al editor disparar una
+   *  auto-reparación y avisar al usuario en el chat. */
+  onFatalError?: (detail: string) => void;
 }
 
 /** Colorea una línea de log según su contenido */
@@ -69,6 +73,7 @@ export function LivePreview({
   onShare,
   onDeploy,
   onClose,
+  onFatalError,
 }: LivePreviewProps) {
   const [phase, setPhase] = useState<Phase>(vercelUrl ? "ready" : "idle");
   const [serverUrl, setServerUrl] = useState<string | null>(vercelUrl || null);
@@ -91,6 +96,22 @@ export function LivePreview({
       return next.length > 500 ? next.slice(next.length - 500) : next;
     });
   }, []);
+
+  // El iframe de preview (vía deployBundle.ts) hace postMessage cuando #root
+  // queda vacío 12s después de cargar — la app no renderizó nada. No
+  // comprobamos event.origin: los iframes srcdoc/cross-origin reportan
+  // origin "null", así que filtramos solo por el marcador __marisPreview.
+  useEffect(() => {
+    if (!onFatalError) return;
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (data && typeof data === "object" && data.__marisPreview && data.type === "fatal-error") {
+        onFatalError(String(data.detail || ""));
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [onFatalError]);
 
   // Auto-scroll de la consola al fondo cuando llegan nuevas líneas
   useEffect(() => {

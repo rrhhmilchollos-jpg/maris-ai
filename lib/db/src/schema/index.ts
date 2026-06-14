@@ -265,6 +265,10 @@ export interface IGenerationJob extends Document {
   approvedFacets?: string[];
   checkpointData?: any;
   editAppId?: string;
+  // Job lanzado automáticamente porque la vista previa no renderizó nada
+  // (detectado vía postMessage desde el iframe). No cuesta créditos, y al
+  // terminar (éxito o fallo) se publica un AppMessage avisando al usuario.
+  isAutoRepair?: boolean;
   coderModel: string;
   language: string;
   kind: string;
@@ -292,6 +296,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     approvedFacets: { type: [String], default: [] },
     checkpointData: { type: Schema.Types.Mixed },
     editAppId: { type: String },
+    isAutoRepair: { type: Boolean, default: false },
     coderModel: { type: String, default: "auto" },
     language: { type: String, default: "typescript" },
     kind: { type: String, default: "fullstack" },

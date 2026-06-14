@@ -569,6 +569,36 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     toast({ title: "Preview cerrada", description: "La vista en vivo se ha retirado completamente y el chat ocupa el área de trabajo." });
   };
 
+  // ── Auto-reparación de preview rota ─────────────────────────────────────
+  // Si el iframe de preview reporta "página en blanco" (#root nunca montó
+  // nada), avisamos en el chat y disparamos automáticamente un job de
+  // reparación — gratis, sin pedir confirmación. Como Emergent.sh: el
+  // usuario no debería tener que descubrir por consola que algo se rompió.
+  // Guardas: solo si hay código generado (si no hay nada, ya mostramos el
+  // mensaje de "generación interrumpida, escríbeme qué construir"), solo si
+  // no hay un job activo ya, y como máximo una vez por código generado (para
+  // no entrar en bucle si el arreglo automático también sale roto).
+  const autoRepairTriedForCodeRef = useRef<string | null>(null);
+  const autoRepairAttemptsRef = useRef(0);
+  const MAX_AUTO_REPAIR_ATTEMPTS = 2;
+  const handlePreviewFatalError = (detail: string) => {
+    if (!hasRenderableCode || isWorking) return;
+    const codeSignature = `${frontendCode.length}`;
+    if (autoRepairTriedForCodeRef.current === codeSignature) return;
+    if (autoRepairAttemptsRef.current >= MAX_AUTO_REPAIR_ATTEMPTS) return;
+    autoRepairTriedForCodeRef.current = codeSignature;
+    autoRepairAttemptsRef.current += 1;
+
+    sendMutation.mutate({
+      id,
+      data: {
+        content: `La vista previa no muestra nada (pantalla en blanco). Detalle técnico capturado en el navegador: ${detail || "el contenedor #root nunca recibió contenido tras cargar"}. Revisa el bundle generado y corrígelo para que la app renderice correctamente.`,
+        attachmentIds: [],
+        isAutoRepair: true,
+      },
+    });
+  };
+
   const handleOpenPreview = () => {
     setIsPreviewClosed(false);
     setIsPreviewMaximized(false);
@@ -1455,6 +1485,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                       onShare={handleShare}
                       onDeploy={() => setShowDeployModal(true)}
                       onClose={handleClosePreview}
+                      onFatalError={handlePreviewFatalError}
                     />
                   )}
                 </div>
