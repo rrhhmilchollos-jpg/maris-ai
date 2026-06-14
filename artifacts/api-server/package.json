@@ -45,7 +45,6 @@
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
-    "hpp": "^0.2.3",
     "ioredis": "^5.10.1",
     "mongoose": "^8.24.0",
     "multer": "^2.1.1",
