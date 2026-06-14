@@ -372,9 +372,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     } else if (job?.status === "failed") {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
-      toast({ title: "Error en la generación", description: job.error || "Algo salió mal", variant: "destructive" });
+      toast({ title: "Error en la generación", description: job.errorMessage || "Algo salió mal", variant: "destructive" });
     }
-  }, [job?.status, id, queryClient, job?.error, toast]);
+  }, [job?.status, id, queryClient, job?.errorMessage, toast]);
 
   const sendMutation = useSendAppMessage({
     mutation: {
@@ -870,7 +870,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <PhaseIcon className={`h-5 w-5 text-[#a78bfa] ${isWorking ? "animate-pulse" : ""}`} />
                 <span className="font-semibold">{isWorking ? phaseInfo.label : "Sin trabajos activos"}</span>
               </div>
-              {job?.error && <p className="mt-3 text-sm text-red-300">{job.error}</p>}
+              {job?.errorMessage && <p className="mt-3 text-sm text-red-300">{job.errorMessage}</p>}
             </div>
             <div className="mt-5 grid gap-3">
               {workflowSteps.map((step) => (
