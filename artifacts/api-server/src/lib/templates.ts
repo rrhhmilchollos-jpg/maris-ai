@@ -13,6 +13,8 @@
  * file framework-agnostic.
  */
 
+import { buildPlaybooksContextBlock } from "./integrationPlaybooks";
+
 /** Kept in sync with KIND_INTENTS / KIND_COSTS in routes/apps.ts. */
 export type TemplateKind =
   | "fullstack"
@@ -425,7 +427,7 @@ export function buildAgentTemplateContextBlock(options: TemplateContextOptions):
     .map((template) => template.id)
     .join(", ") || "usar la plantilla pública más cercana del catálogo";
 
-  return `[MARIS AI TEMPLATE BASE — OBLIGATORIO]
+  const base = `[MARIS AI TEMPLATE BASE — OBLIGATORIO]
 Archivo oficial de plantillas para los agentes: artifacts/api-server/src/lib/templates.ts
 Plantilla profesional seleccionada: ${blueprint.name} (${blueprint.id})
 Tipo solicitado: ${options.kind || "fullstack"}
@@ -446,5 +448,8 @@ Partes que el cliente debe poder modificar después: ${blueprint.editableByClien
 Checklist mínimo de calidad: ${blueprint.qualityChecklist.join("; ")}
 
 Regla de calidad Maris AI: entregar una base lista para que el cliente empiece a editar, nunca una pantalla vacía, nunca una maqueta sin interacción y nunca una app que parezca generada con prisa.`;
+
+  const playbooks = buildPlaybooksContextBlock(options.prompt);
+  return playbooks ? `${base}\n\n${playbooks}` : base;
 }
 

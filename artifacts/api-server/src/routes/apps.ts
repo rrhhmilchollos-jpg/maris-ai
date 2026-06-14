@@ -332,6 +332,11 @@ Output STRICT JSON only:
 Rules:
 - Max 4 services. Only include what's truly needed for the requested app.
 - If the app is a simple landing page, calculator, or self-contained demo, return {"services":[]}.
+- If the app needs payments, use "name":"Stripe" (a verified Stripe Checkout playbook will be provided to the coder).
+- If the app needs transactional email, use "name":"Resend".
+- If the app needs image uploads/galleries, use "name":"Cloudinary".
+- If the app needs maps/locations, use "name":"Google Maps".
+  Using these exact names lets the coder agents apply pre-verified, correct integration code.
 - Output ONLY the JSON object.`;
 
 const TEST_SYSTEM_PROMPT = `You are Maris AI's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
