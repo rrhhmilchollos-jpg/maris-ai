@@ -60,6 +60,8 @@ import {
   type AgentLog,
   type GeneratePhase,
   type GenerateProgress,
+  type AgentModelPlan,
+  type ComplexityTier,
   extractJsonObject,
   withTimeout,
   createClaudeMessageWithFallback,
@@ -359,6 +361,7 @@ export interface GeneratedAppPayload {
   frontendCode: string;
   backendCode: string;
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
+  requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
 }
 
 
@@ -1126,8 +1129,9 @@ RULES — non-negotiable:
 async function specifyIntegrations(
   plan: ProjectPlan,
   prompt: string,
+  agentModelPlan?: AgentModelPlan,
 ): Promise<IntegrationSpec> {
-  const agentPlan = selectAgentModelPlan(prompt);
+  const agentPlan = agentModelPlan ?? selectAgentModelPlan(prompt);
   return withTimeout(
     (async () => {
       try {
@@ -2236,7 +2240,7 @@ export async function generateApp(
   /* === Phase 2 (parallel): integrations + design === */
   const integrationPromise = runIntegration
     ? runPhase("integrations", () => specifyIntegrations(plan, prompt, agentModelPlan))
-    : Promise.resolve({ services: [], envVars: [] });
+    : Promise.resolve({ services: [] });
 
   const FALLBACK_DESIGN: DesignSystem = {
     theme: "dark",
@@ -2264,7 +2268,7 @@ export async function generateApp(
     [integrationSpec, design] = results;
   } catch (err) {
     logger.warn({ err }, "design+integration timed out or failed — using fallbacks");
-    integrationSpec = { services: [], envVars: [] };
+    integrationSpec = { services: [] };
     design = FALLBACK_DESIGN;
   }
   clearInterval(betweenPhasesHeartbeat);
@@ -2559,8 +2563,8 @@ Output STRICT JSON only, no markdown, no explanation.`,
     // Validación de Salud Post-Despliegue (Nivel 3 del plan)
     logger.info(`[QA] Verificando salud de navegación para Job ${jobId}`);
     const navIssues = await validateBundle(result);
-    if (navIssues.length > 0) {
-      logger.warn(`[QA] Se detectaron ${navIssues.length} problemas de navegación tras el Testing Agent.`);
+    if (navIssues.issues.length > 0) {
+      logger.warn(`[QA] Se detectaron ${navIssues.issues.length} problemas de navegación tras el Testing Agent.`);
     }
     return result;
   });
