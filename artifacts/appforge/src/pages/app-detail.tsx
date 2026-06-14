@@ -899,8 +899,20 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </div>
               <div className="space-y-2">
                 <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-5 py-4 text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
-                  <p>He terminado la estructura.</p>
-                  <p className="mt-3">Revisa el plan y dame el visto bueno para continuar.</p>
+                  {hasRenderableCode || isWorking ? (
+                    <>
+                      <p>He terminado la estructura.</p>
+                      <p className="mt-3">Revisa el plan y dame el visto bueno para continuar.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>No encuentro mensajes ni código generado para esta conversación.</p>
+                      <p className="mt-3">
+                        Es posible que una generación anterior se interrumpiera antes de terminar.
+                        Escríbeme abajo qué quieres construir y vuelvo a empezar.
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div className="pl-1">
                   <p className="text-[17px] font-bold text-[#a78bfa]">Maris AI</p>

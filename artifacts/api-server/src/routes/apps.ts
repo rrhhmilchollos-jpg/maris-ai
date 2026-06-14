@@ -3139,14 +3139,19 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
 
     const hasEverPaid = !!(req.dbUser?.hasEverPaid || req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free"));
 
-    // Limpiar jobs anteriores atascados del mismo usuario antes de crear uno nuevo
-    // Esto evita que el watchdog mate el job recién creado por "duplicado"
+    // Limpiar jobs anteriores atascados del mismo usuario antes de crear uno nuevo.
+    // IMPORTANTE: excluye jobs en awaitingApproval=true — esos están PAUSADOS
+    // legítimamente esperando respuesta del usuario (p.ej. en otra pestaña/
+    // proyecto), no "atascados". Sin esta exclusión, iniciar una generación
+    // para el Proyecto B mientras el Proyecto A espera tu aprobación marcaba
+    // el Job A como fallido, dejando esa app a medias.
     try {
       const staleThreshold = new Date(Date.now() - 2 * 60 * 1000); // 2 minutos
       await GenerationJob.updateMany(
         {
           userId,
           status: { $in: ["queued", "running"] },
+          awaitingApproval: { $ne: true },
           updatedAt: { $lt: staleThreshold },
         },
         { $set: { status: "failed", phase: "failed", errorMessage: "Job cancelado — nuevo job iniciado por el usuario.", updatedAt: new Date() } }
@@ -3935,36 +3940,6 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   const ZOMBIE_MS = 12 * 60 * 1000;
   const now = new Date();
   const staleDate = new Date(now.getTime() - STALE_MS);
-
-  // ── Auto-matar jobs duplicados por usuario ────────────────────────────────
-  // Si un usuario tiene más de 1 job running/queued, matar los más antiguos
-  // Esto ocurre cuando Railway reinicia y el Map en memoria se pierde
-  const runningJobsByUser = await GenerationJob.aggregate([
-    { $match: { status: { $in: ["running", "queued"] } } },
-    { $sort: { createdAt: -1 } }, // más reciente primero
-    { $group: { _id: "$userId", jobs: { $push: { id: "$_id", createdAt: "$createdAt" } } } },
-    { $match: { "jobs.1": { $exists: true } } }, // solo usuarios con 2+ jobs
-  ]);
-
-  for (const userGroup of runningJobsByUser) {
-    const toKill = userGroup.jobs.slice(1); // mantener el más reciente, matar el resto
-    if (toKill.length > 0) {
-      // Solo matar si llevan más de 3 minutos sin actividad (grace period)
-      // Esto evita matar un job recién creado mientras el usuario pulsa Generar
-      const GRACE_MS = 3 * 60 * 1000;
-      const graceThreshold = new Date(now.getTime() - GRACE_MS);
-      const staleIds = toKill
-        .filter((j: any) => new Date(j.createdAt) < graceThreshold)
-        .map((j: any) => j.id);
-      if (staleIds.length > 0) {
-        await GenerationJob.updateMany(
-          { _id: { $in: staleIds } },
-          { $set: { status: "failed", phase: "failed", errorMessage: "Job cancelado automáticamente — se detectaron múltiples jobs del mismo usuario en paralelo.", updatedAt: now } },
-        );
-        logger.warn({ userId: userGroup._id, killed: staleIds.length }, "Watchdog: auto-killed stale duplicate jobs for user");
-      }
-    }
-  }
 
   const orphanedQueued = await GenerationJob.find({
     status: "queued",
