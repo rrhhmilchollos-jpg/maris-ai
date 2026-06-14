@@ -107,7 +107,7 @@ export async function deployAppToVercel(opts: {
   const deployFiles =
     appKind === "python-api" || appKind === "django"
       ? preparePythonProjectForVercel(bundleFiles, appKind)
-      : prepareViteProjectForVercel(bundleFiles, isStaticHtml);
+      : prepareViteProjectForVercel(bundleFiles, isStaticHtml, row.title);
 
   let projectId = row.vercelProjectId;
   const projectName = sanitiseProjectName(`maris-${appId.slice(0, 8)}-${row.title}`);
@@ -640,6 +640,7 @@ export function stableVercelProductionUrlForApp(appId: string, title: string): s
 function prepareViteProjectForVercel(
   files: Record<string, string>,
   isStaticHtml = false,
+  appTitle = "Maris AI App",
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [rawPath, contents] of Object.entries(files)) {
@@ -722,6 +723,91 @@ function prepareViteProjectForVercel(
       installCommand: "npm install",
       framework: "vite",
     }, null, 2) + "\n";
+  }
+
+  // ── PWA: instalable en móvil/escritorio (gap "apps móviles" — versión web) ──
+  // Añade manifest.json + icono + service worker mínimo si el bundle no los
+  // trae ya. Vite copia todo lo que hay en public/ a la raíz de dist/, así
+  // que estos quedan servidos en /manifest.json, /icon.svg y /sw.js.
+  const safeTitle = (appTitle || "Maris AI App").trim() || "Maris AI App";
+  const shortName = safeTitle.length > 12 ? safeTitle.slice(0, 12) : safeTitle;
+  const initial = safeTitle.charAt(0).toUpperCase() || "M";
+
+  if (!out["public/icon.svg"]) {
+    out["public/icon.svg"] =
+      `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">\n` +
+      `  <rect width="512" height="512" rx="96" fill="#7c3aed"/>\n` +
+      `  <text x="50%" y="54%" font-family="system-ui,sans-serif" font-size="280" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${initial}</text>\n` +
+      `</svg>\n`;
+  }
+
+  if (!out["public/manifest.json"]) {
+    out["public/manifest.json"] = JSON.stringify(
+      {
+        name: safeTitle,
+        short_name: shortName,
+        start_url: "/",
+        display: "standalone",
+        background_color: "#0a0a0f",
+        theme_color: "#7c3aed",
+        icons: [
+          { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
+        ],
+      },
+      null,
+      2,
+    ) + "\n";
+  }
+
+  if (!out["public/sw.js"]) {
+    out["public/sw.js"] =
+      `// Service worker mínimo generado por Maris AI — instalable + uso básico offline.\n` +
+      `// Nunca cachea /api/*; las páginas usan network-first para evitar versiones\n` +
+      `// desactualizadas, solo cae a caché cuando no hay conexión.\n` +
+      `const CACHE = "maris-pwa-v1";\n\n` +
+      `self.addEventListener("install", () => { self.skipWaiting(); });\n\n` +
+      `self.addEventListener("activate", (event) => {\n` +
+      `  event.waitUntil(\n` +
+      `    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),\n` +
+      `  );\n` +
+      `  self.clients.claim();\n` +
+      `});\n\n` +
+      `self.addEventListener("fetch", (event) => {\n` +
+      `  const req = event.request;\n` +
+      `  if (req.method !== "GET") return;\n` +
+      `  const url = new URL(req.url);\n` +
+      `  if (url.pathname.startsWith("/api/")) return;\n\n` +
+      `  if (req.mode === "navigate") {\n` +
+      `    event.respondWith(fetch(req).catch(() => caches.match("/")));\n` +
+      `    return;\n` +
+      `  }\n\n` +
+      `  event.respondWith(\n` +
+      `    caches.match(req).then((cached) => cached || fetch(req).then((res) => {\n` +
+      `      const copy = res.clone();\n` +
+      `      caches.open(CACHE).then((c) => c.put(req, copy));\n` +
+      `      return res;\n` +
+      `    })),\n` +
+      `  );\n` +
+      `});\n`;
+  }
+
+  // Inyectar <link rel="manifest">, theme-color y registro del service worker
+  // en index.html (idempotente: solo si no están ya presentes).
+  if (out["index.html"] && !/rel=["']manifest["']/.test(out["index.html"])) {
+    out["index.html"] = out["index.html"].replace(
+      "</head>",
+      `    <link rel="manifest" href="/manifest.json" />\n` +
+      `    <meta name="theme-color" content="#7c3aed" />\n` +
+      `    <link rel="icon" href="/icon.svg" type="image/svg+xml" />\n` +
+      `  </head>`,
+    );
+  }
+  if (out["index.html"] && !out["index.html"].includes("serviceWorker")) {
+    out["index.html"] = out["index.html"].replace(
+      "</body>",
+      `    <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>\n` +
+      `  </body>`,
+    );
   }
 
   return out;
