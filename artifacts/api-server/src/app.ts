@@ -18,7 +18,6 @@ import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import { metricsMiddleware } from "./lib/metrics";
 import mongoSanitize from "express-mongo-sanitize";
-import hpp from "hpp";
  
 initSentry();
  
@@ -228,10 +227,12 @@ app.use(
     },
   }),
 );
-// hpp: si un atacante envía el mismo parámetro de query repetido
-// (?id=1&id=2), express normalmente lo convierte en array — hpp se
-// queda con el último valor para evitar bypasses de validación.
-app.use(hpp());
+// hpp ELIMINADO (2026-06-14): hpp@0.2.3 intenta reasignar req.query, que en
+// Express 5 es una propiedad solo-lectura (getter) — esto lanzaba un
+// TypeError en CADA petición entrante, incluidas las healthchecks de Railway
+// a /api/health, dejando el servicio "service unavailable" indefinidamente.
+// Express 5 ya deduplica params de query repetidos de forma segura por
+// defecto, así que hpp era redundante (diagnóstico automático de Railway).
  
 if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
   app.use(
