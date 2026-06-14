@@ -731,7 +731,11 @@ function prepareViteProjectForVercel(
   // que estos quedan servidos en /manifest.json, /icon.svg y /sw.js.
   const safeTitle = (appTitle || "Maris AI App").trim() || "Maris AI App";
   const shortName = safeTitle.length > 12 ? safeTitle.slice(0, 12) : safeTitle;
-  const initial = safeTitle.charAt(0).toUpperCase() || "M";
+  const rawInitial = safeTitle.charAt(0).toUpperCase() || "M";
+  // Escapar caracteres especiales XML — un título que empiece por <, &, etc.
+  // no debe producir un SVG inválido (el icono simplemente no se mostraría).
+  const xmlEscape: Record<string, string> = { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" };
+  const initial = xmlEscape[rawInitial] ?? rawInitial;
 
   if (!out["public/icon.svg"]) {
     out["public/icon.svg"] =
