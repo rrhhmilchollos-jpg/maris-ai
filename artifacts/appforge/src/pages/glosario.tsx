@@ -1,19 +1,28 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { BookOpen, Search, Zap, Code2, Cpu, Globe } from "lucide-react";
+import { BookOpen, Search, Zap, Code2, Cpu, Globe, type LucideIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 
-const GLOSSARY_TERMS = [
+interface GlossaryTerm {
+  term: string;
+  definition: string;
+  icon: LucideIcon;
+  link?: string;
+}
+
+const GLOSSARY_TERMS: GlossaryTerm[] = [
   {
     term: "Agente de IA",
     definition: "Un sistema de inteligencia artificial autónomo que puede percibir su entorno, razonar sobre objetivos y tomar acciones para completarlos sin intervención humana constante.",
-    icon: Cpu
+    icon: Cpu,
+    link: "/que-es-un-agente-de-ia",
   },
   {
     term: "Vibe Coding",
     definition: "Una forma de desarrollo de software donde el programador guía a la IA a través de lenguaje natural y descripciones de alto nivel, enfocándose en la intención y el diseño más que en la sintaxis del código.",
-    icon: Zap
+    icon: Zap,
+    link: "/que-es-vibe-coding",
   },
   {
     term: "LLM (Large Language Model)",
@@ -135,6 +144,11 @@ export default function GlossaryPage() {
                 <div>
                   <h3 className="text-xl font-bold text-white mb-2">{term.term}</h3>
                   <p className="text-muted-foreground leading-relaxed">{term.definition}</p>
+                  {term.link && (
+                    <Link href={term.link} className="inline-block mt-2 text-sm text-primary hover:text-primary/80 underline underline-offset-2">
+                      Leer guía completa →
+                    </Link>
+                  )}
                 </div>
               </div>
             </motion.div>
