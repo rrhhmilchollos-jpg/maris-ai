@@ -15,7 +15,7 @@ function getOpenAIApps(): OpenAI {
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
-import { validateBundle } from "../lib/validate";
+import { validateBundle, type ValidationReport } from "../lib/validate";
 
 // ── Validación de integridad del bundle ──────────────────────────────────────
 // Detecta archivos TSX/TS truncados que pasan el QA pero fallan en el preview.
@@ -3280,7 +3280,129 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
   }
 });
 
-// ── GET /api/apps/:id/active-job ─────────────────────────────────────────────
+// ── POST /api/apps/:id/health ────────────────────────────────────────────────
+// Pre-Deployment Health Check (estilo Emergent.sh): valida el bundle completo
+// (frontend + backend) buscando errores de build/runtime, y si encuentra
+// problemas reparables intenta arreglarlos automáticamente con el patcher
+// antes de que el usuario haga deploy. Cuesta 30 créditos (se descuentan al
+// instante, admins ilimitados). Devuelve un informe con los problemas
+// encontrados/arreglados.
+const HEALTH_CHECK_COST = 30;
+
+router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!app.frontendCode) return res.status(400).json({ error: "Esta app no tiene código generado todavía." });
+
+    const dbUser = await User.findById(userId).lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+
+    // Cobro inmediato y atómico — si no hay créditos suficientes, no se ejecuta nada.
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: HEALTH_CHECK_COST,
+      description: `Pre-Deployment Health Check — ${app.title || "App"}`,
+    });
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "No tienes suficientes créditos para el Health Check.",
+        creditsRequired: HEALTH_CHECK_COST,
+      });
+    }
+
+    const language: GenLanguage = (app.techStack ?? []).some((t: string) => /javascript/i.test(t))
+      ? "javascript"
+      : "typescript";
+
+    // 1) Validar frontend
+    const frontendReport = await validateBundle(app.frontendCode);
+    let backendReport: ValidationReport | null = null;
+    if (app.backendCode) {
+      try {
+        backendReport = await validateBundle(app.backendCode);
+      } catch (err) {
+        logger.warn({ err }, "health-check: backend validation failed, skipping");
+      }
+    }
+
+    const allIssues: BuildIssue[] = [
+      ...frontendReport.issues,
+      ...(backendReport?.issues ?? []),
+    ];
+
+    let updatedFrontend: string | null = null;
+    let updatedBackend: string | null = null;
+    let repaired = false;
+
+    // 2) Si hay problemas, intentar reparar automáticamente (1 ciclo de patch)
+    if (allIssues.length > 0) {
+      const qaIssues: QAIssue[] = allIssues.slice(0, 6).map((i) => ({
+        file: i.file,
+        problem: i.message,
+        fix: "Corrige este error de build/runtime sin cambiar el diseño ni la funcionalidad existente.",
+      }));
+
+      try {
+        const patchedFrontend = await patchBundle(app.frontendCode, qaIssues, language);
+        if (patchedFrontend) {
+          const reValidated = await validateBundle(patchedFrontend);
+          if (reValidated.issues.length < frontendReport.issues.length) {
+            updatedFrontend = patchedFrontend;
+            repaired = true;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, "health-check: frontend auto-repair failed");
+      }
+    }
+
+    // 3) Guardar bundle reparado (si lo hay) y registrar el resultado del check
+    const finalFrontendIssues = updatedFrontend
+      ? (await validateBundle(updatedFrontend)).issues
+      : frontendReport.issues;
+
+    const update: any = {
+      lastHealthCheckAt: new Date(),
+      lastHealthCheckReport: {
+        ok: finalFrontendIssues.length === 0 && (backendReport?.issues.length ?? 0) === 0,
+        frontendIssues: finalFrontendIssues,
+        backendIssues: backendReport?.issues ?? [],
+        repaired,
+        checkedAt: new Date(),
+      },
+    };
+    if (updatedFrontend) update.frontendCode = updatedFrontend;
+    if (updatedBackend) update.backendCode = updatedBackend;
+
+    await GeneratedApp.findByIdAndUpdate(app._id, { $set: update });
+
+    logger.info(
+      { appId: String(app._id), userId, issuesFound: allIssues.length, repaired },
+      "Pre-Deployment Health Check completado",
+    );
+
+    const allRemainingIssues = [...finalFrontendIssues, ...(backendReport?.issues ?? [])];
+    const ok = allRemainingIssues.length === 0;
+
+    res.json({
+      ok,
+      status: ok ? "pass" : "fail",
+      issues: allRemainingIssues.map((i) => `[${i.file}] ${i.message}`),
+      repaired,
+      issuesFoundBeforeRepair: allIssues.length,
+      creditsCharged: isAdmin ? 0 : HEALTH_CHECK_COST,
+      creditsRemaining: charge.newBalance,
+    });
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/health error");
+    res.status(500).json({ error: "Error al ejecutar el Health Check." });
+  }
+});
+
+
 router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;

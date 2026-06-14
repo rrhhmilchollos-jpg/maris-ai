@@ -30,7 +30,8 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, getGetMyStatsQueryKey } from "@/lib/api-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { MatrixBackground } from "@/components/matrix-background";
 
 /* ─────────────────────────── Types ─────────────────────────── */
@@ -44,7 +45,11 @@ interface HealthCheckResponse {
   ok?: boolean;
   status?: string;
   issues?: string[];
+  repaired?: boolean;
+  creditsCharged?: number;
+  creditsRemaining?: number;
   error?: string;
+  creditsRequired?: number;
   warning?: string;
   instructions?: string[];
 }
@@ -161,6 +166,7 @@ export function DeployModal({
   onDeploySuccess,
 }: DeployModalProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   /* ── Screen state ── */
   const [screen, setScreen] = useState<Screen>(currentDeployUrl ? "live" : "initial");
@@ -277,18 +283,32 @@ export function DeployModal({
       const passed = data.ok === true || data.status === "pass";
       setHealthResult(passed ? "pass" : "fail");
       setHealthIssues(Array.isArray(data.issues) ? data.issues : []);
+      queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+
+      const repairedNote = data.repaired ? " Se repararon automáticamente los problemas encontrados." : "";
+      const creditsNote = typeof data.creditsCharged === "number" && data.creditsCharged > 0
+        ? ` (−${data.creditsCharged} créditos, quedan ${data.creditsRemaining})`
+        : "";
       toast({
         title: passed ? "✅ Health check superado" : "⚠️ Health check con incidencias",
-        description: passed ? "La app está lista para producción." : (data.issues?.join(" · ") || "Revisa la configuración."),
+        description: (passed ? `La app está lista para producción.${repairedNote}` : (data.issues?.join(" · ") || "Revisa la configuración.") + repairedNote) + creditsNote,
         variant: passed ? "default" : "destructive",
       });
     } catch (err: any) {
       setHealthResult("fail");
-      toast({ title: "Error en el health check", description: err?.message, variant: "destructive" });
+      if (err?.status === 402 || /créditos/i.test(err?.message || "")) {
+        toast({
+          title: "Créditos insuficientes",
+          description: `El Health Check cuesta 30 créditos. Recarga tu saldo para usarlo.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error en el health check", description: err?.message, variant: "destructive" });
+      }
     } finally {
       setHealthRunning(false);
     }
-  }, [appId, toast]);
+  }, [appId, toast, queryClient]);
 
   /* ── Code review ── */
   const runCodeReview = useCallback(async () => {
@@ -660,7 +680,7 @@ export function DeployModal({
                 <div className="flex-1">
                   <p className="text-sm font-bold text-white">Pre-Deployment Health Check</p>
                   <p className="text-xs text-white/35">
-                    {healthResult === "pass" ? "✅ Superado — lista para producción" : healthResult === "fail" ? `⚠️ ${healthIssues.length} incidencia(s)` : "Análisis automático antes del deploy"}
+                    {healthResult === "pass" ? "✅ Superado — lista para producción" : healthResult === "fail" ? `⚠️ ${healthIssues.length} incidencia(s)` : "Análisis automático antes del deploy · 30 créditos"}
                   </p>
                 </div>
                 <button

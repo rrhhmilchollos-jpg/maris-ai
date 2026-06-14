@@ -525,7 +525,7 @@ router.get("/admin/apps", async (_req, res) => {
       description: r.description,
       techStack: Array.isArray(r.techStack) ? r.techStack : [],
       status: r.status,
-      createdAt: r.createdAt.toISOString(),
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : (r.createdAt ?? null),
     })),
   );
 });
