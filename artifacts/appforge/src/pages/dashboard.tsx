@@ -170,7 +170,32 @@ export default function DashboardPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
-  const [importResult, setImportResult] = useState<{ title: string; filesImported: number } | null>(null); 
+  const [importResult, setImportResult] = useState<{ title: string; filesImported: number } | null>(null);
+
+  // Instrucciones personalizadas (preferencias del usuario, inyectadas en
+  // TODAS sus generaciones como contexto de referencia — no son órdenes
+  // del sistema, igual que la memoria del agente)
+  const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState("");
+  const { data: preferencesData } = useGetMyPreferences({ query: { enabled: preferencesDialogOpen } });
+  const updatePreferences = useUpdateMyPreferences();
+
+  useEffect(() => {
+    if (preferencesData?.notes !== undefined) {
+      setCustomInstructions(preferencesData.notes ?? "");
+    }
+  }, [preferencesData]);
+
+  const handleSavePreferences = async () => {
+    try {
+      await updatePreferences.mutateAsync({ data: { notes: customInstructions } });
+      toast({ title: "Preferencias guardadas", description: "Se aplicarán a tus próximas generaciones." });
+      setPreferencesDialogOpen(false);
+    } catch (error: any) {
+      toast({ title: "Error al guardar", description: error?.message || "No se pudieron guardar las preferencias.", variant: "destructive" });
+    }
+  };
+
 
   const getOnboardingQuestions = () => [
     {
@@ -970,11 +995,47 @@ export default function DashboardPage() {
             <span className="flex items-center">
               <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes
             </span>
+            <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => setPreferencesDialogOpen(true)}>
+              <Settings2 className="h-4 w-4" />
+              Instrucciones personalizadas
+            </Button>
             <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => { setImportDialogOpen(true); setImportResult(null); setImportFile(null); }}>
               <FolderUp className="h-4 w-4" />
               Importar proyecto
             </Button>
           </h3>
+
+          {/* Preferencias / Instrucciones personalizadas Dialog */}
+          <Dialog open={preferencesDialogOpen} onOpenChange={setPreferencesDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5 text-primary" />Instrucciones personalizadas</DialogTitle>
+                <DialogDescription>
+                  Cuéntale a Maris AI cosas que quieres que tenga en cuenta en TODAS tus apps:
+                  el nombre de tu negocio, colores de marca, tono de voz, horarios, ubicación…
+                  Se aplican como contexto de referencia, no sustituyen las reglas de calidad
+                  y seguridad de los agentes.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <Textarea
+                  value={customInstructions}
+                  onChange={(e) => setCustomInstructions(e.target.value.slice(0, 3000))}
+                  placeholder="Ej: Mi negocio se llama 'Café Luna', está en Valencia. Usa tonos cálidos (naranja/marrón). El horario es de 8:00 a 20:00. Siempre en español de España."
+                  className="min-h-[160px] resize-none"
+                  maxLength={3000}
+                />
+                <p className="text-xs text-muted-foreground text-right">{customInstructions.length}/3000</p>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setPreferencesDialogOpen(false)}>Cancelar</Button>
+                <Button onClick={handleSavePreferences} disabled={updatePreferences.isPending} className="gap-2">
+                  {updatePreferences.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}
+                  Guardar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Import Dialog */}
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
