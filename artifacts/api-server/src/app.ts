@@ -219,14 +219,38 @@ app.use(express.urlencoded({ extended: true }));
 // express-mongo-sanitize: elimina claves que empiecen por '$' o contengan '.'
 // en req.body/query/params, evitando inyecciones de operadores Mongo
 // (ej: {"email": {"$ne": null}} para bypass de autenticación).
-app.use(
-  mongoSanitize({
-    replaceWith: "_",
-    onSanitize: ({ req, key }) => {
-      logger.warn({ path: req.path, key, ip: req.ip }, "mongoSanitize: clave sospechosa eliminada");
-    },
-  }),
-);
+//
+// NOTA (2026-06-14): NO usamos mongoSanitize(...) directamente como
+// middleware. Su implementación interna hace `req.query = sanitized` y
+// `req.headers = sanitized` en CADA request — pero en Express 5, req.query
+// es una propiedad de SOLO LECTURA (getter), así que esa reasignación
+// lanzaba un TypeError no capturado en cada petición (statusCode 500 en
+// /api/health, idéntico al bug de hpp). req.body y req.params sí son
+// reasignables con seguridad. Para query/headers, mongoSanitize.sanitize()
+// ya muta el objeto IN-PLACE (delete + reasignación de claves dentro del
+// mismo objeto) antes de intentar la reasignación final — así que basta con
+// NO reasignar req.query/req.headers tras sanearlos.
+function logSuspiciousKey(req: Request, key: string) {
+  logger.warn({ path: req.path, key, ip: req.ip }, "mongoSanitize: clave sospechosa eliminada");
+}
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  const opts = { replaceWith: "_" };
+  for (const key of ["body", "params"] as const) {
+    const val = req[key];
+    if (val && typeof val === "object") {
+      if (mongoSanitize.has(val)) logSuspiciousKey(req, key);
+      req[key] = mongoSanitize.sanitize(val, opts);
+    }
+  }
+  for (const key of ["query", "headers"] as const) {
+    const val = req[key];
+    if (val && typeof val === "object") {
+      if (mongoSanitize.has(val)) logSuspiciousKey(req, key);
+      mongoSanitize.sanitize(val, opts); // muta in-place, sin reasignar (getter en Express 5)
+    }
+  }
+  next();
+});
 // hpp ELIMINADO (2026-06-14): hpp@0.2.3 intenta reasignar req.query, que en
 // Express 5 es una propiedad solo-lectura (getter) — esto lanzaba un
 // TypeError en CADA petición entrante, incluidas las healthchecks de Railway
