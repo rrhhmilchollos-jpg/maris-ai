@@ -19,7 +19,7 @@ const API_BASE = "/api";
 
 // Sustituye por el Client ID real de tu proyecto en Google Cloud Console
 // (APIs y servicios -> Credenciales -> ID de cliente de OAuth 2.0 -> Web).
-const GOOGLE_CLIENT_ID = "TU_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID = "560128973845-o2otvdgfboc3igncs9rovd506bt64l5e.apps.googleusercontent.com";
 
 // ============================================================
 // DATA
