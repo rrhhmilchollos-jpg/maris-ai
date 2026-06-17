@@ -136,6 +136,10 @@ export async function analyzeAppComplexity(
 
 /**
  * Verifica si el usuario puede exportar la app completa a GitHub
+ * 
+ * LÓGICA CORRECTA:
+ * - Apps SIMPLES/MODERADAS: Solo Frontend (sin restricción)
+ * - Apps MUY COMPLEJAS: Requiere MÍNIMO 1000€ para Frontend + Backend
  */
 export async function checkExportPermissions(
   userId: string,
@@ -145,33 +149,38 @@ export async function checkExportPermissions(
     const totalSpent = await getUserTotalSpending(userId);
     const complexity = await analyzeAppComplexity(app);
 
-    // Determinar permisos
-    const canExportFull =
-      totalSpent >= MINIMUM_SPENDING_FOR_FULL_EXPORT || complexity.isComplex;
-    const canExportFrontendOnly = true; // Siempre permitido
-
+    // LÓGICA CORRECTA: La complejidad AUMENTA el requisito
+    let canExportFull = false;
     let reason = "";
-    if (canExportFull) {
-      if (complexity.isComplex) {
-        reason = "App complexity threshold reached - Full export unlocked";
+
+    if (complexity.isComplex) {
+      // App MUY COMPLEJA: Requiere MÍNIMO 1000€
+      canExportFull = totalSpent >= MINIMUM_SPENDING_FOR_FULL_EXPORT;
+      
+      if (canExportFull) {
+        reason = "Complex app + User spending threshold reached - Full export unlocked";
         logger.info(
-          { userId, appId: app._id, complexity: complexity.score },
-          "Full export unlocked due to app complexity"
+          { userId, appId: app._id, complexity: complexity.score, totalSpent },
+          "Full export unlocked for complex app (spending requirement met)"
         );
       } else {
-        reason = "User spending threshold reached - Full export unlocked";
-        logger.info(
-          { userId, appId: app._id, totalSpent },
-          "Full export unlocked due to user spending"
+        reason = "Complex app detected - Full export requires minimum spending";
+        logger.warn(
+          { userId, appId: app._id, complexity: complexity.score, totalSpent, requiredSpending: MINIMUM_SPENDING_FOR_FULL_EXPORT },
+          "Complex app restricted: User spending below threshold"
         );
       }
     } else {
-      reason = "Frontend-only export available";
+      // App SIMPLE/MODERADA: Permitir solo Frontend (sin restricción de gasto)
+      canExportFull = false;
+      reason = "Simple/Moderate app - Frontend-only export available";
       logger.info(
-        { userId, appId: app._id, totalSpent, requiredSpending: MINIMUM_SPENDING_FOR_FULL_EXPORT },
-        "User restricted to frontend-only export"
+        { userId, appId: app._id, complexity: complexity.score },
+        "Simple app: Frontend-only export"
       );
     }
+
+    const canExportFrontendOnly = true; // Siempre permitido
 
     return {
       canExportFull,
