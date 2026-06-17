@@ -167,9 +167,16 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   logger.info({ filesAnalyzed }, "VALIDATOR: Bundle parseado.");
 
   if (filesAnalyzed === 0) {
+    // Mensaje mejorado que ayuda al usuario a entender qué salió mal
+    const diagnosticMsg = bundle.length === 0
+      ? "Empty bundle: no code was provided."
+      : bundle.includes("// === FILE:")
+        ? "Bundle has FILE markers but no valid files were extracted. Check the format of separators."
+        : "No FILE markers found. Expected format: '// === FILE: <path> ===' followed by code.";
+    
     return {
       ok: false,
-      issues: [{ file: "(bundle)", message: "Empty or unparseable bundle." }],
+      issues: [{ file: "(bundle)", message: `Empty or unparseable bundle. ${diagnosticMsg}` }],
       filesAnalyzed: 0,
       durationMs: Date.now() - started,
     };
