@@ -169,8 +169,17 @@ export async function pushAppToGitHub(opts: {
   if (opts.existingRepoFullName) {
     const found = await ghRaw<GhRepo>(`/repos/${opts.existingRepoFullName}`, {}, token);
     if (found.ok) {
-      repo = found.data;
-      reusedExisting = true;
+      // SEGURIDAD: Verificar que el repo pertenece al usuario del token actual.
+      // Si el owner no coincide, ignoramos el repo existente y creamos uno nuevo
+      // en la cuenta correcta para evitar "mezclar" proyectos entre cuentas.
+      const repoOwner = found.data.full_name.split("/")[0];
+      if (repoOwner.toLowerCase() === owner.toLowerCase()) {
+        repo = found.data;
+        reusedExisting = true;
+      } else {
+        console.warn(`[githubPush SECURITY] El repo existente ${opts.existingRepoFullName} pertenece a @${repoOwner}, pero el token es de @${owner}. Se ignorará y se creará uno nuevo.`);
+        repo = null;
+      }
     } else if (found.status !== 404) {
       throw new Error(
         `GitHub GET /repos/${opts.existingRepoFullName} → HTTP ${found.status}${found.message ? `: ${found.message}` : ""}`,

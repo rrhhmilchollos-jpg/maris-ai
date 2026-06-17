@@ -188,6 +188,8 @@ router.post("/github/push/:appId", requireAuth, async (req, res) => {
 
     if (createRes.status === 422 && createData.errors?.[0]?.message?.includes("already exists")) {
       // El repo ya existe, usarlo
+      // IMPORTANTE: Aseguramos que el repoFullName use el login del usuario actual
+      // para evitar colisiones con repositorios de otros usuarios con el mismo nombre.
       repoFullName = `${u.githubLogin}/${finalRepoName}`;
       repoUrl = `https://github.com/${repoFullName}`;
     } else if (!createRes.ok) {
