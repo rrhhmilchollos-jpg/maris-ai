@@ -16,11 +16,20 @@ function sendHealth(res: Response) {
   const testerPath = path.join(process.cwd(), 'src/lib/tester.ts');
   const testerExists = fs.existsSync(testerPath);
 
+  const memUsage = process.memoryUsage();
+  
   res.json({ 
     ...data, 
     queue: queueReady ? "ready" : "degraded",
     testing_agent: testerExists ? "active" : "missing",
-    version: "2.1.0-monitored"
+    version: "2.1.0-monitored",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    memory: {
+      rss: `${(memUsage.rss / 1024 / 1024).toFixed(2)} MB`,
+      heapUsed: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
+      heapTotal: `${(memUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+    }
   });
 }
 
