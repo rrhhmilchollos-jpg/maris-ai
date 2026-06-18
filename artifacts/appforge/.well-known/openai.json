@@ -1,0 +1,19 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Maris AI",
+  "name_for_model": "maris_ai",
+  "description_for_human": "Crea aplicaciones web y móviles completas con inteligencia artificial en minutos.",
+  "description_for_model": "Maris AI es una plataforma de generación de código que utiliza un pipeline de 9 agentes de IA especializados para crear aplicaciones web y móviles funcionales. Puede generar código React, TypeScript, Tailwind CSS, Express y MongoDB basado en descripciones en lenguaje natural.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://www.marisai.es/openapi.yaml",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://www.marisai.es/logo.png",
+  "contact_email": "support@marisai.es",
+  "legal_info_url": "https://www.marisai.es/legal/aviso-legal",
+  "category": "developer_tools"
+}
