@@ -3,19 +3,55 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function VsCompetidoresPage() {
+  // Schema.org ItemList para la comparativa
+  const schemaData = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": "Comparativa Maris AI vs Emergent.sh",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Maris AI",
+        "description": "9 agentes IA, soporte en español, desde 29€/mes"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Emergent.sh",
+        "description": "Plataforma anglosajona, sin soporte en español, desde 20$/mes"
+      }
+    ]
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      <script type="application/ld+json">
+        {JSON.stringify(schemaData)}
+      </script>
       {/* Hero */}
       <section className="py-24 border-b border-white/5">
         <div className="container px-4 mx-auto max-w-4xl text-center">
           <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            ¿Por qué elegir{" "}
-            <span className="text-primary">Maris AI</span>?
+            Maris AI vs Emergent.sh: Comparativa completa 2026
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            El primer generador de apps con IA diseñado para el mercado hispanohablante.
-            Pipeline completo de 9 agentes especializados, desplegado en Vercel + Railway + MongoDB.
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+            Alternativa en español a Emergent.sh, Bolt.new y Lovable
           </p>
+        </div>
+      </section>
+
+      {/* Intro Section */}
+      <section className="py-16 bg-card/30 border-b border-white/5">
+        <div className="container px-4 mx-auto max-w-4xl">
+          <div className="prose prose-invert max-w-none">
+            <p className="text-lg text-muted-foreground leading-relaxed mb-6">
+              Si estás buscando una alternativa a <strong>Emergent.sh</strong>, <strong>Bolt.new</strong> o <strong>Lovable</strong> en español, aquí tienes la comparativa honesta. Emergent.sh es una plataforma de generación de apps con IA popular en el mercado anglosajón, con precios desde 20$/mes. <strong>Maris AI</strong> ofrece el mismo pipeline de agentes especializados, completamente en español, y con soporte nativo para el mercado hispanohablante.
+            </p>
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              La diferencia clave: mientras que Emergent.sh utiliza un agente único generalista, Maris AI implementa un pipeline completo de 9 agentes especializados (diseño, backend, QA, etc.), lo que resulta en código de mejor calidad y aplicaciones más robustas.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -23,7 +59,7 @@ export default function VsCompetidoresPage() {
       <section className="py-24">
         <div className="container px-4 mx-auto max-w-5xl">
           <h2 className="text-3xl font-bold text-white text-center mb-16">
-            Maris AI vs otras plataformas
+            Comparativa: Maris AI vs Emergent.sh vs Bolt.new
           </h2>
           <div className="overflow-x-auto rounded-2xl border border-white/10">
             <table className="w-full">

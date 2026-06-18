@@ -161,7 +161,7 @@ export default function PricingPage() {
             {[
               {
                 q: "¿Puedo cambiar o cancelar mi plan en cualquier momento?",
-                a: "Sí, tienes total flexibilidad. Puedes cambiar o cancelar tu suscripción en cualquier momento desde tu panel de usuario, sin penalizaciones. Los cambios se aplic aplicarán al inicio de tu próximo ciclo de facturación.",
+                a: "Sí, tienes total flexibilidad. Puedes cambiar o cancelar tu suscripción en cualquier momento desde tu panel de usuario, sin penalizaciones. Los cambios se aplicarán al inicio de tu próximo ciclo de facturación.",
               },
               {
                 q: "¿Qué funcionalidades incluye el plan Starter (gratuito)?",
