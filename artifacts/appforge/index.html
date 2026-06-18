@@ -8,6 +8,10 @@
     <!-- Vercel Force Rebuild: 2026-06-07-02-00 (AI discoverability: llms.txt, ai-plugin.json, sameAs) -->
     <!-- LLM discoverability -->
     <link rel="alternate" type="text/plain" href="/llms.txt" title="LLMs.txt — Maris AI para modelos de lenguaje" />
+    <!-- AI Plugin Discovery -->
+    <link rel="alternate" type="application/json" href="/.well-known/ai-plugin.json" />
+    <!-- OpenAI Plugin Manifest -->
+    <link rel="alternate" type="application/json" href="/.well-known/openai.json" />
     <meta name="google-site-verification" content="h8VfglGWGGjRk29YA717Ai-ija8KvVW-l-aTXXhMQYw" />
     <meta name="description" content="Transforma tus ideas en aplicaciones reales en minutos. Maris AI utiliza un equipo de 9 agentes de IA de élite para generar código profesional, escalable y listo para producción. La alternativa definitiva a Bolt y Emergent en español.">
     <meta name="keywords" content="maris ai, marisai.es, generador de apps con ia, vibe coding, crear apps con ia, alternativa a bolt.new, alternativa a emergent.sh, agentes de inteligencia artificial, desarrollo de software ia, react typescript tailwind, saas builder ia, mvp builder ia">
@@ -339,6 +343,32 @@
           }
         }
       ]
+    }
+    </script>
+
+    <!-- Schema.org — SoftwareApplication mejorado para IA Search -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Maris AI",
+      "url": "https://www.marisai.es/",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Web",
+      "inLanguage": "es",
+      "description": "Generador de aplicaciones web y móviles con inteligencia artificial. Crea apps completas con React, TypeScript, Tailwind, Express y MongoDB sin programar.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR",
+        "description": "Plan gratuito con 50 créditos. Planes Pro desde 29€/mes."
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "47"
+      },
+      "keywords": "generador de apps con IA, vibe coding, crear apps sin programar, alternativa a Bolt, alternativa a Emergent, agentes de IA, desarrollo no-code"
     }
     </script>
 
