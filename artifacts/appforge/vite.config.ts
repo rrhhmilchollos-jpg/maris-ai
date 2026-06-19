@@ -11,15 +11,14 @@ const ISOLATION_HEADERS = {
   "Cross-Origin-Embedder-Policy": "unsafe-none",
 };
 
-// Plugin inline que convierte el CSS bloqueante en no bloqueante
-// Cambia <link rel="stylesheet"> por carga diferida con media="print"
+// Plugin que convierte el CSS del bundle en no bloqueante
 function deferNonCriticalCSS() {
   return {
     name: "defer-non-critical-css",
     apply: "build" as const,
     transformIndexHtml(html: string) {
-      // Convierte todos los <link rel="stylesheet"> del bundle en no bloqueantes
-      // excepto los que ya tienen media="print" (fuentes, etc.)
+      // Vite inyecta el CSS así: <link rel="stylesheet" crossorigin href="/assets/xxx.css">
+      // Lo convertimos en preload no bloqueante
       return html.replace(
         /<link rel="stylesheet" crossorigin href="(\/assets\/[^"]+\.css)">/g,
         (_, href) =>
