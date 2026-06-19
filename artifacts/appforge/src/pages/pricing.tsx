@@ -1,65 +1,65 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Check, X, ArrowRight } from "lucide-react";
+import { Check, ArrowRight, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { Layout } from "@/components/layout";
 
 export default function PricingPage() {
-  const plans = [
+  const creditPacks = [
     {
-      name: "Starter",
-      price: "0€",
-      period: "para siempre",
-      description: "Ideal para explorar el potencial de Maris AI con 50 créditos de prueba.",
-      features: [
-        { text: "50 créditos de bienvenida", included: true },
-        { text: "Acceso completo a 9 agentes IA", included: true },
-        { text: "Exportación de código a GitHub", included: true },
-        { text: "Soporte estándar por email", included: true },
-        { text: "Generación de apps ilimitadas", included: false },
-        { text: "Soporte prioritario 24/7", included: false },
-        { text: "Dominio personalizado y SSL", included: false },
-      ],
-      cta: "Empieza gratis",
-      href: "/sign-up",
+      credits: 160,
+      price: 20,
+      pricePerCredit: "0,12€",
       highlight: false,
+      badge: null,
     },
     {
-      name: "Pro",
-      price: "29€",
-      period: "/mes",
-      description: "Para emprendedores y equipos que buscan escalar rápidamente con soporte premium.",
-      features: [
-        { text: "Generación de apps ilimitadas", included: true },
-        { text: "Acceso completo a 9 agentes IA", included: true },
-        { text: "Exportación de código a GitHub", included: true },
-        { text: "Soporte prioritario 24/7", included: true },
-        { text: "Dominio personalizado y SSL", included: true },
-        { text: "Historial de proyectos ilimitado", included: true },
-        { text: "Acceso a la API de generación", included: false },
-      ],
-      cta: "Actualizar a Pro",
-      href: "/sign-up",
+      credits: 250,
+      price: 50,
+      pricePerCredit: "0,20€",
+      highlight: false,
+      badge: null,
+    },
+    {
+      credits: 500,
+      price: 100,
+      pricePerCredit: "0,20€",
       highlight: true,
+      badge: "MÁS POPULAR",
     },
     {
-      name: "Enterprise",
-      price: "A medida",
-      period: "contacta con nosotros",
-      description: "Soluciones personalizadas para grandes empresas y proyectos con requisitos únicos.",
-      features: [
-        { text: "Todas las características del plan Pro", included: true },
-        { text: "Acceso a la API de generación", included: true },
-        { text: "Modelos de IA personalizados y optimizados", included: true },
-        { text: "Soporte técnico 24/7 dedicado", included: true },
-        { text: "Acuerdo de Nivel de Servicio (SLA) garantizado", included: true },
-        { text: "Integración personalizada con tus sistemas", included: true },
-        { text: "Análisis de uso avanzado y consultoría estratégica", included: true },
-      ],
-      cta: "Contactar con Ventas",
-      href: "mailto:ventas@marisai.es",
+      credits: 1250,
+      price: 250,
+      pricePerCredit: "0,20€",
       highlight: false,
+      badge: null,
     },
+    {
+      credits: 3000,
+      price: 500,
+      originalPrice: 625,
+      pricePerCredit: "0,17€",
+      highlight: false,
+      badge: "20% MÁS",
+    },
+    {
+      credits: 6000,
+      price: 1000,
+      originalPrice: 1250,
+      pricePerCredit: "0,17€",
+      highlight: false,
+      badge: "20% MÁS",
+    },
+  ];
+
+  const features = [
+    "Acceso completo a 9 agentes IA especializados",
+    "Generación de apps React + TypeScript + Tailwind",
+    "Backend Express + MongoDB incluido",
+    "Exportación de código a GitHub",
+    "Despliegue automático en Vercel",
+    "Los créditos nunca caducan",
+    "Soporte por email incluido",
   ];
 
   return (
@@ -73,111 +73,125 @@ export default function PricingPage() {
             className="text-center"
           >
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
-              Planes flexibles para tu éxito.
+              Créditos flexibles para tu éxito.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Elige la potencia de Maris AI que mejor se adapte a tus ambiciones. Escala sin límites, paga solo por lo que necesitas.
+              Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 9 agentes IA de Maris AI.
+            </p>
+            <p className="mt-4 text-sm text-primary font-medium">
+              🎁 Regístrate gratis y recibe 50 créditos de bienvenida — sin tarjeta de crédito
             </p>
           </motion.div>
         </section>
 
-        {/* Pricing Cards */}
+        {/* Credit Packs */}
         <section className="container px-4 md:px-8 mx-auto max-w-6xl mb-20">
-          <div className="grid md:grid-cols-3 gap-8">
-            {plans.map((plan, i) => (
+          <div className="grid md:grid-cols-3 gap-6">
+            {creditPacks.map((pack, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
+                transition={{ delay: i * 0.08 }}
                 viewport={{ once: true }}
                 className={`relative rounded-2xl border transition-all ${
-                  plan.highlight
+                  pack.highlight
                     ? "border-primary/50 bg-gradient-to-br from-primary/10 to-primary/5 ring-2 ring-primary/20 scale-105"
                     : "border-white/10 bg-card/40 hover:border-primary/30"
                 }`}
               >
-                {plan.highlight && (
+                {pack.badge && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                     <span className="bg-primary text-white text-xs font-bold px-4 py-1 rounded-full">
-                      MÁS POPULAR
+                      {pack.badge}
                     </span>
                   </div>
                 )}
 
-                <div className="p-8">
-                  <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-                  <p className="text-muted-foreground text-sm mb-6">{plan.description}</p>
-
-                  <div className="mb-8">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold text-white">{plan.price}</span>
-                      <span className="text-muted-foreground text-sm">{plan.period}</span>
-                    </div>
+                <div className="p-6">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap className="h-5 w-5 text-primary" />
+                    <span className="text-2xl font-bold text-white">{pack.credits.toLocaleString()} créditos</span>
                   </div>
 
-                  <Link href={plan.href}>
+                  <div className="mb-6">
+                    {pack.originalPrice && (
+                      <span className="text-muted-foreground line-through text-sm mr-2">
+                        {pack.originalPrice.toLocaleString()}€
+                      </span>
+                    )}
+                    <span className="text-4xl font-bold text-white">{pack.price.toLocaleString()}€</span>
+                    <span className="text-muted-foreground text-sm ml-2">· {pack.pricePerCredit}/crédito</span>
+                  </div>
+
+                  <Link href="/sign-up">
                     <Button
-                      className={`w-full mb-8 h-12 text-base ${
-                        plan.highlight
+                      className={`w-full h-11 text-base mb-4 ${
+                        pack.highlight
                           ? "bg-primary text-white hover:bg-primary/90"
                           : "bg-white/10 text-white hover:bg-white/20"
                       }`}
                     >
-                      {plan.cta}
+                      Comprar ahora
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </Link>
 
-                  <div className="space-y-4">
-                    {plan.features.map((feature, j) => (
-                      <div key={j} className="flex items-start gap-3">
-                        {feature.included ? (
-                          <Check className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
-                        ) : (
-                          <X className="h-5 w-5 text-muted-foreground/40 flex-shrink-0 mt-0.5" />
-                        )}
-                        <span
-                          className={`text-sm ${
-                            feature.included ? "text-white/80" : "text-muted-foreground/60"
-                          }`}
-                        >
-                          {feature.text}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Los créditos nunca caducan
+                  </p>
                 </div>
               </motion.div>
             ))}
           </div>
         </section>
 
+        {/* What's included */}
+        <section className="container px-4 md:px-8 mx-auto max-w-3xl mb-20">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-white/10 bg-card/40 p-8"
+          >
+            <h2 className="text-2xl font-bold text-white mb-6 text-center">
+              Todo incluido en cada crédito
+            </h2>
+            <div className="grid md:grid-cols-2 gap-3">
+              {features.map((feature, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <Check className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-white/80">{feature}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </section>
+
         {/* FAQ */}
         <section className="container px-4 md:px-8 mx-auto max-w-3xl mb-20">
-            <h2 className="text-3xl font-bold text-white mb-12 text-center">Preguntas Frecuentes (FAQ)</h2>
-
+          <h2 className="text-3xl font-bold text-white mb-12 text-center">Preguntas Frecuentes</h2>
           <div className="space-y-6">
             {[
               {
-                q: "¿Puedo cambiar o cancelar mi plan en cualquier momento?",
-                a: "Sí, tienes total flexibilidad. Puedes cambiar o cancelar tu suscripción en cualquier momento desde tu panel de usuario, sin penalizaciones. Los cambios se aplicarán al inicio de tu próximo ciclo de facturación.",
+                q: "¿Qué son los créditos y cómo se usan?",
+                a: "Los créditos son la moneda de Maris AI. Cada vez que generas una app, modificas código o usas los agentes IA, se consumen créditos según la complejidad de la tarea. Una landing page básica consume 1 crédito; una app completa con backend puede consumir 3-5 créditos.",
               },
               {
-                q: "¿Qué funcionalidades incluye el plan Starter (gratuito)?",
-                a: "El plan Starter incluye 50 créditos de bienvenida al registrarte. Esto te permite generar una aplicación básica, acceder a nuestro equipo completo de 9 agentes IA especializados y exportar el código generado a GitHub. No se requiere tarjeta de crédito para empezar.",
+                q: "¿Cuántos créditos recibo al registrarme gratis?",
+                a: "Al crear tu cuenta gratuita recibes 50 créditos de bienvenida, sin necesidad de tarjeta de crédito. Esto te permite generar tu primera app y explorar todas las funcionalidades de Maris AI.",
               },
               {
-                q: "¿Ofrecen descuentos por suscripciones anuales?",
-                a: "¡Absolutamente! Al optar por una suscripción anual, te beneficiarás de un descuento equivalente a 2 meses gratis. Contacta con nuestro equipo de ventas para obtener más información y activar esta oferta.",
+                q: "¿Los créditos caducan?",
+                a: "No. Los créditos que compras nunca caducan. Puedes usarlos a tu ritmo, sin presión de fechas límite.",
               },
               {
-                q: "¿Qué sucede con mis aplicaciones si decido cancelar mi suscripción?",
-                a: "Tus aplicaciones son y siempre serán tuyas. Aunque canceles, mantendrás la propiedad y podrás exportar todo el código a GitHub para desplegarlo donde desees. Solo perderás la capacidad de generar nuevas aplicaciones o acceder a funciones premium.",
+                q: "¿Puedo comprar más créditos en cualquier momento?",
+                a: "Sí. Puedes comprar créditos adicionales en cualquier momento desde tu panel de usuario. Los paquetes más grandes tienen mejor precio por crédito.",
               },
               {
-                q: "¿Cómo funciona el soporte prioritario?",
-                a: "Los planes Pro y Enterprise incluyen soporte prioritario 24/7. Esto significa que tus consultas y solicitudes serán atendidas con la máxima urgencia por nuestro equipo de expertos, garantizando una resolución rápida y eficiente.",
+                q: "¿El código generado es mío?",
+                a: "Sí, el código generado por Maris AI es 100% tuyo. Puedes exportarlo a GitHub, desplegarlo donde quieras y modificarlo libremente sin restricciones de licencia.",
               },
             ].map((item, i) => (
               <motion.div
