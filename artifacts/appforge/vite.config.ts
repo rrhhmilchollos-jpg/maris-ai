@@ -56,42 +56,15 @@ export default defineConfig({
       compress: {
         drop_console: true,
         drop_debugger: true,
-        passes: 4,
+        passes: 2,
         pure_funcs: ["console.log", "console.debug"],
-        unsafe: true,
-        unsafe_methods: true,
       },
-      mangle: { toplevel: true },
+      mangle: true,
       format: { comments: false },
     },
     cssMinify: true,
     cssCodeSplit: true,
     reportCompressedSize: false,
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (id.includes("@clerk/clerk-react") || id.includes("clerk.browser")) return "vendor-clerk";
-            if (id.includes("framer-motion")) return "vendor-motion";
-            if (id.includes("lucide-react")) return "vendor-icons";
-            if (id.includes("react-icons")) return "vendor-react-icons";
-            if (id.includes("@radix-ui")) return "vendor-ui";
-            if (id.includes("/react/") || id.includes("/react-dom/")) return "vendor-react";
-            if (id.includes("@tanstack/react-query") || id.includes("wouter")) return "vendor-router";
-            if (id.includes("react-hook-form") || id.includes("@hookform") || id.includes("zod")) return "vendor-forms";
-            if (id.includes("recharts") || id.includes("d3")) return "vendor-charts";
-            if (id.includes("monaco-editor")) return "vendor-editor";
-            if (id.includes("shiki") || id.includes("prismjs")) return "vendor-highlight";
-            if (id.includes("@codesandbox/sandpack")) return "vendor-sandpack";
-            if (id.includes("@webcontainer")) return "vendor-webcontainer";
-            if (id.includes("@sentry")) return "vendor-sentry";
-            if (id.includes("date-fns")) return "vendor-forms";
-            if (id.includes("embla-carousel") || id.includes("vaul") || id.includes("sonner") || id.includes("cmdk")) return "vendor-ui-extras";
-            return "vendor-others";
-          }
-        },
-      },
-    },
   },
 });
