@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
 import { shadcn } from "@clerk/themes";
 import { esES } from "@clerk/localizations";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 import { Toaster } from "@/components/ui/toaster";
 import { CookieBanner } from "@/components/cookie-banner";
@@ -449,6 +450,7 @@ function App() {
       </WouterRouter>
       <Toaster />
       <CookieBanner />
+      <SpeedInsights />
     </TooltipProvider>
   );
 }
