@@ -11,6 +11,24 @@ const ISOLATION_HEADERS = {
   "Cross-Origin-Embedder-Policy": "unsafe-none",
 };
 
+// Plugin inline que convierte el CSS bloqueante en no bloqueante
+// Cambia <link rel="stylesheet"> por carga diferida con media="print"
+function deferNonCriticalCSS() {
+  return {
+    name: "defer-non-critical-css",
+    apply: "build" as const,
+    transformIndexHtml(html: string) {
+      // Convierte todos los <link rel="stylesheet"> del bundle en no bloqueantes
+      // excepto los que ya tienen media="print" (fuentes, etc.)
+      return html.replace(
+        /<link rel="stylesheet" crossorigin href="(\/assets\/[^"]+\.css)">/g,
+        (_, href) =>
+          `<link rel="preload" as="style" href="${href}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="${href}"></noscript>`
+      );
+    },
+  };
+}
+
 export default defineConfig({
   base: "/",
   server: {
@@ -27,6 +45,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss({ optimize: true }),
+    deferNonCriticalCSS(),
     compression({
       algorithm: "brotliCompress",
       exclude: [/\.(png|jpe?g|gif|svg|webp|ico|woff2?)$/],
