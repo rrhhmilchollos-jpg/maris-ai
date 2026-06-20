@@ -1,0 +1,352 @@
+From 6eae8276088a1b8f170976da76e04b9537ee6065 Mon Sep 17 00:00:00 2001
+From: Claude <claude@anthropic.local>
+Date: Sat, 20 Jun 2026 21:23:49 +0000
+Subject: [PATCH] fix(seo): canonicals/H1/title/meta por ruta + cabeceras de
+ seguridad
+
+- Genera HTML estatico por ruta en build (scripts/prerender-seo.mjs) con
+  title, meta description, canonical, og:*, twitter:* y un H1 real propios
+  de cada pagina, para que los crawlers que no ejecutan JS (Screaming Frog,
+  SEMrush) dejen de ver siempre el canonical/H1/title de la home.
+- Acorta titles >60 caracteres y meta descriptions >160 caracteres en home,
+  pricing, news, vs-emergent, glosario, showcase y las 3 paginas pilar.
+- Anade <h1> al contenido oculto de la home (antes solo tenia H2).
+- vercel.json: corrige X-Frame-Options (ALLOWALL -> SAMEORIGIN) y anade
+  Strict-Transport-Security (HSTS), que faltaba.
+---
+ artifacts/appforge/index.html                 |   2 +-
+ artifacts/appforge/package.json               |   1 +
+ artifacts/appforge/scripts/prerender-seo.mjs  | 236 ++++++++++++++++++
+ .../src/pages/desarrollo-no-code-guia.tsx     |   4 +-
+ .../src/pages/que-es-un-agente-de-ia.tsx      |   4 +-
+ .../appforge/src/pages/que-es-vibe-coding.tsx |   4 +-
+ vercel.json                                   |   6 +-
+ 7 files changed, 249 insertions(+), 8 deletions(-)
+ create mode 100644 artifacts/appforge/scripts/prerender-seo.mjs
+
+diff --git a/artifacts/appforge/index.html b/artifacts/appforge/index.html
+index 431335d..3772e17 100644
+--- a/artifacts/appforge/index.html
++++ b/artifacts/appforge/index.html
+@@ -1 +1 @@
+-<!DOCTYPE html><html lang="es" class="dark" translate="no"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="google" content="notranslate" /><title>Maris AI | Crear Páginas Web y App Profesionales con Inteligencia Artificial</title><link rel="alternate" type="text/plain" href="/llms.txt" title="LLMs.txt — Maris AI para modelos de lenguaje" /><link rel="alternate" type="application/json" href="/.well-known/ai-plugin.json" /><link rel="alternate" type="application/json" href="/.well-known/openai.json" /><meta name="google-site-verification" content="h8VfglGWGGjRk29YA717Ai-ija8KvVW-l-aTXXhMQYw" /><meta name="description" content="Transforma tus ideas en aplicaciones reales en minutos. Maris AI utiliza un equipo de 9 agentes de IA de élite para generar código profesional, escalable y listo para producción. La alternativa definitiva a Bolt y Emergent en español."><meta name="keywords" content="maris ai, marisai.es, generador de apps con ia, vibe coding, crear apps con ia, alternativa a bolt.new, alternativa a emergent.sh, agentes de inteligencia artificial, desarrollo de software ia, react typescript tailwind, saas builder ia, mvp builder ia"><meta name="author" content="Maris AI"><meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"><link rel="canonical" href="https://www.marisai.es/" id="canonical-tag" /><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}var marisCookieConsent=localStorage.getItem('maris-ai-cookie-consent');var marisConsentGranted=marisCookieConsent==='accepted';gtag('consent','default',{ad_storage:marisConsentGranted?'granted':'denied',analytics_storage:marisConsentGranted?'granted':'denied',ad_user_data:marisConsentGranted?'granted':'denied',ad_personalization:marisConsentGranted?'granted':'denied'});</script><script>(function(){var loaded=false;var loadThirdParty=function(){if(loaded)return;loaded=true;(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-PCTZFPL3');var gScript=document.createElement('script');gScript.async=true;gScript.src='https://www.googletagmanager.com/gtag/js?id=AW-18218229959';document.head.appendChild(gScript);gScript.onload=function(){gtag('js',new Date());gtag('config','AW-18218229959');gtag('config','G-NHYSE8VV2J');};!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','3123552171167855');fbq('track','PageView');!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=['page','track','identify','instances','debug','on','off','once','ready','alias','group','enableCookie','disableCookie','holdConsent','revokeConsent','grantConsent'],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r='https://analytics.tiktok.com/i18n/pixel/events.js',o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=document.createElement('script');n.type='text/javascript',n.async=!0,n.src=r+'?sdkid='+e+'&lib='+t;e=document.getElementsByTagName('script')[0];e.parentNode.insertBefore(n,e)};ttq.load('D8PFLNBC77U9OS74QB50');ttq.page();}(window,document,'ttq');};var events=['pointerdown','touchstart','keydown','scroll','mousemove'];var handler=function(){loadThirdParty();events.forEach(function(e){window.removeEventListener(e,handler);});};events.forEach(function(e){window.addEventListener(e,handler,{once:true,passive:true});});setTimeout(loadThirdParty,5000);})();</script><script>(function(){var routeMeta={'/':{ title:'Maris AI | Crear Páginas Web y App Profesionales con Inteligencia Artificial',description:'Transforma tus ideas en aplicaciones reales en minutos. Maris AI utiliza un equipo de 9 agentes de IA de élite para generar código profesional, escalable y listo para producción.',canonical:'https://www.marisai.es/'},'/pricing':{title:'Créditos y Precios — Maris AI | Empieza Gratis con 50 Créditos',description:'Compra créditos para generar apps con IA. Desde 20€ por 160 créditos. Los créditos nunca caducan. Empieza gratis con 50 créditos de bienvenida sin tarjeta de crédito.',canonical:'https://www.marisai.es/pricing'},'/news':{title:'Blog de IA para Emprendedores — Maris AI | Crear Apps, Vibe Coding y Novedades',description:'Artículos, guías y noticias sobre inteligencia artificial para emprendedores en España. Cómo crear apps con IA, vibe coding, no-code y novedades de Maris AI.',canonical:'https://www.marisai.es/news'},'/vs-emergent':{title:'Maris AI vs Emergent.sh — Comparativa de generadores de apps con IA',description:'Compara Maris AI con Emergent.sh: precio, velocidad, calidad del código, agentes especializados y soporte. Descubre por qué Maris AI es la mejor alternativa.',canonical:'https://www.marisai.es/vs-emergent'},'/legal/privacidad':{title:'Política de Privacidad — Maris AI',description:'Política de privacidad de Maris AI. Cómo recopilamos, usamos y protegemos tus datos personales conforme al RGPD.',canonical:'https://www.marisai.es/legal/privacidad'},'/legal/aviso-legal':{title:'Aviso Legal — Maris AI',description:'Aviso legal e información sobre el responsable del sitio web marisai.es conforme a la LSSI.',canonical:'https://www.marisai.es/legal/aviso-legal'},'/legal/cookies':{title:'Política de Cookies — Maris AI',description:'Información sobre las cookies utilizadas en marisai.es y cómo gestionarlas.',canonical:'https://www.marisai.es/legal/cookies'},'/sign-in':{title:'Iniciar sesión — Maris AI',description:'Accede a tu cuenta de Maris AI para generar y gestionar tus aplicaciones con IA.',canonical:'https://www.marisai.es/sign-in'},'/sign-up':{title:'Crear cuenta — Maris AI | Empieza gratis con 50 créditos',description:'Crea tu cuenta gratuita en Maris AI y genera tu primera app con IA en minutos. Sin tarjeta de crédito. 50 créditos de bienvenida incluidos.',canonical:'https://www.marisai.es/sign-up'},'/glosario':{title:'Glosario de Inteligencia Artificial para Emprendedores | Maris AI',description:'Términos clave de IA explicados en español: LLM, agentes, vibe coding, prompt engineering y más. Guía para emprendedores sin conocimientos técnicos.',canonical:'https://www.marisai.es/glosario'},'/que-es-vibe-coding':{title:'Qué es el Vibe Coding: La Nueva Forma de Programar con IA | Maris AI',description:'Descubre qué es el vibe coding, cómo funciona y por qué está revolucionando el desarrollo de software en 2026. Guía completa en español.',canonical:'https://www.marisai.es/que-es-vibe-coding'},'/que-es-un-agente-de-ia':{title:'Qué es un Agente de IA y Para Qué Sirve | Guía 2026 | Maris AI',description:'Aprende qué es un agente de inteligencia artificial, cómo funcionan los pipelines multi-agente y cómo Maris AI los usa para crear apps completas.',canonical:'https://www.marisai.es/que-es-un-agente-de-ia'},'/desarrollo-no-code-guia':{title:'Desarrollo No-Code con IA: Guía Completa para Emprendedores 2026 | Maris AI',description:'Todo lo que necesitas saber sobre desarrollo no-code con inteligencia artificial. Herramientas, comparativas y casos de uso reales en España.',canonical:'https://www.marisai.es/desarrollo-no-code-guia'},'/showcase':{title:'Galería de Apps creadas con IA | Proyectos reales de Maris AI',description:'Explora aplicaciones reales generadas con Maris AI por emprendedores y startups en España. Marketplaces, dashboards, SaaS y más.',canonical:'https://www.marisai.es/showcase'}};var path=window.location.pathname.replace(//$/,'')||'/';var meta=routeMeta[path]||routeMeta['/'];var canonicalEl=document.getElementById('canonical-tag');if(canonicalEl)canonicalEl.setAttribute('href',meta.canonical);document.title=meta.title;var descEl=document.querySelector('meta[name="description"]');if(descEl)descEl.setAttribute('content',meta.description);else{var newDesc=document.createElement('meta');newDesc.name='description';newDesc.content=meta.description;document.head.appendChild(newDesc);}var ogUrl=document.querySelector('meta[property="og:url"]');if(ogUrl)ogUrl.setAttribute('content',meta.canonical);var twUrl=document.querySelector('meta[property="twitter:url"]');if(twUrl)twUrl.setAttribute('content',meta.canonical);var ogTitle=document.querySelector('meta[property="og:title"]');if(ogTitle)ogTitle.setAttribute('content',meta.title);var twTitle=document.querySelector('meta[property="twitter:title"]');if(twTitle)twTitle.setAttribute('content',meta.title);var ogDesc=document.querySelector('meta[property="og:description"]');if(ogDesc)ogDesc.setAttribute('content',meta.description);var twDesc=document.querySelector('meta[property="twitter:description"]');if(twDesc)twDesc.setAttribute('content',meta.description);})();</script><meta property="og:type" content="website"><meta property="og:url" content="https://www.marisai.es/"><meta property="og:title" content="Maris AI | Crear Páginas Web y App Profesionales con Inteligencia Artificial"><meta property="og:description" content="¿Tienes una idea? Maris AI la convierte en una aplicación real. Un equipo de 9 agentes de IA trabajando para ti para generar código de alta calidad al instante."><meta property="og:image" content="https://www.marisai.es/opengraph.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:locale" content="es_ES"><meta property="og:site_name" content="Maris AI"><meta property="twitter:card" content="summary_large_image"><meta property="twitter:url" content="https://www.marisai.es/"><meta property="twitter:title" content="Maris AI | Generador de Apps con IA — 9 Agentes Especializados"><meta property="twitter:description" content="Pipeline de 9 agentes IA: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator."><meta property="twitter:image" content="https://www.marisai.es/opengraph.jpg"><script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Maris AI","url":"https://www.marisai.es/","applicationCategory":"DeveloperApplication","operatingSystem":"All","inLanguage":"es","description":"Plataforma de generación de aplicaciones full-stack con un pipeline de 9 agentes de IA especializados.","offers":{"@type":"Offer","price":"0.00","priceCurrency":"EUR","description":"50 créditos gratis al registrarte. Paquetes desde 20€ por 160 créditos. Los créditos nunca caducan."},"featureList":["Pipeline de 9 agentes de IA especializados","Generación de código React + TypeScript + Tailwind","Backend Express + MongoDB","Exportación a GitHub y despliegue en Vercel"],"publisher":{"@type":"Organization","name":"Maris AI","url":"https://www.marisai.es/","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg"}}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Maris AI","url":"https://www.marisai.es/","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg","width":512,"height":512},"description":"Generador de aplicaciones web y móviles con inteligencia artificial.","sameAs":["https://www.marisai.es/","https://x.com/MarisAIagents","https://www.youtube.com/@Soportemarisai","https://www.tiktok.com/@marisai49","https://www.linkedin.com/company/maris-ai","https://github.com/rrhhmilchollos-jpg/maris-ai"],"foundingDate":"2025","foundingLocation":"España","slogan":"Escribe una idea. Recibe una app real.","email":"marketing@marisai.es"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Maris AI","url":"https://www.marisai.es/","inLanguage":"es","potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://www.marisai.es/news?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"¿Qué es Maris AI?","acceptedAnswer":{"@type":"Answer","text":"Maris AI es un generador de aplicaciones web y móviles completas impulsado por inteligencia artificial. Describe tu idea en español y un pipeline de 9 agentes IA especializados genera el código React + TypeScript + Tailwind + Express + MongoDB listo para producción en menos de 5 minutos."}},{"@type":"Question","name":"¿Necesito saber programar para usar Maris AI?","acceptedAnswer":{"@type":"Answer","text":"No. Maris AI está diseñado para que cualquier persona pueda crear aplicaciones con solo describir su idea en lenguaje natural."}},{"@type":"Question","name":"¿Cuánto cuesta Maris AI?","acceptedAnswer":{"@type":"Answer","text":"Maris AI funciona por créditos. Al registrarte recibes 50 créditos gratis sin tarjeta de crédito. Los paquetes adicionales comienzan desde 20€ por 160 créditos. Los créditos nunca caducan."}},{"@type":"Question","name":"¿El código generado es mío?","acceptedAnswer":{"@type":"Answer","text":"Sí, el código generado por Maris AI es 100% tuyo. Puedes exportarlo a GitHub, desplegarlo en Vercel o cualquier otra plataforma, y modificarlo libremente."}}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Maris AI — Plataforma de Live-Coding con IA para Emprendedores","url":"https://www.marisai.es/","description":"Crea apps completas con IA sin programar. 9 agentes de inteligencia artificial especializados generan tu app en menos de 5 minutos.","brand":{"@type":"Brand","name":"Maris AI"},"image":"https://www.marisai.es/opengraph.jpg","offers":{"@type":"Offer","price":"0.00","priceCurrency":"EUR","availability":"https://schema.org/InStock","priceValidUntil":"2027-12-31","url":"https://www.marisai.es/pricing","description":"50 créditos gratis al registrarte. Paquetes desde 20€ por 160 créditos."},"aggregateRating":{"@type":"AggregateRating","ratingValue":"4.8","reviewCount":"47","bestRating":"5","worstRating":"1"},"review":[{"@type":"Review","reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},"author":{"@type":"Person","name":"Carlos M."},"reviewBody":"Increíble herramienta. En 10 minutos tenía el MVP de mi startup funcionando."},{"@type":"Review","reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},"author":{"@type":"Person","name":"Laura S."},"reviewBody":"Soy autónoma y necesitaba digitalizar mi negocio. Maris AI me generó una app de gestión de citas completa en minutos."}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Cómo crear una app con IA sin programar en España","description":"Guía paso a paso para crear tu primera aplicación web usando Maris AI.","totalTime":"PT5M","estimatedCost":{"@type":"MonetaryAmount","currency":"EUR","value":"0"},"tool":[{"@type":"HowToTool","name":"Maris AI","url":"https://www.marisai.es/"}],"step":[{"@type":"HowToStep","position":1,"name":"Describe tu idea en español","text":"Escribe en lenguaje natural lo que quieres construir.","url":"https://www.marisai.es/#paso-1"},{"@type":"HowToStep","position":2,"name":"9 agentes de IA trabajan en paralelo","text":"Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, DevOps y Optimizer analizan tu idea y generan el código completo automáticamente.","url":"https://www.marisai.es/#paso-2"},{"@type":"HowToStep","position":3,"name":"Recibe tu app completa en menos de 5 minutos","text":"Obtienes una aplicación web funcional con código React + TypeScript + Tailwind + Express + MongoDB. El código es 100% tuyo, exportable a GitHub y desplegable en Vercel.","url":"https://www.marisai.es/#paso-3"}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Inicio","item":"https://www.marisai.es/"},{"@type":"ListItem","position":2,"name":"Precios y Créditos","item":"https://www.marisai.es/pricing"},{"@type":"ListItem","position":3,"name":"Noticias de IA","item":"https://www.marisai.es/news"},{"@type":"ListItem","position":4,"name":"Maris AI vs Competidores","item":"https://www.marisai.es/vs-emergent"}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsMediaOrganization","name":"Maris AI Noticias","url":"https://www.marisai.es/news","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg","width":512,"height":512},"sameAs":["https://www.marisai.es/"],"publishingPrinciples":"https://www.marisai.es/news","masthead":"https://www.marisai.es/news"}</script><meta name="geo.region" content="ES" /><meta name="geo.placename" content="España" /><meta name="geo.position" content="40.4168;-3.7038" /><meta name="ICBM" content="40.4168, -3.7038" /><meta name="language" content="es-ES" /><meta name="target" content="emprendedores, autónomos, startups, España" /><link rel="icon" type="image/svg+xml" href="/favicon.svg" /><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="preconnect" href="https://clerk.marisai.es"><link rel="dns-prefetch" href="https://clerk.marisai.es"><link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" /><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" /><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" /></noscript><style>:root{color-scheme:dark;}html.dark{--background:240 10% 4%;--foreground:0 0% 98%;--primary:272 72% 55%;--primary-foreground:0 0% 100%;--muted-foreground:240 5% 65%;--card:240 10% 6%;}body{background-color:hsl(240 10% 4%);color:hsl(0 0% 98%);margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;}#root{min-height:100vh;}#seo-content{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}</style></head><body><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PCTZFPL3" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=3123552171167855&ev=PageView&noscript=1" /></noscript><div id="seo-content" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"><p>Maris AI es la plataforma de live-coding con inteligencia artificial para emprendedores en España. Describe tu idea en español y 9 agentes de IA especializados generan tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.</p><h2>Crea tu app con IA en minutos, sin saber programar — para emprendedores en España</h2><ol><li><strong>Describe tu app en español</strong> — escribe en lenguaje natural lo que quieres construir.</li><li><strong>9 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, DevOps y Optimizer.</li><li><strong>App lista en menos de 5 minutos</strong> — React + TypeScript + Tailwind + Express + MongoDB. Código 100% tuyo, exportable a GitHub.</li></ol><h2>La alternativa en español a Bolt, Lovable, v0 y Emergent — pensada para España</h2><p>Maris AI es la mejor alternativa en español a Bolt, Lovable, v0 y Emergent.sh. Interfaz completamente en español, soporte en español y modelos de IA optimizados para el mercado emprendedor español.</p><h2>Preguntas frecuentes sobre Maris AI para emprendedores</h2><dl><dt>¿Necesito saber programar para usar Maris AI?</dt><dd>No. Solo describe tu idea en lenguaje natural y Maris AI genera el código completo listo para usar.</dd><dt>¿Cuánto cuesta Maris AI?</dt><dd>Hay un plan gratuito con 50 créditos de bienvenida sin tarjeta de crédito. Paquetes adicionales desde 20€ por 160 créditos para emprendedores en España.</dd><dt>¿El código generado es mío?</dt><dd>Sí, el código generado es 100% tuyo, exportable a GitHub y sin ataduras con la plataforma.</dd></dl><nav aria-label="Páginas principales"><a href="https://www.marisai.es/news">Noticias sobre IA</a><a href="https://www.marisai.es/vs-emergent">Maris AI vs competidores</a><a href="https://www.marisai.es/pricing">Precios y créditos</a><a href="https://www.marisai.es/legal/privacidad">Política de Privacidad</a><a href="https://www.marisai.es/legal/aviso-legal">Aviso Legal</a><a href="https://www.marisai.es/legal/cookies">Política de Cookies</a></nav></div><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
++<!DOCTYPE html><html lang="es" class="dark" translate="no"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="google" content="notranslate" /><title>Maris AI | Crea Apps con Inteligencia Artificial</title><link rel="alternate" type="text/plain" href="/llms.txt" title="LLMs.txt — Maris AI para modelos de lenguaje" /><link rel="alternate" type="application/json" href="/.well-known/ai-plugin.json" /><link rel="alternate" type="application/json" href="/.well-known/openai.json" /><meta name="google-site-verification" content="h8VfglGWGGjRk29YA717Ai-ija8KvVW-l-aTXXhMQYw" /><meta name="description" content="Convierte tu idea en una app real en minutos. 9 agentes de IA generan código profesional listo para producción. Alternativa en español a Bolt y Emergent."><meta name="keywords" content="maris ai, marisai.es, generador de apps con ia, vibe coding, crear apps con ia, alternativa a bolt.new, alternativa a emergent.sh, agentes de inteligencia artificial, desarrollo de software ia, react typescript tailwind, saas builder ia, mvp builder ia"><meta name="author" content="Maris AI"><meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"><link rel="canonical" href="https://www.marisai.es/" id="canonical-tag" /><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}var marisCookieConsent=localStorage.getItem('maris-ai-cookie-consent');var marisConsentGranted=marisCookieConsent==='accepted';gtag('consent','default',{ad_storage:marisConsentGranted?'granted':'denied',analytics_storage:marisConsentGranted?'granted':'denied',ad_user_data:marisConsentGranted?'granted':'denied',ad_personalization:marisConsentGranted?'granted':'denied'});</script><script>(function(){var loaded=false;var loadThirdParty=function(){if(loaded)return;loaded=true;(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-PCTZFPL3');var gScript=document.createElement('script');gScript.async=true;gScript.src='https://www.googletagmanager.com/gtag/js?id=AW-18218229959';document.head.appendChild(gScript);gScript.onload=function(){gtag('js',new Date());gtag('config','AW-18218229959');gtag('config','G-NHYSE8VV2J');};!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','3123552171167855');fbq('track','PageView');!function(w,d,t){w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=['page','track','identify','instances','debug','on','off','once','ready','alias','group','enableCookie','disableCookie','holdConsent','revokeConsent','grantConsent'],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r='https://analytics.tiktok.com/i18n/pixel/events.js',o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=document.createElement('script');n.type='text/javascript',n.async=!0,n.src=r+'?sdkid='+e+'&lib='+t;e=document.getElementsByTagName('script')[0];e.parentNode.insertBefore(n,e)};ttq.load('D8PFLNBC77U9OS74QB50');ttq.page();}(window,document,'ttq');};var events=['pointerdown','touchstart','keydown','scroll','mousemove'];var handler=function(){loadThirdParty();events.forEach(function(e){window.removeEventListener(e,handler);});};events.forEach(function(e){window.addEventListener(e,handler,{once:true,passive:true});});setTimeout(loadThirdParty,5000);})();</script><script>(function(){var routeMeta={'/':{ title:'Maris AI | Crea Apps con Inteligencia Artificial',description:'Convierte tu idea en una app real en minutos. 9 agentes de IA generan código profesional listo para producción. Alternativa en español a Bolt y Emergent.',canonical:'https://www.marisai.es/'},'/pricing':{title:'Créditos y Precios — Maris AI | 50 Créditos Gratis',description:'Compra créditos para generar apps con IA desde 20€ por 160 créditos que nunca caducan. Empieza gratis con 50 créditos de bienvenida, sin tarjeta.',canonical:'https://www.marisai.es/pricing'},'/news':{title:'Blog de IA para Emprendedores — Maris AI',description:'Artículos, guías y noticias sobre inteligencia artificial para emprendedores en España. Cómo crear apps con IA, vibe coding, no-code y novedades de Maris AI.',canonical:'https://www.marisai.es/news'},'/vs-emergent':{title:'Maris AI vs Emergent.sh — Comparativa 2026',description:'Compara Maris AI con Emergent.sh: precio, velocidad, calidad del código, agentes especializados y soporte. Descubre por qué Maris AI es la mejor alternativa.',canonical:'https://www.marisai.es/vs-emergent'},'/legal/privacidad':{title:'Política de Privacidad — Maris AI',description:'Política de privacidad de Maris AI. Cómo recopilamos, usamos y protegemos tus datos personales conforme al RGPD.',canonical:'https://www.marisai.es/legal/privacidad'},'/legal/aviso-legal':{title:'Aviso Legal — Maris AI',description:'Aviso legal e información sobre el responsable del sitio web marisai.es conforme a la LSSI.',canonical:'https://www.marisai.es/legal/aviso-legal'},'/legal/cookies':{title:'Política de Cookies — Maris AI',description:'Información sobre las cookies utilizadas en marisai.es y cómo gestionarlas.',canonical:'https://www.marisai.es/legal/cookies'},'/sign-in':{title:'Iniciar sesión — Maris AI',description:'Accede a tu cuenta de Maris AI para generar y gestionar tus aplicaciones con IA.',canonical:'https://www.marisai.es/sign-in'},'/sign-up':{title:'Crear cuenta gratis — Maris AI',description:'Crea tu cuenta gratuita en Maris AI y genera tu primera app con IA en minutos. Sin tarjeta de crédito. 50 créditos de bienvenida incluidos.',canonical:'https://www.marisai.es/sign-up'},'/glosario':{title:'Glosario de IA para Emprendedores | Maris AI',description:'Términos clave de IA explicados en español: LLM, agentes, vibe coding, prompt engineering y más. Guía para emprendedores sin conocimientos técnicos.',canonical:'https://www.marisai.es/glosario'},'/que-es-vibe-coding':{title:'Qué es el Vibe Coding | Guía en Español | Maris AI',description:'Descubre qué es el vibe coding, cómo funciona y por qué está revolucionando el desarrollo de software en 2026. Guía completa en español.',canonical:'https://www.marisai.es/que-es-vibe-coding'},'/que-es-un-agente-de-ia':{title:'Qué es un Agente de IA | Maris AI',description:'Aprende qué es un agente de inteligencia artificial, cómo funcionan los pipelines multi-agente y cómo Maris AI los usa para crear apps completas.',canonical:'https://www.marisai.es/que-es-un-agente-de-ia'},'/desarrollo-no-code-guia':{title:'Desarrollo No-Code con IA | Guía 2026 | Maris AI',description:'Todo lo que necesitas saber sobre desarrollo no-code con inteligencia artificial. Herramientas, comparativas y casos de uso reales en España.',canonical:'https://www.marisai.es/desarrollo-no-code-guia'},'/showcase':{title:'Galería de Apps con IA | Maris AI',description:'Explora aplicaciones reales generadas con Maris AI por emprendedores y startups en España. Marketplaces, dashboards, SaaS y más.',canonical:'https://www.marisai.es/showcase'}};var path=window.location.pathname.replace(//$/,'')||'/';var meta=routeMeta[path]||routeMeta['/'];var canonicalEl=document.getElementById('canonical-tag');if(canonicalEl)canonicalEl.setAttribute('href',meta.canonical);document.title=meta.title;var descEl=document.querySelector('meta[name="description"]');if(descEl)descEl.setAttribute('content',meta.description);else{var newDesc=document.createElement('meta');newDesc.name='description';newDesc.content=meta.description;document.head.appendChild(newDesc);}var ogUrl=document.querySelector('meta[property="og:url"]');if(ogUrl)ogUrl.setAttribute('content',meta.canonical);var twUrl=document.querySelector('meta[property="twitter:url"]');if(twUrl)twUrl.setAttribute('content',meta.canonical);var ogTitle=document.querySelector('meta[property="og:title"]');if(ogTitle)ogTitle.setAttribute('content',meta.title);var twTitle=document.querySelector('meta[property="twitter:title"]');if(twTitle)twTitle.setAttribute('content',meta.title);var ogDesc=document.querySelector('meta[property="og:description"]');if(ogDesc)ogDesc.setAttribute('content',meta.description);var twDesc=document.querySelector('meta[property="twitter:description"]');if(twDesc)twDesc.setAttribute('content',meta.description);})();</script><meta property="og:type" content="website"><meta property="og:url" content="https://www.marisai.es/"><meta property="og:title" content="Maris AI | Crear Páginas Web y App Profesionales con Inteligencia Artificial"><meta property="og:description" content="¿Tienes una idea? Maris AI la convierte en una aplicación real. Un equipo de 9 agentes de IA trabajando para ti para generar código de alta calidad al instante."><meta property="og:image" content="https://www.marisai.es/opengraph.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:locale" content="es_ES"><meta property="og:site_name" content="Maris AI"><meta property="twitter:card" content="summary_large_image"><meta property="twitter:url" content="https://www.marisai.es/"><meta property="twitter:title" content="Maris AI | Generador de Apps con IA — 9 Agentes Especializados"><meta property="twitter:description" content="Pipeline de 9 agentes IA: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator."><meta property="twitter:image" content="https://www.marisai.es/opengraph.jpg"><script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Maris AI","url":"https://www.marisai.es/","applicationCategory":"DeveloperApplication","operatingSystem":"All","inLanguage":"es","description":"Plataforma de generación de aplicaciones full-stack con un pipeline de 9 agentes de IA especializados.","offers":{"@type":"Offer","price":"0.00","priceCurrency":"EUR","description":"50 créditos gratis al registrarte. Paquetes desde 20€ por 160 créditos. Los créditos nunca caducan."},"featureList":["Pipeline de 9 agentes de IA especializados","Generación de código React + TypeScript + Tailwind","Backend Express + MongoDB","Exportación a GitHub y despliegue en Vercel"],"publisher":{"@type":"Organization","name":"Maris AI","url":"https://www.marisai.es/","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg"}}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Maris AI","url":"https://www.marisai.es/","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg","width":512,"height":512},"description":"Generador de aplicaciones web y móviles con inteligencia artificial.","sameAs":["https://www.marisai.es/","https://x.com/MarisAIagents","https://www.youtube.com/@Soportemarisai","https://www.tiktok.com/@marisai49","https://www.linkedin.com/company/maris-ai","https://github.com/rrhhmilchollos-jpg/maris-ai"],"foundingDate":"2025","foundingLocation":"España","slogan":"Escribe una idea. Recibe una app real.","email":"marketing@marisai.es"}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Maris AI","url":"https://www.marisai.es/","inLanguage":"es","potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://www.marisai.es/news?q={search_term_string}"},"query-input":"required name=search_term_string"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"¿Qué es Maris AI?","acceptedAnswer":{"@type":"Answer","text":"Maris AI es un generador de aplicaciones web y móviles completas impulsado por inteligencia artificial. Describe tu idea en español y un pipeline de 9 agentes IA especializados genera el código React + TypeScript + Tailwind + Express + MongoDB listo para producción en menos de 5 minutos."}},{"@type":"Question","name":"¿Necesito saber programar para usar Maris AI?","acceptedAnswer":{"@type":"Answer","text":"No. Maris AI está diseñado para que cualquier persona pueda crear aplicaciones con solo describir su idea en lenguaje natural."}},{"@type":"Question","name":"¿Cuánto cuesta Maris AI?","acceptedAnswer":{"@type":"Answer","text":"Maris AI funciona por créditos. Al registrarte recibes 50 créditos gratis sin tarjeta de crédito. Los paquetes adicionales comienzan desde 20€ por 160 créditos. Los créditos nunca caducan."}},{"@type":"Question","name":"¿El código generado es mío?","acceptedAnswer":{"@type":"Answer","text":"Sí, el código generado por Maris AI es 100% tuyo. Puedes exportarlo a GitHub, desplegarlo en Vercel o cualquier otra plataforma, y modificarlo libremente."}}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Maris AI — Plataforma de Live-Coding con IA para Emprendedores","url":"https://www.marisai.es/","description":"Crea apps completas con IA sin programar. 9 agentes de inteligencia artificial especializados generan tu app en menos de 5 minutos.","brand":{"@type":"Brand","name":"Maris AI"},"image":"https://www.marisai.es/opengraph.jpg","offers":{"@type":"Offer","price":"0.00","priceCurrency":"EUR","availability":"https://schema.org/InStock","priceValidUntil":"2027-12-31","url":"https://www.marisai.es/pricing","description":"50 créditos gratis al registrarte. Paquetes desde 20€ por 160 créditos."},"aggregateRating":{"@type":"AggregateRating","ratingValue":"4.8","reviewCount":"47","bestRating":"5","worstRating":"1"},"review":[{"@type":"Review","reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},"author":{"@type":"Person","name":"Carlos M."},"reviewBody":"Increíble herramienta. En 10 minutos tenía el MVP de mi startup funcionando."},{"@type":"Review","reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},"author":{"@type":"Person","name":"Laura S."},"reviewBody":"Soy autónoma y necesitaba digitalizar mi negocio. Maris AI me generó una app de gestión de citas completa en minutos."}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Cómo crear una app con IA sin programar en España","description":"Guía paso a paso para crear tu primera aplicación web usando Maris AI.","totalTime":"PT5M","estimatedCost":{"@type":"MonetaryAmount","currency":"EUR","value":"0"},"tool":[{"@type":"HowToTool","name":"Maris AI","url":"https://www.marisai.es/"}],"step":[{"@type":"HowToStep","position":1,"name":"Describe tu idea en español","text":"Escribe en lenguaje natural lo que quieres construir.","url":"https://www.marisai.es/#paso-1"},{"@type":"HowToStep","position":2,"name":"9 agentes de IA trabajan en paralelo","text":"Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, DevOps y Optimizer analizan tu idea y generan el código completo automáticamente.","url":"https://www.marisai.es/#paso-2"},{"@type":"HowToStep","position":3,"name":"Recibe tu app completa en menos de 5 minutos","text":"Obtienes una aplicación web funcional con código React + TypeScript + Tailwind + Express + MongoDB. El código es 100% tuyo, exportable a GitHub y desplegable en Vercel.","url":"https://www.marisai.es/#paso-3"}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Inicio","item":"https://www.marisai.es/"},{"@type":"ListItem","position":2,"name":"Precios y Créditos","item":"https://www.marisai.es/pricing"},{"@type":"ListItem","position":3,"name":"Noticias de IA","item":"https://www.marisai.es/news"},{"@type":"ListItem","position":4,"name":"Maris AI vs Competidores","item":"https://www.marisai.es/vs-emergent"}]}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsMediaOrganization","name":"Maris AI Noticias","url":"https://www.marisai.es/news","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg","width":512,"height":512},"sameAs":["https://www.marisai.es/"],"publishingPrinciples":"https://www.marisai.es/news","masthead":"https://www.marisai.es/news"}</script><meta name="geo.region" content="ES" /><meta name="geo.placename" content="España" /><meta name="geo.position" content="40.4168;-3.7038" /><meta name="ICBM" content="40.4168, -3.7038" /><meta name="language" content="es-ES" /><meta name="target" content="emprendedores, autónomos, startups, España" /><link rel="icon" type="image/svg+xml" href="/favicon.svg" /><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="preconnect" href="https://clerk.marisai.es"><link rel="dns-prefetch" href="https://clerk.marisai.es"><link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" /><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" /><noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" /></noscript><style>:root{color-scheme:dark;}html.dark{--background:240 10% 4%;--foreground:0 0% 98%;--primary:272 72% 55%;--primary-foreground:0 0% 100%;--muted-foreground:240 5% 65%;--card:240 10% 6%;}body{background-color:hsl(240 10% 4%);color:hsl(0 0% 98%);margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;}#root{min-height:100vh;}#seo-content{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}</style></head><body><noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PCTZFPL3" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript><noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=3123552171167855&ev=PageView&noscript=1" /></noscript><div id="seo-content" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"><h1>Tu visión. Apps reales en minutos.</h1><p>Maris AI es la plataforma de live-coding con inteligencia artificial para emprendedores en España. Describe tu idea en español y 9 agentes de IA especializados generan tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.</p><h2>Crea tu app con IA en minutos, sin saber programar — para emprendedores en España</h2><ol><li><strong>Describe tu app en español</strong> — escribe en lenguaje natural lo que quieres construir.</li><li><strong>9 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, DevOps y Optimizer.</li><li><strong>App lista en menos de 5 minutos</strong> — React + TypeScript + Tailwind + Express + MongoDB. Código 100% tuyo, exportable a GitHub.</li></ol><h2>La alternativa en español a Bolt, Lovable, v0 y Emergent — pensada para España</h2><p>Maris AI es la mejor alternativa en español a Bolt, Lovable, v0 y Emergent.sh. Interfaz completamente en español, soporte en español y modelos de IA optimizados para el mercado emprendedor español.</p><h2>Preguntas frecuentes sobre Maris AI para emprendedores</h2><dl><dt>¿Necesito saber programar para usar Maris AI?</dt><dd>No. Solo describe tu idea en lenguaje natural y Maris AI genera el código completo listo para usar.</dd><dt>¿Cuánto cuesta Maris AI?</dt><dd>Hay un plan gratuito con 50 créditos de bienvenida sin tarjeta de crédito. Paquetes adicionales desde 20€ por 160 créditos para emprendedores en España.</dd><dt>¿El código generado es mío?</dt><dd>Sí, el código generado es 100% tuyo, exportable a GitHub y sin ataduras con la plataforma.</dd></dl><nav aria-label="Páginas principales"><a href="https://www.marisai.es/news">Noticias sobre IA</a><a href="https://www.marisai.es/vs-emergent">Maris AI vs competidores</a><a href="https://www.marisai.es/pricing">Precios y créditos</a><a href="https://www.marisai.es/legal/privacidad">Política de Privacidad</a><a href="https://www.marisai.es/legal/aviso-legal">Aviso Legal</a><a href="https://www.marisai.es/legal/cookies">Política de Cookies</a></nav></div><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+diff --git a/artifacts/appforge/package.json b/artifacts/appforge/package.json
+index 41d071e..742fe06 100644
+--- a/artifacts/appforge/package.json
++++ b/artifacts/appforge/package.json
+@@ -6,6 +6,7 @@
+   "scripts": {
+     "dev": "vite --config vite.config.ts --host 0.0.0.0",
+     "build": "vite build --config vite.config.ts",
++    "postbuild": "node scripts/prerender-seo.mjs",
+     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
+     "typecheck": "tsc -p tsconfig.json --noEmit"
+   },
+diff --git a/artifacts/appforge/scripts/prerender-seo.mjs b/artifacts/appforge/scripts/prerender-seo.mjs
+new file mode 100644
+index 0000000..9d2bb1e
+--- /dev/null
++++ b/artifacts/appforge/scripts/prerender-seo.mjs
+@@ -0,0 +1,236 @@
++// scripts/prerender-seo.mjs
++//
++// Por qué existe este script
++// ---------------------------
++// Maris AI es una SPA (React + Vite, sin SSR). El index.html que se sirve
++// es el MISMO fichero para todas las rutas: el <title>, la meta description
++// y el <link rel="canonical"> reales se escriben con JavaScript en tiempo
++// de ejecución (ver el <script> inline de routeMeta en index.html y
++// src/components/pillar-layout.tsx).
++//
++// Cualquier crawler que NO ejecute JavaScript (Screaming Frog en modo texto,
++// el bot de auditoría de SEMrush, etc.) ve siempre el HTML "de fábrica":
++// el title/description/canonical de la home en TODAS las URLs. Esto es
++// exactamente lo que provoca:
++//   - "Canonicals" apuntando a otra URL en el 86% de las páginas
++//   - H1 ausente (la home no tiene <h1> en el HTML estático)
++//   - Title/description duplicados o demasiado largos en bloque
++//
++// Este script se ejecuta DESPUÉS de `vite build` (hook "postbuild" en
++// package.json) y genera, para cada ruta conocida, una copia de
++// dist/index.html con su <title>, meta description, canonical, og:*,
++// twitter:* y un <h1> real ya "horneados" en el HTML, sin tocar el bundle
++// JS ni el comportamiento de la SPA para el usuario (React sigue montando
++// igual en #root y el script de routeMeta sigue actualizando el <head> en
++// cliente, así que el resultado visual no cambia).
++//
++// Vercel sirve un fichero estático que coincide con la ruta ANTES de
++// aplicar el rewrite catch-all a /index.html, así que basta con escribir
++// dist/<ruta>/index.html para que cada URL tenga su propio HTML.
++
++import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
++import { join, dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++
++const __dirname = dirname(fileURLToPath(import.meta.url));
++const DIST_DIR = join(__dirname, "..", "dist");
++const TEMPLATE_PATH = join(DIST_DIR, "index.html");
++const SITE = "https://www.marisai.es";
++
++if (!existsSync(TEMPLATE_PATH)) {
++  console.error(`[prerender-seo] No existe ${TEMPLATE_PATH}. ¿Se ha ejecutado "vite build" antes?`);
++  process.exit(1);
++}
++
++const template = readFileSync(TEMPLATE_PATH, "utf-8");
++
++// Título/descripción acortados para cumplir <=60 caracteres (title) y
++// <=160 caracteres (meta description) — límites de truncado en Google.
++const ROUTES = [
++  {
++    path: "/",
++    title: "Maris AI | Crea Apps con Inteligencia Artificial",
++    description:
++      "Convierte tu idea en una app real en minutos. 9 agentes de IA generan código profesional listo para producción. Alternativa en español a Bolt y Emergent.",
++    h1: "Tu visión. Apps reales en minutos.",
++    intro:
++      "Transforma tus ideas más ambiciosas en aplicaciones funcionales y listas para el mercado, impulsadas por un equipo de 9 agentes IA de élite.",
++  },
++  {
++    path: "/pricing",
++    title: "Créditos y Precios — Maris AI | 50 Créditos Gratis",
++    description:
++      "Compra créditos para generar apps con IA desde 20€ por 160 créditos que nunca caducan. Empieza gratis con 50 créditos de bienvenida, sin tarjeta.",
++    h1: "Créditos flexibles para tu éxito.",
++    intro:
++      "Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 9 agentes IA de Maris AI.",
++  },
++  {
++    path: "/news",
++    title: "Blog de IA para Emprendedores — Maris AI",
++    description:
++      "Artículos, guías y noticias sobre inteligencia artificial para emprendedores en España. Cómo crear apps con IA, vibe coding, no-code y novedades de Maris AI.",
++    h1: "Noticias de Maris AI",
++    intro:
++      "Artículos, guías y noticias sobre inteligencia artificial para emprendedores en España: cómo crear apps con IA, vibe coding y no-code.",
++  },
++  {
++    path: "/vs-emergent",
++    title: "Maris AI vs Emergent.sh — Comparativa 2026",
++    description:
++      "Compara Maris AI con Emergent.sh: precio, velocidad, calidad del código, agentes especializados y soporte. Descubre por qué Maris AI es la mejor alternativa.",
++    h1: "Maris AI vs Emergent.sh: Comparativa completa 2026",
++    intro: "Alternativa en español a Emergent.sh, Bolt.new y Lovable.",
++  },
++  {
++    path: "/legal/privacidad",
++    title: "Política de Privacidad — Maris AI",
++    description: "Política de privacidad de Maris AI. Cómo recopilamos, usamos y protegemos tus datos personales conforme al RGPD.",
++    h1: "Política de Privacidad",
++    intro: "Información sobre cómo Maris AI recopila, usa y protege tus datos personales conforme al RGPD.",
++  },
++  {
++    path: "/legal/aviso-legal",
++    title: "Aviso Legal — Maris AI",
++    description: "Aviso legal e información sobre el responsable del sitio web marisai.es conforme a la LSSI.",
++    h1: "Aviso Legal",
++    intro: "Información sobre el responsable del sitio web marisai.es conforme a la LSSI.",
++  },
++  {
++    path: "/legal/cookies",
++    title: "Política de Cookies — Maris AI",
++    description: "Información sobre las cookies utilizadas en marisai.es y cómo gestionarlas.",
++    h1: "Política de Cookies",
++    intro: "Información sobre las cookies utilizadas en marisai.es y cómo gestionarlas.",
++  },
++  {
++    path: "/sign-in",
++    title: "Iniciar sesión — Maris AI",
++    description: "Accede a tu cuenta de Maris AI para generar y gestionar tus aplicaciones con IA.",
++    h1: "Iniciar sesión",
++    intro: "Accede a tu cuenta de Maris AI para generar y gestionar tus aplicaciones con IA.",
++    noindex: true,
++  },
++  {
++    path: "/sign-up",
++    title: "Crear cuenta gratis — Maris AI",
++    description: "Crea tu cuenta gratuita en Maris AI y genera tu primera app con IA en minutos. Sin tarjeta de crédito. 50 créditos de bienvenida incluidos.",
++    h1: "Crear cuenta",
++    intro: "Crea tu cuenta gratuita en Maris AI y genera tu primera app con IA en minutos. 50 créditos de bienvenida incluidos.",
++    noindex: true,
++  },
++  {
++    path: "/glosario",
++    title: "Glosario de IA para Emprendedores | Maris AI",
++    description:
++      "Términos clave de IA explicados en español: LLM, agentes, vibe coding, prompt engineering y más. Guía para emprendedores sin conocimientos técnicos.",
++    h1: "Glosario de IA",
++    intro:
++      "Términos clave de IA explicados en español: LLM, agentes, vibe coding, prompt engineering y más, pensado para emprendedores sin conocimientos técnicos.",
++  },
++  {
++    path: "/que-es-vibe-coding",
++    title: "Qué es el Vibe Coding | Guía en Español | Maris AI",
++    description:
++      "Descubre qué es el vibe coding: describir en lenguaje natural lo que quieres mientras la IA escribe el código por ti. Ejemplos y herramientas en español.",
++    h1: "¿Qué es el Vibe Coding?",
++    intro:
++      "El vibe coding es la forma de crear software del momento: describes lo que quieres con tus propias palabras y un equipo de agentes de IA construye la aplicación por ti.",
++  },
++  {
++    path: "/que-es-un-agente-de-ia",
++    title: "Qué es un Agente de IA | Maris AI",
++    description:
++      "Qué es un agente de IA, en qué se diferencia de un chatbot, y cómo varios agentes especializados trabajan juntos para generar aplicaciones completas.",
++    h1: "¿Qué es un agente de IA?",
++    intro:
++      "Un agente de IA es un sistema que percibe un objetivo, razona sobre los pasos necesarios y actúa por sí mismo para conseguirlo, usando herramientas reales.",
++  },
++  {
++    path: "/desarrollo-no-code-guia",
++    title: "Desarrollo No-Code con IA | Guía 2026 | Maris AI",
++    description:
++      "Guía completa sobre desarrollo no-code con IA: qué es, en qué se diferencia del no-code tradicional (Webflow, Bubble) y cómo crear tu app sin programar.",
++    h1: "Desarrollo no-code con IA: guía completa",
++    intro:
++      "El no-code permite crear software sin escribir código. Con la IA generativa, ya no se trata de encajar piezas predefinidas, sino de describir tu idea y obtener una app real.",
++  },
++  {
++    path: "/showcase",
++    title: "Galería de Apps con IA | Maris AI",
++    description: "Explora aplicaciones reales generadas con Maris AI por emprendedores y startups en España. Marketplaces, dashboards, SaaS y más.",
++    h1: "Showcase",
++    intro:
++      "Explora aplicaciones reales generadas con Maris AI por emprendedores y startups en España: marketplaces, dashboards, SaaS y más.",
++  },
++];
++
++function escapeHtml(str) {
++  return str
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;");
++}
++
++function buildHtmlForRoute(route) {
++  const canonical = `${SITE}${route.path === "/" ? "/" : route.path}`;
++  let html = template;
++
++  // <title>
++  html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(route.title)}</title>`);
++
++  // meta description
++  html = html.replace(
++    /<meta name="description" content="[^"]*">/,
++    `<meta name="description" content="${escapeHtml(route.description)}">`
++  );
++
++  // canonical
++  html = html.replace(
++    /<link rel="canonical" href="[^"]*" id="canonical-tag" \/>/,
++    `<link rel="canonical" href="${canonical}" id="canonical-tag" />`
++  );
++
++  // robots (solo lo tocamos para rutas marcadas como noindex, p.ej. /sign-in /sign-up)
++  if (route.noindex) {
++    html = html.replace(
++      /<meta name="robots" content="[^"]*">/,
++      `<meta name="robots" content="noindex, follow">`
++    );
++  }
++
++  // Open Graph / Twitter
++  html = html
++    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${canonical}">`)
++    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${escapeHtml(route.title)}">`)
++    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${escapeHtml(route.description)}">`)
++    .replace(/<meta property="twitter:url" content="[^"]*">/, `<meta property="twitter:url" content="${canonical}">`)
++    .replace(/<meta property="twitter:title" content="[^"]*">/, `<meta property="twitter:title" content="${escapeHtml(route.title)}">`)
++    .replace(/<meta property="twitter:description" content="[^"]*">/, `<meta property="twitter:description" content="${escapeHtml(route.description)}">`);
++
++  // Contenido oculto accesible para crawlers sin JS: un único <h1> real +
++  // intro. Sustituye el bloque #seo-content genérico por uno específico
++  // de la ruta (mismo patrón visually-hidden que ya usaba el proyecto).
++  const seoContentRegex = /<div id="seo-content"[^>]*>[\s\S]*?<\/div>(?=<div id="root">)/;
++  const newSeoContent =
++    `<div id="seo-content" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">` +
++    `<h1>${escapeHtml(route.h1)}</h1>` +
++    `<p>${escapeHtml(route.intro)}</p>` +
++    `<nav aria-label="Páginas principales"><a href="${SITE}/">Inicio</a><a href="${SITE}/news">Noticias sobre IA</a><a href="${SITE}/pricing">Precios y créditos</a><a href="${SITE}/glosario">Glosario de IA</a></nav>` +
++    `</div>`;
++  html = html.replace(seoContentRegex, newSeoContent);
++
++  return html;
++}
++
++let written = 0;
++for (const route of ROUTES) {
++  const html = buildHtmlForRoute(route);
++  const outPath = route.path === "/" ? join(DIST_DIR, "index.html") : join(DIST_DIR, route.path.replace(/^\//, ""), "index.html");
++  mkdirSync(dirname(outPath), { recursive: true });
++  writeFileSync(outPath, html, "utf-8");
++  written++;
++}
++
++console.log(`[prerender-seo] Generadas ${written} páginas con title/description/canonical/H1 propios.`);
+diff --git a/artifacts/appforge/src/pages/desarrollo-no-code-guia.tsx b/artifacts/appforge/src/pages/desarrollo-no-code-guia.tsx
+index e504202..8dcae94 100644
+--- a/artifacts/appforge/src/pages/desarrollo-no-code-guia.tsx
++++ b/artifacts/appforge/src/pages/desarrollo-no-code-guia.tsx
+@@ -4,8 +4,8 @@ export default function DesarrolloNoCodeGuiaPage() {
+   return (
+     <PillarLayout
+       slug="desarrollo-no-code-guia"
+-      pageTitle="Desarrollo no-code con IA: guía completa en español | Maris AI"
+-      metaDescription="Guía completa sobre desarrollo no-code con inteligencia artificial: qué es, en qué se diferencia del no-code tradicional (Webflow, Bubble) y cómo crear tu app sin programar."
++      pageTitle="Desarrollo No-Code con IA | Guía 2026 | Maris AI"
++      metaDescription="Guía completa sobre desarrollo no-code con IA: qué es, en qué se diferencia del no-code tradicional (Webflow, Bubble) y cómo crear tu app sin programar."
+       h1="Desarrollo no-code con IA: guía completa"
+       intro="El no-code permite crear software sin escribir código. Con la llegada de la IA generativa, esa promesa da un salto: ya no se trata de encajar piezas predefinidas en un editor visual, sino de describir tu idea y obtener una aplicación real construida desde cero."
+       relatedLinks={[
+diff --git a/artifacts/appforge/src/pages/que-es-un-agente-de-ia.tsx b/artifacts/appforge/src/pages/que-es-un-agente-de-ia.tsx
+index 9c73b5e..15b474c 100644
+--- a/artifacts/appforge/src/pages/que-es-un-agente-de-ia.tsx
++++ b/artifacts/appforge/src/pages/que-es-un-agente-de-ia.tsx
+@@ -4,8 +4,8 @@ export default function QueEsAgenteIaPage() {
+   return (
+     <PillarLayout
+       slug="que-es-un-agente-de-ia"
+-      pageTitle="¿Qué es un agente de IA? Definición y ejemplos en español | Maris AI"
+-      metaDescription="Qué es un agente de IA, en qué se diferencia de un chatbot, y cómo varios agentes especializados trabajan juntos para generar aplicaciones completas. Explicación clara con ejemplos."
++      pageTitle="Qué es un Agente de IA | Maris AI"
++      metaDescription="Qué es un agente de IA, en qué se diferencia de un chatbot, y cómo varios agentes especializados trabajan juntos para generar aplicaciones completas."
+       h1="¿Qué es un agente de IA?"
+       intro="Un agente de IA es un sistema que no solo responde preguntas: percibe un objetivo, razona sobre los pasos necesarios y actúa por sí mismo para conseguirlo, usando herramientas reales como si fuera un miembro más de tu equipo."
+       relatedLinks={[
+diff --git a/artifacts/appforge/src/pages/que-es-vibe-coding.tsx b/artifacts/appforge/src/pages/que-es-vibe-coding.tsx
+index 8a86285..b016168 100644
+--- a/artifacts/appforge/src/pages/que-es-vibe-coding.tsx
++++ b/artifacts/appforge/src/pages/que-es-vibe-coding.tsx
+@@ -4,8 +4,8 @@ export default function QueEsVibeCodingPage() {
+   return (
+     <PillarLayout
+       slug="que-es-vibe-coding"
+-      pageTitle="¿Qué es el Vibe Coding? Guía completa en español | Maris AI"
+-      metaDescription="Descubre qué es el vibe coding: la nueva forma de programar describiendo lo que quieres en lenguaje natural, mientras la IA escribe el código por ti. Ejemplos y herramientas en español."
++      pageTitle="Qué es el Vibe Coding | Guía en Español | Maris AI"
++      metaDescription="Descubre qué es el vibe coding: describir en lenguaje natural lo que quieres mientras la IA escribe el código por ti. Ejemplos y herramientas en español."
+       h1="¿Qué es el Vibe Coding?"
+       intro="El vibe coding es la forma de crear software del momento: en vez de escribir cada línea de código a mano, describes lo que quieres con tus propias palabras y un equipo de agentes de IA construye la aplicación por ti."
+       relatedLinks={[
+diff --git a/vercel.json b/vercel.json
+index e4cd825..83a77c3 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -36,7 +36,11 @@
+         },
+         {
+           "key": "X-Frame-Options",
+-          "value": "ALLOWALL"
++          "value": "SAMEORIGIN"
++        },
++        {
++          "key": "Strict-Transport-Security",
++          "value": "max-age=63072000; includeSubDomains; preload"
+         },
+         {
+           "key": "Content-Security-Policy",
+-- 
+2.43.0
+
