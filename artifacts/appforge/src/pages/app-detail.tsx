@@ -214,7 +214,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const [draft, setDraft] = useState("");
   const [chatAttachments, setChatAttachments] = useState<UploadedAttachment[]>([]);
-  // ✅ Persistir activeJobId en localStorage para sobrevivir recargas de página
   const localStorageKey = `maris_active_job_${id}`;
   const [activeJobId, setActiveJobIdRaw] = useState<string | null>(() => {
     try { return localStorage.getItem(localStorageKey) || null; } catch { return null; }
@@ -235,6 +234,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code">("preview");
+  // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
+  const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
   const [previewSize, setPreviewSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
   const [darkModeEnabled, setDarkModeEnabled] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -244,11 +245,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     query: {
       enabled: !!id,
       queryKey: getGetAppQueryKey(id),
-      // Refrescar la app periódicamente mientras hay un job activo para que
-      // el frontendCode se actualice en cuanto el job termine (succeeded).
-      // Una vez que hay código renderizable, reducimos a 10s para no saturar.
       refetchInterval: (data: any) => {
-        // Solo hacer polling si hay un job activo — usar activeJobId (disponible antes que effectiveJobId)
         if (!activeJobId) return false;
         if (!data) return 3000;
         const code = String(data?.frontendCode ?? "").trim();
@@ -257,13 +254,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
-    const { data: me } = useGetMe();
+  const { data: me } = useGetMe();
   const isAdmin = !!me?.isAdmin;
   const { data: stats } = useGetMyStats();
   const credits = stats?.credits ?? 0;
   const outOfCredits = credits <= 0 && !isAdmin;
 
-  // ✅ Seguimiento 2 y 3: Notificaciones y gráfico de créditos
   const { data: notificationsData } = useGetNotifications();
   const unreadCount: number = notificationsData?.unreadCount ?? 0;
   const { data: creditsHistory } = useGetCreditsHistory();
@@ -272,43 +268,28 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: activeJobId ? 3000 : false },
   });
 
-  // ✅ activeAppJob siempre habilitado — necesario para detectar jobs en awaiting_approval
-  // aunque el localStorage tenga un jobId anterior (que puede haber terminado ya)
   const { data: activeAppJob } = useGetActiveAppJob(id, {
     query: {
       enabled: !!id,
       queryKey: getGetActiveAppJobQueryKey(id),
       refetchInterval: (data: any) => {
         const status = data?.status;
-        // Si hay job activo → poll frecuente. Si no → poll lento solo para detectar nuevos jobs
         if (status && status !== "succeeded" && status !== "failed") return 2000;
-        return activeJobId ? 3000 : 15000; // Sin job: cada 15s es suficiente
+        return activeJobId ? 3000 : 15000;
       },
     },
   });
 
-  // Si activeAppJob devuelve un job activo diferente al del localStorage, sincronizar
   useEffect(() => {
     if (activeAppJob?.id && String(activeAppJob.id) !== activeJobId) {
-      // El servidor tiene un job activo que no conocemos localmente → actualizar
       setActiveJobId(String(activeAppJob.id));
-    }
-    if (!activeAppJob && activeJobId) {
-      // El servidor no tiene ningún job activo → limpiar el localStorage
-      // Solo limpiar si el job local ya terminó (succeeded/failed)
-      // Esto se maneja en el useEffect de job.status
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAppJob?.id]);
 
-  // effectiveJobId: prioridad → activeAppJob del servidor (siempre fresco) > localStorage
-  // NUNCA del objeto app, cuyo _id es el ID de la app (causaba 404 en /api/jobs/:appId)
   const effectiveJobId: string | null =
     (activeAppJob?.id ? String(activeAppJob.id) : null) ?? activeJobId;
 
-  // Job logs para los bloques inline de agentes (Emergent.sh style)
-  // NOTA: isWorking se declara más abajo, por eso usamos solo effectiveJobId como condición
-  // para evitar la referencia circular que causaba: ReferenceError: Cannot access 'Vt' before initialization
   const { data: jobLogsData } = useQuery({
     queryKey: [...getGetGenerationJobLogsQueryKey(effectiveJobId ?? ""), "inline"],
     queryFn: () => getGenerationJobLogs(effectiveJobId!, { }),
@@ -426,12 +407,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const handleApprove = () => {
     const approvalJobId = effectiveJobId;
-
     if (approvalJobId) {
       approveMutation.mutate({ id: String(approvalJobId), data: { facet: "structure" } });
       return;
     }
-
     toast({
       title: "Sin trabajo de generación activo",
       description: "No encuentro el identificador del trabajo que debe aprobarse. Envía un mensaje a Maris AI para reactivar la generación o recarga la pantalla.",
@@ -441,7 +420,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const phaseInfo = PHASE_LABELS[job?.phase ?? "queued"] ?? PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
-  // isWorking = hay un job activo procesando (no en awaiting_approval, que es cuando el usuario puede enviar mensajes)
   const jobStatus = job?.status ?? activeAppJob?.status;
   const isAwaitingApproval = jobStatus === "awaiting_approval";
   const isActivelyProcessing = effectiveJobId !== null && !isAwaitingApproval;
@@ -457,9 +435,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const previewEndpointUrl = app?._id ? `${API_BASE}/api/apps/${app._id}/preview` : "";
   const deployedUrl = app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
 
-  // Showcase público (/showcase): el usuario decide si este proyecto aparece
-  // en la galería pública de Maris AI. Requiere que la app esté desplegada
-  // (deployedUrl real, no el endpoint de preview interno).
   const isDeployedForShowcase = !!(app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || app?.marisaiSubdomain);
   const [showcasePending, setShowcasePending] = useState(false);
   const handleToggleShowcase = async (checked: boolean) => {
@@ -488,8 +463,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const renderedFileCount = hasRenderableCode ? parseBundle(frontendCode) ? Object.keys(parseBundle(frontendCode)).length : 0 : 0;
   useEffect(() => {
     if (!hasRenderableCode || isWorking) return;
-    // Usar solo el hash del código — NO updatedAt que cambia con cada poll
-    // Esto evita que el preview se recargue cuando el polling actualiza la app sin cambiar el código
     const codeHash = frontendCode.slice(0, 200) + frontendCode.slice(-200) + frontendCode.length;
     const signature = `${app?._id || id}:${codeHash}`;
     if (!signature || signature === lastPreviewRefreshSignatureRef.current) return;
@@ -513,20 +486,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       toast({ title: "Sin enlace disponible", description: "Todavía no hay una URL para compartir.", variant: "destructive" });
       return;
     }
-
     try {
       if (typeof navigator !== "undefined" && navigator.share && deployedUrl) {
         await navigator.share({ title: app?.title || "Maris AI App", text: app?.description || "App generada con Maris AI", url: shareUrl });
         toast({ title: "Compartido", description: "Se abrió el panel nativo para compartir la app." });
         return;
       }
-
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
         toast({ title: "Enlace copiado", description: deployedUrl ? "Se copió la URL pública de la app." : "Se copió el enlace de esta pantalla de trabajo." });
         return;
       }
-
       if (typeof window !== "undefined") {
         window.prompt("Copia este enlace", shareUrl);
         toast({ title: "Enlace preparado", description: "Copia el enlace mostrado para compartirlo." });
@@ -566,18 +536,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     setIsPreviewMaximized(false);
     setIsPreviewClosed(true);
     setActiveSidebar("chat");
+    setMobileTab("chat");
     toast({ title: "Preview cerrada", description: "La vista en vivo se ha retirado completamente y el chat ocupa el área de trabajo." });
   };
 
-  // ── Auto-reparación de preview rota ─────────────────────────────────────
-  // Si el iframe de preview reporta "página en blanco" (#root nunca montó
-  // nada), avisamos en el chat y disparamos automáticamente un job de
-  // reparación — gratis, sin pedir confirmación. Como Emergent.sh: el
-  // usuario no debería tener que descubrir por consola que algo se rompió.
-  // Guardas: solo si hay código generado (si no hay nada, ya mostramos el
-  // mensaje de "generación interrumpida, escríbeme qué construir"), solo si
-  // no hay un job activo ya, y como máximo una vez por código generado (para
-  // no entrar en bucle si el arreglo automático también sale roto).
   const autoRepairTriedForCodeRef = useRef<string | null>(null);
   const autoRepairAttemptsRef = useRef(0);
   const MAX_AUTO_REPAIR_ATTEMPTS = 2;
@@ -588,7 +550,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     if (autoRepairAttemptsRef.current >= MAX_AUTO_REPAIR_ATTEMPTS) return;
     autoRepairTriedForCodeRef.current = codeSignature;
     autoRepairAttemptsRef.current += 1;
-
     sendMutation.mutate({
       id,
       data: {
@@ -602,6 +563,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const handleOpenPreview = () => {
     setIsPreviewClosed(false);
     setIsPreviewMaximized(false);
+    setMobileTab("preview");
     toast({ title: "Preview abierta", description: hasRenderableCode ? "La vista en vivo se ha restaurado." : "Todavía no hay frontend renderizable; verás el estado de construcción." });
   };
 
@@ -622,32 +584,20 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       toast({ title: "URL no válida", description: "No se encontró una URL pública válida para enviar a Google.", variant: "destructive" });
       return false;
     }
-
     const propertyUrl = `${target.origin}/`;
     const searchConsoleUrl = `https://search.google.com/search-console/index/inspection?resource_id=${encodeURIComponent(propertyUrl)}&url=${encodeURIComponent(target.href)}`;
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${app?.title || "Maris AI App"} site:${target.hostname}`)}`;
-
-    // Si ya tenemos una ventana pre-abierta (desde el click directo), redirigirla
     if (preOpenedWindow && !preOpenedWindow.closed) {
       preOpenedWindow.location.href = searchConsoleUrl;
     } else {
-      // Intento directo como fallback
       const opened = window.open(searchConsoleUrl, "_blank", "noopener,noreferrer");
       if (!opened) {
         toast({ title: "Ventana bloqueada", description: "Permite ventanas emergentes para Maris AI y vuelve a pulsar Publicar en Google.", variant: "destructive" });
         return false;
       }
     }
-
-    toast({
-      title: "Google Search Console abierto",
-      description: "Revisa la propiedad y pulsa Solicitar indexación en Google. Si la propiedad no existe, Google te pedirá verificarla.",
-    });
-
-    window.setTimeout(() => {
-      window.open(googleSearchUrl, "_blank", "noopener,noreferrer");
-    }, 250);
-
+    toast({ title: "Google Search Console abierto", description: "Revisa la propiedad y pulsa Solicitar indexación en Google." });
+    window.setTimeout(() => { window.open(googleSearchUrl, "_blank", "noopener,noreferrer"); }, 250);
     return true;
   };
 
@@ -658,19 +608,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     }
     if (isPublishingGoogle) return;
     setIsPublishingGoogle(true);
-
-    // Pre-abrimos la ventana AQUÍ, en el contexto directo del click del usuario,
-    // antes de cualquier llamada async. Así el navegador no la bloquea.
     const preOpenedWindow = !deployedUrl ? window.open("about:blank", "_blank", "noopener,noreferrer") : null;
-
     try {
       if (deployedUrl) {
         openGoogleIndexing(deployedUrl);
       } else {
-        toast({
-          title: "Desplegando antes de publicar…",
-          description: "Tu app necesita estar desplegada para aparecer en Google. Iniciando deploy automático.",
-        });
+        toast({ title: "Desplegando antes de publicar…", description: "Tu app necesita estar desplegada para aparecer en Google. Iniciando deploy automático." });
         deployMutation.mutate({ id }, {
           onSuccess: (result: any) => {
             const url = result?.deploymentUrl || result?.url;
@@ -700,6 +643,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     setIsPreviewMaximized(false);
     setIsPreviewClosed(true);
     setActiveSidebar("chat");
+    setMobileTab("chat");
     toast({ title: "Preview cerrada", description: "La app aún no tiene frontend renderizable. Revisa el plan o pide cambios en el chat." });
   };
 
@@ -733,9 +677,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const renderSidebarPanel = () => {
     const panelTitle = NAV_ITEMS.find((item) => item.id === activeSidebar)?.label ?? "Chat";
     const PanelHeader = ({ title, description }: { title: string; description: string }) => (
-      <div className="px-6 pt-6">
+      <div className="px-4 md:px-6 pt-4 md:pt-6">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#a78bfa]">{panelTitle}</p>
-        <h2 className="mt-2 text-2xl font-extrabold text-white">{title}</h2>
+        <h2 className="mt-2 text-xl md:text-2xl font-extrabold text-white">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/55">{description}</p>
       </div>
     );
@@ -744,7 +688,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return (
         <>
           <PanelHeader title="Plan de construcción" description="Revisa la estructura que debe seguir Maris AI antes de continuar con la generación o los cambios." />
-          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
             <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5 text-sm leading-relaxed text-white/75">
               {app?.plan || latestAssistantMessage || "Todavía no hay un plan detallado guardado. Cuando Maris AI termine la estructura, aparecerá aquí para revisión."}
             </div>
@@ -757,7 +701,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               ))}
             </div>
           </div>
-          <div className="px-6 pb-6">
+          <div className="px-4 md:px-6 pb-20 md:pb-6">
             <Button size="lg" onClick={handleApprove} disabled={approveMutation.isPending} className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
               {approveMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
               Aprobar plan
@@ -771,7 +715,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return (
         <>
           <PanelHeader title="Datos de la app" description="Consulta el estado técnico y los datos disponibles para la vista previa y el despliegue." />
-          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
             <div className="grid gap-3">
               {[
                 ["Estado", appStatusLabel],
@@ -798,7 +742,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return (
         <>
           <PanelHeader title="Integraciones" description="Gestiona la URL pública, compartir y despliegue conectado de la aplicación." />
-          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
             <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
               <p className="text-xs uppercase tracking-[0.18em] text-white/35">URL pública</p>
               <p className="mt-3 break-all text-sm text-white/75">{deployedUrl || "Aún no hay URL pública. Pulsa Deploy cuando la preview esté lista."}</p>
@@ -810,7 +754,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 {deployMutation.isPending ? "Desplegando" : "Deploy app"}
               </Button>
             </div>
-
             <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -818,7 +761,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <p className="mt-1 text-xs text-white/50">
                     Muestra este proyecto en{" "}
                     <a href="https://www.marisai.es/showcase" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">marisai.es/showcase</a>
-                    {" "}con su enlace de demo en vivo. Solo se comparte el título, la descripción y el enlace — nunca el código ni tus datos.
+                    {" "}con su enlace de demo en vivo.
                   </p>
                   {app?.isPublic && app?.publicSlug && (
                     <a href={`https://www.marisai.es/showcase/${app.publicSlug}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline underline-offset-2 break-all">
@@ -826,17 +769,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     </a>
                   )}
                 </div>
-                <Switch
-                  checked={!!app?.isPublic}
-                  onCheckedChange={handleToggleShowcase}
-                  disabled={showcasePending || (!isDeployedForShowcase && !app?.isPublic)}
-                />
+                <Switch checked={!!app?.isPublic} onCheckedChange={handleToggleShowcase} disabled={showcasePending || (!isDeployedForShowcase && !app?.isPublic)} />
               </div>
               {!isDeployedForShowcase && !app?.isPublic && (
                 <p className="mt-2 text-xs text-amber-400/80">Despliega la app primero para poder publicarla en la galería.</p>
               )}
             </div>
-
           </div>
         </>
       );
@@ -846,7 +784,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return (
         <>
           <PanelHeader title="UI Builder" description="Controla la preview en vivo de la interfaz generada y abre la vista de trabajo ampliada." />
-          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
             <div className="rounded-2xl border border-[#7c3aed]/25 bg-[#7c3aed]/10 p-5 text-sm text-white/75">
               {showStaticBuildState ? "La preview aún espera código renderizable." : "La preview en vivo está disponible y conectada al último bundle guardado."}
             </div>
@@ -864,7 +802,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return (
         <>
           <PanelHeader title="Workflows" description="Sigue el flujo de trabajo del agente y las fases activas de generación." />
-          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
             <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
               <div className="flex items-center gap-3 text-white/80">
                 <PhaseIcon className={`h-5 w-5 text-[#a78bfa] ${isWorking ? "animate-pulse" : ""}`} />
@@ -889,7 +827,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return (
         <>
           <PanelHeader title="Settings" description="Accesos y acciones de configuración de esta app y de tu cuenta." />
-          <div className="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
             <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
               <p className="text-sm font-semibold text-white">{app?.title || "App sin título"}</p>
               <p className="mt-2 text-sm text-white/55">{app?.description || "Sin descripción guardada."}</p>
@@ -905,12 +843,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       );
     }
 
+    // ── CHAT (tab por defecto) ──
     return (
       <>
-        {/* Banner: solo visible cuando los agentes esperan respuesta del usuario */}
         {isAwaitingApproval && (
-          <div className="px-6 pt-6">
-            <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-6 py-3.5 text-center text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div className="px-4 md:px-6 pt-4 md:pt-6">
+            <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-4 md:px-6 py-3.5 text-center text-[14px] md:text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <div className="flex items-center justify-center gap-3">
                 <Info className="h-5 w-5" />
                 <span>Maris AI seguirá trabajando después de tu respuesta</span>
@@ -918,17 +856,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-8 py-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-10 pb-20 md:pb-6 custom-scrollbar">
           {visibleMessages.length === 0 ? (
-            <div className="flex items-start gap-5">
+            <div className="flex items-start gap-4 md:gap-5">
               <div className="relative mt-1 shrink-0">
                 <div className="absolute inset-0 rounded-full bg-[#7c3aed]/40 blur-xl" />
-                <div className="relative grid h-[74px] w-[74px] place-items-center rounded-full border border-[#8b5cf6]/30 bg-[#111827] shadow-[0_0_30px_rgba(124,58,237,0.55)]">
-                  <Bot className="h-10 w-10 text-white robot-vibrate" />
+                <div className="relative grid h-14 w-14 md:h-[74px] md:w-[74px] place-items-center rounded-full border border-[#8b5cf6]/30 bg-[#111827] shadow-[0_0_30px_rgba(124,58,237,0.55)]">
+                  <Bot className="h-7 w-7 md:h-10 md:w-10 text-white robot-vibrate" />
                 </div>
               </div>
               <div className="space-y-2">
-                <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-5 py-4 text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
+                <div className="rounded-lg border border-white/[0.07] bg-[#1b2230] px-4 py-3 md:px-5 md:py-4 text-[16px] md:text-[18px] leading-relaxed text-white/90 shadow-[0_12px_30px_rgba(0,0,0,0.2)]">
                   {hasRenderableCode || isWorking ? (
                     <>
                       <p>He terminado la estructura.</p>
@@ -937,46 +875,43 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   ) : (
                     <>
                       <p>No encuentro mensajes ni código generado para esta conversación.</p>
-                      <p className="mt-3">
-                        Es posible que una generación anterior se interrumpiera antes de terminar.
-                        Escríbeme abajo qué quieres construir y vuelvo a empezar.
-                      </p>
+                      <p className="mt-3">Es posible que una generación anterior se interrumpiera antes de terminar. Escríbeme abajo qué quieres construir y vuelvo a empezar.</p>
                     </>
                   )}
                 </div>
                 <div className="pl-1">
-                  <p className="text-[17px] font-bold text-[#a78bfa]">Maris AI</p>
-                  <p className="mt-1 text-[14px] text-white/45">Ahora</p>
+                  <p className="text-[15px] md:text-[17px] font-bold text-[#a78bfa]">Maris AI</p>
+                  <p className="mt-1 text-[12px] md:text-[14px] text-white/45">Ahora</p>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-7">
+            <div className="space-y-5 md:space-y-7">
               {visibleMessages.map((message, index) => {
                 const isUserMessage = message.role === "user";
                 const key = message.id ?? `${message.role}-${index}`;
                 return (
-                  <div key={key} className={`flex items-start gap-4 ${isUserMessage ? "justify-end" : "justify-start"}`}>
+                  <div key={key} className={`flex items-start gap-3 md:gap-4 ${isUserMessage ? "justify-end" : "justify-start"}`}>
                     {!isUserMessage && (
                       <div className="relative mt-1 shrink-0">
                         <div className="absolute inset-0 rounded-full bg-[#7c3aed]/35 blur-lg" />
-                        <div className="relative grid h-12 w-12 place-items-center rounded-full border border-[#8b5cf6]/25 bg-[#111827]">
-                          <Bot className="h-6 w-6 text-white" />
+                        <div className="relative grid h-10 w-10 md:h-12 md:w-12 place-items-center rounded-full border border-[#8b5cf6]/25 bg-[#111827]">
+                          <Bot className="h-5 w-5 md:h-6 md:w-6 text-white" />
                         </div>
                       </div>
                     )}
-                    <div className={`max-w-[78%] space-y-2 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
-                      <div className={`whitespace-pre-wrap rounded-2xl px-5 py-4 text-[15px] leading-relaxed shadow-[0_12px_30px_rgba(0,0,0,0.18)] ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
+                    <div className={`max-w-[85%] md:max-w-[78%] space-y-2 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
+                      <div className={`whitespace-pre-wrap rounded-2xl px-4 py-3 md:px-5 md:py-4 text-[14px] md:text-[15px] leading-relaxed shadow-[0_12px_30px_rgba(0,0,0,0.18)] ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
                         {!isUserMessage && String(message.content || "").includes("ENGINE_EXEC activado") && (
-                          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[12px] font-extrabold uppercase tracking-[0.18em] text-emerald-200">
+                          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-200">
                             <Shield className="h-3.5 w-3.5" /> ENGINE_EXEC · sin recompilar
                           </div>
                         )}
                         {message.content}
                       </div>
                       <div className={`px-1 ${isUserMessage ? "text-right" : "text-left"}`}>
-                        <p className={`text-[13px] font-bold ${isUserMessage ? "text-white/65" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
-                        <p className="mt-0.5 text-[12px] text-white/35">{formatMessageTime(message.createdAt)}</p>
+                        <p className={`text-[12px] md:text-[13px] font-bold ${isUserMessage ? "text-white/65" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
+                        <p className="mt-0.5 text-[11px] md:text-[12px] text-white/35">{formatMessageTime(message.createdAt)}</p>
                       </div>
                     </div>
                   </div>
@@ -984,7 +919,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               })}
             </div>
           )}
-          {/* ─── Agent logs inline (Emergent.sh style) ─── */}
+          {/* Agent logs inline */}
           {isWorking && job && jobLogs && jobLogs.length > 0 && (
             <div className="mt-4 space-y-2">
               {jobLogs.slice(-8).map((log: any, idx: number) => {
@@ -1007,28 +942,23 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 const isActive = idx === jobLogs.slice(-8).length - 1 && isWorking;
                 const isError = log.level === "error" || agentKey === "system";
                 return (
-                  <div key={log.id || idx} className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 ${
+                  <div key={log.id || idx} className={`flex items-center gap-3 rounded-xl border px-3 py-2 md:px-3.5 md:py-2.5 ${
                     isError ? "border-red-500/30 bg-red-500/8" :
                     isActive ? "border-[#7c3aed]/40 bg-[#7c3aed]/8" :
                     `${cfg.border} ${cfg.bg}`
                   }`}>
-                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${
-                      isError ? "border-red-500/30 bg-red-500/15" :
-                      `${cfg.border} ${cfg.bg}`
-                    }`}>
-                      <cfg.Icon className={`h-4 w-4 ${isError ? "text-red-400" : cfg.color}`} />
+                    <div className={`grid h-7 w-7 md:h-8 md:w-8 shrink-0 place-items-center rounded-lg border ${isError ? "border-red-500/30 bg-red-500/15" : `${cfg.border} ${cfg.bg}`}`}>
+                      <cfg.Icon className={`h-3.5 w-3.5 md:h-4 md:w-4 ${isError ? "text-red-400" : cfg.color}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[11px] font-black tracking-widest ${isError ? "text-red-400" : cfg.color}`}>{cfg.label}</span>
-                        {log.file && <span className="text-[11px] text-white/35 font-mono truncate">{log.file}</span>}
+                        <span className={`text-[10px] md:text-[11px] font-black tracking-widest ${isError ? "text-red-400" : cfg.color}`}>{cfg.label}</span>
+                        {log.file && <span className="text-[10px] md:text-[11px] text-white/35 font-mono truncate">{log.file}</span>}
                       </div>
-                      {log.message && <p className={`text-[12px] leading-snug truncate ${
-                        isError ? "text-red-300" : "text-white/60"
-                      }`}>{log.message}</p>}
+                      {log.message && <p className={`text-[11px] md:text-[12px] leading-snug truncate ${isError ? "text-red-300" : "text-white/60"}`}>{log.message}</p>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] text-white/25 font-mono">{formatMessageTime(log.createdAt)}</span>
+                      <span className="hidden md:inline text-[11px] text-white/25 font-mono">{formatMessageTime(log.createdAt)}</span>
                       {isActive ? (
                         <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
                       ) : (
@@ -1050,8 +980,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           )}
           <div ref={messagesEndRef} />
         </div>
-        <div className="space-y-3 px-6 pb-6">
-          {/* Botón Aprobar y continuar: SOLO visible cuando el job está en awaiting_approval */}
+        <div className="space-y-3 px-3 md:px-6 pb-20 md:pb-6">
           {isAwaitingApproval && (
             <Button
               size="lg"
@@ -1063,7 +992,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               Aprobar y continuar
             </Button>
           )}
-          {/* Input de mensajes: SOLO visible cuando NO está en awaiting_approval */}
           {!isAwaitingApproval && (
             <div className="rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
               <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
@@ -1077,7 +1005,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   }
                 }}
                 placeholder="Escribe un mensaje al agente..."
-                className="min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2"
+                className="min-h-[64px] md:min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2"
               />
               <div className="flex items-center justify-between px-3 pb-3">
                 <div className="flex items-center gap-1">
@@ -1085,10 +1013,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <button type="button" title="Marcar" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
                     <Star className="h-4 w-4" />
                   </button>
-                  <button type="button" title="Fork" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
+                  <button type="button" title="Fork" className="hidden md:grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
                     <GitBranch className="h-4 w-4" />
                   </button>
-                  <button type="button" title="Compartir" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
+                  <button type="button" title="Compartir" className="hidden md:grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
                     <Share2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -1136,45 +1064,41 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   return (
     <>
     <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#070910] text-white" data-testid="maris-emergent-workspace">
-      <header className="h-[61px] shrink-0 border-b border-white/[0.075] bg-[#070910]/95 backdrop-blur-xl">
-        <div className="flex h-full items-center justify-between px-5">
-          {/* LEFT: Logo + project tab */}
-          <div className="flex items-center gap-4">
+      {/* ── HEADER ── */}
+      <header className="h-[56px] md:h-[61px] shrink-0 border-b border-white/[0.075] bg-[#070910]/95 backdrop-blur-xl">
+        <div className="flex h-full items-center justify-between px-3 md:px-5">
+          {/* LEFT */}
+          <div className="flex items-center gap-2 md:gap-4">
             <button onClick={() => setLocation("/dashboard")} className="flex items-center gap-2.5 hover:opacity-80 transition">
               <MarisLogo />
             </button>
             <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.065] bg-white/[0.04] px-3 py-1.5 text-[13.5px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.065] bg-white/[0.04] px-2 md:px-3 py-1.5 text-[12px] md:text-[13.5px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                 <span className="h-2 w-2 rounded-full bg-[#7c3aed]" />
-                <span className="max-w-[180px] truncate">{app?.title || "Sin título"}</span>
+                <span className="max-w-[100px] md:max-w-[180px] truncate">{app?.title || "Sin título"}</span>
                 <X className="ml-1 h-3.5 w-3.5 text-white/35 hover:text-white/70 cursor-pointer" onClick={(e) => { e.stopPropagation(); setLocation("/dashboard"); }} />
               </div>
               <button
                 onClick={() => window.open("/dashboard", "_blank", "noopener,noreferrer")}
-                title="Abrir Maris AI en una pestaña nueva para empezar otro proyecto"
-                aria-label="Abrir Maris AI en una pestaña nueva"
-                className="grid h-8 w-8 place-items-center rounded-lg border border-white/[0.065] bg-white/[0.04] text-white/60 hover:bg-white/[0.07] hover:text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition"
+                className="hidden md:grid h-8 w-8 place-items-center rounded-lg border border-white/[0.065] bg-white/[0.04] text-white/60 hover:bg-white/[0.07] hover:text-white transition"
               >
                 <span className="text-lg leading-none font-bold">+</span>
               </button>
             </div>
           </div>
 
-          {/* RIGHT: streak + credits + notifications + profile */}
-          <div className="flex items-center gap-3 text-white/70">
-            {/* Streak */}
-            <button onClick={() => setLocation("/billing")} className="flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/8 px-3 py-1.5 text-[13px] font-bold text-orange-400 hover:bg-orange-500/15 transition">
+          {/* RIGHT */}
+          <div className="flex items-center gap-2 md:gap-3 text-white/70">
+            <button onClick={() => setLocation("/billing")} className="flex items-center gap-1.5 rounded-full border border-orange-500/20 bg-orange-500/8 px-2 md:px-3 py-1.5 text-[12px] md:text-[13px] font-bold text-orange-400 hover:bg-orange-500/15 transition">
               <Flame className="h-4 w-4" />
-              <span>{(stats as any)?.streak ?? 1}</span>
+              <span className="hidden md:inline">{(stats as any)?.streak ?? 1}</span>
             </button>
-
-            {/* Credits */}
-            <button onClick={() => setLocation("/billing")} className="flex items-center gap-1.5 rounded-full border border-yellow-500/20 bg-yellow-500/8 px-3 py-1.5 text-[13px] font-bold text-yellow-400 hover:bg-yellow-500/15 transition">
+            <button onClick={() => setLocation("/billing")} className="flex items-center gap-1.5 rounded-full border border-yellow-500/20 bg-yellow-500/8 px-2 md:px-3 py-1.5 text-[12px] md:text-[13px] font-bold text-yellow-400 hover:bg-yellow-500/15 transition">
               <Cpu className="h-4 w-4" />
               <span>{isAdmin ? "∞" : credits}</span>
             </button>
 
-            {/* ✅ Seguimiento 3: Notificaciones con badge de contador real */}
+            {/* Notificaciones */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label="Notificaciones" className="relative grid h-8 w-8 place-items-center rounded-full hover:bg-white/5 hover:text-white">
@@ -1186,20 +1110,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   )}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" forceMount className="z-[220] w-80 border-white/10 bg-[#0f1320] text-white">
+              <DropdownMenuContent align="end" forceMount className="z-[220] w-72 md:w-80 border-white/10 bg-[#0f1320] text-white">
                 <DropdownMenuLabel className="flex items-center justify-between">
                   <span>Notificaciones</span>
                   {unreadCount > 0 && <span className="rounded-full bg-[#7c3aed]/20 px-2 py-0.5 text-[10px] font-bold text-[#a78bfa]">{unreadCount} nuevas</span>}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-white/10" />
-                {/* Notificaciones del backend */}
                 {notificationsData?.notifications?.map((n: any) => (
                   <DropdownMenuItem key={n.id} onSelect={(e) => e.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
                     <span className={`text-sm font-semibold ${n.type === 'error' ? 'text-red-400' : n.type === 'warning' ? 'text-yellow-400' : 'text-white'}`}>{n.title}</span>
                     <span className="text-xs leading-relaxed text-white/55">{n.body}</span>
                   </DropdownMenuItem>
                 ))}
-                {/* Notificaciones del estado del job activo */}
                 {isWorking && (
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="flex cursor-default flex-col items-start gap-1 whitespace-normal focus:bg-white/5 focus:text-white">
                     <span className="flex items-center gap-1.5 text-sm font-semibold text-[#a78bfa]"><span className="h-1.5 w-1.5 rounded-full bg-[#7c3aed] animate-pulse" />Trabajo activo</span>
@@ -1214,19 +1136,18 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Profile dropdown */}
+            {/* Profile */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" aria-label="Perfil" className="flex items-center gap-2 rounded-full pl-1 pr-1.5 hover:bg-white/5 transition">
-                  <Avatar className="h-8 w-8 border border-white/10">
+                <button type="button" aria-label="Perfil" className="flex items-center gap-1 md:gap-2 rounded-full pl-1 pr-1 md:pr-1.5 hover:bg-white/5 transition">
+                  <Avatar className="h-7 w-7 md:h-8 md:w-8 border border-white/10">
                     <AvatarImage src={user?.imageUrl} alt={user?.fullName || firstName} />
                     <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-xs font-bold text-white">{user?.firstName?.charAt(0) || firstName.charAt(0) || "M"}</AvatarFallback>
                   </Avatar>
-                  <ChevronDown className="h-3.5 w-3.5 text-white/45" />
+                  <ChevronDown className="hidden md:block h-3.5 w-3.5 text-white/45" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" forceMount className="z-[220] w-72 border-white/10 bg-[#0f1320] text-white p-0 overflow-hidden">
-                {/* User info header */}
                 <div className="px-4 py-3 border-b border-white/[0.07]">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 border border-white/10">
@@ -1250,36 +1171,25 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     </div>
                   </div>
                 </div>
-                {/* Buy credits CTA */}
                 <div className="px-3 py-2 border-b border-white/[0.07]">
                   <button onClick={() => setLocation("/billing")} className="w-full flex items-center justify-between rounded-lg bg-gradient-to-r from-yellow-500/15 to-orange-500/15 border border-yellow-500/20 px-3 py-2 text-sm font-semibold text-yellow-300 hover:from-yellow-500/25 hover:to-orange-500/25 transition">
-                    <div className="flex items-center gap-2">
-                      <Cpu className="h-4 w-4" />
-                      Comprar créditos
-                    </div>
+                    <div className="flex items-center gap-2"><Cpu className="h-4 w-4" />Comprar créditos</div>
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
-                {/* Menu items */}
                 <div className="py-1">
                   <DropdownMenuItem onClick={() => setLocation("/dashboard")} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
-                    <LayoutDashboard className="mr-2 h-4 w-4 text-white/45" />
-                    Panel de proyectos
+                    <LayoutDashboard className="mr-2 h-4 w-4 text-white/45" />Panel de proyectos
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => { setShowAccountSettings(true); setAccountSettingsTab("personal"); }} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
-                    <Settings className="mr-2 h-4 w-4 text-white/45" />
-                    Configuración de cuenta
+                    <Settings className="mr-2 h-4 w-4 text-white/45" />Configuración de cuenta
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => { setShowAccountSettings(true); setAccountSettingsTab("agents"); }} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
-                    <Users className="mr-2 h-4 w-4 text-white/45" />
-                    Gestionar agentes
+                    <Users className="mr-2 h-4 w-4 text-white/45" />Gestionar agentes
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-default focus:bg-white/5 mx-1 rounded-md">
                     <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center gap-2">
-                        <Moon className="h-4 w-4 text-white/45" />
-                        <span>Modo oscuro</span>
-                      </div>
+                      <div className="flex items-center gap-2"><Moon className="h-4 w-4 text-white/45" /><span>Modo oscuro</span></div>
                       <Switch checked={darkModeEnabled} onCheckedChange={setDarkModeEnabled} className="scale-75" />
                     </div>
                   </DropdownMenuItem>
@@ -1288,17 +1198,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <div className="py-1">
                   {isAdmin && (
                     <DropdownMenuItem onClick={() => setLocation("/admin")} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
-                      <Shield className="mr-2 h-4 w-4 text-[#a78bfa]" />
-                      Panel admin
+                      <Shield className="mr-2 h-4 w-4 text-[#a78bfa]" />Panel admin
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={handleOpenDocs} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
-                    <ExternalLink className="mr-2 h-4 w-4 text-white/45" />
-                    Documentación
+                    <ExternalLink className="mr-2 h-4 w-4 text-white/45" />Documentación
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))} className="cursor-pointer focus:bg-red-500/10 focus:text-red-300 mx-1 rounded-md text-white/70">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Cerrar sesión
+                    <LogOut className="mr-2 h-4 w-4" />Cerrar sesión
                   </DropdownMenuItem>
                 </div>
               </DropdownMenuContent>
@@ -1307,8 +1214,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[72px] shrink-0 flex-col border-r border-white/[0.07] bg-[#070910]">
+      {/* ── BODY ── */}
+      <div className="flex min-h-0 flex-1 relative">
+
+        {/* Sidebar iconos — oculto en móvil */}
+        <aside className="hidden md:flex w-[72px] shrink-0 flex-col border-r border-white/[0.07] bg-[#070910]">
           <nav className="flex flex-1 flex-col items-center gap-1 pt-4 px-2">
             {NAV_ITEMS.map((item) => {
               const active = activeSidebar === item.id;
@@ -1321,23 +1231,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   aria-pressed={active}
                   title={item.label}
                   className={`group relative flex w-full flex-col items-center gap-1.5 py-2.5 rounded-xl text-[11px] font-medium transition ${
-                    active
-                      ? "bg-[#7c3aed]/12 text-[#c084fc]"
-                      : "text-white/40 hover:bg-white/[0.04] hover:text-white/75"
+                    active ? "bg-[#7c3aed]/12 text-[#c084fc]" : "text-white/40 hover:bg-white/[0.04] hover:text-white/75"
                   }`}
                 >
-                  {active && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-0.5 rounded-r-full bg-[#7c3aed] shadow-[0_0_12px_rgba(124,58,237,0.9)]" />
-                  )}
-                  <Icon className={`h-5 w-5 transition ${
-                    active ? "text-[#c084fc] drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]" : ""
-                  }`} />
+                  {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-0.5 rounded-r-full bg-[#7c3aed] shadow-[0_0_12px_rgba(124,58,237,0.9)]" />}
+                  <Icon className={`h-5 w-5 transition ${active ? "text-[#c084fc] drop-shadow-[0_0_8px_rgba(192,132,252,0.8)]" : ""}`} />
                   <span className="leading-none">{item.label}</span>
                 </button>
               );
             })}
           </nav>
-          {/* Avatar at bottom */}
           <div className="flex justify-center pb-4">
             <Avatar className="h-9 w-9 border border-white/10 cursor-pointer hover:ring-2 hover:ring-[#7c3aed]/50 transition" onClick={() => setShowAccountSettings(true)}>
               <AvatarImage src={user?.imageUrl} />
@@ -1346,10 +1249,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
         </aside>
 
-        <section className={`flex min-w-[430px] flex-col border-r border-white/[0.08] bg-[#080a12] ${isPreviewClosed ? "flex-1" : "w-[590px] shrink-0"}`}>
+        {/* Panel chat — full en móvil, fijo en desktop */}
+        <section className={`flex flex-col border-r border-white/[0.08] bg-[#080a12] ${
+          mobileTab === "preview" ? "hidden md:flex" : "flex"
+        } ${isPreviewClosed ? "flex-1" : "w-full md:w-[590px] md:shrink-0"}`}>
           {renderSidebarPanel()}
           {isPreviewClosed && (
-            <div className="px-6 pb-6">
+            <div className="px-3 md:px-6 pb-20 md:pb-6">
               <Button onClick={handleOpenPreview} variant="outline" className="h-11 w-full border-[#8b5cf6]/50 bg-[#7c3aed]/10 font-bold text-[#c4b5fd] hover:bg-[#7c3aed]/20 hover:text-white">
                 Abrir App Preview
               </Button>
@@ -1357,20 +1263,21 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           )}
         </section>
 
+        {/* Panel preview — oculto en móvil cuando tab es chat */}
         {!isPreviewClosed && (
-        <main className={`${isPreviewMaximized ? "fixed inset-0 z-[130]" : "flex min-w-0 flex-1"} flex-col bg-[#0a0d15]`}>
-          {/* ─── Right panel toolbar ─── */}
-          <div className="flex h-[61px] shrink-0 items-center border-b border-white/[0.07] bg-[#0a0d15] px-4 gap-3">
-            {/* Preview / Code tabs */}
-            <div className="flex items-center rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5">
-              <button onClick={() => setRightPanelTab("preview")} className={`px-3 py-1.5 rounded-md text-[13px] font-semibold transition ${rightPanelTab === "preview" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>Preview</button>
-              <button onClick={() => setRightPanelTab("code")} className={`px-3 py-1.5 rounded-md text-[13px] font-semibold transition ${rightPanelTab === "code" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>
+        <main className={`flex-col bg-[#0a0d15] ${
+          isPreviewMaximized ? "fixed inset-0 z-[130] flex" : "flex min-w-0 flex-1"
+        } ${mobileTab === "chat" ? "hidden md:flex" : "flex"}`}>
+          {/* Toolbar preview */}
+          <div className="flex h-[56px] md:h-[61px] shrink-0 items-center border-b border-white/[0.07] bg-[#0a0d15] px-2 md:px-4 gap-2 md:gap-3 overflow-x-auto">
+            <div className="flex items-center rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5 shrink-0">
+              <button onClick={() => setRightPanelTab("preview")} className={`px-2 md:px-3 py-1.5 rounded-md text-[12px] md:text-[13px] font-semibold transition ${rightPanelTab === "preview" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>Preview</button>
+              <button onClick={() => setRightPanelTab("code")} className={`px-2 md:px-3 py-1.5 rounded-md text-[12px] md:text-[13px] font-semibold transition ${rightPanelTab === "code" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>
                 <Code className="inline h-3.5 w-3.5 mr-1" />Código
               </button>
             </div>
 
-            {/* URL bar */}
-            <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 min-w-0">
+            <div className="hidden md:flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 min-w-0">
               <Globe className="h-3.5 w-3.5 text-white/30 shrink-0" />
               <span className="flex-1 truncate text-[12.5px] text-white/50 font-mono">{deployedUrl || `https://${(app?.title || "mi-app").toLowerCase().replace(/\s+/g, "-")}.marisai.es`}</span>
               <button onClick={() => { if (deployedUrl) { navigator.clipboard.writeText(deployedUrl); toast({ title: "URL copiada" }); } }} className="shrink-0 text-white/30 hover:text-white/70 transition">
@@ -1381,36 +1288,34 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </button>
             </div>
 
-            {/* Size controls */}
-            <div className="flex items-center rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5 gap-0.5">
+            <div className="hidden md:flex items-center rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5 gap-0.5">
               <button onClick={() => setPreviewSize("desktop")} title="Escritorio" className={`grid h-7 w-7 place-items-center rounded-md transition ${previewSize === "desktop" ? "bg-white/[0.1] text-white" : "text-white/35 hover:text-white/65"}`}><Monitor className="h-4 w-4" /></button>
               <button onClick={() => setPreviewSize("tablet")} title="Tablet" className={`grid h-7 w-7 place-items-center rounded-md transition ${previewSize === "tablet" ? "bg-white/[0.1] text-white" : "text-white/35 hover:text-white/65"}`}><Tablet className="h-4 w-4" /></button>
               <button onClick={() => setPreviewSize("mobile")} title="Móvil" className={`grid h-7 w-7 place-items-center rounded-md transition ${previewSize === "mobile" ? "bg-white/[0.1] text-white" : "text-white/35 hover:text-white/65"}`}><Smartphone className="h-4 w-4" /></button>
             </div>
 
-            {/* GitHub button */}
-            <GitHubButton
-              appId={id}
-              appTitle={app?.title ?? "app"}
-              appDescription={app?.description ?? ""}
-              githubRepoUrl={(app as any)?.githubRepoUrl}
-              onSuccess={() => queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) })}
-            />
+            <div className="hidden md:block">
+              <GitHubButton
+                appId={id}
+                appTitle={app?.title ?? "app"}
+                appDescription={app?.description ?? ""}
+                githubRepoUrl={(app as any)?.githubRepoUrl}
+                onSuccess={() => queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) })}
+              />
+            </div>
 
-            {/* Share */}
-            <button onClick={handleShare} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/[0.07] bg-white/[0.04] px-3 text-[13px] font-semibold text-white/70 hover:bg-white/[0.07] hover:text-white transition">
+            <button onClick={handleShare} className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-md border border-white/[0.07] bg-white/[0.04] px-3 text-[13px] font-semibold text-white/70 hover:bg-white/[0.07] hover:text-white transition">
               <Share2 className="h-3.5 w-3.5" />Share
             </button>
 
-            {/* Deploy split button */}
-            <div className="flex items-center">
+            <div className="flex items-center ml-auto shrink-0">
               <button
                 onClick={handleDeploy}
                 disabled={deployMutation.isPending || !hasRenderableCode}
-                className="inline-flex h-8 items-center gap-1.5 rounded-l-md bg-gradient-to-r from-[#7c3aed] to-[#9333ea] px-4 text-[13px] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-50 transition"
+                className="inline-flex h-8 items-center gap-1.5 rounded-l-md bg-gradient-to-r from-[#7c3aed] to-[#9333ea] px-3 md:px-4 text-[12px] md:text-[13px] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-50 transition"
               >
                 {deployMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
-                {deployMutation.isPending ? "Desplegando" : "Deploy"}
+                {deployMutation.isPending ? "Deploying" : "Deploy"}
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1432,18 +1337,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </DropdownMenu>
             </div>
 
-            {/* Maximize */}
-            <button onClick={handleMaximizePreview} title={isPreviewMaximized ? "Restaurar" : "Maximizar"} className={`grid h-8 w-8 place-items-center rounded-md border border-white/[0.07] bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white transition ${isPreviewMaximized ? "border-[#7c3aed]/40 text-[#a78bfa]" : ""}`}>
+            <button onClick={handleMaximizePreview} title={isPreviewMaximized ? "Restaurar" : "Maximizar"} className={`shrink-0 grid h-8 w-8 place-items-center rounded-md border border-white/[0.07] bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white transition ${isPreviewMaximized ? "border-[#7c3aed]/40 text-[#a78bfa]" : ""}`}>
               {isPreviewMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
           </div>
 
-
-
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {rightPanelTab === "code" ? (
-              /* ─── Code view ─── */
-              <div className="h-full overflow-auto bg-[#060810] p-6">
+              <div className="h-full overflow-auto bg-[#060810] p-4 md:p-6">
                 {frontendCode ? (
                   <pre className="text-[12px] leading-relaxed text-emerald-300/80 font-mono whitespace-pre-wrap break-words">{frontendCode.slice(0, 50000)}{frontendCode.length > 50000 ? "\n\n... (truncado, descarga el proyecto para ver el código completo)" : ""}</pre>
                 ) : (
@@ -1456,14 +1357,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 )}
               </div>
             ) : (
-              /* ─── Preview view ─── */
               <>
                 <button
                   type="button"
                   onClick={handleClosePreview}
                   aria-label="Cerrar vista previa"
-                  title="Cerrar vista previa"
-                  className="absolute right-4 top-4 z-20 grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-white shadow-[0_8px_25px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
+                  className="absolute right-3 top-3 md:right-4 md:top-4 z-20 grid h-8 w-8 md:h-9 md:w-9 place-items-center rounded-full border border-white/15 bg-[#070910]/85 text-white shadow-[0_8px_25px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-400/50 hover:bg-red-500/20"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1500,14 +1399,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     />
                   )}
                 </div>
-                <div className="pointer-events-none absolute bottom-6 left-1/2 w-[620px] max-w-[calc(100%-4rem)] -translate-x-1/2">
-                  <div className="pointer-events-auto flex h-[56px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                    <div className="flex items-center gap-3 text-[13px] text-white/55">
+                <div className="pointer-events-none absolute bottom-6 left-1/2 w-[90%] md:w-[620px] max-w-[calc(100%-2rem)] -translate-x-1/2">
+                  <div className="pointer-events-auto flex h-[52px] md:h-[56px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-4 md:px-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                    <div className="flex items-center gap-3 text-[12px] md:text-[13px] text-white/55">
                       <span className={`h-2 w-2 rounded-full ${hasRenderableCode ? "bg-emerald-400" : "bg-white/20"}`} />
-                      <span>{showStaticBuildState ? "Esperando código renderizable…" : "Vista en vivo activa"}</span>
+                      <span>{showStaticBuildState ? "Esperando código…" : "Vista en vivo activa"}</span>
                     </div>
-                    <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-4 py-1.5 text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
-                      {hasRenderableCode ? "Resume Preview" : "Cerrar preview"}
+                    <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-3 md:px-4 py-1.5 text-[12px] md:text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
+                      {hasRenderableCode ? "Resume" : "Cerrar"}
                     </button>
                   </div>
                 </div>
@@ -1517,54 +1416,79 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         </main>
         )}
       </div>
+
+      {/* ── BARRA DE NAVEGACIÓN MÓVIL ── */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[150] flex h-14 border-t border-white/[0.08] bg-[#070910]/95 backdrop-blur-xl">
+        <button
+          onClick={() => setMobileTab("chat")}
+          className={`flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition ${
+            mobileTab === "chat" ? "text-[#c084fc]" : "text-white/40"
+          }`}
+        >
+          <Bot className="h-5 w-5" />
+          Chat
+        </button>
+        <button
+          onClick={() => { setMobileTab("preview"); setIsPreviewClosed(false); }}
+          className={`flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition relative ${
+            mobileTab === "preview" ? "text-[#c084fc]" : "text-white/40"
+          }`}
+        >
+          <Monitor className="h-5 w-5" />
+          Preview
+          {isWorking && (
+            <span className="absolute top-2 right-[calc(50%-18px)] h-2 w-2 rounded-full bg-[#7c3aed] animate-pulse" />
+          )}
+        </button>
+      </div>
     </div>
 
     {/* Account Settings Modal */}
     {showAccountSettings && (
       <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowAccountSettings(false)}>
-        <div className="relative w-full max-w-3xl mx-4 rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_32px_80px_rgba(0,0,0,0.7)] overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "85vh" }}>
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
+        <div className="relative w-full max-w-3xl mx-3 md:mx-4 rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_32px_80px_rgba(0,0,0,0.7)] overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh" }}>
+          <div className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-white/[0.07]">
             <div>
-              <h2 className="text-lg font-bold text-white">Configuración de cuenta</h2>
+              <h2 className="text-base md:text-lg font-bold text-white">Configuración de cuenta</h2>
               <p className="text-xs text-white/40 mt-0.5">{user?.primaryEmailAddress?.emailAddress || me?.email}</p>
             </div>
             <button onClick={() => setShowAccountSettings(false)} className="grid h-8 w-8 place-items-center rounded-lg text-white/40 hover:bg-white/5 hover:text-white transition">
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="flex" style={{ height: "calc(85vh - 73px)" }}>
-            {/* Sidebar tabs */}
-            <div className="w-52 shrink-0 border-r border-white/[0.07] p-3 space-y-0.5 overflow-y-auto">
-              {([
-                { id: "personal", label: "Configuración personal", icon: Settings },
-                { id: "apikey", label: "Clave universal", icon: Key },
-                { id: "agents", label: "Gestionar agentes", icon: Users },
-                { id: "preferences", label: "Preferencias", icon: Moon },
-                { id: "billing", label: "Facturas y planes", icon: CreditCard },
-                { id: "usage", label: "Uso de créditos", icon: Cpu },
-              ] as const).map(({ id: tabId, label, icon: Icon }) => (
-                <button
-                  key={tabId}
-                  onClick={() => setAccountSettingsTab(tabId)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition text-left ${
-                    accountSettingsTab === tabId
-                      ? "bg-[#7c3aed]/15 text-[#c084fc] border border-[#7c3aed]/25"
-                      : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {label}
-                </button>
-              ))}
+          <div className="flex flex-col md:flex-row" style={{ height: "calc(90vh - 73px)" }}>
+            {/* Tabs en móvil: scroll horizontal. En desktop: sidebar vertical */}
+            <div className="md:w-52 md:shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] md:p-3 overflow-x-auto md:overflow-y-auto">
+              <div className="flex md:flex-col gap-1 p-3 md:p-0 min-w-max md:min-w-0">
+                {([
+                  { id: "personal", label: "Personal", icon: Settings },
+                  { id: "apikey", label: "API Key", icon: Key },
+                  { id: "agents", label: "Agentes", icon: Users },
+                  { id: "preferences", label: "Preferencias", icon: Moon },
+                  { id: "billing", label: "Facturación", icon: CreditCard },
+                  { id: "usage", label: "Uso", icon: Cpu },
+                ] as const).map(({ id: tabId, label, icon: Icon }) => (
+                  <button
+                    key={tabId}
+                    onClick={() => setAccountSettingsTab(tabId)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] md:text-[13px] font-medium transition whitespace-nowrap ${
+                      accountSettingsTab === tabId
+                        ? "bg-[#7c3aed]/15 text-[#c084fc] border border-[#7c3aed]/25"
+                        : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            {/* Tab content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6">
               {accountSettingsTab === "personal" && (
                 <div className="space-y-5">
                   <h3 className="text-base font-bold text-white">Información personal</h3>
                   <div className="flex items-center gap-4">
-                    <Avatar className="h-16 w-16 border-2 border-white/10">
+                    <Avatar className="h-14 w-14 md:h-16 md:w-16 border-2 border-white/10">
                       <AvatarImage src={user?.imageUrl} />
                       <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-xl font-bold text-white">{user?.firstName?.charAt(0) || "M"}</AvatarFallback>
                     </Avatar>
@@ -1576,12 +1500,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
-                      <p className="text-xs text-white/35 uppercase tracking-widest">Racha actual</p>
-                      <p className="mt-2 text-2xl font-bold text-orange-400 flex items-center gap-2"><Flame className="h-5 w-5" />{(stats as any)?.streak ?? 1} días</p>
+                      <p className="text-xs text-white/35 uppercase tracking-widest">Racha</p>
+                      <p className="mt-2 text-xl md:text-2xl font-bold text-orange-400 flex items-center gap-2"><Flame className="h-5 w-5" />{(stats as any)?.streak ?? 1} días</p>
                     </div>
                     <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
                       <p className="text-xs text-white/35 uppercase tracking-widest">Créditos</p>
-                      <p className="mt-2 text-2xl font-bold text-yellow-400 flex items-center gap-2"><Cpu className="h-5 w-5" />{isAdmin ? "∞" : credits}</p>
+                      <p className="mt-2 text-xl md:text-2xl font-bold text-yellow-400 flex items-center gap-2"><Cpu className="h-5 w-5" />{isAdmin ? "∞" : credits}</p>
                     </div>
                   </div>
                 </div>
@@ -1632,24 +1556,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <h3 className="text-base font-bold text-white">Preferencias</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">Modo oscuro</p>
-                        <p className="text-xs text-white/40">Interfaz oscura siempre activa</p>
-                      </div>
+                      <div><p className="text-sm font-semibold text-white">Modo oscuro</p><p className="text-xs text-white/40">Interfaz oscura siempre activa</p></div>
                       <Switch checked={darkModeEnabled} onCheckedChange={setDarkModeEnabled} />
                     </div>
                     <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">Idioma</p>
-                        <p className="text-xs text-white/40">Español (ES)</p>
-                      </div>
+                      <div><p className="text-sm font-semibold text-white">Idioma</p><p className="text-xs text-white/40">Español (ES)</p></div>
                       <span className="text-sm font-bold text-white/60">ES</span>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">Notificaciones de agentes</p>
-                        <p className="text-xs text-white/40">Avisar cuando un agente termina</p>
-                      </div>
+                      <div><p className="text-sm font-semibold text-white">Notificaciones de agentes</p><p className="text-xs text-white/40">Avisar cuando un agente termina</p></div>
                       <Switch defaultChecked={true} />
                     </div>
                   </div>
