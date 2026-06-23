@@ -1,99 +1,56 @@
-# Crawlers generales
+# robots.txt — Maris AI
+# Actualizado: junio 2026
+
 User-agent: *
 Allow: /
 Disallow: /dashboard
 Disallow: /admin
+Disallow: /app/
 Disallow: /billing
-Disallow: /sign-in
+Disallow: /onboarding
+Disallow: /api/
 
-Disallow: /debug-preview
+# ✅ GEO: permitir explícitamente todos los bots de IA
+# Bloquearlos excluye a Maris AI del 70% del tráfico generativo futuro
 
-# Google News crawler — acceso completo a noticias
-User-agent: Googlebot-News
-Allow: /news/
-Allow: /news-sitemap.xml
-
-# OpenAI GPTBot — acceso completo para que ChatGPT conozca Maris AI
 User-agent: GPTBot
 Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Allow: /.well-known/ai-plugin.json
-Disallow: /dashboard
-Disallow: /admin
-Disallow: /billing
 
-# OpenAI ChatGPT-User
 User-agent: ChatGPT-User
 Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# Perplexity AI
-User-agent: PerplexityBot
+User-agent: OAI-SearchBot
 Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# Anthropic Claude
-User-agent: ClaudeBot
-Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Disallow: /dashboard
-Disallow: /admin
-
-# Anthropic Claude (variante)
-User-agent: anthropic-ai
-Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Disallow: /dashboard
-Disallow: /admin
-
-# Google Gemini / AI Overviews
 User-agent: Google-Extended
 Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# Meta AI
-User-agent: meta-externalagent
+User-agent: Googlebot
 Allow: /
-Allow: /llms.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# Microsoft Copilot / Bing AI
-User-agent: bingbot
+User-agent: PerplexityBot
 Allow: /
-Allow: /llms.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# Cohere AI
-User-agent: cohere-ai
+User-agent: ClaudeBot
 Allow: /
-Allow: /llms.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# You.com AI
-User-agent: YouBot
+User-agent: anthropic-ai
 Allow: /
-Allow: /llms.txt
-Disallow: /dashboard
-Disallow: /admin
 
-# Sitemaps
+User-agent: Applebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: FacebookBot
+Allow: /
+
+# Sitemap
 Sitemap: https://www.marisai.es/sitemap.xml
-Sitemap: https://www.marisai.es/news-sitemap.xml
-
-# Dominio canónico (www)
-Host: https://www.marisai.es
