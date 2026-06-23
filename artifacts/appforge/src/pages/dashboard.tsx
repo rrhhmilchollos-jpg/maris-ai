@@ -630,7 +630,7 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      <div className="container max-w-6xl mx-auto px-4 py-8 space-y-8">
+      <div className="container max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
 
         {/* ── Notificaciones de soporte ── */}
         {notifications.filter(n => !notifDismissed.has(n._id)).map((notif) => (
@@ -670,7 +670,7 @@ export default function DashboardPage() {
           </div>
         ))}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Créditos disponibles</CardTitle>
@@ -786,7 +786,7 @@ export default function DashboardPage() {
               <div className="relative bg-[#0a0a10] border border-white/[0.07] rounded-xl focus-within:border-primary/40 transition-all">
                 <Textarea
                   placeholder={kindMeta.placeholder}
-                  className="min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm text-white placeholder:text-white/20 p-4 pb-14"
+                  className="min-h-[100px] sm:min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm text-white placeholder:text-white/20 p-3 sm:p-4 pb-14"
                   value={prompt}
                   onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); }}
                   disabled={isWorking}
@@ -1165,11 +1165,11 @@ export default function DashboardPage() {
           </div>
 
           {appsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               {visibleApps.map((app: any) => (
                 <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group relative" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
                   <button

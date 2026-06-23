@@ -181,7 +181,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
       {/* Style selector */}
       <div>
         <p className="text-[10px] text-white/40 mb-1.5">Estilo</p>
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="flex gap-1 flex-wrap">
           {(isVideo ? VIDEO_STYLES : IMAGE_STYLES).map(s => (
             <button
               key={s.id}
@@ -232,7 +232,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
             ? "ej. Un producto de lujo flotando en agua cristalina con luz dorada..."
             : "ej. Un robot amigable en una ciudad futurista al amanecer..."
           }
-          className="min-h-[80px] text-sm bg-white/[0.04] border-white/10 text-white placeholder:text-white/20 resize-none"
+          className="min-h-[70px] text-sm bg-white/[0.04] border-white/10 text-white placeholder:text-white/20 resize-none"
         />
         {/* Example prompts */}
         <div className="mt-1.5 flex gap-1 flex-wrap">

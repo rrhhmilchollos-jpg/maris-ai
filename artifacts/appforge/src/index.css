@@ -258,3 +258,69 @@
   background-size: 200% 100%;
   animation: shimmer-gradient 2s ease-in-out infinite;
 }
+
+/* ─── Mobile optimizations — Android & iOS ─────────────────────────────────── */
+
+/* Prevent text size adjust on iOS rotation */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Smooth scrolling everywhere */
+* {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Hide horizontal scrollbar on mobile carousels */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Better tap targets on mobile — min 44px */
+@media (max-width: 640px) {
+  button, [role="button"], a {
+    min-height: 36px;
+  }
+  
+  /* Prevent content overflow */
+  .container {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  
+  /* Fix textarea on iOS — prevents zoom on focus */
+  textarea, input, select {
+    font-size: 16px !important;
+  }
+  
+  /* Reduce motion blur/blob sizes on mobile for performance */
+  .blur-\[100px\], .blur-\[120px\], .blur-\[150px\] {
+    filter: blur(40px) !important;
+  }
+}
+
+/* iOS safe area for bottom nav */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Fix font rendering on mobile */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Fix overflow issues across all pages */
+body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}

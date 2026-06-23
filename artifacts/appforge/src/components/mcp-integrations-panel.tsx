@@ -313,7 +313,7 @@ export function MCPIntegrationsPanel({ onConnectorChange, className }: MCPIntegr
   const connectedCount = Object.values(states).filter(s => s.connected).length;
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("space-y-3 sm:space-y-4", className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -348,7 +348,7 @@ export function MCPIntegrationsPanel({ onConnectorChange, className }: MCPIntegr
           placeholder="Buscar conector..."
           className="h-7 text-xs bg-white/[0.04] border-white/10 text-white placeholder:text-white/30"
         />
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 flex-wrap overflow-x-auto">
           {CATEGORIES.map(cat => (
             <button
               key={cat.id}
@@ -425,7 +425,7 @@ export function MCPIntegrationsPanel({ onConnectorChange, className }: MCPIntegr
               {state.expanded && (
                 <div className="px-3 pb-3 space-y-3 border-t border-white/[0.06] pt-3">
                   {/* Features */}
-                  <div className="flex gap-1 flex-wrap">
+                  <div className="flex gap-1 flex-wrap overflow-x-auto">
                     {connector.features.map(f => (
                       <span key={f} className="text-[10px] bg-white/[0.06] text-white/50 px-2 py-0.5 rounded-full">
                         {f}
