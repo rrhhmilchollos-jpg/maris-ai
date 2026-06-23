@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api-client";
 
 type MediaMode = "imagen-ai" | "video-ai";
 

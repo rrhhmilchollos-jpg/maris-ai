@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api-client";
 
 interface VisualIssue {
   severity: "critical" | "major" | "minor";
