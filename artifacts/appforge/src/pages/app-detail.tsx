@@ -236,6 +236,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
+  const [showVisualTestInline, setShowVisualTestInline] = useState(false);
   // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
   const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
   const [previewSize, setPreviewSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -351,6 +352,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         setPreviewKey((value) => value + 1);
       });
       setActiveJobId(null);
+      // Auto-show visual test panel in chat after generation completes
+      setShowVisualTestInline(true);
       toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha recargado automáticamente con la actualización." });
     } else if (job?.status === "failed") {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
@@ -981,6 +984,26 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
           )}
           <div ref={messagesEndRef} />
+
+          {/* ─── Visual Test Inline — aparece automáticamente tras generar ─── */}
+          {showVisualTestInline && (
+            <div className="mx-3 md:mx-6 mb-4 animate-in slide-in-from-bottom-2">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-[11px] text-cyan-400 font-medium">
+                  <Eye className="h-3.5 w-3.5" />
+                  Testing visual automático — Claude Vision analiza tu app
+                </div>
+                <button onClick={() => setShowVisualTestInline(false)}
+                  className="text-white/25 hover:text-white/60 transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <VisualTestPanel
+                appId={app?._id || app?.id || ""}
+                appSlug={app?.publicSlug || undefined}
+              />
+            </div>
+          )}
         </div>
         <div className="space-y-3 px-3 md:px-6 pb-20 md:pb-6">
           {isAwaitingApproval && (

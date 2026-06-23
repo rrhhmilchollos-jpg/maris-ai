@@ -18,17 +18,28 @@ function sendHealth(res: Response) {
 
   const memUsage = process.memoryUsage();
   
+  // Scaling info — replica ID from Railway env
+  const instanceId = process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || "single-instance";
+  const concurrency = parseInt(process.env.JOB_CONCURRENCY || "10", 10);
+  
   res.json({ 
     ...data, 
     queue: queueReady ? "ready" : "degraded",
     testing_agent: testerExists ? "active" : "missing",
-    version: "2.1.0-monitored",
+    version: "2.2.0-scalable",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+    instance: instanceId,
+    concurrency,
     memory: {
       rss: `${(memUsage.rss / 1024 / 1024).toFixed(2)} MB`,
       heapUsed: `${(memUsage.heapUsed / 1024 / 1024).toFixed(2)} MB`,
       heapTotal: `${(memUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
+    },
+    scaling: {
+      mode: process.env.RAILWAY_REPLICA_ID ? "multi-replica" : "single-instance",
+      hint: "Aumenta réplicas en Railway Dashboard → Settings → Replicas para escalar horizontalmente",
+      bullmq: queueReady ? "distributed-ready" : "in-process-fallback",
     }
   });
 }

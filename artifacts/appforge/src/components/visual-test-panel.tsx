@@ -62,10 +62,12 @@ const SEVERITY_CONFIG = {
 export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelProps) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<VisualTestResult | null>(null);
+  const [beforeResult, setBeforeResult] = useState<VisualTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeViewport, setActiveViewport] = useState<string>("desktop");
   const [showIssues, setShowIssues] = useState(true);
   const [autoFixing, setAutoFixing] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
 
   async function runTest(autoFix = false) {
     if (!appSlug) {
@@ -73,8 +75,16 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
       return;
     }
 
-    if (autoFix) setAutoFixing(true);
-    else setRunning(true);
+    if (autoFix) {
+      setAutoFixing(true);
+      // Save current result as "before" for comparison
+      if (result) setBeforeResult(result);
+      setCompareMode(false);
+    } else {
+      setRunning(true);
+      setBeforeResult(null);
+      setCompareMode(false);
+    }
     setError(null);
 
     try {
@@ -86,6 +96,10 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
       setResult(data);
       if (data.screenshots?.length > 0) {
         setActiveViewport(data.screenshots[0].viewport);
+      }
+      // If autoFix was applied and there were fixes, activate compare mode
+      if (autoFix && data.fixesApplied > 0) {
+        setCompareMode(true);
       }
     } catch (err: any) {
       setError(err.message || "Error en el test visual");
@@ -263,28 +277,99 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
                 })}
               </div>
 
-              {/* Screenshot */}
+              {/* Before/After toggle */}
+              {compareMode && beforeResult && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border-b border-emerald-500/20">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-[11px] text-emerald-400 font-medium">
+                    IA aplicó {result?.fixesApplied} fix{result?.fixesApplied !== 1 ? "es" : ""} — comparando antes vs después
+                  </span>
+                  <div className="ml-auto flex gap-1 bg-white/[0.06] rounded-lg p-0.5">
+                    <button onClick={() => setCompareMode(false)}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-white/[0.1] text-white">
+                      Después ✓
+                    </button>
+                    <button onClick={() => setCompareMode(true)}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-medium text-white/40 hover:text-white/70">
+                      Comparar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Screenshot — Before/After split or single */}
               {activeShot && (
-                <div className="relative">
-                  <img
-                    src={activeShot.dataUrl}
-                    alt={`Screenshot ${activeViewport}`}
-                    className="w-full border-b border-white/[0.06]"
-                    style={{ maxHeight: "400px", objectFit: "cover", objectPosition: "top" }}
-                  />
-                  {/* Issue overlays */}
-                  {activeIssues.length > 0 && (
-                    <div className="absolute top-2 right-2 flex flex-col gap-1">
-                      {activeIssues.slice(0, 3).map((issue, i) => {
-                        const cfg = SEVERITY_CONFIG[issue.severity];
-                        const Icon = cfg.icon;
-                        return (
-                          <div key={i} className={cn("flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-medium", cfg.bg, cfg.color)}>
-                            <Icon className="h-2.5 w-2.5 shrink-0" />
-                            {issue.type}
-                          </div>
-                        );
-                      })}
+                <div className="relative border-b border-white/[0.06]">
+                  {compareMode && beforeResult ? (
+                    /* Side by side comparison */
+                    <div className="flex gap-0.5 bg-black">
+                      <div className="flex-1 relative">
+                        <div className="absolute top-1 left-1 z-10 bg-black/70 text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          ANTES
+                        </div>
+                        <img
+                          src={beforeResult.screenshots?.find(s => s.viewport === activeViewport)?.dataUrl || ""}
+                          alt="Antes"
+                          className="w-full object-cover object-top opacity-80"
+                          style={{ maxHeight: "350px" }}
+                        />
+                        {/* Before issues overlay */}
+                        <div className="absolute bottom-1 left-1 right-1 flex flex-wrap gap-0.5">
+                          {(beforeResult.issues?.filter(i => i.viewport === activeViewport) || []).slice(0,3).map((issue,i) => {
+                            const cfg = SEVERITY_CONFIG[issue.severity];
+                            return <div key={i} className={cn("text-[8px] px-1.5 py-0.5 rounded border font-medium", cfg.bg, cfg.color)}>{issue.type}</div>;
+                          })}
+                        </div>
+                      </div>
+                      <div className="w-0.5 bg-white/10" />
+                      <div className="flex-1 relative">
+                        <div className="absolute top-1 left-1 z-10 bg-black/70 text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          DESPUÉS ✓
+                        </div>
+                        <img
+                          src={activeShot.dataUrl}
+                          alt="Después"
+                          className="w-full object-cover object-top"
+                          style={{ maxHeight: "350px" }}
+                        />
+                        {/* After score badge */}
+                        <div className="absolute bottom-1 right-1 bg-emerald-500/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          {result?.overallScore}/100
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Single screenshot */
+                    <div className="relative">
+                      <img
+                        src={activeShot.dataUrl}
+                        alt={`Screenshot ${activeViewport}`}
+                        className="w-full"
+                        style={{ maxHeight: "400px", objectFit: "cover", objectPosition: "top" }}
+                      />
+                      {/* Issue overlays */}
+                      {activeIssues.length > 0 && (
+                        <div className="absolute top-2 right-2 flex flex-col gap-1">
+                          {activeIssues.slice(0, 3).map((issue, i) => {
+                            const cfg = SEVERITY_CONFIG[issue.severity];
+                            const Icon = cfg.icon;
+                            return (
+                              <div key={i} className={cn("flex items-center gap-1 px-2 py-1 rounded-lg border text-[9px] font-medium", cfg.bg, cfg.color)}>
+                                <Icon className="h-2.5 w-2.5 shrink-0" />
+                                {issue.type}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Score badge */}
+                      <div className={cn(
+                        "absolute bottom-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full",
+                        result && result.overallScore >= 80 ? "bg-emerald-500/80 text-white" :
+                        result && result.overallScore >= 60 ? "bg-amber-500/80 text-white" : "bg-red-500/80 text-white"
+                      )}>
+                        {result?.overallScore}/100
+                      </div>
                     </div>
                   )}
                 </div>
