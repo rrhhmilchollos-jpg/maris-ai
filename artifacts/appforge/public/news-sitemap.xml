@@ -1,136 +1,88 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+
+  <!-- ════════ PÁGINA PRINCIPAL — máxima prioridad ════════ -->
   <url>
-    <loc>https://www.marisai.es/news/bolt-new-vs-maris-ai-comparativa-2026</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-06-06T11:16:09Z</news:publication_date>
-      <news:title>Bolt.new vs Maris AI: ¿Cuál es la Mejor Herramienta para Crear Apps con IA en Español? (2026)</news:title>
-      <news:keywords>bolt.new, alternativa bolt, vibe coding, crear apps con ia, comparativa, español</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
   </url>
+
+  <!-- ════════ PÁGINAS PRINCIPALES ════════ -->
   <url>
-    <loc>https://www.marisai.es/news/crear-app-reservas-negocio-sin-programar-ia</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-28T09:00:00Z</news:publication_date>
-      <news:title>Cómo crear una app de reservas para tu negocio sin programar (en 5 minutos con IA)</news:title>
-      <news:keywords>app reservas, no-code, Maris AI, negocio, inteligencia artificial</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/pricing</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/meta-recorta-8000-empleos-apuesta-ia-automatizacion-2026</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-21T10:00:00+02:00</news:publication_date>
-      <news:title>Meta Recorta 8.000 Empleos en su Gran Apuesta por la IA: El Futuro es Automatización</news:title>
-      <news:keywords>Meta, inteligencia artificial, empleo, automatización, IA 2026</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/showcase</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/google-io-2026-era-agentes-ia-gemini</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-21T11:00:00+02:00</news:publication_date>
-      <news:title>Google I/O 2026: La Era de los Agentes de IA con Gemini ha Comenzado</news:title>
-      <news:keywords>Google IO 2026, Gemini, agentes IA, Google AI, inteligencia artificial</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/news</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
   </url>
+
+  <!-- ════════ PÁGINAS SEO / CONTENIDO ════════ -->
   <url>
-    <loc>https://www.marisai.es/news/anthropic-supera-openai-adopcion-empresarial-mayo-2026</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-21T12:00:00+02:00</news:publication_date>
-      <news:title>Anthropic Supera a OpenAI en Adopción Empresarial por Primera Vez en la Historia</news:title>
-      <news:keywords>Anthropic, OpenAI, Claude, ChatGPT, adopción empresarial, IA 2026</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/vs-emergent</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/ue-acuerdo-politico-ley-ia-mayo-2026-desarrolladores</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-21T13:00:00+02:00</news:publication_date>
-      <news:title>La UE Alcanza Acuerdo Político sobre la Ley de IA: Lo Que Cambia para Desarrolladores y Empresas</news:title>
-      <news:keywords>Ley de IA, Unión Europea, regulación IA, desarrolladores, empresas tecnológicas</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/que-es-vibe-coding</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/google-ai-mode-busqueda-ia-cambia-internet-2026</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-21T14:00:00+02:00</news:publication_date>
-      <news:title>Google AI Mode: La Búsqueda con IA que Amenaza con Cambiar Internet para Siempre</news:title>
-      <news:keywords>Google AI Mode, búsqueda IA, Google Search, inteligencia artificial, internet 2026</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/que-es-un-agente-de-ia</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/optimizacion-modelos-llm-produccion-reducir-costes</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-18T10:00:00+02:00</news:publication_date>
-      <news:title>Optimización de modelos LLM en producción: estrategias para reducir costes hasta un 95% sin sacrificar calidad</news:title>
-      <news:keywords>LLM, optimización, costes IA, producción, modelos de lenguaje</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/glosario</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/crear-aplicacion-web-ia-5-minutos-guia-practica</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-18T11:00:00+02:00</news:publication_date>
-      <news:title>Cómo crear tu primera aplicación web con IA en menos de 5 minutos: guía práctica para no programadores</news:title>
-      <news:keywords>crear app con IA, no-code, Maris AI, aplicación web, inteligencia artificial</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/desarrollo-no-code-guia</loc>
+    <lastmod>2026-06-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
+
+  <!-- ════════ PÁGINAS LEGALES ════════ -->
   <url>
-    <loc>https://www.marisai.es/news/futuro-desarrollo-software-agentes-ia-2026</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-18T12:00:00+02:00</news:publication_date>
-      <news:title>El futuro del desarrollo de software: cómo los agentes de IA están transformando la industria en 2026</news:title>
-      <news:keywords>agentes IA, desarrollo software, futuro tecnología, programación IA, 2026</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/legal</loc>
+    <lastmod>2026-06-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
+
   <url>
-    <loc>https://www.marisai.es/news/maris-ai-plataforma-apps-ia-mejor-precio</loc>
-    <news:news>
-      <news:publication>
-        <news:name>Maris AI</news:name>
-        <news:language>es</news:language>
-      </news:publication>
-      <news:publication_date>2026-05-17T10:00:00+02:00</news:publication_date>
-      <news:title>Maris AI: La Plataforma que Genera Apps Completas con IA por Mucho Menos</news:title>
-      <news:keywords>Maris AI, generador apps IA, alternativa Emergent, vibe coding, no-code IA</news:keywords>
-    </news:news>
+    <loc>https://www.marisai.es/privacy</loc>
+    <lastmod>2026-06-01</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
+
 </urlset>
