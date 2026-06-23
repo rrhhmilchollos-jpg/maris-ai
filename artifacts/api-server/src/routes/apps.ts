@@ -3080,7 +3080,7 @@ Tipo: ${kind || "fullstack"}` }],
 
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false } = req.body;
+    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {} } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const safeAttachments = Array.isArray(attachments) ? attachments : [];
     const conversationalReply = getConversationalOnlyReply(prompt, safeAttachments.length > 0);
@@ -3175,9 +3175,25 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       : model || "claude-sonnet-4-6";
 
     // Legacy mode: prefijo en el prompt para activar modo migración
-    const effectivePrompt = legacyMode
-      ? `[MODO MIGRACIÓN LEGACY] Moderniza y migra el siguiente código/proyecto a tecnología actual (React 18, TypeScript, Tailwind, Express, MongoDB). Mantén toda la funcionalidad pero usa las mejores prácticas de 2026:\n\n${generationPrompt}`
-      : generationPrompt;
+    const legacyPrefix = legacyMode
+      ? "[MODO MIGRACIÓN LEGACY] Moderniza y migra el siguiente código/proyecto a tecnología actual (React 18, TypeScript, Tailwind, Express, MongoDB). Mantén toda la funcionalidad pero usa las mejores prácticas de 2026.\n\n"
+      : "";
+
+    // MCP Connectors: inyectar credenciales y contexto de servicios conectados
+    const connectedMCP = Object.entries(mcpConnectors as Record<string, any>)
+      .filter(([, v]) => v?.connected && Object.keys(v?.values || {}).length > 0);
+
+    const mcpContext = connectedMCP.length > 0
+      ? `\n\n[SERVICIOS CONECTADOS MCP — USA ESTAS INTEGRACIONES]\n${connectedMCP.map(([id, v]) => {
+          const envLines = Object.entries(v.values as Record<string, string>)
+            .filter(([, val]) => val?.trim())
+            .map(([key]) => `  - ${key}: [DISPONIBLE]`)
+            .join("\n");
+          return `- ${id.toUpperCase()}:\n${envLines}`;
+        }).join("\n")}\n\nIMPORTANTE: Usa las variables de entorno de los servicios conectados en el código generado. Importa sus SDKs, inicializa con process.env.VARIABLE_NAME y crea la integración completa funcional.`
+      : "";
+
+    const effectivePrompt = legacyPrefix + generationPrompt + mcpContext;
 
     await GenerationJob.create({
       _id: jobId,
@@ -3193,6 +3209,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       hasEverPaid,
       ultraThinking: !!ultraThinking,
       legacyMode: !!legacyMode,
+      mcpConnectors: connectedMCP.map(([id]) => id),
     });
 
     await enqueueGenerateJob(jobId);

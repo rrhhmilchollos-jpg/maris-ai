@@ -432,10 +432,31 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
-    // Simulación de inicio de test visual (la lógica real está en lib/visualTester.ts)
-    return res.json({ success: true, message: "Test visual iniciado. Revisa los logs en unos minutos." });
-  } catch (error) {
-    return res.status(500).json({ error: "Error al iniciar test visual" });
+    const { autoFix = false } = req.body || {};
+
+    // Load app
+    const { GeneratedApp } = await import("@workspace/db/schema");
+    const app = await (GeneratedApp as any).findOne({ _id: appId, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!app.publicSlug) return res.status(400).json({ error: "La app debe estar desplegada públicamente para el test visual" });
+
+    // Run real visual tester
+    const { runVisualTestAndFix } = await import("../lib/visualTester");
+    const result = await runVisualTestAndFix(app, { autoFix, logger: (await import("../lib/logger")).logger });
+
+    return res.json({
+      success: true,
+      visuallyCorrect: result.analysis.visuallyCorrect,
+      overallScore: result.analysis.overallScore,
+      issues: result.analysis.issues,
+      screenshots: result.analysis.screenshots?.map((s: any) => ({
+        viewport: s.viewport,
+        dataUrl: `data:image/png;base64,${s.data}`,
+      })) || [],
+      fixesApplied: result.fixesApplied,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || "Error en test visual" });
   }
 });
 

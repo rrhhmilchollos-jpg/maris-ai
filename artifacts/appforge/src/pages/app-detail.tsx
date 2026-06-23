@@ -90,9 +90,11 @@ import {
   Users,
   Key,
   Star,
+  Eye,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
+import { VisualTestPanel } from "@/components/visual-test-panel";
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
@@ -233,7 +235,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
-  const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code">("preview");
+  const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
   // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
   const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
   const [previewSize, setPreviewSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -1275,6 +1277,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <button onClick={() => setRightPanelTab("code")} className={`px-2 md:px-3 py-1.5 rounded-md text-[12px] md:text-[13px] font-semibold transition ${rightPanelTab === "code" ? "bg-white/[0.08] text-white" : "text-white/45 hover:text-white/70"}`}>
                 <Code className="inline h-3.5 w-3.5 mr-1" />Código
               </button>
+              <button onClick={() => setRightPanelTab("visual-test")} className={`px-2 md:px-3 py-1.5 rounded-md text-[12px] md:text-[13px] font-semibold transition flex items-center gap-1 ${rightPanelTab === "visual-test" ? "bg-cyan-500/20 text-cyan-400" : "text-white/45 hover:text-white/70"}`}>
+                <Eye className="inline h-3.5 w-3.5 mr-0.5" />Test
+              </button>
             </div>
 
             <div className="hidden md:flex flex-1 items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 min-w-0">
@@ -1343,7 +1348,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
-            {rightPanelTab === "code" ? (
+            {rightPanelTab === "visual-test" ? (
+              <div className="h-full overflow-auto bg-[#0a0d15] p-4">
+                <VisualTestPanel
+                  appId={app?._id || app?.id || ""}
+                  appSlug={app?.publicSlug || undefined}
+                />
+              </div>
+            ) : rightPanelTab === "code" ? (
               <div className="h-full overflow-auto bg-[#060810] p-4 md:p-6">
                 {frontendCode ? (
                   <pre className="text-[12px] leading-relaxed text-emerald-300/80 font-mono whitespace-pre-wrap break-words">{frontendCode.slice(0, 50000)}{frontendCode.length > 50000 ? "\n\n... (truncado, descarga el proyecto para ver el código completo)" : ""}</pre>

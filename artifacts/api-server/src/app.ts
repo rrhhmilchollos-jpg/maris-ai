@@ -9,6 +9,7 @@ import newsRouter from "./routes/news";
 import rssRouter from "./routes/rss";
 import newsSitemapRouter from "./routes/news-sitemap";
 import sitemapRouter from "./routes/sitemap";
+import videoRouter from "./routes/video";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
@@ -304,6 +305,7 @@ app.use("/api", adminRouter);
 app.use("/", rssRouter);
 app.use("/", newsSitemapRouter);
 app.use("/", sitemapRouter);
+app.use("/api", videoRouter);
  
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
 app.use(botRenderRouter);

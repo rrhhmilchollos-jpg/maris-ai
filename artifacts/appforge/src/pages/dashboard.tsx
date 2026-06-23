@@ -21,6 +21,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
 import { MCPIntegrationsPanel } from "@/components/mcp-integrations-panel";
+import { MediaAIGenerator } from "@/components/media-ai-generator";
 import { SupportPanel } from "@/components/support-panel";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { GenerationStudio } from "@/components/generation-studio";
@@ -141,7 +142,7 @@ export default function DashboardPage() {
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
   const [showMCPPanel, setShowMCPPanel] = useState(false);
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
-  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django";
+  type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django" | "video-ai" | "imagen-ai";
   const [kind, setKind] = useState<Kind>("fullstack");
   const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
     fullstack: { label: "App completa", icon: Layers, placeholder: "ej. Un marketplace estilo Wallapop con publicaciones, búsqueda, mensajes y perfil de usuario...", cost: 3 },
@@ -155,6 +156,8 @@ export default function DashboardPage() {
     nextjs: { label: "Next.js", icon: Server, placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...", cost: 3 },
     "python-api": { label: "Python (FastAPI)", icon: Webhook, placeholder: "ej. Una API REST de tareas con FastAPI, validación pydantic, SQLAlchemy + SQLite y endpoints CRUD completos...", cost: 3 },
     django: { label: "Django", icon: Library, placeholder: "ej. Un blog en Django 5 con modelos, vistas, plantillas, admin y SQLite...", cost: 3 },
+    "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: 8 },
+    "imagen-ai": { label: "🖼️ Imagen con IA", icon: ImagePlay, placeholder: "ej. Una imagen realista de un coche deportivo rojo en una montaña al atardecer con luz dorada...", cost: 2 },
   };
   const kindMeta = KIND_META[kind] ?? KIND_META.fullstack;
   const kindCost = kindMeta.cost;
@@ -291,14 +294,14 @@ export default function DashboardPage() {
 
       setOnboardingOpen(false);
       localStorage.setItem("appforge_last_prompt", finalPrompt);
-      generateMutation.mutate({ data: { prompt: finalPrompt, model: coderModel, language, kind, ultraThinking, legacyMode, attachments: attachments.map((a: any) => a.id) } });
+      generateMutation.mutate({ data: { prompt: finalPrompt, model: coderModel, language, kind, ultraThinking, legacyMode, mcpConnectors, attachments: attachments.map((a: any) => a.id) } });
     }
   };
 
   const handleOnboardingSkip = () => {
     setOnboardingOpen(false);
     localStorage.setItem("appforge_last_prompt", prompt);
-    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, ultraThinking, legacyMode, attachments: attachments.map((a: any) => a.id) } });
+    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, ultraThinking, legacyMode, mcpConnectors, attachments: attachments.map((a: any) => a.id) } });
   };
 
   const openOnboarding = () => {
@@ -771,7 +774,14 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <form onSubmit={handleGenerate}>
+          {/* ─── Media AI Generator (vídeo e imagen) ─────────────────────── */}
+          {(kind === "video-ai" || kind === "imagen-ai") && (
+            <div className="px-6 pb-4">
+              <MediaAIGenerator mode={kind as "video-ai" | "imagen-ai"} />
+            </div>
+          )}
+
+          <form onSubmit={handleGenerate} className={kind === "video-ai" || kind === "imagen-ai" ? "hidden" : ""}>
             <div className="px-6 pb-3">
               <div className="relative bg-[#0a0a10] border border-white/[0.07] rounded-xl focus-within:border-primary/40 transition-all">
                 <Textarea
