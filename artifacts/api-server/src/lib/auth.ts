@@ -104,7 +104,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
         email,
         fullName,
         imageUrl: clerkUser.imageUrl ?? undefined,
-        credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 5 : 0),
+        credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 15 : 0),
         planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 50 : 0),
         freeCreditsUsed: shouldGiveFreeCredits,
         registrationIp: ip,
