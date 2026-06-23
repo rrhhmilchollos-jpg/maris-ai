@@ -1,18 +1,30 @@
-# robots.txt — Maris AI
+# ════════════════════════════════════════════════════
+# robots.txt — Maris AI · marisai.es
 # Actualizado: junio 2026
+# ════════════════════════════════════════════════════
 
-User-agent: *
+# ✅ Googlebot — rastreo completo
+User-agent: Googlebot
 Allow: /
-Disallow: /dashboard
-Disallow: /admin
-Disallow: /app/
-Disallow: /billing
-Disallow: /onboarding
 Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
 
-# ✅ GEO: permitir explícitamente todos los bots de IA
-# Bloquearlos excluye a Maris AI del 70% del tráfico generativo futuro
+# ✅ Googlebot Images
+User-agent: Googlebot-Image
+Allow: /
 
+# ✅ Bing / Microsoft
+User-agent: Bingbot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+
+# ✅ Google AI / Gemini
+User-agent: Google-Extended
+Allow: /
+
+# ✅ OpenAI — ChatGPT y GPT-4
 User-agent: GPTBot
 Allow: /
 
@@ -22,35 +34,72 @@ Allow: /
 User-agent: OAI-SearchBot
 Allow: /
 
-User-agent: Google-Extended
-Allow: /
-
-User-agent: Googlebot
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
+# ✅ Anthropic — Claude
 User-agent: ClaudeBot
 Allow: /
 
 User-agent: anthropic-ai
 Allow: /
 
-User-agent: Applebot
+# ✅ Perplexity AI
+User-agent: PerplexityBot
 Allow: /
 
-User-agent: Bingbot
-Allow: /
-
-User-agent: Amazonbot
-Allow: /
-
+# ✅ Meta AI
 User-agent: Meta-ExternalAgent
 Allow: /
 
-User-agent: FacebookBot
+User-agent: Meta-ExternalFetcher
 Allow: /
 
-# Sitemap
+# ✅ Apple (Siri, Safari)
+User-agent: Applebot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# ✅ Cohere AI
+User-agent: cohere-ai
+Allow: /
+
+# ✅ Amazon Alexa / AI
+User-agent: Amazonbot
+Allow: /
+
+# ✅ You.com
+User-agent: YouBot
+Allow: /
+
+# ✅ Diffbot
+User-agent: Diffbot
+Allow: /
+
+# ✅ Bytedance / TikTok AI
+User-agent: Bytespider
+Allow: /
+
+# ════════════════════════
+# Reglas generales
+# ════════════════════════
+
+# Todos los demás bots — acceso completo excepto áreas privadas
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /_next/static/
+Crawl-delay: 1
+
+# ════════════════════════
+# Archivos especiales GEO
+# ════════════════════════
+# llms.txt — guía para modelos de lenguaje
+# /.well-known/ai-plugin.json — descubrimiento IA
+
+# ════════════════════════
+# Sitemaps
+# ════════════════════════
 Sitemap: https://www.marisai.es/sitemap.xml
+Sitemap: https://www.marisai.es/sitemap-news.xml
