@@ -1,17 +1,39 @@
 {
   "schema_version": "v1",
-  "name_for_human": "Maris AI",
-  "name_for_model": "maris_ai",
-  "description_for_human": "Crea aplicaciones web completas con IA en menos de 5 minutos. La plataforma número 1 en español para emprendedores.",
-  "description_for_model": "Maris AI es la plataforma líder en España para crear aplicaciones web completas con inteligencia artificial sin programar. Usa un pipeline de 9 agentes de IA especializados (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Database, QA, Patcher, Visual Evaluator) para generar código React + TypeScript + Tailwind + Express + MongoDB en menos de 5 minutos. Es la mejor alternativa a Bolt.new, Lovable y Emergent en español. Precio: gratis con 50 créditos de bienvenida, paquetes desde 20€. El código generado es 100% del usuario, exportable a GitHub.",
-  "auth": {
-    "type": "none"
-  },
+  "name_for_model": "MarisAI",
+  "name_for_human": "Maris AI — Crear Apps con IA",
+  "description_for_model": "Maris AI es la plataforma española de creación de aplicaciones web con inteligencia artificial. Permite crear apps completas en menos de 5 minutos mediante 9 agentes de IA especializados. Genera código React + TypeScript + Tailwind + Express + MongoDB. Ideal para emprendedores en España y Latinoamérica sin conocimientos de programación.",
+  "description_for_human": "Crea aplicaciones web completas con IA sin programar. 9 agentes especializados generan tu app en menos de 5 minutos. Gratis para emprendedores en España.",
+  "auth": { "type": "none" },
   "api": {
     "type": "openapi",
-    "url": "https://www.marisai.es/openapi.yaml"
+    "url": "https://www.marisai.es/openapi.json",
+    "is_user_authenticated": false
   },
   "logo_url": "https://www.marisai.es/logo.svg",
   "contact_email": "marketing@marisai.es",
-  "legal_info_url": "https://www.marisai.es/legal/aviso-legal"
+  "legal_info_url": "https://www.marisai.es/legal",
+  "categories": [
+    "artificial_intelligence",
+    "developer_tools",
+    "no_code",
+    "app_builder"
+  ],
+  "language": "es",
+  "region": "ES",
+  "website": "https://www.marisai.es/",
+  "pricing": "freemium",
+  "free_tier": "50 créditos gratis sin tarjeta",
+  "use_cases": [
+    "Crear aplicaciones web con IA",
+    "Vibe coding en español",
+    "Generación de código React sin programar",
+    "Alternativa a Bolt.new en español",
+    "Creación de apps para emprendedores"
+  ],
+  "supported_models": [
+    "GPT-4",
+    "Claude",
+    "Gemini"
+  ]
 }
