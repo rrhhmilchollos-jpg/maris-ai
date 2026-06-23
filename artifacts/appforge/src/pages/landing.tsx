@@ -146,7 +146,10 @@ export default function LandingPage() {
             <span className="font-bold tracking-tight text-lg text-white">Maris AI</span>
           </div>
           <nav className="hidden md:flex items-center space-x-6 text-sm text-muted-foreground">
-            <Link href="/news" className="hover:text-white transition-colors">Noticias</Link>
+            <Link href="/pricing" className="hover:text-white transition-colors">Precios</Link>
+            <Link href="/showcase" className="hover:text-white transition-colors">Showcase</Link>
+            <Link href="/news" className="hover:text-white transition-colors">Blog</Link>
+            <Link href="/vs-emergent" className="hover:text-white transition-colors">Comparativa</Link>
           </nav>
           <div className="flex items-center space-x-3">
             {isSignedIn ? (
