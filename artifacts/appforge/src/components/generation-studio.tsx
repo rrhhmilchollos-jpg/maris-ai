@@ -630,7 +630,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const handleDeploy = () => {
     if (!appId || deployAppMutation.isPending) return;
     if (!me?.isAdmin && (me?.credits ?? 0) < 50) {
-      toast({ title: "Créditos insuficientes", description: "El Deploy cuesta 50 créditos.", variant: "destructive" });
+      toast({ title: "Créditos insuficientes", description: "El Deploy cuesta 5 créditos.", variant: "destructive" });
       setLocation("/billing");
       return;
     }
