@@ -35,10 +35,10 @@ export default function NewsPage() {
   useEffect(() => {
     loadNews();
     // Establecer metadatos de SEO
-    document.title = "Noticias de Maris AI - Live Coding y Nuevas Apps";
+    document.title = "Blog IA para Emprendedores — Maris AI";
     const metaDescription = document.querySelector('meta[name="description"]');
     if (metaDescription) {
-      metaDescription.setAttribute("content", "Últimas noticias sobre Maris AI, Live Coding y nuevas aplicaciones generadas por IA.");
+      metaDescription.setAttribute("content", "Noticias, tutoriales y guías sobre IA, vibe coding y creación de apps sin programar para emprendedores españoles.");
     }
 
     // Añadir etiqueta canónica
@@ -48,7 +48,7 @@ export default function NewsPage() {
       canonicalLink.setAttribute("rel", "canonical");
       document.head.appendChild(canonicalLink);
     }
-    canonicalLink.setAttribute("href", window.location.href);
+    canonicalLink.setAttribute("href", "https://www.marisai.es/news");
 
   }, []);
 
