@@ -2870,7 +2870,7 @@ router.post("/clerk-sync-users", requireAuth, async (req: any, res: any) => {
             _id: cu.id, email,
             fullName: [cu.firstName, cu.lastName].filter(Boolean).join(" ") || undefined,
             imageUrl: cu.imageUrl ?? undefined,
-            credits: isAdminEmail(email) ? 999999999 : 5,
+            credits: isAdminEmail(email) ? 999999999 : 15,
             planCredits: isAdminEmail(email) ? 0 : 50,
             freeCreditsUsed: !isAdminEmail(email),
             plan: "free",
@@ -3113,10 +3113,12 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     //     créditos" en Emergent con solo 5-10 gratis): el usuario obtiene UNA
     //     app completa y funcional, y le quedan pocos créditos para seguir
     //     iterando (a 0.2/edición) antes de necesitar plan de pago.
-    //   - landing    = min(1 × 13, 50) = 13 créditos → quedan 37 (≈185 ediciones)
-    //   - vue/svelte  = min(2 × 13, 50) = 26 créditos → quedan 24 (≈120 ediciones)
-    //   - fullstack   = min(3 × 13, 50) = 39 créditos → quedan 11 (≈55 ediciones)
-    //   - game-3d     = min(5 × 13, 50) = 50 créditos → quedan 0
+    //   FREE (15 créditos de bienvenida — justo para 1 landing completa):
+    //   - landing    = 1 × 13 = 13 créditos → quedan 2 (≈10 ediciones mínimas)
+    //   - vue/svelte  = 2 × 13 = 26 créditos → sin saldo (debe pagar)
+    //   - fullstack   = 3 × 13 = 39 créditos → sin saldo (debe pagar)
+    //   Estrategia: 1 landing gratuita completa y funcional, luego pagar.
+    //   Igual de agresivo que Emergent.sh — ven el resultado real, se enganchan.
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;

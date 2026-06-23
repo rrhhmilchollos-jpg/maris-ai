@@ -170,7 +170,7 @@ export default function LandingPage() {
                       }
                     }}
                   >
-                    Comenzar con 5 créditos
+                    Comenzar con 15 créditos
                   </Button>
                 </Link>
               </>
