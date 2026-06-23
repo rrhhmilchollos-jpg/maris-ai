@@ -8,6 +8,7 @@ import ticketsRouter from "./routes/tickets";
 import newsRouter from "./routes/news";
 import rssRouter from "./routes/rss";
 import newsSitemapRouter from "./routes/news-sitemap";
+import sitemapRouter from "./routes/sitemap";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
@@ -302,6 +303,7 @@ app.use("/api", newsRouter);
 app.use("/api", adminRouter);
 app.use("/", rssRouter);
 app.use("/", newsSitemapRouter);
+app.use("/", sitemapRouter);
  
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
 app.use(botRenderRouter);

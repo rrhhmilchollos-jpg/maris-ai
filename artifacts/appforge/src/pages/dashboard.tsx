@@ -45,7 +45,7 @@ import {
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
   Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
-  Bell, BellRing, ExternalLink
+  Bell, BellRing, ExternalLink, RefreshCw
 } from "lucide-react";
 import {
   Dialog,
@@ -132,6 +132,8 @@ export default function DashboardPage() {
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
+  const [ultraThinking, setUltraThinking] = useState<boolean>(false);
+  const [legacyMode, setLegacyMode] = useState<boolean>(false);
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showNoCredits, setShowNoCredits] = useState(false);
@@ -286,14 +288,14 @@ export default function DashboardPage() {
 
       setOnboardingOpen(false);
       localStorage.setItem("appforge_last_prompt", finalPrompt);
-      generateMutation.mutate({ data: { prompt: finalPrompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } });
+      generateMutation.mutate({ data: { prompt: finalPrompt, model: coderModel, language, kind, ultraThinking, legacyMode, attachments: attachments.map((a: any) => a.id) } });
     }
   };
 
   const handleOnboardingSkip = () => {
     setOnboardingOpen(false);
     localStorage.setItem("appforge_last_prompt", prompt);
-    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } });
+    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, ultraThinking, legacyMode, attachments: attachments.map((a: any) => a.id) } });
   };
 
   const openOnboarding = () => {
@@ -808,6 +810,28 @@ export default function DashboardPage() {
                         </SelectItem>
                       </SelectContent>
                     </Select>
+                    {/* ─── Ultra Thinking toggle ─── */}
+                    <button
+                      type="button"
+                      onClick={() => setUltraThinking(v => !v)}
+                      title={ultraThinking ? "Desactivar Ultra Thinking" : "Activar Ultra Thinking — razonamiento profundo antes de codificar"}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${ultraThinking ? "bg-violet-600/30 text-violet-300 border border-violet-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}
+                      disabled={isWorking}
+                    >
+                      <Brain className="h-3 w-3" />
+                      <span className="hidden sm:inline">Ultra</span>
+                    </button>
+                    {/* ─── Legacy Migration toggle ─── */}
+                    <button
+                      type="button"
+                      onClick={() => setLegacyMode(v => !v)}
+                      title={legacyMode ? "Desactivar migración legacy" : "Modo migración — moderniza código antiguo automáticamente"}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${legacyMode ? "bg-amber-600/30 text-amber-300 border border-amber-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}
+                      disabled={isWorking}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      <span className="hidden sm:inline">Legacy</span>
+                    </button>
                   </div>
                   <Button
                     type="submit"

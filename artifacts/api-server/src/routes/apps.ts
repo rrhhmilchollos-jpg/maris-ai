@@ -3080,7 +3080,7 @@ Tipo: ${kind || "fullstack"}` }],
 
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments, kind } = req.body;
+    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const safeAttachments = Array.isArray(attachments) ? attachments : [];
     const conversationalReply = getConversationalOnlyReply(prompt, safeAttachments.length > 0);
@@ -3169,11 +3169,21 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     }
 
     const jobId = new mongoose.Types.ObjectId().toString();
+    // Ultra Thinking: usar Sonnet como mínimo con budget de tokens extendido
+    const effectiveModel = ultraThinking && (model === "auto" || model === "claude-haiku-4-5")
+      ? "claude-sonnet-4-6"
+      : model || "claude-sonnet-4-6";
+
+    // Legacy mode: prefijo en el prompt para activar modo migración
+    const effectivePrompt = legacyMode
+      ? `[MODO MIGRACIÓN LEGACY] Moderniza y migra el siguiente código/proyecto a tecnología actual (React 18, TypeScript, Tailwind, Express, MongoDB). Mantén toda la funcionalidad pero usa las mejores prácticas de 2026:\n\n${generationPrompt}`
+      : generationPrompt;
+
     await GenerationJob.create({
       _id: jobId,
       userId,
-      prompt: generationPrompt,
-      coderModel: model || "claude-sonnet-4-6",
+      prompt: effectivePrompt,
+      coderModel: effectiveModel,
       language: language || "typescript",
       kind: kind || "fullstack",
       status: "queued",
@@ -3181,6 +3191,8 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       progress: 0,
       isAdmin,
       hasEverPaid,
+      ultraThinking: !!ultraThinking,
+      legacyMode: !!legacyMode,
     });
 
     await enqueueGenerateJob(jobId);
