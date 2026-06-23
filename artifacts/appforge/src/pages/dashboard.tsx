@@ -20,6 +20,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
+import { MCPIntegrationsPanel } from "@/components/mcp-integrations-panel";
 import { SupportPanel } from "@/components/support-panel";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { GenerationStudio } from "@/components/generation-studio";
@@ -45,7 +46,7 @@ import {
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
   Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
-  Bell, BellRing, ExternalLink, RefreshCw
+  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown
 } from "lucide-react";
 import {
   Dialog,
@@ -138,6 +139,8 @@ export default function DashboardPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showNoCredits, setShowNoCredits] = useState(false);
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
+  const [showMCPPanel, setShowMCPPanel] = useState(false);
+  const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django";
   const [kind, setKind] = useState<Kind>("fullstack");
   const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
@@ -1116,6 +1119,41 @@ export default function DashboardPage() {
               )}
             </DialogContent>
           </Dialog>
+          {/* ─── MCP Integrations Panel ──────────────────────────────────────── */}
+          <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
+            <button
+              onClick={() => setShowMCPPanel(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                  <Plug className="h-3 w-3 text-violet-400" />
+                </div>
+                <span className="text-sm font-semibold text-white">Conectores MCP</span>
+                <span className="text-[10px] text-white/30">— conecta Supabase, Notion, GitHub, Slack y más</span>
+                {Object.values(mcpConnectors).filter(c => c.connected).length > 0 && (
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                    {Object.values(mcpConnectors).filter(c => c.connected).length} activo(s)
+                  </span>
+                )}
+              </div>
+              {showMCPPanel
+                ? <ChevronUp className="h-4 w-4 text-white/30" />
+                : <ChevronDown className="h-4 w-4 text-white/30" />
+              }
+            </button>
+            {showMCPPanel && (
+              <div className="px-4 pb-4 border-t border-white/[0.06]">
+                <MCPIntegrationsPanel
+                  onConnectorChange={(id, connected, values) => {
+                    setMcpConnectors(prev => ({ ...prev, [id]: { connected, values } }));
+                  }}
+                  className="pt-4"
+                />
+              </div>
+            )}
+          </div>
+
           {appsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}
