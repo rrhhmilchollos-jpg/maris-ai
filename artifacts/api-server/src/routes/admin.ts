@@ -790,7 +790,7 @@ router.post("/admin/sync-clerk-users", async (_req, res): Promise<void> => {
             email,
             fullName: [cu.firstName, cu.lastName].filter(Boolean).join(" ") || undefined,
             imageUrl: cu.imageUrl ?? undefined,
-            credits: isAdmin ? 999999999 : 50,
+            credits: isAdmin ? 999999999 : 5,
             planCredits: isAdmin ? 0 : 50,
             freeCreditsUsed: !isAdmin,
             plan: "free",

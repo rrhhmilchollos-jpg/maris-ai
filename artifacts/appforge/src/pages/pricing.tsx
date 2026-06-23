@@ -79,7 +79,7 @@ export default function PricingPage() {
               Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 9 agentes IA de Maris AI.
             </p>
             <p className="mt-4 text-sm text-primary font-medium">
-              🎁 Regístrate gratis y recibe 50 créditos de bienvenida — sin tarjeta de crédito
+              🎁 Regístrate gratis y recibe 15 créditos de bienvenida — sin tarjeta de crédito
             </p>
           </motion.div>
         </section>
@@ -179,7 +179,7 @@ export default function PricingPage() {
               },
               {
                 q: "¿Cuántos créditos recibo al registrarme gratis?",
-                a: "Al crear tu cuenta gratuita recibes 50 créditos de bienvenida, sin necesidad de tarjeta de crédito. Esto te permite generar tu primera app y explorar todas las funcionalidades de Maris AI.",
+                a: "Al crear tu cuenta gratuita recibes 15 créditos de bienvenida, sin necesidad de tarjeta de crédito. Esto te permite generar tu primera app y explorar todas las funcionalidades de Maris AI.",
               },
               {
                 q: "¿Los créditos caducan?",
@@ -220,11 +220,11 @@ export default function PricingPage() {
               ¿Preparado para transformar tus ideas en realidad?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Empieza hoy mismo con Maris AI. Recibe 50 créditos de bienvenida al registrarte, sin necesidad de tarjeta de crédito y sin compromiso.
+              Empieza hoy mismo con Maris AI. Recibe 15 créditos de bienvenida al registrarte, sin necesidad de tarjeta de crédito y sin compromiso.
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
-                Comienza con 50 créditos gratis <ArrowRight className="ml-2 h-5 w-5" />
+                Comienza con 15 créditos gratis <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
           </motion.div>

@@ -2870,7 +2870,7 @@ router.post("/clerk-sync-users", requireAuth, async (req: any, res: any) => {
             _id: cu.id, email,
             fullName: [cu.firstName, cu.lastName].filter(Boolean).join(" ") || undefined,
             imageUrl: cu.imageUrl ?? undefined,
-            credits: isAdminEmail(email) ? 999999999 : 50,
+            credits: isAdminEmail(email) ? 999999999 : 5,
             planCredits: isAdminEmail(email) ? 0 : 50,
             freeCreditsUsed: !isAdminEmail(email),
             plan: "free",

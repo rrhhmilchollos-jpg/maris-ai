@@ -100,7 +100,7 @@ export const GIFT_CATALOG: Gift[] = [
     particleEffect: 'sparkles',
   },
 
-  // UNCOMMON (10-50 créditos)
+  // UNCOMMON (10-5 créditos)
   {
     id: 'gift-fire',
     name: 'Fuego',

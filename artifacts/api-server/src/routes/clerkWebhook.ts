@@ -99,7 +99,7 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
           email,
           fullName,
           imageUrl,
-          credits: isAdmin ? 999999999 : 50,
+          credits: isAdmin ? 999999999 : 5,
           planCredits: isAdmin ? 0 : 50,
           freeCreditsUsed: !isAdmin,
           plan: "free",
