@@ -5,4 +5,19 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "node --enable-source-maps /app/artifacts/api-server/dist/index.mjs"
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
+# Escalabilidad horizontal — Railway Pro permite múltiples réplicas
+# Para activar: Railway Dashboard → Settings → Replicas → aumentar
+# Con Redis+BullMQ el queue se distribuye automáticamente entre instancias
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+
+[[deploy.envVars]]
+# Workers paralelos por instancia (BullMQ)
+name = "JOB_CONCURRENCY"
+default = "10"
+
+[[deploy.envVars]]
+# Réplicas mínimas recomendadas en producción
+name = "MIN_REPLICAS"
+default = "1"
