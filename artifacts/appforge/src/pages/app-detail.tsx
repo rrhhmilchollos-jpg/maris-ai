@@ -916,7 +916,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                       </div>
                       <div className={`px-1 ${isUserMessage ? "text-right" : "text-left"}`}>
                         <p className={`text-[12px] md:text-[13px] font-bold ${isUserMessage ? "text-white/65" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
-                        <p className="mt-0.5 text-[11px] md:text-[12px] text-white/35">{formatMessageTime(message.createdAt)}</p>
+                        <p className="mt-0.5 text-[10px] md:text-[12px] text-white/35">{formatMessageTime(message.createdAt)}</p>
                       </div>
                     </div>
                   </div>
@@ -987,7 +987,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
           {/* ─── Visual Test Inline — aparece automáticamente tras generar ─── */}
           {showVisualTestInline && (
-            <div className="mx-3 md:mx-6 mb-4 animate-in slide-in-from-bottom-2">
+            <div className="mx-2 md:mx-6 mb-4 animate-in slide-in-from-bottom-2">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-[11px] text-cyan-400 font-medium">
                   <Eye className="h-3.5 w-3.5" />
@@ -1005,7 +1005,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
           )}
         </div>
-        <div className="space-y-3 px-3 md:px-6 pb-20 md:pb-6">
+        <div className="space-y-3 px-2 md:px-6 pb-24 md:pb-6">
           {isAwaitingApproval && (
             <Button
               size="lg"
@@ -1453,7 +1453,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* ── BARRA DE NAVEGACIÓN MÓVIL ── */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[150] flex h-14 border-t border-white/[0.08] bg-[#070910]/95 backdrop-blur-xl">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-[150] flex h-14 border-t border-white/[0.08] bg-[#070910]/95 backdrop-blur-xl pb-safe">
         <button
           onClick={() => setMobileTab("chat")}
           className={`flex flex-1 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition ${

@@ -88,11 +88,11 @@ function CodeAnimation() {
 function AuroraBackground() {
   return (
     <div className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
-      <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full opacity-20 blur-[100px] animate-pulse"
+      <div className="absolute -top-40 -left-40 w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full opacity-20 blur-[100px] animate-pulse"
         style={{ background: "radial-gradient(circle, #7c3aed, transparent)" }} />
-      <div className="absolute top-1/3 -right-40 w-[500px] h-[500px] rounded-full opacity-15 blur-[120px]"
+      <div className="absolute top-1/3 -right-40 w-[250px] h-[250px] md:w-[500px] md:h-[500px] rounded-full opacity-15 blur-[120px]"
         style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "pulse 4s ease-in-out infinite 1s" }} />
-      <div className="absolute -bottom-40 left-1/3 w-[700px] h-[400px] rounded-full opacity-10 blur-[150px]"
+      <div className="absolute -bottom-40 left-1/3 w-[300px] h-[200px] md:w-[700px] md:h-[400px] rounded-full opacity-10 blur-[150px]"
         style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "pulse 6s ease-in-out infinite 2s" }} />
       <div className="absolute inset-0"
         style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" }} />
@@ -140,7 +140,7 @@ export default function LandingPage() {
       <AuroraBackground />
 
       <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl">
-        <div className="container flex h-14 max-w-screen-2xl items-center px-4 md:px-8 justify-between">
+        <div className="container flex h-14 max-w-screen-2xl items-center px-3 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
             <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
             <span className="font-bold tracking-tight text-lg text-white">Maris AI</span>
@@ -180,7 +180,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
+      <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
         <motion.div style={{ opacity: heroOpacity }} className="container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
           <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
             <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
@@ -188,14 +188,14 @@ export default function LandingPage() {
               <span>La revolución del Vibe Coding ha llegado</span>
             </motion.div>
 
-            <motion.h1 variants={fadeIn} className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-white mb-6 leading-[1.05]">
+            <motion.h1 variants={fadeIn} className="text-3xl xs:text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-white mb-4 md:mb-6 leading-[1.1] md:leading-[1.05]">
               Tu visión. <br />
               <span className="bg-gradient-to-r from-primary via-purple-400 to-cyan-400 bg-clip-text text-transparent">
                 Apps reales en minutos.
               </span>
             </motion.h1>
 
-            <motion.p variants={fadeIn} className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto font-light leading-relaxed">
+            <motion.p variants={fadeIn} className="text-base md:text-xl text-muted-foreground mb-6 md:mb-10 max-w-2xl mx-auto font-light leading-relaxed px-2 md:px-0">
               Transforma tus ideas más ambiciosas en aplicaciones funcionales y listas para el mercado, impulsadas por un equipo de 9 agentes IA de élite.
             </motion.p>
 
@@ -257,7 +257,7 @@ export default function LandingPage() {
               <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
             {[
               {
                 title: "Plataformas SaaS de Vanguardia",
@@ -333,7 +333,7 @@ export default function LandingPage() {
       {/* Stats */}
       <section className="py-16 border-y border-white/5 bg-card/20 backdrop-blur-sm">
         <div className="container px-4 md:px-8 mx-auto max-w-5xl">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 text-center">
             <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
               <TrendingUp className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">9</div>
@@ -523,7 +523,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/sign-up">
-                <Button size="lg" className="h-14 px-10 text-lg bg-white text-black hover:bg-white/90 shadow-[0_0_60px_-10px_rgba(255,255,255,0.4)] font-semibold">
+                <Button size="lg" className="h-12 md:h-14 px-6 md:px-10 text-base md:text-lg bg-white text-black hover:bg-white/90 shadow-[0_0_60px_-10px_rgba(255,255,255,0.4)] font-semibold w-full sm:w-auto">
                   Empieza gratis <ChevronRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>

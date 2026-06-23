@@ -302,7 +302,7 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
                 <div className="relative border-b border-white/[0.06]">
                   {compareMode && beforeResult ? (
                     /* Side by side comparison */
-                    <div className="flex gap-0.5 bg-black">
+                    <div className="flex flex-col sm:flex-row gap-0.5 bg-black">
                       <div className="flex-1 relative">
                         <div className="absolute top-1 left-1 z-10 bg-black/70 text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded">
                           ANTES
