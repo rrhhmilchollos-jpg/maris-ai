@@ -91,7 +91,9 @@ import {
   Key,
   Star,
   Eye,
-, Mic, Square } from "lucide-react";
+  Mic,
+  Square,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { VisualTestPanel } from "@/components/visual-test-panel";
