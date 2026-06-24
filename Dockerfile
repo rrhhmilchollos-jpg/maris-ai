@@ -26,7 +26,7 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:20-slim AS runtime
 WORKDIR /app
 
-# Chromium + todas sus dependencias para Puppeteer (Visual Testing Agent)
+# Chromium + dependencias para Puppeteer
 RUN apt-get update && apt-get install -y \
     chromium \
     ca-certificates \
@@ -56,11 +56,12 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Puppeteer usa el Chromium del sistema
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+# Copiar node_modules raíz Y los de cada workspace (donde pnpm instala puppeteer)
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/artifacts/api-server/node_modules ./artifacts/api-server/node_modules
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
 COPY --from=builder /app/artifacts/api-server/package.json ./artifacts/api-server/
 COPY --from=builder /app/lib ./lib
