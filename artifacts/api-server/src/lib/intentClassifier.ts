@@ -18,8 +18,8 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import type { Logger } from "pino";
 import { analyzeSpanishIntent, firstMatchedTerm, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
-export type ChatIntent = "question" | "research" | "edit" | "execute" | "conversational";
-export type ExecutionEngine = "ENGINE_DEV" | "ENGINE_EXEC" | "ENGINE_INFO" | "ENGINE_RESEARCH" | "ENGINE_CHAT";
+export type ChatIntent = "question" | "research" | "edit" | "execute" | "conversational" | "ambiguous";
+export type ExecutionEngine = "ENGINE_DEV" | "ENGINE_EXEC" | "ENGINE_INFO" | "ENGINE_RESEARCH" | "ENGINE_CHAT" | "ENGINE_CLARIFY";
 
 export type ClassifiedIntent = {
   intent: ChatIntent;
@@ -58,6 +58,34 @@ const STRONG_CONVERSATIONAL_PATTERNS: RegExp[] = [
   /\b(cuando\s+tenga\s+tiempo|cuando\s+pueda|m[aá]s\s+adelante|no\s+es\s+urgente)\b/i,
   /\b(solo\s+quer[íi]a|solo\s+dec[íi]rte|solo\s+avisarte|s[oó]lo\s+quer[íi]a)\b/i,
 ];
+
+// Patrones ambiguos — podria ser un cambio de codigo O una pregunta
+// El sistema pedira confirmacion al usuario antes de actuar
+const AMBIGUOUS_PATTERNS: RegExp[] = [
+  // Podria ser pregunta o peticion de cambio
+  /^\s*(que|qué|como|cómo|cuando|cuándo|donde|dónde|quien|quién|por\s+qué|por\s+que)\b/i,
+  // Menciona la app pero sin verbo de accion claro
+  /^\s*(la\s+app|el\s+proyecto|esto|eso|aqui|aquí)\s+(tiene|está|es|parece|se\s+ve)/i,
+  // Frases demasiado cortas con contexto ambiguo (3-7 palabras)
+];
+
+function looksLikeAmbiguous(message: string): boolean {
+  const trimmed = message.trim();
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  
+  // Solo es ambiguo si: tiene entre 3-8 palabras Y no matchea patrones claros de edit/exec/conv
+  if (words.length < 3 || words.length > 8) return false;
+  
+  // Si ya matchea patrones claros, no es ambiguo
+  if (STRONG_CONVERSATIONAL_PATTERNS.some(p => p.test(trimmed))) return false;
+  if (DEV_KEYWORD_PATTERNS.some(p => p.test(trimmed))) return false;
+  if (EXEC_KEYWORD_PATTERNS.some(p => p.test(trimmed))) return false;
+  
+  // Podria ser ambiguo si empieza con pregunta
+  if (AMBIGUOUS_PATTERNS.some(p => p.test(trimmed))) return true;
+  
+  return false;
+}
 
 function looksLikeConversational(message: string): boolean {
   const trimmed = message.trim();
@@ -230,6 +258,7 @@ function engineForIntent(intent: ChatIntent): ExecutionEngine {
     case "research": return "ENGINE_RESEARCH";
     case "question": return "ENGINE_INFO";
     case "conversational": return "ENGINE_CHAT";
+    case "ambiguous": return "ENGINE_CLARIFY";
     case "edit":
     default: return "ENGINE_DEV";
   }
@@ -298,6 +327,19 @@ export async function classifyChatIntent(
   const execution = spanish.isDataOperation || looksLikeExecution(ctx.message);
   const edit = spanish.isDevOperation || looksLikeEdit(ctx.message);
   const research = spanish.isResearch || looksLikeResearch(ctx.message);
+
+  // ── AMBIGUO — Segunda verificacion, pedir confirmacion antes de actuar ────
+  // Si el mensaje es demasiado vago para saber si pide un cambio o hace una pregunta,
+  // devuelve ambiguous para que el route handler pida confirmacion al usuario.
+  if (looksLikeAmbiguous(ctx.message) && !execution && !edit) {
+    ctx.log.info({ message: ctx.message.slice(0, 100) }, "Intent classifier → ambiguous (asking user for clarification)");
+    return {
+      intent: "ambiguous",
+      engine: "ENGINE_CLARIFY",
+      reply: "",
+      reason: "ambiguous-short-message-no-clear-intent",
+    };
+  }
 
   // ── CONVERSACIONAL — PRIMERA verificación, antes que todo ─────────────────
   // Si el mensaje es claramente conversacional (saludo, agradecimiento,
