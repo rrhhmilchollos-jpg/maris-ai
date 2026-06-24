@@ -91,7 +91,7 @@ import {
   Key,
   Star,
   Eye,
-} from "lucide-react";
+, Mic, Square } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { VisualTestPanel } from "@/components/visual-test-panel";
@@ -232,6 +232,36 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
   const [isPreviewClosed, setIsPreviewClosed] = useState(false);
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
+
+  // ── Voz (Web Speech API) ─────────────────────────────────────────────────
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    setIsSpeechSupported(true);
+    const rec = new SR();
+    rec.lang = "es-ES";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    rec.onresult = (e: any) => {
+      const text = e.results[0][0].transcript;
+      setDraft((prev: string) => prev ? prev + " " + text : text);
+      setIsListening(false);
+    };
+    rec.onerror = () => setIsListening(false);
+    rec.onend   = () => setIsListening(false);
+    recognitionRef.current = rec;
+  }, []);
+
+  const toggleMic = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) { recognitionRef.current.stop(); setIsListening(false); }
+    else             { recognitionRef.current.start(); setIsListening(true); }
+  };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
@@ -1045,7 +1075,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     if (draft.trim().length >= 2 && !sendMutation.isPending && !isActivelyProcessing) handleSend();
                   }
                 }}
-                placeholder="Escribe un mensaje al agente..."
+                placeholder={isListening ? "🎙️ Escuchando... habla ahora" : "Escribe un mensaje al agente..."}
                 className="min-h-[64px] md:min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2"
               />
               <div className="flex items-center justify-between px-3 pb-3">
@@ -1060,6 +1090,24 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <button type="button" title="Compartir" className="hidden md:grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
                     <Share2 className="h-4 w-4" />
                   </button>
+                  {isSpeechSupported && (
+                    <button
+                      type="button"
+                      onClick={toggleMic}
+                      disabled={sendMutation.isPending || isActivelyProcessing}
+                      title={isListening ? "Detener grabación" : "Hablar por voz"}
+                      className={`relative grid h-8 w-8 place-items-center rounded-lg transition disabled:opacity-40 ${
+                        isListening
+                          ? "text-red-400 bg-red-500/10"
+                          : "text-white/30 hover:bg-white/[0.05] hover:text-violet-400"
+                      }`}
+                    >
+                      {isListening && <span className="absolute inset-0 rounded-lg animate-ping bg-red-500/15" />}
+                      {isListening
+                        ? <Square className="h-4 w-4 relative z-10" />
+                        : <Mic className="h-4 w-4" />}
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={handleSend}
