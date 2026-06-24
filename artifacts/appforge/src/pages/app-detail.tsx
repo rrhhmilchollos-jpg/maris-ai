@@ -893,32 +893,64 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           ) : (
-            <div className="space-y-5 md:space-y-7">
+            <div className="space-y-2 md:space-y-3">
               {visibleMessages.map((message, index) => {
                 const isUserMessage = message.role === "user";
                 const key = message.id ?? `${message.role}-${index}`;
+                const isOld = index < visibleMessages.length - 4; // los últimos 4 se ven completos
+                const rawContent = String(message.content || "").trim();
+                // Truncar mensajes antiguos y prompts largos del usuario
+                const MAX_CHARS = isOld ? 120 : isUserMessage ? 300 : 600;
+                const truncated = rawContent.length > MAX_CHARS;
+                const displayContent = truncated ? rawContent.slice(0, MAX_CHARS) + "…" : rawContent;
+
+                if (isOld && isUserMessage) {
+                  // Mensajes de usuario antiguos: línea compacta
+                  return (
+                    <div key={key} className="flex justify-end">
+                      <div className="max-w-[75%] flex items-center gap-1.5 bg-[#7c3aed]/20 border border-[#7c3aed]/20 rounded-xl px-3 py-1.5">
+                        <span className="text-[11px] text-white/40 shrink-0">{formatMessageTime(message.createdAt)}</span>
+                        <span className="text-[11px] text-white/60 truncate">{rawContent.slice(0, 80)}{rawContent.length > 80 ? "…" : ""}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (isOld && !isUserMessage) {
+                  // Respuestas antiguas de la IA: línea colapsada con ✓
+                  return (
+                    <div key={key} className="flex items-center gap-2 px-1">
+                      <div className="w-4 h-4 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+                        <span className="text-[8px] text-violet-400">✓</span>
+                      </div>
+                      <div className="flex-1 h-px bg-white/[0.04]" />
+                      <span className="text-[10px] text-white/20 shrink-0">{formatMessageTime(message.createdAt)}</span>
+                    </div>
+                  );
+                }
+
                 return (
-                  <div key={key} className={`flex items-start gap-3 md:gap-4 ${isUserMessage ? "justify-end" : "justify-start"}`}>
+                  <div key={key} className={`flex items-start gap-2 md:gap-3 ${isUserMessage ? "justify-end" : "justify-start"}`}>
                     {!isUserMessage && (
-                      <div className="relative mt-1 shrink-0">
-                        <div className="absolute inset-0 rounded-full bg-[#7c3aed]/35 blur-lg" />
-                        <div className="relative grid h-10 w-10 md:h-12 md:w-12 place-items-center rounded-full border border-[#8b5cf6]/25 bg-[#111827]">
-                          <Bot className="h-5 w-5 md:h-6 md:w-6 text-white" />
+                      <div className="relative mt-0.5 shrink-0">
+                        <div className="absolute inset-0 rounded-full bg-[#7c3aed]/25 blur-md" />
+                        <div className="relative grid h-7 w-7 md:h-8 md:w-8 place-items-center rounded-full border border-[#8b5cf6]/25 bg-[#111827]">
+                          <Bot className="h-3.5 w-3.5 md:h-4 md:w-4 text-white" />
                         </div>
                       </div>
                     )}
-                    <div className={`max-w-[85%] md:max-w-[78%] space-y-2 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
-                      <div className={`whitespace-pre-wrap rounded-2xl px-4 py-3 md:px-5 md:py-4 text-[14px] md:text-[15px] leading-relaxed shadow-[0_12px_30px_rgba(0,0,0,0.18)] ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
-                        {!isUserMessage && String(message.content || "").includes("ENGINE_EXEC activado") && (
-                          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-emerald-200">
-                            <Shield className="h-3.5 w-3.5" /> ENGINE_EXEC · sin recompilar
+                    <div className={`max-w-[85%] md:max-w-[78%] space-y-1 ${isUserMessage ? "items-end text-right" : "items-start"}`}>
+                      <div className={`whitespace-pre-wrap rounded-xl px-3 py-2 md:px-4 md:py-2.5 text-[13px] md:text-[14px] leading-relaxed ${isUserMessage ? "bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_15px_rgba(124,58,237,0.3)]" : "border border-white/[0.07] bg-[#1b2230] text-white/90"}`}>
+                        {!isUserMessage && rawContent.includes("ENGINE_EXEC activado") && (
+                          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.15em] text-emerald-200">
+                            <Shield className="h-3 w-3" /> ENGINE_EXEC
                           </div>
                         )}
-                        {message.content}
+                        {displayContent}
                       </div>
-                      <div className={`px-1 ${isUserMessage ? "text-right" : "text-left"}`}>
-                        <p className={`text-[12px] md:text-[13px] font-bold ${isUserMessage ? "text-white/65" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
-                        <p className="mt-0.5 text-[10px] md:text-[12px] text-white/35">{formatMessageTime(message.createdAt)}</p>
+                      <div className={`px-1 flex items-center gap-2 ${isUserMessage ? "justify-end" : "justify-start"}`}>
+                        <p className={`text-[10px] font-semibold ${isUserMessage ? "text-white/50" : "text-[#a78bfa]"}`}>{isUserMessage ? firstName : "Maris AI"}</p>
+                        <p className="text-[10px] text-white/25">{formatMessageTime(message.createdAt)}</p>
                       </div>
                     </div>
                   </div>
@@ -1007,7 +1039,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
           )}
         </div>
-        <div className="space-y-3 px-2 md:px-6 pb-24 md:pb-6">
+        <div className="space-y-2 px-2 md:px-4 pb-24 md:pb-6">
           {isAwaitingApproval && (
             <Button
               size="lg"
