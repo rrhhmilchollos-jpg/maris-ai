@@ -97,8 +97,14 @@ app.use(
           "https://www.google.com",
           "https://googleads.g.doubleclick.net",
           "https://static.doubleclick.net",
+          "https://www.googleadservices.com",
+          "https://pagead2.googlesyndication.com",
           // Facebook Pixel
           "https://connect.facebook.net",
+          // TikTok Pixel
+          "https://analytics.tiktok.com",
+          "https://*.tiktok.com",
+          "https://*.tiktokcdn.com",
           // Vercel
           "https://vercel.live",
           "https://*.vercel.live",
@@ -125,6 +131,11 @@ app.use(
           // Facebook
           "https://www.facebook.com",
           "https://connect.facebook.net",
+          // TikTok
+          "https://analytics.tiktok.com",
+          "https://*.tiktok.com",
+          "https://*.tiktokcdn.com",
+          "https://log.tiktokv.com",
           "wss:",
           "ws:",
         ],
