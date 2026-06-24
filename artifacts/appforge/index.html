@@ -115,7 +115,19 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" /></noscript>
 
-  <style>:root{color-scheme:dark;}html.dark{--background:240 10% 4%;--foreground:0 0% 98%;--primary:272 72% 55%;--primary-foreground:0 0% 100%;--muted-foreground:240 5% 65%;--card:240 10% 6%;}body{background-color:hsl(240 10% 4%);color:hsl(0 0% 98%);margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;}#root{min-height:100vh;}</style>
+  <style>
+    :root{color-scheme:dark;}
+    html.dark{--background:240 10% 4%;--foreground:0 0% 98%;--primary:272 72% 55%;--primary-foreground:0 0% 100%;--muted-foreground:240 5% 65%;--card:240 10% 6%;}
+    body{background-color:hsl(240 10% 4%);color:hsl(0 0% 98%);margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;}
+    #root{min-height:100vh;}
+    /* Animaciones GPU-composited — solo transform y opacity para evitar reflows */
+    @keyframes marisBlob{0%,100%{opacity:.8;transform:scale(1) translateZ(0)}50%{opacity:1;transform:scale(1.05) translateZ(0)}}
+    @keyframes marisFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    /* Skeleton loader para LCP — evita layout shift mientras carga React */
+    #root:empty::after{content:"";display:block;min-height:100vh;background:hsl(240 10% 4%);}
+    /* Preload hint visual para FCP */
+    .maris-hero-skeleton{background:linear-gradient(135deg,hsl(240 10% 6%) 0%,hsl(240 10% 8%) 100%);min-height:100vh;}
+  </style>
 
   
   
