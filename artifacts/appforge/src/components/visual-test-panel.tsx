@@ -71,13 +71,12 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
 
   async function runTest(autoFix = false) {
     if (!appSlug) {
-      setError("La app debe estar desplegada públicamente para el test visual. Despliégala primero.");
+      setError("La app debe estar desplegada públicamente para el test visual. Usa el botón Deploy primero.");
       return;
     }
 
     if (autoFix) {
       setAutoFixing(true);
-      // Save current result as "before" for comparison
       if (result) setBeforeResult(result);
       setCompareMode(false);
     } else {
@@ -93,11 +92,22 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
         body: JSON.stringify({ autoFix }),
       });
 
+      // Chromium no disponible en este entorno
+      if (data.code === "NO_CHROMIUM") {
+        setError("Testing visual con screenshots no disponible en este entorno. El análisis de código sigue activo.");
+        return;
+      }
+
+      // App no desplegada
+      if (data.code === "NOT_DEPLOYED") {
+        setError("Despliega la app primero con el botón Deploy para activar el testing visual.");
+        return;
+      }
+
       setResult(data);
       if (data.screenshots?.length > 0) {
         setActiveViewport(data.screenshots[0].viewport);
       }
-      // If autoFix was applied and there were fixes, activate compare mode
       if (autoFix && data.fixesApplied > 0) {
         setCompareMode(true);
       }
@@ -209,20 +219,22 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
               <span className="text-[10px] text-white/40">Puntuación visual</span>
               <span className={cn(
                 "text-[11px] font-bold",
+                result.overallScore == null ? "text-white/30" :
                 result.overallScore >= 80 ? "text-emerald-400" :
                 result.overallScore >= 60 ? "text-amber-400" : "text-red-400"
               )}>
-                {result.overallScore}/100
+                {result.overallScore != null ? `${result.overallScore}/100` : "—/100"}
               </span>
             </div>
             <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
               <div
                 className={cn(
                   "h-full rounded-full transition-all",
+                  result.overallScore == null ? "bg-white/10" :
                   result.overallScore >= 80 ? "bg-emerald-500" :
                   result.overallScore >= 60 ? "bg-amber-500" : "bg-red-500"
                 )}
-                style={{ width: `${result.overallScore}%` }}
+                style={{ width: result.overallScore != null ? `${result.overallScore}%` : "0%" }}
               />
             </div>
             <div className="flex gap-3 mt-1.5">
