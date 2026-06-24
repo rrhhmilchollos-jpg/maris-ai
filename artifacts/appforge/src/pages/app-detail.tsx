@@ -267,25 +267,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return;
     }
 
-    // Comprobar estado del permiso ANTES de pedir
-    let permissionState: PermissionState = "prompt";
-    try {
-      const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
-      permissionState = perm.state;
-    } catch (_) { /* Firefox no soporta esto — ignorar */ }
-
-    if (permissionState === "denied") {
-      // Permiso bloqueado — abrir ajustes del sitio directamente
-      setDraft("🔒 El micrófono está bloqueado para este sitio. Haz clic en el candado 🔒 de la barra de direcciones → Micrófono → Permitir → y recarga la página.");
-      // Intentar abrir ajustes del sitio (solo funciona en algunos navegadores)
-      try { (window as any).open("chrome://settings/content/microphone"); } catch (_) {}
-      return;
-    }
-
-    // Permiso concedido o pendiente — pedir acceso (muestra popup si es "prompt")
+    // Pedir acceso al micrófono directamente — el navegador muestra el popup si es necesario
+    // o usa el permiso ya concedido. No comprobamos el estado previo porque puede estar
+    // desactualizado en caché incluso después de que el usuario lo haya cambiado.
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(t => t.stop()); // liberar stream
+      stream.getTracks().forEach(t => t.stop()); // liberar stream inmediatamente
 
       // Arrancar reconocimiento
       const rec = new SR();
@@ -334,8 +321,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       rec.start();
 
     } catch (err: any) {
-      // getUserMedia rechazado — el usuario pulsó "Bloquear" en el popup
-      setDraft("🔒 Micrófono bloqueado. Haz clic en el 🔒 de la barra de direcciones → Micrófono → Permitir → recarga.");
+      // getUserMedia falló — permiso denegado o sin dispositivo
+      const name = (err as any)?.name || "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setDraft("🔒 Permiso denegado. Ve a Configuración del sitio (candado 🔒 en la barra) → Micrófono → Permitir → recarga la página.");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setDraft("🎙️ No se encontró ningún micrófono en este dispositivo.");
+      } else {
+        setDraft("⚠️ No se pudo acceder al micrófono. Comprueba que esté conectado y permitido.");
+      }
     }
   };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
