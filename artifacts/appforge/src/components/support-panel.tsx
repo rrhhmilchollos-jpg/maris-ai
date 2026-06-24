@@ -392,5 +392,39 @@ export function SupportPanel() {
         </CardContent>
       </Card>
     </div>
+
+    {/* ── Sección eliminar cuenta ─────────────────────────────────── */}
+    <div className="mt-8 border border-red-500/20 rounded-xl p-5 bg-red-500/5">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+          <AlertCircle className="h-4 w-4 text-red-400" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-white mb-1">¿Quieres eliminar tu cuenta?</h3>
+          <p className="text-xs text-white/50 mb-3 leading-relaxed">
+            La eliminación de cuentas debe solicitarse a través de soporte. Crea un ticket con el asunto 
+            <strong className="text-white/70"> "Solicitud de baja de cuenta"</strong> y nuestro equipo 
+            lo gestionará en un plazo máximo de 48 horas.
+          </p>
+          <p className="text-xs text-white/40 mb-3">
+            Si no obtienes respuesta en 48h, escríbenos también a{" "}
+            <a href="mailto:soporte@marisai.es" className="text-[#a855f7] hover:underline">
+              soporte@marisai.es
+            </a>
+          </p>
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setSubject("Solicitud de baja de cuenta");
+              setMessage("Hola, solicito la eliminación de mi cuenta y todos mis datos de Maris AI conforme al RGPD.");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/50 px-3 py-1.5 rounded-lg transition"
+          >
+            Solicitar baja de cuenta
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
