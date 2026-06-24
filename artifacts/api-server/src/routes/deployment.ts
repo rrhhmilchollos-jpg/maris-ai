@@ -485,8 +485,16 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
     });
   } catch (error: any) {
     const msg = error.message || "Error en test visual";
+    // Log completo para debug
+    const { logger } = await import("../lib/logger");
+    logger.error({ error: msg, stack: (error as any)?.stack?.slice(0, 500), PUPPETEER_PATH: process.env.PUPPETEER_EXECUTABLE_PATH }, "[visual-test] ERROR COMPLETO");
+
     // Puppeteer/Chromium no disponible — devolver resultado graceful
-    if (msg.includes("chromium") || msg.includes("puppeteer") || msg.includes("executable")) {
+    if (
+      msg.includes("chromium") || msg.includes("puppeteer") ||
+      msg.includes("executable") || msg.includes("no_chromium") ||
+      msg.includes("ENOENT") || msg.includes("spawn") || msg.includes("Cannot find")
+    ) {
       return res.json({
         success: false,
         visuallyCorrect: null,
@@ -494,11 +502,15 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
         issues: [],
         screenshots: [],
         fixesApplied: 0,
-        error: "Testing visual no disponible en este entorno. Chromium no instalado.",
-        code: "NO_CHROMIUM"
+        error: `Testing visual no disponible. Error: ${msg.slice(0, 200)}`,
+        code: "NO_CHROMIUM",
+        debug: {
+          PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH,
+          NODE_ENV: process.env.NODE_ENV,
+        }
       });
     }
-    return res.status(500).json({ error: msg });
+    return res.status(500).json({ error: msg, debug: { PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH } });
   }
 });
 
