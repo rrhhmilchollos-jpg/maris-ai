@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api-client";
 import {
-  Cpu, Send, Zap, X, CheckCircle2, Sparkles, Plus, Check,
+  Cpu, Send, Zap, X, CheckCircle2, Sparkles, Plus, Check, Mic, MicOff, Square,
 } from "lucide-react";
 
 interface ChatMessage {
@@ -71,6 +71,90 @@ function TypingDots() {
   );
 }
 
+// ── Micrófono — hook de voz ──────────────────────────────────────────────────
+function useSpeechRecognition(onResult: (text: string) => void) {
+  const [isListening, setIsListening] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setIsSupported(true);
+      const recognition = new SpeechRecognition();
+      recognition.lang = "es-ES";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.continuous = false;
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        onResult(transcript);
+        setIsListening(false);
+      };
+
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const startListening = () => {
+    if (!recognitionRef.current || isListening) return;
+    recognitionRef.current.start();
+    setIsListening(true);
+  };
+
+  const stopListening = () => {
+    if (!recognitionRef.current) return;
+    recognitionRef.current.stop();
+    setIsListening(false);
+  };
+
+  return { isListening, isSupported, startListening, stopListening };
+}
+
+// ── Botón de micrófono ───────────────────────────────────────────────────────
+function MicButton({
+  isListening,
+  isSupported,
+  onStart,
+  onStop,
+}: {
+  isListening: boolean;
+  isSupported: boolean;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  if (!isSupported) return null;
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className={`relative border-white/10 px-3 transition-all duration-200 ${
+        isListening
+          ? "border-red-500/60 bg-red-500/10 hover:bg-red-500/20 text-red-400"
+          : "hover:border-violet-500/40 hover:bg-violet-500/10 text-white/50 hover:text-violet-300"
+      }`}
+      onClick={isListening ? onStop : onStart}
+      title={isListening ? "Detener grabación" : "Hablar por voz"}
+    >
+      {isListening ? (
+        <>
+          {/* Pulso animado mientras escucha */}
+          <span className="absolute inset-0 rounded-md animate-ping bg-red-500/20" />
+          <Square className="h-4 w-4 relative z-10" />
+        </>
+      ) : (
+        <Mic className="h-4 w-4" />
+      )}
+    </Button>
+  );
+}
+
 export function PreGenerationChat({
   initialPrompt,
   appKind,
@@ -86,6 +170,14 @@ export function PreGenerationChat({
   const [userInput, setUserInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // ── Voz ──
+  const { isListening, isSupported, startListening, stopListening } = useSpeechRecognition(
+    (transcript) => {
+      // El texto reconocido se añade al textarea
+      setUserInput(prev => (prev ? prev + " " + transcript : transcript));
+    }
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -132,7 +224,9 @@ export function PreGenerationChat({
       // Mostrar el plan al usuario
       setTimeout(() => {
         addArchitectMsg(
-          `He preparado el plan para **${p.title}**. ${p.summary}\n\n¿Quieres cambiar el nombre del proyecto o añadir algo antes de empezar?`,
+          `He preparado el plan para **${p.title}**. ${p.summary}
+
+¿Quieres cambiar el nombre del proyecto o añadir algo antes de empezar?`,
           p.extras.length > 0 ? p.extras : undefined,
           p.included,
         );
@@ -171,13 +265,19 @@ export function PreGenerationChat({
   const confirmExtras = () => {
     const chosen = plan?.extras.filter(e => selectedExtras.has(e.id)) ?? [];
     if (chosen.length > 0) {
-      const listMsg = chosen.map(e => `✅ ${e.label}`).join("\n");
+      const listMsg = chosen.map(e => `✅ ${e.label}`).join("
+");
       setMessages(prev => [...prev, {
         role: "user",
-        content: `Quiero añadir:\n${listMsg}`,
+        content: `Quiero añadir:
+${listMsg}`,
         timestamp: new Date(),
       }]);
-      addArchitectMsg(`Perfecto, incluiré también:\n${chosen.map(e => `• **${e.label}**: ${e.why}`).join("\n")}\n\n¿Algún detalle adicional o empezamos a construir?`);
+      addArchitectMsg(`Perfecto, incluiré también:
+${chosen.map(e => `• **${e.label}**: ${e.why}`).join("
+")}
+
+¿Algún detalle adicional o empezamos a construir?`);
     } else {
       setMessages(prev => [...prev, {
         role: "user",
@@ -230,10 +330,17 @@ export function PreGenerationChat({
 
     let enriched = initialPrompt;
     if (chosen.length > 0) {
-      enriched += `\n\n[EXTRAS CONFIRMADOS POR EL USUARIO]\n${chosen.map(e => `- ${e.label}: ${e.why}`).join("\n")}`;
+      enriched += `
+
+[EXTRAS CONFIRMADOS POR EL USUARIO]
+${chosen.map(e => `- ${e.label}: ${e.why}`).join("
+")}`;
     }
     if (extraDetails) {
-      enriched += `\n\n[DETALLES ADICIONALES DEL USUARIO]\n${extraDetails}`;
+      enriched += `
+
+[DETALLES ADICIONALES DEL USUARIO]
+${extraDetails}`;
     }
 
     setTimeout(() => onConfirm(enriched), 300);
@@ -306,7 +413,8 @@ export function PreGenerationChat({
                     <span dangerouslySetInnerHTML={{
                       __html: msg.content
                         .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
-                        .replace(/\n/g, "<br/>")
+                        .replace(/
+/g, "<br/>")
                     }} />
                   </div>
 
@@ -419,10 +527,20 @@ export function PreGenerationChat({
                 value={userInput}
                 onChange={e => setUserInput(e.target.value)}
                 onKeyDown={handleKey}
-                placeholder="O escribe un detalle adicional antes de generar..."
-                className="bg-card/40 border-white/10 focus:border-violet-500/50 resize-none text-sm min-h-[40px] max-h-[100px]"
+                placeholder={isListening ? "🎙️ Escuchando... habla ahora" : "O escribe un detalle adicional antes de generar..."}
+                className={`bg-card/40 border-white/10 focus:border-violet-500/50 resize-none text-sm min-h-[40px] max-h-[100px] transition-colors ${
+                  isListening ? "border-red-500/40 bg-red-500/5" : ""
+                }`}
                 rows={1}
               />
+              {/* Micrófono */}
+              <MicButton
+                isListening={isListening}
+                isSupported={isSupported}
+                onStart={startListening}
+                onStop={stopListening}
+              />
+              {/* Enviar */}
               <Button variant="outline" className="border-white/10 px-3"
                 disabled={!userInput.trim()}
                 onClick={handleUserMsg}>
@@ -430,7 +548,9 @@ export function PreGenerationChat({
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground/40 text-center">
-              Enter para enviar detalle · o pulsa "Construir ahora" directamente
+              {isListening
+                ? "🔴 Grabando — pulsa el cuadrado para detener"
+                : "Enter para enviar · 🎙️ micrófono para hablar · o pulsa \"Construir ahora\""}
             </p>
           </div>
         </div>
