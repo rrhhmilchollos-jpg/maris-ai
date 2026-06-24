@@ -95,6 +95,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { VisualTestPanel } from "@/components/visual-test-panel";
+import { MCPIntegrationsPanel } from "@/components/mcp-integrations-panel";
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
@@ -231,6 +232,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
   const [isPreviewClosed, setIsPreviewClosed] = useState(false);
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
+  const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -746,20 +748,30 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     if (activeSidebar === "integrations") {
       return (
         <>
-          <PanelHeader title="Integraciones" description="Gestiona la URL pública, compartir y despliegue conectado de la aplicación." />
-          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6">
+          <PanelHeader title="Integraciones y Conectores" description="Conecta servicios externos que los agentes usarán al generar tu app. Gestiona también el deploy y la URL pública." />
+          <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 custom-scrollbar pb-20 md:pb-6 space-y-5">
+
+            {/* ── MCP Connectors ───────────────────────────────────── */}
+            <MCPIntegrationsPanel
+              connectors={mcpConnectors}
+              onChange={setMcpConnectors}
+            />
+
+            {/* ── Deploy & URL ─────────────────────────────────────── */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-white/35">URL pública</p>
-              <p className="mt-3 break-all text-sm text-white/75">{deployedUrl || "Aún no hay URL pública. Pulsa Deploy cuando la preview esté lista."}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-white/35 mb-3">Deploy y URL pública</p>
+              <p className="break-all text-sm text-white/75 mb-4">{deployedUrl || "Aún no hay URL pública. Pulsa Deploy cuando la preview esté lista."}</p>
+              <div className="grid gap-3">
+                <Button onClick={handleShare} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><Share2 className="mr-2 h-4 w-4" /> Compartir enlace</Button>
+                <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
+                  {deployMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
+                  {deployMutation.isPending ? "Desplegando" : "Deploy app"}
+                </Button>
+              </div>
             </div>
-            <div className="mt-5 grid gap-3">
-              <Button onClick={handleShare} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><Share2 className="mr-2 h-4 w-4" /> Compartir enlace</Button>
-              <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
-                {deployMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                {deployMutation.isPending ? "Desplegando" : "Deploy app"}
-              </Button>
-            </div>
-            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+
+            {/* ── Showcase ─────────────────────────────────────────── */}
+            <div className="rounded-2xl border border-white/8 bg-white/[0.035] p-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-white">Galería pública de Maris AI</p>
