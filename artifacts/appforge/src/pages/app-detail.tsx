@@ -239,6 +239,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
+  // Ref para acceder al draft más reciente dentro de los callbacks sin closure stale
+  const draftRef = useRef<string>("");
+  // Ref para saber si el stop fue manual (botón) o automático (silencio)
+  const manualStopRef = useRef(false);
+
+  // Mantener draftRef sincronizado con draft
+  useEffect(() => { draftRef.current = draft; }, [draft]);
 
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -248,21 +255,53 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     rec.lang = "es-ES";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
-    rec.continuous = false;
+    rec.continuous = false; // false = para automáticamente al detectar silencio
+
     rec.onresult = (e: any) => {
-      const text = e.results[0][0].transcript;
-      setDraft((prev: string) => prev ? prev + " " + text : text);
+      // Acumular todo el resultado en el draft
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) {
+        transcript += e.results[i][0].transcript;
+      }
+      setDraft(transcript.trim());
+      draftRef.current = transcript.trim();
+    };
+
+    rec.onerror = (e: any) => {
+      // "no-speech" es normal si el usuario tarda — ignorar silenciosamente
+      if (e.error !== "no-speech") {
+        console.warn("Speech recognition error:", e.error);
+      }
       setIsListening(false);
     };
-    rec.onerror = () => setIsListening(false);
-    rec.onend   = () => setIsListening(false);
+
+    rec.onend = () => {
+      setIsListening(false);
+      // Auto-enviar solo si paró automáticamente (silencio) y hay texto
+      if (!manualStopRef.current && draftRef.current.trim().length >= 2) {
+        // Pequeño delay para que React actualice el estado antes de enviar
+        setTimeout(() => {
+          const btn = document.getElementById("maris-send-btn");
+          if (btn) (btn as HTMLButtonElement).click();
+        }, 100);
+      }
+      manualStopRef.current = false;
+    };
+
     recognitionRef.current = rec;
   }, []);
 
   const toggleMic = () => {
     if (!recognitionRef.current) return;
-    if (isListening) { recognitionRef.current.stop(); setIsListening(false); }
-    else             { recognitionRef.current.start(); setIsListening(true); }
+    if (isListening) {
+      manualStopRef.current = true; // marcar como stop manual — NO autoenviar
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      manualStopRef.current = false;
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
   };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
@@ -1112,6 +1151,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   )}
                 </div>
                 <button
+                  id="maris-send-btn"
                   onClick={handleSend}
                   disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing}
                   className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_14px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-40 disabled:cursor-not-allowed transition"
