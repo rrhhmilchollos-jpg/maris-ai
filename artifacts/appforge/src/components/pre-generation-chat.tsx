@@ -506,7 +506,7 @@ export function PreGenerationChat({
             <p className="text-[10px] text-muted-foreground/40 text-center">
               {isListening
                 ? "🔴 Grabando — pulsa el cuadrado para detener"
-                : "Enter para enviar detalle · 🎙️ voz · o pulsa "Construir ahora""}
+                : "Enter para enviar detalle · 🎙️ voz · o pulsa Construir ahora"}
             </p>
           </div>
         </div>
