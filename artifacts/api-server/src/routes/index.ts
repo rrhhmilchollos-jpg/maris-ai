@@ -15,6 +15,7 @@ import deploymentRouter from "./deployment";
 import importRouter from "./import";
 import githubRouter from "./github";
 import showcaseRouter from "./showcase";
+import visualTestRouter from "./visual-test";
 
 const router: IRouter = Router();
 
@@ -28,6 +29,7 @@ router.use(imagesRouter);
 // no hay colisión de rutas (/showcase vs /apps/...).
 router.use(showcaseRouter);
 router.use(appsRouter);
+router.use(visualTestRouter);
 router.use(uploadsRouter);
 router.use(jobsRouter);
 router.use(billingRouter);
