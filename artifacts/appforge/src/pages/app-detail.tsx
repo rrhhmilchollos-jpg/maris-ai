@@ -753,8 +753,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
             {/* ── MCP Connectors ───────────────────────────────────── */}
             <MCPIntegrationsPanel
-              connectors={mcpConnectors}
-              onChange={setMcpConnectors}
+              onConnectorChange={(id, connected, values) => {
+                setMcpConnectors(prev => ({
+                  ...prev,
+                  [id]: { connected, values }
+                }));
+              }}
             />
 
             {/* ── Deploy & URL ─────────────────────────────────────── */}
