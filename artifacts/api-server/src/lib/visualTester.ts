@@ -96,8 +96,27 @@ export function chromiumExecutablePath(): string | null {
     cachedExec = fromEnv;
     return fromEnv;
   }
+  // Rutas conocidas de Chromium en diferentes entornos
+  const knownPaths = [
+    "/usr/bin/chromium",           // Debian/Ubuntu apt-get install chromium
+    "/usr/bin/chromium-browser",   // Ubuntu alternativo
+    "/usr/bin/google-chrome",      // Chrome en Linux
+    "/snap/bin/chromium",          // Snap
+  ];
+
+  for (const p of knownPaths) {
+    try {
+      const { existsSync } = await import("fs");
+      if (existsSync(p)) {
+        cachedExec = p;
+        return p;
+      }
+    } catch {}
+  }
+
+  // Último recurso: which
   try {
-    const out = execSync("which chromium", { encoding: "utf8" }).trim();
+    const out = execSync("which chromium || which chromium-browser || which google-chrome", { encoding: "utf8" }).trim();
     cachedExec = out || null;
   } catch {
     cachedExec = null;

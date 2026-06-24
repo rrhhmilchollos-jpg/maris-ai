@@ -27,6 +27,41 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:20-slim AS runtime
 WORKDIR /app
 
+# Instalar Chromium + dependencias para Puppeteer (Visual Testing Agent)
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-sandbox \
+    ca-certificates \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libx11-6 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxrandr2 \
+    libxshmfence1 \
+    wget \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configurar Puppeteer para usar Chromium del sistema (no descargar uno propio)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 # Copiar solo lo necesario para ejecutar el servidor
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist
