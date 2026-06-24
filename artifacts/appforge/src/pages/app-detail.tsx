@@ -256,7 +256,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   const toggleMic = () => {
     if (isListening) {
-      // Parar manualmente
       manualStopRef.current = true;
       setIsListening(false);
       return;
@@ -265,70 +264,69 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
 
-    const rec = new SR();
-    rec.lang = "es-ES";
-    rec.interimResults = true;  // mostrar texto mientras habla
-    rec.maxAlternatives = 1;
-    rec.continuous = false;
+    // Pedir permiso de micrófono — esto dispara el popup nativo de Chrome.
+    // Si el usuario acepta, arrancamos el reconocimiento inmediatamente.
+    // Si rechaza, mostramos un mensaje amigable en el textarea.
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => {
+        // Permiso concedido — liberar el stream (solo lo necesitábamos para el permiso)
+        stream.getTracks().forEach(t => t.stop());
 
-    rec.onresult = (e: any) => {
-      let transcript = "";
-      for (let i = 0; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          transcript += e.results[i][0].transcript;
-        }
-      }
-      // Si hay resultado final, actualizar el draft
-      if (transcript.trim()) {
-        setDraft(transcript.trim());
-        draftRef.current = transcript.trim();
-        hasSentRef.current = false;
-      } else {
-        // Resultado intermedio — mostrar en el textarea mientras habla
-        let interim = "";
-        for (let i = 0; i < e.results.length; i++) {
-          interim += e.results[i][0].transcript;
-        }
-        setDraft(interim.trim());
-        draftRef.current = interim.trim();
-      }
-    };
+        const rec = new SR();
+        rec.lang = "es-ES";
+        rec.interimResults = true;
+        rec.maxAlternatives = 1;
+        rec.continuous = false;
 
-    rec.onerror = (e: any) => {
-      setIsListening(false);
-      if (e.error === "not-allowed" || e.error === "permission-denied") {
-        // Mostrar instrucción en el textarea en lugar de alert
-        setDraft("⚠️ Permiso de micrófono bloqueado. Haz clic en el 🔒 de la barra de direcciones → Micrófono → Permitir. Luego recarga.");
-      } else if (e.error !== "no-speech" && e.error !== "aborted") {
-        setDraft("⚠️ Error de micrófono: " + e.error + ". Inténtalo de nuevo.");
-      }
-    };
-
-    rec.onend = () => {
-      setIsListening(false);
-      if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
-        hasSentRef.current = true;
-        setTimeout(() => {
-          const btn = document.getElementById("maris-send-btn");
-          if (btn && !(btn as HTMLButtonElement).disabled) {
-            (btn as HTMLButtonElement).click();
+        rec.onresult = (e: any) => {
+          let final = "";
+          let interim = "";
+          for (let i = 0; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              final += e.results[i][0].transcript;
+            } else {
+              interim += e.results[i][0].transcript;
+            }
           }
-        }, 200);
-      }
-      manualStopRef.current = false;
-      hasSentRef.current = false;
-    };
+          const text = (final || interim).trim();
+          if (text) {
+            setDraft(text);
+            draftRef.current = text;
+          }
+          if (final.trim()) hasSentRef.current = false;
+        };
 
-    manualStopRef.current = false;
-    hasSentRef.current = false;
-    setIsListening(true);
+        rec.onerror = (e: any) => {
+          setIsListening(false);
+          if (e.error !== "no-speech" && e.error !== "aborted") {
+            setDraft("⚠️ Error de micrófono: " + e.error);
+          }
+        };
 
-    try {
-      rec.start();
-    } catch (err) {
-      console.error("Speech recognition start error:", err);
-      setIsListening(false);
-    }
+        rec.onend = () => {
+          setIsListening(false);
+          if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
+            hasSentRef.current = true;
+            setTimeout(() => {
+              const btn = document.getElementById("maris-send-btn");
+              if (btn && !(btn as HTMLButtonElement).disabled) {
+                (btn as HTMLButtonElement).click();
+              }
+            }, 200);
+          }
+          manualStopRef.current = false;
+          hasSentRef.current = false;
+        };
+
+        manualStopRef.current = false;
+        hasSentRef.current = false;
+        setIsListening(true);
+        rec.start();
+      })
+      .catch(() => {
+        // Usuario rechazó el permiso o no hay micrófono
+        setDraft("🎙️ Para usar el micrófono, acepta el permiso que muestra el navegador al pulsar el botón.");
+      });
   };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
