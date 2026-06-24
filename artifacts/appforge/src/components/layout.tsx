@@ -107,7 +107,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   Iniciar Sesión
                 </Link>
                 <Link href="/sign-up">
-                  <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">Comenzar</Button>
+                  <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">Empieza Gratis</Button>
                 </Link>
               </Show>
             </div>
