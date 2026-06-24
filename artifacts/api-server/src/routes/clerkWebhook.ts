@@ -135,18 +135,52 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
 
       case "user.deleted": {
         const clerkId = data.id as string;
-        // No borrar — solo marcar como inactivo para conservar historial
+        // Buscar email ANTES de marcar como eliminado
+        const deletedUser = await User.findById(clerkId, { email: 1, fullName: 1 }).lean() as any;
+        const deletedEmail = deletedUser?.email || "email desconocido";
+        const deletedName = deletedUser?.fullName || "Usuario";
+
+        // Marcar como inactivo — NO borrar datos (RGPD: derecho al olvido se gestiona manualmente)
         await User.findByIdAndUpdate(clerkId, {
           $set: {
             isSuspended: true,
             suspendedAt: new Date(),
-            suspendReason: "Cuenta eliminada desde Clerk",
+            suspendReason: "Cuenta eliminada desde Clerk — pendiente revisión de soporte",
           }
         });
-        // Buscar email antes de marcar como eliminado
-        const deletedUser = await User.findById(clerkId, { email: 1 }).lean() as any;
-        logger.info({ clerkId }, "clerkWebhook: usuario marcado como eliminado ✅");
-        notifyAdminUserDeleted({ userEmail: deletedUser?.email || "email desconocido", userId: clerkId }).catch(() => {});
+
+        logger.info({ clerkId, email: deletedEmail }, "clerkWebhook: usuario marcado como eliminado ✅");
+
+        // Notificar al admin URGENTE
+        notifyAdminUserDeleted({ userEmail: deletedEmail, userId: clerkId }).catch(() => {});
+
+        // Enviar email al usuario explicando el proceso
+        if (deletedUser?.email) {
+          const resendKey = process.env.RESEND_API_KEY;
+          if (resendKey) {
+            fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                from: process.env.RESEND_FROM_EMAIL || "Maris AI <soporte@marisai.es>",
+                to: [deletedEmail],
+                subject: "Solicitud de eliminación de cuenta recibida — Maris AI",
+                html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#0f0f12;color:#e2e8f0;padding:24px;border-radius:12px">
+                  <h2 style="color:#fff">Hemos recibido tu solicitud</h2>
+                  <p>Hola ${deletedName},</p>
+                  <p>Hemos recibido tu solicitud de eliminación de cuenta. Nuestro equipo la procesará en un plazo máximo de <strong style="color:#a855f7">48 horas hábiles</strong>.</p>
+                  <p>Si necesitas acelerar el proceso o tienes dudas, contacta con nosotros:</p>
+                  <ul>
+                    <li>📧 <a href="mailto:soporte@marisai.es" style="color:#a855f7">soporte@marisai.es</a></li>
+                    <li>🎫 Crea un ticket en <a href="https://www.marisai.es/dashboard" style="color:#a855f7">marisai.es/dashboard</a></li>
+                  </ul>
+                  <p style="color:#64748b;font-size:13px">Conforme al RGPD, eliminaremos todos tus datos personales en el plazo indicado.</p>
+                  <p>— Equipo Maris AI</p>
+                </div>`,
+              }),
+            }).catch(() => {});
+          }
+        }
         break;
       }
 
