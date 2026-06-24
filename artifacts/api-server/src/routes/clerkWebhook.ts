@@ -16,6 +16,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { notifyAdminNewUser } from "../lib/notify";
 import { connectDB } from "../lib/db";
 import { User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
@@ -107,6 +108,9 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
         });
 
         logger.info({ clerkId, email }, "clerkWebhook: usuario creado en MongoDB ✅");
+
+        // Notificar al admin por email — nuevo usuario registrado
+        notifyAdminNewUser({ userEmail: email, userId: clerkId }).catch(() => {});
         break;
       }
 
