@@ -4115,6 +4115,43 @@ router.post("/apps/:id/messages", requireAuth, async (req: any, res: any) => {
       log: req.log || logger,
     });
 
+    // ── CONVERSACIONAL — cero agentes, respuesta natural ─────────────────────
+    if (classified.intent === "conversational") {
+      // Generar respuesta conversacional breve y humana
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? "¡Buenos días!" : hour < 20 ? "¡Buenas!" : "¡Buenas noches!";
+      
+      // Respuestas naturales según el tipo de mensaje
+      const msg = trimmedContent.toLowerCase();
+      let reply: string;
+      
+      if (/ma[ñn]ana|pasado|luego|despu[eé]s|m[aá]s\s+tarde|pronto/.test(msg)) {
+        reply = "Perfecto, sin prisa. Aquí estaré cuando lo necesites 👋";
+      } else if (/gracias|thank/.test(msg)) {
+        reply = "¡De nada! Cualquier cosa que necesites, aquí estoy.";
+      } else if (/ok|vale|bien|entendido|perfecto|genial|de\s+acuerdo|claro|listo/.test(msg)) {
+        reply = "¡Perfecto! Cuando quieras seguir, dime.";
+      } else if (/hola|buenos|buenas/.test(msg)) {
+        reply = `${greeting} ¿En qué puedo ayudarte con la app?`;
+      } else if (/adi[oó]s|hasta|bye|chao/.test(msg)) {
+        reply = "¡Hasta luego! Cuando vuelvas, seguimos donde lo dejamos 🚀";
+      } else {
+        reply = "Entendido. Cuando quieras que actúe sobre la app, dímelo.";
+      }
+      
+      await AppMessage.create({ appId: req.params.id, role: "user", content: trimmedContent, attachmentIds: JSON.stringify(safeAttachmentIds) });
+      await AppMessage.create({ appId: req.params.id, role: "assistant", content: reply });
+      return res.status(200).json({
+        conversationOnly: true,
+        engine: "ENGINE_CHAT",
+        intent: "conversational",
+        reply,
+        message: reply,
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+      });
+    }
+
     if (classified.intent === "question") {
       // Usar la persona unificada de Maris para responder con tono humano
       let reply: string;

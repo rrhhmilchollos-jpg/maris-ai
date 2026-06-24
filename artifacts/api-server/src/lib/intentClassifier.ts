@@ -18,8 +18,8 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import type { Logger } from "pino";
 import { analyzeSpanishIntent, firstMatchedTerm, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
-export type ChatIntent = "question" | "research" | "edit" | "execute";
-export type ExecutionEngine = "ENGINE_DEV" | "ENGINE_EXEC" | "ENGINE_INFO" | "ENGINE_RESEARCH";
+export type ChatIntent = "question" | "research" | "edit" | "execute" | "conversational";
+export type ExecutionEngine = "ENGINE_DEV" | "ENGINE_EXEC" | "ENGINE_INFO" | "ENGINE_RESEARCH" | "ENGINE_CHAT";
 
 export type ClassifiedIntent = {
   intent: ChatIntent;
@@ -29,6 +29,58 @@ export type ClassifiedIntent = {
   /** Deterministic reason useful for logs/UI badges. */
   reason: string;
 };
+
+// ─── CONVERSATIONAL PATTERNS — NUNCA activan agentes ────────────────────────
+// Si el mensaje coincide con alguno de estos patrones, es una respuesta
+// conversacional humana: agradecimiento, confirmación, saludo, despedida,
+// promesa futura ("mañana te digo"), estado emocional, etc.
+// NINGÚN agente se activa. El sistema responde con texto directamente.
+const CONVERSATIONAL_PATTERNS: RegExp[] = [
+  // Temporalidad futura sin petición concreta
+  /\b(ma[ñn]ana|pasado\s+ma[ñn]ana|luego|m[aá]s\s+tarde|despu[eé]s|pronto|en\s+otro\s+momento|cuando\s+pueda)\b/i,
+  // Promesas y avisos sin acción
+  /\b(te\s+digo|te\s+cuento|te\s+aviso|te\s+explico|te\s+paso|te\s+mando)\b/i,
+  // Confirmaciones y acuses de recibo
+  /^(ok|okay|vale|bien|entendido|perfecto|genial|de\s+acuerdo|claro|s[íi]|no|listo|hecho|confirmado)[.!]?$/i,
+  // Saludos y despedidas
+  /^(hola|buenos\s+d[íi]as|buenas\s+tardes|buenas\s+noches|hasta\s+luego|hasta\s+ma[ñn]ana|adi[oó]s|chao|bye)[.!]?$/i,
+  // Agradecimientos
+  /^(gracias|muchas\s+gracias|thank\s+you|thanks|genial\s+gracias|perfecto\s+gracias)[.!]?$/i,
+  // Mensajes muy cortos sin verbo de acción (menos de 6 palabras y sin keywords dev)
+  // Se maneja en la función looksLikeConversational
+];
+
+// Patrones que SIEMPRE son conversacionales aunque contengan otras palabras
+const STRONG_CONVERSATIONAL_PATTERNS: RegExp[] = [
+  /\b(ma[ñn]ana|pasado\s+ma[ñn]ana)\b.*\b(te\s+digo|te\s+cuento|te\s+aviso|te\s+paso|te\s+explico)\b/i,
+  /\b(te\s+digo|te\s+cuento)\b.*\b(todo\s+lo\s+que)\b/i,
+  /\b(entre\s+(ma[ñn]ana|hoy|el\s+lunes|esta\s+semana))\b/i,
+  /\b(cuando\s+tenga\s+tiempo|cuando\s+pueda|m[aá]s\s+adelante|no\s+es\s+urgente)\b/i,
+  /\b(solo\s+quer[íi]a|solo\s+dec[íi]rte|solo\s+avisarte|s[oó]lo\s+quer[íi]a)\b/i,
+];
+
+function looksLikeConversational(message: string): boolean {
+  const trimmed = message.trim();
+  
+  // Patrones fuertes — siempre conversacional
+  if (STRONG_CONVERSATIONAL_PATTERNS.some(p => p.test(trimmed))) return true;
+  
+  // Patrones simples — conversacional si el mensaje es corto
+  if (CONVERSATIONAL_PATTERNS.some(p => p.test(trimmed))) {
+    // Si además contiene keywords de dev, dejar que el clasificador LLM decida
+    const hasDevKeyword = DEV_KEYWORD_PATTERNS.some(p => p.test(trimmed));
+    if (!hasDevKeyword) return true;
+  }
+  
+  // Mensajes muy cortos (≤4 palabras) sin keywords de desarrollo = conversacional
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length <= 4) {
+    const hasActionKeyword = [...DEV_KEYWORD_PATTERNS, ...EXEC_KEYWORD_PATTERNS].some(p => p.test(trimmed));
+    if (!hasActionKeyword) return true;
+  }
+  
+  return false;
+}
 
 /**
  * Words that indicate the user is asking the running platform to operate on
@@ -143,7 +195,12 @@ El usuario pide buscar información externa o analizar una URL. No modifica la a
 "question" = ENGINE_INFO.
 El usuario solo pregunta algo, no pide ninguna acción. "reply" en ESPAÑOL, máximo 300 caracteres. Tono directo y humano — como un compañero técnico que conoce bien el proyecto. Sin saludos, sin "¿algo más?", sin "Puedo ayudarte con...". Usa el nombre de la app si está disponible. Sé específico.
 
+"conversational" = ENGINE_CHAT.
+El usuario NO pide ninguna acción técnica ni hace ninguna pregunta concreta. Es un mensaje puramente humano: saludo, despedida, agradecimiento, confirmación simple ("ok", "vale", "entendido"), promesa futura ("mañana te digo", "luego te cuento"), estado emocional, comentario sin petición. "reply" vacío — el sistema responde de forma conversacional automáticamente.
+Ejemplos: "mañana te digo todo", "ok perfecto", "gracias", "hola", "hasta luego", "entre mañana o pasado te digo todo lo que hay que hacer".
+
 == REGLAS DE PRIORIDAD ==
+0. Si el mensaje es puramente conversacional (saludo, despedida, agradecimiento, promesa futura, confirmación sin acción) → "conversational"
 1. Si involucra datos reales de producción (CRM, MongoDB, usuarios reales) → "execute"
 2. Si pide cambiar/añadir/arreglar algo en la app o su código → "edit"
 3. Si pide investigar una URL o buscar en internet → "research"
@@ -172,6 +229,7 @@ function engineForIntent(intent: ChatIntent): ExecutionEngine {
     case "execute": return "ENGINE_EXEC";
     case "research": return "ENGINE_RESEARCH";
     case "question": return "ENGINE_INFO";
+    case "conversational": return "ENGINE_CHAT";
     case "edit":
     default: return "ENGINE_DEV";
   }
@@ -240,6 +298,20 @@ export async function classifyChatIntent(
   const execution = spanish.isDataOperation || looksLikeExecution(ctx.message);
   const edit = spanish.isDevOperation || looksLikeEdit(ctx.message);
   const research = spanish.isResearch || looksLikeResearch(ctx.message);
+
+  // ── CONVERSACIONAL — PRIMERA verificación, antes que todo ─────────────────
+  // Si el mensaje es claramente conversacional (saludo, agradecimiento,
+  // promesa futura, confirmación simple), NO se activa ningún agente.
+  // Esto evita que "mañana te digo" active CODER o que "gracias" genere código.
+  if (looksLikeConversational(ctx.message) && !execution) {
+    ctx.log.info({ message: ctx.message.slice(0, 100) }, "Intent classifier → conversational (no agent activated)");
+    return {
+      intent: "conversational",
+      engine: "ENGINE_CHAT",
+      reply: "",  // El route handler genera la respuesta conversacional
+      reason: "conversational-pattern-matched",
+    };
+  }
 
   // REGLA CLAVE: ENGINE_EXEC SIEMPRE tiene prioridad sobre ENGINE_DEV cuando
   // la petición involucra datos/CRM/usuarios/registros, aunque también contenga
