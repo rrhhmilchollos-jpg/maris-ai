@@ -514,4 +514,27 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
   }
 });
 
+// GET /api/apps/visual-test/ping — test rápido de Chromium sin autenticación
+router.get("/apps/visual-test/ping", async (_req: Request, res: Response) => {
+  try {
+    const { chromiumExecutablePath } = await import("../lib/visualTester");
+    const exec = chromiumExecutablePath();
+    if (!exec) {
+      return res.json({ ok: false, error: "chromiumExecutablePath() returned null", env: process.env.PUPPETEER_EXECUTABLE_PATH });
+    }
+    // Intentar lanzar Chromium brevemente
+    const { default: puppeteer } = await import("puppeteer");
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath: exec,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    });
+    const version = await browser.version();
+    await browser.close();
+    return res.json({ ok: true, execPath: exec, version, env: process.env.PUPPETEER_EXECUTABLE_PATH });
+  } catch (err: any) {
+    return res.json({ ok: false, error: err.message?.slice(0, 300), stack: err.stack?.slice(0, 300), env: process.env.PUPPETEER_EXECUTABLE_PATH });
+  }
+});
+
 export default router;
