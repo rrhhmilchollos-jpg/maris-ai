@@ -295,10 +295,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     };
 
     rec.onerror = (e: any) => {
-      if (e.error === "not-allowed") {
-        alert("Maris AI necesita permiso para usar el micrófono. Haz clic en el icono 🔒 de la barra de direcciones y permite el micrófono.");
-      }
       setIsListening(false);
+      if (e.error === "not-allowed" || e.error === "permission-denied") {
+        // Mostrar instrucción en el textarea en lugar de alert
+        setDraft("⚠️ Permiso de micrófono bloqueado. Haz clic en el 🔒 de la barra de direcciones → Micrófono → Permitir. Luego recarga.");
+      } else if (e.error !== "no-speech" && e.error !== "aborted") {
+        setDraft("⚠️ Error de micrófono: " + e.error + ". Inténtalo de nuevo.");
+      }
     };
 
     rec.onend = () => {
