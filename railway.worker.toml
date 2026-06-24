@@ -1,0 +1,12 @@
+# ── Worker (maris-ai-worker) ─────────────────────────────────────────────────
+# Apunta este archivo en Railway Dashboard → Settings → Config File Path
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.worker"
+
+[deploy]
+startCommand = "node --enable-source-maps /app/artifacts/api-server/dist/worker.mjs"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+# El worker NO tiene puerto HTTP — SIN healthcheckPath
+# Railway detecta que el proceso sigue vivo por el PID, no por HTTP
