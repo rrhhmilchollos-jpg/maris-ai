@@ -84,28 +84,6 @@ export default defineConfig({
     cssCodeSplit: true,
     reportCompressedSize: false,
     sourcemap: false,
-    rollupOptions: {
-      output: {
-        // Code splitting agresivo — cada vendor en su propio chunk cacheado
-        manualChunks: (id: string) => {
-          if (id.includes("node_modules")) {
-            // React + react-dom JUNTOS — nunca separar, causa Cannot set properties of undefined
-            if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/react-is/") || id.includes("/scheduler/")) return "react-core";
-            // Clerk auth
-            if (id.includes("@clerk")) return "clerk";
-            // Framer Motion
-            if (id.includes("framer-motion")) return "framer";
-            // Radix UI
-            if (id.includes("@radix-ui")) return "radix";
-            // Lucide icons
-            if (id.includes("lucide-react")) return "lucide";
-            // Recharts
-            if (id.includes("recharts") || id.includes("d3-")) return "charts";
-            // Todo lo demás junto — evita problemas de orden de inicialización
-            return "vendor";
-          }
-        },
-      },
-    },
+
   },
 });
