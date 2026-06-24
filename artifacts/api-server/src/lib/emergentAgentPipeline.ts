@@ -377,7 +377,7 @@ SCHEMA DE RESPUESTA (JSON estricto, sin texto adicional):
   "readyForDeploy": boolean,
   "deployBlockers": number,
   "estimatedFixTime": "menos de 1 min|1-3 min|3-10 min|mas de 10 min"
-}\`;
+}`;
 
 export async function runPMAgent(
   originalPrompt: string,
@@ -476,71 +476,6 @@ Realiza la inspeccion completa y devuelve SOLO el JSON.`;
       issues: [],
       summary: "Validacion omitida por error interno. Revision manual recomendada.",
       readyForDeploy: fallbackScore >= 65,
-    };
-  }
-}
-
-  blueprint: EmergentArchitectBlueprint,
-  frontendCode: string,
-  log: (msg: string) => void
-): Promise<PMValidationResult> {
-  log("📋 PM Agent: validando que la app cumple los requisitos del usuario...");
-
-  const plannedPages = blueprint.pages.map((p) => `${p.name} (${p.route}): ${p.purpose}`);
-  const systemPrompt = buildPMAgentPrompt(originalPrompt, plannedPages);
-
-  // Analizar el bundle para ver qué archivos existen
-  const existingFiles = frontendCode
-    .split("// === FILE: ")
-    .slice(1)
-    .map((part) => part.split("\n")[0].replace(/ ===$/, "").trim())
-    .filter(Boolean);
-
-  const codePreview = frontendCode.slice(0, 8000);
-
-  try {
-    const response = await createClaudeMessageWithFallback("qa", "claude-sonnet-4-6", {
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      system: PM_VALIDATION_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `${systemPrompt}\n\nARCHIVOS GENERADOS:\n${existingFiles.join("\n")}\n\nPREVIEW DEL CÓDIGO (primeros 8000 chars):\n\`\`\`\n${codePreview}\n\`\`\`\n\nRespóndeme SOLO el JSON de validación.`,
-        },
-      ],
-    });
-
-    const raw = response.content?.[0]?.text ?? "";
-    const result = extractJsonObject<PMValidationResult>(raw);
-
-    if (!result) {
-      log("⚠️ PM Agent: no pudo parsear la validación, asumiendo aprobado.");
-      return {
-        passed: true,
-        score: 75,
-        issues: [],
-        summary: "Validación automática completada. App lista para deploy.",
-        readyForDeploy: true,
-      };
-    }
-
-    const blockers = result.issues.filter((i) => i.severity === "blocker");
-    log(
-      blockers.length > 0
-        ? `⚠️ PM Agent: ${blockers.length} blocker(s) detectado(s). Score: ${result.score}/100`
-        : `✅ PM Agent: validación aprobada. Score: ${result.score}/100. ${result.summary}`
-    );
-
-    return result;
-  } catch (err) {
-    logger.warn({ err }, "PM Agent: error en validación, continuando");
-    return {
-      passed: true,
-      score: 70,
-      issues: [],
-      summary: "Validación completada con advertencias.",
-      readyForDeploy: true,
     };
   }
 }
