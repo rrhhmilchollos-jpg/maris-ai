@@ -18,6 +18,17 @@ import { logger } from "./lib/logger";
 import clerkWebhookRouter from "./routes/clerkWebhook";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
+import {
+  ipBlockMiddleware,
+  honeypotMiddleware,
+  antiScrapingMiddleware,
+  injectionDetectionMiddleware,
+  securityHeadersMiddleware,
+  codeExfiltrationMiddleware,
+  getSecurityStats,
+  unblockIP,
+  blockIP,
+} from "./middlewares/security";
 import { metricsMiddleware } from "./lib/metrics";
 import mongoSanitize from "express-mongo-sanitize";
  
@@ -28,6 +39,16 @@ const app: Express = express();
 // Behind the reverse proxy — trust one hop so req.ip is the real client IP
 // and the rate-limiter buckets correctly.
 app.set("trust proxy", 1);
+
+// ─── Security middlewares — ejecutan ANTES que todo lo demás ─────────────────
+// 1. Bloquear IPs ya conocidas como maliciosas (check inmediato, sin proceso)
+app.use(ipBlockMiddleware);
+// 2. Honeypots — rutas trampa para detectar atacantes
+app.use(honeypotMiddleware);
+// 3. Anti-scraping — detectar bots no autorizados
+app.use(antiScrapingMiddleware);
+// 4. Headers de seguridad adicionales
+app.use(securityHeadersMiddleware);
  
 app.use(
   pinoHttp({
@@ -215,6 +236,8 @@ app.use((_req, res, next) => {
 });
 
 app.use(express.json({ limit: "2mb" }));
+// 5. Detección de inyección NoSQL/XSS en body/query (necesita body parseado)
+app.use(injectionDetectionMiddleware);
 app.use(express.urlencoded({ extended: true }));
 
 // ── Anti-hacking: NoSQL injection + HTTP Parameter Pollution protection ────
@@ -292,6 +315,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
  
 // Global API rate limit (per IP / per Clerk userId once authenticated).
 app.use("/api", apiRateLimiter);
+// 6. Detección de exfiltración masiva de código
+app.use("/api", codeExfiltrationMiddleware);
  
 // In-memory request/error/duration counters for /api/admin/metrics.
 app.use("/api", metricsMiddleware);

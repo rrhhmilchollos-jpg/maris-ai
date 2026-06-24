@@ -236,6 +236,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
+  const [copyAttempts, setCopyAttempts] = useState(0);
+  const [copyBlocked, setCopyBlocked] = useState(false);
   const [showVisualTestInline, setShowVisualTestInline] = useState(false);
   // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
   const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
@@ -1379,9 +1381,48 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 />
               </div>
             ) : rightPanelTab === "code" ? (
-              <div className="h-full overflow-auto bg-[#060810] p-4 md:p-6">
+              <div className="h-full overflow-auto bg-[#060810] p-4 md:p-6 relative"
+                onCopy={(e) => {
+                  const selected = window.getSelection()?.toString() || "";
+                  if (selected.length > 500) {
+                    // Bloquear copia masiva — registrar intento
+                    e.preventDefault();
+                    setCopyAttempts(prev => {
+                      const next = prev + 1;
+                      if (next >= 3) {
+                        setCopyBlocked(true);
+                        // Log al backend
+                        fetch("/api/apps/security/copy-attempt", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ appId: id, chars: selected.length, attempt: next }),
+                        }).catch(() => {});
+                      }
+                      return next;
+                    });
+                    toast({
+                      title: "⚠️ Copia limitada",
+                      description: "Para obtener el código completo usa el botón 'GitHub' o 'Descargar'. Exportar por el procedimiento oficial garantiza que el proyecto funciona correctamente.",
+                      variant: "destructive",
+                    });
+                    return false;
+                  }
+                }}
+              >
+                {copyBlocked && (
+                  <div className="sticky top-0 z-10 mb-3 bg-red-500/20 border border-red-500/40 rounded-lg px-3 py-2 text-[11px] text-red-400 flex items-center gap-2">
+                    <span>🔒</span>
+                    Copia de código bloqueada. Usa <strong>GitHub</strong> o <strong>Descargar ZIP</strong> para exportar tu proyecto correctamente.
+                  </div>
+                )}
                 {frontendCode ? (
-                  <pre className="text-[12px] leading-relaxed text-emerald-300/80 font-mono whitespace-pre-wrap break-words">{frontendCode.slice(0, 50000)}{frontendCode.length > 50000 ? "\n\n... (truncado, descarga el proyecto para ver el código completo)" : ""}</pre>
+                  <pre
+                    className={`text-[12px] leading-relaxed text-emerald-300/80 font-mono whitespace-pre-wrap break-words select-${copyBlocked ? "none" : "text"}`}
+                    style={copyBlocked ? { userSelect: "none", WebkitUserSelect: "none" } : {}}
+                  >
+                    {frontendCode.slice(0, 50000)}
+                    {frontendCode.length > 50000 ? "\n\n... (truncado, descarga el proyecto para ver el código completo)" : ""}
+                  </pre>
                 ) : (
                   <div className="flex h-full items-center justify-center">
                     <div className="text-center">
