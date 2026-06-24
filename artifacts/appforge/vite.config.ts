@@ -88,34 +88,22 @@ export default defineConfig({
       output: {
         // Code splitting agresivo — cada vendor en su propio chunk cacheado
         manualChunks: (id: string) => {
-          // Vendor chunks — se cachean por separado en el navegador
           if (id.includes("node_modules")) {
-            // React core — crítico, chunk pequeño propio
-            if (id.includes("react-dom") || id.includes("react/")) return "react-core";
-            // Clerk auth — se carga solo en rutas autenticadas
+            // React + react-dom JUNTOS — nunca separar, causa Cannot set properties of undefined
+            if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/react-is/") || id.includes("/scheduler/")) return "react-core";
+            // Clerk auth
             if (id.includes("@clerk")) return "clerk";
-            // Framer Motion — solo en landing, chunk separado
+            // Framer Motion
             if (id.includes("framer-motion")) return "framer";
-            // Radix UI components — UI library
+            // Radix UI
             if (id.includes("@radix-ui")) return "radix";
-            // Stripe — solo en billing
-            if (id.includes("@stripe") || id.includes("stripe")) return "stripe";
-            // Tanstack Query — data fetching
-            if (id.includes("@tanstack")) return "tanstack";
-            // Lucide icons — grande, chunk propio
+            // Lucide icons
             if (id.includes("lucide-react")) return "lucide";
-            // Date utils
-            if (id.includes("date-fns")) return "date-fns";
-            // Recharts — solo en dashboard
+            // Recharts
             if (id.includes("recharts") || id.includes("d3-")) return "charts";
-            // Everything else vendor
+            // Todo lo demás junto — evita problemas de orden de inicialización
             return "vendor";
           }
-          // App chunks por sección
-          if (id.includes("/pages/admin")) return "admin";
-          if (id.includes("/pages/billing")) return "billing";
-          if (id.includes("/pages/legal")) return "legal";
-          if (id.includes("/pages/landing")) return "landing";
         },
       },
     },
