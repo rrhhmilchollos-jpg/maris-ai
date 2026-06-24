@@ -162,6 +162,26 @@ const ROUTE_CONTENT: Record<string, {
       <p>Para emprendedores en España sin perfil técnico: Maris AI. Para developers globales con experiencia: Bolt puede ser una opción, pero los costes son impredecibles.</p>
     `,
   },
+  "/vs-base44": {
+    title: "Maris AI vs Base44 — Código tuyo vs Plataforma Cerrada 2026",
+    description: "Comparativa Maris AI vs Base44. Código 100% exportable, sin vendor lock-in, en español. La alternativa a Base44 para emprendedores que quieren ser dueños de su código.",
+    h1: "Maris AI vs Base44 — Tu código vs su plataforma",
+    canonical: "https://www.marisai.es/vs-base44",
+    content: `
+      <h2>Maris AI vs Base44: comparativa 2026</h2>
+      <p>Base44 genera apps rápido pero el código vive en su plataforma. Maris AI te da el código completo, exportable a GitHub, sin dependencia de ninguna plataforma.</p>
+      <h2>Diferencias clave</h2>
+      <ul>
+        <li><strong>Propiedad del código</strong>: Maris AI código 100% tuyo exportable a GitHub. Base44 código cerrado en su plataforma.</li>
+        <li><strong>Vendor lock-in</strong>: Maris AI sin dependencia. Base44 alta dependencia del proveedor.</li>
+        <li><strong>Deploy</strong>: Maris AI en Vercel/Railway/AWS. Base44 solo su hosting.</li>
+        <li><strong>Idioma</strong>: Maris AI 100% español. Base44 inglés con español parcial.</li>
+        <li><strong>Coste largo plazo</strong>: Maris AI créditos sin caducar, 0€/mes hosting. Base44 suscripción mensual recurrente.</li>
+      </ul>
+      <h2>El riesgo del vendor lock-in con Base44</h2>
+      <p>Si Base44 sube precios, tienes que pagar o perder tu app. Si cierran, tu app desaparece. Con Maris AI el código es tuyo — si Maris AI desaparece mañana, tu app sigue funcionando.</p>
+    `,
+  },
   "/vs-emergent": {
     title: "Maris AI vs Emergent vs Bolt vs Lovable — Comparativa 2026",
     description: "Compara Maris AI con Bolt.new, Lovable, Emergent y Cursor. La única plataforma de creación de apps con IA completamente en español para el mercado emprendedor.",
