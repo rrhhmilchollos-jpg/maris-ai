@@ -389,16 +389,52 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
 
   // Visual analysis uses Sonnet — tiene vision multimodal excelente
   // Para proyectos con muchos issues usamos max_tokens mayor
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 3000,  // Aumentado de 2000 a 3000 para schema mas completo
-    messages: [{ role: "user", content }],
-  });
-
-  const text = response.content
-    .map((b) => (b.type === "text" ? b.text : ""))
-    .filter(Boolean)
-    .join("\n");
+  // Intentar con Claude Vision primero, fallback a Gemini Vision si no hay créditos
+  let text = "";
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 3000,
+      messages: [{ role: "user", content }],
+    });
+    text = response.content
+      .map((b: any) => (b.type === "text" ? b.text : ""))
+      .filter(Boolean)
+      .join("\n");
+  } catch (anthropicErr: any) {
+    const isCredits = String(anthropicErr?.message || "").includes("credit") || anthropicErr?.status === 400;
+    if (isCredits) {
+      rootLogger.warn("Visual Evaluator: Anthropic sin créditos — fallback a Gemini Vision");
+      // Fallback a Gemini Vision (gratuito)
+      const geminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      if (!geminiKey) throw anthropicErr;
+      const { GoogleGenAI, createPartFromBase64 } = await import("@google/genai");
+      const gemini = new GoogleGenAI({ apiKey: geminiKey });
+      // Construir partes para Gemini Vision
+      const parts: any[] = [];
+      // Texto del sistema/instrucciones
+      const textContent = content.find((b: any) => b.type === "text" && b.text?.includes("VISUAL EVALUATOR"));
+      if (textContent) parts.push({ text: (textContent as any).text });
+      // Imágenes
+      for (const block of content) {
+        if ((block as any).type === "image" && (block as any).source?.data) {
+          const img = (block as any).source;
+          parts.push(createPartFromBase64(img.data, img.media_type || "image/png"));
+        } else if ((block as any).type === "text" && block !== textContent) {
+          parts.push({ text: (block as any).text });
+        }
+      }
+      const result = await gemini.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [{ role: "user", parts }],
+        config: { maxOutputTokens: 3000 },
+      });
+      text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      rootLogger.info({ chars: text.length }, "Gemini Vision fallback exitoso");
+    } else {
+      throw anthropicErr;
+    }
+  }
 
   const parsed = safeJsonParse<VisualAnalysis>(text);
   if (!parsed) {
