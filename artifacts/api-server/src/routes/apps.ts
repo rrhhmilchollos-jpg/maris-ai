@@ -307,22 +307,83 @@ Rules:
 - techStack: 4-8 entries. Include the visible libraries (React, TypeScript, Tailwind, Wouter, Lucide) — not invented ones.
 - Output ONLY the JSON object.`;
 
-const DESIGNER_SYSTEM_PROMPT = `You are Maris AI's Senior UI/UX Designer. You produce design systems with personality — never generic, never "bootstrap blue". Output STRICT JSON only.
+const DESIGNER_SYSTEM_PROMPT = `Eres el Designer Agent de Maris AI — Diseñador UI/UX Senior especializado en productos digitales para el mercado hispanohablante.
 
-Schema:
+Tu misión: crear sistemas visuales con PERSONALIDAD que hagan la app memorable. Nunca genérico, nunca "azul bootstrap", nunca "blanco y gris sin vida".
+
+PROCESO OBLIGATORIO:
+1. Detecta el SECTOR del producto (fintech, salud, restauración, e-commerce, SaaS, educación, legal, startup...)
+2. Elige paleta que comunique los valores de ese sector con estética 2026
+3. Valida contraste WCAG AA (ratio mínimo 4.5:1 texto normal, 3:1 texto grande)
+4. Define tokens de diseño como CSS variables reutilizables
+5. Diseña variantes de componentes clave con clases Tailwind reales
+
+PALETAS RECOMENDADAS POR SECTOR:
+- Fintech/Banca: azul marino + verde confianza, tipografía serif para credibilidad
+- Salud/Clínica: verdes suaves + blancos, nunca negro puro, mucho espacio
+- Restauración: cálidos (terracota, mostaza, crema), dark mode premium
+- E-commerce/Moda: negros elegantes, neutros sofisticados, tipografía editorial
+- SaaS/Tech: dark mode, violetas/índigos, verdes eléctricos para CTAs
+- Educación: azules amigables, amarillos motivadores, alta legibilidad
+- Legal: azul marino, dorado, serif clásico, máxima sobriedad
+
+REGLAS CRÍTICAS:
+- NUNCA #000000 puro — usa #0a0a0f o similar
+- NUNCA #ffffff puro — usa #f8fafc o #fafaf9
+- globalCSS DEBE incluir @import Google Fonts Y todas las CSS variables
+- tailwindExtend DEBE ser objeto JSON válido con fontFamily y colors
+- componentVariants DEBE incluir clases Tailwind reales para cada variante
+
+SCHEMA DE SALIDA (JSON estricto sin texto adicional):
 {
   "theme": "light" | "dark" | "auto",
-  "palette": {"primary":"#hex","secondary":"#hex","accent":"#hex","background":"#hex","foreground":"#hex","muted":"#hex"},
-  "typography": {"sans":"font-name","display":"font-name","sizes":{"base":"16px","lg":"18px"}},
-  "radius": "sm" | "md" | "lg" | "xl",
-  "vibe": "1-line description of the visual mood",
-  "tailwindExtend": "JSON-stringified object you would put inside tailwind.config.ts theme.extend",
-  "globalCSS": "string with @import or :root CSS variables you would put in src/index.css after @tailwind directives"
+  "sectorDetected": "sector detectado",
+  "palette": {
+    "primary": "#hex",
+    "primaryHover": "#hex",
+    "secondary": "#hex",
+    "accent": "#hex",
+    "background": "#hex",
+    "surface": "#hex",
+    "foreground": "#hex",
+    "muted": "#hex",
+    "mutedForeground": "#hex",
+    "border": "#hex",
+    "success": "#22c55e",
+    "warning": "#f59e0b",
+    "error": "#ef4444"
+  },
+  "wcagValidation": {
+    "primaryOnBackground": "4.5:1 PASS AA",
+    "foregroundOnBackground": "7.2:1 PASS AA",
+    "notes": "correcciones si hay fails"
+  },
+  "typography": {
+    "sans": "nombre Google Font para cuerpo",
+    "display": "nombre Google Font para headings",
+    "mono": "JetBrains Mono",
+    "googleFontsImport": "@import url('https://fonts.googleapis.com/css2?family=...')"
+  },
+  "radius": "none" | "sm" | "md" | "lg" | "xl" | "full",
+  "vibe": "descripcion 2-3 lineas del mood visual y por que encaja con el sector",
+  "tailwindExtend": {
+    "fontFamily": { "sans": ["Font Name", "system-ui"], "display": ["Display Font", "serif"] },
+    "colors": { "primary": { "DEFAULT": "#hex", "hover": "#hex" }, "accent": "#hex" }
+  },
+  "globalCSS": "@import url('...');\n\n:root {\n  --color-primary: #hex;\n  --color-background: #hex;\n  --color-foreground: #hex;\n  --color-surface: #hex;\n  --color-muted: #hex;\n  --color-border: #hex;\n  --color-accent: #hex;\n  --radius: 8px;\n}",
+  "componentVariants": {
+    "buttonPrimary": "bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-semibold px-4 py-2 rounded-[var(--radius)] transition-colors",
+    "buttonSecondary": "border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-muted)] px-4 py-2 rounded-[var(--radius)] transition-colors",
+    "buttonDestructive": "bg-red-500 hover:bg-red-600 text-white font-semibold px-4 py-2 rounded-[var(--radius)] transition-colors",
+    "card": "bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 shadow-sm",
+    "badge": "inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full",
+    "input": "w-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] rounded-[var(--radius)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+  },
+  "animationStyle": "subtle" | "moderate" | "expressive",
+  "darkModeStrategy": "class" | "media" | "none"
 }
 
-Rules:
-- Real hex colors with good contrast. Match the product's domain and any research context provided.
-- Output ONLY the JSON object.`;
+Devuelve UNICAMENTE el JSON. Cero texto adicional.`
 
 const INTEGRATION_SYSTEM_PROMPT = `You are Maris AI's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics).
 
@@ -650,49 +711,98 @@ async function architectPlan(prompt: string, research: string, templateContext =
 /**
  * Designer — Anthropic Claude Sonnet 4.6.
  */
-async function designSystem(plan: ProjectPlan, research: string, templateContext = "", agentPlan = selectAgentModelPlan(plan.description ?? plan.title)): Promise<DesignSystem> {
-  const summary = `Product: ${plan.title}\nDescription: ${plan.description}\nVibe needed for: ${plan.pages.map((p) => p.name).join(", ")}`;
-  const templateNote = templateContext ? `\n\n${templateContext}` : "";
-  const userContent = research
-    ? `${summary}${templateNote}\n\nDesign the visual system. Reference brand context:\n${research.slice(0, 1500)}`
-    : `${summary}${templateNote}`;
-  let raw = "";
-  try {
-    const response = await withTimeoutOrThrow(
-      createClaudeMessageWithFallback("designer", agentPlan.agents.designer.model, {
-        max_tokens: 4096,
-        system: DESIGNER_SYSTEM_PROMPT + "\nOutput JSON only.",
-        messages: [{ role: "user", content: userContent }],
-      }),
-      15_000,
-      "designer",
-    );
-    raw = (response.content[0] as any).text ?? "";
-  } catch (_err) {
-    // Fall through to default design below.
-  }
-  const design = extractJsonObject<DesignSystem>(raw);
-  if (!design || !design.palette) {
-    return {
-      theme: "light",
-      palette: {
-        primary: "#7c3aed",
-        secondary: "#22d3ee",
-        accent: "#f97316",
-        background: "#0b0b12",
-        foreground: "#f8fafc",
-        muted: "#1e1e2a",
-      },
-      typography: { sans: "Inter, system-ui, sans-serif" },
-      radius: "lg",
-      vibe: "Modern, polished, dark-first SaaS aesthetic",
-      tailwindExtend: "{}",
-      globalCSS: "",
-    };
-  }
-  return design;
-}
+async function designSystem(plan: ProjectPlan, research: string, templateContext = "", agentPlan = selectAgentModelPlan(plan.description ?? plan.title), userPreferences?: string): Promise<DesignSystem> {
+  const pages = plan.pages.map((p) => p.name).join(", ");
+  const dataModels = (plan.dataModels || []).map((m: any) => m.name).join(", ");
+  const techStack = (plan.techStack || []).join(", ");
 
+  const userContent = `PROYECTO: ${plan.title}
+DESCRIPCION: ${plan.description}
+PAGINAS: ${pages}
+MODELOS: ${dataModels || "ninguno"}
+TECH STACK: ${techStack}
+${userPreferences ? `PREFERENCIAS USUARIO: ${userPreferences}` : ""}
+${research ? `CONTEXTO INVESTIGACION:\n${research.slice(0, 2000)}` : ""}
+${templateContext ? templateContext : ""}
+
+Crea el sistema visual completo. Detecta el sector, elige paleta, valida WCAG AA, genera tokens CSS y variantes Tailwind. Solo JSON.`;
+
+  // Sonnet minimo para diseno - decision critica que impacta toda la app
+  const designerModel = (agentPlan.agents.designer.model === "claude-haiku-4-5-20251001" || agentPlan.agents.designer.model === "claude-haiku-4-5")
+    ? "claude-sonnet-4-6"
+    : agentPlan.agents.designer.model;
+
+  let raw = "";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await withTimeoutOrThrow(
+        createClaudeMessageWithFallback("designer", designerModel, {
+          max_tokens: 6000,
+          system: DESIGNER_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: userContent }],
+        }),
+        25_000,
+        "designer",
+      );
+      raw = (response.content[0] as any).text ?? "";
+      const design = extractJsonObject<DesignSystem>(raw);
+      if (design?.palette?.primary) {
+        return {
+          theme: design.theme ?? "dark",
+          palette: {
+            primary: design.palette.primary,
+            secondary: design.palette.secondary ?? design.palette.primary,
+            accent: design.palette.accent ?? "#f97316",
+            background: design.palette.background ?? "#0b0b12",
+            foreground: design.palette.foreground ?? "#f8fafc",
+            muted: design.palette.muted ?? "#1e1e2a",
+          },
+          typography: design.typography ?? { sans: "Inter, system-ui, sans-serif" },
+          radius: design.radius ?? "lg",
+          vibe: design.vibe ?? "Diseno moderno y profesional",
+          tailwindExtend: typeof (design as any).tailwindExtend === "object"
+            ? JSON.stringify((design as any).tailwindExtend)
+            : ((design as any).tailwindExtend ?? "{}"),
+          globalCSS: design.globalCSS ?? "",
+          // Nuevos campos schema mejorado
+          ...((design as any).sectorDetected ? { sectorDetected: (design as any).sectorDetected } : {}),
+          ...((design as any).componentVariants ? { componentVariants: (design as any).componentVariants } : {}),
+          ...((design as any).wcagValidation ? { wcagValidation: (design as any).wcagValidation } : {}),
+          ...((design as any).darkModeStrategy ? { darkModeStrategy: (design as any).darkModeStrategy } : {}),
+        };
+      }
+    } catch (_err) {
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+  }
+
+  // Fallback inteligente por sector
+  const desc = (plan.title + " " + plan.description).toLowerCase();
+  const isSalud = /salud|clinic|medic|hospital|doctor/.test(desc);
+  const isFood = /restaur|food|comida|cafe|bar|cocina/.test(desc);
+  const isFintech = /banco|finanz|pago|dinero|credit|crypto/.test(desc);
+  const isEcommerce = /tienda|shop|venta|producto|compra/.test(desc);
+
+  const palette = isSalud
+    ? { primary: "#0891b2", secondary: "#22d3ee", accent: "#10b981", background: "#f0f9ff", foreground: "#0c4a6e", muted: "#e0f2fe" }
+    : isFood
+    ? { primary: "#c2410c", secondary: "#d97706", accent: "#fbbf24", background: "#1c0a00", foreground: "#fef3c7", muted: "#2d1a0a" }
+    : isFintech
+    ? { primary: "#1e3a5f", secondary: "#2563eb", accent: "#10b981", background: "#f8fafc", foreground: "#1e293b", muted: "#f1f5f9" }
+    : isEcommerce
+    ? { primary: "#18181b", secondary: "#3f3f46", accent: "#e11d48", background: "#fafafa", foreground: "#18181b", muted: "#f4f4f5" }
+    : { primary: "#7c3aed", secondary: "#22d3ee", accent: "#f97316", background: "#0b0b12", foreground: "#f8fafc", muted: "#1e1e2a" };
+
+  return {
+    theme: (isSalud || isFintech || isEcommerce) ? "light" : "dark",
+    palette,
+    typography: { sans: "Inter, system-ui, sans-serif", display: "Inter, system-ui, sans-serif" },
+    radius: "lg",
+    vibe: "Diseno moderno y profesional adaptado al sector detectado",
+    tailwindExtend: "{}",
+    globalCSS: `:root { --color-primary: ${palette.primary}; --color-background: ${palette.background}; --color-foreground: ${palette.foreground}; }`,
+  };
+}
 interface CodeGenResult {
   code: string;
   truncated: boolean;

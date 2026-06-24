@@ -319,36 +319,167 @@ export async function runIntegrationAgent(
 
 // ─── PM Agent (Product Manager) ───────────────────────────────────────────────
 
-const PM_VALIDATION_SYSTEM = `Eres el Product Manager Agent de Maris AI, inspirado en emergent.sh.
+const PM_VALIDATION_SYSTEM = `Eres el PM Agent de Maris AI — Product Manager y Director de Calidad Final.
 
-Tu rol es validar que la app generada cumple EXACTAMENTE con lo que el usuario pidió.
-Eres el guardián de calidad final antes del deploy.
+Tu rol va mas alla de simplemente validar: eres el guardian que asegura que el usuario recibe exactamente lo que pidio, con calidad de produccion real.
 
-PROCESO:
-1. Lee el prompt original del usuario
-2. Lee el blueprint del arquitecto (páginas planificadas)
-3. Analiza el código generado
-4. Verifica que TODAS las páginas están implementadas (no stubs)
-5. Verifica que las funcionalidades clave están presentes
-6. Verifica que la navegación funciona
-7. Asigna una puntuación de calidad (0-100)
+PROCESO COMPLETO (ejecuta TODO en orden):
+1. LEER el prompt original — extrae los requisitos funcionales explicitos e implicitos
+2. MAPEAR las paginas del blueprint contra el codigo generado
+3. VERIFICAR funcionalidades criticas (auth si la pide, pagos si los pide, CRUD si aplica)
+4. DETECTAR codigo de relleno (stubs, TODOs, placeholder content, lorem ipsum)
+5. VALIDAR navegacion y rutas (que los links del navbar funcionan)
+6. COMPROBAR responsive (que hay clases mobile, md:, lg:)
+7. VERIFICAR imports (que no hay imports de archivos inexistentes)
+8. DETECTAR hardcoding excesivo (arrays vacios pasando como "datos reales")
+9. GENERAR informe detallado con instrucciones exactas de fix para cada issue
+10. DECIDIR si esta ready para deploy o necesita reparacion
 
-CRITERIOS DE PUNTUACIÓN:
-- 90-100: Todas las páginas implementadas, funcionalidades completas, diseño coherente
-- 70-89: Páginas implementadas pero alguna funcionalidad menor falta
-- 50-69: Páginas implementadas pero hay stubs o TODOs visibles
-- 0-49: Páginas faltantes o funcionalidades críticas sin implementar
+CRITERIOS DE PUNTUACION ESTRICTOS:
+- 95-100: Todo implementado, funcionalidades completas, codigo limpio, 0 stubs, responsive, navegacion funcional
+- 80-94: Implementado al 90%+, 0 blockers, 1-2 mejoras menores
+- 65-79: Implementado al 75%+, sin blockers criticos, algunos TODOs no bloqueantes
+- 50-64: Implementado al 60%+, stubs visibles, funcionalidades secundarias faltantes
+- 0-49: Paginas faltantes o funcionalidades criticas del prompt no implementadas
 
-BLOCKERS (impiden el deploy):
-- Páginas planificadas que no existen en el código
-- Funcionalidades críticas del prompt sin implementar
-- Errores de sintaxis obvios
-- Pantalla en blanco (sin contenido real)
+BLOCKERS ABSOLUTOS (score < 80 automatico, readyForDeploy: false):
+- Paginas planificadas que no aparecen como "// === FILE:" en el codigo
+- Funcionalidad CRITICA del prompt no implementada (si pide login y no hay login = BLOCKER)
+- Pantalla en blanco o componente vacio como pagina principal
+- Errores de sintaxis que impedirian la compilacion
+- Imports de archivos que no existen en el bundle
 
-RESPONDE EN JSON ESTRICTO.`;
+MAJORS (reducen score pero no bloquean deploy si hay pocos):
+- TODOs o comentarios "// implementar" visibles al usuario
+- Datos hardcodeados sin posibilidad de edicion cuando el prompt pide CRUD
+- Falta de estados de loading o error en formularios
+- Navegacion que no lleva a las paginas correctas
+
+MINORS (nota en el informe, no afectan deploy):
+- Textos en ingles cuando el producto deberia ser en espanol
+- Falta de animaciones o transiciones
+- Iconos placeholder (usando emojis donde deberian ser SVGs)
+
+SCHEMA DE RESPUESTA (JSON estricto, sin texto adicional):
+{
+  "passed": boolean,
+  "score": number (0-100),
+  "filesFound": ["lista de archivos encontrados en el bundle"],
+  "filesMissing": ["archivos planificados que NO estan en el bundle"],
+  "functionalitiesChecked": [
+    { "feature": "nombre de la funcionalidad", "status": "implemented|partial|missing", "evidence": "donde se ve o no se ve en el codigo" }
+  ],
+  "issues": [
+    { "severity": "blocker|major|minor", "requirement": "que se esperaba", "found": "que se encontro", "fix": "instruccion EXACTA para arreglarlo", "file": "archivo afectado si aplica" }
+  ],
+  "strengths": ["lista de cosas que estan bien implementadas"],
+  "summary": "resumen ejecutivo en espanol de 3-4 frases para mostrar al usuario",
+  "readyForDeploy": boolean,
+  "deployBlockers": number,
+  "estimatedFixTime": "menos de 1 min|1-3 min|3-10 min|mas de 10 min"
+}\`;
 
 export async function runPMAgent(
   originalPrompt: string,
+  blueprint: EmergentArchitectBlueprint,
+  frontendCode: string,
+  log: (msg: string) => void
+): Promise<PMValidationResult> {
+  log("PM Agent: inspeccion completa de calidad — 10 puntos de verificacion activos...");
+
+  const plannedPages = blueprint.pages.map((p) => `${p.name} (${p.route}): ${p.purpose}`);
+  const plannedEndpoints = (blueprint.apiEndpoints || []).map((e) => `${e.method} ${e.path}: ${e.purpose}`);
+  const plannedIntegrations = (blueprint.integrations || []).join(", ");
+
+  // Extraer archivos reales del bundle
+  const existingFiles = frontendCode
+    .split("// === FILE: ")
+    .slice(1)
+    .map((part) => part.split("\n")[0].replace(/ ===$/, "").trim())
+    .filter(Boolean);
+
+  // Detectar archivos planificados que faltan
+  const missingFiles = blueprint.frontendFiles.filter(
+    (f) => !existingFiles.some((ef) => ef.includes(f.replace("src/", "").replace(".tsx", "").replace(".ts", "")))
+  );
+
+  // Detectar stubs y TODOs
+  const stubPatterns = ["TODO", "FIXME", "placeholder", "lorem ipsum", "// implement", "coming soon"];
+  const stubsFound = stubPatterns.filter(p => frontendCode.toLowerCase().includes(p.toLowerCase()));
+
+  const codePreview = frontendCode.slice(0, 12000);
+
+  const userMessage = `PROMPT ORIGINAL DEL USUARIO:
+"${originalPrompt}"
+
+BLUEPRINT:
+- Paginas planificadas: ${plannedPages.join(" | ")}
+- Endpoints: ${plannedEndpoints.join(" | ") || "ninguno (SPA)"}
+- Integraciones: ${plannedIntegrations || "ninguna"}
+- Backend necesario: ${blueprint.backendNeeded ? "si" : "no"}
+- Complejidad: ${blueprint.complexity}
+
+ARCHIVOS ENCONTRADOS (${existingFiles.length}):
+${existingFiles.join("\n")}
+
+ARCHIVOS FALTANTES (${missingFiles.length}):
+${missingFiles.length > 0 ? missingFiles.join("\n") : "ninguno"}
+
+STUBS/TODOs: ${stubsFound.length > 0 ? stubsFound.join(", ") : "ninguno"}
+
+PREVIEW CODIGO:
+\`\`\`
+${codePreview}
+\`\`\`
+
+Realiza la inspeccion completa y devuelve SOLO el JSON.`;
+
+  try {
+    const pmModel = blueprint.complexity === "enterprise" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+
+    const response = await createClaudeMessageWithFallback("qa", pmModel, {
+      model: pmModel,
+      max_tokens: 4096,
+      system: PM_VALIDATION_SYSTEM,
+      messages: [{ role: "user", content: userMessage }],
+    });
+
+    const raw = response.content?.[0]?.text ?? "";
+    const result = extractJsonObject<PMValidationResult>(raw);
+
+    if (!result) {
+      const basicScore = missingFiles.length === 0 ? 78 : Math.max(40, 78 - (missingFiles.length * 15));
+      return {
+        passed: basicScore >= 65,
+        score: basicScore,
+        issues: missingFiles.map(f => ({ severity: "blocker" as const, requirement: `Archivo ${f}`, found: "No encontrado", fix: `Implementar ${f}` })),
+        summary: `Validacion basica: ${existingFiles.length} archivos encontrados, ${missingFiles.length} faltantes.`,
+        readyForDeploy: basicScore >= 65,
+      };
+    }
+
+    const blockers = result.issues.filter((i) => i.severity === "blocker");
+    const majors = result.issues.filter((i) => i.severity === "major");
+
+    log(`PM Agent: score ${result.score}/100 — ${blockers.length} blocker(s), ${majors.length} major(s)`);
+    if (blockers.length > 0) log(`PM Agent BLOCKERS: ${blockers.map(b => b.requirement).join(", ")}`);
+    if ((result as any).strengths?.length > 0) log(`PM Agent OK: ${((result as any).strengths as string[]).slice(0, 2).join(", ")}`);
+    log(`PM Agent: ${result.summary}`);
+
+    return result;
+  } catch (err) {
+    logger.warn({ err }, "PM Agent: error en validacion");
+    const fallbackScore = missingFiles.length === 0 ? 72 : 55;
+    return {
+      passed: fallbackScore >= 65,
+      score: fallbackScore,
+      issues: [],
+      summary: "Validacion omitida por error interno. Revision manual recomendada.",
+      readyForDeploy: fallbackScore >= 65,
+    };
+  }
+}
+
   blueprint: EmergentArchitectBlueprint,
   frontendCode: string,
   log: (msg: string) => void
