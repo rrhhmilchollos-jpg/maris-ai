@@ -20,7 +20,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AgentNotesPanel } from "@/components/agent-notes-panel";
-import { MCPIntegrationsPanel } from "@/components/mcp-integrations-panel";
 import { MediaAIGenerator } from "@/components/media-ai-generator";
 import { SupportPanel } from "@/components/support-panel";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
@@ -140,7 +139,6 @@ export default function DashboardPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showNoCredits, setShowNoCredits] = useState(false);
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
-  const [showMCPPanel, setShowMCPPanel] = useState(false);
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django" | "video-ai" | "imagen-ai";
   const [kind, setKind] = useState<Kind>("fullstack");
@@ -163,7 +161,7 @@ export default function DashboardPage() {
   const kindCost = kindMeta.cost;
   const [annualOpen, setAnnualOpen] = useState(false);
 
-  // ─── Pre-Generation Chat (Emergent.sh style) ────────────────────────────────
+  // ─── Pre-Generation Chat ────────────────────────────────────────────────────
   const [preGenChatOpen, setPreGenChatOpen] = useState(false);
   const [preGenChatGenerating, setPreGenChatGenerating] = useState(false);
   const [inlineHint, setInlineHint] = useState<string | null>(null);
@@ -171,7 +169,6 @@ export default function DashboardPage() {
   const [quickChatReply, setQuickChatReply] = useState<string | null>(null);
   const [quickChatLoading, setQuickChatLoading] = useState(false);
 
-  // Legacy onboarding state (kept for reference, replaced by PreGenerationChat)
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingAnswers, setOnboardingAnswers] = useState<Record<number, string>>({}); 
@@ -180,9 +177,6 @@ export default function DashboardPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ title: string; filesImported: number } | null>(null);
 
-  // Instrucciones personalizadas (preferencias del usuario, inyectadas en
-  // TODAS sus generaciones como contexto de referencia — no son órdenes
-  // del sistema, igual que la memoria del agente)
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
   const [customInstructions, setCustomInstructions] = useState("");
   const { data: preferencesData } = useGetMyPreferences({ query: { enabled: preferencesDialogOpen } });
@@ -204,7 +198,6 @@ export default function DashboardPage() {
     }
   };
 
-
   const getOnboardingQuestions = () => [
     {
       id: 0,
@@ -222,7 +215,7 @@ export default function DashboardPage() {
     },
     {
       id: 1,
-      question: "¿Tienes contexto previo del proyecto? (descripción, documentos, capturas, branding, etc.) Si es así, descríbelo.",
+      question: "¿Tienes contexto previo del proyecto?",
       type: "textarea" as const,
       placeholder: "ej. Tengo una carpeta con el logo, paleta de colores y una descripción del negocio...",
     },
@@ -249,7 +242,7 @@ export default function DashboardPage() {
     },
     {
       id: 4,
-      question: "¿Tienes preferencias de diseño? (colores, tipografía, estilo, referencias visuales)",
+      question: "¿Tienes preferencias de diseño?",
       type: "textarea" as const,
       placeholder: "ej. Estilo oscuro y minimalista, colores morado y negro, tipografía moderna tipo Inter...",
     },
@@ -278,7 +271,6 @@ export default function DashboardPage() {
     if (onboardingStep < onboardingQuestions.length - 1) {
       setOnboardingStep(prev => prev + 1);
     } else {
-      // Build enriched prompt
       const enrichedContext = onboardingQuestions
         .map((q, i) => {
           const answer = onboardingAnswers[i];
@@ -332,7 +324,6 @@ export default function DashboardPage() {
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
 
-  // Mostrar overlay automáticamente si los créditos llegan a 0
   useEffect(() => {
     if (!isAdmin && stats && stats.credits <= 0) {
       setShowNoCredits(true);
@@ -368,7 +359,7 @@ export default function DashboardPage() {
     try {
       const result = await apiFetch<{ ok: boolean; id: string; title: string }>(`/api/apps/${id}/fork`, { method: "POST" });
       queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-      toast({ title: "Proyecto duplicado", description: `Se creó una copia: "${result.title}". Puedes experimentar libremente sin afectar al original.` });
+      toast({ title: "Proyecto duplicado", description: `Se creó una copia: "${result.title}".` });
     } catch (error: any) {
       toast({ title: "Error al duplicar", description: error?.message || "No se pudo duplicar la aplicación.", variant: "destructive" });
     } finally {
@@ -383,13 +374,10 @@ export default function DashboardPage() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const data = await apiFetch<any>("/api/import-app", {
-        method: "POST",
-        body: formData,
-      });
+      const data = await apiFetch<any>("/api/import-app", { method: "POST", body: formData });
       setImportResult({ title: data.title, filesImported: data.filesImported });
       queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-      toast({ title: `✅ "${data.title}" importado`, description: `${data.filesImported} archivos cargados. Ya aparece en tus apps recientes.` });
+      toast({ title: `✅ "${data.title}" importado`, description: `${data.filesImported} archivos cargados.` });
       setTimeout(() => { setImportDialogOpen(false); setImportFile(null); setImportResult(null); }, 2000);
     } catch (err: any) {
       toast({ title: "Error al importar", description: err.message, variant: "destructive" });
@@ -417,7 +405,7 @@ export default function DashboardPage() {
     mutation: {
       onSuccess: (data) => {
         if (data?.conversationOnly) {
-          toast({ title: "Maris AI", description: data.reply || data.message || "Mensaje recibido. No se ha iniciado ninguna generación." });
+          toast({ title: "Maris AI", description: data.reply || data.message || "Mensaje recibido." });
           queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
           return;
         }
@@ -428,7 +416,7 @@ export default function DashboardPage() {
         toast({ title: "Respuesta inesperada", description: "No se ha iniciado ningún trabajo de generación.", variant: "destructive" });
       },
       onError: (error: any) => {
-        toast({ title: "No pudimos encolar la generación", description: error?.message || error?.error || "Inténtalo otra vez en un momento.", variant: "destructive" });
+        toast({ title: "No pudimos encolar la generación", description: error?.message || error?.error || "Inténtalo otra vez.", variant: "destructive" });
       },
     },
   });
@@ -445,34 +433,20 @@ export default function DashboardPage() {
       attachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
       setAttachments([]);
       toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
-      import("@/lib/analytics").then(({ trackAppSucceeded }) => {
-        trackAppSucceeded(kind, 0);
-      });
+      import("@/lib/analytics").then(({ trackAppSucceeded }) => { trackAppSucceeded(kind, 0); });
       setLocation(`/app/${appId}`);
     } else if (job.status === "failed") {
-      toast({ title: "Falló la generación", description: job.errorMessage || "Inténtalo otra vez o ajusta el prompt.", variant: "destructive" });
+      toast({ title: "Falló la generación", description: job.errorMessage || "Inténtalo otra vez.", variant: "destructive" });
       setActiveJobId(null);
     }
   }, [job, queryClient, setLocation, toast, activeJobId]);
 
-  // Detecta si el prompt es intención de construir una app o una consulta
-  // REGLA PRINCIPAL: las palabras de construcción tienen PRIORIDAD ABSOLUTA
-  // "hola me ayudas a crear una IA" → BUILD (tiene "crear")
-  // "hola" solo → CHAT
   const looksLikeBuildIntent = (text: string): boolean => {
     if (attachments.length > 0) return true;
-
-    // URL en el prompt = SIEMPRE BUILD (referencia visual o inspiración)
-    // ej: "algo como dejalia.com", "igual que airbnb.com", "https://..."
     const hasUrl = /https?:\/\/|www\.|[a-zA-Z0-9-]+\.(com|es|io|app|net|org|co)([\/\s]|$)/.test(text);
     if (hasUrl) return true;
-
-    // Prompt largo (>100 chars) = SIEMPRE BUILD
     if (text.trim().length > 100) return true;
-
     const t = text.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-    // Palabras de construcción — prioridad total sobre cualquier señal de chat
     const buildWords = [
       "crea", "crear", "genera", "generar", "haz ", "hazme", "hacer",
       "construye", "construir", "desarrolla", "desarrollar", "diseña", "disenar",
@@ -483,7 +457,6 @@ export default function DashboardPage() {
       "puedes crear", "puedes hacer", "puedes generar", "puedes construir",
       "algo como", "similar a", "igual que", "al estilo", "tipo ",
       "inspirado en", "copia de", "version de", "versión de",
-      // Tipos de producto — su sola presencia indica build
       " app", "aplicacion", "aplicación", " web", "pagina", "página",
       "landing", "tienda", "ecommerce", "marketplace", "dashboard",
       "crm", "saas", "plataforma", "sistema", "juego", "game",
@@ -492,11 +465,7 @@ export default function DashboardPage() {
       "generador", "gestor", "gestion",
     ];
     if (buildWords.some(w => t.includes(w))) return true;
-
-    // Prompt medio sin historial → BUILD (beneficio de la duda)
     if (t.length > 30 && quickChatHistory.length === 0) return true;
-
-    // Señales inequívocas de chat — solo estas bloquean
     const chatOnly = [
       "cuanto cuesta", "cuánto cuesta", "precio", "cuantos creditos",
       "como funciona maris", "que es maris",
@@ -504,53 +473,32 @@ export default function DashboardPage() {
       "solo quiero preguntar",
     ];
     if (chatOnly.some(s => t.includes(s))) return false;
-
-    // Muy corto y ambiguo → chat
     if (t.length < 15) return false;
-
-    // Default → BUILD
     return true;
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-
-    // Prompts largos (>100 chars) son SIEMPRE intención de construir — sin análisis
     const isLongPrompt = prompt.trim().length > 100;
-
-    // Si no es intención de construir → responder como chat con Maris
     if (!isLongPrompt && !looksLikeBuildIntent(prompt)) {
       const userMsg = prompt.trim();
       setPrompt("");
       setQuickChatLoading(true);
-      // Añadir mensaje del usuario al historial
       const newHistory = [...quickChatHistory, { role: "user" as const, text: userMsg }];
       setQuickChatHistory(newHistory);
-      // Contexto de apps del usuario para respuestas contextuales
-      const appContext = (apps ?? []).slice(0, 5).map((a: any) =>
-        `"${a.title}" — ${a.description?.slice(0, 60) || "sin descripción"}`
-      ).join("; ");
+      const appContext = (apps ?? []).slice(0, 5).map((a: any) => `"${a.title}" — ${a.description?.slice(0, 60) || "sin descripción"}`).join("; ");
       try {
         const data = await apiFetch<any>("/api/apps/quick-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: userMsg,
-            history: quickChatHistory.slice(-6), // últimos 6 mensajes
-            appContext: appContext || null,
-          }),
+          body: JSON.stringify({ message: userMsg, history: quickChatHistory.slice(-6), appContext: appContext || null }),
         });
         const reply = data.reply || "Cuéntame más, ¿en qué puedo ayudarte?";
         setQuickChatReply(reply);
         setQuickChatHistory([...newHistory, { role: "maris" as const, text: reply }]);
-        // Feedback loop: si detectamos insatisfacción, guardar el patrón
         if (data.feedbackDetected) {
-          apiFetch("/api/apps/feedback", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: userMsg, type: data.feedbackType }),
-          }).catch(() => {});
+          apiFetch("/api/apps/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: userMsg, type: data.feedbackType }) }).catch(() => {});
         }
       } catch {
         const fallback = "Estoy aquí. ¿Tienes alguna duda sobre Maris AI o quieres construir algo?";
@@ -561,19 +509,13 @@ export default function DashboardPage() {
       }
       return;
     }
-    setQuickChatHistory([]); // limpiar historial al lanzar generación
-
-    if (!isAdmin && stats && stats.credits <= 0) {
-      // Bloqueo total — mostrar overlay de sin créditos
-      setShowNoCredits(true);
-      return;
-    }
+    setQuickChatHistory([]);
+    if (!isAdmin && stats && stats.credits <= 0) { setShowNoCredits(true); return; }
     if (!isAdmin && stats && stats.credits < kindCost) {
-      toast({ title: "Créditos insuficientes", description: `Este proyecto necesita ${kindCost} crédito(s) y solo tienes ${stats.credits}. Recarga para continuar.`, variant: "destructive" });
+      toast({ title: "Créditos insuficientes", description: `Este proyecto necesita ${kindCost} crédito(s) y solo tienes ${stats.credits}.`, variant: "destructive" });
       setShowNoCredits(true);
       return;
     }
-    // Trackear intención de generar
     import("@/lib/analytics").then(({ trackGenerateApp }) => {
       const isFirst = !apps || (apps as any[]).length === 0;
       trackGenerateApp(kind, isFirst);
@@ -581,9 +523,8 @@ export default function DashboardPage() {
     openOnboarding();
   };
 
-  const isWorking = activeJobId !== null; // isPending puede atascarse — solo bloquear si hay job real
+  const isWorking = activeJobId !== null;
 
-  // Auto-detectar recarga de créditos — cuando el usuario paga, los créditos suben automáticamente
   useEffect(() => {
     if (!showNoCredits || isAdmin) return;
     const interval = setInterval(async () => {
@@ -595,13 +536,13 @@ export default function DashboardPage() {
           queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         }
       } catch { /* silencioso */ }
-    }, 8000); // Comprobar cada 8 segundos
+    }, 8000);
     return () => clearInterval(interval);
   }, [showNoCredits, isAdmin]);
+
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
 
-  // ─── Pre-Generation Chat overlay ────────────────────────────────────────────
   if (preGenChatOpen) {
     return (
       <PreGenerationChat
@@ -650,21 +591,14 @@ export default function DashboardPage() {
                   </span>
                 )}
               </p>
-              <p className="text-sm text-white/80 leading-relaxed">
-                {notif.message.replace(/\*\*/g, "")}
-              </p>
+              <p className="text-sm text-white/80 leading-relaxed">{notif.message.replace(/\*\*/g, "")}</p>
               {notif.appId && (
-                <button
-                  onClick={() => setLocation(`/apps/${notif.appId}`)}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors">
-                  <ExternalLink className="h-3 w-3" />
-                  Ver mi app actualizada
+                <button onClick={() => setLocation(`/apps/${notif.appId}`)} className="mt-2 inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors">
+                  <ExternalLink className="h-3 w-3" />Ver mi app actualizada
                 </button>
               )}
             </div>
-            <button
-              onClick={() => dismissNotif(notif._id)}
-              className="shrink-0 text-white/30 hover:text-white/60 transition-colors mt-0.5">
+            <button onClick={() => dismissNotif(notif._id)} className="shrink-0 text-white/30 hover:text-white/60 transition-colors mt-0.5">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -701,12 +635,9 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* ─── Emergent-style Prompt Box ─────────────────────────────────── */}
+        {/* ─── Prompt Box ─────────────────────────────────────────────────────── */}
         <div className="relative rounded-2xl border border-white/[0.08] bg-[#0d0d12] overflow-hidden shadow-[0_0_60px_rgba(124,58,237,0.08)]">
-          {/* Top gradient line */}
           <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-
-          {/* Header */}
           <div className="px-6 pt-6 pb-4">
             <div className="flex items-center gap-3 mb-1">
               <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
@@ -719,35 +650,23 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Kind selector tabs */}
           <div className="px-6 pb-4">
             <div className="flex flex-wrap gap-1.5">
               {(Object.entries(KIND_META) as [Kind, typeof KIND_META[Kind]][]).map(([k, meta]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  disabled={isWorking}
+                <button key={k} type="button" onClick={() => setKind(k)} disabled={isWorking}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
-                    kind === k
-                      ? "bg-primary/15 border-primary/40 text-primary shadow-sm shadow-primary/10"
-                      : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
-                  }`}
-                >
+                    kind === k ? "bg-primary/15 border-primary/40 text-primary shadow-sm shadow-primary/10" : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
+                  }`}>
                   <meta.icon className="h-3 w-3" />
                   {meta.label}
                   {meta.cost > 1 && (
-                    <span className={`ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full ${
-                      kind === k ? "bg-primary/20 text-primary" : "bg-white/5 text-white/20"
-                    }`}>{meta.cost}cr</span>
+                    <span className={`ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full ${kind === k ? "bg-primary/20 text-primary" : "bg-white/5 text-white/20"}`}>{meta.cost}cr</span>
                   )}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Textarea */}
-          {/* OVERLAY SIN CRÉDITOS — bloquea el textarea como Emergent.sh */}
           {showNoCredits && !isAdmin && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-background/95 backdrop-blur-sm border border-destructive/20">
               <div className="text-center px-6 max-w-sm">
@@ -755,26 +674,17 @@ export default function DashboardPage() {
                   <Sparkles className="h-7 w-7 text-destructive" />
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">Te has quedado sin créditos</h3>
-                <p className="text-sm text-muted-foreground mb-5">
-                  Recarga ahora para seguir generando apps. En cuanto completes la compra, tu cuenta se desbloqueará automáticamente.
-                </p>
+                <p className="text-sm text-muted-foreground mb-5">Recarga ahora para seguir generando apps.</p>
                 <div className="flex flex-col gap-2">
-                  <Button
-                    className="w-full bg-primary hover:bg-primary/90 font-bold"
-                    onClick={() => setLocation("/billing")}
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Recargar créditos
+                  <Button className="w-full bg-primary hover:bg-primary/90 font-bold" onClick={() => setLocation("/billing")}>
+                    <Sparkles className="mr-2 h-4 w-4" />Recargar créditos
                   </Button>
-                  <p className="text-[11px] text-muted-foreground/60 animate-pulse">
-                    Detectando recarga automáticamente...
-                  </p>
+                  <p className="text-[11px] text-muted-foreground/60 animate-pulse">Detectando recarga automáticamente...</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ─── Media AI Generator (vídeo e imagen) ─────────────────────── */}
           {(kind === "video-ai" || kind === "imagen-ai") && (
             <div className="px-6 pb-4">
               <MediaAIGenerator mode={kind as "video-ai" | "imagen-ai"} />
@@ -797,7 +707,6 @@ export default function DashboardPage() {
                     }
                   }}
                 />
-                {/* Bottom bar inside textarea */}
                 <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 border-t border-white/[0.05]">
                   <div className="flex items-center gap-1">
                     <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={isWorking} />
@@ -806,65 +715,31 @@ export default function DashboardPage() {
                         <SelectValue placeholder="Modelo" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#16161e] border-white/10">
-                        <SelectItem value="auto" className="text-[11px] font-semibold">
-                          <div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (9 Agentes)</div>
-                        </SelectItem>
-                        <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold">
-                          <div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div>
-                        </SelectItem>
-                        <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold">
-                          <div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div>
-                        </SelectItem>
-                        <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold">
-                          <div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div>
-                        </SelectItem>
-                        <SelectItem value="gpt-5.4" className="text-[11px] font-semibold">
-                          <div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4</div>
-                        </SelectItem>
+                        <SelectItem value="auto" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (9 Agentes)</div></SelectItem>
+                        <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div></SelectItem>
+                        <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
+                        <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
+                        <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4</div></SelectItem>
                       </SelectContent>
                     </Select>
-                    {/* ─── Ultra Thinking toggle ─── */}
-                    <button
-                      type="button"
-                      onClick={() => setUltraThinking(v => !v)}
-                      title={ultraThinking ? "Desactivar Ultra Thinking" : "Activar Ultra Thinking — razonamiento profundo antes de codificar"}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${ultraThinking ? "bg-violet-600/30 text-violet-300 border border-violet-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}
-                      disabled={isWorking}
-                    >
-                      <Brain className="h-3 w-3" />
-                      <span className="hidden sm:inline">Ultra</span>
+                    <button type="button" onClick={() => setUltraThinking(v => !v)} disabled={isWorking}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${ultraThinking ? "bg-violet-600/30 text-violet-300 border border-violet-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}>
+                      <Brain className="h-3 w-3" /><span className="hidden sm:inline">Ultra</span>
                     </button>
-                    {/* ─── Legacy Migration toggle ─── */}
-                    <button
-                      type="button"
-                      onClick={() => setLegacyMode(v => !v)}
-                      title={legacyMode ? "Desactivar migración legacy" : "Modo migración — moderniza código antiguo automáticamente"}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${legacyMode ? "bg-amber-600/30 text-amber-300 border border-amber-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}
-                      disabled={isWorking}
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      <span className="hidden sm:inline">Legacy</span>
+                    <button type="button" onClick={() => setLegacyMode(v => !v)} disabled={isWorking}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${legacyMode ? "bg-amber-600/30 text-amber-300 border border-amber-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}>
+                      <RefreshCw className="h-3 w-3" /><span className="hidden sm:inline">Legacy</span>
                     </button>
                   </div>
-                  <Button
-                    type="submit"
-                    disabled={isWorking || !prompt.trim()}
-                    className="h-8 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-[12px] font-bold"
-                  >
-                    {isWorking ? (
-                      <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</>
-                    ) : (
-                      <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar <span className="hidden sm:inline">({kindCost} cr)</span></>
-                    )}
+                  <Button type="submit" disabled={isWorking || !prompt.trim()} className="h-8 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-[12px] font-bold">
+                    {isWorking ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar <span className="hidden sm:inline">({kindCost} cr)</span></>}
                   </Button>
                 </div>
               </div>
               {attachments.length > 0 && <AttachmentChips attachments={attachments} onRemove={(id) => setAttachments((prev: any[]) => { const removed = prev.find((a:any) => a.id === id); if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl); return prev.filter((a:any) => a.id !== id); })} />}
 
-              {/* Chat inline con Maris — historial completo */}
               {(quickChatHistory.length > 0 || quickChatLoading) && (
                 <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
-                  {/* Header */}
                   <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04]">
                     <div className="flex items-center gap-2">
                       <div className="h-5 w-5 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
@@ -876,15 +751,10 @@ export default function DashboardPage() {
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  {/* Mensajes */}
                   <div className="px-3 py-2 space-y-2 max-h-48 overflow-y-auto">
                     {quickChatHistory.map((msg, i) => (
                       <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`text-[12px] leading-relaxed px-3 py-1.5 rounded-lg max-w-[85%] ${
-                          msg.role === "user"
-                            ? "bg-primary/15 text-primary border border-primary/20"
-                            : "bg-white/[0.05] text-white/80 border border-white/[0.05]"
-                        }`}>
+                        <div className={`text-[12px] leading-relaxed px-3 py-1.5 rounded-lg max-w-[85%] ${msg.role === "user" ? "bg-primary/15 text-primary border border-primary/20" : "bg-white/[0.05] text-white/80 border border-white/[0.05]"}`}>
                           {msg.text}
                         </div>
                       </div>
@@ -902,7 +772,6 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* AVISO PLAN FREE */}
             {!me?.isPremium && !isAdmin && (
               <div className="mx-6 mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-400/90 flex items-center gap-2">
                 <Sparkles className="h-3 w-3 flex-shrink-0" />
@@ -910,7 +779,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Quick suggestions */}
             <div className="px-6 pb-5">
               <p className="text-[10px] text-white/20 uppercase tracking-widest font-bold mb-2">Sugerencias rápidas</p>
               <div className="flex flex-wrap gap-1.5">
@@ -922,20 +790,14 @@ export default function DashboardPage() {
                   "Juego 2D tipo Tetris con tabla de records",
                   "Landing page para startup de IA con pricing",
                 ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setPrompt(suggestion)}
-                    disabled={isWorking}
-                    className="text-[11px] px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/40 hover:text-white/80 hover:bg-white/[0.08] hover:border-primary/30 transition-all"
-                  >
+                  <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)} disabled={isWorking}
+                    className="text-[11px] px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/40 hover:text-white/80 hover:bg-white/[0.08] hover:border-primary/30 transition-all">
                     {suggestion}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Agents row */}
             <div className="border-t border-white/[0.05] px-6 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Equipo activo</span>
@@ -947,21 +809,17 @@ export default function DashboardPage() {
                           <agent.icon className="h-3 w-3" />
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top">
-                        <p className="text-xs font-semibold">{agent.name}</p>
-                      </TooltipContent>
+                      <TooltipContent side="top"><p className="text-xs font-semibold">{agent.name}</p></TooltipContent>
                     </Tooltip>
                   ))}
                 </div>
               </div>
-              <p className="text-[10px] text-white/20 italic hidden sm:block">
-                ⌘/Ctrl + Enter para generar rápido
-              </p>
+              <p className="text-[10px] text-white/20 italic hidden sm:block">⌘/Ctrl + Enter para generar rápido</p>
             </div>
           </form>
         </div>
 
-        {/* ─── Onboarding Questions Modal (legacy, replaced by PreGenerationChat) ─── */}
+        {/* ─── Onboarding Modal ─── */}
         <Dialog open={onboardingOpen} onOpenChange={setOnboardingOpen}>
           <DialogContent className="max-w-lg bg-[#0d0d12] border-white/10">
             <DialogHeader>
@@ -974,12 +832,11 @@ export default function DashboardPage() {
               <DialogTitle className="text-lg font-bold">{currentQuestion?.question}</DialogTitle>
               <div className="flex items-center gap-1 mt-2">
                 {onboardingQuestions.map((_, i) => (
-                  <div key={i} className={`h-1 flex-1 rounded-full transition-all ${ i <= onboardingStep ? "bg-primary" : "bg-white/10" }`} />
+                  <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= onboardingStep ? "bg-primary" : "bg-white/10"}`} />
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Pregunta {onboardingStep + 1} de {onboardingQuestions.length}</p>
             </DialogHeader>
-
             <div className="py-2 space-y-3">
               {currentQuestion?.type === "checkbox" && currentQuestion.options && (
                 <div className="space-y-2">
@@ -995,32 +852,18 @@ export default function DashboardPage() {
                 </div>
               )}
               {currentQuestion?.type === "textarea" && (
-                <Textarea
-                  placeholder={currentQuestion.placeholder}
-                  className="min-h-[120px] bg-background/50 border-white/10 focus:border-primary/50 resize-none text-sm"
-                  value={onboardingAnswers[onboardingStep] || ""}
-                  onChange={(e) => handleOnboardingAnswer(e.target.value)}
-                  autoFocus
-                />
+                <Textarea placeholder={currentQuestion.placeholder} className="min-h-[120px] bg-background/50 border-white/10 focus:border-primary/50 resize-none text-sm"
+                  value={onboardingAnswers[onboardingStep] || ""} onChange={(e) => handleOnboardingAnswer(e.target.value)} autoFocus />
               )}
             </div>
-
             <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white" onClick={handleOnboardingSkip}>
-                Saltar todo y generar
-              </Button>
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white" onClick={handleOnboardingSkip}>Saltar todo y generar</Button>
               <div className="flex gap-2">
                 {onboardingStep > 0 && (
-                  <Button variant="outline" size="sm" className="border-white/10" onClick={() => setOnboardingStep(p => p - 1)}>
-                    Atrás
-                  </Button>
+                  <Button variant="outline" size="sm" className="border-white/10" onClick={() => setOnboardingStep(p => p - 1)}>Atrás</Button>
                 )}
                 <Button size="sm" className="bg-primary hover:bg-primary/90 min-w-[100px]" onClick={handleOnboardingNext}>
-                  {onboardingStep < onboardingQuestions.length - 1 ? (
-                    <>Siguiente <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></>
-                  ) : (
-                    <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar app</>
-                  )}
+                  {onboardingStep < onboardingQuestions.length - 1 ? <>Siguiente <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar app</>}
                 </Button>
               </div>
             </DialogFooter>
@@ -1033,53 +876,39 @@ export default function DashboardPage() {
               <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes
             </span>
             <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => setPreferencesDialogOpen(true)}>
-              <Settings2 className="h-4 w-4" />
-              Instrucciones personalizadas
+              <Settings2 className="h-4 w-4" />Instrucciones personalizadas
             </Button>
             <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => { setImportDialogOpen(true); setImportResult(null); setImportFile(null); }}>
-              <FolderUp className="h-4 w-4" />
-              Importar proyecto
+              <FolderUp className="h-4 w-4" />Importar proyecto
             </Button>
           </h3>
 
-          {/* Preferencias / Instrucciones personalizadas Dialog */}
           <Dialog open={preferencesDialogOpen} onOpenChange={setPreferencesDialogOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5 text-primary" />Instrucciones personalizadas</DialogTitle>
-                <DialogDescription>
-                  Cuéntale a Maris AI cosas que quieres que tenga en cuenta en TODAS tus apps:
-                  el nombre de tu negocio, colores de marca, tono de voz, horarios, ubicación…
-                  Se aplican como contexto de referencia, no sustituyen las reglas de calidad
-                  y seguridad de los agentes.
-                </DialogDescription>
+                <DialogDescription>Cuéntale a Maris AI cosas que quieres que tenga en cuenta en TODAS tus apps.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 py-2">
-                <Textarea
-                  value={customInstructions}
-                  onChange={(e) => setCustomInstructions(e.target.value.slice(0, 3000))}
-                  placeholder="Ej: Mi negocio se llama 'Café Luna', está en Valencia. Usa tonos cálidos (naranja/marrón). El horario es de 8:00 a 20:00. Siempre en español de España."
-                  className="min-h-[160px] resize-none"
-                  maxLength={3000}
-                />
+                <Textarea value={customInstructions} onChange={(e) => setCustomInstructions(e.target.value.slice(0, 3000))}
+                  placeholder="Ej: Mi negocio se llama 'Café Luna', está en Valencia. Usa tonos cálidos (naranja/marrón)."
+                  className="min-h-[160px] resize-none" maxLength={3000} />
                 <p className="text-xs text-muted-foreground text-right">{customInstructions.length}/3000</p>
               </div>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setPreferencesDialogOpen(false)}>Cancelar</Button>
                 <Button onClick={handleSavePreferences} disabled={updatePreferences.isPending} className="gap-2">
-                  {updatePreferences.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}
-                  Guardar
+                  {updatePreferences.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}Guardar
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
-          {/* Import Dialog */}
           <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2"><FolderUp className="h-5 w-5 text-primary" />Importar proyecto existente</DialogTitle>
-                <DialogDescription>Sube un archivo .zip o .rar con tu proyecto web y aparecerá en tu panel listo para editar con Maris AI.</DialogDescription>
+                <DialogDescription>Sube un archivo .zip o .rar con tu proyecto web.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-2">
                 {importResult ? (
@@ -1090,32 +919,15 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <>
-                    <label
-                      htmlFor="import-file-input"
-                      className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${importFile ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50 hover:bg-white/5"}`}
-                    >
+                    <label htmlFor="import-file-input"
+                      className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${importFile ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50 hover:bg-white/5"}`}>
                       <FolderUp className="h-8 w-8 mb-2 text-muted-foreground" />
-                      {importFile ? (
-                        <span className="text-sm font-medium text-primary">{importFile.name}</span>
-                      ) : (
-                        <>
-                          <span className="text-sm text-muted-foreground">Haz clic o arrastra tu archivo aquí</span>
-                          <span className="text-xs text-muted-foreground mt-1">ZIP o RAR · máx. 150 MB</span>
-                        </>
+                      {importFile ? <span className="text-sm font-medium text-primary">{importFile.name}</span> : (
+                        <><span className="text-sm text-muted-foreground">Haz clic o arrastra tu archivo aquí</span><span className="text-xs text-muted-foreground mt-1">ZIP o RAR · máx. 150 MB</span></>
                       )}
-                      <input
-                        id="import-file-input"
-                        type="file"
-                        accept=".zip,.rar,application/zip,application/x-rar-compressed"
-                        className="hidden"
-                        onChange={e => setImportFile(e.target.files?.[0] ?? null)}
-                      />
+                      <input id="import-file-input" type="file" accept=".zip,.rar,application/zip,application/x-rar-compressed" className="hidden" onChange={e => setImportFile(e.target.files?.[0] ?? null)} />
                     </label>
-                    {importFile && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        {(importFile.size / 1024 / 1024).toFixed(1)} MB · listo para importar
-                      </p>
-                    )}
+                    {importFile && <p className="text-xs text-muted-foreground text-center">{(importFile.size / 1024 / 1024).toFixed(1)} MB · listo para importar</p>}
                   </>
                 )}
               </div>
@@ -1129,40 +941,6 @@ export default function DashboardPage() {
               )}
             </DialogContent>
           </Dialog>
-          {/* ─── MCP Integrations Panel ──────────────────────────────────────── */}
-          <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
-            <button
-              onClick={() => setShowMCPPanel(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
-                  <Plug className="h-3 w-3 text-violet-400" />
-                </div>
-                <span className="text-sm font-semibold text-white">Conectores MCP</span>
-                <span className="text-[10px] text-white/30">— conecta Supabase, Notion, GitHub, Slack y más</span>
-                {Object.values(mcpConnectors).filter(c => c.connected).length > 0 && (
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                    {Object.values(mcpConnectors).filter(c => c.connected).length} activo(s)
-                  </span>
-                )}
-              </div>
-              {showMCPPanel
-                ? <ChevronUp className="h-4 w-4 text-white/30" />
-                : <ChevronDown className="h-4 w-4 text-white/30" />
-              }
-            </button>
-            {showMCPPanel && (
-              <div className="px-4 pb-4 border-t border-white/[0.06]">
-                <MCPIntegrationsPanel
-                  onConnectorChange={(id, connected, values) => {
-                    setMcpConnectors(prev => ({ ...prev, [id]: { connected, values } }));
-                  }}
-                  className="pt-4"
-                />
-              </div>
-            )}
-          </div>
 
           {appsLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -1172,20 +950,12 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               {visibleApps.map((app: any) => (
                 <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group relative" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
-                  <button
-                    className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
-                    onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)}
-                    disabled={deletingId === (app.id || app._id)}
-                    title="Eliminar proyecto"
-                  >
+                  <button className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
+                    onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)} disabled={deletingId === (app.id || app._id)} title="Eliminar proyecto">
                     <X className="h-3.5 w-3.5" />
                   </button>
-                  <button
-                    className="absolute top-2 right-10 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-primary/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
-                    onClick={(e) => handleForkApp(e, app.id || app._id, app.title)}
-                    disabled={forkingId === (app.id || app._id)}
-                    title="Duplicar proyecto (fork) — crea una copia para experimentar sin riesgo"
-                  >
+                  <button className="absolute top-2 right-10 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-primary/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
+                    onClick={(e) => handleForkApp(e, app.id || app._id, app.title)} disabled={forkingId === (app.id || app._id)} title="Duplicar proyecto">
                     {forkingId === (app.id || app._id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                   <CardHeader className="pb-2">
