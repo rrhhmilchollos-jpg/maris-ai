@@ -8,7 +8,7 @@
  */
 
 import { Router } from "express";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth } from "../lib/auth";
 import { connectDB } from "@workspace/db";
 import { GeneratedApp } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
