@@ -240,7 +240,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
   const [copyAttempts, setCopyAttempts] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
-  const recognitionRef = React.useRef<any>(null);
+  const recognitionRef = useRef<any>(null);
   const [copyBlocked, setCopyBlocked] = useState(false);
   const [showVisualTestInline, setShowVisualTestInline] = useState(false);
   // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
