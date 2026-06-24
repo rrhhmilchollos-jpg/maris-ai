@@ -254,7 +254,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // Sincronizar draftRef con draft
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
-  const toggleMic = () => {
+  const toggleMic = async () => {
     if (isListening) {
       manualStopRef.current = true;
       setIsListening(false);
@@ -262,71 +262,81 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     }
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      setDraft("⚠️ Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.");
+      return;
+    }
 
-    // Pedir permiso de micrófono — esto dispara el popup nativo de Chrome.
-    // Si el usuario acepta, arrancamos el reconocimiento inmediatamente.
-    // Si rechaza, mostramos un mensaje amigable en el textarea.
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then((stream) => {
-        // Permiso concedido — liberar el stream (solo lo necesitábamos para el permiso)
-        stream.getTracks().forEach(t => t.stop());
+    // Comprobar estado del permiso ANTES de pedir
+    let permissionState: PermissionState = "prompt";
+    try {
+      const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      permissionState = perm.state;
+    } catch (_) { /* Firefox no soporta esto — ignorar */ }
 
-        const rec = new SR();
-        rec.lang = "es-ES";
-        rec.interimResults = true;
-        rec.maxAlternatives = 1;
-        rec.continuous = false;
+    if (permissionState === "denied") {
+      // Permiso bloqueado — abrir ajustes del sitio directamente
+      setDraft("🔒 El micrófono está bloqueado para este sitio. Haz clic en el candado 🔒 de la barra de direcciones → Micrófono → Permitir → y recarga la página.");
+      // Intentar abrir ajustes del sitio (solo funciona en algunos navegadores)
+      try { (window as any).open("chrome://settings/content/microphone"); } catch (_) {}
+      return;
+    }
 
-        rec.onresult = (e: any) => {
-          let final = "";
-          let interim = "";
-          for (let i = 0; i < e.results.length; i++) {
-            if (e.results[i].isFinal) {
-              final += e.results[i][0].transcript;
-            } else {
-              interim += e.results[i][0].transcript;
+    // Permiso concedido o pendiente — pedir acceso (muestra popup si es "prompt")
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => t.stop()); // liberar stream
+
+      // Arrancar reconocimiento
+      const rec = new SR();
+      rec.lang = "es-ES";
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      rec.continuous = false;
+
+      rec.onresult = (e: any) => {
+        let final = "";
+        let interim = "";
+        for (let i = 0; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript;
+          else interim += e.results[i][0].transcript;
+        }
+        const text = (final || interim).trim();
+        if (text) { setDraft(text); draftRef.current = text; }
+        if (final.trim()) hasSentRef.current = false;
+      };
+
+      rec.onerror = (e: any) => {
+        setIsListening(false);
+        if (e.error !== "no-speech" && e.error !== "aborted") {
+          setDraft("⚠️ Error de micrófono: " + e.error);
+        }
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+        if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
+          hasSentRef.current = true;
+          setTimeout(() => {
+            const btn = document.getElementById("maris-send-btn");
+            if (btn && !(btn as HTMLButtonElement).disabled) {
+              (btn as HTMLButtonElement).click();
             }
-          }
-          const text = (final || interim).trim();
-          if (text) {
-            setDraft(text);
-            draftRef.current = text;
-          }
-          if (final.trim()) hasSentRef.current = false;
-        };
-
-        rec.onerror = (e: any) => {
-          setIsListening(false);
-          if (e.error !== "no-speech" && e.error !== "aborted") {
-            setDraft("⚠️ Error de micrófono: " + e.error);
-          }
-        };
-
-        rec.onend = () => {
-          setIsListening(false);
-          if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
-            hasSentRef.current = true;
-            setTimeout(() => {
-              const btn = document.getElementById("maris-send-btn");
-              if (btn && !(btn as HTMLButtonElement).disabled) {
-                (btn as HTMLButtonElement).click();
-              }
-            }, 200);
-          }
-          manualStopRef.current = false;
-          hasSentRef.current = false;
-        };
-
+          }, 200);
+        }
         manualStopRef.current = false;
         hasSentRef.current = false;
-        setIsListening(true);
-        rec.start();
-      })
-      .catch(() => {
-        // Usuario rechazó el permiso o no hay micrófono
-        setDraft("🎙️ Para usar el micrófono, acepta el permiso que muestra el navegador al pulsar el botón.");
-      });
+      };
+
+      manualStopRef.current = false;
+      hasSentRef.current = false;
+      setIsListening(true);
+      rec.start();
+
+    } catch (err: any) {
+      // getUserMedia rechazado — el usuario pulsó "Bloquear" en el popup
+      setDraft("🔒 Micrófono bloqueado. Haz clic en el 🔒 de la barra de direcciones → Micrófono → Permitir → recarga.");
+    }
   };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
