@@ -434,29 +434,71 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
     const userId = getAuthenticatedUserId(req);
     const { autoFix = false } = req.body || {};
 
-    // Load app
+    // Load app with all needed fields
     const { GeneratedApp } = await import("@workspace/db/schema");
-    const app = await (GeneratedApp as any).findOne({ _id: appId, userId });
+    const app = await (GeneratedApp as any).findOne({ _id: appId, userId })
+      .select("title description frontendCode publicSlug prompt")
+      .lean();
+
     if (!app) return res.status(404).json({ error: "App no encontrada" });
-    if (!app.publicSlug) return res.status(400).json({ error: "La app debe estar desplegada públicamente para el test visual" });
+    if (!app.publicSlug) {
+      return res.status(400).json({
+        error: "La app debe estar desplegada públicamente para el test visual. Usa el botón 'Deploy' primero.",
+        code: "NOT_DEPLOYED"
+      });
+    }
 
-    // Run real visual tester
-    const { runVisualTestAndFix } = await import("../lib/visualTester");
-    const result = await runVisualTestAndFix(app, { autoFix, logger: (await import("../lib/logger")).logger });
+    // runVisualTester — nombre correcto de la funcion exportada
+    const { runVisualTester } = await import("../lib/visualTester");
+    const { logger } = await import("../lib/logger");
 
+    const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
+
+    const report = await runVisualTester({
+      app: {
+        id: app._id,
+        title: app.title || "App",
+        description: app.description || null,
+        frontendCode: app.frontendCode || "",
+        publicSlug: app.publicSlug,
+      },
+      baseUrl,
+      prompt: app.prompt || app.description || app.title || "",
+      autoFix,
+      log: logger,
+    });
+
+    // Respuesta estructurada para el frontend VisualTestPanel
     return res.json({
       success: true,
-      visuallyCorrect: result.analysis.visuallyCorrect,
-      overallScore: result.analysis.overallScore,
-      issues: result.analysis.issues,
-      screenshots: result.analysis.screenshots?.map((s: any) => ({
+      visuallyCorrect: report.finalAnalysis.visuallyCorrect,
+      overallScore: report.finalAnalysis.overallScore,
+      issues: report.finalAnalysis.issues || [],
+      positives: report.finalAnalysis.positives || [],
+      summary: report.finalAnalysis.summary || "",
+      screenshots: report.screenshots?.map((s: any) => ({
         viewport: s.viewport,
-        dataUrl: `data:image/png;base64,${s.data}`,
-      })) || [],
-      fixesApplied: result.fixesApplied,
+        dataUrl: s.data ? `data:image/png;base64,${s.data}` : null,
+      })).filter((s: any) => s.dataUrl) || [],
+      fixesApplied: report.fixesApplied,
+      cycles: report.cycles,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: error.message || "Error en test visual" });
+    const msg = error.message || "Error en test visual";
+    // Puppeteer/Chromium no disponible — devolver resultado graceful
+    if (msg.includes("chromium") || msg.includes("puppeteer") || msg.includes("executable")) {
+      return res.json({
+        success: false,
+        visuallyCorrect: null,
+        overallScore: null,
+        issues: [],
+        screenshots: [],
+        fixesApplied: 0,
+        error: "Testing visual no disponible en este entorno. Chromium no instalado.",
+        code: "NO_CHROMIUM"
+      });
+    }
+    return res.status(500).json({ error: msg });
   }
 });
 
