@@ -30,7 +30,6 @@ WORKDIR /app
 # Instalar Chromium + dependencias para Puppeteer (Visual Testing Agent)
 RUN apt-get update && apt-get install -y \
     chromium \
-    chromium-sandbox \
     ca-certificates \
     fonts-liberation \
     fonts-noto-color-emoji \
