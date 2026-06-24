@@ -1,0 +1,21 @@
+{
+  "name": "Maris AI",
+  "short_name": "Maris AI",
+  "description": "Crea apps y webs con inteligencia artificial en minutos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
