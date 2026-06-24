@@ -7,48 +7,54 @@ import { Layout } from "@/components/layout";
 export default function PricingPage() {
   const creditPacks = [
     {
-      credits: 160,
+      credits: 100,
       price: 20,
-      pricePerCredit: "0,12€",
+      pricePerCredit: "0,20€",
       highlight: false,
       badge: null,
+      label: "Starter",
     },
     {
       credits: 250,
-      price: 50,
-      pricePerCredit: "0,20€",
+      price: 45,
+      pricePerCredit: "0,18€",
       highlight: false,
       badge: null,
+      label: "Builder",
     },
     {
       credits: 500,
-      price: 100,
-      pricePerCredit: "0,20€",
+      price: 85,
+      pricePerCredit: "0,17€",
       highlight: true,
       badge: "MÁS POPULAR",
+      label: "Popular",
     },
     {
       credits: 1250,
-      price: 250,
-      pricePerCredit: "0,20€",
+      price: 200,
+      pricePerCredit: "0,16€",
       highlight: false,
       badge: null,
+      label: "Pro",
     },
     {
       credits: 3000,
-      price: 500,
-      originalPrice: 625,
-      pricePerCredit: "0,17€",
+      price: 450,
+      originalPrice: 600,
+      pricePerCredit: "0,15€",
       highlight: false,
-      badge: "20% MÁS",
+      badge: "25% MÁS",
+      label: "Scale",
     },
     {
       credits: 6000,
-      price: 1000,
-      originalPrice: 1250,
-      pricePerCredit: "0,17€",
+      price: 850,
+      originalPrice: 1200,
+      pricePerCredit: "0,14€",
       highlight: false,
-      badge: "20% MÁS",
+      badge: "30% MÁS",
+      label: "Enterprise",
     },
   ];
 
@@ -79,8 +85,12 @@ export default function PricingPage() {
               Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 9 agentes IA de Maris AI.
             </p>
             <p className="mt-4 text-sm text-primary font-medium">
-              🎁 Regístrate gratis y recibe 115 créditos de bienvenida — sin tarjeta de crédito
+              🎁 Regístrate gratis y recibe 15 créditos de bienvenida — sin tarjeta de crédito
             </p>
+            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-400">
+              <Zap className="h-4 w-4" />
+              Cuanto más compras, más barato el crédito
+            </div>
           </motion.div>
         </section>
 
@@ -109,20 +119,26 @@ export default function PricingPage() {
                 )}
 
                 <div className="p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Zap className="h-5 w-5 text-primary" />
-                    <span className="text-2xl font-bold text-white">{pack.credits.toLocaleString()} créditos</span>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-primary" />
+                      <span className="text-2xl font-bold text-white">{pack.credits.toLocaleString()} cr</span>
+                    </div>
+                    <span className="text-xs font-bold text-white/40 uppercase tracking-widest">{pack.label}</span>
                   </div>
 
-                  <div className="mb-6">
+                  <div className="mb-2">
                     {pack.originalPrice && (
                       <span className="text-muted-foreground line-through text-sm mr-2">
                         {pack.originalPrice.toLocaleString()}€
                       </span>
                     )}
                     <span className="text-4xl font-bold text-white">{pack.price.toLocaleString()}€</span>
-                    <span className="text-muted-foreground text-sm ml-2">· {pack.pricePerCredit}/crédito</span>
                   </div>
+
+                  <p className="text-sm text-emerald-400 font-medium mb-6">
+                    {pack.pricePerCredit} por crédito
+                  </p>
 
                   <Link href="/sign-up">
                     <Button
@@ -144,6 +160,32 @@ export default function PricingPage() {
               </motion.div>
             ))}
           </div>
+
+          {/* Tabla comparativa de precio por crédito */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mt-10 rounded-2xl border border-white/10 bg-card/40 p-6"
+          >
+            <p className="text-sm font-semibold text-white/60 text-center mb-4 uppercase tracking-widest">Ahorro por volumen</p>
+            <div className="flex items-end justify-between gap-2">
+              {creditPacks.map((pack, i) => {
+                const pct = Math.round((1 - parseFloat(pack.pricePerCredit.replace(",", ".")) / 0.20) * 100);
+                const height = 20 + i * 13;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-emerald-400 font-bold">{pct > 0 ? `-${pct}%` : "base"}</span>
+                    <div
+                      className={`w-full rounded-t-md ${pack.highlight ? "bg-primary" : "bg-white/10"}`}
+                      style={{ height: `${height}px` }}
+                    />
+                    <span className="text-[10px] text-white/30">{pack.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
         </section>
 
         {/* What's included */}
@@ -179,7 +221,11 @@ export default function PricingPage() {
               },
               {
                 q: "¿Cuántos créditos recibo al registrarme gratis?",
-                a: "Al crear tu cuenta gratuita recibes 115 créditos de bienvenida, sin necesidad de tarjeta de crédito. Esto te permite generar tu primera app y explorar todas las funcionalidades de Maris AI.",
+                a: "Al crear tu cuenta gratuita recibes 15 créditos de bienvenida, sin necesidad de tarjeta de crédito. Esto te permite generar tu primera app y explorar todas las funcionalidades de Maris AI.",
+              },
+              {
+                q: "¿Por qué es más barato comprar packs grandes?",
+                a: "Cuanto mayor es el pack, menor es el precio por crédito. El pack Starter cuesta 0,20€/crédito mientras que el Enterprise baja hasta 0,14€/crédito — un 30% de ahorro. Es nuestra forma de premiar a los usuarios que más confían en Maris AI.",
               },
               {
                 q: "¿Los créditos caducan?",
@@ -187,7 +233,7 @@ export default function PricingPage() {
               },
               {
                 q: "¿Puedo comprar más créditos en cualquier momento?",
-                a: "Sí. Puedes comprar créditos adicionales en cualquier momento desde tu panel de usuario. Los paquetes más grandes tienen mejor precio por crédito.",
+                a: "Sí. Puedes comprar créditos adicionales en cualquier momento desde tu panel de usuario.",
               },
               {
                 q: "¿El código generado es mío?",
@@ -220,11 +266,11 @@ export default function PricingPage() {
               ¿Preparado para transformar tus ideas en realidad?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Empieza hoy mismo con Maris AI. Recibe 115 créditos de bienvenida al registrarte, sin necesidad de tarjeta de crédito y sin compromiso.
+              Empieza hoy mismo con Maris AI. Recibe 15 créditos de bienvenida al registrarte, sin necesidad de tarjeta de crédito y sin compromiso.
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
-                Comienza con 115 créditos gratis <ArrowRight className="ml-2 h-5 w-5" />
+                Empieza Gratis <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
           </motion.div>
