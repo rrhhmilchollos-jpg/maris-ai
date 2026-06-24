@@ -17,9 +17,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import { setSentryUser } from "@/lib/sentry";
 
 // Pages — lazy loaded para reducir bundle inicial y mejorar LCP/FCP
-// La landing se carga de forma inmediata (es la primera página visible)
 import LandingPage from "@/pages/landing";
-// El resto de páginas se cargan bajo demanda
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
 const AppDetailPage = lazy(() => import("@/pages/app-detail"));
 const BillingPage = lazy(() => import("@/pages/billing"));
@@ -31,6 +29,8 @@ const DebugPreviewPage = lazy(() => import("@/pages/debug-preview"));
 const NewsPage = lazy(() => import("@/pages/news"));
 const NewsDetailPage = lazy(() => import("@/pages/news-detail"));
 const VsCompetidoresPage = lazy(() => import("@/pages/vs-emergent"));
+const VsLovablePage = lazy(() => import("@/pages/vs-lovable"));
+const VsBoltPage = lazy(() => import("@/pages/vs-bolt"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const PrivacidadPage = lazy(() => import("@/pages/legal/privacidad"));
 const AvisoLegalPage = lazy(() => import("@/pages/legal/aviso-legal"));
@@ -42,9 +42,8 @@ const DesarrolloNoCodeGuiaPage = lazy(() => import("@/pages/desarrollo-no-code-g
 const ShowcasePage = lazy(() => import("@/pages/showcase"));
 const ShowcaseDetailPage = lazy(() => import("@/pages/showcase-detail"));
 const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
-const OnboardingPage = lazy(() => import("@/pages/onboarding")); // ✅ Seguimiento 4
+const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 
-// Fallback de carga para Suspense
 function PageLoader() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
@@ -53,7 +52,6 @@ function PageLoader() {
   );
 }
 
-// Wrapper para Suspense en rutas
 function SuspendedRoute({ component: Component, ...props }: any) {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -71,14 +69,8 @@ const queryClient = new QueryClient({
   },
 });
 
-// ✅ CORREGIDO: usar la clave directamente sin publishableKeyFromHost
-// publishableKeyFromHost generaba un proxy automático basado en el dominio de Vercel
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// ✅ CORREGIDO: usar el CDN del tenant de Clerk (clerk.marisai.es) que incluye
-// la configuración del tenant con los social providers habilitados (Google OAuth).
-// El CDN genérico de jsdelivr NO incluye esta configuración y por eso Google no aparecía.
-// Se usa la URL del tenant directamente para garantizar que Google OAuth siempre esté disponible.
 const clerkJsUrl =
   import.meta.env.VITE_CLERK_JS_URL ||
   "https://clerk.marisai.es/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
@@ -92,10 +84,7 @@ function stripBase(path: string): string {
 }
 
 if (!clerkPubKey) {
-  // En desarrollo, lanzar error para detectar el problema rápidamente.
-  // En producción, si la variable no está definida, la app no puede funcionar.
-  // Vercel debe tener VITE_CLERK_PUBLISHABLE_KEY configurada en las variables de entorno del proyecto.
-  console.error("[Maris AI] VITE_CLERK_PUBLISHABLE_KEY no está definida. Configura esta variable en el panel de Vercel.");
+  console.error("[Maris AI] VITE_CLERK_PUBLISHABLE_KEY no está definida.");
 }
 
 const clerkAppearance = {
@@ -183,23 +172,12 @@ function ClerkQueryClientCacheInvalidator() {
   useEffect(() => {
     const unsubscribe = addListener(({ user }) => {
       const userId = user?.id ?? null;
-      if (
-        prevUserIdRef.current !== undefined &&
-        prevUserIdRef.current !== userId
-      ) {
+      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) {
         queryClient.clear();
       }
       prevUserIdRef.current = userId;
-      setSentryUser(
-        user
-          ? {
-              id: user.id,
-              email: user.primaryEmailAddress?.emailAddress,
-            }
-          : null,
-      );
+      setSentryUser(user ? { id: user.id, email: user.primaryEmailAddress?.emailAddress } : null);
 
-      // Trackear registro nuevo — si la cuenta tiene menos de 2 minutos
       if (user) {
         const createdAt = user.createdAt ? new Date(user.createdAt).getTime() : 0;
         const isNewUser = Date.now() - createdAt < 2 * 60 * 1000;
@@ -244,11 +222,10 @@ function AdminGuardInner({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser();
   const [location] = useLocation();
 
-  // Trackear page views en SPA — GA4 no las detecta automáticamente con wouter
   useEffect(() => {
     trackPageView(location);
   }, [location]);
-  // ✅ CORREGIDO: retry 3 veces con 2s de delay para que Clerk tenga tiempo de autenticarse al recargar
+
   const { data: me, isLoading, isError } = useGetMe({
     query: { enabled: isLoaded && !!user, queryKey: getGetMeQueryKey(), retry: 3, retryDelay: 2000 },
   });
@@ -261,19 +238,13 @@ function AdminGuardInner({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // ✅ CORREGIDO: solo bloquear si la API confirma explícitamente que el usuario NO es admin.
-  // Si hay un error de red, timeout o Clerk aún no ha terminado de autenticarse,
-  // NO bloqueamos el acceso para evitar falsos positivos de "Acceso restringido".
   if (!isError && me && !me.isAdmin) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
         <ShieldAlert className="h-10 w-10 text-destructive mb-4" />
-        <h2 className="text-2xl font-bold tracking-tight text-white mb-2">
-          Acceso restringido
-        </h2>
+        <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Acceso restringido</h2>
         <p className="text-sm text-muted-foreground max-w-md">
-          Esta sección es solo para administradores. Si crees que es un error,
-          contacta con el equipo de Maris AI.
+          Esta sección es solo para administradores.
         </p>
       </div>
     );
@@ -292,10 +263,6 @@ function AdminGated({ children }: { children: React.ReactNode }) {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
-  // __internal_clerkJSUrl es una prop real de IsomorphicClerkOptions (carga el JS de Clerk
-  // desde el tenant clerk.marisai.es para habilitar Google OAuth) pero @clerk/react v6
-  // la excluye deliberadamente del tipo público ClerkProviderProps. Sigue funcionando
-  // en runtime; usamos un alias tipado para no perder la verificación de tipos del resto de props.
   const ClerkProviderInternal = ClerkProvider as React.ComponentType<
     React.ComponentProps<typeof ClerkProvider> & { __internal_clerkJSUrl?: string }
   >;
@@ -332,115 +299,124 @@ function ClerkProviderWithRoutes() {
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
         <Suspense fallback={<PageLoader />}>
-        <Switch>
-          <Route path="/" component={HomeRedirect} />
-          <Route path="/sign-in/*?" component={SignInPage} />
-          <Route path="/sign-up/*?" component={SignUpPage} />
-          
-          <Route path="/onboarding">
-            <Gated><OnboardingPage /></Gated>
-          </Route>
+          <Switch>
+            <Route path="/" component={HomeRedirect} />
+            <Route path="/sign-in/*?" component={SignInPage} />
+            <Route path="/sign-up/*?" component={SignUpPage} />
 
-          <Route path="/dashboard">
-            <Gated><DashboardPage /></Gated>
-          </Route>
-          
-          <Route path="/app/:id">
-            {(params) => <Gated><AppDetailPage params={params} /></Gated>}
-          </Route>
+            <Route path="/onboarding">
+              <Gated><OnboardingPage /></Gated>
+            </Route>
 
-          <Route path="/billing">
-            <Gated><BillingPage /></Gated>
-          </Route>
+            <Route path="/dashboard">
+              <Gated><DashboardPage /></Gated>
+            </Route>
 
-          <Route path="/billing/success">
-            <Gated><BillingSuccessPage /></Gated>
-          </Route>
+            <Route path="/app/:id">
+              {(params) => <Gated><AppDetailPage params={params} /></Gated>}
+            </Route>
 
-          <Route path="/admin">
-            <AdminGated><AdminPage /></AdminGated>
-          </Route>
+            <Route path="/billing">
+              <Gated><BillingPage /></Gated>
+            </Route>
 
-          <Route path="/admin/jobs">
-            <AdminGated><AdminPage initialTab="queue" /></AdminGated>
-          </Route>
+            <Route path="/billing/success">
+              <Gated><BillingSuccessPage /></Gated>
+            </Route>
 
-          <Route path="/admin/memory">
-            <AdminGated><AdminPage initialTab="memory" /></AdminGated>
-          </Route>
+            <Route path="/admin">
+              <AdminGated><AdminPage /></AdminGated>
+            </Route>
 
-          <Route path="/admin/dashboard">
-            <AdminGated><AdminDashboardPage /></AdminGated>
-          </Route>
+            <Route path="/admin/jobs">
+              <AdminGated><AdminPage initialTab="queue" /></AdminGated>
+            </Route>
 
-          <Route path="/news">
-            <NewsPage />
-          </Route>
+            <Route path="/admin/memory">
+              <AdminGated><AdminPage initialTab="memory" /></AdminGated>
+            </Route>
 
-          <Route path="/news/:slug">
-            <NewsDetailPage />
-          </Route>
+            <Route path="/admin/dashboard">
+              <AdminGated><AdminDashboardPage /></AdminGated>
+            </Route>
 
-          <Route path="/vs-emergent">
-            <VsCompetidoresPage />
-          </Route>
+            <Route path="/news">
+              <NewsPage />
+            </Route>
 
-          <Route path="/pricing">
-            <PricingPage />
-          </Route>
+            <Route path="/news/:slug">
+              <NewsDetailPage />
+            </Route>
 
-          <Route path="/glosario">
-            <GlossaryPage />
-          </Route>
+            {/* ── Páginas de comparativa SEO ─────────────────────────── */}
+            <Route path="/vs-emergent">
+              <VsCompetidoresPage />
+            </Route>
 
-          <Route path="/que-es-vibe-coding">
-            <QueEsVibeCodingPage />
-          </Route>
+            <Route path="/vs-lovable">
+              <VsLovablePage />
+            </Route>
 
-          <Route path="/que-es-un-agente-de-ia">
-            <QueEsAgenteIaPage />
-          </Route>
+            <Route path="/vs-bolt">
+              <VsBoltPage />
+            </Route>
 
-          <Route path="/desarrollo-no-code-guia">
-            <DesarrolloNoCodeGuiaPage />
-          </Route>
+            <Route path="/pricing">
+              <PricingPage />
+            </Route>
 
-          <Route path="/showcase/:slug">
-            <ShowcaseDetailPage />
-          </Route>
+            <Route path="/glosario">
+              <GlossaryPage />
+            </Route>
 
-          <Route path="/showcase">
-            <ShowcasePage />
-          </Route>
+            <Route path="/que-es-vibe-coding">
+              <QueEsVibeCodingPage />
+            </Route>
 
-          <Route path="/crm/fisioterapeuta">
-            <FisioterapeutaCRM />
-          </Route>
+            <Route path="/que-es-un-agente-de-ia">
+              <QueEsAgenteIaPage />
+            </Route>
 
-          <Route path="/legal/privacidad">
-            <PrivacidadPage />
-          </Route>
+            <Route path="/desarrollo-no-code-guia">
+              <DesarrolloNoCodeGuiaPage />
+            </Route>
 
-          <Route path="/legal/aviso-legal">
-            <AvisoLegalPage />
-          </Route>
+            <Route path="/showcase/:slug">
+              <ShowcaseDetailPage />
+            </Route>
 
-          <Route path="/legal/cookies">
-            <CookiesPage />
-          </Route>
+            <Route path="/showcase">
+              <ShowcasePage />
+            </Route>
 
-          <Route path="/__debug-preview/:id">
-            {(params) => <DebugPreviewPage params={params as { id: string }} />}
-          </Route>
-          <Route component={NotFound} />
-        </Switch>
+            <Route path="/crm/fisioterapeuta">
+              <FisioterapeutaCRM />
+            </Route>
+
+            <Route path="/legal/privacidad">
+              <PrivacidadPage />
+            </Route>
+
+            <Route path="/legal/aviso-legal">
+              <AvisoLegalPage />
+            </Route>
+
+            <Route path="/legal/cookies">
+              <CookiesPage />
+            </Route>
+
+            <Route path="/__debug-preview/:id">
+              {(params) => <DebugPreviewPage params={params as { id: string }} />}
+            </Route>
+
+            <Route component={NotFound} />
+          </Switch>
         </Suspense>
       </QueryClientProvider>
     </ClerkProviderInternal>
   );
 }
 
-// Version: 2026-06-08-20-00 (Testing Agent Integration & SPA Fix)
 function App() {
   return (
     <TooltipProvider>
