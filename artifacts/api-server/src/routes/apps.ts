@@ -1398,55 +1398,139 @@ Backend needed: ${plan.backendNeeded}`,
 }
 
 /**
- * QA Reviewer — Gemini 2.0 Flash.
+ * QA Auditor — 100% — revision completa con 8 categorias de error.
  */
 async function reviewBundle(
   frontendCode: string,
   plan: ProjectPlan,
   agentPlan = selectAgentModelPlan(plan.description ?? plan.title),
 ): Promise<QAReport> {
+
+  const QA_SYSTEM = `Eres el QA Auditor de Maris AI — el guardian de calidad final antes de que el usuario vea su app.
+
+Tu mision: detectar y reportar TODOS los errores que romperian la app en runtime o darian una mala experiencia al usuario. Eres exhaustivo, tecnico y practico.
+
+CATEGORIAS DE REVISION (revisa TODAS):
+
+1. IMPORTS ROTOS
+   - Imports de archivos que no existen en el bundle (compara contra === FILE: markers)
+   - Named imports de exports que no existen en el archivo importado
+   - Import paths incorrectos (../../ que no resuelven)
+   - Dependencias npm que no son de React/Tailwind/Radix sin @/ alias
+
+2. EXPORTS FALTANTES
+   - Componentes React sin export default
+   - Hooks sin export nombrado
+   - Utils/helpers definidos pero no exportados donde se usan
+
+3. JSX ROTO
+   - Tags sin cerrar correctamente
+   - Condiciones ternarias mal formadas que rompen JSX
+   - Props de tipo incorrecto (string donde va number, etc.)
+   - Keys faltantes en listas .map()
+
+4. TYPESCRIPT CRITICO
+   - Variables usadas antes de definirse
+   - Tipos incorrectos que causarian errores en runtime
+   - Promises sin await en lugares donde deberia haberlo
+   - undefined accedido sin optional chaining cuando es necesario
+
+5. HOOKS INVALIDOS
+   - useState/useEffect dentro de condicionales
+   - useEffect con dependencias claramente incorrectas ([] cuando deberia tener deps)
+   - Custom hooks que no empiezan por "use"
+
+6. LOGICA CRITICA
+   - Rutas de React Router sin componente asociado
+   - Links/navegacion que apuntan a rutas inexistentes
+   - Formularios sin onSubmit o con preventDefault faltante
+   - Fetches sin manejo de error
+
+7. ACCESIBILIDAD CRITICA
+   - Imagenes sin alt text
+   - Botones sin texto accesible ni aria-label
+   - Inputs sin label asociado
+   - Links sin texto descriptivo
+
+8. CONSISTENCIA
+   - Variables de entorno usadas en frontend que deberian estar en backend
+   - console.log dejados en produccion con datos sensibles
+   - API keys hardcodeadas en codigo frontend
+
+REGLAS:
+- Reporta SOLO errores reales, no preferencias de estilo
+- Para cada issue da el FIX exacto (no "arreglar el import" sino "cambiar import { X } from './Y' por import { X } from '@/components/X'")
+- Prioriza: CRITICOS (rompen la app) > MAYORES (experiencia rota) > MENORES
+- Max 15 issues total, priorizando los mas criticos
+- Responde SOLO JSON, sin markdown ni texto adicional`;
+
   return withTimeout(
     (async () => {
       try {
         const expected = plan.frontendFiles.join(", ");
-        const sample = frontendCode.slice(0, 12000);
+        // Analizar mas codigo — 20KB en lugar de 12KB
+        const sample = frontendCode.slice(0, 20000);
+        // Extraer lista de archivos reales para validar imports
+        const realFiles = frontendCode
+          .split("// === FILE: ")
+          .slice(1)
+          .map(part => part.split("\n")[0].replace(/ ===$/, "").trim())
+          .filter(Boolean);
+
         const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
-          max_tokens: 700,
-          system: "You are a QA reviewer for a React+TS+Tailwind bundle. Output JSON only.",
+          max_tokens: 2000,  // Aumentado de 700 a 2000
+          system: QA_SYSTEM,
           messages: [
             {
               role: "user",
-              content: `Spot ONLY OBVIOUS bugs that would break runtime: missing imports, undefined symbols, wrong import paths, broken JSX, missing default exports for React components. Ignore stylistic issues.
+              content: `ARCHIVOS PLANIFICADOS: ${expected}
 
-Expected files: ${expected}
+ARCHIVOS REALES EN BUNDLE (${realFiles.length}): ${realFiles.join(", ")}
 
-First 12KB of generated bundle:
+PRIMEROS 20KB DEL BUNDLE:
 ${sample}
 
-Return STRICT JSON ONLY:
-{"ok":true} when everything looks fine,
-OR {"ok":false,"issues":[{"file":"src/App.tsx","problem":"imports Button from non-existent path","fix":"Update import to './components/Button' or remove the import"}]}
-
-Max 5 issues.`,
+Revisa todas las categorias y devuelve JSON estricto:
+{
+  "ok": boolean,
+  "issues": [
+    {
+      "file": "ruta/del/archivo.tsx",
+      "problem": "descripcion exacta del problema",
+      "fix": "solucion exacta a aplicar",
+      "severity": "critical|major|minor",
+      "category": "imports|exports|jsx|typescript|hooks|logic|accessibility|consistency"
+    }
+  ],
+  "filesAnalyzed": number,
+  "coverageNote": "resumen de lo que se analizo"
+}`,
             },
           ],
         });
         const raw = (response.content[0] as any).text ?? "";
-        const parsed = extractJsonObject<QAReport>(raw);
+        const parsed = extractJsonObject<QAReport & { filesAnalyzed?: number }>(raw);
         if (!parsed) return { ok: true, issues: [] };
+
+        // Filtrar y priorizar — criticos primero
+        const allIssues = Array.isArray(parsed.issues)
+          ? parsed.issues.filter((i): i is QAIssue => !!i && typeof i.file === "string")
+          : [];
+        const criticals = allIssues.filter((i: any) => i.severity === "critical");
+        const majors = allIssues.filter((i: any) => i.severity === "major");
+        const minors = allIssues.filter((i: any) => i.severity === "minor");
+        const prioritized = [...criticals, ...majors, ...minors].slice(0, 15);
+
         return {
-          ok: parsed.ok !== false,
-          issues: Array.isArray(parsed.issues)
-            ? parsed.issues
-                .filter((i): i is QAIssue => !!i && typeof i.file === "string")
-                .slice(0, 5)
-            : [],
+          ok: criticals.length === 0 && majors.length === 0,
+          issues: prioritized,
+          filesAnalyzed: parsed.filesAnalyzed ?? realFiles.length,
         };
       } catch {
         return { ok: true, issues: [] };
       }
     })(),
-    8000,
+    15000,  // Aumentado de 8s a 15s
     { ok: true, issues: [] },
   );
 }

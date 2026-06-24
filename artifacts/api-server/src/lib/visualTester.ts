@@ -275,38 +275,86 @@ async function analyzeWithVision(
 
   content.push({
     type: "text",
-    text: `Información de la app:
-- Nombre: ${app.title}
-- Descripción: ${app.description ?? "(no disponible)"}
-- Prompt original del usuario: ${prompt.slice(0, 600)}
+    text: `VISUAL EVALUATOR — Maris AI Quality Gate
 
-Analiza estos screenshots y detecta problemas visuales. Devuelve EXCLUSIVAMENTE
-un JSON válido con esta estructura exacta (sin markdown, sin backticks):
+App: ${app.title}
+Descripcion: ${app.description ?? "(no disponible)"}
+Prompt original del usuario: ${prompt.slice(0, 800)}
+
+PROCESO DE ANALISIS (ejecuta TODO):
+
+1. PANTALLA EN BLANCO O CONTENIDO MINIMO
+   - Hay contenido real visible o es una pantalla vacia?
+   - El contenido corresponde a lo que el usuario pidio?
+
+2. LAYOUT Y ESTRUCTURA
+   - El layout es coherente y bien estructurado?
+   - Los elementos se solapan o hay overflow horizontal?
+   - La navbar/header existe y es funcional visualmente?
+   - Footer presente si aplica?
+
+3. RESPONSIVE (critico — analiza cada viewport)
+   - Desktop: layout de pantalla completa correcto?
+   - Tablet: adaptacion al ancho medio correcta?
+   - Mobile: texto legible? botones tocables? sin scroll horizontal?
+   - Los breakpoints de Tailwind se aplican correctamente?
+
+4. TIPOGRAFIA Y LEGIBILIDAD
+   - El texto es legible contra el fondo?
+   - Hay suficiente contraste (WCAG aproximado)?
+   - Los tamanos de fuente son apropiados por viewport?
+
+5. CONSISTENCIA VISUAL
+   - Los colores son coherentes entre secciones?
+   - El estilo es uniforme (no mezcla estilos sin razon)?
+   - Las imagenes cargan o hay placeholders rotos?
+
+6. ERRORES DE CONSOLA VISIBLES
+   - Hay mensajes de error en la UI?
+   - Hay elementos que claramente fallan al renderizar?
+
+7. CALIDAD DEL DISENO
+   - Se ve profesional para su sector?
+   - El diseno transmite el proposito del producto?
+   - Hay elementos claramente feos o rotos (no preferencia estetica, sino problema real)?
+
+8. CUMPLIMIENTO DEL PROMPT
+   - La app muestra lo que el usuario pidio?
+   - Falta alguna funcionalidad que deberia ser visible?
+
+CRITERIOS DE PUNTUACION:
+- 90-100: App excelente, todo funciona, diseno profesional, responsive perfecto
+- 75-89: App buena, un issue minor o dos, nada critico
+- 60-74: App funcional pero con problemas de responsividad o diseno
+- 40-59: Problemas significativos visibles, layout roto o contenido faltante
+- 0-39: Pantalla en blanco, app completamente rota, o contenido incorrecto
+
+Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
 
 {
   "visuallyCorrect": boolean,
-  "overallScore": number,        // 0-100
+  "overallScore": number,
+  "viewportScores": { "desktop": number, "tablet": number, "mobile": number },
   "issues": [
     {
       "severity": "critical" | "major" | "minor",
-      "type": "blank_page" | "broken_layout" | "missing_content" | "bad_colors" | "not_responsive" | "overlapping_elements" | "missing_navbar" | "console_errors" | "ugly_design" | "wrong_font" | "missing_images" | "broken_links_visual",
+      "type": "blank_page" | "broken_layout" | "missing_content" | "bad_contrast" | "not_responsive" | "overlapping_elements" | "missing_navbar" | "console_errors" | "broken_images" | "text_overflow" | "touch_targets_small" | "prompt_mismatch" | "inconsistent_style",
       "viewport": "desktop" | "tablet" | "mobile" | "all",
-      "description": "qué está mal, en español",
-      "cssfix": "instrucción concreta de cómo arreglarlo (cambios CSS / JSX)"
+      "description": "descripcion exacta en espanol de que esta mal y donde",
+      "cssfix": "instruccion EXACTA y ACCIONABLE de como arreglarlo con Tailwind o CSS"
     }
   ],
-  "positives": ["qué está bien"],
-  "summary": "una frase resumen en español"
-}
-
-Sé estricto pero práctico: una buena app debe sacar 80+. Marca como críticos:
-páginas en blanco, layouts rotos, contenido faltante, errores de consola
-visibles, mala responsividad. NO marques preferencias estéticas menores.`,
+  "positives": ["lista de cosas que estan bien implementadas"],
+  "summary": "resumen ejecutivo de 2-3 frases en espanol",
+  "recommendedAction": "deploy_ready" | "fix_minor" | "fix_major" | "redesign_needed"
+}`,
   });
 
+  // Visual analysis uses Sonnet — tiene vision multimodal excelente
+  // Para proyectos con muchos issues usamos max_tokens mayor
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2000,
+    max_tokens: 3000,  // Aumentado de 2000 a 3000 para schema mas completo
     messages: [{ role: "user", content }],
   });
 
@@ -366,32 +414,37 @@ async function applyVisualFixes(opts: {
     )
     .join("\n");
 
-  const prompt = `Eres el agente de diseño de Maris AI. Te paso el bundle completo
-de una app generada (formato: archivos separados por '// === FILE: <path> ===')
-y una lista de problemas visuales detectados. Tu trabajo: arreglar SOLO esos
-problemas, sin cambiar funcionalidad ni romper la app.
+  const prompt = `Eres el Visual Fix Agent de Maris AI — especialista en reparaciones quirurgicas de UI/UX sin romper funcionalidad.
 
 App: ${app.title}
-Descripción: ${app.description ?? "(no disponible)"}
+Descripcion: ${app.description ?? "(no disponible)"}
 
-PROBLEMAS A ARREGLAR:
+PROBLEMAS A ARREGLAR (ordenados por severidad):
 ${fixList}
 
-REGLAS ESTRICTAS:
-- Devuelve SOLO JSON con changedFiles/deletedFiles. No devuelvas el bundle completo. Cada changedFiles[path] debe contener el archivo completo actualizado.
-- No cambies funcionalidad, lógica de negocio, ni nombres de funciones públicas.
-- Mantén las dependencias y los imports.
-- Si el archivo afectado es CSS, modifícalo. Si es JSX/TSX, ajusta solo las
-  clases / estilos que arreglan el issue.
-- Hazlo responsive cuando aplique (breakpoints sm:/md:/lg: de Tailwind).
-- Devuelve SOLO JSON, sin markdown, sin backticks, sin explicaciones.
+REGLAS:
+- Devuelve SOLO JSON con changedFiles. NO el bundle completo.
+- changedFiles[ruta] = contenido COMPLETO del archivo modificado.
+- NO cambies funcionalidad, logica de negocio ni nombres de funciones publicas.
+- Para responsive: usa breakpoints Tailwind sm: md: lg: correctamente.
+- Para contraste bajo: usa clases de color Tailwind con ratio WCAG AA.
+- Para blank_page: verifica que el componente raiz renderiza contenido visible.
+- Para overlapping: usa z-index apropiados o corrige layout flex/grid.
+- Para touch_targets_small: min h-11 w-11 en botones y links en mobile.
+- Solo arregla los issues listados, no optimices otras cosas.
 
-ARCHIVOS RELEVANTES ACTUALES:
+RESPUESTA JSON (sin markdown, sin backticks):
+{
+  "changedFiles": { "src/App.tsx": "contenido completo actualizado" },
+  "fixesSummary": ["descripcion breve de cada fix"]
+}
+
+ARCHIVOS RELEVANTES:
 ${compactBundle}`;
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 8000,
+    max_tokens: 12000,  // Aumentado de 8000 a 12000 para patches mas completos
     messages: [{ role: "user", content: prompt }],
   });
 
