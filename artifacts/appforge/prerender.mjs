@@ -216,14 +216,27 @@ for (const route of PUBLIC_ROUTES) {
       `$1https://www.marisai.es${route.path}$2`
     );
 
-    // Añadir contenido visible ANTES de #root para que Google lo lea
-    // sin ejecutar JavaScript
+    // Añadir contenido SEO VISIBLE para Google e IAs
+    // NO usar clip-path ni display:none — Google penaliza el cloaking
+    // El div se oculta visualmente solo cuando React hidrata la página
     html = html.replace(
       '<div id="root"></div>',
-      `<div id="seo-content" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;" aria-hidden="true">
+      `<div id="seo-content" style="font-family:Inter,system-ui,sans-serif;color:#e2e8f0;background:#0a0a0f;padding:2rem;max-width:800px;margin:0 auto;">
         ${staticData.body}
+        <p style="margin-top:2rem;opacity:0.5;font-size:0.875rem;">Cargando Maris AI...</p>
       </div>
-      <div id="root"></div>`
+      <div id="root"></div>
+      <script>
+        // Ocultar contenido SEO cuando React hidrata — evita flash de contenido duplicado
+        document.addEventListener('DOMContentLoaded', function() {
+          setTimeout(function() {
+            var seo = document.getElementById('seo-content');
+            if (seo && document.getElementById('root').children.length > 0) {
+              seo.style.display = 'none';
+            }
+          }, 100);
+        });
+      <\/script>`
     );
 
     writeFileSync(join(DIST, route.file), html, "utf-8");
