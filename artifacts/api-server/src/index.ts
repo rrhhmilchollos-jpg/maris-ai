@@ -4,6 +4,7 @@ import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
 import { runAutopilotTick } from "./lib/aiAutopilot";
+import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
  
@@ -64,6 +65,14 @@ app.listen(finalPort, async (err) => {
     logger.info("AI Autopilot started (health monitor, auto-fix, daily summary)");
   } catch (autopilotErr) {
     logger.error({ err: autopilotErr }, "Failed to start AI Autopilot");
+  }
+
+  // IndexNow — notificar a Bing/DuckDuckGo/Yandex/Ecosia de todas las URLs
+  // Se ejecuta al arrancar el servidor en producción
+  if (process.env.NODE_ENV === "production") {
+    setTimeout(() => {
+      submitIndexNow().catch(() => {});
+    }, 10000); // 10s delay para que el servidor esté completamente listo
   }
  
   // 5) Best-effort Redis ping at boot.
