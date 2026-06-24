@@ -31,6 +31,7 @@ const NewsDetailPage = lazy(() => import("@/pages/news-detail"));
 const VsCompetidoresPage = lazy(() => import("@/pages/vs-emergent"));
 const VsLovablePage = lazy(() => import("@/pages/vs-lovable"));
 const VsBoltPage = lazy(() => import("@/pages/vs-bolt"));
+const VsBase44Page = lazy(() => import("@/pages/vs-base44"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const PrivacidadPage = lazy(() => import("@/pages/legal/privacidad"));
 const AvisoLegalPage = lazy(() => import("@/pages/legal/aviso-legal"));
@@ -359,6 +360,10 @@ function ClerkProviderWithRoutes() {
 
             <Route path="/vs-bolt">
               <VsBoltPage />
+            </Route>
+
+            <Route path="/vs-base44">
+              <VsBase44Page />
             </Route>
 
             <Route path="/pricing">
