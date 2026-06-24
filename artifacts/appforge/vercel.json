@@ -1,6 +1,19 @@
 {
   "headers": [
     {
+      "source": "/llms-full.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    },
+    {
       "source": "/robots.txt",
       "headers": [
         {
@@ -64,7 +77,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|llms|BingSiteAuth|08180adobbmib94doF1973Fa84390db7ad1|opengraph|logo|apple-touch|.well-known|pricing|showcase|news|vs-emergent|vs-lovable|vs-bolt|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia).*)",
+      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|llms|BingSiteAuth|08180adobbmib94doF1973Fa84390db7ad1|opengraph|logo|apple-touch|.well-known|pricing|showcase|news|vs-emergent|vs-lovable|vs-bolt|vs-base44|llms-full|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia).*)",
       "destination": "/index.html"
     }
   ],
