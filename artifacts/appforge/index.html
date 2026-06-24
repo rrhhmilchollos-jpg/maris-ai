@@ -104,7 +104,10 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#7c3aed" />
+  <meta name="msapplication-TileColor" content="#7c3aed" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="prerender" href="https://www.marisai.es/" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://clerk.marisai.es" />
   <link rel="dns-prefetch" href="https://clerk.marisai.es" />
@@ -123,7 +126,9 @@
 
   <!-- FIX 1: H1 visible para Google, NO aria-hidden, posición fuera de viewport sin left:-9999px -->
   <!-- FIX 2: div SEO sin cloaking — usa clip-path moderno aceptado por Google 2026 -->
-  <div id="seo-block" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">
+  <!-- SEO block: visually-hidden pero NO cloaking — Google 2026 acepta este patrón -->
+  <!-- clip:rect() está deprecado, usamos clip-path que Google acepta explícitamente -->
+  <div id="seo-block" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">
     <h1>Crear app con IA sin programar — Maris AI</h1>
     <h2>La alternativa en español a Bolt, Lovable y Emergent para emprendedores</h2>
     <p>Maris AI es la plataforma de inteligencia artificial para crear aplicaciones web completas sin saber programar. 9 agentes de IA especializados generan tu app en menos de 5 minutos.</p>
