@@ -13,7 +13,7 @@
  */
 
 import { Router, Request, Response } from "express";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { GoogleGenAI, Modality } from "@google/genai";
 
