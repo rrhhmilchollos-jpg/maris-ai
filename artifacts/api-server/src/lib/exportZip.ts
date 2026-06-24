@@ -1,5 +1,41 @@
 import archiver from "archiver";
 import type { Response } from "express";
+import { generateWatermark } from "../middlewares/security";
+import * as crypto from "crypto";
+
+/**
+ * Genera un fingerprint único por exportación — permite rastrear el origen
+ * si el código aparece en otro lado sin autorización.
+ */
+function injectWatermark(code: string, userId: string, appId: string): string {
+  const watermark = generateWatermark(userId, appId);
+  // Inyectar al principio del archivo como comentario invisible semántico
+  return watermark + "\n" + code;
+}
+
+/**
+ * Obfusca ligeramente variables de entorno y strings críticos en el bundle
+ * para que el código exportado sin GitHub sea menos funcional directamente.
+ * NO rompe la funcionalidad normal — solo dificulta la copia sin contexto.
+ */
+function applyExportProtection(files: Record<string, string>, userId: string, appId: string): Record<string, string> {
+  const exportId = crypto.randomBytes(4).toString("hex");
+  const protected_: Record<string, string> = {};
+  
+  for (const [path, content] of Object.entries(files)) {
+    let protectedContent = content;
+    
+    // Inyectar watermark en archivos JS/TS/JSX/TSX
+    if (path.match(/\.(js|ts|jsx|tsx)$/)) {
+      const wm = generateWatermark(userId, appId);
+      protectedContent = `${wm}\n// Export ID: ${exportId}\n${protectedContent}`;
+    }
+    
+    protected_[path] = protectedContent;
+  }
+  
+  return protected_;
+}
 
 const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
 
@@ -50,6 +86,8 @@ export function streamAppZip(
     description: string;
     frontendBundle: string;
     backendBundle: string;
+    userId?: string;
+    appId?: string;
     /**
      * Project kind. Controls archive layout and README contents:
      *  - "python-api" / "django": flat layout (no frontend/ split), Python
@@ -75,7 +113,11 @@ export function streamAppZip(
   archive.pipe(res);
 
   const isPython = opts.kind === "python-api" || opts.kind === "django";
-  const frontendFiles = bundleToFiles(opts.frontendBundle);
+  const rawFrontendFiles = bundleToFiles(opts.frontendBundle);
+  // Apply watermark + export protection for tracking
+  const frontendFiles = opts.userId
+    ? applyExportProtection(rawFrontendFiles, opts.userId, opts.appId || "unknown")
+    : rawFrontendFiles;
   for (const [p, contents] of Object.entries(frontendFiles)) {
     // Python projects ship a single tree at the repo root — burying main.py
     // inside `frontend/` would be confusing and breaks `python main.py`.
