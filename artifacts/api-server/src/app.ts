@@ -4,6 +4,7 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
+import healthRouter from "./routes/health";
 import ticketsRouter from "./routes/tickets";
 import newsRouter from "./routes/news";
 import rssRouter from "./routes/rss";
@@ -28,7 +29,13 @@ const app: Express = express();
 // Behind the reverse proxy — trust one hop so req.ip is the real client IP
 // and the rate-limiter buckets correctly.
 app.set("trust proxy", 1);
- 
+
+// ── Healthcheck — MUST be first, before any auth/rate-limit/CORS ──────────
+// Railway polls /api/health every 30s. If Clerk, rate-limiter or any
+// middleware runs before this and throws, the deployment stays "unhealthy".
+app.use("/api", healthRouter);
+
+
 app.use(
   pinoHttp({
     logger,
