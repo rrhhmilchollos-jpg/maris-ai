@@ -116,7 +116,6 @@ export default function LandingPage() {
     e.preventDefault();
     if (!prompt.trim()) return;
     
-    // Meta Pixel Tracking: Lead/StartTrial
     if (typeof window !== "undefined" && (window as any).fbq) {
       (window as any).fbq("track", "Lead", { content_name: "Generation Intent", content_category: "App Creation" });
     }
@@ -127,13 +126,6 @@ export default function LandingPage() {
 
   const fadeIn = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
   const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
-
-  const stats = [
-    { value: "9", label: "Agentes IA especializados", icon: TrendingUp },
-    { value: "< 5 min", label: "De idea a app funcional", icon: Clock },
-    { value: "100%", label: "Código exportable tuyo", icon: Globe },
-    { value: "Gratis", label: "Para empezar hoy", icon: Star },
-  ];
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -170,7 +162,7 @@ export default function LandingPage() {
                       }
                     }}
                   >
-                    Comenzar con 15 créditos
+                    Empieza Gratis
                   </Button>
                 </Link>
               </>
@@ -392,7 +384,6 @@ export default function LandingPage() {
               </div>
             </motion.div>
 
-            {/* Código animado */}
             <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }} viewport={{ once: true }} className="relative">
               <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-purple-500/20 to-cyan-500/20 rounded-2xl blur-xl"></div>
@@ -458,7 +449,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Early Adopters — sección honesta */}
+      {/* Early Adopters */}
       <section className="py-24 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto max-w-4xl">
           <div className="text-center mb-12">
@@ -469,21 +460,9 @@ export default function LandingPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
             {[
-              {
-                icon: Zap,
-                title: "Pruébalo gratis ahora",
-                desc: "Genera tu primera app sin tarjeta de crédito. Sin límite de tiempo para explorar la plataforma.",
-              },
-              {
-                icon: Users,
-                title: "Acceso directo al creador",
-                desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día.",
-              },
-              {
-                icon: Star,
-                title: "Precio de lanzamiento",
-                desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube.",
-              },
+              { icon: Zap, title: "Pruébalo gratis ahora", desc: "Genera tu primera app sin tarjeta de crédito. Sin límite de tiempo para explorar la plataforma." },
+              { icon: Users, title: "Acceso directo al creador", desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día." },
+              { icon: Star, title: "Precio de lanzamiento", desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube." },
             ].map((item, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }} viewport={{ once: true }}
@@ -499,9 +478,7 @@ export default function LandingPage() {
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               ¿Tienes dudas antes de registrarte?{" "}
-              <a href="mailto:hola@marisai.es" className="text-primary hover:underline">
-                Escríbenos directamente
-              </a>{" "}
+              <a href="mailto:hola@marisai.es" className="text-primary hover:underline">Escríbenos directamente</a>{" "}
               — respondemos en menos de 24 horas.
             </p>
           </div>
@@ -537,7 +514,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-            <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur">
+      <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur">
         <div className="container px-4 md:px-8 mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
