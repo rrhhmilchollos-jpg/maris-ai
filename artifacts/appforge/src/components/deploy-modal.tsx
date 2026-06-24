@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiFetch, getGetMyStatsQueryKey } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { MatrixBackground } from "@/components/matrix-background";
+import { MCPIntegrationsPanel } from "@/components/mcp-integrations-panel";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface DnsRecord {
@@ -96,7 +97,7 @@ interface DeployModalProps {
   onClose: () => void;
   onDeploySuccess: (url: string) => void;
 }
-type Screen = "initial" | "live" | "providers" | "dns";
+type Screen = "initial" | "live" | "providers" | "dns" | "connectors";
 type PlanId = "starter" | "pro" | "enterprise";
 
 /* ─────────────────────────── Plan data ─────────────────────────── */
@@ -662,6 +663,12 @@ export function DeployModal({
                 >
                   {verifiedDomain ? "Cambiar dominio" : "Conectar dominio"}
                 </button>
+                <button
+                  onClick={() => setScreen("connectors")}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold transition bg-[#1e2030] text-white/60 hover:bg-white/[0.08] hover:text-white border border-white/[0.06] flex items-center gap-1.5"
+                >
+                  <span>🔌</span> Conectores
+                </button>
               </div>
               {!isPremium && (
                 <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2">
@@ -921,6 +928,26 @@ export function DeployModal({
           </>
         )}
 
+
+        {screen === "connectors" && (
+          <div className="flex flex-col h-full">
+            <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/[0.07] shrink-0">
+              <button onClick={() => setScreen("live")} className="text-white/40 hover:text-white transition">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <div>
+                <h3 className="text-sm font-bold text-white">Conectores MCP</h3>
+                <p className="text-[11px] text-white/40">Conecta servicios externos a tu proyecto</p>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <MCPIntegrationsPanel
+                onConnectorChange={() => {}}
+                className=""
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
