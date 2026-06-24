@@ -96,7 +96,8 @@ export function chromiumExecutablePath(): string | null {
     cachedExec = fromEnv;
     return fromEnv;
   }
-  // Rutas conocidas de Chromium en diferentes entornos
+  // Rutas conocidas de Chromium en diferentes entornos (sync, sin await)
+  const { existsSync } = require("fs");
   const knownPaths = [
     "/usr/bin/chromium",           // Debian/Ubuntu apt-get install chromium
     "/usr/bin/chromium-browser",   // Ubuntu alternativo
@@ -106,7 +107,6 @@ export function chromiumExecutablePath(): string | null {
 
   for (const p of knownPaths) {
     try {
-      const { existsSync } = await import("fs");
       if (existsSync(p)) {
         cachedExec = p;
         return p;
