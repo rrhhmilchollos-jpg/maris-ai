@@ -80,6 +80,7 @@ import { planExecution, planSummaryEs, PLAN_FEATURE } from "../lib/planner";
 import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
+import { notifyAdminAppGenerated, notifyAdminCreditsLow, notifyAdminAppDeployed } from "../lib/notify";
 import { pushAppToGitHub } from "../lib/githubPush";
 import { executeDataOperation } from "../lib/dataOperationAgent";
 import { MarisId, generateAppId } from "../lib/universalId";
@@ -3682,6 +3683,19 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
           ? `Este tipo de app (${kind || "fullstack"}) cuesta ${cost} créditos en plan de pago.`
           : "Necesitas créditos para generar apps.",
       });
+    }
+
+    // Notificar al admin — usuario inició generación
+    const userEmail = req.dbUser?.email || userId;
+    notifyAdminAppGenerated({
+      userEmail,
+      userId,
+      appTitle: prompt.slice(0, 80),
+      credits: cost,
+    }).catch(() => {});
+    // Avisar si quedan pocos créditos
+    if (charge.newBalance !== undefined) {
+      notifyAdminCreditsLow({ userEmail, userId, creditsLeft: charge.newBalance }).catch(() => {});
     }
 
     const requestLocale = detectRequestLocale(req);

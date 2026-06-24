@@ -1,6 +1,7 @@
 import express, { Router, type IRouter, type Request, type Response } from "express";
 import { getStripe, getPlanByStripePriceId, SUBSCRIPTION_PLANS } from "../lib/stripe";
 import { creditPurchase } from "../lib/credits";
+import { notifyAdminPaymentSuccess, notifyAdminSubscriptionRenewed } from "../lib/notify";
 import { connectDB } from "../lib/db";
 import { User, CreditTransaction } from "@workspace/db/schema";
 
@@ -119,6 +120,14 @@ stripeWebhookRouter.post(
               $setOnInsert: { firstPaidAt: new Date() },
             });
             req.log.info({ clerkUserId, credits }, "Top-up confirmado — hasEverPaid=true, acceso completo desbloqueado");
+            // Notificar al admin — pago recibido
+            const paidUser = await User.findById(clerkUserId, { email: 1 }).lean() as any;
+            notifyAdminPaymentSuccess({
+              userEmail: paidUser?.email || clerkUserId,
+              userId: clerkUserId,
+              credits,
+              amount: session.amount_total ? `${(session.amount_total / 100).toFixed(2)} €` : "—",
+            }).catch(() => {});
           }
         }
 
@@ -173,6 +182,14 @@ stripeWebhookRouter.post(
           { clerkUserId, planId, creditsPerMonth, periodEnd },
           "Plan credits granted on subscription payment — isPremium=true",
         );
+        // Notificar al admin — suscripción renovada
+        const subUser = await User.findById(clerkUserId, { email: 1 }).lean() as any;
+        notifyAdminSubscriptionRenewed({
+          userEmail: subUser?.email || clerkUserId,
+          userId: clerkUserId,
+          plan: planId,
+          credits: creditsPerMonth,
+        }).catch(() => {});
       }
 
       // ─── Suscripción cancelada ────────────────────────────────────────────

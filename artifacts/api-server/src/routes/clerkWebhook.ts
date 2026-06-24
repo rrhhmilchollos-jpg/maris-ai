@@ -16,7 +16,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { notifyAdminNewUser } from "../lib/notify";
+import { notifyAdminNewUser, notifyAdminUserDeleted, notifyAdminUserUpdated } from "../lib/notify";
 import { connectDB } from "../lib/db";
 import { User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
@@ -128,6 +128,7 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
         if (Object.keys(updates).length > 0) {
           await User.findByIdAndUpdate(clerkId, { $set: updates });
           logger.info({ clerkId, updates: Object.keys(updates) }, "clerkWebhook: usuario actualizado ✅");
+          notifyAdminUserUpdated({ userEmail: email, userId: clerkId, changes: Object.keys(updates).join(", ") }).catch(() => {});
         }
         break;
       }
@@ -142,7 +143,10 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
             suspendReason: "Cuenta eliminada desde Clerk",
           }
         });
+        // Buscar email antes de marcar como eliminado
+        const deletedUser = await User.findById(clerkId, { email: 1 }).lean() as any;
         logger.info({ clerkId }, "clerkWebhook: usuario marcado como eliminado ✅");
+        notifyAdminUserDeleted({ userEmail: deletedUser?.email || "email desconocido", userId: clerkId }).catch(() => {});
         break;
       }
 

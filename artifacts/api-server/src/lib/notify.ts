@@ -235,6 +235,85 @@ export async function notifyAdminNewUser(opts: {
   });
 }
 
+// ─── Notificaciones de actividad de usuarios (tiempo real) ───────────────────
+
+export async function notifyAdminUserActivity(opts: {
+  event: string;
+  emoji: string;
+  userEmail: string;
+  userId: string;
+  details?: Record<string, string>;
+}): Promise<void> {
+  const { event, emoji, userEmail, userId, details = {} } = opts;
+  const hora = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+  const fields = [
+    { label: "Email", value: userEmail },
+    { label: "ID", value: userId },
+    { label: "Hora", value: hora },
+    ...Object.entries(details).map(([label, value]) => ({ label, value })),
+  ];
+  await sendEmail({
+    to: getAdminEmails(),
+    subject: `${emoji} ${event} — ${userEmail}`,
+    html: alertHtml({ emoji, title: event, urgency: "📡 ACTIVIDAD", fields, actionUrl: "https://www.marisai.es/admin" }),
+    text: `${event}: ${userEmail} (${userId}) — ${hora}`,
+  });
+}
+
+export async function notifyAdminUserDeleted(opts: { userEmail: string; userId: string }): Promise<void> {
+  await notifyAdminUserActivity({ event: "Usuario eliminó su cuenta", emoji: "🗑️", ...opts });
+}
+
+export async function notifyAdminUserUpdated(opts: { userEmail: string; userId: string; changes: string }): Promise<void> {
+  await notifyAdminUserActivity({ event: "Usuario actualizó su perfil", emoji: "✏️", ...opts, details: { Cambios: opts.changes } });
+}
+
+export async function notifyAdminPaymentSuccess(opts: { userEmail: string; userId: string; credits: number; amount?: string }): Promise<void> {
+  await notifyAdminUserActivity({
+    event: "💳 Pago recibido — créditos comprados",
+    emoji: "💰",
+    ...opts,
+    details: { Créditos: `+${opts.credits}`, Importe: opts.amount || "—" },
+  });
+}
+
+export async function notifyAdminSubscriptionRenewed(opts: { userEmail: string; userId: string; plan: string; credits: number }): Promise<void> {
+  await notifyAdminUserActivity({
+    event: "🔄 Suscripción renovada",
+    emoji: "🔄",
+    ...opts,
+    details: { Plan: opts.plan, Créditos: `${opts.credits}/mes` },
+  });
+}
+
+export async function notifyAdminAppGenerated(opts: { userEmail: string; userId: string; appTitle: string; credits: number }): Promise<void> {
+  await notifyAdminUserActivity({
+    event: "🚀 App generada por usuario",
+    emoji: "🚀",
+    ...opts,
+    details: { App: opts.appTitle, "Créditos usados": String(opts.credits) },
+  });
+}
+
+export async function notifyAdminAppDeployed(opts: { userEmail: string; userId: string; appTitle: string; url: string }): Promise<void> {
+  await notifyAdminUserActivity({
+    event: "🌐 App desplegada",
+    emoji: "🌐",
+    ...opts,
+    details: { App: opts.appTitle, URL: opts.url },
+  });
+}
+
+export async function notifyAdminCreditsLow(opts: { userEmail: string; userId: string; creditsLeft: number }): Promise<void> {
+  if (opts.creditsLeft > 3) return; // Solo avisar cuando quedan muy pocos
+  await notifyAdminUserActivity({
+    event: "⚠️ Usuario con pocos créditos",
+    emoji: "⚠️",
+    ...opts,
+    details: { "Créditos restantes": String(opts.creditsLeft) },
+  });
+}
+
 // ─── Notificaciones al usuario ────────────────────────────────────────────────
 
 /**
