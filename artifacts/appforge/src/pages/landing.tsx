@@ -78,7 +78,7 @@ function CodeAnimation() {
       {visibleLines < CODE_LINES.length && (
         <div className={CODE_LINES[visibleLines]?.color || "text-white/70"}>
           {currentText}
-          <span className="animate-pulse text-primary">|</span>
+          <span className="text-primary" style={{animation:"marisBlob 1s step-end infinite"}}>|</span>
         </div>
       )}
     </div>
@@ -88,12 +88,12 @@ function CodeAnimation() {
 function AuroraBackground() {
   return (
     <div className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
-      <div className="absolute -top-40 -left-40 w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full opacity-20 blur-[100px] animate-pulse"
+      <div className="absolute -top-40 -left-40 w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full opacity-20 blur-[100px] will-change-transform"
         style={{ background: "radial-gradient(circle, #7c3aed, transparent)" }} />
       <div className="absolute top-1/3 -right-40 w-[250px] h-[250px] md:w-[500px] md:h-[500px] rounded-full opacity-15 blur-[120px]"
-        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "pulse 4s ease-in-out infinite 1s" }} />
+        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "marisBlob 4s ease-in-out infinite 1s", transform: "translateZ(0)" }} />
       <div className="absolute -bottom-40 left-1/3 w-[300px] h-[200px] md:w-[700px] md:h-[400px] rounded-full opacity-10 blur-[150px]"
-        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "pulse 6s ease-in-out infinite 2s" }} />
+        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "marisBlob 6s ease-in-out infinite 2s", transform: "translateZ(0)" }} />
       <div className="absolute inset-0"
         style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" }} />
     </div>
@@ -134,7 +134,7 @@ export default function LandingPage() {
       <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl">
         <div className="container flex h-14 max-w-screen-2xl items-center px-3 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
-            <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-6 w-6" />
+            <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-6 w-6" fetchPriority="high" decoding="sync" />
             <span className="font-bold tracking-tight text-lg text-white">Maris AI</span>
           </div>
           <nav className="hidden md:flex items-center space-x-6 text-sm text-muted-foreground">
@@ -244,7 +244,7 @@ export default function LandingPage() {
               onClick={() => setLocation("/crm/fisioterapeuta")}
               className="bg-primary hover:bg-primary/90 text-white px-8 py-6 text-lg rounded-full shadow-lg shadow-primary/20 group h-auto"
             >
-              <Activity className="mr-2 h-5 w-5 animate-pulse" />
+              <Activity className="mr-2 h-5 w-5 opacity-90" />
               Ver Demo CRM Fisioterapeuta
               <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Button>
@@ -519,7 +519,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center space-x-2 mb-4">
-                <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-5 w-5 opacity-70" />
+                <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-5 w-5 opacity-70" width="20" height="20" loading="lazy" decoding="async" />
                 <span className="font-semibold text-muted-foreground">Maris AI</span>
               </div>
               <p className="text-xs text-muted-foreground/60">Generador de apps con IA. Describe tu idea, recibe una app real.</p>
@@ -550,7 +550,7 @@ export default function LandingPage() {
           </div>
           <div className="border-t border-white/5 pt-8 mb-6">
             <a href="https://www.producthunt.com/products/maris-ai?embed=true&utm_source=embed&utm_medium=post_embed" target="_blank" rel="noopener">
-              <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=maris-ai&theme=dark" alt="Maris AI on Product Hunt" style={{height: "54px"}} />
+              <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=maris-ai&theme=dark" alt="Maris AI on Product Hunt" width="250" height="54" loading="lazy" decoding="async" />
             </a>
           </div>
           <div className="border-t border-white/5 pt-6 text-center">

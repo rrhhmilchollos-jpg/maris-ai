@@ -17,7 +17,7 @@ import { Loader2, ShieldAlert } from "lucide-react";
 import { setSentryUser } from "@/lib/sentry";
 
 // Pages — lazy loaded para reducir bundle inicial y mejorar LCP/FCP
-import LandingPage from "@/pages/landing";
+const LandingPage = lazy(() => import("@/pages/landing"));
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
 const AppDetailPage = lazy(() => import("@/pages/app-detail"));
 const BillingPage = lazy(() => import("@/pages/billing"));
@@ -202,7 +202,7 @@ function HomeRedirect() {
         <Redirect to="/dashboard" />
       </Show>
       <Show when="signed-out">
-        <LandingPage />
+        <Suspense fallback={<div style={{background:"hsl(240 10% 4%)",minHeight:"100vh"}} />}><LandingPage /></Suspense>
       </Show>
     </>
   );
