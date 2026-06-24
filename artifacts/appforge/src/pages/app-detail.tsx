@@ -237,102 +237,94 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   // ── Voz (Web Speech API) ─────────────────────────────────────────────────
   const [isListening, setIsListening] = useState(false);
-  const [isSpeechSupported] = useState(() => {
-    return typeof window !== "undefined" &&
-      !!(( window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-  });
-  // Ref para acceder al draft más reciente sin stale closure
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
   const draftRef = useRef<string>("");
-  // Ref para saber si el stop fue manual (botón) o por silencio
   const manualStopRef = useRef(false);
-  // Guardar la instancia de recognition entre renders
-  const recognitionRef = useRef<any>(null);
-  // Ref para evitar doble-envío
   const hasSentRef = useRef(false);
 
-  // Sincronizar draftRef con draft en cada render
+  // Detectar soporte DESPUÉS del mount (no en SSR)
+  useEffect(() => {
+    const supported = !!(
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition
+    );
+    setIsSpeechSupported(supported);
+  }, []);
+
+  // Sincronizar draftRef con draft
   useEffect(() => { draftRef.current = draft; }, [draft]);
-
-  const startListening = () => {
-    console.log("[MIC] toggleMic called, isListening=", isListening);
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    console.log("[MIC] SpeechRecognition available:", !!SR);
-    if (!SR) {
-      console.error("[MIC] SpeechRecognition NOT supported in this browser");
-      return;
-    }
-
-    // Pedir permiso de micrófono explícitamente antes de arrancar
-    navigator.mediaDevices?.getUserMedia({ audio: true })
-      .then(() => {
-        console.log("[MIC] Microphone permission granted — starting recognition");
-        const rec = new SR();
-        rec.lang = "es-ES";
-        rec.interimResults = false;
-        rec.maxAlternatives = 1;
-        rec.continuous = false;
-
-        rec.onstart = () => console.log("[MIC] Recognition started — listening...");
-
-        rec.onresult = (e: any) => {
-          console.log("[MIC] Got result:", e.results);
-          let transcript = "";
-          for (let i = 0; i < e.results.length; i++) {
-            transcript += e.results[i][0].transcript;
-          }
-          const text = transcript.trim();
-          console.log("[MIC] Transcript:", text);
-          if (text) {
-            setDraft(text);
-            draftRef.current = text;
-            hasSentRef.current = false;
-          }
-        };
-
-        rec.onerror = (e: any) => {
-          console.error("[MIC] Recognition error:", e.error, e);
-          setIsListening(false);
-        };
-
-        rec.onend = () => {
-          console.log("[MIC] Recognition ended. manualStop:", manualStopRef.current, "draft:", draftRef.current);
-          setIsListening(false);
-          if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
-            hasSentRef.current = true;
-            setTimeout(() => {
-              const btn = document.getElementById("maris-send-btn");
-              console.log("[MIC] Auto-send — btn found:", !!btn, "disabled:", (btn as HTMLButtonElement)?.disabled);
-              if (btn && !(btn as HTMLButtonElement).disabled) {
-                (btn as HTMLButtonElement).click();
-              }
-            }, 150);
-          }
-          manualStopRef.current = false;
-        };
-
-        recognitionRef.current = rec;
-        manualStopRef.current = false;
-        hasSentRef.current = false;
-        rec.start();
-        setIsListening(true);
-      })
-      .catch((err) => {
-        console.error("[MIC] Microphone permission DENIED or error:", err);
-        setIsListening(false);
-      });
-  };
-
-  const stopListening = () => {
-    manualStopRef.current = true;
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  };
 
   const toggleMic = () => {
     if (isListening) {
-      stopListening();
-    } else {
-      startListening();
+      // Parar manualmente
+      manualStopRef.current = true;
+      setIsListening(false);
+      return;
+    }
+
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+
+    const rec = new SR();
+    rec.lang = "es-ES";
+    rec.interimResults = true;  // mostrar texto mientras habla
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+
+    rec.onresult = (e: any) => {
+      let transcript = "";
+      for (let i = 0; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          transcript += e.results[i][0].transcript;
+        }
+      }
+      // Si hay resultado final, actualizar el draft
+      if (transcript.trim()) {
+        setDraft(transcript.trim());
+        draftRef.current = transcript.trim();
+        hasSentRef.current = false;
+      } else {
+        // Resultado intermedio — mostrar en el textarea mientras habla
+        let interim = "";
+        for (let i = 0; i < e.results.length; i++) {
+          interim += e.results[i][0].transcript;
+        }
+        setDraft(interim.trim());
+        draftRef.current = interim.trim();
+      }
+    };
+
+    rec.onerror = (e: any) => {
+      if (e.error === "not-allowed") {
+        alert("Maris AI necesita permiso para usar el micrófono. Haz clic en el icono 🔒 de la barra de direcciones y permite el micrófono.");
+      }
+      setIsListening(false);
+    };
+
+    rec.onend = () => {
+      setIsListening(false);
+      if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
+        hasSentRef.current = true;
+        setTimeout(() => {
+          const btn = document.getElementById("maris-send-btn");
+          if (btn && !(btn as HTMLButtonElement).disabled) {
+            (btn as HTMLButtonElement).click();
+          }
+        }, 200);
+      }
+      manualStopRef.current = false;
+      hasSentRef.current = false;
+    };
+
+    manualStopRef.current = false;
+    hasSentRef.current = false;
+    setIsListening(true);
+
+    try {
+      rec.start();
+    } catch (err) {
+      console.error("Speech recognition start error:", err);
+      setIsListening(false);
     }
   };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
