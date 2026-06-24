@@ -178,8 +178,10 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
           String(err?.error?.message || "").includes("credit");
         
         if (isOutOfCredits) {
-          logger.error({ role, err: err?.message }, "Anthropic API: créditos agotados — pausando generaciones");
-          throw new Error("API_CREDITS_EXHAUSTED: Los créditos de la API de Anthropic se han agotado temporalmente. Las generaciones se reanudarán automáticamente cuando se recarguen. Disculpa las molestias.");
+          logger.warn({ role, err: err?.message }, "Anthropic API: créditos agotados — activando fallback automático a Gemini");
+          // No lanzar excepción — salir del bucle de reintentos de Anthropic
+          // y dejar que el sistema pruebe Gemini automáticamente
+          break;
         }
         
         if (isRateLimit && attempt < MAX_RETRIES - 1) {
@@ -195,11 +197,60 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
     }
   }
 
-  // Fallback to OpenAI if Anthropic fails
+  // ── FALLBACK 1: Gemini (gratuito) ────────────────────────────────────────
+  // Se activa automáticamente cuando Anthropic no tiene créditos o falla.
+  // Cuando Anthropic vuelve a tener créditos, el siguiente request lo usará de nuevo.
+  const geminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      logger.info({ role }, "Fallback automático → Gemini (API gratuita)");
+      
+      // Mapear modelos Claude a equivalentes Gemini
+      const geminiModel = (() => {
+        if (String(params.model || "").includes("opus")) return "gemini-2.0-flash";
+        if (String(params.model || "").includes("sonnet")) return "gemini-2.0-flash";
+        return "gemini-2.0-flash"; // Haiku → Flash (más rápido y gratuito)
+      })();
+
+      const { GoogleGenAI } = await import("@google/genai");
+      const gemini = new GoogleGenAI({ apiKey: geminiKey });
+      
+      // Construir el prompt combinando system + messages
+      const systemText = params.system || "";
+      const userMessages = (params.messages || []);
+      const lastUser = userMessages.filter((m: any) => m.role === "user").slice(-1)[0];
+      const userText = typeof lastUser?.content === "string" 
+        ? lastUser.content 
+        : JSON.stringify(lastUser?.content || "");
+      
+      const fullPrompt = systemText 
+        ? `${systemText}
+
+---
+
+${userText}`
+        : userText;
+
+      const result = await gemini.models.generateContent({
+        model: geminiModel,
+        contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+        config: { maxOutputTokens: Math.min(params.max_tokens || 4096, 8192) },
+      });
+
+      const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      logger.info({ role, geminiModel, chars: text.length }, "Gemini fallback exitoso");
+      
+      return { content: [{ type: "text", text }] };
+    } catch (geminiErr: any) {
+      logger.warn({ role, err: geminiErr?.message }, "Gemini fallback falló — intentando OpenAI");
+    }
+  }
+
+  // ── FALLBACK 2: OpenAI ────────────────────────────────────────────────────
   try {
     logger.info({ role }, "Falling back to OpenAI (GPT-4o/5) for agent task");
     const response = await getOpenAI().chat.completions.create({
-      model: "gpt-4o", // or "gpt-5.4" if available
+      model: "gpt-4o",
       messages: [
         { role: "system", content: params.system },
         ...params.messages
@@ -207,18 +258,10 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
       max_tokens: Math.min(params.max_tokens || 4096, 16000),
     });
     
-    // Adapt OpenAI response to match Anthropic's structure for the rest of the code
-    const content = response.choices?.[0]?.message?.content || "";
-    return {
-      content: [
-        {
-          type: "text",
-          text: content
-        }
-      ]
-    };
+    const text = response.choices?.[0]?.message?.content || "";
+    return { content: [{ type: "text", text }] };
   } catch (err) {
-    logger.error({ role, err }, "Both Anthropic and OpenAI failed for agent task");
+    logger.error({ role, err }, "Anthropic, Gemini y OpenAI fallaron para este agente");
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 }
