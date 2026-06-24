@@ -91,6 +91,8 @@ import {
   Key,
   Star,
   Eye,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
@@ -237,6 +239,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
   const [copyAttempts, setCopyAttempts] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = React.useRef<any>(null);
   const [copyBlocked, setCopyBlocked] = useState(false);
   const [showVisualTestInline, setShowVisualTestInline] = useState(false);
   // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
@@ -1058,7 +1062,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  // Enter solo = enviar | Shift+Enter = nueva línea
+                  if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     if (draft.trim().length >= 2 && !sendMutation.isPending && !isActivelyProcessing) handleSend();
                   }
@@ -1079,13 +1084,54 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     <Share2 className="h-4 w-4" />
                   </button>
                 </div>
-                <button
-                  onClick={handleSend}
-                  disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_14px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-40 disabled:cursor-not-allowed transition"
-                >
-                  {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Botón micrófono — Speech to Text */}
+                  <button
+                    type="button"
+                    title={isRecording ? "Detener grabación" : "Hablar con el agente"}
+                    onClick={() => {
+                      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                      if (!SpeechRecognition) {
+                        alert("Tu navegador no soporta reconocimiento de voz. Prueba Chrome.");
+                        return;
+                      }
+                      if (isRecording) {
+                        recognitionRef.current?.stop();
+                        setIsRecording(false);
+                        return;
+                      }
+                      const recognition = new SpeechRecognition();
+                      recognition.lang = "es-ES";
+                      recognition.continuous = false;
+                      recognition.interimResults = false;
+                      recognition.onstart = () => setIsRecording(true);
+                      recognition.onresult = (event: any) => {
+                        const transcript = event.results[0][0].transcript;
+                        setDraft(prev => prev ? prev + " " + transcript : transcript);
+                        setIsRecording(false);
+                      };
+                      recognition.onerror = () => setIsRecording(false);
+                      recognition.onend = () => setIsRecording(false);
+                      recognitionRef.current = recognition;
+                      recognition.start();
+                    }}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                      isRecording
+                        ? "bg-red-500 text-white animate-pulse shadow-[0_4px_14px_rgba(239,68,68,0.5)]"
+                        : "text-white/40 hover:bg-white/[0.07] hover:text-white/70"
+                    }`}
+                  >
+                    {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </button>
+                  {/* Botón enviar */}
+                  <button
+                    onClick={handleSend}
+                    disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_14px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
             </div>
           )}
