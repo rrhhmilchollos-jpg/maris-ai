@@ -237,70 +237,86 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
   // ── Voz (Web Speech API) ─────────────────────────────────────────────────
   const [isListening, setIsListening] = useState(false);
-  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  // Ref para acceder al draft más reciente dentro de los callbacks sin closure stale
+  const [isSpeechSupported] = useState(() => {
+    return typeof window !== "undefined" &&
+      !!(( window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  });
+  // Ref para acceder al draft más reciente sin stale closure
   const draftRef = useRef<string>("");
-  // Ref para saber si el stop fue manual (botón) o automático (silencio)
+  // Ref para saber si el stop fue manual (botón) o por silencio
   const manualStopRef = useRef(false);
+  // Guardar la instancia de recognition entre renders
+  const recognitionRef = useRef<any>(null);
+  // Ref para evitar doble-envío
+  const hasSentRef = useRef(false);
 
-  // Mantener draftRef sincronizado con draft
+  // Sincronizar draftRef con draft en cada render
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
-  useEffect(() => {
+  const startListening = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
-    setIsSpeechSupported(true);
+
+    // Siempre crear una instancia nueva — evita estado sucio de sesiones anteriores
     const rec = new SR();
     rec.lang = "es-ES";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
-    rec.continuous = false; // false = para automáticamente al detectar silencio
+    rec.continuous = false;
 
     rec.onresult = (e: any) => {
-      // Acumular todo el resultado en el draft
       let transcript = "";
       for (let i = 0; i < e.results.length; i++) {
         transcript += e.results[i][0].transcript;
       }
-      setDraft(transcript.trim());
-      draftRef.current = transcript.trim();
+      const text = transcript.trim();
+      if (text) {
+        setDraft(text);
+        draftRef.current = text;
+        hasSentRef.current = false;
+      }
     };
 
     rec.onerror = (e: any) => {
-      // "no-speech" es normal si el usuario tarda — ignorar silenciosamente
-      if (e.error !== "no-speech") {
-        console.warn("Speech recognition error:", e.error);
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        console.warn("Speech error:", e.error);
       }
       setIsListening(false);
     };
 
     rec.onend = () => {
       setIsListening(false);
-      // Auto-enviar solo si paró automáticamente (silencio) y hay texto
-      if (!manualStopRef.current && draftRef.current.trim().length >= 2) {
-        // Pequeño delay para que React actualice el estado antes de enviar
+      // Auto-enviar si: paró por silencio (no manual) + hay texto + no enviado ya
+      if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
+        hasSentRef.current = true;
         setTimeout(() => {
           const btn = document.getElementById("maris-send-btn");
-          if (btn) (btn as HTMLButtonElement).click();
-        }, 100);
+          if (btn && !(btn as HTMLButtonElement).disabled) {
+            (btn as HTMLButtonElement).click();
+          }
+        }, 150);
       }
       manualStopRef.current = false;
     };
 
     recognitionRef.current = rec;
-  }, []);
+    manualStopRef.current = false;
+    hasSentRef.current = false;
+    rec.start();
+    setIsListening(true);
+  };
+
+  const stopListening = () => {
+    manualStopRef.current = true;
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  };
 
   const toggleMic = () => {
-    if (!recognitionRef.current) return;
     if (isListening) {
-      manualStopRef.current = true; // marcar como stop manual — NO autoenviar
-      recognitionRef.current.stop();
-      setIsListening(false);
+      stopListening();
     } else {
-      manualStopRef.current = false;
-      recognitionRef.current.start();
-      setIsListening(true);
+      startListening();
     }
   };
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
