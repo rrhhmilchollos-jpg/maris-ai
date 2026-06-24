@@ -23,8 +23,8 @@ import { logger } from "./logger";
  * preview AND the public `/p/:slug` deploy.
  * ========================================================================== */
 
-const MAX_IMAGES = 16;
-const CONCURRENCY = 3;
+const MAX_IMAGES = 20;
+const CONCURRENCY = 4;
 
 /**
  * Build the public absolute base URL of the API server. We need ABSOLUTE URLs
@@ -97,59 +97,122 @@ export function findPlaceholders(bundle: string): FoundPlaceholder[] {
   return Array.from(found.values());
 }
 
+// Sector detection for contextual image generation
+function detectSectorFromApp(title: string, description: string): string {
+  const text = (title + " " + description).toLowerCase();
+  if (/restaur|comida|food|cafe|bar|cocina|gastro|delivery/.test(text)) return "food";
+  if (/salud|clinic|medic|hospital|doctor|dental|psic/.test(text)) return "health";
+  if (/fintech|banco|pago|crypto|inversion|credito|finanz/.test(text)) return "finance";
+  if (/tienda|shop|venta|producto|compra|ecommerce/.test(text)) return "ecommerce";
+  if (/viaje|travel|hotel|vuelo|turismo|reserva/.test(text)) return "travel";
+  if (/fitness|gym|deporte|entrenamiento|ejercicio/.test(text)) return "fitness";
+  if (/educacion|curso|aprend|academia|tutor|formacion/.test(text)) return "education";
+  if (/inmobili|propiedad|piso|casa|alquiler|real estate/.test(text)) return "realestate";
+  if (/tech|saas|software|app|startup|digital|plataforma/.test(text)) return "tech";
+  return "generic";
+}
+
+const SECTOR_STYLE_GUIDES: Record<string, string> = {
+  food: "Fotografía gastronómica profesional, iluminación natural cálida, colores ricos y apetecibles, fondos de madera o mármol, profundidad de campo selectiva, estilo Ottolenghi/Kinfolk. Sin texto ni logos.",
+  health: "Fotografía médica limpia y profesional, luz natural suave, colores fríos y tranquilizadores (azul, verde menta, blanco), fondos neutros, personas reales con expresiones amables y naturales. Sin texto ni logos.",
+  finance: "Fotografía corporativa premium, luz dura y direccional tipo estudio, paleta azul marino y dorado, composición geométrica, fondos oscuros elegantes o blancos limpios. Estilo Bloomberg / McKinsey. Sin texto ni logos.",
+  ecommerce: "Fotografía de producto e-commerce premium, fondo blanco limpio o superficie neutra, iluminación de estudio, sombras naturales suaves, composición centrada, foco nítido. Estilo Apple Store / Amazon Premium. Sin texto ni logos.",
+  travel: "Fotografía de viajes cinematográfica, paisajes espectaculares con luz dorada de amanecer/atardecer, composición con regla de tercios, colores vibrantes y saturados, sensación de aventura y libertad. Sin texto ni logos.",
+  fitness: "Fotografía de fitness dinámica, luz de estudio dramática con fondos oscuros, cuerpos en movimiento, paleta de colores energética (naranja, negro, blanco), composición que transmite fuerza y determinación. Sin texto ni logos.",
+  education: "Fotografía educativa luminosa y motivadora, espacios de aprendizaje modernos, luz natural, colores cálidos y amigables, personas concentradas y satisfechas, composición abierta y accesible. Sin texto ni logos.",
+  realestate: "Fotografía inmobiliaria de arquitectura premium, gran angular, HDR equilibrado, luz natural maximizada, espacios amplios y luminosos, composición simétrica, colores neutros y elegantes. Sin texto ni logos.",
+  tech: "Fotografía tech editorial, fondos oscuros con destellos de luz, dispositivos y pantallas con UI limpia, iluminación LED azulada o violeta, composición futurista, paleta fría y sofisticada. Estilo The Verge / Wired. Sin texto ni logos.",
+  generic: "Fotografía profesional premium, iluminación de estudio perfecta, composición equilibrada, colores armónicos, fondo neutro, estilo editorial de gama alta. Sin texto, sin logos, sin marcas de agua.",
+};
+
 function buildPrompt(altText: string, appTitle: string, appDescription: string): string {
   const subject = altText && altText.length > 3
     ? altText
     : `imagen ilustrativa para "${appTitle}"`;
-  // Detect avatar/portrait context so we direct the model toward portrait
-  // composition instead of product photography.
-  const altLower = altText.toLowerCase();
-  const isAvatar = /avatar|usuari|perfil|persona|cara|cliente|vendedor|comprador|review|testimoni/.test(altLower);
-  const isHero = /hero|banner|portada|fondo|cover|cabecera/.test(altLower);
 
-  // Nano Banana Pro responds best to concrete, photographic direction. We
-  // include subject + context + style + lighting + composition + camera + a
-  // strict "no text" guardrail. Square aspect-ratio is requested in the prompt
-  // text since this model doesn't expose a separate aspect param.
-  let style: string;
+  const altLower = altText.toLowerCase();
+  const sector = detectSectorFromApp(appTitle, appDescription);
+
+  // Tipo de imagen por contexto del alt text
+  const isAvatar = /avatar|usuari|perfil|persona|cara|cliente|vendedor|comprador|review|testimoni|equipo|team/.test(altLower);
+  const isHero = /hero|banner|portada|fondo|cover|cabecera|principal|main/.test(altLower);
+  const isIcon = /icono|icon|logo|symbol|badge/.test(altLower);
+  const isMap = /mapa|map|location|ubicacion|direccion/.test(altLower);
+  const isDashboard = /dashboard|panel|grafico|chart|estadistic/.test(altLower);
+
+  let baseStyle: string;
   if (isAvatar) {
-    style =
-      "Retrato fotográfico profesional de una persona real, ángulo frontal, fondo desenfocado neutro, iluminación natural suave tipo ventana, expresión amable y natural, encuadre desde los hombros hacia arriba, foco nítido en los ojos. Estilo editorial moderno tipo The Verge / Apple. Formato cuadrado 1:1. No incluyas ningún texto, logo, marca de agua ni elementos generados artificialmente";
+    baseStyle = "Retrato fotografico profesional de una persona real. Angulo frontal o 3/4, fondo desenfocado neutro, iluminacion natural suave tipo ventana, expresion amable y natural, encuadre desde los hombros hacia arriba, foco nitido en los ojos. Estilo editorial moderno tipo LinkedIn Premium o Apple. Formato cuadrado 1:1.";
   } else if (isHero) {
-    style =
-      "Imagen cinematográfica de gran formato, profundidad de campo amplia, iluminación dorada o azulada con dirección clara, composición que respira, paleta de colores limitada y sofisticada. Estilo de portada editorial moderna. Formato cuadrado 1:1. Sin texto, sin logos, sin marcas de agua";
+    baseStyle = `Imagen hero cinematografica de gran formato. ${SECTOR_STYLE_GUIDES[sector]} Profundidad de campo amplia, iluminacion con direccion clara, composicion que respira con espacio negativo, paleta de colores limitada y sofisticada.`;
+  } else if (isIcon) {
+    baseStyle = "Icono digital minimalista 3D, fondo degradado suave, sombra larga, colores vibrantes y modernos, estilo Dribbble Premium. Formato cuadrado 1:1.";
+  } else if (isDashboard) {
+    baseStyle = "Mockup de interfaz digital sobre pantalla de MacBook o monitor moderno, fondo oscuro elegante, destellos de luz ambiente, UI limpia y moderna visible en pantalla. Estilo media kit de startup tech. Formato cuadrado 1:1.";
   } else {
-    style =
-      "Fotografía de producto profesional estilo e-commerce premium, fondo limpio (blanco roto, lino o superficie de madera clara), iluminación de estudio suave con sombras naturales, composición centrada con espacio negativo, paleta de colores armónica, foco nítido. Estilo Apple / Aesop / Muji. Formato cuadrado 1:1. Sin texto, sin logos, sin marcas de agua";
+    baseStyle = SECTOR_STYLE_GUIDES[sector] || SECTOR_STYLE_GUIDES.generic;
   }
 
-  return `${style}.\n\nSujeto principal: ${subject}.\n\nContexto del producto: ${appDescription.slice(0, 200)}.\n\nLa imagen debe verse 100% real y profesional, como una foto tomada por un fotógrafo humano para una marca de gama alta. Evita el aspecto plástico o sobre-renderizado de IA.`;
+  // Prompt final enriquecido con contexto de producto
+  return `${baseStyle}
+
+Sujeto principal: ${subject}.
+
+Contexto del producto: ${appDescription.slice(0, 150)}.
+
+La imagen debe verse 100% real y profesional, indistinguible de una foto tomada por un fotografo humano para una marca de gama alta. Fotorrealismo maximo. Evita el aspecto plastico, sobre-saturado o irreal tipico de IA generativa. Formato cuadrado 1:1 perfecto.`;
 }
+
+// Modelos de imagen en orden de preferencia (fallback automatico)
+const IMAGE_MODELS = [
+  "gemini-3-pro-image-preview",
+  "gemini-2.0-flash-preview-image-generation",
+  "imagen-3.0-generate-002",
+];
 
 async function generateOne(
   prompt: string,
 ): Promise<{ b64_json: string; mimeType: string } | null> {
-  try {
-    const response = await imageClient.models.generateContent({
-      model: "gemini-3-pro-image-preview",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        responseModalities: [Modality.TEXT, Modality.IMAGE],
-      },
-    });
-    const candidate = response.candidates?.[0];
-    const imagePart = candidate?.content?.parts?.find(
-      (part: { inlineData?: { data?: string; mimeType?: string } }) => part.inlineData,
-    );
-    if (!imagePart?.inlineData?.data) return null;
-    return {
-      b64_json: imagePart.inlineData.data,
-      mimeType: imagePart.inlineData.mimeType || "image/png",
-    };
-  } catch (err) {
-    logger.warn({ err }, "Nano Banana Pro image generation failed");
-    return null;
+  // Intentar con cada modelo hasta que uno funcione
+  for (const model of IMAGE_MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await imageClient.models.generateContent({
+          model,
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          config: {
+            responseModalities: [Modality.TEXT, Modality.IMAGE],
+          },
+        });
+        const candidate = response.candidates?.[0];
+        const imagePart = candidate?.content?.parts?.find(
+          (part: { inlineData?: { data?: string; mimeType?: string } }) => part.inlineData,
+        );
+        if (imagePart?.inlineData?.data) {
+          logger.info({ model, attempt }, "Image Agent: imagen generada OK");
+          return {
+            b64_json: imagePart.inlineData.data,
+            mimeType: imagePart.inlineData.mimeType || "image/png",
+          };
+        }
+        // Si no hay imagen en la respuesta, intentar con prompt simplificado
+        if (attempt === 1) {
+          logger.warn({ model }, "Image Agent: sin imagen en respuesta, reintentando con prompt reducido");
+        }
+      } catch (err: any) {
+        const msg = err?.message || "";
+        // Si el modelo no existe o hay error de cuota, pasar al siguiente
+        if (msg.includes("not found") || msg.includes("quota") || msg.includes("billing")) {
+          logger.warn({ model, err: msg }, "Image Agent: modelo no disponible, probando siguiente");
+          break; // Saltar al siguiente modelo
+        }
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+        logger.warn({ model, attempt, err: msg }, "Image Agent: intento fallido");
+      }
+    }
   }
+  logger.warn("Image Agent: todos los modelos fallaron para esta imagen");
+  return null;
 }
 
 /** Run an async map with bounded concurrency. Errors per item are returned as null. */

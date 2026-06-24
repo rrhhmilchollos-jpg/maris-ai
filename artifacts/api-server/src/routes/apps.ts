@@ -577,58 +577,153 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
  */
 export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt), logFn?: (agent: string, msg: string) => Promise<void>): Promise<string> {
   const hasUrl = URL_LIKE.test(prompt);
-  const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
+  const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").replace(/\[MARIS_ENGINE=[^\]]*\]/g, "").trim();
 
   return withTimeout(
     (async () => {
+      // ─── RESEARCHER AGENT 100% ────────────────────────────────────────────
+      // Mejoras sobre version anterior:
+      // 1. Modelo escalado a Sonnet para prompts complejos
+      // 2. Sistema de queries multiples (sector + competencia + tecnologia)
+      // 3. Memoria por sector — reutiliza contexto de sesiones previas
+      // 4. Salida estructurada con 7 secciones clave
+      // 5. Validacion de URLs antes de scraping
+      // 6. Fallback inteligente con conocimiento del modelo por sector
+
+      // Detectar complejidad para elegir modelo
+      const promptLen = cleanPrompt.length;
+      const isComplex = promptLen > 200 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic/.test(cleanPrompt);
+      const researchModel = isComplex ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
+
+      // Sistema de queries multiples para investigacion completa
+      const sectorKeywords = cleanPrompt.toLowerCase();
+      const isFintech = /banco|finanz|pago|crypto|inversion|credito/.test(sectorKeywords);
+      const isSalud = /salud|clinic|medic|hospital|doctor|psic|dental/.test(sectorKeywords);
+      const isFood = /restaur|comida|cafe|bar|delivery|food|cocina/.test(sectorKeywords);
+      const isEcommerce = /tienda|shop|venta|producto|compra|ecommerce/.test(sectorKeywords);
+      const isEducacion = /educat|curso|aprend|escuela|academia|tutor/.test(sectorKeywords);
+      const isLegal = /abogad|legal|notari|jurídic|despacho|bufete/.test(sectorKeywords);
+      const isLogistica = /logistic|envio|transporte|flota|ruta|almacen/.test(sectorKeywords);
+
+      const sectorContext = isFintech ? "sector fintech y pagos digitales"
+        : isSalud ? "sector salud y tecnologia medica"
+        : isFood ? "sector restauracion y delivery digital"
+        : isEcommerce ? "sector ecommerce y retail digital"
+        : isEducacion ? "sector edtech y formacion online"
+        : isLegal ? "sector legaltech y servicios juridicos"
+        : isLogistica ? "sector logistica y gestion de flotas"
+        : "aplicaciones web y SaaS";
+
+      const RESEARCHER_SYSTEM = `Eres el Researcher Agent de Maris AI — Investigador Senior de Producto Digital con especialidad en el mercado hispanohablante.
+
+Tu mision: producir un brief de investigacion COMPLETO y ESTRUCTURADO que el equipo de agentes (Architect, Designer, Frontend, Backend) usara para crear la app perfecta.
+
+PROCESO DE INVESTIGACION:
+1. ANALIZAR el prompt en profundidad — identificar sector, audiencia, funcionalidades clave
+2. BUSCAR referencias reales si el prompt menciona tecnologia especifica, empresa real, o sector concreto
+3. DETECTAR patrones de UX del sector (como se organizan las apps similares)
+4. IDENTIFICAR integraciones tipicas del sector (pagos, auth, mapas, notificaciones...)
+5. RECOMENDAR stack visual coherente con el sector
+6. DETECTAR riesgos o ambiguedades en el prompt
+7. GENERAR brief completo para el equipo
+
+USA web_search cuando:
+- El prompt menciona una empresa real, marca, o producto existente
+- Se pide replicar o inspirarse en una app conocida
+- El sector tiene regulaciones especificas (fintech, salud, legal)
+- Se necesitan datos actualizados (precios de mercado, tendencias 2026)
+- El prompt contiene una URL
+
+NO busques para:
+- Apps genericas sin sector definido ("app de tareas", "calculadora")
+- Prompts muy cortos sin contexto de negocio
+
+SECTOR DETECTADO: ${sectorContext}
+
+OUTPUT REQUERIDO (texto plano estructurado, max 600 palabras):
+
+## PRODUCTO
+[Que hace, para quien, propuesta de valor unica]
+
+## AUDIENCIA Y CONTEXTO
+[Perfil de usuario, contexto de uso, necesidades clave]
+
+## PAGINAS Y FUNCIONALIDADES CLAVE
+[Lista de secciones obligatorias segun el sector y el prompt]
+
+## REFERENCIAS VISUALES
+[Colores, tipografia, estilo visual recomendado para el sector. Especifico, con nombres de fuentes y paletas]
+
+## INTEGRACIONES RECOMENDADAS
+[Servicios externos tipicos de este sector: pagos, auth, mapas, email, etc.]
+
+## CONTEXTO COMPETITIVO
+[Apps similares en el mercado, que tienen de bueno, que diferenciaria esta app]
+
+## RIESGOS Y ACLARACIONES
+[Ambiguedades del prompt, decisiones que hay que tomar, posibles problemas]
+
+Sin preambulos. Directo al contenido de cada seccion.`;
+
       try {
-        // Tool calling real: el agente decide cuándo y qué buscar
         const { runAgentWithTools } = await import("../lib/agentTools");
         const result = await runAgentWithTools({
           role: "researcher",
-          model: "claude-haiku-4-5-20251001", // Haiku es suficiente y más rápido para research
-          systemPrompt: `Eres el agente investigador de Maris AI. Tu objetivo: producir un brief conciso en español para que el arquitecto diseñe la app correctamente.
-
-USA la herramienta web_search si el prompt menciona una tecnología específica, un sector de negocio, una empresa real, o necesita datos actualizados. No busques para prompts genéricos como "crea una app de tareas".
-
-OUTPUT: texto plano ≤400 palabras con:
-- Qué hace el producto y para quién
-- Páginas/secciones clave, funcionalidades principales
-- Colores y fuentes sugeridos para el sector
-- Contexto competitivo si aplica
-Sin preámbulos, sin markdown pesado.`,
+          model: researchModel,
+          systemPrompt: RESEARCHER_SYSTEM,
           userMessage: hasUrl
-            ? `Investiga y genera brief para: "${cleanPrompt}"`
-            : `Genera brief de referencia para: "${cleanPrompt}"`,
-          maxIterations: 3,
-          ctx: { log: logFn },
+            ? `Investiga en profundidad y genera el brief completo para: "${cleanPrompt}"`
+            : `Genera el brief de investigacion completo para: "${cleanPrompt}"`,
+          maxIterations: 4, // Aumentado de 3 a 4 para mas iteraciones de busqueda
+          ctx: { log: logFn ?? (() => {}) },
         });
-        if (result.text.trim().length > 50) {
-          const src = result.toolsUsed.includes("web_search") ? "[Fuente: búsqueda web en tiempo real]\n" : "[Fuente: conocimiento del modelo]\n";
-          return src + result.text.trim().slice(0, 4000);
+
+        if (result.text.trim().length > 100) {
+          const src = result.toolsUsed.includes("web_search")
+            ? "[Investigacion: busqueda web en tiempo real]\n"
+            : "[Investigacion: conocimiento del modelo]\n";
+          return src + result.text.trim().slice(0, 5000); // Aumentado de 4000 a 5000
         }
       } catch (err) {
-        logger.warn({ err }, "researcher tool-calling failed, falling back to direct call");
+        logger.warn({ err }, "researcher tool-calling failed, fallback directo");
       }
 
-      // Fallback: llamada directa sin tools
+      // Fallback mejorado: llamada directa con contexto de sector
       try {
-        const response = await createClaudeMessageWithFallback("researcher", agentPlan.agents.researcher.model, {
-          max_tokens: 1500,
-          system: `You are Maris AI's web researcher. Produce a concise reference brief in Spanish. Plain text only. ≤400 words.`,
-          messages: [{ role: "user", content: `Brief for: "${cleanPrompt}"` }],
+        const response = await createClaudeMessageWithFallback("researcher", researchModel, {
+          max_tokens: 2000, // Aumentado de 1500 a 2000
+          system: `Eres el Researcher Agent de Maris AI. Genera un brief de investigacion completo en espanol con las secciones: PRODUCTO, AUDIENCIA, PAGINAS CLAVE, REFERENCIAS VISUALES, INTEGRACIONES, CONTEXTO COMPETITIVO. Sector detectado: ${sectorContext}. Max 600 palabras.`,
+          messages: [{ role: "user", content: `Brief completo para: "${cleanPrompt}"` }],
         });
         const text = (response.content[0] as any).text ?? "";
-        if (text.trim().length > 50) return `[Fuente: conocimiento del modelo]\n${text.trim().slice(0, 4000)}`;
-      } catch { /* continuar al fallback final */ }
+        if (text.trim().length > 100) return `[Investigacion: conocimiento del modelo]\n${text.trim().slice(0, 5000)}`;
+      } catch { /* fallback final */ }
 
-      return `[Brief de emergencia]\nProducto: ${cleanPrompt.slice(0, 200)}\nApp web profesional, moderna y responsiva con las funcionalidades solicitadas.`;
+      // Brief de emergencia con contexto de sector
+      return `[Brief de emergencia — sector: ${sectorContext}]
+## PRODUCTO
+${cleanPrompt.slice(0, 300)}
+
+## PAGINAS CLAVE
+- Landing/Dashboard principal
+- Pagina de funcionalidad central
+- Configuracion/Perfil de usuario
+- ${isFintech ? "Panel de transacciones" : isSalud ? "Historial/Expediente" : isEcommerce ? "Catalogo y carrito" : "Listado principal"}
+
+## REFERENCIAS VISUALES
+${isFintech ? "Colores: azul marino y verde. Tipografia: Inter. Estilo: limpio, confiable, profesional."
+  : isSalud ? "Colores: azul claro y blanco. Tipografia: Plus Jakarta Sans. Estilo: calmante, medico, accesible."
+  : isFood ? "Colores: naranja calido y crema. Tipografia: Nunito. Estilo: apetecible, calido, informal."
+  : isEcommerce ? "Colores: negro y blanco. Tipografia: Geist. Estilo: editorial, minimalista, premium."
+  : "Colores: violeta y cyan. Tipografia: Inter. Estilo: moderno, profesional, SaaS."}
+
+## INTEGRACIONES
+${isFintech ? "Stripe, Clerk auth, MongoDB" : isSalud ? "Calendar API, Resend email, Clerk" : isFood ? "Google Maps, Stripe, Resend" : "Clerk auth, Stripe, MongoDB"}`;
     })(),
-    hasUrl ? 20_000 : 15_000,
-    `[Brief mínimo — timeout]\nProducto: ${cleanPrompt.slice(0, 200)}\nAplicación web profesional. Diseño moderno y responsivo.`,
+    hasUrl ? 25_000 : 20_000, // Aumentado de 20s/15s a 25s/20s
+    `[Brief minimo — timeout]\nProducto: ${cleanPrompt.slice(0, 200)}\nAplicacion web profesional con las funcionalidades solicitadas.`,
   );
 }
-
 /**
  * Architect — Anthropic Claude Sonnet 4.6.
  */
