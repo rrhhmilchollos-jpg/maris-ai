@@ -254,56 +254,72 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
   const startListening = () => {
+    console.log("[MIC] toggleMic called, isListening=", isListening);
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    console.log("[MIC] SpeechRecognition available:", !!SR);
+    if (!SR) {
+      console.error("[MIC] SpeechRecognition NOT supported in this browser");
+      return;
+    }
 
-    // Siempre crear una instancia nueva — evita estado sucio de sesiones anteriores
-    const rec = new SR();
-    rec.lang = "es-ES";
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.continuous = false;
+    // Pedir permiso de micrófono explícitamente antes de arrancar
+    navigator.mediaDevices?.getUserMedia({ audio: true })
+      .then(() => {
+        console.log("[MIC] Microphone permission granted — starting recognition");
+        const rec = new SR();
+        rec.lang = "es-ES";
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        rec.continuous = false;
 
-    rec.onresult = (e: any) => {
-      let transcript = "";
-      for (let i = 0; i < e.results.length; i++) {
-        transcript += e.results[i][0].transcript;
-      }
-      const text = transcript.trim();
-      if (text) {
-        setDraft(text);
-        draftRef.current = text;
-        hasSentRef.current = false;
-      }
-    };
+        rec.onstart = () => console.log("[MIC] Recognition started — listening...");
 
-    rec.onerror = (e: any) => {
-      if (e.error !== "no-speech" && e.error !== "aborted") {
-        console.warn("Speech error:", e.error);
-      }
-      setIsListening(false);
-    };
-
-    rec.onend = () => {
-      setIsListening(false);
-      // Auto-enviar si: paró por silencio (no manual) + hay texto + no enviado ya
-      if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
-        hasSentRef.current = true;
-        setTimeout(() => {
-          const btn = document.getElementById("maris-send-btn");
-          if (btn && !(btn as HTMLButtonElement).disabled) {
-            (btn as HTMLButtonElement).click();
+        rec.onresult = (e: any) => {
+          console.log("[MIC] Got result:", e.results);
+          let transcript = "";
+          for (let i = 0; i < e.results.length; i++) {
+            transcript += e.results[i][0].transcript;
           }
-        }, 150);
-      }
-      manualStopRef.current = false;
-    };
+          const text = transcript.trim();
+          console.log("[MIC] Transcript:", text);
+          if (text) {
+            setDraft(text);
+            draftRef.current = text;
+            hasSentRef.current = false;
+          }
+        };
 
-    recognitionRef.current = rec;
-    manualStopRef.current = false;
-    hasSentRef.current = false;
-    rec.start();
-    setIsListening(true);
+        rec.onerror = (e: any) => {
+          console.error("[MIC] Recognition error:", e.error, e);
+          setIsListening(false);
+        };
+
+        rec.onend = () => {
+          console.log("[MIC] Recognition ended. manualStop:", manualStopRef.current, "draft:", draftRef.current);
+          setIsListening(false);
+          if (!manualStopRef.current && !hasSentRef.current && draftRef.current.trim().length >= 2) {
+            hasSentRef.current = true;
+            setTimeout(() => {
+              const btn = document.getElementById("maris-send-btn");
+              console.log("[MIC] Auto-send — btn found:", !!btn, "disabled:", (btn as HTMLButtonElement)?.disabled);
+              if (btn && !(btn as HTMLButtonElement).disabled) {
+                (btn as HTMLButtonElement).click();
+              }
+            }, 150);
+          }
+          manualStopRef.current = false;
+        };
+
+        recognitionRef.current = rec;
+        manualStopRef.current = false;
+        hasSentRef.current = false;
+        rec.start();
+        setIsListening(true);
+      })
+      .catch((err) => {
+        console.error("[MIC] Microphone permission DENIED or error:", err);
+        setIsListening(false);
+      });
   };
 
   const stopListening = () => {
