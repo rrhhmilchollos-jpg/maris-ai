@@ -64,7 +64,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|llms|BingSiteAuth|08180adobbmib94doF1973Fa84390db7ad1|opengraph|logo|apple-touch|.well-known).*)",
+      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|llms|BingSiteAuth|08180adobbmib94doF1973Fa84390db7ad1|opengraph|logo|apple-touch|.well-known|pricing|showcase|news|vs-emergent|vs-lovable|vs-bolt|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia).*)",
       "destination": "/index.html"
     }
   ],
