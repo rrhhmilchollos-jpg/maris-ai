@@ -120,6 +120,12 @@ REGLAS CRÍTICAS:
 - Para e-commerce: incluye catálogo, carrito, checkout, confirmación
 - Para SaaS: incluye onboarding, pricing, dashboard, settings, billing
 - Máximo 12 páginas. Mínimo 3 páginas para cualquier app real.
+- Para apps de negocio (CRM, SaaS, marketplace): mínimo 6 páginas
+- Para e-commerce: incluir SIEMPRE Home, Catálogo, Detalle Producto, Carrito, Checkout, Confirmación
+- Para SaaS: incluir SIEMPRE Home/Marketing, Dashboard, Lista de recursos, Detalle, Configuración, Pricing
+- Para apps con auth: incluir SIEMPRE página de Login/Register separada
+- frontendFiles debe listar TODOS los archivos que se van a generar, no solo los principales
+- Si backendNeeded es true, backendFiles debe tener mínimo: src/index.ts, src/routes/*.ts, src/models/*.ts
 
 RESPONDE EN JSON ESTRICTO con este schema:
 {
@@ -146,12 +152,12 @@ export async function runArchitectAgent(
 
   const response = await createClaudeMessageWithFallback("architect", "claude-sonnet-4-6", {
     model: "claude-sonnet-4-6",
-    max_tokens: 4096,
+    max_tokens: 6000,
     system: ARCHITECT_SYSTEM,
     messages: [
       {
         role: "user",
-        content: `PROMPT DEL USUARIO:\n"${prompt}"\n\nCONTEXTO DE INVESTIGACIÓN:\n${research.slice(0, 2000)}\n\nCrea el blueprint técnico completo. Responde SOLO el JSON.`,
+        content: `PROMPT DEL USUARIO:\n"${prompt}"\n\nCONTEXTO DE INVESTIGACIÓN:\n${research.slice(0, 3000)}\n\nCrea el blueprint técnico completo. Recuerda: mínimo 5 páginas para apps de negocio, incluir TODOS los archivos frontend en frontendFiles. Responde SOLO el JSON.`,
       },
     ],
   });
@@ -200,13 +206,19 @@ PROCESO:
 5. Genera el CSS global y la configuración de Tailwind
 
 REGLAS:
-- Para seguridad/alarmas: tonos oscuros, azul/rojo, aspecto profesional y confiable
-- Para fintech: azul corporativo, tipografía limpia, datos claros
-- Para salud: verde/azul suave, accesible, calmante
-- Para e-commerce: colores vibrantes, CTA prominentes
-- Para SaaS: moderno, gradientes sutiles, dark mode opcional
+- Para seguridad/alarmas: primary #1e3a5f, accent #ef4444, dark background, Inter, aspecto profesional y confiable
+- Para fintech/banca: primary #1d4ed8, accent #22c55e, background #f8fafc, tipografía limpia, datos claros, Plus Jakarta Sans
+- Para salud/médico: primary #059669, secondary #0ea5e9, background #f0fdf4, calmante y accesible, Plus Jakarta Sans
+- Para restauración/food: primary #e07c6a, accent #f59e0b, background #fef9f0, apetecible y cálido, Nunito
+- Para e-commerce/moda: primary #18181b, accent #f59e0b, background #fafafa, editorial y premium, DM Sans/Geist
+- Para SaaS/tech: primary #7c3aed, accent #22d3ee, background #0f0f1a (dark), violetas/índigos, Inter
+- Para inmobiliaria: primary #1e40af, accent #d4a574 (dorado), background #f8fafc, trust y premium, Playfair+Inter
+- Para turismo/hotel: primary #0ea5e9, accent #16a34a, background cielos limpios, fotográfico, Montserrat
+- Para deporte/fitness: primary #dc2626, accent #f97316, background #0a0a0f (dark), potente y enérgico, Barlow Condensed
+- Para educación: primary #3b82f6, accent #fbbf24, background #f0f9ff, amigable y motivador, Nunito/Poppins
 - SIEMPRE incluye estados hover, focus, disabled en el CSS global
-- SIEMPRE incluye animaciones suaves (transitions de 200ms)
+- SIEMPRE incluye animaciones suaves (transitions de 200ms ease-in-out)
+- El globalCSS DEBE incluir Google Fonts import y todas las CSS variables como --color-primary etc.
 
 RESPONDE EN JSON ESTRICTO con este schema:
 {
@@ -241,14 +253,14 @@ export async function runDesignerAgent(
 ): Promise<EmergentDesignSystem> {
   log(`🎨 Designer Agent: creando sistema visual para "${blueprint.title}"...`);
 
-  const response = await createClaudeMessageWithFallback("designer", "claude-haiku-4-5", {
-    model: "claude-haiku-4-5",
-    max_tokens: 2048,
+  const response = await createClaudeMessageWithFallback("designer", "claude-sonnet-4-6", {
+    model: "claude-sonnet-4-6",
+    max_tokens: 3000,
     system: DESIGNER_SYSTEM,
     messages: [
       {
         role: "user",
-        content: `APP: "${blueprint.title}"\nDESCRIPCIÓN: ${blueprint.description}\nTECH STACK: ${blueprint.techStack.join(", ")}\nCOMPLEJIDAD: ${blueprint.complexity}\n\nCrea el sistema de diseño. Responde SOLO el JSON.`,
+        content: `APP: "${blueprint.title}"\nDESCRIPCIÓN: ${blueprint.description}\nTECH STACK: ${blueprint.techStack.join(", ")}\nCOMPLEJIDAD: ${blueprint.complexity}\nPÁGINAS: ${blueprint.pages.map(p => p.name).join(", ")}\n\nCrea el sistema de diseño visual coherente con el sector y la complejidad del proyecto. Sé específico con los colores hex y las fuentes Google Fonts. Responde SOLO el JSON.`,
       },
     ],
   });
