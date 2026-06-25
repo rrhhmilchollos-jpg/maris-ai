@@ -57,6 +57,14 @@ const STRONG_CONVERSATIONAL_PATTERNS: RegExp[] = [
   /\b(entre\s+(ma[ñn]ana|hoy|el\s+lunes|esta\s+semana))\b/i,
   /\b(cuando\s+tenga\s+tiempo|cuando\s+pueda|m[aá]s\s+adelante|no\s+es\s+urgente)\b/i,
   /\b(solo\s+quer[íi]a|solo\s+dec[íi]rte|solo\s+avisarte|s[oó]lo\s+quer[íi]a)\b/i,
+  // Saludos con pregunta sobre estado — "como estas", "qué tal estás"
+  /^\s*(como\s+est[aá]s|qu[eé]\s+tal\s+est[aá]s|c[oó]mo\s+te\s+va|qu[eé]\s+tal\s+todo)/i,
+  // Saludos seguidos de propuesta vaga — "como estas creamos algo"
+  /^\s*(como\s+est[aá]s?|hola|buenas?).*\b(creamos|hagamos|hacemos|construimos|trabajamos)\b/i,
+  // Propuestas de colaboración sin especificación técnica
+  /\b(algo\s+novedoso|algo\s+juntos|algo\s+nuevo|algo\s+chulo|algo\s+guay)\b/i,
+  // "venga", "vamos", "dale" solos o con propuesta vaga
+  /^\s*(venga|vamos|dale|va|listo)[\s,!.]*(qu[eé]|a\s+ver|dime|cuéntame|empezamos)?\s*$/i,
 ];
 
 // Patrones ambiguos — podria ser un cambio de codigo O una pregunta
