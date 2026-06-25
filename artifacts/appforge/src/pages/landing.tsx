@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
-// Framer Motion eliminado — CSS animations para mejor TBT/performance
+import { motion, useScroll, useTransform } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -104,7 +104,8 @@ export default function LandingPage() {
   const [, setLocation] = useLocation();
   const { isSignedIn } = useAuth();
   const [prompt, setPrompt] = useState("");
-  // scroll parallax removido — mejora TBT en 200ms+
+  const { scrollY } = useScroll();
+  const heroOpacity = useTransform(scrollY, [0, 400], [1, 0.3]);
 
   useEffect(() => {
     const saved = localStorage.getItem("appforge_pending_prompt");
@@ -123,7 +124,8 @@ export default function LandingPage() {
     setLocation(isSignedIn ? "/dashboard" : "/sign-up");
   };
 
-  // motion variants removidos — CSS animations
+  const fadeIn = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
+  const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -175,25 +177,25 @@ export default function LandingPage() {
       {/* Hero */}
       <main id="main-content" role="main" aria-label="Contenido principal de Maris AI">
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
-        <div style={{ opacity: heroOpacity }} className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
-          <div initial="initial" animate="animate" className="maris-fade-in text-center">
-            <div className="maris-fade-in inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
+        <motion.div style={{ opacity: heroOpacity }} className="container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
+          <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
+            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
               <span>La revolución del Vibe Coding ha llegado</span>
-            </div>
+            </motion.div>
 
-            <h1 className="maris-fade-in text-3xl xs:text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-white mb-4 md:mb-6 leading-[1.1] md:leading-[1.05]">
+            <motion.h1 variants={fadeIn} className="text-3xl xs:text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter text-white mb-4 md:mb-6 leading-[1.1] md:leading-[1.05]">
               Tu visión. <br />
               <span className="bg-gradient-to-r from-primary via-purple-400 to-cyan-400 bg-clip-text text-transparent">
                 Apps reales en minutos.
               </span>
-            </h1>
+            </motion.h1>
 
-            <p className="maris-fade-in text-base md:text-xl text-muted-foreground mb-6 md:mb-10 max-w-2xl mx-auto font-light leading-relaxed px-2 md:px-0">
+            <motion.p variants={fadeIn} className="text-base md:text-xl text-muted-foreground mb-6 md:mb-10 max-w-2xl mx-auto font-light leading-relaxed px-2 md:px-0">
               Transforma tus ideas más ambiciosas en aplicaciones funcionales y listas para el mercado, impulsadas por un equipo de 9 agentes IA de élite.
-            </p>
+            </motion.p>
 
-            <div className="maris-fade-in max-w-3xl mx-auto relative mb-6">
+            <motion.div variants={fadeIn} className="max-w-3xl mx-auto relative mb-6">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-primary via-purple-500 to-cyan-500 rounded-2xl blur opacity-30"></div>
               <form onSubmit={handleGenerate} className="relative flex flex-col sm:flex-row gap-2 bg-background/90 backdrop-blur rounded-2xl border border-white/10 p-2 shadow-2xl">
                 <Textarea
@@ -212,33 +214,34 @@ export default function LandingPage() {
                   Generar App <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </form>
-            </div>
+            </motion.div>
 
-            <div className="maris-fade-in flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
+            <motion.div variants={fadeIn} className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
               {["Panel CRM", "E-commerce", "App móvil", "Dashboard analytics", "SaaS MVP", "Landing page"].map((ex) => (
                 <button key={ex} onClick={() => setPrompt(`Crea un ${ex.toLowerCase()}`)}
                   className="px-3 py-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:text-white transition-all text-xs">
                   {ex}
                 </button>
               ))}
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
       </section>
 
       {/* ¿Qué puedes construir? */}
       <section className="py-24 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
-          <div}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="maris-fade-in text-center mb-16"
+            className="text-center mb-16"
           >
             <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Desata tu potencial creativo.</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Desde MVPs innovadores hasta soluciones empresariales complejas, Maris AI transforma tus ideas en realidad con código impecable y escalable.
             </p>
-          </div>
+          </motion.div>
 
           <div className="flex justify-center mb-12">
             <Button 
@@ -289,11 +292,13 @@ export default function LandingPage() {
                 tags: ["Internal Tools", "Auth", "Clerk"]
               }
             ].map((app, i) => (
-              <div
-                key={i}}
-                whileInView={{ opacity: 1, y: 0 }}}
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
                 viewport={{ once: true }}
-                className="maris-fade-in group relative overflow-hidden rounded-2xl border border-white/10 bg-card/30 hover:border-primary/30 transition-all"
+                className="group relative overflow-hidden rounded-2xl border border-white/10 bg-card/30 hover:border-primary/30 transition-all"
               >
                 <div className="aspect-video overflow-hidden">
                   <img
@@ -315,7 +320,7 @@ export default function LandingPage() {
                   <h3 className="text-xl font-bold text-white mb-2">{app.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{app.desc}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -325,26 +330,26 @@ export default function LandingPage() {
       <section className="py-16 border-y border-white/5 bg-card/20 backdrop-blur-sm">
         <div className="container px-4 md:px-8 mx-auto max-w-5xl">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 text-center">
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
               <TrendingUp className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">9</div>
               <div className="text-sm text-muted-foreground">Agentes IA especializados</div>
-            </div>
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
               <Clock className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">&lt; 5 min</div>
               <div className="text-sm text-muted-foreground">De idea a app funcional</div>
-            </div>
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
               <Globe className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">100%</div>
               <div className="text-sm text-muted-foreground">Código exportable tuyo</div>
-            </div>
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} viewport={{ once: true }} className="flex flex-col items-center justify-center">
               <Star className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">Gratis</div>
               <div className="text-sm text-muted-foreground">Para empezar hoy</div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -353,7 +358,8 @@ export default function LandingPage() {
       <section className="py-24 relative">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div} whileInView={{ opacity: 1, x: 0 }}} viewport={{ once: true }} className="maris-fade-in">
+            <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }} viewport={{ once: true }}>
               <h2 className="text-4xl font-bold text-white mb-6">Ingeniería de Software <br />
                 <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                   a la velocidad de la IA.
@@ -380,9 +386,10 @@ export default function LandingPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </motion.div>
 
-            <div} whileInView={{ opacity: 1, x: 0 }}} viewport={{ once: true }} className="maris-fade-in relative">
+            <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }} viewport={{ once: true }} className="relative">
               <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-purple-500/20 to-cyan-500/20 rounded-2xl blur-xl"></div>
               <div className="relative rounded-2xl border border-white/10 bg-background/80 backdrop-blur shadow-2xl overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/5">
@@ -410,7 +417,7 @@ export default function LandingPage() {
                   <span className="text-xs text-emerald-400 font-mono">✓ Sin errores</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -432,14 +439,15 @@ export default function LandingPage() {
               { title: "App Móvil PWA", desc: "Progressive Web App instalable con soporte offline y notificaciones push.", icon: Smartphone, color: "text-cyan-400", border: "border-cyan-500/20", bg: "bg-cyan-500/5" },
               { title: "Portal de Noticias", desc: "Blog con editor Markdown, SEO optimizado y sitemap para Google News.", icon: Newspaper, color: "text-pink-400", border: "border-pink-500/20", bg: "bg-pink-500/5" },
             ].map((ex, i) => (
-              <div key={i}} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }}
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.08 }} viewport={{ once: true }}
                 className={`p-6 rounded-xl border ${ex.border} ${ex.bg} hover:-translate-y-1 transition-all duration-300`}>
                 <div className={`h-11 w-11 rounded-lg bg-background/60 flex items-center justify-center mb-4 border ${ex.border}`}>
                   <ex.icon className={`h-5 w-5 ${ex.color}`} />
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2">{ex.title}</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed">{ex.desc}</p>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -460,14 +468,15 @@ export default function LandingPage() {
               { icon: Users, title: "Acceso directo al creador", desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día." },
               { icon: Star, title: "Precio de lanzamiento", desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube." },
             ].map((item, i) => (
-              <div key={i}} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }}
-                className="maris-fade-in p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-primary/30 transition-all text-center">
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }} viewport={{ once: true }}
+                className="p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-primary/30 transition-all text-center">
                 <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto mb-4">
                   <item.icon className="h-5 w-5 text-primary" />
                 </div>
                 <h3 className="text-base font-semibold text-white mb-2">{item.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
-              </div>
+              </motion.div>
             ))}
           </div>
           <div className="text-center">
@@ -485,7 +494,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-primary/10 blur-[100px] rounded-full pointer-events-none"></div>
         <div className="container px-4 md:px-8 mx-auto text-center relative z-10">
-          <div} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="maris-fade-in">
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight">
               Tu próxima app empieza <br />
               <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">con una frase.</span>
@@ -505,7 +514,7 @@ export default function LandingPage() {
                 </Button>
               </Link>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
