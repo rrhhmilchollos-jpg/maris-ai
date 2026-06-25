@@ -3,7 +3,7 @@
  *
  * Muestra una vista previa en tiempo real de la app generada.
  * Soporta URL de Vercel y ejecución local con WebContainer.
- * Incluye consola de PC estilo Manus (terminal integrada).
+ * Incluye consola de PC integrada (terminal integrada).
  */
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -291,7 +291,7 @@ export function LivePreview({
 
   const handleExpand = () => setIsExpanded(!isExpanded);
 
-  // ── Consola de PC estilo Manus ──────────────────────────────────────────
+  // ── Consola de PC integrada ──────────────────────────────────────────
   const renderConsole = () => (
     <div className="border-t border-white/10 bg-[#0a0a0f] flex flex-col" style={{ height: showConsole ? "200px" : "36px" }}>
       {/* Barra de título de la consola */}

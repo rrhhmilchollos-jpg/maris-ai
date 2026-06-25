@@ -197,6 +197,6 @@ GitHub: https://github.com/rrhhmilchollos-jpg/maris-ai
 
 ---
 
-**Implementado por:** Manus AI  
+**Implementado por:** Equipo Maris AI  
 **Fecha:** Junio 17, 2026  
 **Estado:** ✅ LISTO PARA PRODUCCIÓN
