@@ -161,6 +161,8 @@ app.use(
           "https://www.facebook.com",
           "https://accounts.google.com",
         ],
+        // ✅ FIX CLICKJACKING: solo marisai.es puede embeber estas páginas
+        frameAncestors: ["'self'", "https://marisai.es", "https://*.marisai.es"],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],
       },
@@ -173,7 +175,7 @@ app.use(
     },
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     xContentTypeOptions: true,
-    xFrameOptions: false,
+    xFrameOptions: { action: "sameorigin" }, // ✅ FIX: era `false`, ahora bloquea clickjacking
     xXssProtection: true,
     hidePoweredBy: true,
   })
@@ -204,14 +206,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use("/api/billing/webhook", stripeWebhookRouter);
  
 // ── CORS — anti-hacking: allowlist en vez de "allow all" ───────────────────
-// Con credentials:true, permitir CUALQUIER origen (origin:'*') es un riesgo
-// de CORS+CSRF: un sitio malicioso podría hacer fetch con credentials:'include'
-// y, si el navegador adjunta cookies de sesión de Clerk, leer respuestas con
-// datos del usuario. Restringimos a los dominios legítimos de Maris AI:
-// - marisai.es / www.marisai.es (frontend de producción)
-// - *.vercel.app (previews de Vercel del propio appforge y de apps generadas)
-// - *.railway.app (backend y posibles previews)
-// - localhost / 127.0.0.1 (desarrollo local)
 const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
   /^https?:\/\/(www\.)?marisai\.es$/,
   /^https?:\/\/[a-z0-9-]+\.marisai\.es$/,
@@ -223,7 +217,6 @@ const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Peticiones sin origin (curl, server-to-server, healthchecks) se permiten.
     if (!origin) { callback(null, true); return; }
     if (ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin))) {
       callback(null, true);
@@ -237,7 +230,6 @@ app.use(cors({
 }));
 
 // Security headers for Cross-Origin Isolation (required for WebContainers)
-// Adjusted to be more permissive while maintaining isolation
 app.use((_req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
@@ -252,20 +244,6 @@ app.use(injectionDetectionMiddleware);
 app.use(express.urlencoded({ extended: true }));
 
 // ── Anti-hacking: NoSQL injection + HTTP Parameter Pollution protection ────
-// express-mongo-sanitize: elimina claves que empiecen por '$' o contengan '.'
-// en req.body/query/params, evitando inyecciones de operadores Mongo
-// (ej: {"email": {"$ne": null}} para bypass de autenticación).
-//
-// NOTA (2026-06-14): NO usamos mongoSanitize(...) directamente como
-// middleware. Su implementación interna hace `req.query = sanitized` y
-// `req.headers = sanitized` en CADA request — pero en Express 5, req.query
-// es una propiedad de SOLO LECTURA (getter), así que esa reasignación
-// lanzaba un TypeError no capturado en cada petición (statusCode 500 en
-// /api/health, idéntico al bug de hpp). req.body y req.params sí son
-// reasignables con seguridad. Para query/headers, mongoSanitize.sanitize()
-// ya muta el objeto IN-PLACE (delete + reasignación de claves dentro del
-// mismo objeto) antes de intentar la reasignación final — así que basta con
-// NO reasignar req.query/req.headers tras sanearlos.
 function logSuspiciousKey(req: Request, key: string) {
   logger.warn({ path: req.path, key, ip: req.ip }, "mongoSanitize: clave sospechosa eliminada");
 }
@@ -287,12 +265,6 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   }
   next();
 });
-// hpp ELIMINADO (2026-06-14): hpp@0.2.3 intenta reasignar req.query, que en
-// Express 5 es una propiedad solo-lectura (getter) — esto lanzaba un
-// TypeError en CADA petición entrante, incluidas las healthchecks de Railway
-// a /api/health, dejando el servicio "service unavailable" indefinidamente.
-// Express 5 ya deduplica params de query repetidos de forma segura por
-// defecto, así que hpp era redundante (diagnóstico automático de Railway).
  
 if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
   app.use(
@@ -305,8 +277,7 @@ if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
   logger.warn("Clerk keys not set — Authentication will be disabled or fail.");
 }
  
-// Per-request Sentry breadcrumb — records method, path, status, duration.
-// No-op if Sentry is not configured.
+// Per-request Sentry breadcrumb
 app.use((req: Request, res: Response, next: NextFunction) => {
   if (!isSentryEnabled()) {
     next();
