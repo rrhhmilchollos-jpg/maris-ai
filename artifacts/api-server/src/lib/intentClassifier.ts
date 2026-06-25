@@ -111,8 +111,11 @@ function looksLikeConversational(message: string): boolean {
   // Mensajes muy cortos (≤4 palabras) sin keywords de desarrollo = conversacional
   const words = trimmed.split(/\s+/).filter(Boolean);
   if (words.length <= 4) {
-    const hasActionKeyword = [...DEV_KEYWORD_PATTERNS, ...EXEC_KEYWORD_PATTERNS].some(p => p.test(trimmed));
-    if (!hasActionKeyword) return true;
+    const hasActionKeyword = [...DEV_KEYWORD_PATTERNS, ...EXEC_KEYWORD_PATTERNS, ...ALWAYS_DEV_PATTERNS].some(p => p.test(trimmed));
+    // Palabras que siempre indican intención de desarrollo aunque sean cortas
+    const devWords = /\b(app|web|tienda|landing|dashboard|crm|saas|panel|página|bot[oó]n|formulario|crea|haz|pon|añade|arregla|cambia)\b/i;
+    if (hasActionKeyword || devWords.test(trimmed)) return false;
+    return true;
   }
   
   return false;
