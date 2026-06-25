@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Sobre Nosotros — Maris AI | La historia de por qué existe</title>
+<meta name="description" content="Maris AI nació de la frustración con plataformas de IA que queman créditos sin avisar, tienen soporte pésimo y operan solo en inglés. Iván Rubio Cano, Valencia."/>
+<meta name="robots" content="index,follow"/>
+<link rel="canonical" href="https://www.marisai.es/sobre-nosotros"/>
+<meta property="og:title" content="Sobre Nosotros — Maris AI"/>
+<meta property="og:description" content="La historia real de por qué existe Maris AI."/>
+<meta property="og:url" content="https://www.marisai.es/sobre-nosotros"/>
+<meta property="og:image" content="https://www.marisai.es/opengraph.jpg"/>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  "name": "Sobre Maris AI",
+  "url": "https://www.marisai.es/sobre-nosotros",
+  "description": "Historia y misión de Maris AI",
+  "publisher": {
+    "@type": "Organization",
+    "name": "Maris AI",
+    "url": "https://www.marisai.es",
+    "founder": {
+      "@type": "Person",
+      "name": "Iván Rubio Cano",
+      "jobTitle": "Fundador y CEO",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Valencia",
+        "addressCountry": "ES"
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    background: #07070f;
+    color: #e2e8f0;
+    line-height: 1.7;
+  }
+  .nav {
+    padding: 1.2rem 2rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .nav a { color: #a78bfa; text-decoration: none; font-size: 0.9rem; }
+  .nav span { color: #4b5563; }
+  .hero {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 5rem 2rem 3rem;
+  }
+  .tag {
+    display: inline-block;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.3);
+    color: #a78bfa;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.9rem;
+    border-radius: 100px;
+    margin-bottom: 1.5rem;
+  }
+  h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.15;
+    margin-bottom: 1.5rem;
+  }
+  h1 span { color: #a78bfa; }
+  .lead {
+    font-size: 1.15rem;
+    color: #94a3b8;
+    margin-bottom: 3rem;
+    max-width: 600px;
+  }
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    margin: 3rem 0;
+  }
+  .story {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 2rem 2rem;
+  }
+  .story h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 1rem;
+    margin-top: 2.5rem;
+  }
+  .story p {
+    color: #94a3b8;
+    margin-bottom: 1.2rem;
+    font-size: 1.05rem;
+  }
+  .story p strong { color: #e2e8f0; }
+  .quote {
+    border-left: 3px solid #7c3aed;
+    padding: 1rem 1.5rem;
+    margin: 2rem 0;
+    background: rgba(124,58,237,0.08);
+    border-radius: 0 8px 8px 0;
+    font-size: 1.1rem;
+    color: #c4b5fd;
+    font-style: italic;
+  }
+  .values {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+  }
+  .value-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+  .value-card .icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .value-card h3 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 0.3rem; }
+  .value-card p { font-size: 0.85rem; color: #64748b; margin: 0; }
+  .founder {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin: 2.5rem 0;
+  }
+  .founder-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .founder-info h3 { font-size: 1rem; font-weight: 700; color: #fff; }
+  .founder-info p { font-size: 0.85rem; color: #64748b; margin: 0; }
+  .cta-section {
+    text-align: center;
+    padding: 4rem 2rem;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    margin-top: 3rem;
+  }
+  .cta-section h2 { font-size: 1.8rem; font-weight: 800; color: #fff; margin-bottom: 1rem; }
+  .cta-section p { color: #64748b; margin-bottom: 2rem; }
+  .btn {
+    display: inline-block;
+    background: #7c3aed;
+    color: #fff;
+    padding: 0.85rem 2rem;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: background 0.2s;
+  }
+  .btn:hover { background: #6d28d9; }
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: #374151;
+    font-size: 0.8rem;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  footer a { color: #6b7280; text-decoration: none; margin: 0 0.5rem; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="https://www.marisai.es">← Maris AI</a>
+  <span>/</span>
+  <span style="color:#9ca3af;">Sobre nosotros</span>
+</nav>
+
+<section class="hero">
+  <div class="tag">Nuestra historia</div>
+  <h1>Construida por alguien<br/>que se hartó de lo mismo<br/>que <span>tú</span>.</h1>
+  <p class="lead">
+    Maris AI no nació de un PowerPoint ni de una ronda de inversión. 
+    Nació de la frustración real de usar herramientas de IA que te queman 
+    los créditos sin avisar, tienen un soporte que tarda días en responder, 
+    y encima están solo en inglés.
+  </p>
+</section>
+
+<section class="story">
+
+  <h2>El problema que nadie quería resolver</h2>
+
+  <p>
+    En 2025, probé todas las plataformas de vibe coding que existían. 
+    Bolt.new, Lovable, Emergent, Base44. Todas tienen cosas buenas. 
+    Pero todas tienen el mismo problema: <strong>están diseñadas para el mercado anglosajón</strong>, 
+    con precios en dólares, soporte solo en inglés, y un sistema de créditos 
+    que desaparece antes de que te des cuenta.
+  </p>
+
+  <div class="quote">
+    "Abrí un ticket de soporte un lunes. Me respondieron el jueves. 
+    Para entonces ya había perdido 200 créditos intentando que funcionara solo."
+  </div>
+
+  <p>
+    Eso me pasó a mí. Y cuando busqué en Google "alternativa a Bolt.new en español", 
+    no encontré nada. <strong>500 millones de hispanohablantes sin una sola opción nativa.</strong> 
+    Ahí vi la oportunidad — y la obligación.
+  </p>
+
+  <h2>Por qué Maris AI es diferente</h2>
+
+  <p>
+    Construí Maris AI con tres reglas no negociables que ningún competidor cumple a la vez:
+  </p>
+
+  <div class="values">
+    <div class="value-card">
+      <div class="icon">🇪🇸</div>
+      <h3>100% en español</h3>
+      <p>Interfaz, soporte, código generado y documentación. Sin traducciones automáticas.</p>
+    </div>
+    <div class="value-card">
+      <div class="icon">⚡</div>
+      <h3>Soporte real</h3>
+      <p>Respondemos en horas, no en días. Y si algo falla, lo arreglamos nosotros.</p>
+    </div>
+    <div class="value-card">
+      <div class="icon">💶</div>
+      <h3>Créditos justos</h3>
+      <p>Precios en euros, transparentes, sin quemas inesperadas. Los créditos nunca caducan.</p>
+    </div>
+    <div class="value-card">
+      <div class="icon">🔓</div>
+      <h3>Tu código es tuyo</h3>
+      <p>Exportas a GitHub cuando quieras. Sin vendor lock-in. Sin sorpresas.</p>
+    </div>
+  </div>
+
+  <h2>Quién hay detrás</h2>
+
+  <p>
+    Maris AI la fundé yo, Iván Rubio Cano, desde Valencia, España. 
+    No soy una corporación ni un fondo de inversión. Soy un emprendedor 
+    que lleva años construyendo productos digitales y que se cansó de 
+    que las mejores herramientas ignoraran al mercado hispanohablante.
+  </p>
+
+  <p>
+    Trabajo con un equipo pequeño y muy implicado. Cada decisión que tomamos 
+    la tomamos pensando en el emprendedor español o latinoamericano que quiere 
+    lanzar su idea sin depender de un desarrollador ni gastar una fortuna.
+  </p>
+
+  <div class="founder">
+    <div class="founder-avatar">IR</div>
+    <div class="founder-info">
+      <h3>Iván Rubio Cano</h3>
+      <p>Fundador y CEO · Valencia, España · hola@marisai.es</p>
+    </div>
+  </div>
+
+  <h2>Nuestra misión</h2>
+
+  <p>
+    Que cualquier persona en España o Latinoamérica pueda convertir 
+    una idea en una aplicación real sin saber programar, sin que le exploten 
+    los créditos y con alguien al otro lado del teléfono cuando algo no funciona.
+  </p>
+
+  <p>
+    <strong>Eso es Maris AI. Sin más complicaciones.</strong>
+  </p>
+
+</section>
+
+<section class="cta-section">
+  <h2>Pruébala gratis — sin tarjeta</h2>
+  <p>15 créditos para empezar. Tu primera app en menos de 5 minutos.</p>
+  <a href="https://www.marisai.es" class="btn">Crear mi primera app →</a>
+</section>
+
+<footer>
+  <a href="https://www.marisai.es">Inicio</a>
+  <a href="https://www.marisai.es/pricing">Precios</a>
+  <a href="https://www.marisai.es/legal/privacidad">Privacidad</a>
+  <a href="https://www.marisai.es/legal/aviso-legal">Aviso legal</a>
+  <br/><br/>
+  © 2025-2026 Maris AI · Valencia, España · hola@marisai.es
+</footer>
+
+</body>
+</html>
