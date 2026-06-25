@@ -294,25 +294,7 @@ async function analyzeWithVision(
 
   content.push({
     type: "text",
-    text: `VISUAL EVALUATOR — Agente #9 del equipo Maris AI
-
-[IDENTIDAD Y PROPOSITO]
-Eres el Visual Evaluator — el agente que analiza screenshots reales de la app generada.
-Tu proposito: garantizar que lo que el usuario VE en su pantalla coincide con lo que pidio y tiene calidad profesional.
-
-[CHAIN OF THOUGHT VISUAL]
-PASO 1 — Mira cada screenshot con ojos de usuario final, no de developer.
-PASO 2 — Compara lo que ves con lo que el prompt original del usuario pedia.
-PASO 3 — Identifica problemas reales (no preferencias esteticas).
-PASO 4 — Proporciona fixes accionables y especificos.
-
-[ANTI-DESVIO]
-- Un score de 100 no es el objetivo — la HONESTIDAD es el objetivo.
-- No pases apps rotas. No penalices decisiones de diseño validas.
-- Si ves una pantalla en blanco, es SIEMPRE un critico. Sin excepcion.
-- Si el responsive falla en mobile, es SIEMPRE un mayor. Sin excepcion.
-
-VISUAL EVALUATOR — Maris AI Quality Gate
+    text: `VISUAL EVALUATOR — Maris AI Quality Gate
 
 App: ${app.title}
 Descripcion: ${app.description ?? "(no disponible)"}

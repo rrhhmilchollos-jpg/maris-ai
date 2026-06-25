@@ -1,6 +1,5 @@
 /**
- * prerender.mjs — Genera HTML estático completo para Google e IAs
- * Ejecuta después del build de Vite. Crea /ruta/index.html con contenido real visible.
+ * prerender.mjs — Generación de páginas estáticas
  */
 
 import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";

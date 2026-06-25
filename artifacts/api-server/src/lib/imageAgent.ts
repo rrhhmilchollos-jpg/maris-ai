@@ -245,15 +245,6 @@ export interface GenerateAppImagesResult {
 }
 
 /**
- * IMAGE AGENT — Agente #8 del equipo Maris AI
- * IDENTIDAD: Genera imagenes reales para reemplazar placeholders de Unsplash/picsum.
- * CHAIN OF THOUGHT: 1) Analiza el alt text del placeholder. 2) Detecta el sector de la app.
- * 3) Construye un prompt fotografico profesional y especifico. 4) Genera y reemplaza.
- * ANTI-DESVIO: Genera SOLO imagenes relacionadas con el contenido del proyecto.
- * Si el alt dice "foto de perfil de usuario", genera un retrato — no un paisaje.
- */
-
-/**
  * Generate real images for the given app and rewrite its frontend bundle.
  * Idempotent-ish: re-running will pick up any remaining placeholders that
  * weren't yet replaced (the previous successes are already permanent URLs and
