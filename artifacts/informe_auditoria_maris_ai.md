@@ -1,6 +1,6 @@
 # Informe de Auditoría y Correcciones de Maris AI
 
-**Autor:** Manus AI
+**Autor:** Equipo Maris AI
 **Fecha:** 20 de mayo de 2026
 
 ## Resumen Ejecutivo
