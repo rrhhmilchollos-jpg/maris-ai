@@ -197,7 +197,9 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
     }
   }
 
-  // Fallback a modelos alternativos cuando el principal no está disponible
+  // ── FALLBACK 1: Gemini (gratuito) ────────────────────────────────────────
+  // Se activa automáticamente cuando Anthropic no tiene créditos o falla.
+  // Cuando Anthropic vuelve a tener créditos, el siguiente request lo usará de nuevo.
   const geminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (geminiKey) {
     try {
@@ -244,7 +246,7 @@ ${userText}`
     }
   }
 
-  // Segundo fallback
+  // ── FALLBACK 2: OpenAI ────────────────────────────────────────────────────
   try {
     logger.info({ role }, "Falling back to OpenAI (GPT-4o/5) for agent task");
     const response = await getOpenAI().chat.completions.create({
