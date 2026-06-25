@@ -175,8 +175,8 @@ export default function LandingPage() {
       {/* Hero */}
       <main id="main-content" role="main" aria-label="Contenido principal de Maris AI">
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
-        <div style={{ opacity: heroOpacity } className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
-          <div initial="initial" animate="animate" className="maris-fade-in text-center">
+        <div style={{ className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
+          <div className="maris-fade-in text-center">
             <div className="maris-fade-in inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
               <span>La revolución del Vibe Coding ha llegado</span>
@@ -195,7 +195,7 @@ export default function LandingPage() {
 
             <div className="maris-fade-in max-w-3xl mx-auto relative mb-6">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-primary via-purple-500 to-cyan-500 rounded-2xl blur opacity-30"></div>
-              <form onSubmit={handleGenerate} className="relative flex flex-col sm:flex-row gap-2 bg-background/90 backdrop-blur rounded-2xl border border-white/10 p-2 shadow-2xl">
+              <form onSubmit={handleGenerate}} className="relative flex flex-col sm:flex-row gap-2 bg-background/90 backdrop-blur rounded-2xl border border-white/10 p-2 shadow-2xl">
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
