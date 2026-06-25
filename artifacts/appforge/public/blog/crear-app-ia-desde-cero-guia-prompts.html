@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Guía paso a paso: Cómo crear una app con IA desde cero | Maris AI</title>
+<meta name="description" content="Tutorial completo para emprendedores. Aprende cómo estructurar tus instrucciones y prompts para construir una aplicación web funcional con IA sin programar."/>
+<meta name="robots" content="index,follow"/>
+<link rel="canonical" href="https://www.marisai.es/blog/crear-app-ia-desde-cero-guia-prompts.html"/>
+<link rel="alternate" hreflang="es" href="https://www.marisai.es/blog/crear-app-ia-desde-cero-guia-prompts.html"/>
+<meta property="og:title" content="Guía paso a paso: Cómo crear una app con IA desde cero"/>
+<meta property="og:description" content="Tutorial completo con prompts estructurados para crear tu primera app web funcional con IA. Para emprendedores sin conocimientos técnicos."/>
+<meta property="og:type" content="article"/>
+<meta property="og:url" content="https://www.marisai.es/blog/crear-app-ia-desde-cero-guia-prompts.html"/>
+<meta property="og:image" content="https://www.marisai.es/opengraph.jpg"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Cómo crear una app con IA desde cero — Guía completa con prompts"/>
+<meta name="twitter:description" content="Tutorial paso a paso para construir tu primera app funcional con IA. Prompts estructurados incluidos."/>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "Cómo crear una app con IA desde cero",
+  "description": "Tutorial completo para crear una aplicación web funcional con IA usando prompts estructurados en lenguaje natural.",
+  "totalTime": "PT48H",
+  "estimatedCost": {"@type": "MonetaryAmount", "currency": "EUR", "value": "0"},
+  "step": [
+    {"@type": "HowToStep", "position": 1, "name": "Estructurar el Prompt Maestro", "text": "Define el rol de la IA, el objetivo de la app y las restricciones técnicas antes de escribir una sola línea de instrucción."},
+    {"@type": "HowToStep", "position": 2, "name": "Generar la interfaz visual y el flujo de navegación", "text": "Introduce el Prompt Maestro en Maris AI y audita la experiencia de usuario: navegación, botones, responsive mobile."},
+    {"@type": "HowToStep", "position": 3, "name": "Desplegar la base de datos de forma segura", "text": "Indica al agente backend que cree las tablas necesarias con cifrado y relaciones correctas entre modelos."},
+    {"@type": "HowToStep", "position": 4, "name": "Pruebas de errores y publicación en un clic", "text": "Realiza el test de estrés con inputs incorrectos y despliega en Vercel con un clic."}
+  ],
+  "publisher": {"@type": "Organization", "name": "Maris AI", "url": "https://www.marisai.es"}
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "¿Qué pasa si mi app necesita una función compleja que la IA no sabe hacer?", "acceptedAnswer": {"@type": "Answer", "text": "Si usas plataformas que generan código estándar como Maris AI (React + Node.js), puedes descargar el repositorio en cualquier momento y entregárselo a un desarrollador humano para que continúe sin empezar desde cero."}},
+    {"@type": "Question", "name": "¿Es seguro almacenar datos de clientes en una app creada con IA?", "acceptedAnswer": {"@type": "Answer", "text": "Depende de la plataforma. Maris AI genera backends con bcrypt para contraseñas, JWT para autenticación, Zod para validación y MongoDB con cifrado. El código cumple los estándares de seguridad de producción."}},
+    {"@type": "Question", "name": "¿Cómo escribo un buen prompt para crear mi app?", "acceptedAnswer": {"@type": "Answer", "text": "Sigue la estructura de tres bloques: Rol (qué tipo de app quieres), Objetivo (qué problema resuelve y para quién), Restricciones (estilo visual, tecnologías, funcionalidades específicas). Cuanto más específico seas, mejor será el resultado."}},
+    {"@type": "Question", "name": "¿Puedo modificar la app después de generarla con IA?", "acceptedAnswer": {"@type": "Answer", "text": "Sí. Con Maris AI puedes pedir modificaciones en lenguaje natural después de la generación inicial. También puedes exportar el código a GitHub y modificarlo manualmente o contratar a un desarrollador."}}
+  ]
+}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#07070f;color:#e2e8f0;line-height:1.8}
+.nav{padding:1rem 2rem;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.nav a{color:#a78bfa;text-decoration:none;font-size:0.9rem}
+.nav span{color:#4b5563}
+.container{max-width:760px;margin:0 auto;padding:0 1.5rem}
+.hero{padding:4rem 0 2rem}
+.tag{display:inline-block;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.25);color:#22c55e;font-size:0.75rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:0.3rem 0.9rem;border-radius:100px;margin-bottom:1rem}
+.meta{color:#4b5563;font-size:0.85rem;margin-bottom:2rem}
+h1{font-size:clamp(1.6rem,4vw,2.2rem);font-weight:800;color:#fff;line-height:1.2;margin-bottom:1rem}
+h2{font-size:1.4rem;font-weight:700;color:#fff;margin:2.5rem 0 1rem}
+h3{font-size:1.05rem;font-weight:700;color:#e2e8f0;margin:1.75rem 0 0.5rem}
+p{color:#94a3b8;margin-bottom:1.2rem}
+strong{color:#e2e8f0}
+ul,ol{padding-left:1.5rem;color:#94a3b8;margin-bottom:1.2rem}
+li{margin-bottom:0.6rem}
+.step-block{border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;margin:2rem 0}
+.step-header{display:flex;align-items:center;gap:1rem;padding:1.25rem 1.5rem;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.06)}
+.step-num{width:2.5rem;height:2.5rem;background:#7c3aed;color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1rem;flex-shrink:0}
+.step-header h2{margin:0;font-size:1.1rem;color:#e2e8f0}
+.step-body{padding:1.5rem}
+.step-body p:last-child{margin-bottom:0}
+.prompt-box{background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:1.5rem;margin:1.25rem 0}
+.prompt-box h4{color:#22c55e;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;font-weight:700}
+.prompt-box .prompt-text{color:#e2e8f0;font-style:italic;font-size:0.95rem;line-height:1.65;border-left:2px solid rgba(34,197,94,0.4);padding-left:1rem}
+.prompt-structure{display:grid;grid-template-columns:auto 1fr;gap:0.5rem 1rem;margin:1rem 0}
+.prompt-label{color:#a78bfa;font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding-top:0.1rem}
+.prompt-value{color:#94a3b8;font-size:0.9rem}
+.checklist{list-style:none;padding:0}
+.checklist li{display:flex;align-items:flex-start;gap:0.75rem;margin-bottom:0.75rem;padding:0.75rem;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.04)}
+.checklist li::before{content:"✓";color:#22c55e;font-weight:800;flex-shrink:0;margin-top:0.05rem}
+.warning-box{background:rgba(245,158,11,0.08);border-left:3px solid #f59e0b;padding:1rem 1.5rem;border-radius:0 8px 8px 0;margin:1.25rem 0}
+.warning-box p{margin:0;color:#fcd34d;font-size:0.95rem}
+.success-box{background:rgba(34,197,94,0.08);border-left:3px solid #22c55e;padding:1rem 1.5rem;border-radius:0 8px 8px 0;margin:1.25rem 0}
+.success-box p{margin:0;color:#86efac;font-size:0.95rem}
+.faq-item{margin-bottom:1.5rem;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:1.5rem}
+.faq-item h3{color:#e2e8f0;margin-bottom:0.5rem;margin-top:0}
+.faq-item p{margin:0;font-size:0.95rem}
+.closure{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:1.5rem;margin:2rem 0}
+.closure h3{color:#e2e8f0;margin-bottom:1rem;font-size:1rem}
+.closure-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem}
+.closure-item{background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:10px;padding:0.85rem;text-align:center}
+.closure-item .num{font-size:1.5rem;font-weight:900;color:#a78bfa;display:block;margin-bottom:0.25rem}
+.closure-item p{font-size:0.78rem;color:#64748b;margin:0}
+.related{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.5rem;margin:2rem 0}
+.related h4{color:#e2e8f0;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:1rem}
+.related a{display:block;color:#a78bfa;text-decoration:none;font-size:0.9rem;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.related a:last-child{border-bottom:none}
+.cta-box{background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:16px;padding:2rem;text-align:center;margin:3rem 0}
+.cta-box h3{color:#fff;margin-bottom:0.5rem;margin-top:0;font-size:1.3rem}
+.cta-box p{margin-bottom:1.5rem}
+.btn{display:inline-block;background:#7c3aed;color:#fff;padding:0.85rem 2rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:1rem}
+.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:2.5rem 0}
+footer{text-align:center;padding:2rem;color:#374151;font-size:0.8rem;border-top:1px solid rgba(255,255,255,0.05);margin-top:3rem}
+footer a{color:#6b7280;text-decoration:none;margin:0 0.5rem}
+@media(max-width:600px){.prompt-structure{grid-template-columns:1fr}.prompt-label{margin-top:0.5rem}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="https://www.marisai.es">← Maris AI</a>
+  <span>/</span>
+  <a href="https://www.marisai.es/news">Blog</a>
+  <span>/</span>
+  <span style="color:#9ca3af;">Guía prompts</span>
+</nav>
+<div class="container">
+<article>
+  <section class="hero">
+    <div class="tag">Tutorial completo</div>
+    <h1>Guía práctica: De una idea en un prompt a una aplicación web funcional con IA</h1>
+    <p class="meta">Por <strong style="color:#e2e8f0">Iván Rubio</strong> · 25 de junio de 2026 · 12 min de lectura</p>
+    <p style="font-size:1.05rem;color:#94a3b8;">El desarrollo de software ha dejado de ser un territorio exclusivo de quienes dominan lenguajes de programación. Hoy, gracias a la evolución del <strong>vibe coding</strong>, el superpoder de un emprendedor es su capacidad para comunicar una idea de forma clara y estructurada. Esta guía te enseña el flujo de trabajo exacto para construir tu primera aplicación web full-stack usando prompts estructurados.</p>
+  </section>
+
+  <div class="warning-box">
+    <p>⚠️ <strong>El error más común:</strong> Escribir prompts vagos como "hazme una app para una clínica". La IA necesita contexto y límites claros. Sigue los 4 pasos de esta guía para evitarlo.</p>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- PASO 1 -->
+  <div class="step-block">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <h2>Estructurar el "Prompt Maestro" — El plano del proyecto</h2>
+    </div>
+    <div class="step-body">
+      <p>Antes de tocar una sola línea de texto en el chat de desarrollo, redacta tu requerimiento inicial siguiendo esta estructura de <strong>tres bloques</strong>. Es la diferencia entre recibir una app genérica y recibir exactamente lo que necesitas.</p>
+
+      <h3>Los 3 bloques del Prompt Maestro</h3>
+
+      <div class="prompt-structure">
+        <span class="prompt-label">Bloque 1<br/>El Rol</span>
+        <span class="prompt-value">Define qué tipo de app necesitas y el contexto de negocio. "Soy propietario de una clínica dental en Valencia con 3 dentistas y 200 pacientes activos."</span>
+
+        <span class="prompt-label">Bloque 2<br/>El Objetivo</span>
+        <span class="prompt-value">Explica qué hace la aplicación y para quién. "Quiero un sistema donde los pacientes reserven cita online, los dentistas vean su agenda diaria y yo controle las estadísticas del negocio."</span>
+
+        <span class="prompt-label">Bloque 3<br/>Las Restricciones</span>
+        <span class="prompt-value">Pon límites técnicos y visuales. "Diseño minimalista en azul y blanco, formulario de registro con validación de email, modo móvil obligatorio, textos en español."</span>
+      </div>
+
+      <h3>Ejemplo completo de Prompt Maestro</h3>
+      <div class="prompt-box">
+        <h4>Prompt listo para usar en Maris AI</h4>
+        <p class="prompt-text">"Crea una app de gestión de citas para mi clínica dental en Valencia. Tengo 3 dentistas y necesito que los pacientes puedan reservar cita online eligiendo dentista, fecha y hora disponible. Los dentistas deben tener su panel para ver las citas del día. Yo como administrador necesito ver estadísticas: citas por dentista, ingresos del mes, pacientes nuevos. Diseño limpio en tonos azul claro y blanco, completamente en español, con validación de email en el registro y recordatorios automáticos 24h antes de cada cita."</p>
+      </div>
+
+      <div class="success-box">
+        <p>✅ Este prompt activa el <strong>Agente Researcher</strong> de Maris AI para investigar el sector clínica dental, el <strong>Architect</strong> planificará exactamente las páginas descritas y el <strong>Designer</strong> aplicará una paleta azul médica apropiada.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASO 2 -->
+  <div class="step-block">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <h2>Generar la interfaz visual y el flujo de navegación</h2>
+    </div>
+    <div class="step-body">
+      <p>Una vez introducido el Prompt Maestro, los agentes empiezan a trabajar. En Maris AI verás el progreso en tiempo real: Researcher → Architect → Designer → Frontend Engineer. En menos de 5 minutos tendrás la app completa.</p>
+      <p>Durante esta fase, tu labor no es programar — es <strong>auditar la experiencia de usuario</strong>. Revisa la app generada y valida:</p>
+
+      <ul class="checklist">
+        <li>Los botones realizan las acciones que esperas (reservar, cancelar, confirmar)</li>
+        <li>La navegación entre el panel de control y la página principal es fluida</li>
+        <li>El diseño se adapta correctamente en pantalla de móvil (375px)</li>
+        <li>Los textos de la interfaz están en español</li>
+        <li>Los datos de ejemplo son nombres y ciudades en español</li>
+        <li>Los formularios tienen validación visible de campos incorrectos</li>
+      </ul>
+
+      <h3>Cómo pedir modificaciones correctamente</h3>
+      <p>Si algo no te convence, no intentes corregirlo todo de golpe. Pide modificaciones una a una en el chat de edición:</p>
+      <div class="prompt-box">
+        <h4>Ejemplos de modificaciones efectivas</h4>
+        <p class="prompt-text">"Cambia el formulario de reserva para que ocupe solo la mitad derecha de la pantalla en desktop."</p>
+      </div>
+      <div class="prompt-box">
+        <h4>Otro ejemplo</h4>
+        <p class="prompt-text">"Añade un botón de exportar a PDF en la esquina superior derecha del panel del administrador."</p>
+      </div>
+      <div class="prompt-box">
+        <h4>Y otro</h4>
+        <p class="prompt-text">"Cambia el color del botón principal de reserva a verde oscuro #15803d."</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASO 3 -->
+  <div class="step-block">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <h2>Desplegar la base de datos de forma segura</h2>
+    </div>
+    <div class="step-body">
+      <p>Una aplicación bonita que no guarda información no es un software — es un boceto. Este paso es donde la arquitectura de agentes especializados marca la diferencia real.</p>
+      <p>Mientras que los entornos de chat tradicionales (Base44, Bolt.new) sufren para mantener la consistencia de las tablas, el <strong>Agente Backend Engineer de Maris AI</strong> aísla completamente el backend. Solo debes indicarle en el chat de edición:</p>
+
+      <div class="prompt-box">
+        <h4>Prompt para base de datos</h4>
+        <p class="prompt-text">"Crea una tabla de usuarios que guarde nombre, correo, contraseña encriptada con bcrypt y teléfono. Conéctala con la tabla de citas que tiene fecha, hora, dentista asignado y estado (pendiente/confirmada/cancelada)."</p>
+      </div>
+
+      <p>El Backend Engineer genera automáticamente:</p>
+      <ul>
+        <li><strong>Modelos Mongoose</strong> con todos los campos y relaciones</li>
+        <li><strong>Contraseñas con bcrypt</strong> (salt 12) — nunca en texto plano</li>
+        <li><strong>JWT tokens</strong> para autenticación segura</li>
+        <li><strong>Validación Zod</strong> en cada endpoint</li>
+        <li><strong>Datos seed en español</strong> con 8-12 registros reales</li>
+      </ul>
+
+      <div class="success-box">
+        <p>✅ El agente aísla el backend del frontend. Puedes modificar el diseño visual sin romper la base de datos, y modificar la base de datos sin romper el diseño. Es la ventaja de la arquitectura de agentes especializados vs el agente único generalista.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASO 4 -->
+  <div class="step-block">
+    <div class="step-header">
+      <div class="step-num">4</div>
+      <h2>Pruebas de errores y publicación en un clic</h2>
+    </div>
+    <div class="step-body">
+      <p>Antes de enviar la URL de tu app a tus clientes o inversores, debes asegurarte de que todo funciona bajo presión. Maris AI incluye el <strong>Agente QA Auditor</strong> que revisa automáticamente el código, pero también debes hacer tus propias pruebas funcionales.</p>
+
+      <h3>El test de estrés — pruebas que debes hacer</h3>
+      <ul class="checklist">
+        <li>Introduce un email inválido en el registro y comprueba que aparece el mensaje de error</li>
+        <li>Intenta registrarte sin rellenar campos obligatorios</li>
+        <li>Reserva una cita en un horario ya ocupado y verifica que lo bloquea</li>
+        <li>Accede al panel de administración sin estar logueado</li>
+        <li>Prueba la app en el móvil (Chrome DevTools → modo responsive)</li>
+      </ul>
+
+      <p>Puedes pedirle a Maris AI que simule estos tests:</p>
+      <div class="prompt-box">
+        <h4>Prompt para test de estrés</h4>
+        <p class="prompt-text">"Simula que un usuario introduce un correo inválido, intenta registrarse sin rellenar los campos obligatorios y accede a /dashboard sin autenticarse. Verifica que el código maneja estos casos correctamente."</p>
+      </div>
+
+      <h3>El lanzamiento — deploy en un clic</h3>
+      <p>Una vez corregidos los detalles, exporta el código a GitHub desde Maris AI y despliega:</p>
+      <ul>
+        <li><strong>Frontend</strong> → Vercel (plan gratuito, un clic desde GitHub)</li>
+        <li><strong>Backend</strong> → Railway (plan gratuito, conecta el repo)</li>
+        <li><strong>Base de datos</strong> → MongoDB Atlas (tier gratuito 512MB)</li>
+      </ul>
+      <p>En menos de 10 minutos tienes una URL pública funcional y segura para compartir con el mundo.</p>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Cierre del ciclo mensual -->
+  <div class="closure">
+    <h3>📊 Lo que has conseguido con este plan de 4 semanas</h3>
+    <div class="closure-grid">
+      <div class="closure-item">
+        <span class="num">6</span>
+        <p>artículos de blog publicados</p>
+      </div>
+      <div class="closure-item">
+        <span class="num">36+</span>
+        <p>URLs indexables en sitemap</p>
+      </div>
+      <div class="closure-item">
+        <span class="num">12k+</span>
+        <p>palabras de contenido SEO</p>
+      </div>
+      <div class="closure-item">
+        <span class="num">∞</span>
+        <p>red de enlazado interno</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Preguntas frecuentes al lanzar apps con IA</h2>
+
+  <div class="faq-item">
+    <h3>¿Qué pasa si mi app necesita una función compleja que la IA no puede hacer?</h3>
+    <p>Si usas plataformas que generan código estándar como Maris AI (React + Node.js), puedes descargar el repositorio en cualquier momento y entregárselo a un desarrollador humano para que continúe sin empezar desde cero. El código es tuyo, sin restricciones.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Es seguro almacenar datos de clientes en una app creada con IA?</h3>
+    <p>Depende de la plataforma. Maris AI genera backends con bcrypt para contraseñas, JWT para autenticación, Zod para validación y MongoDB con cifrado estándar. El código generado cumple los estándares de seguridad de producción y el RGPD europeo.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Cómo escribo un buen prompt para crear mi app?</h3>
+    <p>Sigue la estructura de tres bloques: Rol (qué tipo de negocio tienes), Objetivo (qué problema resuelve la app y para quién), Restricciones (estilo visual, idioma, funcionalidades específicas). Cuanto más concreto seas, mejor será el resultado.</p>
+  </div>
+
+  <div class="faq-item">
+    <h3>¿Puedo modificar la app después de generarla?</h3>
+    <p>Sí. Maris AI tiene un chat de edición donde pides cambios en lenguaje natural. También puedes exportar el código a GitHub y modificarlo manualmente o contratar a un desarrollador para añadir funcionalidades avanzadas.</p>
+  </div>
+
+  <div class="related">
+    <h4>Completa tu formación — artículos del plan mensual</h4>
+    <a href="https://www.marisai.es/blog/que-es-el-vibe-coding-guia-2026.html">→ Semana 1: Qué es el Vibe Coding — guía completa 2026</a>
+    <a href="https://www.marisai.es/blog/lanzar-mvp-espana-48-horas-ia.html">→ Semana 2: Cómo lanzar un MVP en España en 48 horas</a>
+    <a href="https://www.marisai.es/blog/app-reservas-restaurante-ia-espana.html">→ Semana 3: App de reservas para restaurante con IA</a>
+    <a href="https://www.marisai.es/blog/lovable-vs-maris-ai-comparativa-espanol.html">→ Semana 4: Lovable vs Maris AI — comparativa completa</a>
+    <a href="https://www.marisai.es/blog/alternativas-bolt-new-espanol-2026.html">→ Semana 5: Alternativas a Bolt.new en español</a>
+    <a href="https://www.marisai.es/landings/base44-vs-emergent-alternativa-espanol.html">→ Base44 vs Emergent.sh vs Maris AI — comparativa técnica</a>
+  </div>
+
+  <div class="cta-box">
+    <h3>Aplica esta guía ahora mismo</h3>
+    <p>15 créditos gratis. Sin tarjeta. Usa el Prompt Maestro de esta guía<br/>y ten tu primera app lista en menos de 5 minutos.</p>
+    <a href="https://www.marisai.es" class="btn">Crear mi app con IA →</a>
+  </div>
+</article>
+</div>
+<footer>
+  <a href="https://www.marisai.es">Maris AI</a>
+  <a href="https://www.marisai.es/news">Blog</a>
+  <a href="https://www.marisai.es/pricing">Precios</a>
+  <a href="https://www.marisai.es/landings/base44-vs-emergent-alternativa-espanol.html">Base44 vs Emergent</a>
+  <a href="https://www.marisai.es/blog/alternativas-bolt-new-espanol-2026.html">Alternativas Bolt.new</a>
+  <br/><br/>© 2026 Maris AI · Valencia, España
+</footer>
+</body>
+</html>
