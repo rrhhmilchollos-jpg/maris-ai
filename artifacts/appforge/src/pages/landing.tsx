@@ -130,6 +130,9 @@ export default function LandingPage() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-white px-4 py-2 rounded z-50">
         Saltar al contenido principal
       </a>
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-white px-4 py-2 rounded z-50">
+        Saltar al contenido principal
+      </a>
       <AuroraBackground />
 
       <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl" role="banner">
@@ -174,9 +177,10 @@ export default function LandingPage() {
 
       {/* Hero */}
       <main id="main-content" role="main" aria-label="Contenido principal de Maris AI">
+      <main id="main-content" role="main" aria-label="Contenido principal de Maris AI">
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
-        <div style={{ className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
-          <div className="maris-fade-in text-center">
+        <div className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
+          <div initial="initial" animate="animate" className="maris-fade-in text-center">
             <div className="maris-fade-in inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
               <span>La revolución del Vibe Coding ha llegado</span>
@@ -229,7 +233,9 @@ export default function LandingPage() {
       {/* ¿Qué puedes construir? */}
       <section className="py-24 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
-          <div className="maris-fade-in text-center mb-16">
+          <div>
+            className="maris-fade-in text-center mb-16"
+          >
             <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Desata tu potencial creativo.</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Desde MVPs innovadores hasta soluciones empresariales complejas, Maris AI transforma tus ideas en realidad con código impecable y escalable.
@@ -286,7 +292,7 @@ export default function LandingPage() {
               }
             ].map((app, i) => (
               <div
-                key={i}
+                key={i}}}
                 className="maris-fade-in group relative overflow-hidden rounded-2xl border border-white/10 bg-card/30 hover:border-primary/30 transition-all"
               >
                 <div className="aspect-video overflow-hidden">
@@ -426,7 +432,7 @@ export default function LandingPage() {
               { title: "App Móvil PWA", desc: "Progressive Web App instalable con soporte offline y notificaciones push.", icon: Smartphone, color: "text-cyan-400", border: "border-cyan-500/20", bg: "bg-cyan-500/5" },
               { title: "Portal de Noticias", desc: "Blog con editor Markdown, SEO optimizado y sitemap para Google News.", icon: Newspaper, color: "text-pink-400", border: "border-pink-500/20", bg: "bg-pink-500/5" },
             ].map((ex, i) => (
-              <div key={i}
+              <div key={i}}}
                 className={`p-6 rounded-xl border ${ex.border} ${ex.bg} hover:-translate-y-1 transition-all duration-300`}>
                 <div className={`h-11 w-11 rounded-lg bg-background/60 flex items-center justify-center mb-4 border ${ex.border}`}>
                   <ex.icon className={`h-5 w-5 ${ex.color}`} />
@@ -454,7 +460,7 @@ export default function LandingPage() {
               { icon: Users, title: "Acceso directo al creador", desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día." },
               { icon: Star, title: "Precio de lanzamiento", desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube." },
             ].map((item, i) => (
-              <div key={i}
+              <div key={i}}}
                 className="maris-fade-in p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-primary/30 transition-all text-center">
                 <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto mb-4">
                   <item.icon className="h-5 w-5 text-primary" />
@@ -503,6 +509,7 @@ export default function LandingPage() {
         </div>
       </section>
 
+      </main>
       </main>
       <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur" role="contentinfo">
         <div className="container px-4 md:px-8 mx-auto">
