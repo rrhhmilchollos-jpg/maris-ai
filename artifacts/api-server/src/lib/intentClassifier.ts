@@ -30,11 +30,7 @@ export type ClassifiedIntent = {
   reason: string;
 };
 
-// ─── CONVERSATIONAL PATTERNS — NUNCA activan agentes ────────────────────────
-// Si el mensaje coincide con alguno de estos patrones, es una respuesta
-// conversacional humana: agradecimiento, confirmación, saludo, despedida,
-// promesa futura ("mañana te digo"), estado emocional, etc.
-// NINGÚN agente se activa. El sistema responde con texto directamente.
+// Patrones conversacionales — respuesta directa sin procesamiento adicional
 const CONVERSATIONAL_PATTERNS: RegExp[] = [
   // Temporalidad futura sin petición concreta
   /\b(ma[ñn]ana|pasado\s+ma[ñn]ana|luego|m[aá]s\s+tarde|despu[eé]s|pronto|en\s+otro\s+momento|cuando\s+pueda)\b/i,
@@ -50,7 +46,7 @@ const CONVERSATIONAL_PATTERNS: RegExp[] = [
   // Se maneja en la función looksLikeConversational
 ];
 
-// Patrones que SIEMPRE son conversacionales aunque contengan otras palabras
+// Patrones de alta prioridad
 const STRONG_CONVERSATIONAL_PATTERNS: RegExp[] = [
   /\b(ma[ñn]ana|pasado\s+ma[ñn]ana)\b.*\b(te\s+digo|te\s+cuento|te\s+aviso|te\s+paso|te\s+explico)\b/i,
   /\b(te\s+digo|te\s+cuento)\b.*\b(todo\s+lo\s+que)\b/i,
