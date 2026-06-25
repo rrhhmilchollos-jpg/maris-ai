@@ -129,6 +129,12 @@
     .maris-hero-skeleton{background:linear-gradient(135deg,hsl(240 10% 6%) 0%,hsl(240 10% 8%) 100%);min-height:100vh;}
     /* Evitar FOIT — mostrar texto con font del sistema hasta que cargue Inter */
     @font-face{font-family:'Inter';font-display:swap;}
+    /* Reemplaza Framer Motion — CSS puro, cero JS bloqueante */
+    @keyframes marisFadeIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .maris-fade-in{animation:marisFadeIn 0.5s ease forwards;}
+    .maris-fade-in:nth-child(2){animation-delay:0.1s}
+    .maris-fade-in:nth-child(3){animation-delay:0.2s}
+    .maris-fade-in:nth-child(4){animation-delay:0.3s}
     /* Mejorar INP — reducir trabajo del hilo principal */
     *{contain-intrinsic-size:auto;}
     img,video{content-visibility:auto;}
