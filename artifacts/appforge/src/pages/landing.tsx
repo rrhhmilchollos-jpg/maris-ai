@@ -195,7 +195,7 @@ export default function LandingPage() {
 
             <div className="maris-fade-in max-w-3xl mx-auto relative mb-6">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-primary via-purple-500 to-cyan-500 rounded-2xl blur opacity-30"></div>
-              <form onSubmit={handleGenerate}} className="relative flex flex-col sm:flex-row gap-2 bg-background/90 backdrop-blur rounded-2xl border border-white/10 p-2 shadow-2xl">
+              <form onSubmit={handleGenerate} className="relative flex flex-col sm:flex-row gap-2 bg-background/90 backdrop-blur rounded-2xl border border-white/10 p-2 shadow-2xl">
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
