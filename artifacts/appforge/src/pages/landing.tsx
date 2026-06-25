@@ -229,11 +229,7 @@ export default function LandingPage() {
       {/* ¿Qué puedes construir? */}
       <section className="py-24 relative overflow-hidden">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
-          <div}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="maris-fade-in text-center mb-16"
-          >
+          <div className="maris-fade-in text-center mb-16">
             <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Desata tu potencial creativo.</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Desde MVPs innovadores hasta soluciones empresariales complejas, Maris AI transforma tus ideas en realidad con código impecable y escalable.
@@ -290,9 +286,7 @@ export default function LandingPage() {
               }
             ].map((app, i) => (
               <div
-                key={i}}
-                whileInView={{ opacity: 1, y: 0 }}}
-                viewport={{ once: true }}
+                key={i}}}
                 className="maris-fade-in group relative overflow-hidden rounded-2xl border border-white/10 bg-card/30 hover:border-primary/30 transition-all"
               >
                 <div className="aspect-video overflow-hidden">
@@ -325,22 +319,22 @@ export default function LandingPage() {
       <section className="py-16 border-y border-white/5 bg-card/20 backdrop-blur-sm">
         <div className="container px-4 md:px-8 mx-auto max-w-5xl">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 text-center">
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            <div className="maris-fade-in flex flex-col items-center justify-center">
               <TrendingUp className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">9</div>
               <div className="text-sm text-muted-foreground">Agentes IA especializados</div>
             </div>
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            <div className="maris-fade-in flex flex-col items-center justify-center">
               <Clock className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">&lt; 5 min</div>
               <div className="text-sm text-muted-foreground">De idea a app funcional</div>
             </div>
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            <div className="maris-fade-in flex flex-col items-center justify-center">
               <Globe className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">100%</div>
               <div className="text-sm text-muted-foreground">Código exportable tuyo</div>
             </div>
-            <div} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }} className="maris-fade-in flex flex-col items-center justify-center">
+            <div className="maris-fade-in flex flex-col items-center justify-center">
               <Star className="h-10 w-10 text-primary mb-3" />
               <div className="text-4xl font-bold text-white mb-1">Gratis</div>
               <div className="text-sm text-muted-foreground">Para empezar hoy</div>
@@ -353,7 +347,7 @@ export default function LandingPage() {
       <section className="py-24 relative">
         <div className="container px-4 md:px-8 mx-auto max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div} whileInView={{ opacity: 1, x: 0 }}} viewport={{ once: true }} className="maris-fade-in">
+            <div className="maris-fade-in">
               <h2 className="text-4xl font-bold text-white mb-6">Ingeniería de Software <br />
                 <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                   a la velocidad de la IA.
@@ -382,7 +376,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div} whileInView={{ opacity: 1, x: 0 }}} viewport={{ once: true }} className="maris-fade-in relative">
+            <div className="maris-fade-in relative">
               <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-purple-500/20 to-cyan-500/20 rounded-2xl blur-xl"></div>
               <div className="relative rounded-2xl border border-white/10 bg-background/80 backdrop-blur shadow-2xl overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/5">
@@ -432,7 +426,7 @@ export default function LandingPage() {
               { title: "App Móvil PWA", desc: "Progressive Web App instalable con soporte offline y notificaciones push.", icon: Smartphone, color: "text-cyan-400", border: "border-cyan-500/20", bg: "bg-cyan-500/5" },
               { title: "Portal de Noticias", desc: "Blog con editor Markdown, SEO optimizado y sitemap para Google News.", icon: Newspaper, color: "text-pink-400", border: "border-pink-500/20", bg: "bg-pink-500/5" },
             ].map((ex, i) => (
-              <div key={i}} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }}
+              <div key={i}}}
                 className={`p-6 rounded-xl border ${ex.border} ${ex.bg} hover:-translate-y-1 transition-all duration-300`}>
                 <div className={`h-11 w-11 rounded-lg bg-background/60 flex items-center justify-center mb-4 border ${ex.border}`}>
                   <ex.icon className={`h-5 w-5 ${ex.color}`} />
@@ -460,7 +454,7 @@ export default function LandingPage() {
               { icon: Users, title: "Acceso directo al creador", desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día." },
               { icon: Star, title: "Precio de lanzamiento", desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube." },
             ].map((item, i) => (
-              <div key={i}} whileInView={{ opacity: 1, y: 0 }}} viewport={{ once: true }}
+              <div key={i}}}
                 className="maris-fade-in p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-primary/30 transition-all text-center">
                 <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto mb-4">
                   <item.icon className="h-5 w-5 text-primary" />
@@ -485,7 +479,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-primary/10 blur-[100px] rounded-full pointer-events-none"></div>
         <div className="container px-4 md:px-8 mx-auto text-center relative z-10">
-          <div} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="maris-fade-in">
+          <div className="maris-fade-in">
             <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight">
               Tu próxima app empieza <br />
               <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">con una frase.</span>
