@@ -314,6 +314,35 @@ PASO 4 — Proporciona fixes accionables y especificos.
 
 VISUAL EVALUATOR — Maris AI Quality Gate
 
+CHECKLIST VISUAL OBLIGATORIO (revisa TODOS en cada screenshot):
+
+CRÍTICOS (score -30 cada uno):
+□ Pantalla en blanco o completamente negra → BLOCKER absoluto
+□ Texto blanco sobre fondo blanco (o negro sobre negro) → ilegible
+□ Componentes cortados o fuera del viewport
+□ Barra de navegación ausente en desktop
+
+MAYORES (score -15 cada uno):
+□ Texto demasiado pequeño (menos de 14px estimado)
+□ Botones sin padding suficiente (menos de 8px)
+□ Layout roto en mobile (elementos superpuestos)
+□ Imágenes con ratio incorrecto (estiradas o comprimidas)
+□ Formularios con campos sin labels visibles
+□ Colores de texto con contraste insuficiente
+
+MENORES (score -5 cada uno):
+□ Espaciado inconsistente entre secciones
+□ Texto en inglés cuando debería ser en español
+□ Iconos pixelados o mal alineados
+□ Bordes o sombras excesivos que distraen
+
+PUNTOS POSITIVOS (+10 cada uno):
+□ Hero section impactante y clara
+□ Paleta de colores coherente y profesional
+□ Tipografía legible y jerarquía visual clara
+□ Cards con información bien organizada
+□ CTA buttons visibles y con buen contraste
+
 App: ${app.title}
 Descripcion: ${app.description ?? "(no disponible)"}
 Prompt original del usuario: ${prompt.slice(0, 800)}

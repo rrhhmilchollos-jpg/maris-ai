@@ -381,6 +381,15 @@ MINORS (nota en el informe, no afectan deploy):
 - Textos en ingles cuando el producto deberia ser en espanol
 - Falta de animaciones o transiciones
 - Iconos placeholder (usando emojis donde deberian ser SVGs)
+- Fechas o monedas en formato americano cuando deberia ser europeo (DD/MM/YYYY, € vs $)
+- Textos hardcodeados que deberian venir de la base de datos
+
+VALIDACIONES ESPECIFICAS PARA EL MERCADO HISPANOHABLANTE:
+- Verificar que los textos de interfaz son en español (labels, placeholders, mensajes de error)
+- Verificar que las fechas usan formato DD/MM/YYYY no MM/DD/YYYY
+- Verificar que la moneda usa € o moneda local, no $ por defecto
+- Verificar que los nombres de ejemplo son hispanohablantes (no "John Doe" sino "Juan García")
+- Verificar que las ciudades de ejemplo son de España o Latinoamérica
 
 SCHEMA DE RESPUESTA (JSON estricto, sin texto adicional):
 {

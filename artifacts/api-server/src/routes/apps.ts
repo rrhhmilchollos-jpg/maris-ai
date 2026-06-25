@@ -370,6 +370,21 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - Los campos del body deben coincidir con los FormData/JSON del frontend
     - Las respuestas deben tener la estructura que el frontend espera
 
+11. PAGINACION Y BUSQUEDA:
+    - GET /resource?page=1&limit=20&q=busqueda&sort=createdAt&order=desc
+    - Respuesta: { data: [...], total: N, page: N, totalPages: N }
+    - Siempre incluir metadatos de paginacion en respuestas de lista
+
+12. SOFT DELETE Y AUDITORIA:
+    - Modelos con deletedAt?: Date (soft delete, nunca borrar datos reales)
+    - Campo updatedBy?: string para rastrear quien modifica
+    - Campo createdBy?: string vinculado al userId del token JWT
+
+13. VARIABLES DE ENTORNO:
+    - Generar siempre un .env.example con TODAS las variables necesarias
+    - JWT_SECRET, MONGODB_URI, PORT, CORS_ORIGIN, NODE_ENV obligatorios
+    - Documentar para que sirve cada variable
+
 Si el plan no necesita backend: {"backendCode":"No backend required for this app."}
 
 Rules:
@@ -525,13 +540,18 @@ PROCESO OBLIGATORIO:
 5. Diseña variantes de componentes clave con clases Tailwind reales
 
 PALETAS RECOMENDADAS POR SECTOR:
-- Fintech/Banca: azul marino + verde confianza, tipografía serif para credibilidad
-- Salud/Clínica: verdes suaves + blancos, nunca negro puro, mucho espacio
-- Restauración: cálidos (terracota, mostaza, crema), dark mode premium
-- E-commerce/Moda: negros elegantes, neutros sofisticados, tipografía editorial
-- SaaS/Tech: dark mode, violetas/índigos, verdes eléctricos para CTAs
-- Educación: azules amigables, amarillos motivadores, alta legibilidad
-- Legal: azul marino, dorado, serif clásico, máxima sobriedad
+- Fintech/Banca: azul marino #1e3a5f + verde confianza #22c55e, tipografía serif para credibilidad, Inter/Playfair
+- Salud/Clínica: verdes suaves #10b981 + blancos #f8fafc, nunca negro puro, mucho espacio, Plus Jakarta Sans
+- Restauración: cálidos (terracota #e07c6a, mostaza #f59e0b, crema #fef3c7), dark mode premium, Nunito
+- E-commerce/Moda: negros elegantes #0a0a0f, neutros sofisticados, tipografía editorial, Geist/DM Sans
+- SaaS/Tech: dark mode #0f0f1a, violetas/índigos #7c3aed, verdes eléctricos #22d3ee para CTAs, Inter
+- Educación: azules amigables #3b82f6, amarillos motivadores #fbbf24, alta legibilidad, Nunito/Poppins
+- Legal: azul marino #1e3a5f, dorado #d97706, serif clásico Playfair Display, máxima sobriedad
+- Inmobiliaria: azul confianza #1d4ed8 + blanco premium, serif para lujo, fotografía grande
+- Turismo: azules cielo #0ea5e9 + verdes naturaleza #16a34a, fotografía heroes, Montserrat
+- Deporte/Fitness: negros poderosos + naranja energía #f97316 o rojo #dc2626, Barlow Condensed
+- Belleza/Wellness: rosas nude #f9a8d4 + dorados #d4a574, tipografía elegante, Cormorant Garamond
+- Eventos: oscuros dramáticos + dorados celebración, tipografía display expresiva, Raleway
 
 REGLAS CRÍTICAS:
 - NUNCA #000000 puro — usa #0a0a0f o similar
@@ -798,18 +818,24 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
 
       // Detectar complejidad para elegir modelo
       const promptLen = cleanPrompt.length;
-      const isComplex = promptLen > 200 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic/.test(cleanPrompt);
+      const isComplex = promptLen > 150 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic|hotel|inmobili|logistic|deporte|academia|eventos|recursos humanos|ecommerce/.test(cleanPrompt);
       const researchModel = isComplex ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
 
       // Sistema de queries multiples para investigacion completa
       const sectorKeywords = cleanPrompt.toLowerCase();
-      const isFintech = /banco|finanz|pago|crypto|inversion|credito/.test(sectorKeywords);
-      const isSalud = /salud|clinic|medic|hospital|doctor|psic|dental/.test(sectorKeywords);
-      const isFood = /restaur|comida|cafe|bar|delivery|food|cocina/.test(sectorKeywords);
-      const isEcommerce = /tienda|shop|venta|producto|compra|ecommerce/.test(sectorKeywords);
-      const isEducacion = /educat|curso|aprend|escuela|academia|tutor/.test(sectorKeywords);
-      const isLegal = /abogad|legal|notari|jurídic|despacho|bufete/.test(sectorKeywords);
-      const isLogistica = /logistic|envio|transporte|flota|ruta|almacen/.test(sectorKeywords);
+      const isFintech = /banco|finanz|pago|crypto|inversion|credito|wallet|prestamo/.test(sectorKeywords);
+      const isSalud = /salud|clinic|medic|hospital|doctor|psic|dental|farmac|veterinar/.test(sectorKeywords);
+      const isFood = /restaur|comida|cafe|bar|delivery|food|cocina|catering|menu/.test(sectorKeywords);
+      const isEcommerce = /tienda|shop|venta|producto|compra|ecommerce|catalogo|marketplace/.test(sectorKeywords);
+      const isEducacion = /educat|curso|aprend|escuela|academia|tutor|formacion|certificado/.test(sectorKeywords);
+      const isLegal = /abogad|legal|notari|jurídic|despacho|bufete|contrato|compliance/.test(sectorKeywords);
+      const isLogistica = /logistic|envio|transporte|flota|ruta|almacen|tracking|paquete/.test(sectorKeywords);
+      const isInmobiliaria = /inmobili|alquiler|piso|apartament|vivienda|propiedad|real estate|hipoteca/.test(sectorKeywords);
+      const isTurismo = /hotel|turismo|viaje|reserva|vuelo|alojamiento|booking|vacacion/.test(sectorKeywords);
+      const isDeporte = /deport|gym|fitness|entrenamiento|futbol|padel|club|liga|torneo/.test(sectorKeywords);
+      const isBelleza = /peluquer|estetica|belleza|spa|masaje|salon|barberia|nail/.test(sectorKeywords);
+      const isEventos = /evento|boda|fiesta|concierto|ticket|entrada|celebracion|catering/.test(sectorKeywords);
+      const isRRHH = /rrhh|recursos humanos|empleado|nomina|vacaciones|contratacion|onboarding/.test(sectorKeywords);
 
       const sectorContext = isFintech ? "sector fintech y pagos digitales"
         : isSalud ? "sector salud y tecnologia medica"
@@ -818,6 +844,12 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
         : isEducacion ? "sector edtech y formacion online"
         : isLegal ? "sector legaltech y servicios juridicos"
         : isLogistica ? "sector logistica y gestion de flotas"
+        : isInmobiliaria ? "sector inmobiliario y proptech"
+        : isTurismo ? "sector turismo y hospitality tech"
+        : isDeporte ? "sector deportes y fitness tech"
+        : isBelleza ? "sector belleza y wellness tech"
+        : isEventos ? "sector eventos y entretenimiento"
+        : isRRHH ? "sector recursos humanos y HR tech"
         : "aplicaciones web y SaaS";
 
       const RESEARCHER_SYSTEM = `
@@ -1708,6 +1740,19 @@ CATEGORIAS DE REVISION (revisa TODAS):
    - Variables de entorno usadas en frontend que deberian estar en backend
    - console.log dejados en produccion con datos sensibles
    - API keys hardcodeadas en codigo frontend
+
+9. PERFORMANCE CRITICO
+   - Imagenes sin lazy loading (usar loading="lazy" o Intersection Observer)
+   - useEffect con llamadas API sin cleanup (memory leaks)
+   - Listas de mas de 50 items sin virtualizacion o paginacion
+   - Imports de librerias completas cuando solo se necesita una funcion (lodash, etc.)
+
+10. UX CRITICO
+    - Formularios sin feedback de loading (spinner/disabled mientras hace fetch)
+    - Errores de API sin mensaje visible al usuario
+    - Paginas sin estado vacio (cuando no hay datos que mostrar)
+    - Botones sin cursor: pointer
+    - Links de navegacion que no cambian de ruta al clickar
 
 REGLAS:
 - Reporta SOLO errores reales, no preferencias de estilo
