@@ -89,13 +89,13 @@ function AuroraBackground() {
   return (
     <div className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
       <div className="absolute -top-40 -left-40 w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full opacity-20 blur-[100px] will-change-transform"
-        style={{ background: "radial-gradient(circle, #7c3aed, transparent)" }} />
+        style={{ background: "radial-gradient(circle, #7c3aed, transparent)" } />
       <div className="absolute top-1/3 -right-40 w-[250px] h-[250px] md:w-[500px] md:h-[500px] rounded-full opacity-15 blur-[120px]"
-        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "marisBlob 4s ease-in-out infinite 1s", transform: "translateZ(0)" }} />
+        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "marisBlob 4s ease-in-out infinite 1s", transform: "translateZ(0)" } />
       <div className="absolute -bottom-40 left-1/3 w-[300px] h-[200px] md:w-[700px] md:h-[400px] rounded-full opacity-10 blur-[150px]"
-        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "marisBlob 6s ease-in-out infinite 2s", transform: "translateZ(0)" }} />
+        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "marisBlob 6s ease-in-out infinite 2s", transform: "translateZ(0)" } />
       <div className="absolute inset-0"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" }} />
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" } />
     </div>
   );
 }
@@ -175,7 +175,7 @@ export default function LandingPage() {
       {/* Hero */}
       <main id="main-content" role="main" aria-label="Contenido principal de Maris AI">
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
-        <div style={{ opacity: heroOpacity }} className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
+        <div style={{ opacity: heroOpacity } className="maris-fade-in container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
           <div initial="initial" animate="animate" className="maris-fade-in text-center">
             <div className="maris-fade-in inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
@@ -286,7 +286,7 @@ export default function LandingPage() {
               }
             ].map((app, i) => (
               <div
-                key={i}}}
+                key={i}
                 className="maris-fade-in group relative overflow-hidden rounded-2xl border border-white/10 bg-card/30 hover:border-primary/30 transition-all"
               >
                 <div className="aspect-video overflow-hidden">
@@ -426,7 +426,7 @@ export default function LandingPage() {
               { title: "App Móvil PWA", desc: "Progressive Web App instalable con soporte offline y notificaciones push.", icon: Smartphone, color: "text-cyan-400", border: "border-cyan-500/20", bg: "bg-cyan-500/5" },
               { title: "Portal de Noticias", desc: "Blog con editor Markdown, SEO optimizado y sitemap para Google News.", icon: Newspaper, color: "text-pink-400", border: "border-pink-500/20", bg: "bg-pink-500/5" },
             ].map((ex, i) => (
-              <div key={i}}}
+              <div key={i}
                 className={`p-6 rounded-xl border ${ex.border} ${ex.bg} hover:-translate-y-1 transition-all duration-300`}>
                 <div className={`h-11 w-11 rounded-lg bg-background/60 flex items-center justify-center mb-4 border ${ex.border}`}>
                   <ex.icon className={`h-5 w-5 ${ex.color}`} />
@@ -454,7 +454,7 @@ export default function LandingPage() {
               { icon: Users, title: "Acceso directo al creador", desc: "Los primeros usuarios tienen línea directa. Tu feedback da forma al producto desde el primer día." },
               { icon: Star, title: "Precio de lanzamiento", desc: "El mejor precio disponible, solo para los primeros. Una vez llenos los cupos, sube." },
             ].map((item, i) => (
-              <div key={i}}}
+              <div key={i}
                 className="maris-fade-in p-6 rounded-xl border border-white/10 bg-card/40 backdrop-blur hover:border-primary/30 transition-all text-center">
                 <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mx-auto mb-4">
                   <item.icon className="h-5 w-5 text-primary" />
