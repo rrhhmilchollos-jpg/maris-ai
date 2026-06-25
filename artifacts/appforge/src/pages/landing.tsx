@@ -129,9 +129,12 @@ export default function LandingPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-white px-4 py-2 rounded z-50">
+        Saltar al contenido principal
+      </a>
       <AuroraBackground />
 
-      <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl">
+      <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl" role="banner">
         <div className="container flex h-14 max-w-screen-2xl items-center px-3 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
             <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-6 w-6" fetchPriority="high" decoding="sync" />
@@ -172,6 +175,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
+      <main id="main-content" role="main" aria-label="Contenido principal de Maris AI">
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
         <motion.div style={{ opacity: heroOpacity }} className="container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
           <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
@@ -394,7 +398,7 @@ export default function LandingPage() {
                   <div className="h-3 w-3 rounded-full bg-green-500/80"></div>
                   <span className="text-xs text-muted-foreground ml-2 font-mono">Dashboard.tsx</span>
                   <div className="ml-auto flex items-center gap-1.5">
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" style={{animation:"marisBlob 2s ease-in-out infinite",transform:"translateZ(0)"}}></div>
                     <span className="text-xs text-emerald-400 font-mono">generando...</span>
                   </div>
                 </div>
@@ -514,7 +518,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur">
+      </main>
+      <footer className="py-12 border-t border-white/5 bg-background/80 backdrop-blur" role="contentinfo">
         <div className="container px-4 md:px-8 mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>

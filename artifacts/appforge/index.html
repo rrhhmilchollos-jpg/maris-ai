@@ -127,6 +127,11 @@
     #root:empty::after{content:"";display:block;min-height:100vh;background:hsl(240 10% 4%);}
     /* Preload hint visual para FCP */
     .maris-hero-skeleton{background:linear-gradient(135deg,hsl(240 10% 6%) 0%,hsl(240 10% 8%) 100%);min-height:100vh;}
+    /* Evitar FOIT — mostrar texto con font del sistema hasta que cargue Inter */
+    @font-face{font-family:'Inter';font-display:swap;}
+    /* Mejorar INP — reducir trabajo del hilo principal */
+    *{contain-intrinsic-size:auto;}
+    img,video{content-visibility:auto;}
   </style>
 
   
@@ -233,7 +238,7 @@
     })();
   </script>
 
-  <div id="root"></div>
+  <div id="root" role="main"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

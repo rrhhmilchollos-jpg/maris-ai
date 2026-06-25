@@ -62,9 +62,9 @@ export function CookieBanner() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-white">Configuración de Cookies</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    <p className="mt-1 text-sm leading-relaxed text-white/70">
                       Utilizamos cookies propias y de terceros para mejorar tu experiencia, analizar el tráfico y mostrarte contenido personalizado. Puedes aceptarlas todas o configurar tus preferencias. Consulta nuestra{" "}
-                      <Link href="/legal/cookies" className="text-primary hover:underline">
+                      <Link href="/legal/cookies" className="text-violet-300 hover:text-white underline">
                         Política de Cookies
                       </Link>.
                     </p>
