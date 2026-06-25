@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>App de Reservas para Restaurante con IA en España 2026 — Sin Programar | Maris AI</title>
+<meta name="description" content="Crea tu app de reservas para restaurante con IA en 5 minutos sin programar. Gestión de mesas, horarios, carta digital y pagos. Guía completa para hosteleros en España."/>
+<meta name="robots" content="index,follow"/>
+<link rel="canonical" href="https://www.marisai.es/blog/app-reservas-restaurante-ia-espana.html"/>
+<meta property="og:title" content="App de Reservas para Restaurante con IA — Sin Programar"/>
+<meta property="og:description" content="Crea tu app de gestión de reservas para tu restaurante en 5 minutos con IA. Sin conocimientos técnicos. Para hosteleros en España."/>
+<meta property="og:type" content="article"/>
+<meta property="og:url" content="https://www.marisai.es/blog/app-reservas-restaurante-ia-espana.html"/>
+<meta property="og:image" content="https://www.marisai.es/opengraph.jpg"/>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"App de Reservas para Restaurante con IA en España 2026 — Sin Programar","description":"Crea tu app de reservas para restaurante con IA en 5 minutos sin programar. Gestión de mesas, horarios, carta digital y pagos.","datePublished":"2026-06-25","dateModified":"2026-06-25","author":{"@type":"Person","name":"Iván Rubio","url":"https://www.marisai.es/landings/sobre-nosotros.html"},"publisher":{"@type":"Organization","name":"Maris AI","url":"https://www.marisai.es","logo":{"@type":"ImageObject","url":"https://www.marisai.es/logo.svg"}},"mainEntityOfPage":"https://www.marisai.es/blog/app-reservas-restaurante-ia-espana.html","keywords":"app reservas restaurante, app restaurante sin programar, gestión reservas restaurante ia, vibe coding restaurante, maris ai restaurante"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"¿Cuánto cuesta una app de reservas para restaurante?","acceptedAnswer":{"@type":"Answer","text":"Con Maris AI puedes crear tu app de reservas para restaurante desde 0€ (15 créditos gratis sin tarjeta). Los paquetes de pago empiezan desde 20€. Comparado con los 3.000-10.000€ que cobra una agencia por una app similar, el ahorro es enorme."}},{"@type":"Question","name":"¿Qué funcionalidades tiene una app de restaurante generada con IA?","acceptedAnswer":{"@type":"Answer","text":"La app incluye: reservas online con calendario, gestión de mesas y capacidad, carta digital con fotos, panel de administración, recordatorios por email, estadísticas de ocupación y pagos con Stripe si lo necesitas."}},{"@type":"Question","name":"¿Puedo personalizar la app de restaurante después de generarla?","acceptedAnswer":{"@type":"Answer","text":"Sí. El código es 100% tuyo y exportable a GitHub. Puedes modificarlo tú mismo o contratar a cualquier desarrollador para añadir funcionalidades específicas sin depender de Maris AI."}},{"@type":"Question","name":"¿La app de restaurante funciona en móvil?","acceptedAnswer":{"@type":"Answer","text":"Sí. Todas las apps generadas por Maris AI son mobile-first y responsive. Funcionan perfectamente en smartphone, tablet y ordenador desde el primer momento."}}]}</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#07070f;color:#e2e8f0;line-height:1.8}
+.nav{padding:1rem 2rem;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.nav a{color:#a78bfa;text-decoration:none;font-size:0.9rem}
+.nav span{color:#4b5563}
+.container{max-width:760px;margin:0 auto;padding:0 1.5rem}
+.hero{padding:4rem 0 2rem}
+.tag{display:inline-block;background:rgba(234,88,12,0.15);border:1px solid rgba(234,88,12,0.3);color:#fb923c;font-size:0.75rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:0.3rem 0.9rem;border-radius:100px;margin-bottom:1rem}
+.meta{color:#4b5563;font-size:0.85rem;margin-bottom:2rem}
+h1{font-size:clamp(1.6rem,4vw,2.2rem);font-weight:800;color:#fff;line-height:1.2;margin-bottom:1rem}
+h2{font-size:1.4rem;font-weight:700;color:#fff;margin:2.5rem 0 1rem}
+h3{font-size:1.05rem;font-weight:700;color:#e2e8f0;margin:1.75rem 0 0.5rem}
+p{color:#94a3b8;margin-bottom:1.2rem}
+strong{color:#e2e8f0}
+ul,ol{padding-left:1.5rem;color:#94a3b8;margin-bottom:1.2rem}
+li{margin-bottom:0.6rem}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin:1.5rem 0}
+.feature-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:1.25rem}
+.feature-card .icon{font-size:1.5rem;margin-bottom:0.5rem}
+.feature-card h3{font-size:0.9rem;margin:0 0 0.3rem;color:#e2e8f0}
+.feature-card p{font-size:0.82rem;color:#64748b;margin:0}
+.prompt-box{background:rgba(234,88,12,0.08);border:1px solid rgba(234,88,12,0.2);border-radius:12px;padding:1.5rem;margin:1.5rem 0}
+.prompt-box h4{color:#fb923c;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.75rem}
+.prompt-box p{color:#e2e8f0;font-style:italic;margin:0;font-size:1rem;line-height:1.6}
+.step-list{counter-reset:steps;list-style:none;padding:0}
+.step-list li{counter-increment:steps;display:flex;gap:1rem;margin-bottom:1.5rem;align-items:flex-start}
+.step-list li::before{content:counter(steps);min-width:2rem;height:2rem;background:#7c3aed;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.85rem;flex-shrink:0}
+.comparison{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;overflow:hidden;margin:1.5rem 0}
+.comparison-row{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid rgba(255,255,255,0.05)}
+.comparison-row:last-child{border-bottom:none}
+.comparison-cell{padding:1rem;font-size:0.9rem}
+.comparison-cell.header{background:rgba(255,255,255,0.04);font-weight:700;color:#e2e8f0;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em}
+.comparison-cell.bad{color:#94a3b8}
+.comparison-cell.good{color:#e2e8f0;background:rgba(124,58,237,0.05)}
+.comparison-cell .price{font-size:1.1rem;font-weight:700;color:#22c55e}
+.highlight{background:rgba(124,58,237,0.1);border-left:3px solid #7c3aed;padding:1rem 1.5rem;border-radius:0 8px 8px 0;margin:1.5rem 0}
+.highlight p{margin:0;color:#c4b5fd}
+.faq-item{margin-bottom:1.5rem;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:1.5rem}
+.faq-item h3{color:#e2e8f0;margin-bottom:0.5rem}
+.faq-item p{margin:0;font-size:0.95rem}
+.related{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:1.5rem;margin:2rem 0}
+.related h4{color:#e2e8f0;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:1rem}
+.related a{display:block;color:#a78bfa;text-decoration:none;font-size:0.9rem;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.related a:last-child{border-bottom:none}
+.cta-box{background:linear-gradient(135deg,rgba(234,88,12,0.15),rgba(124,58,237,0.15));border:1px solid rgba(234,88,12,0.3);border-radius:16px;padding:2rem;text-align:center;margin:3rem 0}
+.cta-box h3{color:#fff;margin-bottom:0.5rem;margin-top:0;font-size:1.3rem}
+.cta-box p{margin-bottom:1.5rem}
+.btn{display:inline-block;background:#7c3aed;color:#fff;padding:0.85rem 2rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:1rem}
+.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:2.5rem 0}
+footer{text-align:center;padding:2rem;color:#374151;font-size:0.8rem;border-top:1px solid rgba(255,255,255,0.05);margin-top:3rem}
+footer a{color:#6b7280;text-decoration:none;margin:0 0.5rem}
+@media(max-width:600px){.comparison-row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="https://www.marisai.es">← Maris AI</a>
+  <span>/</span>
+  <a href="https://www.marisai.es/news">Blog</a>
+  <span>/</span>
+  <span style="color:#9ca3af;">App Restaurante</span>
+</nav>
+<div class="container">
+<article>
+  <section class="hero">
+    <div class="tag">Hostelería</div>
+    <h1>App de Reservas para Restaurante con IA en España: Crea la tuya en 5 Minutos sin Programar</h1>
+    <p class="meta">Por <strong style="color:#e2e8f0">Iván Rubio</strong> · 25 de junio de 2026 · 9 min de lectura</p>
+    <p style="font-size:1.05rem;color:#94a3b8;">¿Sigues gestionando las reservas de tu restaurante por teléfono o WhatsApp? En 2026, cualquier hostelero en España puede tener su propia app de reservas profesional en menos de 5 minutos usando inteligencia artificial — sin saber programar y sin pagar a una agencia.</p>
+  </section>
+
+  <hr class="divider"/>
+
+  <h2>¿Por qué tu restaurante necesita una app de reservas propia?</h2>
+  <p>El 73% de los comensales en España prefiere reservar mesa online antes que llamar por teléfono. Plataformas como TheFork o ElTenedor cobran comisiones de entre 1€ y 5€ por cubierto reservado. Con tu propia app, las reservas son directas, sin intermediarios y sin comisiones.</p>
+
+  <div class="comparison">
+    <div class="comparison-row">
+      <div class="comparison-cell header">TheFork / ElTenedor</div>
+      <div class="comparison-cell header good">Tu app con Maris AI</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">1-5€ por cubierto reservado</div>
+      <div class="comparison-cell good"><span class="price">0€</span> de comisión</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">Datos de tus clientes en manos de terceros</div>
+      <div class="comparison-cell good">Tus clientes son solo tuyos</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">Tu restaurante compite con otros en la misma plataforma</div>
+      <div class="comparison-cell good">App exclusiva de tu restaurante</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">Sin personalización de marca</div>
+      <div class="comparison-cell good">100% con tu identidad visual</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">Dependencia de la plataforma</div>
+      <div class="comparison-cell good">Código tuyo para siempre</div>
+    </div>
+  </div>
+
+  <h2>Qué incluye una app de restaurante generada con Maris AI</h2>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="icon">📅</div>
+      <h3>Reservas online 24/7</h3>
+      <p>Tus clientes reservan mesa a cualquier hora. Selección de fecha, hora, número de comensales y zona (terraza, interior, privado).</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">🪑</div>
+      <h3>Gestión de mesas</h3>
+      <p>Panel visual con el plano de tu local. Control de capacidad por zona y turno. Evita sobreventas automáticamente.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">📱</div>
+      <h3>Carta digital QR</h3>
+      <p>Menú digital con fotos, descripciones, alérgenos y precios. Actualizable en tiempo real desde el panel de administración.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">📧</div>
+      <h3>Recordatorios automáticos</h3>
+      <p>Email de confirmación al reservar y recordatorio 24h antes. Reduce las no-shows hasta un 60%.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">📊</div>
+      <h3>Estadísticas de ocupación</h3>
+      <p>Dashboard con los días y horas de mayor demanda, ticket medio y tendencias mensuales.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">💳</div>
+      <h3>Pagos y señales</h3>
+      <p>Opción de pagar señal al reservar con Stripe. Ideal para eventos especiales, grupos grandes o menús degustación.</p>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <h2>Cómo crear tu app de restaurante en 5 minutos</h2>
+
+  <h3>El prompt exacto que debes usar</h3>
+  <p>Copia y adapta este prompt a tu restaurante:</p>
+
+  <div class="prompt-box">
+    <h4>Prompt para Maris AI</h4>
+    <p>"Crea una app de gestión de reservas para mi restaurante [nombre] en [ciudad]. Los clientes pueden reservar mesa online seleccionando fecha, hora y número de comensales. El restaurante tiene 15 mesas (10 interior, 5 terraza), dos turnos (14:00 y 21:00) y capacidad máxima de 60 personas. El panel de administración permite ver todas las reservas del día, confirmarlas o cancelarlas. Los clientes reciben email de confirmación y recordatorio 24h antes. Estilo visual: cálido, terracota y madera, tipografía amigable."</p>
+  </div>
+
+  <h3>Pasos para generar y publicar tu app</h3>
+  <ol class="step-list">
+    <li>
+      <div><strong>Entra en marisai.es</strong> y regístrate gratis. Recibes 15 créditos sin tarjeta.</div>
+    </li>
+    <li>
+      <div><strong>Pega el prompt</strong> adaptado a tu restaurante (nombre, ciudad, número de mesas, turnos, capacidad).</div>
+    </li>
+    <li>
+      <div><strong>Espera 4-5 minutos</strong> mientras los 9 agentes generan tu app completa con frontend, backend y base de datos.</div>
+    </li>
+    <li>
+      <div><strong>Previsualiza la app</strong> en el navegador y comprueba que las funcionalidades son correctas.</div>
+    </li>
+    <li>
+      <div><strong>Exporta a GitHub</strong> y despliega en Vercel (gratuito) en menos de 2 minutos.</div>
+    </li>
+    <li>
+      <div><strong>Comparte la URL</strong> con tus clientes, ponla en tu web y en tu perfil de Google Maps.</div>
+    </li>
+  </ol>
+
+  <div class="highlight">
+    <p>💡 Consejo: Añade la URL de tu app de reservas en la descripción de tu ficha de Google My Business. Los clientes que te encuentren en Google Maps podrán reservar directamente sin llamar.</p>
+  </div>
+
+  <hr class="divider"/>
+
+  <h2>Casos reales: restaurantes en España que usan apps propias</h2>
+
+  <h3>Restaurante de cocina mediterránea en Valencia</h3>
+  <p>Un restaurante familiar en el barrio del Carmen de Valencia generó su app de reservas con Maris AI en 6 minutos. En el primer mes recibieron 47 reservas online directas, evitando pagar las comisiones de TheFork. Ahorro estimado: 180€ en el primer mes.</p>
+
+  <h3>Bar de tapas en Madrid con carta digital QR</h3>
+  <p>Un bar de tapas en Malasaña usó Maris AI para crear su carta digital QR. Los clientes escanean el código en la mesa y ven la carta con fotos en su móvil. Redujeron el coste de imprimir cartas físicas y actualizan el menú diario en 2 minutos desde el panel.</p>
+
+  <h3>Restaurante de menú del día en Barcelona</h3>
+  <p>Un restaurante de menú ejecutivo en el Eixample creó una app donde sus clientes corporativos reservan el menú del día con antelación. Bajaron las no-shows de un 18% a un 3% gracias a los recordatorios automáticos por email.</p>
+
+  <hr class="divider"/>
+
+  <h2>¿Cuánto cuesta una app de restaurante vs contratar una agencia?</h2>
+  <div class="comparison">
+    <div class="comparison-row">
+      <div class="comparison-cell header">Opción</div>
+      <div class="comparison-cell header">Coste</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">Agencia de desarrollo web</div>
+      <div class="comparison-cell bad">5.000€ - 15.000€</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">Freelance desarrollador</div>
+      <div class="comparison-cell bad">2.000€ - 5.000€</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell bad">TheFork/ElTenedor (anual)</div>
+      <div class="comparison-cell bad">600€ - 3.000€ en comisiones</div>
+    </div>
+    <div class="comparison-row">
+      <div class="comparison-cell good"><strong>Maris AI</strong></div>
+      <div class="comparison-cell good"><span class="price">0€</span> para empezar · desde 20€</div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <h2>Preguntas frecuentes sobre apps para restaurantes con IA</h2>
+  <div class="faq-item">
+    <h3>¿Cuánto cuesta una app de reservas para restaurante?</h3>
+    <p>Con Maris AI puedes crear tu app desde 0€ (15 créditos gratis sin tarjeta). Los paquetes de pago empiezan desde 20€. Comparado con los 5.000-15.000€ de una agencia, el ahorro es enorme.</p>
+  </div>
+  <div class="faq-item">
+    <h3>¿Qué funcionalidades tiene la app de restaurante?</h3>
+    <p>Reservas online con calendario, gestión de mesas y capacidad por zona, carta digital con fotos, panel de administración, recordatorios por email, estadísticas de ocupación y pagos con Stripe.</p>
+  </div>
+  <div class="faq-item">
+    <h3>¿Puedo personalizar la app con el logo y colores de mi restaurante?</h3>
+    <p>Sí. Maris AI adapta automáticamente los colores y el estilo visual al sector (cálido y apetecible para restauración). Puedes especificar en el prompt los colores de tu marca y el sistema los aplica.</p>
+  </div>
+  <div class="faq-item">
+    <h3>¿La app funciona en móvil?</h3>
+    <p>Sí. Todas las apps generadas por Maris AI son mobile-first y responsive. Funcionan perfectamente en smartphone, tablet y ordenador desde el primer momento.</p>
+  </div>
+
+  <div class="related">
+    <h4>Artículos relacionados</h4>
+    <a href="https://www.marisai.es/blog/lanzar-mvp-espana-48-horas-ia.html">→ Cómo lanzar un MVP en España en 48 horas con IA</a>
+    <a href="https://www.marisai.es/blog/crear-app-sin-programar-espana-2026.html">→ Cómo crear una app sin programar en España 2026</a>
+    <a href="https://www.marisai.es/landings/app-para-restaurantes.html">→ Maris AI para restaurantes — landing page</a>
+    <a href="https://www.marisai.es/landings/base44-vs-emergent-alternativa-espanol.html">→ Base44 vs Emergent vs Maris AI — comparativa completa</a>
+  </div>
+
+  <div class="cta-box">
+    <h3>🍽️ Crea la app de tu restaurante ahora</h3>
+    <p>15 créditos gratis. Sin tarjeta. Sin comisiones para siempre.<br/>Tu app de reservas lista en menos de 5 minutos.</p>
+    <a href="https://www.marisai.es" class="btn">Crear mi app de restaurante →</a>
+  </div>
+</article>
+</div>
+<footer>
+  <a href="https://www.marisai.es">Maris AI</a>
+  <a href="https://www.marisai.es/news">Blog</a>
+  <a href="https://www.marisai.es/pricing">Precios</a>
+  <a href="https://www.marisai.es/landings/app-para-restaurantes.html">App Restaurantes</a>
+  <a href="https://www.marisai.es/landings/base44-vs-emergent-alternativa-espanol.html">Base44 vs Emergent</a>
+  <br/><br/>© 2026 Maris AI · Valencia, España
+</footer>
+</body>
+</html>
