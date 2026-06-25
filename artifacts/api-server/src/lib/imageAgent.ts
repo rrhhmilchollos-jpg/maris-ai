@@ -164,6 +164,19 @@ La imagen debe verse 100% real y profesional, indistinguible de una foto tomada 
 }
 
 // Modelos de imagen en orden de preferencia (fallback automatico)
+// Sector-aware image generation prompts
+function buildSectorImageHint(altText: string, appTitle: string): string {
+  const lower = (altText + " " + appTitle).toLowerCase();
+  if (/restaur|comida|cafe|bar|menu|delivery/.test(lower)) return "food photography, warm lighting, appetizing, professional restaurant";
+  if (/salud|medic|clinic|doctor|hospital/.test(lower)) return "healthcare, clean, professional, trustworthy, medical setting";
+  if (/inmobili|casa|piso|apartament|propiedad/.test(lower)) return "real estate photography, bright interior, modern home, professional";
+  if (/deport|gym|fitness|entrena|futbol/.test(lower)) return "sports photography, dynamic, energetic, action shot";
+  if (/viaje|hotel|turismo|playa|vacacion/.test(lower)) return "travel photography, stunning landscape, professional tourism";
+  if (/moda|ropa|fashion|tienda|boutique/.test(lower)) return "fashion photography, editorial, clean background, professional";
+  if (/negocio|empresa|corporativ|profesional/.test(lower)) return "business photography, professional, corporate, clean office";
+  return "professional photography, high quality, modern, clean background";
+}
+
 const IMAGE_MODELS = [
   "gemini-3-pro-image-preview",
   "gemini-2.0-flash-preview-image-generation",
