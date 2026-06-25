@@ -1,139 +1,42 @@
-# ════════════════════════════════════════════════════
-# robots.txt — Maris AI · www.marisai.es
-# Actualizado: junio 2026
-# ════════════════════════════════════════════════════
-
-# ✅ Googlebot — rastreo completo de todas las páginas públicas
 User-agent: Googlebot
 Allow: /
 Disallow: /api/
 Disallow: /admin/
 Disallow: /dashboard/
 
-# ✅ Googlebot para imágenes
-User-agent: Googlebot-Image
-Allow: /
-Allow: /opengraph.jpg
-Allow: /logo.svg
-
-# ✅ Google AdsBot
-User-agent: AdsBot-Google
-Allow: /
-
-# ✅ Google Mobile
-User-agent: Googlebot-Mobile
-Allow: /
-
-# ✅ Bing / Microsoft
 User-agent: Bingbot
 Allow: /
 Disallow: /api/
-Disallow: /admin/
 
-# ✅ Yandex
-User-agent: YandexBot
-Allow: /
-Disallow: /api/
-
-# ✅ DuckDuckGo
-User-agent: DuckDuckBot
-Allow: /
-
-# ✅ Google AI / Gemini — acceso a todo el contenido
-User-agent: Google-Extended
-Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Allow: /.well-known/ai-plugin.json
-
-# ✅ OpenAI — ChatGPT, GPT-4
 User-agent: GPTBot
 Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
 
-User-agent: ChatGPT-User
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
 Allow: /
 
 User-agent: OAI-SearchBot
 Allow: /
 
-# ✅ Anthropic — Claude
-User-agent: ClaudeBot
-Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-
-User-agent: anthropic-ai
-Allow: /
-
-# ✅ Perplexity AI
-User-agent: PerplexityBot
-Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-
-# ✅ Meta AI / Llama
 User-agent: Meta-ExternalAgent
 Allow: /
 
-User-agent: Meta-ExternalFetcher
-Allow: /
-
-# ✅ Apple (Siri, Safari, Spotlight)
 User-agent: Applebot
 Allow: /
 
-User-agent: Applebot-Extended
-Allow: /
-
-# ✅ Cohere AI
-User-agent: cohere-ai
-Allow: /
-
-# ✅ Amazon Alexa / AI
-User-agent: Amazonbot
-Allow: /
-
-# ✅ You.com
-User-agent: YouBot
-Allow: /
-
-# ✅ Diffbot
-User-agent: Diffbot
-Allow: /
-
-# ✅ Bytedance / TikTok AI
-User-agent: Bytespider
-Allow: /
-
-# ✅ Semrush / Ahrefs (análisis SEO)
-User-agent: SemrushBot
-Allow: /
-
-User-agent: AhrefsBot
-Allow: /
-
-# ════════════════════════════════════════════
-# Reglas generales — todos los demás bots
-# ════════════════════════════════════════════
 User-agent: *
 Allow: /
-Allow: /llms.txt
-Allow: /llms-full.txt
-Allow: /.well-known/
 Disallow: /api/
 Disallow: /admin/
 Disallow: /dashboard/
 
-# ════════════════════════════════════════════
-# IndexNow — indexación instantánea
-# ════════════════════════════════════════════
-# Key: marisai9987e310506898d3
-# Verificación: https://www.marisai.es/marisai9987e310506898d3.txt
-
-# ════════════════════════════════════════════
-# Sitemaps — todas las URLs del sitio
-# ════════════════════════════════════════════
 Sitemap: https://www.marisai.es/sitemap.xml
 Sitemap: https://www.marisai.es/sitemap-news.xml
