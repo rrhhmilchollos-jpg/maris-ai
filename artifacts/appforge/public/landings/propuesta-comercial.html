@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Propuesta Comercial — Maris AI | Arquitectura de 9 Agentes para tu MVP</title>
+<meta name="description" content="Por qué la arquitectura de 9 agentes especializados de Maris AI supera a Bolt.new y Lovable para lanzar tu MVP en España. Propuesta comercial y argumentario."/>
+<meta name="robots" content="index,follow"/>
+<link rel="canonical" href="https://www.marisai.es/landings/propuesta-comercial.html"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:#07070f;color:#e2e8f0;line-height:1.7}
+.nav{padding:1rem 2rem;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:1rem}
+.nav a{color:#a78bfa;text-decoration:none;font-size:0.9rem}
+.nav span{color:#4b5563}
+.container{max-width:860px;margin:0 auto;padding:0 1.5rem}
+.hero{padding:4rem 0 3rem;text-align:center}
+.tag{display:inline-block;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#a78bfa;font-size:0.75rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;padding:0.3rem 0.9rem;border-radius:100px;margin-bottom:1.25rem}
+h1{font-size:clamp(1.8rem,4vw,2.6rem);font-weight:800;color:#fff;line-height:1.2;margin-bottom:1rem}
+h1 span{color:#a78bfa}
+.lead{font-size:1.05rem;color:#64748b;max-width:640px;margin:0 auto 2.5rem}
+.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:3rem 0}
+h2{font-size:1.4rem;font-weight:700;color:#fff;margin-bottom:1.5rem}
+h3{font-size:1rem;font-weight:700;color:#e2e8f0;margin-bottom:0.4rem}
+p{color:#94a3b8;margin-bottom:1rem}
+strong{color:#e2e8f0}
+
+/* Matriz de objeciones */
+.objections{display:flex;flex-direction:column;gap:1rem;margin:2rem 0}
+.objection-card{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,0.07)}
+.objection-left{background:rgba(239,68,68,0.06);padding:1.25rem;border-right:1px solid rgba(255,255,255,0.06)}
+.objection-right{background:rgba(34,197,94,0.05);padding:1.25rem}
+.objection-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem}
+.objection-left .objection-label{color:#f87171}
+.objection-right .objection-label{color:#4ade80}
+.objection-left p,.objection-right p{font-size:0.88rem;margin:0;color:#94a3b8}
+.objection-right p{color:#94a3b8}
+.objection-right strong{color:#e2e8f0}
+
+/* Propuesta email */
+.email-template{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;margin:2rem 0}
+.email-header{background:rgba(124,58,237,0.12);border-bottom:1px solid rgba(255,255,255,0.06);padding:1rem 1.5rem;display:flex;align-items:center;gap:0.75rem}
+.email-header .dot{width:10px;height:10px;border-radius:50%}
+.email-header .dot.r{background:#ef4444}
+.email-header .dot.y{background:#f59e0b}
+.email-header .dot.g{background:#22c55e}
+.email-subject{font-size:0.85rem;color:#94a3b8;margin-left:0.5rem}
+.email-body{padding:1.5rem;font-size:0.92rem;color:#94a3b8;line-height:1.8}
+.email-body strong{color:#e2e8f0}
+.email-body .highlight-line{color:#c4b5fd;font-style:italic}
+.email-placeholder{color:#7c3aed;font-weight:600}
+.copy-btn{display:block;width:100%;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);color:#a78bfa;padding:0.75rem;text-align:center;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background 0.2s;font-family:inherit}
+.copy-btn:hover{background:rgba(124,58,237,0.25)}
+
+/* Funnel */
+.funnel{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:2rem 0}
+.funnel-step{text-align:center;padding:1.5rem 1rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:14px}
+.funnel-step .icon{font-size:2rem;margin-bottom:0.75rem}
+.funnel-step h3{color:#e2e8f0;font-size:0.95rem;margin-bottom:0.4rem}
+.funnel-step p{font-size:0.8rem;color:#64748b;margin:0}
+.funnel-arrow{display:flex;align-items:center;justify-content:center;color:#4b5563;font-size:1.2rem;padding-top:2rem}
+
+/* CTA */
+.cta-box{background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);border-radius:16px;padding:2.5rem;text-align:center;margin:3rem 0}
+.cta-box h2{font-size:1.6rem;margin-bottom:0.75rem}
+.cta-box p{margin-bottom:2rem;max-width:480px;margin-left:auto;margin-right:auto}
+.btn{display:inline-block;background:#7c3aed;color:#fff;padding:0.9rem 2rem;border-radius:10px;text-decoration:none;font-weight:700;font-size:1rem;margin:0.4rem}
+.btn-sec{display:inline-block;border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;padding:0.9rem 2rem;border-radius:10px;text-decoration:none;font-weight:600;font-size:0.95rem;margin:0.4rem}
+
+footer{text-align:center;padding:2rem;color:#374151;font-size:0.8rem;border-top:1px solid rgba(255,255,255,0.05);margin-top:3rem}
+footer a{color:#6b7280;text-decoration:none;margin:0 0.5rem}
+@media(max-width:640px){.objection-card{grid-template-columns:1fr}.objection-left{border-right:none;border-bottom:1px solid rgba(255,255,255,0.06)}.funnel{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="https://www.marisai.es">← Maris AI</a>
+  <span>/</span>
+  <span style="color:#9ca3af;">Propuesta Comercial</span>
+</nav>
+
+<div class="container">
+
+  <section class="hero">
+    <div class="tag">Argumentario comercial</div>
+    <h1>Por qué <span>9 agentes especializados</span><br/>superan al chat único de la competencia</h1>
+    <p class="lead">Matriz de objeciones, plantilla de propuesta y embudo de conversión para cerrar clientes que llegan buscando alternativas a Bolt.new, Lovable o Emergent.</p>
+  </section>
+
+  <hr class="divider"/>
+
+  <h2>🎯 Matriz de Objeciones — Respuestas ganadoras</h2>
+  <p>Estas son las 3 objeciones más frecuentes y cómo responderlas con el argumento de los 9 agentes:</p>
+
+  <div class="objections">
+
+    <div class="objection-card">
+      <div class="objection-left">
+        <div class="objection-label">❌ El cliente dice</div>
+        <p>"Ya uso Bolt.new o Lovable y me funcionan bien."</p>
+        <p style="margin-top:0.5rem;font-size:0.78rem;color:#4b5563;font-style:italic;">Miedo: cambiar de herramienta o perder tiempo aprendido.</p>
+      </div>
+      <div class="objection-right">
+        <div class="objection-label">✅ Tu respuesta ganadora</div>
+        <p><strong>"Son herramientas brutales para prototipos visuales. Pero cuando tu app crece, su chat único se satura y empieza a cometer errores en la base de datos."</strong> Nosotros separamos el diseño del backend usando 9 agentes independientes: si cambias un botón, tu base de datos sigue intacta.</p>
+      </div>
+    </div>
+
+    <div class="objection-card">
+      <div class="objection-left">
+        <div class="objection-label">❌ El cliente dice</div>
+        <p>"¿Por qué elegir una opción local en lugar de los gigantes de EE.UU.?"</p>
+        <p style="margin-top:0.5rem;font-size:0.78rem;color:#4b5563;font-style:italic;">Miedo: desconfianza sobre el tamaño de la empresa.</p>
+      </div>
+      <div class="objection-right">
+        <div class="objection-label">✅ Tu respuesta ganadora</div>
+        <p><strong>"Porque los modelos americanos no entienden las normativas fiscales españolas, el RGPD ni nuestras pasarelas de pago locales de forma nativa."</strong> Con Maris AI programas en español sin errores de traducción y cuentas con soporte en tu misma zona horaria.</p>
+      </div>
+    </div>
+
+    <div class="objection-card">
+      <div class="objection-left">
+        <div class="objection-label">❌ El cliente dice</div>
+        <p>"No sé programar, me da miedo que sea muy técnico."</p>
+        <p style="margin-top:0.5rem;font-size:0.78rem;color:#4b5563;font-style:italic;">Miedo: frustración por interfaces complejas con consolas de comandos.</p>
+      </div>
+      <div class="objection-right">
+        <div class="objection-label">✅ Tu respuesta ganadora</div>
+        <p><strong>"Nuestro Agente Arquitecto traduce tu idea en lenguaje humano a especificaciones técnicas automáticamente."</strong> No verás pantallas de código ni terminales de errores como en Bolt. Ves tu aplicación web creciendo visualmente paso a paso.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <hr class="divider"/>
+
+  <h2>📄 Plantilla de Propuesta Comercial — Lista para enviar</h2>
+  <p>Personaliza los campos en <span style="color:#7c3aed;font-weight:600">[corchetes]</span> y envíala por email o WhatsApp:</p>
+
+  <div class="email-template">
+    <div class="email-header">
+      <div class="dot r"></div>
+      <div class="dot y"></div>
+      <div class="dot g"></div>
+      <span class="email-subject">Asunto: Tu proyecto tecnológico: Por qué la arquitectura de agentes es la clave para tu MVP</span>
+    </div>
+    <div class="email-body">
+      <p>Hola <span class="email-placeholder">[Nombre del Cliente]</span>,</p>
+      <br/>
+      <p>He estado revisando la idea que tienes en mente para <span class="email-placeholder">[Nombre de su proyecto/idea de app]</span> y tienes toda la razón: lanzar al mercado un Producto Mínimo Viable (MVP) rápido es la única forma inteligente de validar tu negocio hoy en día.</p>
+      <br/>
+      <p>Seguramente habrás oído hablar de herramientas de desarrollo con IA americanas como Bolt.new o Lovable. Son buenas para hacer pantallas bonitas, pero los emprendedores se topan con un muro invisible cuando la aplicación empieza a crecer: <strong>los chats de un solo modelo se saturan, pierden el contexto y terminan rompiendo el backend de la aplicación.</strong></p>
+      <br/>
+      <p>En <strong>Maris AI</strong> resolvemos esto eliminando el "chat plano". Para construir tu proyecto, ponemos a trabajar un equipo coordinado de <strong>9 agentes de Inteligencia Artificial especializados</strong>:</p>
+      <br/>
+      <p class="highlight-line">✅ <strong>Tu idea no se rompe:</strong> Mientras un agente diseña la interfaz visual, otro agente independiente estructura el almacenamiento de tus clientes de forma aislada. Cambiar el diseño de tu app jamás destruirá tus datos.</p>
+      <br/>
+      <p class="highlight-line">✅ <strong>Lanzamiento seguro en 48 horas:</strong> Nuestro Agente de Control de Calidad (QA) realiza pruebas de estrés automatizadas para buscar errores antes de que tu aplicación se publique, asegurando un despliegue limpio en la nube.</p>
+      <br/>
+      <p class="highlight-line">✅ <strong>Nativo en español y adaptado a tu mercado:</strong> Olvídate de traducir prompts complejos al inglés. La plataforma entiende la lógica de negocio, la facturación y las normativas de privacidad (RGPD) de nuestro mercado de forma nativa.</p>
+      <br/>
+      <p>Tu proyecto no necesita un chat que lo haga todo a medias; necesita una arquitectura de software robusta que garantice que tu aplicación pueda escalar cuando lleguen tus primeros 1.000 usuarios.</p>
+      <br/>
+      <p><strong>¿Te viene bien que hagamos una breve llamada de 10 minutos esta semana para enseñarte cómo estructurar el Prompt Maestro de tu aplicación y ver la plataforma en acción?</strong></p>
+      <br/>
+      <p>Un saludo cordial,</p>
+      <p><span class="email-placeholder">[Iván Rubio — Fundador de Maris AI]</span></p>
+      <p><a href="https://www.marisai.es" style="color:#a78bfa">marisai.es</a> · hola@marisai.es</p>
+    </div>
+    <button class="copy-btn" onclick="copyEmail()">📋 Copiar propuesta completa al portapapeles</button>
+  </div>
+
+  <hr class="divider"/>
+
+  <h2>🚀 El embudo completo — De Google a cliente</h2>
+  <div class="funnel">
+    <div class="funnel-step">
+      <div class="icon">🔍</div>
+      <h3>Atracción SEO</h3>
+      <p>Blog + comparativas posicionan en Google para "base44 vs emergent", "alternativa bolt.new español", "vibe coding españa"</p>
+    </div>
+    <div class="funnel-step">
+      <div class="icon">📊</div>
+      <h3>Retención en web</h3>
+      <p>Tabla comparativa visual retiene al usuario. FAQ schema lo convierte en lead cualificado que entiende el valor de los 9 agentes</p>
+    </div>
+    <div class="funnel-step">
+      <div class="icon">💼</div>
+      <h3>Conversión comercial</h3>
+      <p>Propuesta email cierra al lead con el argumento de los agentes especializados vs chat único. CTA a llamada de 10 minutos</p>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <h2>📈 Métricas de éxito a vigilar cada lunes</h2>
+  <div style="overflow-x:auto;margin:1.5rem 0">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+      <thead>
+        <tr style="background:#0f0f1a">
+          <th style="padding:0.85rem 1rem;text-align:left;color:#64748b;border-bottom:2px solid rgba(255,255,255,0.06)">Keyword en Looker Studio</th>
+          <th style="padding:0.85rem 1rem;text-align:left;color:#64748b;border-bottom:2px solid rgba(255,255,255,0.06)">Artículo asociado</th>
+          <th style="padding:0.85rem 1rem;text-align:left;color:#64748b;border-bottom:2px solid rgba(255,255,255,0.06)">Acción si posición &gt;10</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:0.85rem 1rem;color:#a78bfa">base44 vs emergent</td>
+          <td style="padding:0.85rem 1rem;color:#64748b">Comparativa principal</td>
+          <td style="padding:0.85rem 1rem;color:#94a3b8">Compartir en X + LinkedIn</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:0.85rem 1rem;color:#a78bfa">alternativa bolt.new español</td>
+          <td style="padding:0.85rem 1rem;color:#64748b">Semana 5</td>
+          <td style="padding:0.85rem 1rem;color:#94a3b8">Enlace interno extra</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:0.85rem 1rem;color:#a78bfa">vibe coding español</td>
+          <td style="padding:0.85rem 1rem;color:#64748b">Semana 1</td>
+          <td style="padding:0.85rem 1rem;color:#94a3b8">+300 palabras al artículo</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:0.85rem 1rem;color:#a78bfa">lanzar mvp no code</td>
+          <td style="padding:0.85rem 1rem;color:#64748b">Semana 2</td>
+          <td style="padding:0.85rem 1rem;color:#94a3b8">Compartir en LinkedIn</td>
+        </tr>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+          <td style="padding:0.85rem 1rem;color:#a78bfa">alternativa lovable español</td>
+          <td style="padding:0.85rem 1rem;color:#64748b">Semana 4</td>
+          <td style="padding:0.85rem 1rem;color:#94a3b8">Enlace interno extra</td>
+        </tr>
+        <tr>
+          <td style="padding:0.85rem 1rem;color:#a78bfa">crear app sin programar españa</td>
+          <td style="padding:0.85rem 1rem;color:#64748b">Semana 1</td>
+          <td style="padding:0.85rem 1rem;color:#94a3b8">Compartir en X</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cta-box">
+    <h2>Todo listo — empieza a generar tráfico hoy</h2>
+    <p>15 créditos gratis. Blog de 8 artículos publicado. Comparativa técnica live. Propuesta comercial lista para enviar.</p>
+    <a href="https://www.marisai.es" class="btn">Probar Maris AI gratis →</a>
+    <a href="mailto:hola@marisai.es" class="btn-sec">Contactar al equipo →</a>
+  </div>
+
+</div>
+
+<footer>
+  <a href="https://www.marisai.es">Maris AI</a>
+  <a href="https://www.marisai.es/news">Blog</a>
+  <a href="https://www.marisai.es/pricing">Precios</a>
+  <a href="https://www.marisai.es/landings/sobre-nosotros.html">Sobre nosotros</a>
+  <br/><br/>© 2026 Maris AI · Valencia, España · hola@marisai.es
+</footer>
+
+<script>
+function copyEmail() {
+  const text = `Asunto: Tu proyecto tecnológico: Por qué la arquitectura de agentes es la clave para tu MVP
+
+Hola [Nombre del Cliente],
+
+He estado revisando la idea que tienes en mente para [Nombre de su proyecto/idea de app] y tienes toda la razón: lanzar al mercado un Producto Mínimo Viable (MVP) rápido es la única forma inteligente de validar tu negocio hoy en día.
+
+Seguramente habrás oído hablar de herramientas de desarrollo con IA americanas como Bolt.new o Lovable. Son buenas para hacer pantallas bonitas, pero los emprendedores se topan con un muro invisible cuando la aplicación empieza a crecer: los chats de un solo modelo se saturan, pierden el contexto y terminan rompiendo el backend de la aplicación.
+
+En Maris AI resolvemos esto eliminando el "chat plano". Para construir tu proyecto, ponemos a trabajar un equipo coordinado de 9 agentes de Inteligencia Artificial especializados:
+
+✅ Tu idea no se rompe: Mientras un agente diseña la interfaz visual, otro agente independiente estructura el almacenamiento de tus clientes de forma aislada. Cambiar el diseño de tu app jamás destruirá tus datos.
+
+✅ Lanzamiento seguro en 48 horas: Nuestro Agente de Control de Calidad (QA) realiza pruebas de estrés automatizadas para buscar errores antes de que tu aplicación se publique, asegurando un despliegue limpio en la nube.
+
+✅ Nativo en español y adaptado a tu mercado: Olvídate de traducir prompts complejos al inglés. La plataforma entiende la lógica de negocio, la facturación y las normativas de privacidad (RGPD) de nuestro mercado de forma nativa.
+
+Tu proyecto no necesita un chat que lo haga todo a medias; necesita una arquitectura de software robusta que garantice que tu aplicación pueda escalar cuando lleguen tus primeros 1.000 usuarios.
+
+¿Te viene bien que hagamos una breve llamada de 10 minutos esta semana para enseñarte cómo estructurar el Prompt Maestro de tu aplicación y ver la plataforma en acción?
+
+Un saludo cordial,
+Iván Rubio — Fundador de Maris AI
+marisai.es · hola@marisai.es`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ ¡Copiado al portapapeles!';
+    setTimeout(() => btn.textContent = '📋 Copiar propuesta completa al portapapeles', 3000);
+  });
+}
+</script>
+</body>
+</html>
