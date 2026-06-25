@@ -89,13 +89,13 @@ function AuroraBackground() {
   return (
     <div className="fixed inset-0 -z-20 overflow-hidden pointer-events-none">
       <div className="absolute -top-40 -left-40 w-[300px] h-[300px] md:w-[600px] md:h-[600px] rounded-full opacity-20 blur-[100px] will-change-transform"
-        style={{ background: "radial-gradient(circle, #7c3aed, transparent)" } />
+        style={{ background: "radial-gradient(circle, #7c3aed, transparent)" }} />
       <div className="absolute top-1/3 -right-40 w-[250px] h-[250px] md:w-[500px] md:h-[500px] rounded-full opacity-15 blur-[120px]"
-        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "marisBlob 4s ease-in-out infinite 1s", transform: "translateZ(0)" } />
+        style={{ background: "radial-gradient(circle, #0ea5e9, transparent)", animation: "marisBlob 4s ease-in-out infinite 1s", transform: "translateZ(0)" }} />
       <div className="absolute -bottom-40 left-1/3 w-[300px] h-[200px] md:w-[700px] md:h-[400px] rounded-full opacity-10 blur-[150px]"
-        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "marisBlob 6s ease-in-out infinite 2s", transform: "translateZ(0)" } />
+        style={{ background: "radial-gradient(circle, #ec4899, transparent)", animation: "marisBlob 6s ease-in-out infinite 2s", transform: "translateZ(0)" }} />
       <div className="absolute inset-0"
-        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" } />
+        style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)", backgroundSize: "40px 40px" }} />
     </div>
   );
 }
