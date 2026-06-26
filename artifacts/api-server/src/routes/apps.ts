@@ -1587,13 +1587,16 @@ RULES — non-negotiable:
     ? `\n\nReference brief (inspiration only):\n${research.slice(0, 800)}`
     : "";
 
+  // OPTIMIZACIÓN: systemPrompt de la landing page es estático (solo cambia ext/utilExt/isTS).
+  // Con cache_control activa el 90% de descuento en tokens de entrada.
+  // El contenido dinámico (prompt, design, research) va en el mensaje del usuario.
   try {
     const streamed = await streamClaudeTextWithFallback(
       "frontend",
       "claude-haiku-4-5-20251001",
       {
         max_tokens: 10000,
-        system: systemPrompt,
+        system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: `Create a landing page for:\n\n${prompt}${designNote}${researchNote}\n\nReturn ONLY JSON: {"frontendCode":"..."}` }],
       },
       () => {},
@@ -3614,10 +3617,9 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
       .trim()
       .slice(0, 3000); // Limitar para no saturar Haiku
 
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1000,
-      system: `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
+    // OPTIMIZACIÓN: cache_control en el system prompt estático del Arquitecto
+    // Este endpoint se llama en cada generación → el ahorro acumulado es muy alto.
+    const PLAN_PREVIEW_SYSTEM = `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
 {
   "title": "nombre corto del proyecto en español",
   "summary": "1-2 frases de qué vas a construir exactamente",
@@ -3632,7 +3634,18 @@ REGLAS:
 - "included": las funcionalidades clave que el usuario pidió o que tiene la web de referencia. Máx 4 items.
 - "extras": funcionalidades útiles que NO mencionó. Máx 3. Si no hay extras claros, devuelve [].
 - "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
-- Devuelve ÚNICAMENTE el JSON. Nada más.`,
+- Devuelve ÚNICAMENTE el JSON. Nada más.`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1000,
+      system: [
+        {
+          type: "text",
+          text: PLAN_PREVIEW_SYSTEM,
+          cache_control: { type: "ephemeral" }, // ← 90% descuento en tokens de entrada
+        },
+      ] as any,
       messages: [{ role: "user", content: `Prompt: "${cleanPrompt}"
 Tipo: ${kind || "fullstack"}` }],
     });

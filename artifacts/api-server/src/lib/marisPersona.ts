@@ -76,7 +76,15 @@ export async function generateMarisReply(opts: {
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 400,
-      system: MARIS_PERSONA,
+      // OPTIMIZACIÓN: MARIS_PERSONA es estático y largo → cache_control activa 90% descuento
+      // El contexto dinámico (appContext, historyBlock) va en el mensaje del usuario, no en el system
+      system: [
+        {
+          type: "text",
+          text: MARIS_PERSONA,
+          cache_control: { type: "ephemeral" },
+        },
+      ] as any,
       messages: [{
         role: "user",
         content: `${appContext}${historyBlock}${contextBlock}\n\nMensaje del usuario: "${userMessage}"\n\nResponde como Maris. Máximo 3-4 frases. En español. Sin saludos, sin despedidas.`,
@@ -135,17 +143,28 @@ export async function generateUpdateCompleteMessage(opts: {
     return msg + creditsLine;
   }
 
-  try {
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 200,
-      system: `Eres Maris, asistente de Maris AI. Generas mensajes de confirmación breves tras actualizar una app.
+  // NOTA: Este system prompt es corto (~80 tokens) pero se llama muy frecuentemente.
+  // Con cache_control, el ahorro acumulado en producción es significativo.
+  const UPDATE_CONFIRM_SYSTEM = `Eres Maris, asistente de Maris AI. Generas mensajes de confirmación breves tras actualizar una app.
 REGLAS:
 - 1-2 frases máximo. En español.
 - Confirma lo que se hizo basándote en la petición.
 - Añade algo útil: qué probar, qué refrescar, qué verificar.
 - NUNCA preguntes qué se hizo — ya lo sabes (te lo dan).
-- Sin "¡Listo!" genérico. Sin saludos. Directo.`,
+- Sin "¡Listo!" genérico. Sin saludos. Directo.`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 200,
+      // OPTIMIZACIÓN: cache_control en el system prompt estático
+      system: [
+        {
+          type: "text",
+          text: UPDATE_CONFIRM_SYSTEM,
+          cache_control: { type: "ephemeral" },
+        },
+      ] as any,
       messages: [{
         role: "user",
         content: `Petición del usuario: "${clean}"

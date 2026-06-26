@@ -220,17 +220,33 @@ async function runAgent(
     .filter(Boolean)
     .join("\n\n---\n\n");
 
-  const systemPrompt = `Eres ${agent.role} del equipo de Maris AI.
+  // OPTIMIZACIÓN: Separar el system prompt en dos bloques:
+  //   Bloque 1 (ESTÁTICO): rol + objetivo + backstory + reglas fijas → CACHEADO (90% descuento)
+  //   Bloque 2 (DINÁMICO): memoria del agente (varía por sesión) → no cacheado
+  const systemStaticPart = `Eres ${agent.role} del equipo de Maris AI.
 
 OBJETIVO: ${agent.goal}
 
-QUIÉN ERES: ${agent.backstory}${memory.getContext()}
+QUIÉN ERES: ${agent.backstory}
 
 REGLAS:
 - Responde SOLO con el output pedido, sin explicaciones meta
 - Si allowDelegation=true y algo está fuera de tu expertise, di "DELEGAR a [rol]: [razón]"
 - Sé conciso pero completo
 - Todo en español salvo nombres de código`;
+
+  const memoryContext = memory.getContext();
+  const systemBlocks: any[] = [
+    {
+      type: "text",
+      text: systemStaticPart,
+      cache_control: { type: "ephemeral" }, // ← 90% descuento en tokens de entrada
+    },
+  ];
+  // Solo añadir el bloque dinámico si hay memoria (evita bloques vacíos)
+  if (memoryContext && memoryContext.trim().length > 0) {
+    systemBlocks.push({ type: "text", text: memoryContext });
+  }
 
   const userMessage = `TAREA: ${task.description}
 
@@ -248,7 +264,7 @@ OUTPUT ESPERADO: ${task.expectedOutput}${contextBlocks ? `\n\nCONTEXTO DE TAREAS
     const response = await anthropic.messages.create({
       model: agent.model,
       max_tokens: 2048,
-      system: systemPrompt,
+      system: systemBlocks, // ← Ahora usa los bloques cacheados
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? { type: "auto" } : undefined,
       messages,
