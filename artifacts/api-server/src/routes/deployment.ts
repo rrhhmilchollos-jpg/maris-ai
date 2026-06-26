@@ -441,18 +441,61 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
       .lean();
 
     if (!app) return res.status(404).json({ error: "App no encontrada" });
-    if (!app.publicSlug) {
-      return res.status(400).json({
-        error: "La app debe estar desplegada públicamente para el test visual. Usa el botón 'Deploy' primero.",
-        code: "NOT_DEPLOYED"
-      });
-    }
 
     // runVisualTester — nombre correcto de la funcion exportada
-    const { runVisualTester } = await import("../lib/visualTester");
+    const { runVisualTester, takeScreenshots, VisualTesterError } = await import("../lib/visualTester");
     const { logger } = await import("../lib/logger");
 
     const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
+
+    // Si no hay publicSlug, usamos la URL de preview interno del API server
+    // para que el test visual funcione aunque la app no esté desplegada públicamente
+    let effectiveSlug = app.publicSlug;
+    let usingPreviewFallback = false;
+    if (!effectiveSlug) {
+      usingPreviewFallback = true;
+      // Usamos la URL de preview interno: el api-server sirve /api/apps/:id/preview
+      // Necesitamos una URL accesible por puppeteer — usamos localhost si estamos en Railway
+      const internalBaseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`;
+      // Hacemos el test directamente sobre la URL de preview sin necesitar publicSlug
+      const previewUrl = `${internalBaseUrl}/api/apps/${appId}/preview`;
+      logger.info({ appId, previewUrl }, "[visual-test] No hay publicSlug — usando preview interno");
+
+      try {
+        // Capturamos screenshots del preview interno
+        const shots = await takeScreenshots(previewUrl);
+        // Análisis completo con Claude Vision sobre los screenshots del preview
+        const { analyzePreviewScreenshots } = await import("../lib/visualTester");
+        const analysis = await analyzePreviewScreenshots({
+          shots,
+          app: { title: app.title || "App", description: app.description || null },
+          prompt: app.prompt || app.description || app.title || "",
+        });
+        
+        return res.json({
+          success: true,
+          visuallyCorrect: analysis.visuallyCorrect,
+          overallScore: analysis.overallScore,
+          issues: analysis.issues || [],
+          positives: analysis.positives || [],
+          summary: analysis.summary || "",
+          screenshots: shots.map((s: any) => ({
+            viewport: s.viewport,
+            dataUrl: s.data ? `data:image/png;base64,${s.data}` : null,
+          })).filter((s: any) => s.dataUrl),
+          fixesApplied: 0,
+          cycles: 1,
+          usingPreviewFallback: true,
+          note: "Analizado desde preview interno. Despliega con Deploy para autofix automático."
+        });
+      } catch (previewErr: any) {
+        logger.warn({ appId, err: previewErr?.message }, "[visual-test] Preview interno falló — devolviendo NOT_DEPLOYED");
+        return res.status(400).json({
+          error: "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
+          code: "NOT_DEPLOYED"
+        });
+      }
+    }
 
     const report = await runVisualTester({
       app: {
@@ -460,7 +503,7 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
         title: app.title || "App",
         description: app.description || null,
         frontendCode: app.frontendCode || "",
-        publicSlug: app.publicSlug,
+        publicSlug: effectiveSlug,
       },
       baseUrl,
       prompt: app.prompt || app.description || app.title || "",

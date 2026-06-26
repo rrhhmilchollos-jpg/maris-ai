@@ -34,11 +34,13 @@ interface Screenshot {
 }
 
 interface VisualTestResult {
-  visuallyCorrect: boolean;
-  overallScore: number;
+  visuallyCorrect: boolean | null;
+  overallScore: number | null;
   issues: VisualIssue[];
   screenshots: Screenshot[];
   fixesApplied: number;
+  usingPreviewFallback?: boolean;
+  note?: string;
 }
 
 interface VisualTestPanelProps {
@@ -137,7 +139,7 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
             <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px] py-0">
               Claude Vision
             </Badge>
-            {result && (
+            {result && result.overallScore != null && (
               <Badge className={cn(
                 "text-[9px] py-0",
                 result.visuallyCorrect
@@ -147,6 +149,11 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
                   : "bg-amber-500/20 text-amber-400 border-amber-500/30"
               )}>
                 {result.overallScore}/100
+              </Badge>
+            )}
+          {result && result.usingPreviewFallback && (
+              <Badge className="text-[9px] py-0 bg-blue-500/20 text-blue-300 border-blue-500/30">
+                Preview
               </Badge>
             )}
           </div>
@@ -213,6 +220,14 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
       {/* Results */}
       {result && !running && (
         <div>
+          {/* Nota de preview fallback */}
+          {result.usingPreviewFallback && result.note && (
+            <div className="mx-4 mt-3 flex items-start gap-2 text-[11px] text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
+              <Eye className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              {result.note}
+            </div>
+          )}
+
           {/* Score bar */}
           <div className="px-4 py-2 border-b border-white/[0.06]">
             <div className="flex items-center justify-between mb-1">

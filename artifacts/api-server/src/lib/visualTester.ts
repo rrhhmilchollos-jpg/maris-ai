@@ -570,6 +570,19 @@ ${compactBundle}`;
 }
 
 /**
+ * Analyze screenshots already captured (e.g. from preview URL) with Claude Vision.
+ * Returns a VisualAnalysis without needing a publicSlug or deployed app.
+ * Used by the visual-test endpoint when app is not yet deployed publicly.
+ */
+export async function analyzePreviewScreenshots(opts: {
+  shots: ViewportShot[];
+  app: { title: string; description?: string | null };
+  prompt: string;
+}): Promise<VisualAnalysis> {
+  return analyzeWithVision(opts.shots, opts.app, opts.prompt);
+}
+
+/**
  * Run the visual testing agent end-to-end against a deployed app.
  *
  * Returns a report regardless of success; if `autoFix` is true and Claude
