@@ -40,7 +40,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://cdn.jsdelivr.net https://js.stripe.com https://cdn.tailwindcss.com https://fonts.googleapis.com https://www.googletagmanager.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://ssl.google-analytics.com https://connect.facebook.net https://vercel.live https://*.vercel.live https://googleads.g.doubleclick.net https://static.doubleclick.net https://www.googleadservices.com https://pagead2.googlesyndication.com https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokcdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.marisai.es; font-src 'self' data: https://fonts.gstatic.com https:; img-src 'self' data: blob: https: https://www.facebook.com https://www.google.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://api.marisai.es https://*.railway.app https://maris-ai-api-server-production-fbad.up.railway.app https://*.stripe.com wss: ws: https://accounts.google.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://googleads.g.doubleclick.net https://ad.doubleclick.net https://www.googleadservices.com https://www.googletagmanager.com https://www.facebook.com https://connect.facebook.net https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokcdn.com https://log.tiktokv.com https://*.vercel.live wss://*.vercel.live https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; frame-src 'self' https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://js.stripe.com https://hooks.stripe.com https://accounts.google.com https://www.googletagmanager.com https://td.doubleclick.net https://vercel.live https://marisai.es https://*.marisai.es https://www.facebook.com https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; frame-ancestors 'self'; worker-src 'self' blob:; object-src 'none';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://cdn.jsdelivr.net https://js.stripe.com https://cdn.tailwindcss.com https://fonts.googleapis.com https://www.googletagmanager.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://ssl.google-analytics.com https://connect.facebook.net https://vercel.live https://*.vercel.live https://googleads.g.doubleclick.net https://static.doubleclick.net https://www.googleadservices.com https://pagead2.googlesyndication.com https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokcdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.clerk.com https://*.clerk.marisai.es; font-src 'self' data: https://fonts.gstatic.com https:; img-src 'self' data: blob: https: https://www.facebook.com https://www.google.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://api.marisai.es https://*.railway.app https://maris-ai-api-server-production.up.railway.app https://*.stripe.com wss: ws: https://accounts.google.com https://www.google.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://googleads.g.doubleclick.net https://ad.doubleclick.net https://www.googleadservices.com https://www.googletagmanager.com https://www.facebook.com https://connect.facebook.net https://analytics.tiktok.com https://*.tiktok.com https://*.tiktokcdn.com https://log.tiktokv.com https://*.vercel.live wss://*.vercel.live https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; frame-src 'self' https://maris-ai-api-server-production.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live https://*.clerk.accounts.dev https://*.clerk.com https://clerk.marisai.es https://*.clerk.marisai.es https://js.stripe.com https://hooks.stripe.com https://accounts.google.com https://www.googletagmanager.com https://td.doubleclick.net https://vercel.live https://marisai.es https://*.marisai.es https://www.facebook.com https://stackblitz.com https://*.stackblitz.io https://*.webcontainer.io https://*.webcontainer-api.io https://*.local.webcontainer.io; frame-ancestors 'self'; worker-src 'self' blob:; object-src 'none';"
         }
       ]
     }
@@ -48,23 +48,23 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/:path*"
+      "destination": "https://maris-ai-api-server-production.up.railway.app/api/:path*"
     },
     {
       "source": "/news-sitemap.xml",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/news-sitemap.xml"
+      "destination": "https://maris-ai-api-server-production.up.railway.app/news-sitemap.xml"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/sitemap.xml"
+      "destination": "https://maris-ai-api-server-production.up.railway.app/sitemap.xml"
     },
     {
       "source": "/rss",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/rss"
+      "destination": "https://maris-ai-api-server-production.up.railway.app/rss"
     },
     {
       "source": "/rss/:path*",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/rss/:path*"
+      "destination": "https://maris-ai-api-server-production.up.railway.app/rss/:path*"
     },
     {
       "source": "/robots.txt",

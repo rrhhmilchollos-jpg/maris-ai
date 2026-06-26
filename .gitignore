@@ -52,4 +52,5 @@ Thumbs.db
 .env
 .vercel
 .env*
+!.env.example
 artifacts/appforge/.env.production
