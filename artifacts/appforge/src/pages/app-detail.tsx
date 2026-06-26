@@ -1092,7 +1092,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     onClick={() => {
                       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
                       if (!SpeechRecognition) {
-                        alert("Tu navegador no soporta reconocimiento de voz. Prueba Chrome.");
+                        toast({ title: "Navegador no compatible", description: "El reconocimiento de voz requiere Chrome o Edge. Prueba con uno de ellos.", variant: "destructive" });
                         return;
                       }
                       if (isRecording) {
@@ -1100,20 +1100,37 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                         setIsRecording(false);
                         return;
                       }
-                      const recognition = new SpeechRecognition();
-                      recognition.lang = "es-ES";
-                      recognition.continuous = false;
-                      recognition.interimResults = false;
-                      recognition.onstart = () => setIsRecording(true);
-                      recognition.onresult = (event: any) => {
-                        const transcript = event.results[0][0].transcript;
-                        setDraft(prev => prev ? prev + " " + transcript : transcript);
-                        setIsRecording(false);
-                      };
-                      recognition.onerror = () => setIsRecording(false);
-                      recognition.onend = () => setIsRecording(false);
-                      recognitionRef.current = recognition;
-                      recognition.start();
+                      // Solicitar permiso explícito antes de iniciar
+                      navigator.mediaDevices?.getUserMedia({ audio: true })
+                        .then(() => {
+                          const recognition = new SpeechRecognition();
+                          recognition.lang = "es-ES";
+                          recognition.continuous = false;
+                          recognition.interimResults = false;
+                          recognition.onstart = () => setIsRecording(true);
+                          recognition.onresult = (event: any) => {
+                            const transcript = event.results[0][0].transcript;
+                            setDraft(prev => prev ? prev + " " + transcript : transcript);
+                            setIsRecording(false);
+                          };
+                          recognition.onerror = (event: any) => {
+                            setIsRecording(false);
+                            if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+                              toast({ title: "Permiso denegado", description: "Haz clic en el candado 🔒 de la barra de direcciones y activa el micrófono para marisai.es.", variant: "destructive" });
+                            } else if (event.error === 'audio-capture') {
+                              toast({ title: "Micrófono no encontrado", description: "No se detectó ningún micrófono en tu dispositivo. Conecta uno e inténtalo de nuevo.", variant: "destructive" });
+                            } else if (event.error === 'network') {
+                              toast({ title: "Error de red", description: "No se pudo procesar la voz. Comprueba tu conexión a internet.", variant: "destructive" });
+                            }
+                            // 'no-speech' es normal — no mostrar error
+                          };
+                          recognition.onend = () => setIsRecording(false);
+                          recognitionRef.current = recognition;
+                          recognition.start();
+                        })
+                        .catch(() => {
+                          toast({ title: "Permiso de micrófono denegado", description: "Para usar la voz, haz clic en el candado 🔒 de la barra de direcciones y activa el micrófono para marisai.es.", variant: "destructive" });
+                        });
                     }}
                     className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
                       isRecording
