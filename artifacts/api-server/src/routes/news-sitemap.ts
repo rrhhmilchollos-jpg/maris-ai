@@ -18,7 +18,7 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
-router.get("/news-sitemap.xml", async (_req, res) => {
+router.get("/api/news-sitemap.xml", async (_req, res) => {
   await connectDB();
   try {
     // Google News sitemaps: máximo 1000 URLs
@@ -73,7 +73,7 @@ router.get("/news-sitemap.xml", async (_req, res) => {
  * Sitemap general del sitio (para Google Search Console).
  * Incluye todas las páginas públicas estáticas.
  */
-router.get("/sitemap.xml", async (_req, res) => {
+router.get("/api/sitemap-dynamic.xml", async (_req, res) => {
   await connectDB();
   try {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(1000).lean();

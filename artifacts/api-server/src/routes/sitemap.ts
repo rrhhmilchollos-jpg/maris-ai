@@ -6,7 +6,7 @@ const router = Router();
  * Sitemap principal — servido desde el backend para que Google Search Console lo encuentre.
  * Las landings y rutas SPA se incluyen aquí.
  */
-router.get("/sitemap.xml", async (_req: Request, res: Response) => {
+router.get("/api/sitemap.xml", async (_req: Request, res: Response) => {
   const today = new Date().toISOString().split("T")[0];
 
   const urls = [

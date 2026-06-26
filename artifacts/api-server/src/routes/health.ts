@@ -12,9 +12,10 @@ function sendHealth(res: Response) {
   // fall back to in-process setImmediate (no restart resilience).
   const queueReady = isQueueReady();
   
-  // Verificar si el Testing Agent está cargado y disponible
-  const testerPath = path.join(process.cwd(), 'src/lib/tester.ts');
-  const testerExists = fs.existsSync(testerPath);
+  // Verificar si el Testing Agent está cargado y disponible (soporta dev y prod/esbuild)
+  const testerPathDist = path.join(process.cwd(), 'dist/lib/tester.js');
+  const testerPathSrc = path.join(process.cwd(), 'src/lib/tester.ts');
+  const testerExists = fs.existsSync(testerPathDist) || fs.existsSync(testerPathSrc);
 
   const memUsage = process.memoryUsage();
   
