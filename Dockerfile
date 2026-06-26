@@ -67,8 +67,6 @@ COPY --from=builder /app/artifacts/api-server/package.json ./artifacts/api-serve
 COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/communication ./communication
-COPY --from=builder /app/self ./self
 
 ENV NODE_ENV=production
 ENV NODE_PATH=/app/node_modules

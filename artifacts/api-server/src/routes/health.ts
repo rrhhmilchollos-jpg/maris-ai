@@ -12,10 +12,13 @@ function sendHealth(res: Response) {
   // fall back to in-process setImmediate (no restart resilience).
   const queueReady = isQueueReady();
   
-  // Verificar si el Testing Agent está cargado y disponible (soporta dev y prod/esbuild)
-  const testerPathDist = path.join(process.cwd(), 'dist/lib/tester.js');
+  // Verificar si el Testing Agent está cargado y disponible
+  // En producción (Railway): el build de esbuild genera un único bundle index.mjs,
+  // por lo que el tester.ts queda embebido. Se verifica la existencia del bundle.
+  // En desarrollo: se busca el archivo fuente src/lib/tester.ts
+  const distBundle = path.join(process.cwd(), 'dist/index.mjs');
   const testerPathSrc = path.join(process.cwd(), 'src/lib/tester.ts');
-  const testerExists = fs.existsSync(testerPathDist) || fs.existsSync(testerPathSrc);
+  const testerExists = fs.existsSync(distBundle) || fs.existsSync(testerPathSrc);
 
   const memUsage = process.memoryUsage();
   
