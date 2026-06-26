@@ -71,12 +71,10 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
   const [autoFixing, setAutoFixing] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
 
-  async function runTest(autoFix = false) {
-    if (!appSlug) {
-      setError("La app debe estar desplegada públicamente para el test visual. Usa el botón Deploy primero.");
-      return;
-    }
+  const [fixProgress, setFixProgress] = useState<string | null>(null);
 
+  async function runTest(autoFix = false) {
+    // Ya no requerimos appSlug — el backend usa preview interno si no hay slug
     if (autoFix) {
       setAutoFixing(true);
       if (result) setBeforeResult(result);
@@ -87,6 +85,27 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
       setCompareMode(false);
     }
     setError(null);
+    setFixProgress(null);
+
+    // Simular progreso del autofix en tiempo real
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+    if (autoFix) {
+      const steps = [
+        "Capturando screenshots del estado actual...",
+        "Claude Vision analizando problemas...",
+        "Generando parches de código...",
+        "Aplicando correcciones al bundle...",
+        "Validando bundle parcheado...",
+        "Re-capturando screenshots para verificar...",
+        "Verificando mejoras con Claude Vision...",
+      ];
+      let step = 0;
+      setFixProgress(steps[0]);
+      progressInterval = setInterval(() => {
+        step = Math.min(step + 1, steps.length - 1);
+        setFixProgress(steps[step]);
+      }, 4000);
+    }
 
     try {
       const data = await apiFetch<any>(`/api/apps/${appId}/visual-test`, {
@@ -100,9 +119,9 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
         return;
       }
 
-      // App no desplegada
+      // App no desplegada (solo si el preview también falló)
       if (data.code === "NOT_DEPLOYED") {
-        setError("Despliega la app primero con el botón Deploy para activar el testing visual.");
+        setError("No se pudo acceder al preview de la app. Intenta recargar la página.");
         return;
       }
 
@@ -116,6 +135,8 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
     } catch (err: any) {
       setError(err.message || "Error en el test visual");
     } finally {
+      if (progressInterval) clearInterval(progressInterval);
+      setFixProgress(null);
       setRunning(false);
       setAutoFixing(false);
     }
@@ -171,7 +192,7 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
               className="h-7 text-[10px] border-violet-500/30 text-violet-400 hover:bg-violet-500/10 px-2"
             >
               {autoFixing
-                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Reparando...</>
+                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Reparando ({fixProgress ? fixProgress.split(" ")[0] : "..."})</>
                 : <><Wand2 className="h-3 w-3 mr-1" />Autofix IA</>
               }
             </Button>
@@ -212,6 +233,31 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
                 <Loader2 className="h-3 w-3 animate-spin" />
                 {v}
               </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Autofix progress state */}
+      {autoFixing && fixProgress && (
+        <div className="p-6 text-center space-y-3">
+          <div className="w-10 h-10 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mx-auto">
+            <Wand2 className="h-5 w-5 text-violet-400 animate-pulse" />
+          </div>
+          <p className="text-sm text-white/70 font-medium">Autofix IA en progreso</p>
+          <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg px-4 py-2 mx-4">
+            <p className="text-[11px] text-violet-300 flex items-center justify-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {fixProgress}
+            </p>
+          </div>
+          <div className="flex justify-center gap-1 mt-2">
+            {[0,1,2,3,4,5,6].map(i => (
+              <div key={i} className={cn(
+                "h-1 w-1 rounded-full transition-all",
+                fixProgress && i <= ["Capturando","Claude","Generando","Aplicando","Validando","Re-capturando","Verificando"].findIndex(s => fixProgress.startsWith(s))
+                  ? "bg-violet-400 w-2" : "bg-white/10"
+              )} />
             ))}
           </div>
         </div>

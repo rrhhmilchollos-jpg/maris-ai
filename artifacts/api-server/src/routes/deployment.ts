@@ -466,11 +466,31 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
         const shots = await takeScreenshots(previewUrl);
         // Análisis completo con Claude Vision sobre los screenshots del preview
         const { analyzePreviewScreenshots } = await import("../lib/visualTester");
-        const analysis = await analyzePreviewScreenshots({
+        let analysis = await analyzePreviewScreenshots({
           shots,
           app: { title: app.title || "App", description: app.description || null },
           prompt: app.prompt || app.description || app.title || "",
         });
+
+        let fixesApplied = 0;
+        let cycles = 1;
+
+        // AUTOFIX: Si autoFix=true y hay issues críticos/mayores, aplicar fixes aunque no haya publicSlug
+        if (autoFix && !analysis.visuallyCorrect) {
+          const { applyVisualFixesAndSave } = await import("../lib/visualTester");
+          const fixResult = await applyVisualFixesAndSave({
+            appId,
+            app: { title: app.title || "App", description: app.description || null, frontendCode: app.frontendCode || "" },
+            analysis,
+            previewUrl,
+            prompt: app.prompt || app.description || app.title || "",
+            maxCycles: 3,
+            log: logger,
+          });
+          fixesApplied = fixResult.fixesApplied;
+          cycles = fixResult.cycles;
+          analysis = fixResult.finalAnalysis;
+        }
         
         return res.json({
           success: true,
@@ -483,10 +503,12 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
             viewport: s.viewport,
             dataUrl: s.data ? `data:image/png;base64,${s.data}` : null,
           })).filter((s: any) => s.dataUrl),
-          fixesApplied: 0,
-          cycles: 1,
+          fixesApplied,
+          cycles,
           usingPreviewFallback: true,
-          note: "Analizado desde preview interno. Despliega con Deploy para autofix automático."
+          note: fixesApplied > 0
+            ? `Autofix aplicó ${fixesApplied} corrección(es) automáticamente.`
+            : "Analizado desde preview interno. Usa Autofix IA para corregir los problemas detectados."
         });
       } catch (previewErr: any) {
         logger.warn({ appId, err: previewErr?.message }, "[visual-test] Preview interno falló — devolviendo NOT_DEPLOYED");

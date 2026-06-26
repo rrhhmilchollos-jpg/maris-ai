@@ -524,6 +524,11 @@ async function applyVisualFixes(opts: {
     )
     .join("\n");
 
+  // Detectar si hay issues críticos de blank_page o missing_content que requieren reconstrucción
+  const hasCriticalStructure = issues.some(i =>
+    i.severity === "critical" && (i.type === "blank_page" || i.type === "missing_content" || i.type === "missing_navbar" || i.type === "prompt_mismatch")
+  );
+
   const prompt = `Eres el Visual Fix Agent de Maris AI — especialista en reparaciones quirurgicas de UI/UX sin romper funcionalidad.
 
 App: ${app.title}
@@ -532,20 +537,35 @@ Descripcion: ${app.description ?? "(no disponible)"}
 PROBLEMAS A ARREGLAR (ordenados por severidad):
 ${fixList}
 
+${hasCriticalStructure ? `⚠️ MODO RECONSTRUCCIÓN ACTIVADO: Hay problemas críticos de estructura (pantalla en blanco, contenido faltante, navbar ausente).
+En este modo DEBES:
+1. Revisar el App.tsx/main.tsx y asegurarte de que la ruta '/' renderiza el componente principal real
+2. Si el router tiene un catch-all 404 interceptando '/', moverlo al final o eliminarlo
+3. Si el componente principal no existe o está vacío, crear contenido real visible con mock data
+4. Añadir una NavBar funcional si no existe
+5. Asegurarte de que el componente raiz tiene 'min-h-screen' y contenido visible
+6. Puedes modificar MULTIPLES archivos si es necesario para arreglar la estructura
+` : ""}
+
 REGLAS:
 - Devuelve SOLO JSON con changedFiles. NO el bundle completo.
-- changedFiles[ruta] = contenido COMPLETO del archivo modificado.
-- NO cambies funcionalidad, logica de negocio ni nombres de funciones publicas.
+- changedFiles[ruta] = contenido COMPLETO del archivo modificado (no parcial).
+- Para blank_page/missing_content: RECONSTRUYE los componentes rotos con contenido real visible.
+- Para missing_navbar: Añade NavBar con 'fixed top-0 left-0 right-0 z-50' o bottom nav en mobile.
+- Para prompt_mismatch: Construye las vistas que el prompt pedia con mock data realista.
 - Para responsive: usa breakpoints Tailwind sm: md: lg: correctamente.
 - Para contraste bajo: usa clases de color Tailwind con ratio WCAG AA.
-- Para blank_page: verifica que el componente raiz renderiza contenido visible.
 - Para overlapping: usa z-index apropiados o corrige layout flex/grid.
 - Para touch_targets_small: min h-11 w-11 en botones y links en mobile.
-- Solo arregla los issues listados, no optimices otras cosas.
+- Si el router tiene un 404 catch-all antes de las rutas reales, muévelo al final.
+- Incluye TODOS los archivos que necesiten cambios para que la app sea visible.
 
 RESPUESTA JSON (sin markdown, sin backticks):
 {
-  "changedFiles": { "src/App.tsx": "contenido completo actualizado" },
+  "changedFiles": { 
+    "src/App.tsx": "contenido completo actualizado",
+    "src/pages/HomePage.tsx": "contenido completo si necesita cambios"
+  },
   "fixesSummary": ["descripcion breve de cada fix"]
 }
 
@@ -588,6 +608,83 @@ export async function analyzePreviewScreenshots(opts: {
   prompt: string;
 }): Promise<VisualAnalysis> {
   return analyzeWithVision(opts.shots, opts.app, opts.prompt);
+}
+
+/**
+ * Apply visual fixes iteratively for apps without a publicSlug (preview mode).
+ * Uses the preview URL to re-screenshot after each fix cycle.
+ * Exported so the visual-test endpoint can use it for apps not yet deployed.
+ */
+export async function applyVisualFixesAndSave(opts: {
+  appId: string;
+  app: { title: string; description?: string | null; frontendCode: string };
+  analysis: VisualAnalysis;
+  previewUrl: string;
+  prompt: string;
+  maxCycles?: number;
+  log?: Logger;
+}): Promise<{ fixesApplied: number; cycles: number; finalAnalysis: VisualAnalysis }> {
+  const { appId, app, previewUrl, prompt, maxCycles = 3, log } = opts;
+  let currentAnalysis = opts.analysis;
+  let currentBundle = app.frontendCode;
+  let fixesApplied = 0;
+  let cycle = 0;
+
+  while (cycle < maxCycles && !currentAnalysis.visuallyCorrect) {
+    cycle++;
+    const fixable = currentAnalysis.issues.filter((i) => i.severity !== "minor");
+    if (fixable.length === 0) break;
+
+    log?.info({ appId, cycle, issues: fixable.length }, "[applyVisualFixesAndSave] Applying fixes");
+
+    const patched = await applyVisualFixes({
+      bundle: currentBundle,
+      issues: fixable,
+      app: { title: app.title, description: app.description },
+    });
+    if (!patched) {
+      log?.warn({ appId, cycle }, "[applyVisualFixesAndSave] No patch returned");
+      break;
+    }
+
+    // Validate the patched bundle before saving
+    const validation = await validateBundle(patched);
+    if (!validation.ok) {
+      log?.warn({ appId, cycle, errors: validation.issues.length }, "[applyVisualFixesAndSave] Patched bundle failed validation");
+      break;
+    }
+
+    // Save the patched bundle to DB
+    const previousBundle = currentBundle;
+    const updated = await GeneratedApp.findOneAndUpdate(
+      { _id: appId, frontendCode: previousBundle },
+      { frontendCode: patched },
+      { new: false },
+    );
+    if (!updated) {
+      log?.warn({ appId, cycle }, "[applyVisualFixesAndSave] Bundle changed concurrently — aborting");
+      break;
+    }
+    currentBundle = patched;
+    fixesApplied++;
+
+    // Re-screenshot and re-analyze with the new bundle
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const newShots = await takeScreenshots(previewUrl);
+      currentAnalysis = await analyzeWithVision(
+        newShots,
+        { title: app.title, description: app.description },
+        prompt,
+      );
+      log?.info({ appId, cycle, score: currentAnalysis.overallScore }, "[applyVisualFixesAndSave] Re-analysis after fix");
+    } catch (reErr) {
+      log?.warn({ appId, cycle, err: (reErr as Error).message }, "[applyVisualFixesAndSave] Re-screenshot failed");
+      break;
+    }
+  }
+
+  return { fixesApplied, cycles: cycle, finalAnalysis: currentAnalysis };
 }
 
 /**
