@@ -184,7 +184,8 @@ function ClerkQueryClientCacheInvalidator() {
         const isNewUser = Date.now() - createdAt < 2 * 60 * 1000;
         if (isNewUser) {
           import("@/lib/analytics").then(({ trackSignUp }) => {
-            trackSignUp(user.id, user.externalAccounts?.[0]?.provider || "email");
+            const userEmail = user.primaryEmailAddress?.emailAddress;
+            trackSignUp(user.id, user.externalAccounts?.[0]?.provider || "email", userEmail);
           });
         }
       }

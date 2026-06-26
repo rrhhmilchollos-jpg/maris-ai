@@ -6,6 +6,11 @@
  * - generate_app  → usuario lanzó su primera generación
  * - app_succeeded → app generada con éxito
  * - purchase      → usuario compró créditos
+ *
+ * Conversiones mejoradas (Enhanced Conversions):
+ * - En trackSignUp se envía el email del usuario hasheado con SHA-256
+ *   mediante gtag('set', 'user_data', ...) para maximizar la tasa de
+ *   coincidencia en Google Ads y resolver el diagnóstico "Requiere atención".
  */
 
 declare global {
@@ -21,15 +26,49 @@ function gtag(...args: any[]) {
   }
 }
 
+/**
+ * Normaliza y hashea un email con SHA-256 para Conversiones mejoradas.
+ * Normalización: minúsculas, sin espacios, sin puntos antes del dominio en gmail/googlemail.
+ */
+async function hashEmail(email: string): Promise<string> {
+  // Normalizar
+  let normalized = email.trim().toLowerCase();
+  // Eliminar puntos antes del dominio en gmail.com y googlemail.com
+  const [localPart, domain] = normalized.split("@");
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    normalized = localPart.replace(/\./g, "") + "@" + domain;
+  }
+  // SHA-256
+  const msgBuffer = new TextEncoder().encode(normalized);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** Usuario nuevo registrado — el evento de conversión principal */
-export function trackSignUp(userId: string, method = "email") {
+export async function trackSignUp(userId: string, method = "email", userEmail?: string) {
+  // Conversiones mejoradas: enviar datos de usuario hasheados ANTES del evento de conversión
+  if (userEmail) {
+    try {
+      const hashedEmail = await hashEmail(userEmail);
+      gtag("set", "user_data", {
+        sha256_email_address: hashedEmail,
+      });
+    } catch {
+      // Si falla el hash, continuar sin datos mejorados (no bloquear la conversión)
+    }
+  }
+
   gtag("event", "sign_up", {
     method,
     user_id: userId,
   });
-  // También enviar a Google Ads como conversión
+
+  // Conversión de Google Ads — Registro (label: bd7tCPjYwbwcEMfBkO9D)
   gtag("event", "conversion", {
-    send_to: "AW-18218229959/sign_up",
+    send_to: "AW-18218229959/bd7tCPjYwbwcEMfBkO9D",
+    value: 1.0,
+    currency: "EUR",
     user_id: userId,
   });
 }
