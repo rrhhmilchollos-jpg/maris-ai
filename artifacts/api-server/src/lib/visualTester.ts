@@ -168,15 +168,23 @@ async function captureViewport(
       waitUntil: "networkidle2",
       timeout: SCREENSHOT_TIMEOUT_MS,
     });
-    // Give React a tick to paint after networkidle.
-    await new Promise((r) => setTimeout(r, 1500));
+    // Give React more time to paint — apps with lazy loading or animations need longer
+    await new Promise((r) => setTimeout(r, 2500));
+    // Esperar a que el #root tenga contenido (React hydration)
+    try {
+      await page.waitForFunction(
+        "document.getElementById('root') && document.getElementById('root').children.length > 0",
+        { timeout: 5000 }
+      );
+    } catch (_) {
+      // Si no hay #root con contenido en 5s, continuar de todas formas
+    }
     // Trigger lazy/scroll-revealed content. We pass strings instead of arrow
     // functions so this file doesn't need DOM lib types in tsconfig.
     await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)");
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 600));
     await page.evaluate("window.scrollTo(0, 0)");
-    await new Promise((r) => setTimeout(r, 400));
-
+    await new Promise((r) => setTimeout(r, 600));
     const buf = await page.screenshot({ fullPage: true, type: "png" });
     return {
       viewport: viewport.name,
@@ -603,7 +611,9 @@ export async function runVisualTester(opts: {
   log?: Logger;
 }): Promise<VisualReport> {
   const { app, baseUrl, prompt, autoFix, log } = opts;
-  const url = `${baseUrl.replace(/\/$/, "")}/p/${app.publicSlug}`;
+  // Usamos /_inner directamente para que Puppeteer capture el contenido real
+  // en lugar del wrapper HTML que solo contiene un <iframe> (que Puppeteer no penetra)
+  const url = `${baseUrl.replace(/\/$/, "")}/p/${app.publicSlug}/_inner`;
 
   let currentBundle = app.frontendCode;
   let cycle = 0;
