@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
+import { startAppHealthMonitor } from "./lib/autoRepairAgent";
 import { runAutopilotTick } from "./lib/aiAutopilot";
 import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
@@ -57,7 +58,14 @@ app.listen(finalPort, async (err) => {
     logger.error({ err: selfErr }, "Failed to start self-monitor");
   }
 
-  // 5) AI Autopilot — monitor de salud, auto-fix, resumen diario.
+  // 5) App Health Monitor — auto-reparación continua de apps generadas.
+  try {
+    startAppHealthMonitor();
+  } catch (healthErr) {
+    logger.error({ err: healthErr }, "Failed to start AppHealthMonitor");
+  }
+
+  // 6) AI Autopilot — monitor de salud, auto-fix, resumen diario.
   try {
     // Primer tick inmediato, luego cada 5 minutos
     runAutopilotTick().catch(() => {});

@@ -111,8 +111,16 @@ router.post(
         res.status(204).end();
         return;
       }
-      // Error logging simplified for MongoDB (non-critical)
-      void kind; void stack; void source; void lineno; void colno; void pathname; void userAgent;
+      // Registrar el error en la DB para el AppHealthMonitor
+      const { recordRuntimeError } = await import("../lib/autoRepairAgent");
+      void recordRuntimeError({
+        appId: String((app as any)._id),
+        slug,
+        message,
+        stack: stack ?? undefined,
+        kind,
+      });
+      void source; void lineno; void colno; void pathname; void userAgent;
     } catch (err) {
       req.log?.error({ err, slug }, "Failed to record runtime error");
     }

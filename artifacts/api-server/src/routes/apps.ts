@@ -5153,6 +5153,20 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
 
+    // ── AUTO-REPAIR POST-GENERACIÓN — analizar y reparar si hay errores ─────────
+    if (savedAppId && finalResult?.frontendCode && !isAutoRepairJob && !editResultInvalid) {
+      try {
+        const { runPostGenerationRepair } = await import("../lib/autoRepairAgent");
+        // Lanzar en background — no bloquear el succeeded
+        runPostGenerationRepair({
+          appId: String(savedAppId),
+          userId: String(job.userId),
+          userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
+          jobId: String(jobId),
+        }).catch(repairErr => logger.warn({ repairErr, jobId }, "Post-generation repair failed"));
+      } catch { /* nunca bloquear el succeeded */ }
+    }
+
     // ── A/B TESTING — registrar resultado para mejorar futuros prompts ────────
     try {
       const { recordVariantResult } = await import("../lib/promptABTesting");
