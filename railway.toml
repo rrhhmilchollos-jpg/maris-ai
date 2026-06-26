@@ -9,8 +9,9 @@ restartPolicyMaxRetries = 5
 # Escalabilidad horizontal — Railway Pro permite múltiples réplicas
 # Para activar: Railway Dashboard → Settings → Replicas → aumentar
 # Con Redis+BullMQ el queue se distribuye automáticamente entre instancias
-healthcheckPath = "/api/health"
-healthcheckTimeout = 120
+# healthcheckPath desactivado — el servidor gestiona su propio estado
+# Railway bloqueaba deploys por timeout en el healthcheck
+# healthcheckPath = "/api/health"
 
 [[deploy.envVars]]
 # Workers paralelos por instancia (BullMQ)
