@@ -10,7 +10,7 @@ restartPolicyMaxRetries = 5
 # Para activar: Railway Dashboard → Settings → Replicas → aumentar
 # Con Redis+BullMQ el queue se distribuye automáticamente entre instancias
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 120
 
 [[deploy.envVars]]
 # Workers paralelos por instancia (BullMQ)
