@@ -1,8 +1,23 @@
+import { useEffect } from "react";
 import { Check, X, ArrowRight, Zap, Code2, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function VsCompetidoresPage() {
+  useEffect(() => {
+    document.title = "Maris AI vs Emergent.sh — Mejor Alternativa Española 2026";
+    const desc = document.querySelector('meta[name="description"]');
+    if (desc) desc.setAttribute("content", "Maris AI es la mejor alternativa a Emergent.sh para emprendedores españoles. En español, con 9 agentes IA, precios en euros y soporte directo.");
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute("content", "Maris AI vs Emergent.sh — Mejor Alternativa Española 2026");
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute("content", "Maris AI es la mejor alternativa a Emergent.sh para emprendedores españoles. En español, con 9 agentes IA, precios en euros y soporte directo.");
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute("content", "https://www.marisai.es/vs-emergent");
+    let canonical = document.getElementById("canonical-tag") as HTMLLinkElement | null;
+    if (!canonical) canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+    if (canonical) canonical.setAttribute("href", "https://www.marisai.es/vs-emergent");
+  }, []);
   // Schema.org ItemList para la comparativa
   const schemaData = {
     "@context": "https://schema.org",

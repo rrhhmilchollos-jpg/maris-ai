@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Check, X, ArrowRight, Zap, Globe, Code2, Shield, Clock, Euro } from "lucide-react";
@@ -5,6 +6,20 @@ import { motion } from "framer-motion";
 import { Layout } from "@/components/layout";
 
 export default function VsLovablePage() {
+  useEffect(() => {
+    document.title = "Maris AI vs Lovable — Mejor Alternativa Española 2026";
+    const desc = document.querySelector('meta[name="description"]');
+    if (desc) desc.setAttribute("content", "Maris AI es la mejor alternativa a Lovable para emprendedores españoles. En español, con 9 agentes IA, precios en euros y soporte directo.");
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute("content", "Maris AI vs Lovable — Mejor Alternativa Española 2026");
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute("content", "Maris AI es la mejor alternativa a Lovable para emprendedores españoles. En español, con 9 agentes IA, precios en euros y soporte directo.");
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.setAttribute("content", "https://www.marisai.es/vs-lovable");
+    let canonical = document.getElementById("canonical-tag") as HTMLLinkElement | null;
+    if (!canonical) canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+    if (canonical) canonical.setAttribute("href", "https://www.marisai.es/vs-lovable");
+  }, []);
   const comparison = [
     { feature: "Idioma de la interfaz", maris: "100% Español", lovable: "Inglés", marisWins: true },
     { feature: "Soporte en español", maris: "Sí, email directo", lovable: "No", marisWins: true },
