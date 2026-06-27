@@ -286,6 +286,65 @@ const ROUTES = [
 <h2>Maris AI vs otras herramientas no-code</h2>
 <p>A diferencia de Webflow, Bubble o WordPress, Maris AI genera código React real que puedes exportar, modificar y alojar donde quieras. No quedas atrapado en la plataforma. El código es 100% tuyo.</p>`
   },
+  {
+    path: "/legal/privacidad",
+    file: "legal/privacidad/index.html",
+    title: "Política de Privacidad — Maris AI",
+    description: "Política de privacidad de Maris AI: qué datos recopilamos, cómo los usamos y tus derechos conforme al RGPD.",
+    canonical: "https://www.marisai.es/legal/privacidad",
+    body: `<h1>Política de Privacidad</h1>
+<p>Última actualización: 28 de mayo de 2026</p>
+<h2>1. Introducción</h2>
+<p>En Maris AI respetamos la privacidad de nuestros usuarios. Esta Política de Privacidad explica cómo recopilamos, usamos, divulgamos y salvaguardamos tu información cuando visitas marisai.es y utilizas nuestros servicios.</p>
+<h2>2. Información que Recopilamos</h2>
+<p>Recopilamos información que nos proporcionas directamente: nombre, correo electrónico y contraseña (a través de Clerk), información de perfil y preferencias, descripciones de aplicaciones que deseas generar, información de facturación y pago, y comunicaciones de soporte.</p>
+<h2>3. Cómo Usamos tu Información</h2>
+<p>Utilizamos la información recopilada para proporcionar y mejorar nuestros servicios, procesar transacciones, enviar comunicaciones técnicas, responder consultas de soporte, cumplir obligaciones legales y prevenir fraude.</p>
+<h2>4. Compartir tu Información</h2>
+<p>No vendemos ni transferimos tu información personal a terceros sin tu consentimiento, salvo proveedores que nos asisten operativamente, obligación legal, o protección de derechos y seguridad.</p>
+<h2>5. Tus Derechos</h2>
+<p>Tienes derecho a acceder, rectificar y solicitar la eliminación de tu información personal, así como a oponerte a su procesamiento. Para ejercer estos derechos, contáctanos en privacidad@marisai.es.</p>
+<h2>6. Contacto</h2>
+<p>Maris AI Inc. — Email: privacidad@marisai.es — Sitio web: www.marisai.es</p>`
+  },
+  {
+    path: "/legal/aviso-legal",
+    file: "legal/aviso-legal/index.html",
+    title: "Aviso Legal — Maris AI",
+    description: "Aviso legal e información sobre el responsable del sitio web marisai.es conforme a la LSSI.",
+    canonical: "https://www.marisai.es/legal/aviso-legal",
+    body: `<h1>Aviso Legal</h1>
+<p>Última actualización: 28 de mayo de 2026</p>
+<h2>1. Información Legal</h2>
+<p>Maris AI Inc. es una empresa constituida de conformidad con las leyes aplicables. El contenido de este sitio web está protegido por derechos de autor y otras leyes de propiedad intelectual.</p>
+<h2>2. Uso Aceptable</h2>
+<p>Al acceder y utilizar este sitio web aceptas no usarlo para fines ilegales, no infringir derechos de propiedad intelectual de terceros, no transmitir contenido obsceno u ofensivo, y no intentar acceder sin autorización a nuestros sistemas.</p>
+<h2>3. Limitación de Responsabilidad</h2>
+<p>Maris AI proporciona el sitio web y los servicios "tal como están", sin garantías de ningún tipo, en la máxima medida permitida por la ley.</p>
+<h2>4. Propiedad Intelectual</h2>
+<p>El contenido del sitio web está protegido por derechos de autor. Sin embargo, el código generado por nuestros servicios es 100% tuyo: puedes usarlo, modificarlo, distribuirlo y comercializarlo sin restricciones.</p>
+<h2>5. Contacto</h2>
+<p>Maris AI Inc. — Email: legal@marisai.es — Sitio web: www.marisai.es</p>`
+  },
+  {
+    path: "/legal/cookies",
+    file: "legal/cookies/index.html",
+    title: "Política de Cookies — Maris AI",
+    description: "Información sobre las cookies utilizadas en marisai.es: tipos de cookies, cómo gestionarlas y cookies de terceros.",
+    canonical: "https://www.marisai.es/legal/cookies",
+    body: `<h1>Política de Cookies</h1>
+<p>Última actualización: 28 de mayo de 2026</p>
+<h2>1. ¿Qué son las Cookies?</h2>
+<p>Las cookies son pequeños archivos de texto que se almacenan en tu dispositivo cuando visitas un sitio web. Las usamos para mejorar tu experiencia, recordar tus preferencias y analizar el uso del sitio.</p>
+<h2>2. Tipos de Cookies que Utilizamos</h2>
+<p>Cookies esenciales (autenticación y seguridad), cookies de rendimiento (mejora de funcionalidad) y cookies de análisis (Google Analytics y similares, para entender el uso del sitio).</p>
+<h2>3. Cómo Controlar las Cookies</h2>
+<p>Puedes eliminar o bloquear cookies desde la configuración de tu navegador. Si lo haces, es posible que algunos servicios y funcionalidades del sitio no funcionen correctamente.</p>
+<h2>4. Cookies de Terceros</h2>
+<p>Nuestro sitio puede contener cookies de terceros, como Google Analytics. No tenemos control sobre estas cookies; te recomendamos revisar las políticas de privacidad de esos terceros.</p>
+<h2>5. Contacto</h2>
+<p>Maris AI Inc. — Email: privacy@marisai.es — Sitio web: www.marisai.es</p>`
+  },
 ];
 
 const HIDE_SCRIPT = `<script>
