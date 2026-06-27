@@ -1530,6 +1530,18 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
     return;
   }
 
+  // Guardia de seguridad: este endpoint es para REPARAR un job ya terminado
+  // (failed/reviewing). Si el frontend muestra el botón antes de que el
+  // panel se haya refrescado (ventana de carrera tras recargar la página,
+  // dado el polling de 3s), rechazamos aquí para no crear una condición de
+  // carrera sobre un job que sigue trabajando activamente.
+  if (failedJob.status === "running" || failedJob.status === "queued" || failedJob.status === "repairing") {
+    res.status(409).json({
+      error: `Este job sigue en estado "${failedJob.status}" — todavía no ha terminado ni fallado. Espera a que termine o falle antes de repararlo. Si la página no se ha actualizado, refréscala.`,
+    });
+    return;
+  }
+
   const cleanPrompt = (failedJob.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
 
   // 1. Código parcial directo en el job fallido

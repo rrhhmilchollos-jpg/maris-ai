@@ -136,6 +136,25 @@ function fallbackClaudeModels(model: string): string[] {
   return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
 }
 
+// Timeout duro para cualquier llamada a un proveedor de IA dentro de este
+// archivo. Sin esto, una llamada no-streaming (anthropic.messages.create,
+// Gemini, OpenAI) puede colgarse minutos si el proveedor se degrada, sin
+// ningún chunk que activar un timeout de inactividad (eso solo aplica a
+// streams) — el job entero queda en silencio hasta que el watchdog global
+// (12 min) lo reinicia desde cero, perdiendo todo el trabajo ya hecho.
+async function raceWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([p, timeoutPromise]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+const AI_CALL_TIMEOUT_MS = 90_000;
+
 export async function createClaudeMessageWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
   let lastError: unknown;
   const MAX_RETRIES = 3;
@@ -166,7 +185,11 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
       try {
         // Pequeño desfase aleatorio para evitar colisiones de agentes
         await new Promise(r => setTimeout(r, Math.random() * 500));
-        return await anthropic.messages.create({ ...params, model: candidate });
+        return await raceWithTimeout(
+          anthropic.messages.create({ ...params, model: candidate }),
+          AI_CALL_TIMEOUT_MS,
+          `anthropic.messages.create(${candidate})`,
+        );
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
@@ -231,11 +254,15 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
 ${userText}`
         : userText;
 
-      const result = await gemini.models.generateContent({
-        model: geminiModel,
-        contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-        config: { maxOutputTokens: Math.min(params.max_tokens || 4096, 8192) },
-      });
+      const result = await raceWithTimeout(
+        gemini.models.generateContent({
+          model: geminiModel,
+          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          config: { maxOutputTokens: Math.min(params.max_tokens || 4096, 8192) },
+        }),
+        AI_CALL_TIMEOUT_MS,
+        `gemini.generateContent(${geminiModel})`,
+      );
 
       const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
       logger.info({ role, geminiModel, chars: text.length }, "Gemini fallback exitoso");
@@ -249,14 +276,18 @@ ${userText}`
   // ── FALLBACK 2: OpenAI ────────────────────────────────────────────────────
   try {
     logger.info({ role }, "Falling back to OpenAI (GPT-4o/5) for agent task");
-    const response = await getOpenAI().chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: params.system },
-        ...params.messages
-      ],
-      max_tokens: Math.min(params.max_tokens || 4096, 16000),
-    });
+    const response = await raceWithTimeout(
+      getOpenAI().chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: params.system },
+          ...params.messages
+        ],
+        max_tokens: Math.min(params.max_tokens || 4096, 16000),
+      }),
+      AI_CALL_TIMEOUT_MS,
+      "openai.chat.completions.create(gpt-4o)",
+    );
     
     const text = response.choices?.[0]?.message?.content || "";
     return { content: [{ type: "text", text }] };

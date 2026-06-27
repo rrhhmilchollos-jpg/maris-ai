@@ -1185,8 +1185,8 @@ function LiveMonitorPanel() {
                           disabled={actionLoading[`recover_${job.id}`]}
                         >
                           {actionLoading[`recover_${job.id}`]
-                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Recuperando…</>
-                            : <><RefreshCw className="h-3 w-3 mr-1" />Recuperar y continuar</>
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Reparando…</>
+                            : <><RefreshCw className="h-3 w-3 mr-1" />Reparar en sitio</>
                           }
                         </Button>
                         <Button
