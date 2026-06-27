@@ -498,6 +498,7 @@ Usa '// === FILE: <path> ===' para separar archivos. Incluye siempre:
 - src/routes/<nombre>.ts (uno por recurso)
 - src/middleware/auth.ts (JWT verify si hay autenticacion)
 - src/lib/logger.ts, src/lib/asyncHandler.ts, src/lib/errors.ts
+- src/lib/withRetry.ts (helper reutilizable: retryOnConflict(fn, maxAttempts=3) — reintenta fn() solo si el error tiene code 'P2034' o 'P2002' con backoff exponencial 50ms/100ms/150ms; cualquier otro código de error se relanza inmediatamente sin reintentar. Usa este helper en CUALQUIER transacción identificada como de alta concurrencia en el punto 3 — no reescribas la lógica de reintento inline en cada ruta)
 - src/db/seed.ts (script de Prisma seed con datos reales en espanol, no lorem ipsum)
 - openapi.yaml (especificacion OpenAPI 3.0 de TODOS los endpoints reales que generaste — ver seccion OPENAPI abajo)
 
@@ -518,9 +519,21 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
    - PATCH /resource/:id (actualizacion parcial con zod)
    - DELETE /resource/:id (soft delete con deletedAt si aplica)
 
-3. TRANSACCIONES ATOMICAS — la razón de ser de elegir Postgres:
+3. TRANSACCIONES ATOMICAS Y CONCURRENCIA — la razón de ser de elegir Postgres:
    - Cualquier operación que toque 2+ tablas relacionadas (ej: crear pedido + descontar stock, pago + actualizar saldo) DEBE usar prisma.$transaction([...]) o $transaction(async (tx) => {...})
    - Nunca dejes una operación multi-tabla sin envolver en transacción — es el motivo principal de usar SQL en vez de Mongo
+
+   CONCURRENCIA REAL — cuando dos usuarios pueden chocar al mismo tiempo (ej: dos clientes comprando el último artículo en stock, dos cajeros cobrando del mismo saldo):
+   a) BLOQUEO OPTIMISTA (preferido para la mayoría de casos — stock, saldos, reservas):
+      - Añade un campo "version Int @default(0)" al modelo afectado.
+      - Al actualizar, condiciona el UPDATE a la versión leída: dentro de la transacción, primero lee la fila, luego actualiza con WHERE id=X AND version=Y (vía prisma.model.updateMany con esa condición, comprobando que count===1), incrementando version+1.
+      - Si count!==1 (otra petición ganó la carrera), responde 409 Conflict con un mensaje claro ("Este recurso fue modificado por otra operación, vuelve a intentarlo") — NUNCA asumas que la operación tuvo éxito sin comprobar el resultado.
+   b) BLOQUEO PESIMISTA (solo para operaciones financieras críticas de muy alta contención — ej: descuento de saldo en cuentas bancarias):
+      - Usa SELECT ... FOR UPDATE dentro de la transacción vía prisma.$queryRaw, para bloquear la fila hasta que la transacción termine.
+      - Mantén estas transacciones lo más CORTAS posible (sin llamadas a APIs externas ni operaciones lentas dentro) para minimizar el tiempo de bloqueo.
+   c) REINTENTOS ANTE DEADLOCKS: envuelve las transacciones de alta contención en una función de reintento (hasta 3 intentos con backoff de 50-150ms) que capture específicamente el código de error P2034 (write conflict) de Prisma y reintente — nunca reintentes otros tipos de error (validación, not found) ciegamente.
+   d) NIVEL DE AISLAMIENTO: para operaciones que leen un valor y decidan algo basándose en él dentro de la misma transacción (ej: "si stock>0, descuenta"), usa prisma.$transaction(fn, { isolationLevel: 'Serializable' }) en vez del nivel por defecto, para evitar lecturas fantasma bajo alta concurrencia — combínalo con el reintento ante conflictos del punto (c), ya que Serializable puede abortar transacciones que colisionan.
+   - Documenta en un comentario junto a cada transacción crítica POR QUÉ se eligió ese patrón concreto (optimista/pesimista/serializable), para que quede claro a un desarrollador humano que la revise después.
 
 4. VALIDACION CON ZOD:
    - Schema zod para cada POST/PATCH body
