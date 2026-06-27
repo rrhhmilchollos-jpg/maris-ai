@@ -16,6 +16,7 @@ function getOpenAIApps(): OpenAI {
 }
 import { makeSlug } from "../lib/deployBundle";
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
+import { snapshotCurrentApp } from "../lib/appRevisions";
 import * as esbuild from "esbuild";
 
 // ── Validación de integridad del bundle ──────────────────────────────────────
@@ -2548,7 +2549,26 @@ REGLAS:
       return { success: false, filesChanged: [] };
     }
 
-    await log("coder", `✅ Cambio aplicado en ${result.toolsUsed.filter(t => t === "patch_file" || t === "write_file").length} archivo(s) usando herramientas`);
+    // VALIDACIÓN REAL ANTES DE ACEPTAR EL CAMBIO — antes este código confiaba
+    // únicamente en que el propio LLM, opcionalmente, hubiera llamado a
+    // validate_code (heurísticas de regex, sin compilar nada de verdad) si
+    // decidía que el cambio era "código complejo". Esto es exactamente el
+    // riesgo documentado para Maris AI en proyectos que se editan
+    // iterativamente: "los prompts iterativos tienden a romper componentes
+    // existentes". Ahora se compila el bundle COMPLETO con esbuild
+    // (validateBundle, el mismo validador real que usa el resto del
+    // pipeline) antes de aceptar el resultado — si el patch quirúrgico rompió
+    // algo (aunque fuera en un archivo que el LLM no tocó directamente, por
+    // un import roto entre archivos, por ejemplo), se detecta aquí y se cae
+    // al fallback (singleEditPass) en vez de entregar un bundle roto.
+    const postEditCheck = await validateBundle(result.bundleUpdated);
+    if (!postEditCheck.ok) {
+      logger.warn({ issues: postEditCheck.issues.length }, "surgicalEditWithTools: el bundle resultante no compila — descartando y cayendo a singleEditPass");
+      await log("coder", `⚠️ El cambio quirúrgico introdujo ${postEditCheck.issues.length} error(es) de compilación — reintentando con el método completo.`, "warn");
+      return { success: false, filesChanged: [] };
+    }
+
+    await log("coder", `✅ Cambio aplicado en ${result.toolsUsed.filter(t => t === "patch_file" || t === "write_file").length} archivo(s) usando herramientas — verificado con esbuild`);
     return {
       success: true,
       bundleUpdated: result.bundleUpdated,
@@ -5422,6 +5442,23 @@ export async function runJobById(jobId: string): Promise<void> {
         });
         editResultInvalid = true;
       } else {
+        // SNAPSHOT ANTES DE SOBRESCRIBIR — el sistema de revisiones
+        // (AppRevision, snapshotCurrentApp) ya existía en el código pero
+        // nunca se invocaba desde el flujo real de edición. La validación de
+        // sintaxis (arriba, validFrontend) detecta bundles rotos o vacíos,
+        // pero NO detecta refactorizaciones que compilan perfectamente pero
+        // rompen algo visual/lógico que el usuario no pidió tocar —
+        // exactamente el riesgo de "los prompts iterativos tienden a romper
+        // componentes existentes" documentado para este tipo de plataformas.
+        // Con el snapshot del estado anterior guardado, ese caso sí tiene
+        // una vía de recuperación real (restoreAppRevision), aunque pase
+        // todas las validaciones automáticas.
+        await snapshotCurrentApp({
+          appId: String(job.editAppId),
+          source: "edit",
+          summary: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").replace(/\[ADMIN (REPAIR|RECOVERY)\]/i, "").trim().slice(0, 200) || "Edición",
+          jobId: String(jobId),
+        });
         await GeneratedApp.findByIdAndUpdate(job.editAppId, {
         $set: {
           title: finalResult.title,

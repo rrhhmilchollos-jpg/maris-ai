@@ -11,7 +11,9 @@ import {
   JobLog,
   UserNotification,
   AppMessage,
+  AppRevision,
 } from "@workspace/db/schema";
+import { restoreAppRevision } from "../lib/appRevisions";
 import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
 import { bulkCreateProjectSeeds } from "../lib/projectSeeds";
@@ -1771,6 +1773,61 @@ router.post("/admin/jobs/:id/approve-for-client", async (req: any, res: any): Pr
   await GenerationJob.findByIdAndUpdate(job._id, { $set: { status: "done", phase: "done" } });
   logger.info({ jobId: String(job._id), appId: String(job.appId) }, "Admin approved app for client");
   res.json({ ok: true, appId: String(job.appId), message: "App aprobada — ya es visible para el cliente." });
+});
+
+// GET /api/admin/apps/:appId/revisions
+// Lista las revisiones guardadas de una app (snapshotCurrentApp ya las crea
+// automáticamente antes de cada edición desde hoy — antes existían la
+// colección y las funciones pero ningún endpoint las exponía).
+router.get("/admin/apps/:appId/revisions", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { appId } = req.params;
+  const app = await GeneratedApp.findById(appId, { _id: 1 }).lean();
+  if (!app) {
+    res.status(404).json({ error: `App ${appId} no encontrada.` });
+    return;
+  }
+  const revisions = await AppRevision.find(
+    { appId },
+    { frontendCode: 0, backendCode: 0 }, // no mandamos el código completo en el listado, solo metadatos
+  ).sort({ createdAt: -1 }).limit(30).lean() as any[];
+  res.json({
+    ok: true,
+    revisions: revisions.map((r) => ({
+      id: String(r._id),
+      source: r.source,
+      summary: r.summary,
+      jobId: r.jobId ? String(r.jobId) : null,
+      createdAt: r.createdAt,
+    })),
+  });
+});
+
+// POST /api/admin/apps/:appId/revisions/:revisionId/restore
+// Restaura una app a una revisión anterior — para cuando una edición pasó
+// todas las validaciones automáticas (compila bien) pero rompió algo que el
+// admin/cliente detecta visualmente y que ninguna validación de sintaxis
+// puede capturar.
+router.post("/admin/apps/:appId/revisions/:revisionId/restore", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { appId, revisionId } = req.params;
+  const app = await GeneratedApp.findById(appId, { userId: 1, title: 1 }).lean() as any;
+  if (!app) {
+    res.status(404).json({ error: `App ${appId} no encontrada.` });
+    return;
+  }
+  const result = await restoreAppRevision({ appId, revisionId, userId: String(app.userId) });
+  if (!result.ok) {
+    const messages: Record<string, string> = {
+      not_found: "Esa revisión no existe o no pertenece a esta app.",
+      forbidden: "No se pudo verificar la propiedad de esta app.",
+      job_in_flight: "Hay un job en curso para esta app — espera a que termine antes de restaurar.",
+    };
+    res.status(409).json({ error: messages[result.reason] || "No se pudo restaurar la revisión." });
+    return;
+  }
+  logger.info({ appId, revisionId }, "Admin restored app revision");
+  res.json({ ok: true, message: `"${app.title}" restaurada a la revisión seleccionada.` });
 });
 
 // POST /api/admin/jobs/:id/continue
