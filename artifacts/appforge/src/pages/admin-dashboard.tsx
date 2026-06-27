@@ -177,6 +177,77 @@ function JobLogsPanel({ jobId }: { jobId: string }) {
   );
 }
 
+// Catálogo de instrucciones de reparación/mejora para el panel de soporte,
+// organizado por categoría. Antes solo había 4 chips planos — esto da al
+// equipo de soporte un vocabulario completo y consistente para dirigir a los
+// agentes de reparación (autoRepairBundle), sin tener que escribir cada
+// instrucción desde cero cada vez.
+const REPAIR_INSTRUCTION_CATEGORIES: Array<{ label: string; icon: string; options: string[] }> = [
+  {
+    label: "Contenido y páginas",
+    icon: "📄",
+    options: [
+      "Completa las páginas que faltan según el plan original",
+      "Rellena los textos de marcador de posición (lorem ipsum) con contenido real en español",
+      "Añade la sección de FAQ que falta",
+      "Completa el footer con enlaces reales",
+      "Genera solo la landing page sin backend",
+    ],
+  },
+  {
+    label: "Diseño y UI",
+    icon: "🎨",
+    options: [
+      "Corrige el espaciado y alineación de los componentes principales",
+      "Hace que el diseño sea coherente entre todas las páginas",
+      "Mejora el contraste de colores para accesibilidad",
+      "Corrige el menú de navegación para que funcione en móvil",
+      "Simplifica la app a las funciones básicas",
+    ],
+  },
+  {
+    label: "Backend y datos",
+    icon: "🗄️",
+    options: [
+      "Completa los endpoints del backend que faltan",
+      "Corrige los modelos de datos para que coincidan con el frontend",
+      "Añade validación de formularios en el backend",
+      "Corrige la autenticación de usuarios",
+      "Conecta el frontend con los endpoints reales del backend",
+    ],
+  },
+  {
+    label: "Errores técnicos",
+    icon: "🐛",
+    options: [
+      "Corrige errores de TypeScript del frontend",
+      "Corrige imports rotos o componentes faltantes",
+      "Corrige errores de consola del navegador",
+      "Corrige rutas de navegación que no funcionan",
+      "Corrige el botón o formulario que no responde",
+    ],
+  },
+  {
+    label: "Rendimiento",
+    icon: "⚡",
+    options: [
+      "Optimiza las imágenes para que carguen más rápido",
+      "Añade paginación a las listas largas",
+      "Elimina renders innecesarios y mejora la fluidez",
+      "Añade estados de carga (loading) donde falten",
+    ],
+  },
+  {
+    label: "SEO y metadatos",
+    icon: "🔎",
+    options: [
+      "Añade título y meta descripción a cada página",
+      "Añade textos alternativos (alt) a las imágenes",
+      "Añade datos estructurados básicos (Schema.org)",
+    ],
+  },
+];
+
 function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   const { toast } = useToast();
   const [email, setEmail] = useState("faquiunmen@gmail.com");
@@ -190,6 +261,10 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   const [clientList, setClientList] = useState<Array<{ email: string; appsGenerated: number }>>([]);
   const [clientListLoading, setClientListLoading] = useState(false);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  // Texto de reparación por app (sustituye al window.prompt() ambiguo que se
+  // confundía fácilmente con "introduce el email del cliente").
+  const [repairText, setRepairText] = useState<Record<string, string>>({});
+  const [repairPopoverOpen, setRepairPopoverOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -451,29 +526,97 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     }}>
                     {actionLoading[`delapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                   </Button>
-                  {/* Reparar y continuar — usa el flujo in-situ (autoRepairBundle), NO crea una generación nueva */}
-                  <Button size="sm" variant="outline"
-                    className="h-7 text-[10px] border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
-                    disabled={actionLoading[`repairapp_${appId}`]}
-                    onClick={async () => {
-                      const instruction = window.prompt("¿Qué hay que reparar o completar en esta app? (se aplicará SOBRE la app existente, sin regenerarla desde 0)", "");
-                      if (!instruction) return;
-                      setActionLoading(p => ({ ...p, [`repairapp_${appId}`]: true }));
-                      try {
-                        const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${instruction}` }),
-                        });
-                        toast({ title: "🔧 Reparando en sitio", description: d.message || "Aplicando la instrucción sobre la app existente." });
-                      } catch (e: any) {
-                        toast({ title: "Error al reparar", description: e.message, variant: "destructive" });
-                      } finally {
-                        setActionLoading(p => ({ ...p, [`repairapp_${appId}`]: false }));
-                      }
-                    }}>
-                    {actionLoading[`repairapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔧 Reparar y continuar"}
-                  </Button>
+                  {/* Reparar y continuar — usa el flujo in-situ (autoRepairBundle), NO crea
+                      una generación nueva. Antes usaba window.prompt(), que se confundía
+                      fácilmente con "introduce el email del cliente" (otros botones de esta
+                      misma tarjeta SÍ piden un email) — ahora es un panel explícito que solo
+                      puede rellenarse con una INSTRUCCIÓN DE REPARACIÓN, nunca un email. */}
+                  <Popover
+                    open={!!repairPopoverOpen[appId]}
+                    onOpenChange={(open) => setRepairPopoverOpen(p => ({ ...p, [appId]: open }))}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button size="sm" variant="outline"
+                        className="h-7 text-[10px] border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                        disabled={actionLoading[`repairapp_${appId}`]}
+                      >
+                        {actionLoading[`repairapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔧 Reparar y continuar"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-96 p-3 space-y-2">
+                      <p className="text-xs font-medium text-white">
+                        ¿Qué hay que reparar o completar en "{app.title}"?
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Esto NO es el email del cliente — escribe aquí la instrucción técnica.
+                        Se aplica sobre la app existente, sin regenerarla desde 0.
+                      </p>
+                      <Input
+                        autoFocus
+                        value={repairText[appId] ?? ""}
+                        onChange={e => setRepairText(p => ({ ...p, [appId]: e.target.value }))}
+                        placeholder="Ej: Completa las páginas de reservas que faltan"
+                        className="text-xs h-8 bg-black/20"
+                      />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="text-[10px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium flex items-center gap-1">
+                            Catálogo de instrucciones <ChevronDown className="h-3 w-3" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-64 max-h-[60vh] overflow-y-auto">
+                          {REPAIR_INSTRUCTION_CATEGORIES.map(category => (
+                            <DropdownMenuSub key={category.label}>
+                              <DropdownMenuSubTrigger className="text-xs">
+                                <span className="mr-2">{category.icon}</span>
+                                {category.label}
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuPortal>
+                                <DropdownMenuSubContent className="w-72">
+                                  {category.options.map(option => (
+                                    <DropdownMenuItem
+                                      key={option}
+                                      className="text-xs cursor-pointer"
+                                      onClick={() => setRepairText(p => ({ ...p, [appId]: option }))}
+                                    >
+                                      {option}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuPortal>
+                            </DropdownMenuSub>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        size="sm"
+                        className="w-full h-8 bg-amber-600 hover:bg-amber-700 text-white text-xs"
+                        disabled={actionLoading[`repairapp_${appId}`] || !repairText[appId]?.trim()}
+                        onClick={async () => {
+                          const instruction = repairText[appId]?.trim();
+                          if (!instruction) return;
+                          setActionLoading(p => ({ ...p, [`repairapp_${appId}`]: true }));
+                          try {
+                            const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${instruction}` }),
+                            });
+                            toast({ title: "🔧 Reparando en sitio", description: d.message || "Aplicando la instrucción sobre la app existente." });
+                            setRepairText(p => ({ ...p, [appId]: "" }));
+                            setRepairPopoverOpen(p => ({ ...p, [appId]: false }));
+                          } catch (e: any) {
+                            toast({ title: "Error al reparar", description: e.message, variant: "destructive" });
+                          } finally {
+                            setActionLoading(p => ({ ...p, [`repairapp_${appId}`]: false }));
+                          }
+                        }}
+                      >
+                        {actionLoading[`repairapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Zap className="h-3 w-3 mr-1" />}
+                        Aplicar reparación
+                      </Button>
+                    </PopoverContent>
+                  </Popover>
                   {/* Regenerar desde 0 — crea un job de generación COMPLETA nueva, a propósito */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
@@ -1590,76 +1733,6 @@ function ClerkSyncPanel() {
   );
 }
 
-// Catálogo de instrucciones de reparación/mejora para el panel de soporte,
-// organizado por categoría. Antes solo había 4 chips planos — esto da al
-// equipo de soporte un vocabulario completo y consistente para dirigir a los
-// agentes de reparación (autoRepairBundle), sin tener que escribir cada
-// instrucción desde cero cada vez.
-const REPAIR_INSTRUCTION_CATEGORIES: Array<{ label: string; icon: string; options: string[] }> = [
-  {
-    label: "Contenido y páginas",
-    icon: "📄",
-    options: [
-      "Completa las páginas que faltan según el plan original",
-      "Rellena los textos de marcador de posición (lorem ipsum) con contenido real en español",
-      "Añade la sección de FAQ que falta",
-      "Completa el footer con enlaces reales",
-      "Genera solo la landing page sin backend",
-    ],
-  },
-  {
-    label: "Diseño y UI",
-    icon: "🎨",
-    options: [
-      "Corrige el espaciado y alineación de los componentes principales",
-      "Hace que el diseño sea coherente entre todas las páginas",
-      "Mejora el contraste de colores para accesibilidad",
-      "Corrige el menú de navegación para que funcione en móvil",
-      "Simplifica la app a las funciones básicas",
-    ],
-  },
-  {
-    label: "Backend y datos",
-    icon: "🗄️",
-    options: [
-      "Completa los endpoints del backend que faltan",
-      "Corrige los modelos de datos para que coincidan con el frontend",
-      "Añade validación de formularios en el backend",
-      "Corrige la autenticación de usuarios",
-      "Conecta el frontend con los endpoints reales del backend",
-    ],
-  },
-  {
-    label: "Errores técnicos",
-    icon: "🐛",
-    options: [
-      "Corrige errores de TypeScript del frontend",
-      "Corrige imports rotos o componentes faltantes",
-      "Corrige errores de consola del navegador",
-      "Corrige rutas de navegación que no funcionan",
-      "Corrige el botón o formulario que no responde",
-    ],
-  },
-  {
-    label: "Rendimiento",
-    icon: "⚡",
-    options: [
-      "Optimiza las imágenes para que carguen más rápido",
-      "Añade paginación a las listas largas",
-      "Elimina renders innecesarios y mejora la fluidez",
-      "Añade estados de carga (loading) donde falten",
-    ],
-  },
-  {
-    label: "SEO y metadatos",
-    icon: "🔎",
-    options: [
-      "Añade título y meta descripción a cada página",
-      "Añade textos alternativos (alt) a las imágenes",
-      "Añade datos estructurados básicos (Schema.org)",
-    ],
-  },
-];
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
