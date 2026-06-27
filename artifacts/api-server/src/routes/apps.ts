@@ -768,10 +768,10 @@ SCHEMA DE SALIDA (JSON estricto sin texto adicional):
 
 Devuelve UNICAMENTE el JSON. Cero texto adicional.`
 
-const INTEGRATION_SYSTEM_PROMPT = `You are Maris AI's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics).
+const INTEGRATION_SYSTEM_PROMPT = `You are Maris AI's Integration Architect. Decide which third-party services this app realistically needs (auth, payments, AI, storage, email, maps, analytics, AND enterprise systems like ERPs/CRMs when explicitly requested).
 
 Output STRICT JSON only:
-{"services":[{"name":"Clerk","why":"User auth","envVars":["CLERK_PUBLISHABLE_KEY"],"setupSteps":["Create Clerk app","Copy publishable key into env"]}]}
+{"services":[{"name":"Clerk","why":"User auth","envVars":["CLERK_PUBLISHABLE_KEY"],"setupSteps":["Create Clerk app","Copy publishable key into env"],"kind":"playbook"}]}
 
 Rules:
 - Max 4 services. Only include what's truly needed for the requested app.
@@ -785,8 +785,28 @@ Rules:
 - If the app needs social login, use "Google OAuth" (or "Clerk" if it already handles auth broadly).
 - If the app needs WhatsApp notifications, use "WhatsApp".
 - If the app needs push notifications, use "OneSignal".
-  Using these exact names lets the coder agents apply pre-verified, correct integration code (a "playbook").
-- Output ONLY the JSON object.`;
+  Using these exact names (kind:"playbook") lets the coder agents apply pre-verified, correct integration code.
+
+GENERIC ERP/CRM INTEGRATIONS (kind:"generic-rest"):
+- If the user explicitly names an enterprise system NOT in the playbook above (e.g. "Salesforce", "SAP", "HubSpot", "Odoo", "Zoho", "Microsoft Dynamics", "PrestaShop", or any other named ERP/CRM/external platform), include it with "kind":"generic-rest".
+- For these, envVars must include at minimum: "<NAME>_API_BASE_URL", "<NAME>_API_KEY" (or "<NAME>_CLIENT_ID"/"<NAME>_CLIENT_SECRET" if the system is known to use OAuth2 — e.g. Salesforce, HubSpot, Microsoft Dynamics).
+- setupSteps must explain: (1) where to get API credentials in that platform's developer/admin portal, (2) that the generated connector is a starting point using that platform's REST API conventions and may need adjustment once real credentials/sandbox access are available, (3) that the user should test against the platform's sandbox/developer environment before production use.
+- Be honest in "why": state this is a best-effort REST connector based on the platform's publicly documented API patterns, not a certified/officially-tested integration.
+- NEVER claim certified support for an ERP/CRM you have not been given real-time documentation for in this conversation.
+
+Output ONLY the JSON object.`;
+
+const GENERIC_INTEGRATION_BACKEND_GUIDANCE = `
+GENERIC ERP/CRM CONNECTOR — cuando el plan incluya un servicio con kind="generic-rest":
+- Genera src/integrations/<nombreSistema>Client.ts: un cliente HTTP (fetch nativo o axios) con:
+  - Constructor/factory que lee las env vars de base URL y credenciales.
+  - Autenticación: si el sistema usa OAuth2 client_credentials (típico en Salesforce, HubSpot, Dynamics), implementa el flujo de obtención y refresco de token. Si usa API key simple, añádela como header.
+  - Métodos CRUD genéricos (list, get, create, update, delete) sobre el recurso relevante (ej: contacts, invoices, products) siguiendo las convenciones REST estándar de ese tipo de plataforma.
+  - Manejo de errores HTTP con reintentos básicos (1 retry en 429/503) y logging claro.
+- Genera src/routes/integrations/<nombreSistema>.ts: endpoints propios (ej: POST /api/integrations/salesforce/sync) que usan el cliente anterior para sincronizar datos entre el modelo de la app y el sistema externo.
+- IMPORTANTE — limitación honesta a documentar en un comentario al inicio del archivo: este conector se basa en los patrones REST públicos típicos de ese tipo de plataforma, NO en pruebas reales contra esa plataforma específica. El usuario DEBE probarlo contra el entorno sandbox del proveedor antes de producción, y puede necesitar ajustar nombres de campos/endpoints exactos según su instancia real.
+- Nunca inventes que la integración "ya está probada y funcionando con [Sistema]" — sé preciso: "conector base generado, pendiente de validar contra credenciales reales".
+`;
 
 const TEST_SYSTEM_PROMPT = `You are Maris AI's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
 
@@ -891,6 +911,7 @@ interface IntegrationService {
   why: string;
   envVars: string[];
   setupSteps: string[];
+  kind?: "playbook" | "generic-rest";
 }
 
 interface IntegrationSpec {
@@ -1663,20 +1684,23 @@ async function generateBackendCode(
   prompt: string,
   templateContext = "",
   agentPlan = selectAgentModelPlan(prompt),
+  integrationServices: IntegrationService[] = [],
 ): Promise<CodeGenResult> {
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
   }
+  const genericIntegrations = integrationServices.filter((s) => s.kind === "generic-rest");
   const planSummary = JSON.stringify({
     title: plan.title,
     dataModels: plan.dataModels,
     requiredFiles: plan.backendFiles,
+    ...(genericIntegrations.length ? { genericIntegrations: genericIntegrations.map((s) => ({ name: s.name, why: s.why, envVars: s.envVars })) } : {}),
   });
   const userContent = `User request: ${prompt}
 ${templateContext ? `\n${templateContext}\n` : ""}
 Backend plan (implement every listed file with real Express handlers):
 ${planSummary}
-
+${genericIntegrations.length ? `\n${GENERIC_INTEGRATION_BACKEND_GUIDANCE}\n` : ""}
 Now produce the JSON object with backendCode.`;
 
   try {
@@ -1812,6 +1836,7 @@ Backend needed: ${plan.backendNeeded}`,
               setupSteps: Array.isArray(s.setupSteps)
                 ? s.setupSteps.slice(0, 4).map((x) => String(x).slice(0, 200))
                 : [],
+              kind: s.kind === "generic-rest" ? "generic-rest" as const : "playbook" as const,
             })),
         };
       } catch {
@@ -3157,7 +3182,7 @@ export async function generateApp(
   if (runBackend) {
     backendResult = await runPhase("backend", async () => {
       await log("coder", "Construyendo el backend — API, rutas y base de datos…");
-      return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan);
+      return generateBackendCode(plan, prompt, templateContextBlock, agentModelPlan, integrationSpec.services);
     });
   } else if (execPlan.phases.includes("backend") && plan.backendNeeded) {
     // Solo mostrar este mensaje si el frontend realmente terminó con código válido
