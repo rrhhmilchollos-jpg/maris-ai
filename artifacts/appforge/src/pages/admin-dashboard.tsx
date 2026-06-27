@@ -265,6 +265,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   // confundía fácilmente con "introduce el email del cliente").
   const [repairText, setRepairText] = useState<Record<string, string>>({});
   const [repairPopoverOpen, setRepairPopoverOpen] = useState<Record<string, boolean>>({});
+  const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -420,8 +421,35 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
               {/* App header */}
               <div className="flex items-center justify-between p-4 gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white/90 truncate">{app.title || "Sin título"}</p>
-                  <p className="text-[10px] text-white/40 truncate mt-0.5">{app.prompt?.slice(0, 80)}…</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-white/90 truncate">{app.title || "Sin título"}</p>
+                    {app.kind && (
+                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-sky-500/30 text-sky-400 shrink-0">
+                        {app.kind}
+                      </Badge>
+                    )}
+                  </div>
+                  {/* Prompt original del cliente — antes se cortaba a 80
+                      caracteres y ni siquiera limpiaba el prefijo técnico
+                      interno ([MARIS AI REQUEST LOCALE]...), dejando muy
+                      poco (o nada) del texto real que escribió el cliente.
+                      Ahora: prefijo limpio siempre, y expandible con un clic
+                      si es largo, en vez de cortarlo a ciegas. */}
+                  {(() => {
+                    const cleanedAppPrompt = (app.prompt || "").replace(/^\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+                    const isLong = cleanedAppPrompt.length > 140;
+                    const isExpanded = !!expandedPromptIds[appId];
+                    return (
+                      <p
+                        className={`text-[10px] text-white/40 mt-0.5 ${isExpanded ? "" : "truncate"} ${isLong ? "cursor-pointer hover:text-white/60" : ""}`}
+                        onClick={isLong ? () => setExpandedPromptIds(p => ({ ...p, [appId]: !p[appId] })) : undefined}
+                        title={isLong ? (isExpanded ? "Clic para contraer" : "Clic para ver el prompt completo") : undefined}
+                      >
+                        {cleanedAppPrompt || "(sin prompt registrado)"}
+                        {isLong && <span className="text-violet-400 ml-1">{isExpanded ? "▲" : "▼"}</span>}
+                      </p>
+                    );
+                  })()}
                   <div className="flex items-center gap-3 mt-1">
                     <span className="text-[9px] font-mono text-white/25 cursor-pointer hover:text-white/50"
                       onClick={() => navigator.clipboard?.writeText(appId)}
