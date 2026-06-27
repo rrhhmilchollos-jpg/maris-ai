@@ -20,7 +20,7 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
-import { patchBundle } from "./shared-agents";
+import { patchBundle, type QAIssue } from "./shared-agents";
 import { buildDeployHtml } from "./deployBundle";
 import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
 
@@ -34,7 +34,7 @@ const REPAIR_COOLDOWN_MS = 10 * 60 * 1000;        // 10 min entre reparaciones d
 interface IAppRepairLog extends Document {
   appId: string;
   userId: string;
-  trigger: "visual-test" | "runtime-error" | "health-check" | "post-generation";
+  trigger: "visual-test" | "runtime-error" | "health-check" | "post-generation" | "manual";
   errorSummary: string;
   fixApplied: string;
   cyclesUsed: number;
@@ -48,7 +48,7 @@ const AppRepairLogSchema = new Schema<IAppRepairLog>(
   {
     appId: { type: String, required: true, index: true },
     userId: { type: String, required: true },
-    trigger: { type: String, enum: ["visual-test", "runtime-error", "health-check", "post-generation"], required: true },
+    trigger: { type: String, enum: ["visual-test", "runtime-error", "health-check", "post-generation", "manual"], required: true },
     errorSummary: { type: String, default: "" },
     fixApplied: { type: String, default: "" },
     cyclesUsed: { type: Number, default: 0 },
@@ -254,25 +254,30 @@ export async function autoRepairBundle(opts: {
 
     log.info({ trigger, errorSummary: errorSummary.slice(0, 100) }, "Starting auto-repair");
 
-    // Construir el prompt de reparación
-    const repairPrompt = buildRepairPrompt(errorSummary, app.title || "App");
+    // Construir el issue de reparación en el formato real que espera patchBundle
+    const repairIssues: QAIssue[] = [{
+      file: "general",
+      problem: errorSummary.slice(0, 2000),
+      fix: buildRepairPrompt(errorSummary, app.title || "App"),
+    }];
 
-    // Aplicar el patcher
-    const patchResult = await patchBundle({
-      bundle: app.frontendCode,
-      instruction: repairPrompt,
-      language: (app.kind === "python-api" ? "python" : "typescript") as any,
-      log,
-    });
+    // Aplicar el patcher (firma real: frontendCode, issues, language, memoryContext, model)
+    const patchedCode = await patchBundle(
+      app.frontendCode,
+      repairIssues,
+      (app.kind === "python-api" ? "python" : "typescript") as any,
+      "",
+      "claude-sonnet-4-6",
+    );
 
-    if (!patchResult?.bundle || patchResult.bundle === app.frontendCode) {
+    if (!patchedCode || patchedCode === app.frontendCode) {
       log.warn("Patcher no produjo cambios");
       return false;
     }
 
     // Verificar que el nuevo bundle compila
     try {
-      await buildDeployHtml({ bundle: patchResult.bundle, title: app.title || "App", kind: app.kind });
+      await buildDeployHtml({ bundle: patchedCode, title: app.title || "App", kind: app.kind });
     } catch (buildErr: any) {
       log.warn({ buildErr: String(buildErr).slice(0, 200) }, "Repaired bundle doesn't compile");
       return false;
@@ -281,7 +286,7 @@ export async function autoRepairBundle(opts: {
     // Guardar el bundle reparado
     await GeneratedApp.findByIdAndUpdate(appId, {
       $set: {
-        frontendCode: patchResult.bundle,
+        frontendCode: patchedCode,
         updatedAt: new Date(),
         lastAutoRepairAt: new Date(),
         autoRepairCount: ((app.autoRepairCount || 0) + 1),
@@ -294,7 +299,7 @@ export async function autoRepairBundle(opts: {
       userId,
       trigger,
       errorSummary: errorSummary.slice(0, 1000),
-      fixApplied: (patchResult.summary || "Bundle reparado automáticamente").slice(0, 500),
+      fixApplied: "Bundle reparado automáticamente por el Patcher Agent",
       cyclesUsed: 1,
       scoreBeforeRepair,
       success: true,
@@ -472,6 +477,7 @@ function buildRepairNotification(trigger: IAppRepairLog["trigger"], errorSummary
     "runtime-error": "por errores detectados en producción",
     "health-check": "durante la revisión periódica",
     "visual-test": "tras el análisis visual",
+    "manual": "a petición del equipo de soporte",
   };
 
   const firstError = errorSummary.split("\n")[0].slice(0, 150);

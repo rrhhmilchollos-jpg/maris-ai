@@ -25,6 +25,7 @@ import { pingRedis, getRedisStatus } from "../lib/redisHealth";
 import mongoose from "mongoose";
 import { makeSlug } from "../lib/deployBundle";
 import { MarisId, generateAppId } from "../lib/universalId";
+import { autoRepairBundle } from "../lib/autoRepairAgent";
 
 const router: IRouter = Router();
 
@@ -1562,26 +1563,52 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
     }
   }
 
-  // 3. App existente — continuar editándola
+  // 3. App existente — reparar EN SITIO, sobre el mismo job y la misma app.
+  // IMPORTANTE: ya NO se crea un GenerationJob nuevo. El job fallido original
+  // (failedJob._id) se actualiza in-situ a status "repairing", y al terminar
+  // pasa a "repaired-pending-review" — un estado intermedio que el panel de
+  // Monitorización sigue mostrando (no se mueve solo a "Apps de clientes")
+  // hasta que el admin lo apruebe explícitamente con otra acción.
   if (baseAppId) {
     const existingApp = await GeneratedApp.findById(baseAppId).lean() as any;
     if (existingApp?.frontendCode && existingApp.frontendCode.length > 500) {
-      const recoverPrompt = `[ADMIN RECOVERY] Continúa y completa esta app que quedó incompleta. Revisa el código existente, identifica qué falta (páginas sin implementar, componentes vacíos, imports rotos) y completa TODO lo que falta para que sea completamente funcional. NO rehagas lo que ya funciona. Prompt original: ${cleanPrompt.slice(0, 300)}`;
-      const newJobId = new mongoose.Types.ObjectId().toString();
-      await GenerationJob.create({
-        _id: newJobId, userId: failedJob.userId,
-        prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. ${recoverPrompt}`,
-        editAppId: String(baseAppId), coderModel: "claude-sonnet-4-6",
-        language: failedJob.language || "typescript", kind: "edit",
-        status: "queued", phase: "queued", progress: 0, isAdmin: true, hasEverPaid: true,
+      await GenerationJob.findByIdAndUpdate(failedJob._id, {
+        $set: { status: "repairing", phase: "repairing", progress: failedJob.progress || 70, appId: String(baseAppId) },
       });
-      await enqueueGenerateJob(newJobId);
-      res.status(201).json({ ok: true, jobId: newJobId, strategy: "edit-existing", message: `Continuando desde la app existente (${Math.round(existingApp.frontendCode.length / 1000)} KB). El cliente verá el progreso en tiempo real.` });
+      // Responder ya — la reparación sigue en background y el panel verá el
+      // progreso vía polling del propio job (mismo id, sin ventana nueva).
+      res.status(200).json({
+        ok: true,
+        jobId: String(failedJob._id),
+        appId: String(baseAppId),
+        strategy: "repair-in-place",
+        message: "Reparando la app existente en el mismo job — sin crear una generación nueva.",
+      });
+      const recoverPrompt = `[ADMIN RECOVERY] Continúa y completa esta app que quedó incompleta. Revisa el código existente, identifica qué falta (páginas sin implementar, componentes vacíos, imports rotos) y completa TODO lo que falta para que sea completamente funcional. NO rehagas lo que ya funciona. Prompt original: ${cleanPrompt.slice(0, 300)}`;
+      void autoRepairBundle({
+        appId: String(baseAppId),
+        userId: failedJob.userId,
+        trigger: "manual",
+        errorSummary: recoverPrompt,
+        log: logger.child({ module: "admin-recover", jobId: String(failedJob._id) }),
+      }).then(async (success) => {
+        await GenerationJob.findByIdAndUpdate(failedJob._id, {
+          $set: success
+            ? { status: "repaired-pending-review", phase: "done", progress: 100, errorMessage: null }
+            : { status: "failed", phase: "done", errorMessage: "La reparación automática no produjo cambios válidos. Revisa manualmente o usa Regenerar desde 0." },
+        });
+      }).catch(async (err) => {
+        logger.error({ err, jobId: String(failedJob._id) }, "admin-recover: repair-in-place falló");
+        await GenerationJob.findByIdAndUpdate(failedJob._id, {
+          $set: { status: "failed", phase: "done", errorMessage: String(err?.message || err).slice(0, 500) },
+        });
+      });
       return;
     }
   }
 
-  // 4. Código parcial — crear app temporal y completarla
+  // 4. Código parcial sin app creada todavía — crear la app UNA VEZ (necesario,
+  // no existía antes) pero seguir reparando sobre el MISMO job fallido, no uno nuevo.
   if (partialCode && partialCode.length > 500) {
     try {
       const owner = await User.findById(failedJob.userId).lean() as any;
@@ -1597,26 +1624,45 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
         status: "ready", publicSlug: makeSlug(),
         marisId: await generateAppId(userMarisId).catch(() => MarisId.project(userMarisId)),
       });
-      await GenerationJob.findByIdAndUpdate(failedJob._id, { $set: { appId: String(recoveredApp._id) } });
-      const recoverPrompt = `[ADMIN RECOVERY] Completa esta app que quedó incompleta por un timeout. Tienes ${Math.round(partialCode.length / 1000)}KB de código como base. Completa todo lo que falta sin rehacer lo que ya funciona. Prompt original: ${cleanPrompt.slice(0, 300)}`;
-      const newJobId = new mongoose.Types.ObjectId().toString();
-      await GenerationJob.create({
-        _id: newJobId, userId: failedJob.userId,
-        prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-recovery. ${recoverPrompt}`,
-        editAppId: String(recoveredApp._id), coderModel: "claude-sonnet-4-6",
-        language: failedJob.language || "typescript", kind: "edit",
-        status: "queued", phase: "queued", progress: 0, isAdmin: true, hasEverPaid: true,
+      await GenerationJob.findByIdAndUpdate(failedJob._id, {
+        $set: { appId: String(recoveredApp._id), status: "repairing", phase: "repairing", progress: failedJob.progress || 70 },
       });
-      await enqueueGenerateJob(newJobId);
-      res.status(201).json({ ok: true, jobId: newJobId, appId: String(recoveredApp._id), strategy: "partial-code", message: `App creada desde ${Math.round(partialCode.length / 1000)} KB de código parcial. Completando lo que falta.` });
+      res.status(200).json({
+        ok: true,
+        jobId: String(failedJob._id),
+        appId: String(recoveredApp._id),
+        strategy: "repair-in-place",
+        message: `App creada desde ${Math.round(partialCode.length / 1000)} KB de código parcial. Completando lo que falta en el mismo job, sin generación nueva.`,
+      });
+      const recoverPrompt = `[ADMIN RECOVERY] Completa esta app que quedó incompleta por un timeout. Tienes ${Math.round(partialCode.length / 1000)}KB de código como base. Completa todo lo que falta sin rehacer lo que ya funciona. Prompt original: ${cleanPrompt.slice(0, 300)}`;
+      void autoRepairBundle({
+        appId: String(recoveredApp._id),
+        userId: failedJob.userId,
+        trigger: "manual",
+        errorSummary: recoverPrompt,
+        log: logger.child({ module: "admin-recover", jobId: String(failedJob._id) }),
+      }).then(async (success) => {
+        await GenerationJob.findByIdAndUpdate(failedJob._id, {
+          $set: success
+            ? { status: "repaired-pending-review", phase: "done", progress: 100, errorMessage: null }
+            : { status: "failed", phase: "done", errorMessage: "La reparación automática no produjo cambios válidos. Revisa manualmente o usa Regenerar desde 0." },
+        });
+      }).catch(async (err) => {
+        logger.error({ err, jobId: String(failedJob._id) }, "admin-recover: repair-in-place falló");
+        await GenerationJob.findByIdAndUpdate(failedJob._id, {
+          $set: { status: "failed", phase: "done", errorMessage: String(err?.message || err).slice(0, 500) },
+        });
+      });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : "Error creando app de recuperación" });
     }
     return;
   }
 
-  // 5. Sin código parcial — generar desde el prompt original con Sonnet completo
-  // Esto es mejor que el 404: al menos le damos algo al cliente
+  // 5. Sin código parcial — aquí SÍ es inevitable lanzar una generación nueva
+  // (no hay nada que reparar, hay que crear desde cero). Esto es honesto: si
+  // no hay código previo, "continuar donde se quedó" no es posible porque no
+  // hay un "donde" real. Se mantiene como única excepción documentada.
   logger.warn({ jobId: req.params.id }, "Admin recovery: no partial code found, generating fresh with full Sonnet");
   try {
     const newJobId = new mongoose.Types.ObjectId().toString();
