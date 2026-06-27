@@ -1595,6 +1595,7 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
         userId: failedJob.userId,
         trigger: "manual",
         errorSummary: recoverPrompt,
+        maxCycles: 6, // flujo de soporte humano: más margen que el modo automático estándar
         log: logger.child({ module: "admin-recover", jobId: String(failedJob._id) }),
       }).then(async (success) => {
         await GenerationJob.findByIdAndUpdate(failedJob._id, {
@@ -1646,6 +1647,7 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
         userId: failedJob.userId,
         trigger: "manual",
         errorSummary: recoverPrompt,
+        maxCycles: 6, // flujo de soporte humano: más margen que el modo automático estándar
         log: logger.child({ module: "admin-recover", jobId: String(failedJob._id) }),
       }).then(async (success) => {
         await GenerationJob.findByIdAndUpdate(failedJob._id, {

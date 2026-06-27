@@ -407,25 +407,44 @@ export async function patchBundle(
   const issueList = issues
     .map((i, idx) => `${idx + 1}. [${i.file}] Problem: ${i.problem}\n   Fix: ${i.fix}`)
     .join("\n");
-  
+
+  // CRÍTICO: el bundle completo puede ser de cientos de KB. Pedirle al modelo
+  // que devuelva el bundle entero reparado arriesga truncamiento por límite de
+  // tokens en bundles grandes — exactamente el tipo de fallo silencioso de
+  // reparación que más frustra a los usuarios. En su lugar: enviamos solo los
+  // archivos relevantes (compactBundleForPrompt, ya existía pero no se usaba
+  // aquí), el modelo devuelve SOLO los archivos que cambia (el formato real
+  // que pide buildPatcherSystemPrompt: changedFiles/deletedFiles), y los
+  // fusionamos de vuelta con mergePatchIntoBundle. Esto es estrictamente más
+  // fiable: menos tokens de salida necesarios, menor riesgo de truncamiento,
+  // y los archivos no tocados quedan garantizados intactos byte a byte.
+  const issueHints = issues.flatMap((i) => [i.file, i.problem]);
+  const compactedBundle = compactBundleForPrompt(frontendCode, issueHints, 70_000);
+
   return withTimeout(
     (async () => {
       try {
         const response = await createClaudeMessageWithFallback("patcher", model, {
-      max_tokens: 16000,
-      system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
+          max_tokens: 16000,
+          system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
             {
               role: "user",
-              content: `ISSUES TO FIX:\n${issueList}\n${memoryContext}\nCURRENT FRONTEND BUNDLE:\n${frontendCode}\n\nReturn the FULL patched bundle as JSON.`,
+              content: `ISSUES TO FIX:\n${issueList}\n${memoryContext}\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the changed/added files as JSON: {"changedFiles":{"path":"full content"},"deletedFiles":["path"]}.`,
             },
           ],
         });
         const raw = (response.content[0] as any).text ?? "";
-        const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
-        if (!parsed || typeof parsed.frontendCode !== "string") return null;
-        if (parsed.frontendCode.length < 100) return null;
-        return parsed.frontendCode;
+        const parsed = extractJsonObject<{ changedFiles?: Record<string, string>; deletedFiles?: string[] }>(raw);
+        if (!parsed || typeof parsed.changedFiles !== "object" || parsed.changedFiles === null) {
+          return null;
+        }
+        const changedFiles = parsed.changedFiles;
+        const deletedFiles = Array.isArray(parsed.deletedFiles) ? parsed.deletedFiles.map(String) : [];
+        if (Object.keys(changedFiles).length === 0 && deletedFiles.length === 0) return null;
+        const merged = mergePatchIntoBundle(frontendCode, changedFiles, deletedFiles);
+        if (!merged || merged.length < 100) return null;
+        return merged;
       } catch {
         return null;
       }

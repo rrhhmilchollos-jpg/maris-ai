@@ -2020,14 +2020,20 @@ REGLAS:
     (async () => {
       try {
         const expected = plan.frontendFiles.join(", ");
-        // Analizar mas codigo — 20KB en lugar de 12KB
-        const sample = frontendCode.slice(0, 20000);
         // Extraer lista de archivos reales para validar imports
         const realFiles = frontendCode
           .split("// === FILE: ")
           .slice(1)
           .map(part => part.split("\n")[0].replace(/ ===$/, "").trim())
           .filter(Boolean);
+        // CRÍTICO: antes se analizaban solo los primeros 20KB del bundle
+        // (literalmente el principio del archivo, sin criterio) — en apps de
+        // varios archivos, esto significa que el QA Auditor NUNCA llega a ver
+        // la mayoría del código real. compactBundleForPrompt selecciona los
+        // archivos más relevantes (críticos como App.tsx/main.tsx + los que
+        // mencionan los nombres de página/componente del plan) hasta un
+        // presupuesto mucho mayor de caracteres, dando cobertura real.
+        const sample = compactBundleForPrompt(frontendCode, plan.frontendFiles ?? [], 60_000);
 
         const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
           max_tokens: 2000,  // Aumentado de 700 a 2000
@@ -2039,7 +2045,7 @@ REGLAS:
 
 ARCHIVOS REALES EN BUNDLE (${realFiles.length}): ${realFiles.join(", ")}
 
-PRIMEROS 20KB DEL BUNDLE:
+BUNDLE (archivos más relevantes seleccionados, hasta 60KB — los archivos omitidos se listan en el encabezado y NO deben reportarse como "faltantes" solo por no aparecer aquí):
 ${sample}
 
 Revisa todas las categorias y devuelve JSON estricto:
@@ -2190,12 +2196,13 @@ async function runValidatePatchLoop(
   log?: AgentLog,
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
   agentModelPlan?: ReturnType<typeof selectAgentModelPlan>,
+  maxIterationsOverride?: number,
 ): Promise<string> {
   // Modelo del agente "patcher" según el plan (Sonnet para paid, Haiku para
   // free). Si no se pasa plan, patchBundle usa su valor por defecto
   // (claude-sonnet-4-6), igual que antes de este fix.
   const patcherModel = agentModelPlan?.agents.patcher.model;
-  const MAX_ITERATIONS = 5; // testing-agent: hasta 5 rondas de reparación para proyectos ultra-complejos
+  const MAX_ITERATIONS = maxIterationsOverride ?? 5; // testing-agent: hasta 5 rondas (más para proyectos ultra-complejos, vía override)
   let finalFrontend = initialBundle;
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
@@ -3472,6 +3479,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
       log,
       { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
       agentModelPlan,
+      agentModelPlan.tier === "ultra" ? 8 : undefined, // proyectos ultra-complejos: más margen de reparación
     ),
   );
 

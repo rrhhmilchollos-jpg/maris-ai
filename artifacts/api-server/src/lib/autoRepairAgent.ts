@@ -21,6 +21,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
 import { patchBundle, type QAIssue } from "./shared-agents";
+import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
 import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
 
@@ -237,7 +238,7 @@ export async function autoRepairBundle(opts: {
   maxCycles?: number;
   log?: any;
 }): Promise<boolean> {
-  const { appId, userId, trigger, errorSummary, scoreBeforeRepair, maxCycles = 2 } = opts;
+  const { appId, userId, trigger, errorSummary, scoreBeforeRepair, maxCycles = 4 } = opts;
   const log = opts.log || logger.child({ module: "auto-repair", appId });
 
   if (isInCooldown(appId)) {
@@ -252,41 +253,79 @@ export async function autoRepairBundle(opts: {
 
     setCooldown(appId);
 
-    log.info({ trigger, errorSummary: errorSummary.slice(0, 100) }, "Starting auto-repair");
+    log.info({ trigger, errorSummary: errorSummary.slice(0, 100), maxCycles }, "Starting auto-repair");
 
-    // Construir el issue de reparación en el formato real que espera patchBundle
-    const repairIssues: QAIssue[] = [{
-      file: "general",
-      problem: errorSummary.slice(0, 2000),
-      fix: buildRepairPrompt(errorSummary, app.title || "App"),
-    }];
+    const repairKind = (app.kind === "python-api" ? "python" : "typescript") as any;
+    let currentCode = app.frontendCode as string;
+    let cyclesUsed = 0;
+    let lastFixSummary = "Bundle reparado automáticamente por el Patcher Agent";
 
-    // Aplicar el patcher (firma real: frontendCode, issues, language, memoryContext, model)
-    const patchedCode = await patchBundle(
-      app.frontendCode,
-      repairIssues,
-      (app.kind === "python-api" ? "python" : "typescript") as any,
-      "",
-      "claude-sonnet-4-6",
-    );
+    // BUCLE REAL DE REPARACIÓN — antes esta función hacía un único intento de
+    // parche sin validar ni reintentar; maxCycles existía como parámetro pero
+    // nunca se usaba. Ahora: en cada ciclo se valida con esbuild real
+    // (validateBundle, el mismo validador que usa la generación normal) y,
+    // si quedan errores de compilación reales, se reintenta el parche sobre
+    // ellos — no solo sobre el error original — hasta maxCycles veces o hasta
+    // que el bundle compile limpio.
+    for (let cycle = 1; cycle <= Math.max(1, maxCycles); cycle++) {
+      cyclesUsed = cycle;
+      const repairIssues: QAIssue[] = cycle === 1
+        ? [{ file: "general", problem: errorSummary.slice(0, 2000), fix: buildRepairPrompt(errorSummary, app.title || "App") }]
+        : []; // a partir del ciclo 2, los issues vienen de la validación real (abajo)
 
-    if (!patchedCode || patchedCode === app.frontendCode) {
-      log.warn("Patcher no produjo cambios");
+      let issuesForThisCycle = repairIssues;
+      if (cycle > 1) {
+        const validation = await validateBundle(currentCode);
+        if (validation.ok) {
+          log.info({ cycle }, "Bundle ya compila limpio antes de este ciclo — deteniendo bucle");
+          break;
+        }
+        issuesForThisCycle = validation.issues.slice(0, 6).map((i) => ({
+          file: i.file,
+          problem: `Build error${i.line ? ` at line ${i.line}` : ""}: ${i.message}`,
+          fix: "Fix the import / symbol / syntax so the file compiles.",
+        }));
+        if (issuesForThisCycle.length === 0) break;
+      }
+
+      const patchedCode = await patchBundle(currentCode, issuesForThisCycle, repairKind, "", "claude-sonnet-4-6");
+      if (!patchedCode || patchedCode === currentCode) {
+        log.warn({ cycle }, "Patcher no produjo cambios en este ciclo");
+        if (cycle === 1) return false; // primer intento sin cambios → nada que reportar
+        break; // ciclos posteriores sin cambios → entregamos lo mejor que tenemos
+      }
+      currentCode = patchedCode;
+      lastFixSummary = `Bundle reparado automáticamente por el Patcher Agent (${cycle} ciclo${cycle > 1 ? "s" : ""})`;
+    }
+
+    // Validación final real — si tras todos los ciclos sigue sin compilar,
+    // no guardamos un bundle roto sobre uno que (aunque con errores) sí
+    // compilaba antes.
+    const finalValidation = await validateBundle(currentCode);
+    if (!finalValidation.ok) {
+      log.warn({ cyclesUsed, remainingIssues: finalValidation.issues.length }, "Bundle sigue sin compilar tras todos los ciclos — no se sobrescribe el original");
+      await AppRepairLog.create({
+        appId, userId, trigger,
+        errorSummary: errorSummary.slice(0, 1000),
+        fixApplied: `Reparación incompleta tras ${cyclesUsed} ciclo(s) — ${finalValidation.issues.length} error(es) de compilación residuales. No se aplicó para no degradar la app.`,
+        cyclesUsed, scoreBeforeRepair, success: false,
+      });
       return false;
     }
 
-    // Verificar que el nuevo bundle compila
+    // Verificar también que el HTML final se construye correctamente
+    // (capa adicional sobre la validación de esbuild)
     try {
-      await buildDeployHtml({ bundle: patchedCode, title: app.title || "App", kind: app.kind });
+      await buildDeployHtml({ bundle: currentCode, title: app.title || "App", kind: app.kind });
     } catch (buildErr: any) {
-      log.warn({ buildErr: String(buildErr).slice(0, 200) }, "Repaired bundle doesn't compile");
+      log.warn({ buildErr: String(buildErr).slice(0, 200) }, "Repaired bundle doesn't compile (deploy build)");
       return false;
     }
 
     // Guardar el bundle reparado
     await GeneratedApp.findByIdAndUpdate(appId, {
       $set: {
-        frontendCode: patchedCode,
+        frontendCode: currentCode,
         updatedAt: new Date(),
         lastAutoRepairAt: new Date(),
         autoRepairCount: ((app.autoRepairCount || 0) + 1),
@@ -299,8 +338,8 @@ export async function autoRepairBundle(opts: {
       userId,
       trigger,
       errorSummary: errorSummary.slice(0, 1000),
-      fixApplied: "Bundle reparado automáticamente por el Patcher Agent",
-      cyclesUsed: 1,
+      fixApplied: lastFixSummary,
+      cyclesUsed,
       scoreBeforeRepair,
       success: true,
     });
