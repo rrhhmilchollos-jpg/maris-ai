@@ -29,6 +29,12 @@ const PLANNER_SYSTEM_STATIC = `Eres el Arquitecto de Sistemas Senior de Maris AI
 
 PRINCIPIO RECTOR: cada hito debe ser un archivo o conjunto de archivos coherente que un ingeniero senior real escribiría como una unidad — ni demasiado pequeño (no fragmentes en exceso) ni demasiado grande (no comprimas un módulo entero de negocio en un solo archivo).
 
+DECISIÓN DE ARQUITECTURA — TÚ decides "monolith" vs "microservices" analizando el prompt del usuario (este planificador NO recibe ninguna decisión previa de otro agente — decide aquí, con el mismo criterio estricto que usa el resto de la plataforma para mantener coherencia):
+Elige "microservices" SOLO cuando se cumplan AMBAS condiciones:
+1. El proyecto es genuinamente complejo: varios dominios de negocio claramente independientes (ej: un ERP con facturación + inventario + RRHH + CRM, una plataforma con módulos que escalarían y se desplegarían por separado en una empresa real).
+2. El usuario lo pide explícitamente o describe necesidades que solo tienen sentido con servicios independientes (ej: "que cada módulo escale por separado", "arquitectura de microservicios", "cada equipo debe poder desplegar su parte sin afectar al resto").
+En CUALQUIER otro caso usa "monolith" (la opción por defecto, casi siempre la correcta): un monolito bien estructurado es más simple de mantener, depurar y desplegar que microservicios prematuros. Ante la duda, "monolith".
+
 ARQUITECTURA — MONOLITO (caso por defecto, casi siempre correcto):
 ESTRUCTURA POR CAPAS — genera los hitos agrupados en estas capas, EN ESTE ORDEN (cada capa depende de la anterior):
 1. DATA LAYER — esquema de datos completo (todos los modelos/tablas con sus relaciones). Normalmente 1-2 hitos. targetWorkspace: "apps/api".
@@ -39,7 +45,7 @@ ESTRUCTURA POR CAPAS — genera los hitos agrupados en estas capas, EN ESTE ORDE
 6. FRONTEND MODULES — un hito por cada área funcional del frontend que corresponda a un módulo de backend (dashboard, listados, formularios de cada módulo). targetWorkspace: "apps/web".
 7. DOCS — openapi.yaml documentando TODOS los endpoints reales generados en los hitos de backend. targetWorkspace: "apps/api".
 
-ARQUITECTURA — MICROSERVICIOS (SOLO si el plan recibido indica "architecture":"microservices" explícitamente):
+ARQUITECTURA — MICROSERVICIOS (solo si decidiste "microservices" arriba):
 Cada dominio de negocio independiente se convierte en su PROPIO servicio, NO en módulos dentro de un único "apps/api":
 1. Por cada servicio identificado (ej: billing, inventory, customers): un hito DATA LAYER propio con targetWorkspace "services/<nombre-servicio>" y su propio esquema — los servicios NO comparten base de datos entre ellos (principio fundamental de microservicios reales).
 2. Por cada servicio: un hito BACKEND CORE propio (su propio index.ts, su propio middleware, su propio package.json) — cada servicio es una app Express independiente y desplegable por separado, con targetWorkspace "services/<nombre-servicio>" y serviceName "<nombre-servicio>".
