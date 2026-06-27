@@ -881,6 +881,12 @@ GENERIC ERP/CRM INTEGRATIONS (kind:"generic-rest"):
 - Be honest in "why": state this is a best-effort REST connector based on the platform's publicly documented API patterns, not a certified/officially-tested integration.
 - NEVER claim certified support for an ERP/CRM you have not been given real-time documentation for in this conversation.
 
+REAL-TIME / WEBHOOK INTEGRATIONS (kind:"webhook"):
+- Use this kind (instead of "generic-rest") when the system NOTIFIES the app asynchronously instead of (or in addition to) being polled — banks/payment gateways confirming a transaction, couriers/logistics updating shipment status, or any "notify me when X happens" requirement. Signal words: "en tiempo real", "cuando se confirme el pago", "notificación del banco", "actualización de envío/tracking", "webhook".
+- envVars must include "<NAME>_WEBHOOK_SECRET" (for signature verification) in addition to whatever API credentials are needed for any outbound calls to that same provider.
+- setupSteps must explain: (1) where in the provider's dashboard to register the webhook URL, (2) where to find the signing secret for signature verification, (3) that idempotency (the same event can arrive more than once) and signature verification are mandatory, not optional, for this kind of integration.
+- Be just as honest as with generic-rest: this is a best-effort implementation of that provider's typical webhook patterns, to be validated against their real sandbox/test-webhook tooling before production.
+
 Output ONLY the JSON object.`;
 
 const GENERIC_INTEGRATION_BACKEND_GUIDANCE = `
@@ -893,6 +899,17 @@ GENERIC ERP/CRM CONNECTOR — cuando el plan incluya un servicio con kind="gener
 - Genera src/routes/integrations/<nombreSistema>.ts: endpoints propios (ej: POST /api/integrations/salesforce/sync) que usan el cliente anterior para sincronizar datos entre el modelo de la app y el sistema externo.
 - IMPORTANTE — limitación honesta a documentar en un comentario al inicio del archivo: este conector se basa en los patrones REST públicos típicos de ese tipo de plataforma, NO en pruebas reales contra esa plataforma específica. El usuario DEBE probarlo contra el entorno sandbox del proveedor antes de producción, y puede necesitar ajustar nombres de campos/endpoints exactos según su instancia real.
 - Nunca inventes que la integración "ya está probada y funcionando con [Sistema]" — sé preciso: "conector base generado, pendiente de validar contra credenciales reales".
+
+WEBHOOKS Y EVENTOS EN TIEMPO REAL — cuando el sistema (banco, pasarela de pago, courier/logística, sistema de notificaciones) NOTIFICA por webhook en vez de (o además de) consultarse por polling. Distinto del CRUD genérico de arriba: aquí el riesgo real es procesar el MISMO evento dos veces (el proveedor reintenta si no recibe 200 a tiempo — esto pasa en producción real, no es un caso raro):
+- Genera src/models/WebhookEvent.ts (o tabla Prisma equivalente si database=postgresql): registra CADA evento recibido con un id externo único del proveedor (ej: Stripe event.id, o el id que dé el courier/banco), antes de procesarlo.
+- IDEMPOTENCIA OBLIGATORIA en cada endpoint de webhook (ej: POST /api/webhooks/<proveedor>):
+  1. Extrae el id único del evento del payload (o cabecera, según documente el proveedor).
+  2. Comprueba si ya existe un WebhookEvent con ese id ANTES de procesar nada.
+  3. Si ya existe → responde 200 inmediatamente sin reprocesar (el proveedor interpretará 200 como "ya recibido", dejará de reintentar).
+  4. Si no existe → guarda el WebhookEvent (con status:"processing") DENTRO de la misma transacción que el efecto del evento (ej: marcar pedido como pagado), nunca como pasos separados — si el proceso se cae a mitad, no debe quedar el evento marcado como recibido sin haber aplicado su efecto, ni al revés.
+- VERIFICACIÓN DE FIRMA: si el proveedor firma sus webhooks (común en pasarelas de pago: header tipo X-Signature o Stripe-Signature con HMAC), genera el código de verificación de firma usando la variable de entorno del secreto compartido — y RECHAZA (401) cualquier webhook sin firma válida. Documenta en el .env.example que esta variable debe obtenerse del panel del proveedor.
+- RESPUESTA RÁPIDA: el endpoint de webhook debe responder 200 en milisegundos (solo guardar el evento), y procesar el efecto real de forma asíncrona si implica trabajo pesado (llamadas a otras APIs, generación de documentos) — nunca hacer esperar al proveedor mientras se procesa todo de forma síncrona, o el proveedor puede marcarlo como timeout y reintentar innecesariamente.
+- Limitación honesta a documentar igual que en el CRUD genérico: la estructura del payload y las cabeceras de firma se basan en los patrones públicos documentados de ese tipo de proveedor — deben validarse contra la documentación real y el modo sandbox antes de producción.
 `;
 
 const TEST_SYSTEM_PROMPT = `You are Maris AI's Test Engineer. Generate basic but REAL test scaffolding for a React+TS+Vite app.
@@ -1000,7 +1017,7 @@ interface IntegrationService {
   why: string;
   envVars: string[];
   setupSteps: string[];
-  kind?: "playbook" | "generic-rest";
+  kind?: "playbook" | "generic-rest" | "webhook";
 }
 
 interface IntegrationSpec {
@@ -1780,7 +1797,7 @@ async function generateBackendCode(
   if (!plan.backendNeeded) {
     return { code: "No backend required for this app.", truncated: false };
   }
-  const genericIntegrations = integrationServices.filter((s) => s.kind === "generic-rest");
+  const genericIntegrations = integrationServices.filter((s) => s.kind === "generic-rest" || s.kind === "webhook");
   const planSummary = JSON.stringify({
     title: plan.title,
     dataModels: plan.dataModels,
@@ -1927,7 +1944,7 @@ Backend needed: ${plan.backendNeeded}`,
               setupSteps: Array.isArray(s.setupSteps)
                 ? s.setupSteps.slice(0, 4).map((x) => String(x).slice(0, 200))
                 : [],
-              kind: s.kind === "generic-rest" ? "generic-rest" as const : "playbook" as const,
+              kind: s.kind === "generic-rest" ? "generic-rest" as const : s.kind === "webhook" ? "webhook" as const : "playbook" as const,
             })),
         };
       } catch {
