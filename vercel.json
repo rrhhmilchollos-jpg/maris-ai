@@ -79,6 +79,20 @@
       "destination": "/llms-full.txt"
     },
     {
+      "source": "/news/:slug",
+      "has": [
+        { "type": "header", "key": "user-agent", "value": ".*(Googlebot|bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Discordbot|TelegramBot|Applebot).*" }
+      ],
+      "destination": "https://maris-ai-api-server-production.up.railway.app/bot-render/news/:slug"
+    },
+    {
+      "source": "/news",
+      "has": [
+        { "type": "header", "key": "user-agent", "value": ".*(Googlebot|bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Discordbot|TelegramBot|Applebot).*" }
+      ],
+      "destination": "https://maris-ai-api-server-production.up.railway.app/bot-render/news"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
