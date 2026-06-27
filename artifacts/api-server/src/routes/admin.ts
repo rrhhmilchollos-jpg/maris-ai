@@ -1921,30 +1921,85 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
   }
 
   try {
-    // Si es una reparación (no regeneración desde 0), buscar la app más reciente del usuario
-    // y usar editAppId para que el resultado se guarde SOBRE la app existente
-    let editAppId: string | null = null;
-    let existingAppTitle = "";
+    // Si es una instrucción de reparación (botón "Aplicar" / chips del panel de
+    // soporte), buscamos la app más reciente y reparamos EN SITIO con
+    // autoRepairBundle — mismo flujo que /recover. Antes esto creaba un
+    // GenerationJob nuevo con kind:'edit' (pipeline COMPLETO de generación vía
+    // enqueueGenerateJob), lo cual podía tardar minutos, pasar por
+    // fastPatchEdit/callModel (con el riesgo de colgarse que arreglamos hoy),
+    // y no estaba realmente dirigido a aplicar solo la instrucción puntual.
     if (isRepair) {
       const latestApp = await GeneratedApp.findOne(
         { userId: targetId },
         { _id: 1, title: 1, frontendCode: 1 }
       ).sort({ updatedAt: -1 }).lean() as any;
-      if (latestApp?._id) {
-        editAppId = String(latestApp._id);
-        existingAppTitle = latestApp.title || "";
+
+      if (!latestApp?._id || !latestApp.frontendCode || latestApp.frontendCode.length < 500) {
+        res.status(400).json({ error: "Este usuario no tiene una app existente con código suficiente para reparar en sitio. Usa 'Regenerar desde 0' en su lugar." });
+        return;
       }
+
+      const repairInstruction = rawPrompt.replace(/^\[ADMIN (REPAIR|RECOVERY)\]\s*/, "").trim();
+
+      // Job ligero de seguimiento — NO dispara enqueueGenerateJob (no pasa por
+      // el pipeline completo de generación), solo da visibilidad en el panel
+      // de Monitorización mientras autoRepairBundle trabaja en background.
+      const trackingJobId = new mongoose.Types.ObjectId().toString();
+      await GenerationJob.create({
+        _id: trackingJobId,
+        userId: targetId,
+        prompt: rawPrompt,
+        appId: String(latestApp._id),
+        kind: "edit",
+        coderModel: "claude-sonnet-4-6",
+        language: "typescript",
+        status: "repairing",
+        phase: "repairing",
+        progress: 70,
+        isAdmin: true,
+        hasEverPaid: true,
+      });
+
+      res.status(200).json({
+        ok: true,
+        jobId: trackingJobId,
+        appId: String(latestApp._id),
+        strategy: "repair-in-place",
+        message: `Aplicando "${repairInstruction.slice(0, 60)}${repairInstruction.length > 60 ? "…" : ""}" sobre "${latestApp.title}" — sin crear una generación nueva.`,
+      });
+      await GeneratedApp.findByIdAndUpdate(latestApp._id, {
+        $set: { pendingAdminApproval: true, pendingApprovalSince: new Date() },
+      });
+      void autoRepairBundle({
+        appId: String(latestApp._id),
+        userId: targetId,
+        trigger: "manual",
+        errorSummary: repairInstruction,
+        maxCycles: 6,
+        log: logger.child({ module: "admin-inject-repair", appId: String(latestApp._id) }),
+      }).then(async (success) => {
+        await GenerationJob.findByIdAndUpdate(trackingJobId, {
+          $set: success
+            ? { status: "repaired-pending-review", phase: "done", progress: 100 }
+            : { status: "failed", phase: "done", errorMessage: "La reparación automática no produjo cambios válidos sobre la instrucción indicada." },
+        });
+      }).catch(async (err) => {
+        logger.error({ err, appId: String(latestApp._id) }, "admin-inject-repair: autoRepairBundle falló");
+        await GenerationJob.findByIdAndUpdate(trackingJobId, {
+          $set: { status: "failed", phase: "done", errorMessage: String(err?.message || err).slice(0, 500) },
+        });
+      });
+      return;
     }
 
     const jobId = new mongoose.Types.ObjectId().toString();
-    const source = isRepair ? "admin-repair" : "admin-inject";
-    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=${source}. ${prompt}`;
+    const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-inject. ${prompt}`;
 
     await GenerationJob.create({
       _id: jobId,
       userId: targetId,
       prompt: generationPrompt,
-      ...(editAppId ? { editAppId, kind: "edit" } : { kind: "fullstack" }),
+      kind: "fullstack",
       coderModel: "claude-sonnet-4-6",
       language: "typescript",
       status: "queued",
@@ -1955,13 +2010,9 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
     });
 
     await enqueueGenerateJob(jobId);
-    logger.info({ jobId, targetId, editAppId, email: (user as any).email }, "Admin generate-app for user");
+    logger.info({ jobId, targetId, email: (user as any).email }, "Admin generate-app for user");
 
-    const desc = editAppId
-      ? `Corrección aplicada sobre "${existingAppTitle}" — el cliente verá el resultado en su panel en cuanto termine.`
-      : `Nueva app en cola para ${(user as any).email}. Estará lista en breve.`;
-
-    res.status(201).json({ ok: true, jobId, editAppId, message: desc });
+    res.status(201).json({ ok: true, jobId, message: `Nueva app en cola para ${(user as any).email}. Estará lista en breve.` });
   } catch (err) {
     logger.error({ err, targetId }, "Admin generate-app error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
