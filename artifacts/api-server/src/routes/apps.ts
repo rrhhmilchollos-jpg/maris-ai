@@ -267,6 +267,64 @@ FORMATEO LOCALIZADO:
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MOBILE FRONTEND — React Native + Expo. Primer paso real hacia apps móviles
+// nativas: cuando el Architect detecta platform="mobile-native" (el usuario
+// pide explícitamente App Store/Google Play/app nativa), el Frontend Engineer
+// genera un proyecto Expo en vez de un proyecto Vite/web.
+//
+// LIMITACIÓN HONESTA QUE DEBE COMUNICARSE AL USUARIO (ver uso en el flujo):
+// esto genera el CÓDIGO FUENTE de la app nativa (componentes, navegación,
+// estado, llamadas a la API). NO compila un .ipa/.apk, NO gestiona
+// certificados de Apple Developer/Google Play, NI publica en las tiendas —
+// esas tres cosas requieren cuentas de pago del propio usuario y procesos
+// administrativos (revisión manual de Apple, etc.) que ninguna IA puede
+// completar en su nombre. El usuario recibe un proyecto Expo real, ejecutable
+// con `npx expo start`, listo para que él mismo (o con `eas build`) lo
+// compile y publique.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildMobileFrontendSystemPrompt(): string {
+  return `
+[IDENTIDAD Y PROPOSITO]
+Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos.
+Tu rol específico aquí es el de Mobile Engineer: generas apps móviles NATIVAS reales con React Native + Expo, no aplicaciones web.
+
+[ROL ESPECIFICO: MOBILE ENGINEER]
+El usuario ha pedido explícitamente una app nativa (para App Store y/o Google Play), no una web responsive. Genera un proyecto Expo completo y real.
+
+Stack OBLIGATORIO: React Native + Expo (SDK más reciente estable) + TypeScript + React Navigation (stack/tabs según corresponda) + Expo vector icons.
+NO uses: Tailwind CSS (no funciona igual en RN), wouter/react-router-dom (usa React Navigation), elementos HTML (div/span/button — usa View/Text/Pressable/TouchableOpacity de react-native), vercel.json ni nada de despliegue web.
+
+ARCHIVOS OBLIGATORIOS:
+- package.json (dependencias Expo correctas: expo, react-native, @react-navigation/native, @react-navigation/native-stack o bottom-tabs, react-native-screens, react-native-safe-area-context, expo-status-bar)
+- app.json (configuración Expo: name, slug, version, orientation, icon, splash, ios.bundleIdentifier, android.package — usa valores de ejemplo razonables basados en el nombre del proyecto)
+- tsconfig.json
+- App.tsx (punto de entrada, NavigationContainer + estructura de navegación)
+- src/screens/<Nombre>Screen.tsx — una por cada página del plan (equivalente a las "pages" del blueprint web)
+- src/components/<Nombre>.tsx — componentes reutilizables
+- src/navigation/AppNavigator.tsx — definición del stack/tabs de navegación
+- src/lib/api.ts — cliente fetch hacia el backend (mismas rutas que el plan de backend, si existe)
+- src/theme.ts — colores, tipografía, espaciados (equivalente al design system, adaptado a StyleSheet de RN)
+
+CALIDAD:
+- Usa StyleSheet.create para los estilos — nunca estilos inline extensos.
+- SafeAreaView en todas las pantallas raíz.
+- Estados de carga (ActivityIndicator) y error reales en cualquier pantalla que haga fetch.
+- Listas con FlatList/SectionList (nunca .map sobre arrays grandes dentro de ScrollView — problema real de rendimiento en RN).
+- Formularios con manejo de teclado (KeyboardAvoidingView donde aplique).
+- Todo el texto de UI en español (es-ES).
+- Código real y completo — cero TODOs, cero pantallas placeholder.
+
+LIMITACIÓN A DOCUMENTAR — incluye SIEMPRE un archivo README.md con esta sección:
+"## Cómo ejecutar y publicar esta app
+1. Instala dependencias: \`npm install\`
+2. Ejecuta en desarrollo: \`npx expo start\` (escanea el QR con la app Expo Go en tu móvil, o usa un emulador)
+3. Para publicar en las tiendas necesitas: una cuenta de Apple Developer (99\$/año) y/o Google Play Console (25\$ pago único), y ejecutar \`eas build\` (Expo Application Services) seguido de \`eas submit\`. Este proceso incluye revisión manual por parte de Apple/Google y no puede completarse automáticamente — son pasos que debes realizar tú con tus propias credenciales de desarrollador."
+
+Output STRICT JSON only: {"frontendCode":"all files as one string, separated by '// === FILE: <path> ===', plus README.md"}
+- Close every quote, brace and bracket. Output ONLY the JSON object.`;
+}
+
 const BACKEND_SYSTEM_PROMPT = `
 [IDENTIDAD Y PROPOSITO — LEE ESTO PRIMERO]
 Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos (apps, webs, SaaS, dashboards, e-commerce, etc.).
@@ -592,6 +650,7 @@ Output STRICT JSON only matching this schema:
   "frontendFiles": ["src/pages/Home.tsx", "src/components/ProductCard.tsx", ...],
   "backendNeeded": false,
   "database": "mongodb",
+  "platform": "web",
   "backendFiles": []
 }
 
@@ -603,6 +662,11 @@ Elige "postgresql" únicamente cuando el proyecto tenga CUALQUIERA de estas cara
 - El usuario pide explícitamente PostgreSQL, SQL, o menciona necesidades transaccionales/contables
 En CUALQUIER otro caso usa "mongodb" (la opción por defecto): blogs, catálogos, SaaS estándar, redes sociales, dashboards, CRMs ligeros, marketplaces simples, apps de citas/reservas básicas, herramientas internas.
 Ante la duda, elige "mongodb" — es la opción más probada de la plataforma. No fuerces "postgresql" salvo que el criterio anterior aplique con claridad.
+
+PLATFORM CHOICE — campo "platform": "web" | "mobile-native":
+Elige "mobile-native" SOLO cuando el usuario pida explícitamente una app móvil nativa real — frases como "app para iOS", "app para Android", "app nativa", "publicar en App Store", "publicar en Google Play", "que se instale desde la tienda de apps". Una PWA o "app móvil" en sentido genérico (responsive web) sigue siendo "web" — NO actives mobile-native solo porque el usuario diga "app" o "móvil" sin más, eso es el caso normal y ya está cubierto por el diseño responsive estándar.
+En "mobile-native": techStack debe ser ["React Native", "Expo", "TypeScript"] en vez del stack web habitual, y NO debe incluirse vercel.json ni nada específico de despliegue web.
+Por defecto (y en caso de duda) usa "web" — es la opción probada y la que cubre el 95%+ de los casos reales, incluyendo cualquier necesidad "móvil" vía diseño responsive.
 
 PRODUCT THINKING — be ambitious about UX:
 - Always include a Home/Landing page that's COMPELLING (hero + features + social proof + CTA + footer). Not just a navbar with text.
@@ -893,6 +957,7 @@ interface ProjectPlan {
   frontendFiles: string[];
   backendNeeded: boolean;
   database?: "mongodb" | "postgresql";
+  platform?: "web" | "mobile-native";
   backendFiles: string[];
 }
 
@@ -1543,7 +1608,9 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 
   const frontendModel = agentPlan.agents.frontend.model;
   const provider = frontendModel === "gpt-5.4" ? "gpt-5" : resolveCoderProvider(frontendModel);
-  const systemPrompt = buildFrontendSystemPrompt(language);
+  const systemPrompt = plan.platform === "mobile-native"
+    ? buildMobileFrontendSystemPrompt()
+    : buildFrontendSystemPrompt(language);
   let accumulated = "";
   let truncated = false;
 
