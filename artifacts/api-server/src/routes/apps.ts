@@ -2752,52 +2752,6 @@ export async function generateApp(
 
   onProgress?.({ phase: "generating", progress: Math.max((await GenerationJob.findById(jobId).select("progress").lean() as any)?.progress ?? 5, 5), note: "Planificando…" });
 
-  // El Core Orchestrator por hitos queda detrás de una feature flag porque su salida
-  // sólo empaqueta archivos parciales y puede dejar la preview sin un App React completo.
-  // Para producción usamos por defecto el pipeline robusto de generación, validación y
-  // parcheo que devuelve un bundle renderizable persistido en GeneratedApp.frontendCode.
-  const wantsFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
-  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true";
-
-  if (wantsFullBuild && useMilestoneOrchestrator) {
-    await log("system", "🚀 Activando Core Orchestrator experimental (Estrategia de Hitos)...");
-    const coreOrchestrator = new CoreOrchestrator(process.cwd());
-    await log("system", "📋 Analizando arquitectura y planificando hitos...");
-    await log("system", "📋 Mapa de ruta generado. Iniciando ejecución por hitos...");
-
-    const milestoneResult = await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
-      onProgress?.({
-        phase: "generating",
-        progress: update.progress,
-        note: update.status
-      });
-      await log("coder", update.status);
-    });
-
-    const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
-    if (milestoneFrontend.length >= 200 && /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/.test(milestoneFrontend)) {
-      const testedMilestone = await runPhase("testing", () =>
-        runTestingAgent(milestoneFrontend, {
-          jobId: jobId || "unknown",
-          prompt,
-          plan: { title: "Hitos", description: "Construcción por hitos" },
-          language,
-          log: log,
-          onProgress,
-        })
-      );
-      return {
-        title: "Proyecto Generado por Hitos",
-        description: "App construida mediante Task Splitting y Milestone Forking",
-        techStack: ["React", "Node", "TypeScript"],
-        frontendCode: testedMilestone,
-        backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
-      };
-    }
-
-    await log("system", "El orquestador experimental produjo un bundle incompleto; continúo con el pipeline robusto de generación.", "warn");
-  }
-
   let execPlan = await runPhase("planner", () =>
     planExecution(prompt, { hasExistingApp: !!previous }),
   );
@@ -2827,6 +2781,63 @@ export async function generateApp(
     hasExistingApp: !!previous,
   });
   logger.info({ tier: agentModelPlan.tier, score: agentModelPlan.score, frontend: agentModelPlan.agents.frontend.model }, "planner: modelo seleccionado");
+
+  // El Core Orchestrator por hitos (v2) se activa automáticamente para proyectos
+  // tier="ultra" — sistemas empresariales/ERPs/multi-módulo donde el pipeline
+  // estándar de una sola pasada tiene límites reales de tamaño de salida.
+  // También se puede forzar manualmente con MARIS_USE_MILESTONE_ORCHESTRATOR=true
+  // para proyectos de menor complejidad (uso experimental/pruebas).
+  const wantsFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
+  const isUltraComplex = agentModelPlan.tier === "ultra";
+  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" || isUltraComplex;
+
+  if (wantsFullBuild && useMilestoneOrchestrator) {
+    await log("system", isUltraComplex
+      ? "🏗️ Proyecto de alta complejidad detectado — activando construcción por hitos (modela cada módulo por separado en vez de comprimirlo todo en un único intento)..."
+      : "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
+    const coreOrchestrator = new CoreOrchestrator(process.cwd(), {
+      model: "claude-sonnet-4-6",
+      // El orquestador decide mongodb/postgresql por hito; le damos AMBOS quality
+      // bars y dejamos que use el que corresponda según database por hito de backend.
+      backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
+    });
+    await log("system", "📋 Analizando arquitectura y planificando hitos por capas (datos → backend core → módulos → integraciones → frontend)...");
+
+    const milestoneResult = await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
+      onProgress?.({
+        phase: "generating",
+        progress: update.progress,
+        note: update.status
+      });
+      await log("coder", update.status);
+    });
+
+    const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
+    if (milestoneFrontend.length >= 200 && /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/.test(milestoneFrontend)) {
+      const testedMilestone = await runPhase("testing", () =>
+        runTestingAgent(milestoneFrontend, {
+          jobId: jobId || "unknown",
+          prompt,
+          plan: { title: "Hitos", description: "Construcción por hitos" },
+          language,
+          log: log,
+          onProgress,
+        })
+      );
+      return {
+        title: "Proyecto Generado por Hitos",
+        description: `Sistema construido mediante Task Splitting por capas (${milestoneResult.milestones?.length ?? 0} hitos, base de datos: ${milestoneResult.database ?? "mongodb"})`,
+        techStack: ["React", "Node", "TypeScript", milestoneResult.database === "postgresql" ? "PostgreSQL" : "MongoDB"],
+        frontendCode: testedMilestone,
+        backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
+      };
+    }
+
+    await log("system", isUltraComplex
+      ? "El orquestador por hitos no produjo un bundle de frontend completo; continúo con el pipeline robusto de generación (el resultado puede necesitar iteración manual adicional dada la complejidad del proyecto)."
+      : "El orquestador experimental produjo un bundle incompleto; continúo con el pipeline robusto de generación.", "warn");
+  }
+
 
   // Edit mode
   if (previous) {

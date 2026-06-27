@@ -2,219 +2,251 @@ import fs from 'fs-extra';
 import path from 'path';
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 
-// ─── System Prompts Estáticos (CACHEADOS) ─────────────────────────────────────
-// Extraídos fuera de la clase para que sean constantes de módulo.
-// Anthropic cachea bloques estáticos durante 5 min → 90% descuento en tokens de entrada.
-const PLANNER_SYSTEM_STATIC = `Eres el Diseñador de Arquitectura de Maris AI. Tu trabajo es recibir la idea de una app completa y dividir su construcción en exactamente 4 hitos secuenciales mapeados a la estructura de nuestro monorepo.
+// ─────────────────────────────────────────────────────────────────────────────
+// CoreOrchestrator v2 — "Task Splitting" real para proyectos ultra-complejos
+// (ERPs, ecosistemas multi-módulo, sistemas de nivel empresarial).
+//
+// Diferencias clave frente a v1 (ver historial de git para la versión anterior):
+// - Número de hitos DINÁMICO según la complejidad real del proyecto, no fijo en 4.
+//   Un ERP necesita modelar cada módulo de negocio por separado (facturación,
+//   inventario, clientes, reporting...), no comprimirlo en un solo archivo.
+// - claude-sonnet-4-6 en planificación y generación de código, no Haiku — la
+//   complejidad real de un sistema empresarial necesita el modelo capaz, no el
+//   más rápido.
+// - Contexto ACUMULATIVO real: cada hito recibe el código completo (no solo un
+//   resumen en texto) de los hitos relevantes ya generados, para mantener
+//   coherencia real entre archivos (mismos nombres de campos, mismos tipos).
+// - Ejecución SECUENCIAL por capas (DB → Backend → Frontend → Integración),
+//   no en paralelo ciego — el backend necesita conocer el esquema de datos ya
+//   decidido, no adivinarlo en paralelo.
+// - Reusa systemPromptOverrides inyectados desde apps.ts (los mismos prompts de
+//   calidad — Zod, JWT, rate limiting, transacciones Prisma, OpenAPI — que ya
+//   usa el pipeline estándar), para que un proyecto ultra-complejo no reciba
+//   código de menor calidad que uno simple, solo más volumen.
+// ─────────────────────────────────────────────────────────────────────────────
 
-STACK TECNOLÓGICO OBLIGATORIO (no negociable):
-- Base de datos: MongoDB con Mongoose (packages/db)
-- Backend: Node.js + Express + TypeScript (apps/api)
-- Frontend: React + TypeScript + Tailwind CSS + Wouter (apps/web)
-- Validación: Zod en frontend y backend
+const PLANNER_SYSTEM_STATIC = `Eres el Arquitecto de Sistemas Senior de Maris AI. Recibes la idea de un proyecto de ALTA COMPLEJIDAD (sistema empresarial, ERP, ecosistema multi-módulo) y lo divides en hitos de construcción reales y manejables.
 
-REGLAS DE PLANIFICACIÓN:
-- Siempre 4 hitos exactos en este orden: DB → API → UI → Integración
-- Los nombres de archivo deben ser rutas relativas dentro del workspace
-- Las descripciones deben ser específicas y accionables
-- Nunca inventes tecnologías fuera del stack definido
+PRINCIPIO RECTOR: cada hito debe ser un archivo o conjunto de archivos coherente que un ingeniero senior real escribiría como una unidad — ni demasiado pequeño (no fragmentes en exceso) ni demasiado grande (no comprimas un módulo entero de negocio en un solo archivo).
+
+ESTRUCTURA POR CAPAS — genera los hitos agrupados en estas capas, EN ESTE ORDEN (cada capa depende de la anterior):
+1. DATA LAYER — esquema de datos completo (todos los modelos/tablas con sus relaciones). Normalmente 1-2 hitos.
+2. BACKEND CORE — autenticación, middleware, configuración base (helmet, cors, rate limit, logger, errors). 1 hito.
+3. BACKEND MODULES — un hito POR CADA módulo de negocio real (ej: en un ERP: facturación, inventario, clientes, RRHH, contabilidad serían hitos separados). Esto es lo que hace que un proyecto complejo se modele bien: no comprimas 5 módulos de negocio en 1 archivo.
+4. INTEGRATIONS — un hito por integración externa relevante si las hay (pagos, email, webhooks).
+5. FRONTEND CORE — layout, routing, componentes compartidos (Navbar, Sidebar, auth guard). 1-2 hitos.
+6. FRONTEND MODULES — un hito por cada área funcional del frontend que corresponda a un módulo de backend (dashboard, listados, formularios de cada módulo).
+7. DOCS — openapi.yaml documentando TODOS los endpoints reales generados en los hitos de backend.
+
+NÚMERO DE HITOS: no hay un número fijo. Un proyecto "ultra-complejo" real necesita entre 8 y 20 hitos según cuántos módulos de negocio distintos tenga. NO comprimas para reducir el número — eso es exactamente el error que produce sistemas incompletos.
+
+Cada hito debe especificar "dependsOn": [ids de hitos que debe ver como contexto antes de generarse]. Por ejemplo, un módulo de backend depende del hito de la capa DATA. Un hito de frontend depende del hito de backend correspondiente.
+
+STACK TECNOLÓGICO:
+- Si el proyecto tiene transacciones multi-tabla críticas (pagos+stock, facturación, contabilidad): PostgreSQL + Prisma.
+- En el resto de casos: MongoDB + Mongoose.
+- Backend: Node.js + Express + TypeScript + Zod.
+- Frontend: React + TypeScript + Tailwind CSS.
 
 Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
 {
+  "database": "mongodb" | "postgresql",
   "milestones": [
-    { "id": 1, "name": "Base de datos", "targetWorkspace": "packages/db", "description": "Explicación del esquema", "filePath": "src/schema.ts" },
-    { "id": 2, "name": "Rutas API Backend", "targetWorkspace": "apps/api", "description": "Explicación de endpoints", "filePath": "src/routes/app.ts" },
-    { "id": 3, "name": "Componentes de Interfaz", "targetWorkspace": "apps/web", "description": "Explicación del frontend UI", "filePath": "src/pages/index.tsx" },
-    { "id": 4, "name": "Integración y Estilos", "targetWorkspace": "apps/web", "description": "Estilos globales y layout", "filePath": "src/App.tsx" }
+    { "id": 1, "layer": "data", "name": "Esquema de datos — Facturación", "targetWorkspace": "apps/api", "description": "Modelos Invoice, InvoiceLine, Customer con relaciones...", "filePath": "src/models/billing.ts", "dependsOn": [] },
+    { "id": 2, "layer": "backend-core", "name": "Configuración base del servidor", "targetWorkspace": "apps/api", "description": "...", "filePath": "src/index.ts", "dependsOn": [1] },
+    { "id": 3, "layer": "backend-module", "name": "Módulo de Facturación — API", "targetWorkspace": "apps/api", "description": "Endpoints CRUD + lógica de negocio de facturación, usando prisma.$transaction para emitir facturas y descontar stock atómicamente...", "filePath": "src/routes/billing.ts", "dependsOn": [1, 2] }
   ]
 }`;
 
-const CODE_AGENT_STATIC = `Eres el Agente de Código Experto de Maris AI.
-
-STACK OBLIGATORIO:
-- Frontend: React 18 + TypeScript + Tailwind CSS + Wouter v3 + lucide-react
-- Backend: Node.js 20 + Express 5 + TypeScript
-- Validación: Zod. Sin TODOs, sin stubs. Código real y funcional.
+const CODE_AGENT_STATIC = `Eres el Ingeniero de Software Senior de Maris AI, especializado en sistemas empresariales complejos.
 
 REGLAS DE GENERACIÓN:
-- Genera EXCLUSIVAMENTE el código fuente del archivo solicitado. Sin explicaciones.
-- Código válido TypeScript. Sin trailing commas antes de }]).
-- Todos los textos de UI en español (es-ES). Mobile-first: 375px+.
-- NUNCA generes texto conversacional. Solo el código del archivo.`;
+- Genera EXCLUSIVAMENTE el código fuente del archivo solicitado. Sin explicaciones, sin markdown, sin backticks.
+- Código TypeScript real, completo y funcional. CERO TODOs, CERO stubs, CERO placeholders tipo "// implementar después".
+- Si el hito menciona operaciones multi-tabla o transaccionales, usa transacciones reales (prisma.$transaction o sesiones de Mongoose según corresponda) — esto es CRÍTICO en sistemas empresariales: una operación parcialmente aplicada corrompe los datos.
+- Usa exactamente los nombres de campos, modelos y rutas que aparecen en el CONTEXTO DE HITOS ANTERIORES que se te proporciona — la coherencia entre archivos es la diferencia entre un sistema que funciona y uno que no.
+- Validación con Zod en cada endpoint que reciba datos.
+- Todos los textos de UI y mensajes de error en español (es-ES).
+- Sigue el QUALITY BAR adicional si se proporciona en el mensaje de usuario (reglas específicas de seguridad, paginación, auditoría, etc.).`;
 
 interface Milestone {
   id: number;
+  layer: string;
   name: string;
   targetWorkspace: 'apps/api' | 'apps/web' | 'packages/db' | 'packages/shared';
   description: string;
   filePath: string;
+  dependsOn: number[];
 }
 
 interface GeneratedMilestone extends Milestone {
   code: string;
 }
 
+export interface CoreOrchestratorOptions {
+  /** Prompt de calidad adicional (las reglas de BACKEND_SYSTEM_PROMPT / BACKEND_SYSTEM_PROMPT_POSTGRES
+   *  de apps.ts) para que los hitos de backend usen el mismo quality bar que el pipeline estándar. */
+  backendQualityPrompt?: string;
+  /** Modelo a usar — por defecto el más capaz disponible para proyectos complejos. */
+  model?: string;
+  /** Máximo de hitos a generar en paralelo dentro de la misma capa (las capas en sí son secuenciales). */
+  concurrencyPerLayer?: number;
+}
+
+const LAYER_ORDER = ["data", "backend-core", "backend-module", "integration", "frontend-core", "frontend-module", "docs"];
+
 export class CoreOrchestrator {
   private projectRoot: string;
-  private architectureSummary: string = "";
+  private generatedByMilestoneId: Map<number, GeneratedMilestone> = new Map();
+  private options: CoreOrchestratorOptions;
 
-  constructor(projectRoot: string) {
+  constructor(projectRoot: string, options: CoreOrchestratorOptions = {}) {
     this.projectRoot = projectRoot;
+    this.options = {
+      model: options.model ?? "claude-sonnet-4-6",
+      concurrencyPerLayer: options.concurrencyPerLayer ?? 4,
+      backendQualityPrompt: options.backendQualityPrompt ?? "",
+    };
   }
 
-  /**
-   * Limpia el texto de respuesta del LLM eliminando bloques de código Markdown
-   * para asegurar que JSON.parse no falle.
-   */
   private cleanJsonResponse(text: string): string {
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      return jsonMatch[1].trim();
-    }
+    if (jsonMatch && jsonMatch[1]) return jsonMatch[1].trim();
     return text.trim();
   }
 
   /**
-   * FASE 1: PLANIFICACIÓN con Prompt Caching
-   *
-   * OPTIMIZACIÓN: El system prompt del planificador es estático y largo.
-   * Con cache_control: { type: "ephemeral" }, las llamadas repetidas cuestan
-   * un 90% menos en tokens de entrada (Anthropic Prompt Caching).
-   * El prefilling con '{"milestones":[' fuerza al modelo a devolver JSON directamente.
+   * FASE 1: PLANIFICACIÓN — divide el proyecto en hitos reales, en número
+   * dinámico según la complejidad, agrupados por capas con dependencias.
    */
-  async planMonorepoProject(userPrompt: string): Promise<Milestone[]> {
-    console.log("🤖 [Maris AI] Analizando arquitectura del monorepo...");
-
+  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; milestones: Milestone[] }> {
     const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 1000,
-      // OPTIMIZACIÓN: cache_control en el system prompt estático → 90% descuento
-      system: [
-        {
-          type: "text",
-          text: PLANNER_SYSTEM_STATIC,
-          cache_control: { type: "ephemeral" },
-        },
-      ] as any,
-      messages: [
-        { role: "user", content: userPrompt },
-        // OPTIMIZACIÓN: Prefilling → el modelo continúa desde aquí sin texto conversacional
-        { role: "assistant", content: '{"milestones":[' },
-      ],
+      model: this.options.model!,
+      max_tokens: 4000,
+      system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
+      messages: [{ role: "user", content: userPrompt }],
     });
 
-    const rawText = response.content[0].type === 'text' ? response.content[0].text : ']}'
-    // Reconstruimos el JSON completo (el prefill ya añadió el inicio)
-    const fullJson = '{"milestones":[' + rawText;
-    const cleanedJson = this.cleanJsonResponse(fullJson);
+    const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const cleanedJson = this.cleanJsonResponse(rawText);
 
     try {
       const result = JSON.parse(cleanedJson);
-      return result.milestones;
+      const milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
+        ...m,
+        dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
+      }));
+      return { database: result.database === "postgresql" ? "postgresql" : "mongodb", milestones };
     } catch (error) {
-      console.error("❌ Error parseando JSON de la planificación (intentando sin prefill):", error);
-      // Fallback: llamada sin prefilling si el JSON está malformado
-      const fallback = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 1000,
-        system: [
-          { type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } },
-        ] as any,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-      const fallbackText = fallback.content[0].type === 'text' ? fallback.content[0].text : '{}';
-      const result = JSON.parse(this.cleanJsonResponse(fallbackText));
-      return result.milestones;
+      console.error("❌ Error parseando JSON de la planificación de hitos:", error);
+      throw new Error("No se pudo generar el plan de hitos — respuesta del planificador inválida.");
     }
   }
 
+  /** Construye el bloque de contexto con el código real de los hitos en los que depende uno nuevo. */
+  private buildDependencyContext(milestone: Milestone): string {
+    if (!milestone.dependsOn.length) return "Este es uno de los primeros hitos del proyecto — no hay contexto previo relevante.";
+    const blocks = milestone.dependsOn
+      .map((id) => this.generatedByMilestoneId.get(id))
+      .filter((m): m is GeneratedMilestone => Boolean(m))
+      .map((m) => `// === ARCHIVO YA GENERADO: ${m.filePath} (hito "${m.name}") ===\n${m.code.trim()}`);
+    if (!blocks.length) return "Hitos de dependencia aún no disponibles — usa nombres y convenciones razonables.";
+    return `CONTEXTO DE HITOS ANTERIORES (usa los mismos nombres de campos, modelos y rutas que aquí aparecen):\n\n${blocks.join("\n\n")}`;
+  }
+
+  private async generateMilestone(milestone: Milestone, database: "mongodb" | "postgresql"): Promise<GeneratedMilestone> {
+    const MAX_ATTEMPTS = 3;
+    let lastError: unknown;
+
+    const dependencyContext = this.buildDependencyContext(milestone);
+    const qualityBlock = this.options.backendQualityPrompt && milestone.targetWorkspace !== "apps/web"
+      ? `\n\nQUALITY BAR OBLIGATORIO (mismas reglas que el resto de la plataforma):\n${this.options.backendQualityPrompt.slice(0, 6000)}`
+      : "";
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await anthropic.messages.create({
+          model: this.options.model!,
+          max_tokens: 8192,
+          system: [
+            { type: "text", text: CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
+            { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}` },
+          ] as any,
+          messages: [{
+            role: "user",
+            content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
+          }],
+        });
+        const code = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
+        if (code) return { ...milestone, code };
+        throw new Error("Respuesta vacía del modelo");
+      } catch (error) {
+        lastError = error;
+        console.error(`⚠️ Hito ${milestone.id} (${milestone.name}) — intento ${attempt}/${MAX_ATTEMPTS}:`, error);
+        if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
+    throw new Error(`Fallo crítico tras ${MAX_ATTEMPTS} intentos en hito ${milestone.id} (${milestone.name}): ${lastError}`);
+  }
+
   /**
-   * FASE 2: CONSTRUCCIÓN HÍBRIDA (Rápida + Live Preview)
-   * Ejecuta agentes en paralelo pero actualiza el contexto para la previsualización.
+   * FASE 2: CONSTRUCCIÓN POR CAPAS — cada capa se genera en paralelo
+   * internamente (con límite de concurrencia), pero las capas se ejecutan
+   * SECUENCIALMENTE para que cada una pueda usar el contexto real de la
+   * anterior. Esto es lo que evita la incoherencia entre archivos que tenía
+   * la versión anterior (paralelismo total sin dependencias).
    */
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
-    const milestones = await this.planMonorepoProject(userPrompt);
+    const { database, milestones } = await this.planMonorepoProject(userPrompt);
 
-    wsNotificationCallback({ 
-      status: "🚀 Arquitectura aprobada. Iniciando construcción paralela...", 
-      progress: 10 
+    wsNotificationCallback({
+      status: `🚀 Plan de ${milestones.length} hito(s) aprobado (base de datos: ${database}). Iniciando construcción por capas...`,
+      progress: 8,
     });
 
-    // Ejecución paralela con control de timeout y reintentos para evitar fallos sistémicos
-    const generationPromises = milestones.map(async (milestone) => {
-      let attempts = 0;
-      const MAX_ATTEMPTS = 3;
-      let generatedCode = "";
+    const layers = LAYER_ORDER
+      .map((layer) => milestones.filter((m) => m.layer === layer))
+      .filter((group) => group.length > 0);
+    // Cualquier hito con una capa no reconocida se añade al final para no perderlo.
+    const knownIds = new Set(layers.flat().map((m) => m.id));
+    const orphan = milestones.filter((m) => !knownIds.has(m.id));
+    if (orphan.length) layers.push(orphan);
 
-      while (attempts < MAX_ATTEMPTS) {
-        try {
-          const agentResponse = await anthropic.messages.create({
-            model: "claude-haiku-4-5",
-            max_tokens: 4000,
-            // OPTIMIZACIÓN: system en dos bloques:
-            //   Bloque 1 (ESTÁTICO, CACHEADO): reglas que nunca cambian → 90% descuento
-            //   Bloque 2 (DINÁMICO): estado del proyecto → no se cachea (varía)
-            system: [
-              {
-                type: "text",
-                text: CODE_AGENT_STATIC,
-                cache_control: { type: "ephemeral" },
-              },
-              {
-                type: "text",
-                text: `ESTADO ACTUAL DEL PROYECTO:\n${this.architectureSummary || 'Iniciando proyecto desde cero.'}`,
-              },
-            ] as any,
-            messages: [{ role: "user", content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo: ${milestone.description}\n\nDevuelve SOLO el código del archivo, sin explicaciones.` }]
+    let completed = 0;
+    const total = milestones.length || 1;
+
+    for (const layerMilestones of layers) {
+      const concurrency = this.options.concurrencyPerLayer!;
+      for (let i = 0; i < layerMilestones.length; i += concurrency) {
+        const batch = layerMilestones.slice(i, i + concurrency);
+        const results = await Promise.all(batch.map((m) => this.generateMilestone(m, database)));
+        for (const generated of results) {
+          this.generatedByMilestoneId.set(generated.id, generated);
+          await this.writeCodeToWorkspace(generated.targetWorkspace, generated.filePath, generated.code);
+          completed++;
+          wsNotificationCallback({
+            status: `🔨 ${generated.name} integrado en ${generated.targetWorkspace}.`,
+            progress: 8 + Math.round((completed / total) * 90),
+            step: generated.id,
+            previewAvailable: true,
           });
-
-          generatedCode = agentResponse.content[0].type === 'text' ? agentResponse.content[0].text : '';
-          if (generatedCode) break;
-        } catch (error) {
-          attempts++;
-          console.error(`⚠️ Error en hito ${milestone.id} (intento ${attempts}):`, error);
-          if (attempts === MAX_ATTEMPTS) throw new Error(`Fallo crítico tras ${MAX_ATTEMPTS} intentos en hito ${milestone.id}`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * attempts)); // Backoff exponencial
         }
       }
+    }
 
+    wsNotificationCallback({ status: "🚀 ¡Proyecto completo generado e integrado!", progress: 100, step: total });
 
-
-      // Guardamos en el sistema de archivos
-      await this.writeCodeToWorkspace(milestone.targetWorkspace, milestone.filePath, generatedCode);
-
-      // ACTUALIZACIÓN CRÍTICA: Mantiene viva la Live Preview
-      this.architectureSummary += `\n- Hito ${milestone.id} listo: Creado código en ${milestone.targetWorkspace}/${milestone.filePath}.`;
-
-      // Notificación al frontend con los parámetros que activan la preview
-      wsNotificationCallback({ 
-        status: `🔨 ${milestone.name} integrado en ${milestone.targetWorkspace}.`, 
-        progress: (milestone.id / milestones.length) * 100,
-        step: milestone.id,
-        previewAvailable: true // Esto le dice a la UI que refresque la App Preview
-      });
-
-      return { ...milestone, code: generatedCode } as GeneratedMilestone;
-    });
-
-    // Esperamos a que todos los agentes terminen sus tareas
-    const generatedMilestones = await Promise.all(generationPromises);
-
-    wsNotificationCallback({ 
-      status: "🚀 ¡Proyecto completo generado e integrado en el Monorepo!", 
-      progress: 100, 
-      step: 100 
-    });
-
+    const allGenerated = Array.from(this.generatedByMilestoneId.values());
     const toBundle = (items: GeneratedMilestone[]) => items
       .sort((a, b) => a.id - b.id)
       .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
       .join("\n");
 
     return {
-      frontendCode: toBundle(generatedMilestones.filter((item) => item.targetWorkspace === 'apps/web')),
-      backendCode: toBundle(generatedMilestones.filter((item) => item.targetWorkspace !== 'apps/web')),
-      milestones: generatedMilestones,
+      database,
+      frontendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace === 'apps/web')),
+      backendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web')),
+      milestones: allGenerated,
     };
   }
 
