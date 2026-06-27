@@ -66,7 +66,7 @@ export default function OnboardingPage() {
     { icon: Zap, title: "9 agentes de IA especializados", description: "Frontend, Backend, Testing, Planner, Researcher y más trabajando en paralelo." },
     { icon: Code, title: "Código real y funcional", description: "React, TypeScript, TailwindCSS, Node.js — código que puedes descargar y modificar." },
     { icon: Globe, title: "Deploy en un clic", description: "Publica tu app en marisai.es con subdominio gratuito. Dominio personalizado con plan de pago." },
-    { icon: Rocket, title: "115 créditos de bienvenida", description: "Suficientes para crear hasta 16 apps completas. Sin tarjeta de crédito." },
+    { icon: Rocket, title: "15 créditos de bienvenida", description: "Suficientes para crear hasta 16 apps completas. Sin tarjeta de crédito." },
   ];
 
   return (
@@ -214,7 +214,7 @@ export default function OnboardingPage() {
             <div className="mb-8 space-y-3 text-left">
               {[
                 "Cuenta creada y verificada",
-                "115 créditos de bienvenida asignados",
+                "15 créditos de bienvenida asignados",
                 "9 agentes de IA listos para trabajar",
                 `Tipo de proyecto seleccionado: ${APP_TYPES.find(t => t.id === selectedType)?.label ?? "App Web"}`,
               ].map((item) => (
