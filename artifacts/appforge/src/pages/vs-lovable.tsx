@@ -24,7 +24,7 @@ export default function VsLovablePage() {
     { feature: "Idioma de la interfaz", maris: "100% Español", lovable: "Inglés", marisWins: true },
     { feature: "Soporte en español", maris: "Sí, email directo", lovable: "No", marisWins: true },
     { feature: "Backend incluido", maris: "Sí (Express + MongoDB)", lovable: "Requiere Supabase (+25€/mes)", marisWins: true },
-    { feature: "Precio entrada", maris: "Gratis (15 créditos)", lovable: "Gratis (5 créditos/día)", marisWins: true },
+    { feature: "Precio entrada", maris: "Gratis (78 créditos)", lovable: "Gratis (5 créditos/día)", marisWins: true },
     { feature: "Plan de pago desde", maris: "20€", lovable: "25$/mes (~23€)", marisWins: true },
     { feature: "Créditos caducan", maris: "Nunca", lovable: "Sí (2 meses)", marisWins: true },
     { feature: "Agentes IA especializados", maris: "9 agentes en paralelo", lovable: "1 agente general", marisWins: true },
@@ -222,7 +222,7 @@ export default function VsLovablePage() {
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="bg-primary hover:bg-primary/90 text-white h-14 px-10 text-lg">
-                Empieza gratis — 15 créditos sin tarjeta <ArrowRight className="ml-2 h-5 w-5" />
+                Empieza gratis — 78 créditos sin tarjeta <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
             <p className="text-xs text-muted-foreground mt-4">Sin tarjeta de crédito · En español · Backend incluido</p>

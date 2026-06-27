@@ -235,7 +235,7 @@ export default function VsBase44Page() {
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="bg-primary hover:bg-primary/90 text-white h-14 px-10 text-lg">
-                Empieza gratis — 15 créditos sin tarjeta <ArrowRight className="ml-2 h-5 w-5" />
+                Empieza gratis — 78 créditos sin tarjeta <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
             <p className="text-xs text-muted-foreground mt-4">Sin tarjeta de crédito · En español · Código 100% tuyo</p>

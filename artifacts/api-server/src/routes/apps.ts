@@ -4193,18 +4193,22 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     //   - fullstack   = 3 × 10 = 30 créditos
     //   - game-3d     = 5 × 10 = 50 créditos
     //
-    // FREE (50 créditos de bienvenida):
+    // FREE (78 créditos de bienvenida):
     //   - Coste = min(KIND_COSTS[kind] × 13, 50) — consume la MAYOR PARTE del
     //     saldo en ESA primera app completa (igual que "1 deploy = 50
     //     créditos" en Emergent con solo 5-10 gratis): el usuario obtiene UNA
-    //     app completa y funcional, y le quedan pocos créditos para seguir
-    //     iterando (a 0.2/edición) antes de necesitar plan de pago.
-    //   FREE (15 créditos de bienvenida — justo para 1 landing completa):
-    //   - landing    = 1 × 13 = 13 créditos → quedan 2 (≈10 ediciones mínimas)
-    //   - vue/svelte  = 2 × 13 = 26 créditos → sin saldo (debe pagar)
-    //   - fullstack   = 3 × 13 = 39 créditos → sin saldo (debe pagar)
-    //   Estrategia: 1 landing gratuita completa y funcional, luego pagar.
-    //   Igual de agresivo que Emergent.sh — ven el resultado real, se enganchan.
+    //     app completa y funcional, y le quedan créditos reales para al
+    //     menos una reparación completa si la primera generación no sale
+    //     perfecta (no hay distinción de coste entre generar y reparar — el
+    //     mismo endpoint cobra lo mismo en ambos casos), antes de necesitar
+    //     plan de pago.
+    //   FREE (78 créditos de bienvenida — generación fullstack + 1 reparación completa):
+    //   - landing    = 1 × 13 = 13 créditos → quedan 65 (generación + reparación + margen de sobra)
+    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 52 (generación + reparación con margen)
+    //   - fullstack   = 3 × 13 = 39 créditos → quedan 39 (justo para una reparación completa si la primera falla)
+    //   Estrategia: 1 app fullstack gratuita completa y funcional, CON margen real para
+    //   una reparación si algo sale mal, luego pagar.
+    //   Más generoso que Emergent.sh para dar una primera experiencia fiable, no solo una demo frágil.
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;
