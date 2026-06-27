@@ -600,7 +600,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                             const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${instruction}` }),
+                              body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${instruction}`, appId }),
                             });
                             toast({ title: "🔧 Reparando en sitio", description: d.message || "Aplicando la instrucción sobre la app existente." });
                             setRepairText(p => ({ ...p, [appId]: "" }));

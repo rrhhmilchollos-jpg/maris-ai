@@ -1902,10 +1902,20 @@ router.post("/admin/recover-by-email", async (req: any, res: any): Promise<void>
     }
   }
 
-  // También buscar en GeneratedApp directamente
+  // También buscar en GeneratedApp directamente — ÚLTIMO RECURSO, solo si no
+  // hay ninguna pista más específica (ni el propio job, ni jobs relacionados
+  // con appId/código parcial). Mismo riesgo que se corrigió en el endpoint
+  // de "Aplicar reparación": para un usuario con varias apps, elegir "la más
+  // reciente" sin más contexto puede acertar la app equivocada. Como aquí no
+  // hay ningún ID explícito posible (recover-by-email solo recibe un email,
+  // no un appId), al menos registramos si había ambigüedad real para poder
+  // detectarlo en logs si vuelve a pasar.
   if (!baseAppId) {
-    const latestApp = await GeneratedApp.findOne({ userId: failedJob.userId }).sort({ createdAt: -1 }).lean() as any;
-    if (latestApp?._id) baseAppId = String(latestApp._id);
+    const candidateApps = await GeneratedApp.find({ userId: failedJob.userId }, { _id: 1, title: 1 }).sort({ createdAt: -1 }).limit(5).lean() as any[];
+    if (candidateApps.length > 1) {
+      logger.warn({ userId: failedJob.userId, candidateCount: candidateApps.length, chosen: candidateApps[0]?.title }, "recover-by-email: usuario con múltiples apps, eligiendo la más reciente como último recurso — riesgo de ambigüedad");
+    }
+    if (candidateApps[0]?._id) baseAppId = String(candidateApps[0]._id);
   }
 
   if (baseAppId) {
@@ -2024,6 +2034,7 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
   await connectDB();
   const targetId = req.params.id;
   const rawPrompt = req.body?.prompt || "";
+  const explicitAppId = req.body?.appId ? String(req.body.appId) : null;
   const isRepair = rawPrompt.startsWith("[ADMIN REPAIR]") || rawPrompt.startsWith("[ADMIN RECOVERY]");
   const defaultPrompt = "Crea una landing page profesional moderna para un emprendedor en España. Hero con titular impactante y CTA, sección de 3 beneficios con iconos, cómo funciona en 3 pasos, FAQ con 3 preguntas y footer. Diseño limpio en español. Sin backend.";
   const prompt = rawPrompt || defaultPrompt;
@@ -2036,18 +2047,37 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
 
   try {
     // Si es una instrucción de reparación (botón "Aplicar" / chips del panel de
-    // soporte), buscamos la app más reciente y reparamos EN SITIO con
-    // autoRepairBundle — mismo flujo que /recover. Antes esto creaba un
-    // GenerationJob nuevo con kind:'edit' (pipeline COMPLETO de generación vía
-    // enqueueGenerateJob), lo cual podía tardar minutos, pasar por
-    // fastPatchEdit/callModel (con el riesgo de colgarse que arreglamos hoy),
-    // y no estaba realmente dirigido a aplicar solo la instrucción puntual.
+    // soporte), reparamos EN SITIO con autoRepairBundle — mismo flujo que
+    // /recover. Antes esto creaba un GenerationJob nuevo con kind:'edit'
+    // (pipeline COMPLETO de generación vía enqueueGenerateJob), lo cual podía
+    // tardar minutos, pasar por fastPatchEdit/callModel (con el riesgo de
+    // colgarse que arreglamos hoy), y no estaba realmente dirigido a aplicar
+    // solo la instrucción puntual.
+    //
+    // BUG CRÍTICO encontrado en producción y corregido aquí: cuando el admin
+    // no especificaba qué app exactamente, el código elegía "la más reciente
+    // del usuario" (sort updatedAt:-1) — para CUALQUIER cliente (nuevo o
+    // veterano) con más de una app generada, esto podía elegir una app
+    // completamente distinta a la que el admin tenía abierta en pantalla,
+    // aplicando la reparación sobre el proyecto equivocado sin ningún aviso.
+    // Ahora: si el frontend manda appId explícito (la tarjeta exacta donde
+    // se pulsó el botón), SIEMPRE se usa esa — "la más reciente" queda solo
+    // como fallback para llamadas antiguas que aún no manden el ID.
     if (isRepair) {
-      const latestApp = await GeneratedApp.findOne(
-        { userId: targetId },
-        { _id: 1, title: 1, frontendCode: 1 }
-      ).sort({ updatedAt: -1 }).lean() as any;
+      const latestApp = explicitAppId
+        ? await GeneratedApp.findOne(
+            { _id: explicitAppId, userId: targetId },
+            { _id: 1, title: 1, frontendCode: 1 },
+          ).lean() as any
+        : await GeneratedApp.findOne(
+            { userId: targetId },
+            { _id: 1, title: 1, frontendCode: 1 }
+          ).sort({ updatedAt: -1 }).lean() as any;
 
+      if (explicitAppId && !latestApp) {
+        res.status(404).json({ error: `La app ${explicitAppId} no existe o no pertenece a este usuario.` });
+        return;
+      }
       if (!latestApp?._id || !latestApp.frontendCode || latestApp.frontendCode.length < 500) {
         res.status(400).json({ error: "Este usuario no tiene una app existente con código suficiente para reparar en sitio. Usa 'Regenerar desde 0' en su lugar." });
         return;
