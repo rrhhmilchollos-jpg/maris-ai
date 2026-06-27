@@ -52,6 +52,7 @@ export interface EmergentArchitectBlueprint {
   dataModels: Array<{ name: string; fields: string[]; relations?: string[] }>;
   apiEndpoints: Array<{ method: string; path: string; purpose: string }>;
   backendNeeded: boolean;
+  database?: "mongodb" | "postgresql";
   techStack: string[];
   frontendFiles: string[];
   backendFiles: string[];
@@ -112,6 +113,16 @@ PROCESO:
 4. Define la jerarquía de componentes y páginas
 5. Evalúa la complejidad real del proyecto
 6. Decide si se necesita backend (sé agresivo: cualquier app con usuarios, datos persistentes, pagos o APIs externas NECESITA backend)
+7. Si hay backend, elige la base de datos: MongoDB o PostgreSQL (ver criterio abajo)
+
+CRITERIO PARA ELEGIR BASE DE DATOS (campo "database"):
+Usa "postgresql" cuando el proyecto tenga CUALQUIERA de estas características:
+- Relaciones fuertes entre modelos con integridad referencial crítica (ej: pedidos↔líneas de pedido↔productos↔stock, facturación, contabilidad)
+- Necesidad de transacciones atómicas multi-tabla (ej: pagos, reservas con bloqueo de inventario, transferencias de saldo)
+- Datos tabulares con muchos JOINs esperados (ej: reporting, BI, dashboards analíticos complejos)
+- complexity es "advanced" o "enterprise" Y el dominio es financiero, de inventario, o de gestión empresarial (ERP-like)
+Usa "mongodb" en el resto de casos (por defecto): contenido flexible, prototipos, blogs, catálogos simples, SaaS estándar, apps sociales, dashboards básicos, CRMs ligeros.
+Ante la duda, prefiere "mongodb" — es la opción por defecto de la plataforma y la más probada. Solo eligas "postgresql" cuando el criterio anterior aplique claramente.
 
 REGLAS CRÍTICAS:
 - Genera TODOS los archivos necesarios en frontendFiles (no solo los principales)
@@ -136,6 +147,7 @@ RESPONDE EN JSON ESTRICTO con este schema:
   "dataModels": [{"name":"...","fields":["..."],"relations":["..."]}],
   "apiEndpoints": [{"method":"GET|POST|PUT|DELETE|PATCH","path":"/api/...","purpose":"..."}],
   "backendNeeded": boolean,
+  "database": "mongodb|postgresql" (solo si backendNeeded es true; usa el criterio anterior),
   "techStack": ["..."],
   "frontendFiles": ["..."],
   "backendFiles": ["..."],
