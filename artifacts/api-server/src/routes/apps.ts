@@ -2620,6 +2620,25 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
     let finishReason: string | undefined;
     const observe = makeStreamObserver();
     const PROGRESS_EVERY = 500;
+    // CRÍTICO: sin esto, si el proveedor (Anthropic/OpenAI) deja de enviar
+    // chunks a mitad de un stream sin cerrar la conexión (degradación de red,
+    // no un error explícito), el `for await` se queda esperando
+    // indefinidamente. El heartbeat de 30s del job sigue corriendo (por eso
+    // no se ve "muerto"), pero el contenido real no avanza — hasta que el
+    // watchdog actúa 12 MINUTOS después y reinicia el job desde cero,
+    // repitiendo todo el trabajo ya hecho. Este timeout corta el stream tras
+    // 60s sin recibir NINGÚN chunk nuevo, mucho antes de llegar al watchdog,
+    // y permite recuperar el contenido acumulado hasta ese punto en vez de
+    // perderlo todo.
+    const CHUNK_IDLE_TIMEOUT_MS = 60_000;
+    const raceChunk = <T>(iterPromise: Promise<T>): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
+        const t = setTimeout(() => {
+          reject(new Error(`Stream idle timeout: no chunk received in ${CHUNK_IDLE_TIMEOUT_MS}ms`));
+        }, CHUNK_IDLE_TIMEOUT_MS);
+        iterPromise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+      });
+    };
 
     try {
 
@@ -2634,7 +2653,10 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         stream: true,
       });
       let lastReport = 0;
-      for await (const chunk of stream) {
+      const iterator = stream[Symbol.asyncIterator]();
+      while (true) {
+        const { value: chunk, done } = await raceChunk<IteratorResult<any>>(iterator.next());
+        if (done) break;
         const delta = chunk.choices[0]?.delta?.content;
         if (delta) {
           accumulated += delta;
@@ -2655,7 +2677,10 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         messages: [{ role: "user", content: finalUserContent }],
       });
       let lastReportC = 0;
-      for await (const chunk of stream) {
+      const iterator = stream[Symbol.asyncIterator]();
+      while (true) {
+        const { value: chunk, done } = await raceChunk<IteratorResult<any>>(iterator.next());
+        if (done) break;
         if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
           accumulated += chunk.delta.text;
           observe(accumulated);
@@ -2672,7 +2697,10 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         messages: [{ role: "user", content: finalUserContent }],
       });
       let lastReport = 0;
-      for await (const chunk of stream) {
+      const iterator = stream[Symbol.asyncIterator]();
+      while (true) {
+        const { value: chunk, done } = await raceChunk<IteratorResult<any>>(iterator.next());
+        if (done) break;
         if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
           accumulated += chunk.delta.text;
           observe(accumulated);
