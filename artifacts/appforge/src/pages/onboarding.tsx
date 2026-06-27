@@ -18,31 +18,27 @@ import {
 
 // ✅ Seguimiento 4: Pantalla de bienvenida/onboarding para nuevos usuarios
 
-// Función para disparar el evento de conversión de Google Ads al completar el registro
-function fireGoogleAdsConversion(userId?: string | null) {
+// NOTA — eliminada la conversión de Google Ads que se disparaba aquí
+// (fireGoogleAdsConversion, ID AW-18218229959/bd7tCPjYwbwcEMfBkO9D): era una
+// implementación DUPLICADA de la misma conversión "Registro" que ya dispara
+// trackSignUp() en App.tsx al detectar un usuario nuevo (creado hace <2min).
+// La de App.tsx es la correcta — incluye gtag('set','user_data',{sha256_email})
+// para Conversiones Mejoradas ANTES del evento; esta no lo hacía. Disparar
+// AMBAS para el mismo registro real enviaba a Google Ads una mezcla de
+// conversiones con y sin los datos hasheados de Conversiones Mejoradas —
+// la causa real del aviso "Conversiones mejoradas tiene problemas de
+// configuración... Implementa código en la página además del automático",
+// que a su vez limitaba el alcance de la campaña (puja por conversiones sin
+// suficientes datos limpios para aprender). Se mantiene solo el disparo de
+// Meta Pixel, que no estaba duplicado en ningún otro sitio.
+function fireMetaPixelRegistration() {
   try {
-    const storageKey = `maris-google-ads-registro-${userId || "anonymous"}`;
-    if (typeof window !== "undefined" && localStorage.getItem(storageKey) === "sent") return true;
-
-    if (typeof (window as any).gtag === 'function') {
-      // ID de conversión: AW-18218229959/bd7tCPjYwbwcEMfBkO9D (acción Registro en Google Ads de Maris AI)
-      (window as any).gtag('event', 'conversion', {
-        'send_to': 'AW-18218229959/bd7tCPjYwbwcEMfBkO9D',
-        'value': 1.0,
-        'currency': 'EUR',
-        'event_callback': () => console.log('[GoogleAds] Conversión de registro disparada'),
-      });
-      localStorage.setItem(storageKey, "sent");
-      // También disparar evento de Meta Pixel
-      if (typeof (window as any).fbq === 'function') {
-        (window as any).fbq('track', 'CompleteRegistration', { value: 1.0, currency: 'EUR' });
-      }
-      return true;
+    if (typeof (window as any).fbq === 'function') {
+      (window as any).fbq('track', 'CompleteRegistration', { value: 1.0, currency: 'EUR' });
     }
-  } catch (e) {
-    console.warn('[GoogleAds] Error al disparar conversión:', e);
+  } catch {
+    // no bloquear el flujo de onboarding si Meta Pixel falla
   }
-  return false;
 }
 
 export default function OnboardingPage() {
@@ -54,11 +50,8 @@ export default function OnboardingPage() {
   const firstName = user?.firstName || user?.fullName?.split(" ")[0] || "ahí";
 
   useEffect(() => {
-    const userId = user?.id || null;
-    if (fireGoogleAdsConversion(userId)) return;
-    const retry = window.setTimeout(() => fireGoogleAdsConversion(userId), 1500);
-    return () => window.clearTimeout(retry);
-  }, [user?.id]);
+    fireMetaPixelRegistration();
+  }, []);
 
   const APP_TYPES = [
     { id: "web", label: "App Web", icon: Globe, description: "SaaS, dashboards, portales", cost: 3 },
@@ -234,7 +227,7 @@ export default function OnboardingPage() {
 
             <Button
               size="lg"
-              onClick={() => { fireGoogleAdsConversion(user?.id || null); setLocation("/dashboard"); }}
+              onClick={() => setLocation("/dashboard")}
               className="h-14 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-base font-bold shadow-[0_0_30px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
             >
               <Sparkles className="mr-2 h-5 w-5" />
