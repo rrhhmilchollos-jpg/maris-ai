@@ -299,7 +299,7 @@ ARCHIVOS OBLIGATORIOS:
 - package.json (dependencias Expo correctas: expo, react-native, @react-navigation/native, @react-navigation/native-stack o bottom-tabs, react-native-screens, react-native-safe-area-context, expo-status-bar)
 - app.json (configuración Expo: name, slug, version, orientation, icon, splash, ios.bundleIdentifier, android.package — usa valores de ejemplo razonables basados en el nombre del proyecto)
 - tsconfig.json
-- App.tsx (punto de entrada, NavigationContainer + estructura de navegación)
+- App.tsx (punto de entrada — usa exactamente "export default function App()" como firma del componente raíz, NavigationContainer + estructura de navegación dentro)
 - src/screens/<Nombre>Screen.tsx — una por cada página del plan (equivalente a las "pages" del blueprint web)
 - src/components/<Nombre>.tsx — componentes reutilizables
 - src/navigation/AppNavigator.tsx — definición del stack/tabs de navegación
@@ -2905,6 +2905,12 @@ export async function generateApp(
     });
 
     const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
+    // NOTA: si milestoneResult.platform === "mobile-native", este bundle es código
+    // React Native/Expo, no React web. runTestingAgent fue diseñado para proyectos
+    // web (Vitest/Playwright sobre Vite) — si no reconoce el código móvil, el
+    // try/catch de runPhase ya capturará el fallo y caerá al pipeline robusto
+    // estándar (mismo comportamiento de seguridad que el resto de este bloque).
+    // Mejora pendiente: un testing agent específico para Expo/React Native.
     if (milestoneFrontend.length >= 200 && /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/.test(milestoneFrontend)) {
       const testedMilestone = await runPhase("testing", () =>
         runTestingAgent(milestoneFrontend, {

@@ -46,11 +46,13 @@ STACK TECNOLÓGICO:
 - Si el proyecto tiene transacciones multi-tabla críticas (pagos+stock, facturación, contabilidad): PostgreSQL + Prisma.
 - En el resto de casos: MongoDB + Mongoose.
 - Backend: Node.js + Express + TypeScript + Zod.
-- Frontend: React + TypeScript + Tailwind CSS.
+- Frontend WEB (caso por defecto): React + TypeScript + Tailwind CSS.
+- Frontend MÓVIL NATIVO ("platform":"mobile-native"): SOLO si el usuario pide explícitamente App Store/Google Play/app nativa/iOS/Android nativo. En ese caso usa React Native + Expo + TypeScript + React Navigation en vez de React+Tailwind para todos los hitos de capa frontend-core/frontend-module — sin Tailwind (no aplica igual en RN), sin vercel.json. Por defecto y ante la duda usa "web".
 
 Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
 {
   "database": "mongodb" | "postgresql",
+  "platform": "web" | "mobile-native",
   "milestones": [
     { "id": 1, "layer": "data", "name": "Esquema de datos — Facturación", "targetWorkspace": "apps/api", "description": "Modelos Invoice, InvoiceLine, Customer con relaciones...", "filePath": "src/models/billing.ts", "dependsOn": [] },
     { "id": 2, "layer": "backend-core", "name": "Configuración base del servidor", "targetWorkspace": "apps/api", "description": "...", "filePath": "src/index.ts", "dependsOn": [1] },
@@ -119,7 +121,7 @@ export class CoreOrchestrator {
    * FASE 1: PLANIFICACIÓN — divide el proyecto en hitos reales, en número
    * dinámico según la complejidad, agrupados por capas con dependencias.
    */
-  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; milestones: Milestone[] }> {
+  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; milestones: Milestone[] }> {
     const response = await anthropic.messages.create({
       model: this.options.model!,
       max_tokens: 4000,
@@ -136,7 +138,11 @@ export class CoreOrchestrator {
         ...m,
         dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
       }));
-      return { database: result.database === "postgresql" ? "postgresql" : "mongodb", milestones };
+      return {
+        database: result.database === "postgresql" ? "postgresql" : "mongodb",
+        platform: result.platform === "mobile-native" ? "mobile-native" : "web",
+        milestones,
+      };
     } catch (error) {
       console.error("❌ Error parseando JSON de la planificación de hitos:", error);
       throw new Error("No se pudo generar el plan de hitos — respuesta del planificador inválida.");
@@ -154,13 +160,16 @@ export class CoreOrchestrator {
     return `CONTEXTO DE HITOS ANTERIORES (usa los mismos nombres de campos, modelos y rutas que aquí aparecen):\n\n${blocks.join("\n\n")}`;
   }
 
-  private async generateMilestone(milestone: Milestone, database: "mongodb" | "postgresql"): Promise<GeneratedMilestone> {
+  private async generateMilestone(milestone: Milestone, database: "mongodb" | "postgresql", platform: "web" | "mobile-native" = "web"): Promise<GeneratedMilestone> {
     const MAX_ATTEMPTS = 3;
     let lastError: unknown;
 
     const dependencyContext = this.buildDependencyContext(milestone);
     const qualityBlock = this.options.backendQualityPrompt && milestone.targetWorkspace !== "apps/web"
       ? `\n\nQUALITY BAR OBLIGATORIO (mismas reglas que el resto de la plataforma):\n${this.options.backendQualityPrompt.slice(0, 6000)}`
+      : "";
+    const platformBlock = platform === "mobile-native" && milestone.targetWorkspace === "apps/web"
+      ? `\n\nIMPORTANTE: este proyecto es una APP MÓVIL NATIVA, no web. Para este hito (capa ${milestone.layer}) usa React Native + Expo + TypeScript + React Navigation. NO uses Tailwind CSS, NO uses elementos HTML (div/span/button) — usa View/Text/Pressable de react-native con StyleSheet.create. NO generes vercel.json.`
       : "";
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -170,7 +179,7 @@ export class CoreOrchestrator {
           max_tokens: 8192,
           system: [
             { type: "text", text: CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
-            { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}` },
+            { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}${platformBlock}` },
           ] as any,
           messages: [{
             role: "user",
@@ -197,10 +206,10 @@ export class CoreOrchestrator {
    * la versión anterior (paralelismo total sin dependencias).
    */
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
-    const { database, milestones } = await this.planMonorepoProject(userPrompt);
+    const { database, platform, milestones } = await this.planMonorepoProject(userPrompt);
 
     wsNotificationCallback({
-      status: `🚀 Plan de ${milestones.length} hito(s) aprobado (base de datos: ${database}). Iniciando construcción por capas...`,
+      status: `🚀 Plan de ${milestones.length} hito(s) aprobado (base de datos: ${database}, plataforma: ${platform === "mobile-native" ? "app nativa (Expo/React Native)" : "web"}). Iniciando construcción por capas...`,
       progress: 8,
     });
 
@@ -219,7 +228,7 @@ export class CoreOrchestrator {
       const concurrency = this.options.concurrencyPerLayer!;
       for (let i = 0; i < layerMilestones.length; i += concurrency) {
         const batch = layerMilestones.slice(i, i + concurrency);
-        const results = await Promise.all(batch.map((m) => this.generateMilestone(m, database)));
+        const results = await Promise.all(batch.map((m) => this.generateMilestone(m, database, platform)));
         for (const generated of results) {
           this.generatedByMilestoneId.set(generated.id, generated);
           await this.writeCodeToWorkspace(generated.targetWorkspace, generated.filePath, generated.code);
@@ -244,6 +253,7 @@ export class CoreOrchestrator {
 
     return {
       database,
+      platform,
       frontendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace === 'apps/web')),
       backendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web')),
       milestones: allGenerated,
