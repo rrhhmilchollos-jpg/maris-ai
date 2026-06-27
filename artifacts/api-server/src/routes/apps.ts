@@ -5982,6 +5982,18 @@ router.get("/apps/:id/preview-debug", async (req: any, res: any) => {
       esbuildError = err?.message || String(err);
     }
 
+    // Extraer el contenido completo de archivos clave para diagnóstico
+    // remoto sin depender del explorador de Atlas (que en interfaces de
+    // resumen no expande strings largos de forma fiable).
+    const extractFile = (fileName: string): string | null => {
+      const marker = `// === FILE: ${fileName} ===`;
+      const idx = (app.frontendCode as string).indexOf(marker);
+      if (idx === -1) return null;
+      const start = idx + marker.length;
+      const nextMarkerIdx = (app.frontendCode as string).indexOf("// === FILE:", start);
+      return (app.frontendCode as string).slice(start, nextMarkerIdx === -1 ? undefined : nextMarkerIdx).trim();
+    };
+
     res.json({
       appId: req.params.id,
       title: app.title,
@@ -5992,6 +6004,8 @@ router.get("/apps/:id/preview-debug", async (req: any, res: any) => {
       hasAppTsx: files.some(f => f.includes("App.tsx") || f.includes("App.jsx")),
       esbuildError,
       esbuildOk: !esbuildError,
+      appTsxContent: extractFile("src/App.tsx"),
+      mainTsxContent: extractFile("src/main.tsx"),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
