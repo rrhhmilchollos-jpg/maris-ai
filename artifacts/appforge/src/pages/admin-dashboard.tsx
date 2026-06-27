@@ -23,6 +23,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
 import React, { useState, useEffect, useRef } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -183,10 +185,11 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   const [previewAppId, setPreviewAppId] = useState<string | null>(null);
   const [apologyLoading, setApologyLoading] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
-  // Lista de clientes para autocompletado del campo de email — antes había
-  // que escribir el email a mano cada vez, sin ninguna sugerencia.
+  // Lista de clientes para el desplegable de selección rápida — antes había
+  // que escribir el email a mano cada vez, sin ninguna lista visible.
   const [clientList, setClientList] = useState<Array<{ email: string; appsGenerated: number }>>([]);
   const [clientListLoading, setClientListLoading] = useState(false);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -249,26 +252,49 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
-            <div className="relative flex-1">
+            <div className="flex-1 flex gap-2">
               <Input
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder={clientListLoading ? "Cargando clientes…" : "Email del cliente…"}
-                className="bg-black/20 border-white/10 text-sm"
+                placeholder="Email del cliente…"
+                className="bg-black/20 border-white/10 text-sm flex-1"
                 onKeyDown={e => e.key === "Enter" && searchApps()}
-                list="maris-client-emails"
               />
-              {/* datalist nativo — autocompletado real del navegador con TODOS los
-                  emails de clientes, sin construir un dropdown custom. Se ordena
-                  por nº de apps generadas para que los clientes más activos
-                  aparezcan primero al escribir. */}
-              <datalist id="maris-client-emails">
-                {clientList.map((c) => (
-                  <option key={c.email} value={c.email}>
-                    {c.appsGenerated} app{c.appsGenerated === 1 ? "" : "s"}
-                  </option>
-                ))}
-              </datalist>
+              {/* Desplegable real con buscador — lista completa de clientes
+                  visible de un vistazo, en vez de depender del autocompletado
+                  nativo del navegador (poco visible y poco práctico). */}
+              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline" className="shrink-0 border-violet-500/30 text-violet-400 hover:bg-violet-500/10" disabled={clientListLoading}>
+                    {clientListLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0">
+                  <Command>
+                    <CommandInput placeholder="Buscar cliente por email…" />
+                    <CommandList className="max-h-72">
+                      <CommandEmpty>Sin clientes que coincidan.</CommandEmpty>
+                      <CommandGroup heading={`${clientList.length} cliente(s) — ordenados por nº de apps`}>
+                        {clientList.map((c) => (
+                          <CommandItem
+                            key={c.email}
+                            value={c.email}
+                            onSelect={() => {
+                              setEmail(c.email);
+                              setClientPickerOpen(false);
+                              searchApps(c.email);
+                            }}
+                            className="cursor-pointer flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">{c.email}</span>
+                            <Badge variant="outline" className="text-[10px] shrink-0">{c.appsGenerated} app{c.appsGenerated === 1 ? "" : "s"}</Badge>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <Button size="sm" onClick={() => searchApps()} disabled={loading} className="shrink-0">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
