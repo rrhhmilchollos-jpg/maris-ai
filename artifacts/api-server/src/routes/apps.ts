@@ -652,6 +652,7 @@ Output STRICT JSON only matching this schema:
   "backendNeeded": false,
   "database": "mongodb",
   "platform": "web",
+  "architecture": "monolith",
   "backendFiles": []
 }
 
@@ -668,6 +669,13 @@ PLATFORM CHOICE — campo "platform": "web" | "mobile-native":
 Elige "mobile-native" SOLO cuando el usuario pida explícitamente una app móvil nativa real — frases como "app para iOS", "app para Android", "app nativa", "publicar en App Store", "publicar en Google Play", "que se instale desde la tienda de apps". Una PWA o "app móvil" en sentido genérico (responsive web) sigue siendo "web" — NO actives mobile-native solo porque el usuario diga "app" o "móvil" sin más, eso es el caso normal y ya está cubierto por el diseño responsive estándar.
 En "mobile-native": techStack debe ser ["React Native", "Expo", "TypeScript"] en vez del stack web habitual, y NO debe incluirse vercel.json ni nada específico de despliegue web.
 Por defecto (y en caso de duda) usa "web" — es la opción probada y la que cubre el 95%+ de los casos reales, incluyendo cualquier necesidad "móvil" vía diseño responsive.
+
+ARCHITECTURE CHOICE — campo "architecture": "monolith" | "microservices":
+Elige "microservices" SOLO cuando se cumplan AMBAS condiciones:
+1. El proyecto es genuinamente complejo (equivalente a complexity "enterprise"/"advanced", varios dominios de negocio claramente independientes — ej: un ERP con facturación + inventario + RRHH + CRM, una plataforma con módulos que escalarían y se desplegarían por separado en una empresa real).
+2. El usuario lo pide explícitamente o describe necesidades que solo tienen sentido con servicios independientes (ej: "que cada módulo escale por separado", "arquitectura de microservicios", "cada equipo debe poder desplegar su parte sin afectar al resto").
+En CUALQUIER otro caso usa "monolith" (la opción por defecto, casi siempre la correcta): un monolito bien estructurado es más simple de mantener, depurar y desplegar que microservicios prematuros — la sabiduría de ingeniería real es "empieza monolito, divide cuando el dolor real lo justifique", no al revés.
+Si elige "microservices": describe en dataModels/frontendFiles qué dominios de negocio existen, para que el siguiente agente (el orquestador de hitos) pueda dividir el backend en servicios reales por dominio, cada uno con su propia base de datos y API, comunicándose por HTTP/eventos — no microservicios de juguete que comparten la misma base de datos.
 
 PRODUCT THINKING — be ambitious about UX:
 - Always include a Home/Landing page that's COMPELLING (hero + features + social proof + CTA + footer). Not just a navbar with text.
@@ -959,6 +967,7 @@ interface ProjectPlan {
   backendNeeded: boolean;
   database?: "mongodb" | "postgresql";
   platform?: "web" | "mobile-native";
+  architecture?: "monolith" | "microservices";
   backendFiles: string[];
 }
 
@@ -2958,12 +2967,24 @@ export async function generateApp(
           onProgress,
         })
       );
+      const archDescription = milestoneResult.architecture === "microservices"
+        ? `microservicios (${Object.keys(milestoneResult.serviceBundles || {}).join(", ") || "servicios sin nombre"})`
+        : "monolito";
+      // En microservicios, el código de cada servicio se concatena con un
+      // separador claro de servicio — el modelo GeneratedApp.backendCode es
+      // un único string, así que reflejamos la separación real con
+      // comentarios de cabecera por servicio en vez de cambiar el esquema.
+      const microservicesBackend = milestoneResult.serviceBundles && Object.keys(milestoneResult.serviceBundles).length > 0
+        ? Object.entries(milestoneResult.serviceBundles)
+            .map(([svc, code]) => `// ════════════════════ SERVICIO: ${svc} ════════════════════\n// Este servicio es independiente — su propio package.json, su propio\n// servidor Express, su propia base de datos. Despliega cada servicio\n// por separado (ej. cada uno en su propio contenedor/proceso).\n${code}`)
+            .join("\n\n")
+        : null;
       return {
         title: "Proyecto Generado por Hitos",
-        description: `Sistema construido mediante Task Splitting por capas (${milestoneResult.milestones?.length ?? 0} hitos, base de datos: ${milestoneResult.database ?? "mongodb"})`,
-        techStack: ["React", "Node", "TypeScript", milestoneResult.database === "postgresql" ? "PostgreSQL" : "MongoDB"],
+        description: `Sistema construido mediante Task Splitting por capas (${milestoneResult.milestones?.length ?? 0} hitos, base de datos: ${milestoneResult.database ?? "mongodb"}, arquitectura: ${archDescription})`,
+        techStack: ["React", "Node", "TypeScript", milestoneResult.database === "postgresql" ? "PostgreSQL" : "MongoDB", ...(milestoneResult.architecture === "microservices" ? ["Microservicios"] : [])],
         frontendCode: testedMilestone,
-        backendCode: milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
+        backendCode: microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
       };
     }
 

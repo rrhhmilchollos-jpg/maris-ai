@@ -29,21 +29,32 @@ const PLANNER_SYSTEM_STATIC = `Eres el Arquitecto de Sistemas Senior de Maris AI
 
 PRINCIPIO RECTOR: cada hito debe ser un archivo o conjunto de archivos coherente que un ingeniero senior real escribiría como una unidad — ni demasiado pequeño (no fragmentes en exceso) ni demasiado grande (no comprimas un módulo entero de negocio en un solo archivo).
 
+ARQUITECTURA — MONOLITO (caso por defecto, casi siempre correcto):
 ESTRUCTURA POR CAPAS — genera los hitos agrupados en estas capas, EN ESTE ORDEN (cada capa depende de la anterior):
-1. DATA LAYER — esquema de datos completo (todos los modelos/tablas con sus relaciones). Normalmente 1-2 hitos.
-2. BACKEND CORE — autenticación, middleware, configuración base (helmet, cors, rate limit, logger, errors). 1 hito.
-3. BACKEND MODULES — un hito POR CADA módulo de negocio real (ej: en un ERP: facturación, inventario, clientes, RRHH, contabilidad serían hitos separados). Esto es lo que hace que un proyecto complejo se modele bien: no comprimas 5 módulos de negocio en 1 archivo.
-4. INTEGRATIONS — un hito por integración externa relevante si las hay (pagos, email, webhooks).
-5. FRONTEND CORE — layout, routing, componentes compartidos (Navbar, Sidebar, auth guard). 1-2 hitos.
-6. FRONTEND MODULES — un hito por cada área funcional del frontend que corresponda a un módulo de backend (dashboard, listados, formularios de cada módulo).
-7. DOCS — openapi.yaml documentando TODOS los endpoints reales generados en los hitos de backend.
+1. DATA LAYER — esquema de datos completo (todos los modelos/tablas con sus relaciones). Normalmente 1-2 hitos. targetWorkspace: "apps/api".
+2. BACKEND CORE — autenticación, middleware, configuración base (helmet, cors, rate limit, logger, errors). 1 hito. targetWorkspace: "apps/api".
+3. BACKEND MODULES — un hito POR CADA módulo de negocio real (ej: en un ERP: facturación, inventario, clientes, RRHH, contabilidad serían hitos separados). Esto es lo que hace que un proyecto complejo se modele bien: no comprimas 5 módulos de negocio en 1 archivo. targetWorkspace: "apps/api".
+4. INTEGRATIONS — un hito por integración externa relevante si las hay (pagos, email, webhooks). targetWorkspace: "apps/api".
+5. FRONTEND CORE — layout, routing, componentes compartidos (Navbar, Sidebar, auth guard). 1-2 hitos. targetWorkspace: "apps/web".
+6. FRONTEND MODULES — un hito por cada área funcional del frontend que corresponda a un módulo de backend (dashboard, listados, formularios de cada módulo). targetWorkspace: "apps/web".
+7. DOCS — openapi.yaml documentando TODOS los endpoints reales generados en los hitos de backend. targetWorkspace: "apps/api".
 
-NÚMERO DE HITOS: no hay un número fijo. Un proyecto "ultra-complejo" real necesita entre 8 y 20 hitos según cuántos módulos de negocio distintos tenga. NO comprimas para reducir el número — eso es exactamente el error que produce sistemas incompletos.
+ARQUITECTURA — MICROSERVICIOS (SOLO si el plan recibido indica "architecture":"microservices" explícitamente):
+Cada dominio de negocio independiente se convierte en su PROPIO servicio, NO en módulos dentro de un único "apps/api":
+1. Por cada servicio identificado (ej: billing, inventory, customers): un hito DATA LAYER propio con targetWorkspace "services/<nombre-servicio>" y su propio esquema — los servicios NO comparten base de datos entre ellos (principio fundamental de microservicios reales).
+2. Por cada servicio: un hito BACKEND CORE propio (su propio index.ts, su propio middleware, su propio package.json) — cada servicio es una app Express independiente y desplegable por separado, con targetWorkspace "services/<nombre-servicio>" y serviceName "<nombre-servicio>".
+3. Por cada servicio: hito(s) BACKEND MODULE con la lógica de ese dominio — targetWorkspace "services/<nombre-servicio>".
+4. Si un servicio necesita datos de otro (ej: facturación necesita el precio de inventory), el hito debe especificarlo en su description como "llama a la API HTTP de inventory en process.env.INVENTORY_SERVICE_URL" — NUNCA importar código directamente entre servicios ni compartir su base de datos.
+5. Un hito adicional "packages/shared" con tipos/contratos TypeScript compartidos (ej: la forma de los eventos o payloads entre servicios) — esto SÍ se comparte, el código de negocio NO.
+6. FRONTEND: igual que en monolito, pero las llamadas API del frontend deben distribuirse entre los distintos servicios según corresponda (ej: el frontend llama a billing-service para facturas, a inventory-service para stock) — documentar esto en la description del hito de cliente API del frontend.
+7. Un hito final "docs" describiendo en un README.md la topología de servicios (qué servicio expone qué API, en qué puerto/URL se espera cada uno en desarrollo).
 
-Cada hito debe especificar "dependsOn": [ids de hitos que debe ver como contexto antes de generarse]. Por ejemplo, un módulo de backend depende del hito de la capa DATA. Un hito de frontend depende del hito de backend correspondiente.
+NÚMERO DE HITOS: no hay un número fijo. Un proyecto "ultra-complejo" real necesita entre 8 y 20 hitos en monolito, o más en microservicios (cada servicio repite su propia mini-estructura data+core+module). NO comprimas para reducir el número — eso es exactamente el error que produce sistemas incompletos.
+
+Cada hito debe especificar "dependsOn": [ids de hitos que debe ver como contexto antes de generarse]. Por ejemplo, un módulo de backend depende del hito de la capa DATA de SU MISMO servicio (nunca de la capa DATA de otro servicio, en microservicios — esa dependencia debe ser por HTTP en runtime, no por contexto de generación).
 
 STACK TECNOLÓGICO:
-- Si el proyecto tiene transacciones multi-tabla críticas (pagos+stock, facturación, contabilidad): PostgreSQL + Prisma.
+- Si el proyecto tiene transacciones multi-tabla críticas (pagos+stock, facturación, contabilidad): PostgreSQL + Prisma. En microservicios, esta decisión es POR SERVICIO — un servicio puede usar Postgres y otro Mongo, según lo que ese dominio concreto necesite.
 - En el resto de casos: MongoDB + Mongoose.
 - Backend: Node.js + Express + TypeScript + Zod.
 - Frontend WEB (caso por defecto): React + TypeScript + Tailwind CSS.
@@ -53,12 +64,14 @@ Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
 {
   "database": "mongodb" | "postgresql",
   "platform": "web" | "mobile-native",
+  "architecture": "monolith" | "microservices",
   "milestones": [
     { "id": 1, "layer": "data", "name": "Esquema de datos — Facturación", "targetWorkspace": "apps/api", "description": "Modelos Invoice, InvoiceLine, Customer con relaciones...", "filePath": "src/models/billing.ts", "dependsOn": [] },
     { "id": 2, "layer": "backend-core", "name": "Configuración base del servidor", "targetWorkspace": "apps/api", "description": "...", "filePath": "src/index.ts", "dependsOn": [1] },
     { "id": 3, "layer": "backend-module", "name": "Módulo de Facturación — API", "targetWorkspace": "apps/api", "description": "Endpoints CRUD + lógica de negocio de facturación, usando prisma.$transaction para emitir facturas y descontar stock atómicamente...", "filePath": "src/routes/billing.ts", "dependsOn": [1, 2] }
   ]
-}`;
+}
+Ejemplo de un hito en arquitectura microservicios: { "id": 5, "layer": "backend-core", "name": "Inventory Service — núcleo", "targetWorkspace": "services/inventory", "serviceName": "inventory", "description": "Servidor Express independiente para el dominio de inventario, su propio package.json y .env.example con su propio puerto/DATABASE_URL", "filePath": "src/index.ts", "dependsOn": [4] }`;
 
 const CODE_AGENT_STATIC = `Eres el Ingeniero de Software Senior de Maris AI, especializado en sistemas empresariales complejos.
 
@@ -75,7 +88,15 @@ interface Milestone {
   id: number;
   layer: string;
   name: string;
-  targetWorkspace: 'apps/api' | 'apps/web' | 'packages/db' | 'packages/shared';
+  // Antes era un enum fijo de 4 valores (solo monolito). Ahora string libre
+  // con convención: "apps/web" (frontend), "apps/api" (backend monolito),
+  // "services/<nombre>" (un microservicio independiente, con su propia base
+  // de datos y API — solo cuando plan.architecture === "microservices"),
+  // "packages/shared" (código compartido entre servicios, ej. tipos comunes).
+  targetWorkspace: string;
+  /** Si pertenece a un microservicio, su nombre corto (ej. "billing", "inventory").
+   *  Indiferente/undefined en arquitectura monolito. */
+  serviceName?: string;
   description: string;
   filePath: string;
   dependsOn: number[];
@@ -121,7 +142,7 @@ export class CoreOrchestrator {
    * FASE 1: PLANIFICACIÓN — divide el proyecto en hitos reales, en número
    * dinámico según la complejidad, agrupados por capas con dependencias.
    */
-  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; milestones: Milestone[] }> {
+  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {
     const response = await anthropic.messages.create({
       model: this.options.model!,
       max_tokens: 4000,
@@ -136,11 +157,13 @@ export class CoreOrchestrator {
       const result = JSON.parse(cleanedJson);
       const milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
         ...m,
+        targetWorkspace: typeof m.targetWorkspace === "string" ? m.targetWorkspace : "apps/api",
         dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
       }));
       return {
         database: result.database === "postgresql" ? "postgresql" : "mongodb",
         platform: result.platform === "mobile-native" ? "mobile-native" : "web",
+        architecture: result.architecture === "microservices" ? "microservices" : "monolith",
         milestones,
       };
     } catch (error) {
@@ -206,10 +229,14 @@ export class CoreOrchestrator {
    * la versión anterior (paralelismo total sin dependencias).
    */
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
-    const { database, platform, milestones } = await this.planMonorepoProject(userPrompt);
+    const { database, platform, architecture, milestones } = await this.planMonorepoProject(userPrompt);
 
+    const serviceNames = Array.from(new Set(milestones.map((m) => m.serviceName).filter(Boolean))) as string[];
+    const archLabel = architecture === "microservices"
+      ? `microservicios (${serviceNames.length || "?"} servicio(s): ${serviceNames.join(", ") || "sin nombre"})`
+      : "monolito";
     wsNotificationCallback({
-      status: `🚀 Plan de ${milestones.length} hito(s) aprobado (base de datos: ${database}, plataforma: ${platform === "mobile-native" ? "app nativa (Expo/React Native)" : "web"}). Iniciando construcción por capas...`,
+      status: `🚀 Plan de ${milestones.length} hito(s) aprobado (base de datos: ${database}, plataforma: ${platform === "mobile-native" ? "app nativa (Expo/React Native)" : "web"}, arquitectura: ${archLabel}). Iniciando construcción por capas...`,
       progress: 8,
     });
 
@@ -234,7 +261,7 @@ export class CoreOrchestrator {
           await this.writeCodeToWorkspace(generated.targetWorkspace, generated.filePath, generated.code);
           completed++;
           wsNotificationCallback({
-            status: `🔨 ${generated.name} integrado en ${generated.targetWorkspace}.`,
+            status: `🔨 ${generated.name} integrado en ${generated.targetWorkspace}${generated.serviceName ? ` (servicio: ${generated.serviceName})` : ""}.`,
             progress: 8 + Math.round((completed / total) * 90),
             step: generated.id,
             previewAvailable: true,
@@ -251,11 +278,27 @@ export class CoreOrchestrator {
       .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
       .join("\n");
 
+    // En microservicios: un bundle de código SEPARADO por cada servicio (no
+    // todo mezclado en un único backendCode) — refleja la realidad de que
+    // cada servicio se despliega y mantiene de forma independiente. En
+    // monolito: comportamiento idéntico al original (un único backendCode).
+    const serviceBundles: Record<string, string> = {};
+    if (architecture === "microservices") {
+      for (const svc of serviceNames) {
+        serviceBundles[svc] = toBundle(allGenerated.filter((item) => item.serviceName === svc));
+      }
+    }
+    const nonWebBackend = architecture === "microservices"
+      ? toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web' && !item.serviceName))
+      : toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web'));
+
     return {
       database,
       platform,
+      architecture,
       frontendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace === 'apps/web')),
-      backendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web')),
+      backendCode: nonWebBackend,
+      serviceBundles, // {} en monolito; { "billing": "...", "inventory": "..." } en microservicios
       milestones: allGenerated,
     };
   }
