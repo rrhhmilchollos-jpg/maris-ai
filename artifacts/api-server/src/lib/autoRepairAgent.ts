@@ -23,7 +23,7 @@ import { logger } from "./logger";
 import { patchBundle, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
-import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
+import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const HEALTH_CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutos
@@ -237,23 +237,45 @@ export async function autoRepairBundle(opts: {
   scoreBeforeRepair?: number;
   maxCycles?: number;
   log?: any;
+  jobId?: string;
 }): Promise<boolean> {
-  const { appId, userId, trigger, errorSummary, scoreBeforeRepair, maxCycles = 4 } = opts;
+  const { appId, userId, trigger, errorSummary, scoreBeforeRepair, maxCycles = 4, jobId } = opts;
   const log = opts.log || logger.child({ module: "auto-repair", appId });
+
+  // ANTES: esta función solo escribía en el logger interno del servidor
+  // (logger.info/warn — visible en logs de Railway, INVISIBLE en el panel
+  // de Monitorización). El admin pulsaba "Reparar y continuar" y veía
+  // "repairing" sin ningún log mientras la reparación trabajaba en segundo
+  // plano varios minutos — exactamente el síntoma reportado de "no se ve lo
+  // que está haciendo". Ahora, si se pasa jobId (el job de seguimiento
+  // ligero que ya crea el endpoint de soporte), cada paso real del ciclo
+  // escribe también en JobLog — la misma colección que lee el panel en
+  // tiempo real (polling de 3s) para los jobs de generación normal.
+  const jlog = async (message: string, level: "info" | "warn" | "error" = "info") => {
+    if (!jobId) return;
+    try {
+      await JobLog.create({ jobId, agent: "repair", level, message });
+    } catch { /* no bloquear la reparación si el log falla */ }
+  };
 
   if (isInCooldown(appId)) {
     log.info("App en cooldown — saltando reparación");
+    await jlog("⏸️ Esta app está en periodo de espera tras una reparación reciente — inténtalo de nuevo en unos minutos.", "warn");
     return false;
   }
 
   try {
     await connectDB();
     const app = await GeneratedApp.findById(appId).lean() as any;
-    if (!app?.frontendCode) return false;
+    if (!app?.frontendCode) {
+      await jlog("⚠️ No se encontró código de frontend en esta app — no hay nada que reparar.", "warn");
+      return false;
+    }
 
     setCooldown(appId);
 
     log.info({ trigger, errorSummary: errorSummary.slice(0, 100), maxCycles }, "Starting auto-repair");
+    await jlog(`🔧 Iniciando reparación — instrucción: "${errorSummary.slice(0, 150)}${errorSummary.length > 150 ? "…" : ""}" (hasta ${maxCycles} ciclos)`);
 
     const repairKind = (app.kind === "python-api" ? "python" : "typescript") as any;
     let currentCode = app.frontendCode as string;
@@ -269,6 +291,7 @@ export async function autoRepairBundle(opts: {
     // que el bundle compile limpio.
     for (let cycle = 1; cycle <= Math.max(1, maxCycles); cycle++) {
       cyclesUsed = cycle;
+      await jlog(`🔄 Ciclo ${cycle}/${maxCycles} — analizando y aplicando el parche…`);
       const repairIssues: QAIssue[] = cycle === 1
         ? [{ file: "general", problem: errorSummary.slice(0, 2000), fix: buildRepairPrompt(errorSummary, app.title || "App") }]
         : []; // a partir del ciclo 2, los issues vienen de la validación real (abajo)
@@ -278,6 +301,7 @@ export async function autoRepairBundle(opts: {
         const validation = await validateBundle(currentCode);
         if (validation.ok) {
           log.info({ cycle }, "Bundle ya compila limpio antes de este ciclo — deteniendo bucle");
+          await jlog(`✅ El bundle ya compila correctamente — no hace falta seguir reparando.`);
           break;
         }
         issuesForThisCycle = validation.issues.slice(0, 6).map((i) => ({
@@ -286,16 +310,19 @@ export async function autoRepairBundle(opts: {
           fix: "Fix the import / symbol / syntax so the file compiles.",
         }));
         if (issuesForThisCycle.length === 0) break;
+        await jlog(`🔍 Quedan ${issuesForThisCycle.length} error(es) de compilación — reintentando…`, "warn");
       }
 
       const patchedCode = await patchBundle(currentCode, issuesForThisCycle, repairKind, "", "claude-sonnet-4-6");
       if (!patchedCode || patchedCode === currentCode) {
         log.warn({ cycle }, "Patcher no produjo cambios en este ciclo");
+        await jlog(`⚠️ El reparador no consiguió generar un cambio en este ciclo.`, "warn");
         if (cycle === 1) return false; // primer intento sin cambios → nada que reportar
         break; // ciclos posteriores sin cambios → entregamos lo mejor que tenemos
       }
       currentCode = patchedCode;
       lastFixSummary = `Bundle reparado automáticamente por el Patcher Agent (${cycle} ciclo${cycle > 1 ? "s" : ""})`;
+      await jlog(`✏️ Ciclo ${cycle} completado — código actualizado (${Math.round(currentCode.length / 1000)} KB).`);
     }
 
     // Validación final real — si tras todos los ciclos sigue sin compilar,
@@ -304,6 +331,7 @@ export async function autoRepairBundle(opts: {
     const finalValidation = await validateBundle(currentCode);
     if (!finalValidation.ok) {
       log.warn({ cyclesUsed, remainingIssues: finalValidation.issues.length }, "Bundle sigue sin compilar tras todos los ciclos — no se sobrescribe el original");
+      await jlog(`❌ Tras ${cyclesUsed} ciclo(s) siguen quedando ${finalValidation.issues.length} error(es) de compilación — se conserva la app original sin sobrescribir.`, "error");
       await AppRepairLog.create({
         appId, userId, trigger,
         errorSummary: errorSummary.slice(0, 1000),
@@ -312,6 +340,7 @@ export async function autoRepairBundle(opts: {
       });
       return false;
     }
+    await jlog(`✅ Validación con esbuild superada — el bundle compila correctamente.`);
 
     // Verificar también que el HTML final se construye correctamente
     // (capa adicional sobre la validación de esbuild)
@@ -319,8 +348,10 @@ export async function autoRepairBundle(opts: {
       await buildDeployHtml({ bundle: currentCode, title: app.title || "App", kind: app.kind });
     } catch (buildErr: any) {
       log.warn({ buildErr: String(buildErr).slice(0, 200) }, "Repaired bundle doesn't compile (deploy build)");
+      await jlog(`❌ El bundle compila con esbuild, pero falla al construir el HTML final de preview — se conserva la app original.`, "error");
       return false;
     }
+    await jlog(`✅ Validación de preview superada — guardando el resultado final…`);
 
     // Guardar el bundle reparado
     await GeneratedApp.findByIdAndUpdate(appId, {
@@ -352,9 +383,11 @@ export async function autoRepairBundle(opts: {
     }).catch(() => {});
 
     log.info({ appId, trigger }, "Auto-repair completed successfully");
+    await jlog(`🎉 Reparación completada con éxito tras ${cyclesUsed} ciclo(s) — app actualizada y lista para revisar.`);
     return true;
   } catch (err) {
     log.warn({ err }, "Auto-repair failed");
+    await jlog(`❌ Error inesperado durante la reparación: ${String((err as any)?.message || err).slice(0, 200)}`, "error");
     return false;
   }
 }

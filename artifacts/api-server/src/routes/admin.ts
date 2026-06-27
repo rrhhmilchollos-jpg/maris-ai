@@ -640,6 +640,7 @@ router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> =
       trigger: "manual",
       errorSummary: repairInstruction,
       maxCycles: 6,
+      jobId: id,
       log: logger.child({ module: "admin-retry-repair", jobId: id }),
     }).then(async (success) => {
       await GenerationJob.findByIdAndUpdate(id, {
@@ -1653,6 +1654,7 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
         trigger: "manual",
         errorSummary: recoverPrompt,
         maxCycles: 6, // flujo de soporte humano: más margen que el modo automático estándar
+        jobId: String(failedJob._id),
         log: logger.child({ module: "admin-recover", jobId: String(failedJob._id) }),
       }).then(async (success) => {
         await GenerationJob.findByIdAndUpdate(failedJob._id, {
@@ -1705,6 +1707,7 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
         trigger: "manual",
         errorSummary: recoverPrompt,
         maxCycles: 6, // flujo de soporte humano: más margen que el modo automático estándar
+        jobId: String(failedJob._id),
         log: logger.child({ module: "admin-recover", jobId: String(failedJob._id) }),
       }).then(async (success) => {
         await GenerationJob.findByIdAndUpdate(failedJob._id, {
@@ -2177,6 +2180,7 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
         trigger: "manual",
         errorSummary: repairInstruction,
         maxCycles: 6,
+        jobId: trackingJobId,
         log: logger.child({ module: "admin-inject-repair", appId: String(latestApp._id) }),
       }).then(async (success) => {
         await GenerationJob.findByIdAndUpdate(trackingJobId, {
