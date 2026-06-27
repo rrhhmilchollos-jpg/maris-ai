@@ -494,6 +494,7 @@ function LiveMonitorPanel() {
           if (!j.id || j.id === "undefined") return false;
           if (j.status === "running" || j.status === "queued") return true;
           if (j.status === "reviewing") return true; // reviewing siempre visible
+          if (j.status === "repairing" || j.status === "repaired-pending-review") return true; // flujo de soporte/recovery — siempre visible hasta aprobación manual
           if (j.status === "failed") {
             // Máximo 5 failed por usuario para no llenar el panel
             const key = j.userId || j.userEmail || "unknown";
@@ -504,7 +505,7 @@ function LiveMonitorPanel() {
           return j.status !== "succeeded" && j.ageMs < 48 * 60 * 60 * 1000;
         })
         .sort((a: any, b: any) => {
-          const order: Record<string, number> = { running: 0, queued: 1, reviewing: 2, failed: 3 };
+          const order: Record<string, number> = { running: 0, repairing: 0, queued: 1, "repaired-pending-review": 1, reviewing: 2, failed: 3 };
           const ao = order[a.status] ?? 4;
           const bo = order[b.status] ?? 4;
           if (ao !== bo) return ao - bo;
@@ -603,7 +604,7 @@ function LiveMonitorPanel() {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
-            {jobs.filter((j: any) => j.status === "running" || j.status === "queued").length} activos
+            {jobs.filter((j: any) => j.status === "running" || j.status === "queued" || j.status === "repairing").length} activos
             {jobs.filter((j: any) => j.status === "failed").length > 0 && (
               <span className="text-red-400 ml-1">· {jobs.filter((j: any) => j.status === "failed").length} fallidos</span>
             )}
@@ -972,6 +973,30 @@ function LiveMonitorPanel() {
                           }
                         </Button>
                       </div>
+                      {job.status === "repaired-pending-review" && (
+                        <Button
+                          size="sm"
+                          className="w-full h-9 text-xs bg-violet-600 hover:bg-violet-700 text-white"
+                          onClick={async () => {
+                            setActionLoading(p => ({ ...p, [`approve_${job.id}`]: true }));
+                            try {
+                              const d = await apiFetch<any>(`/api/admin/jobs/${job.id}/approve-for-client`, { method: "POST" });
+                              toast({ title: "✅ App aprobada", description: d.message });
+                              await fetchJobs();
+                            } catch (e: any) {
+                              toast({ title: "Error", description: e.message, variant: "destructive" });
+                            } finally {
+                              setActionLoading(p => ({ ...p, [`approve_${job.id}`]: false }));
+                            }
+                          }}
+                          disabled={actionLoading[`approve_${job.id}`]}
+                        >
+                          {actionLoading[`approve_${job.id}`]
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Aprobando…</>
+                            : <>✅ Reparación revisada — mostrar al cliente</>
+                          }
+                        </Button>
+                      )}
                       {/* Vista previa — dos botones: iframe inline + abrir en nueva pestaña */}
                       <div className="grid grid-cols-2 gap-2">
                         <Button

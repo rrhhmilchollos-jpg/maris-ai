@@ -4129,7 +4129,15 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
     const userId = req.userId as string;
-    const apps = await GeneratedApp.find({ userId }, { frontendCode: 0, backendCode: 0 }).sort({ createdAt: -1 }).lean();
+    // pendingAdminApproval: true se usa SOLO en el flujo de soporte/reparación
+    // (admin recovery) — mientras una app está pendiente de revisión manual
+    // del admin, queda oculta para el cliente. La inmensa mayoría de apps
+    // nunca tiene este campo (generación normal), por lo que $ne:true las
+    // incluye igual que antes.
+    const apps = await GeneratedApp.find(
+      { userId, pendingAdminApproval: { $ne: true } },
+      { frontendCode: 0, backendCode: 0 },
+    ).sort({ createdAt: -1 }).lean();
     
     // Serializar fechas para evitar problemas de serialización
     const serializedApps = apps.map((app: any) => ({
@@ -4151,6 +4159,9 @@ router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
     const userId = req.userId as string;
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if ((app as any).pendingAdminApproval) {
+      return res.status(404).json({ error: "App no encontrada" });
+    }
     res.json(app);
   } catch (err) {
     logger.error({ err }, "GET /api/apps/:id error");

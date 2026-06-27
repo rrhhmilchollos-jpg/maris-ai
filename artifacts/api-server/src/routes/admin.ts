@@ -1575,6 +1575,11 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
       await GenerationJob.findByIdAndUpdate(failedJob._id, {
         $set: { status: "repairing", phase: "repairing", progress: failedJob.progress || 70, appId: String(baseAppId) },
       });
+      // Marcar la app como pendiente de revisión del admin — queda oculta
+      // para el cliente (GET /api/apps la excluye) hasta aprobación manual.
+      await GeneratedApp.findByIdAndUpdate(baseAppId, {
+        $set: { pendingAdminApproval: true, pendingApprovalSince: new Date() },
+      });
       // Responder ya — la reparación sigue en background y el panel verá el
       // progreso vía polling del propio job (mismo id, sin ventana nueva).
       res.status(200).json({
@@ -1623,6 +1628,7 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
         language: failedJob.language || "typescript", kind: failedJob.kind || "fullstack",
         status: "ready", publicSlug: makeSlug(),
         marisId: await generateAppId(userMarisId).catch(() => MarisId.project(userMarisId)),
+        pendingAdminApproval: true, pendingApprovalSince: new Date(),
       });
       await GenerationJob.findByIdAndUpdate(failedJob._id, {
         $set: { appId: String(recoveredApp._id), status: "repairing", phase: "repairing", progress: failedJob.progress || 70 },
@@ -1679,6 +1685,35 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error lanzando generación de recuperación" });
   }
+});
+
+// POST /api/admin/jobs/:id/approve-for-client
+// El admin revisa la app reparada (vista previa) y, si está satisfecho,
+// la aprueba explícitamente para que el cliente vuelva a verla. Hasta este
+// punto, GET /api/apps (cliente) la mantiene oculta vía pendingAdminApproval.
+router.post("/admin/jobs/:id/approve-for-client", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const job = await GenerationJob.findById(req.params.id).lean() as any;
+  if (!job) {
+    res.status(404).json({ error: `Job ${req.params.id} no encontrado.` });
+    return;
+  }
+  if (!job.appId) {
+    res.status(400).json({ error: "Este job no tiene una app asociada para aprobar." });
+    return;
+  }
+  const app = await GeneratedApp.findByIdAndUpdate(
+    job.appId,
+    { $set: { pendingAdminApproval: false, approvedByAdminAt: new Date() } },
+    { new: true },
+  ).lean() as any;
+  if (!app) {
+    res.status(404).json({ error: `App ${job.appId} no encontrada.` });
+    return;
+  }
+  await GenerationJob.findByIdAndUpdate(job._id, { $set: { status: "done", phase: "done" } });
+  logger.info({ jobId: String(job._id), appId: String(job.appId) }, "Admin approved app for client");
+  res.json({ ok: true, appId: String(job.appId), message: "App aprobada — ya es visible para el cliente." });
 });
 
 // ─── Admin: Recuperar por email — busca el último job fallido del usuario ──────

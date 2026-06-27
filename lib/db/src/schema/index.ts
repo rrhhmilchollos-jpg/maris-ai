@@ -148,6 +148,16 @@ export interface IGeneratedApp {
     repaired: boolean;
     checkedAt: Date;
   };
+  // Flujo de soporte/reparación (admin recovery): cuando una app pasa por
+  // /api/admin/jobs/:id/recover, se crea/actualiza marcada con
+  // pendingAdminApproval=true — queda OCULTA para el cliente (GET /api/apps
+  // la excluye) hasta que un admin la apruebe explícitamente vía
+  // /api/admin/jobs/:id/approve-for-client. Las apps de generación NORMAL
+  // (el 99% de los casos) nunca tocan este campo — por defecto es
+  // false/undefined y se comportan exactamente igual que siempre.
+  pendingAdminApproval?: boolean;
+  pendingApprovalSince?: Date;
+  approvedByAdminAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -212,6 +222,11 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
       ),
       required: false,
     },
+    // Flujo de soporte/reparación — por defecto false/ausente, no afecta a
+    // la generación normal de apps.
+    pendingAdminApproval: { type: Boolean, default: false, index: true },
+    pendingApprovalSince: { type: Date },
+    approvedByAdminAt: { type: Date },
   },
   { timestamps: true },
 );
