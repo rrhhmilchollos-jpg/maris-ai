@@ -1683,7 +1683,7 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
       status: "queued", phase: "queued", progress: 0, isAdmin: true, hasEverPaid: true,
     });
     await enqueueGenerateJob(newJobId);
-    res.status(201).json({ ok: true, jobId: newJobId, strategy: "fresh-generation", message: "Sin código parcial disponible — generando de nuevo con máxima calidad. El cliente verá el progreso." });
+    res.status(201).json({ ok: true, jobId: newJobId, strategy: "fresh-generation", message: "Este job se quedó sin generar ningún código todavía (falló durante la planificación) — no hay nada que reparar in-situ, así que se ha lanzado una generación nueva desde el prompt original. El cliente verá el progreso." });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Error lanzando generación de recuperación" });
   }

@@ -183,6 +183,33 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
   const [previewAppId, setPreviewAppId] = useState<string | null>(null);
   const [apologyLoading, setApologyLoading] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  // Lista de clientes para autocompletado del campo de email — antes había
+  // que escribir el email a mano cada vez, sin ninguna sugerencia.
+  const [clientList, setClientList] = useState<Array<{ email: string; appsGenerated: number }>>([]);
+  const [clientListLoading, setClientListLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setClientListLoading(true);
+      try {
+        const users = await apiFetch<any[]>("/api/admin/users");
+        if (!cancelled && Array.isArray(users)) {
+          setClientList(
+            users
+              .filter((u) => !!u.email)
+              .map((u) => ({ email: u.email as string, appsGenerated: u.appsGenerated ?? 0 }))
+              .sort((a, b) => b.appsGenerated - a.appsGenerated),
+          );
+        }
+      } catch {
+        // best-effort — si falla, el campo sigue funcionando como input libre
+      } finally {
+        if (!cancelled) setClientListLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const searchApps = async (searchEmail?: string) => {
     const target = (searchEmail || email).trim();
@@ -222,13 +249,27 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
-            <Input
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Email del cliente..."
-              className="bg-black/20 border-white/10 text-sm"
-              onKeyDown={e => e.key === "Enter" && searchApps()}
-            />
+            <div className="relative flex-1">
+              <Input
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder={clientListLoading ? "Cargando clientes…" : "Email del cliente…"}
+                className="bg-black/20 border-white/10 text-sm"
+                onKeyDown={e => e.key === "Enter" && searchApps()}
+                list="maris-client-emails"
+              />
+              {/* datalist nativo — autocompletado real del navegador con TODOS los
+                  emails de clientes, sin construir un dropdown custom. Se ordena
+                  por nº de apps generadas para que los clientes más activos
+                  aparezcan primero al escribir. */}
+              <datalist id="maris-client-emails">
+                {clientList.map((c) => (
+                  <option key={c.email} value={c.email}>
+                    {c.appsGenerated} app{c.appsGenerated === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </datalist>
+            </div>
             <Button size="sm" onClick={() => searchApps()} disabled={loading} className="shrink-0">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               {loading ? "Buscando…" : "Ver apps"}
@@ -384,15 +425,38 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     }}>
                     {actionLoading[`delapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                   </Button>
-                  {/* Regenerar app */}
+                  {/* Reparar y continuar — usa el flujo in-situ (autoRepairBundle), NO crea una generación nueva */}
+                  <Button size="sm" variant="outline"
+                    className="h-7 text-[10px] border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                    disabled={actionLoading[`repairapp_${appId}`]}
+                    onClick={async () => {
+                      const instruction = window.prompt("¿Qué hay que reparar o completar en esta app? (se aplicará SOBRE la app existente, sin regenerarla desde 0)", "");
+                      if (!instruction) return;
+                      setActionLoading(p => ({ ...p, [`repairapp_${appId}`]: true }));
+                      try {
+                        const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ prompt: `[ADMIN REPAIR] ${instruction}` }),
+                        });
+                        toast({ title: "🔧 Reparando en sitio", description: d.message || "Aplicando la instrucción sobre la app existente." });
+                      } catch (e: any) {
+                        toast({ title: "Error al reparar", description: e.message, variant: "destructive" });
+                      } finally {
+                        setActionLoading(p => ({ ...p, [`repairapp_${appId}`]: false }));
+                      }
+                    }}>
+                    {actionLoading[`repairapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔧 Reparar y continuar"}
+                  </Button>
+                  {/* Regenerar desde 0 — crea un job de generación COMPLETA nueva, a propósito */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                     disabled={actionLoading[`regenapp_${appId}`]}
                     onClick={async () => {
                       const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
-                      const promptToUse = window.prompt("Prompt para regenerar (puedes editarlo):", cleanPrompt);
+                      const promptToUse = window.prompt("Prompt para regenerar DESDE CERO (puedes editarlo):", cleanPrompt);
                       if (!promptToUse) return;
-                      if (!window.confirm(`¿Regenerar la app "${app.title}" para ${app.userEmail}?\n\nSe creará un nuevo job de generación.`)) return;
+                      if (!window.confirm(`¿Regenerar la app "${app.title}" para ${app.userEmail} DESDE CERO?\n\nSe creará un nuevo job de generación completa — esto reemplaza la app entera. Si solo necesitas arreglar algo puntual, usa "Reparar y continuar" en su lugar.`)) return;
                       setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: true }));
                       try {
                         const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
@@ -400,14 +464,14 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6" }),
                         });
-                        toast({ title: "🔄 Regenerando app", description: d.message || "Job en cola — el cliente verá el progreso en su panel" });
+                        toast({ title: "🔄 Regenerando app desde 0", description: d.message || "Job en cola — el cliente verá el progreso en su panel" });
                       } catch (e: any) {
                         toast({ title: "Error al regenerar", description: e.message, variant: "destructive" });
                       } finally {
                         setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: false }));
                       }
                     }}>
-                    {actionLoading[`regenapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔄 Regenerar"}
+                    {actionLoading[`regenapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔄 Regenerar desde 0"}
                   </Button>
                   {/* Disculpas */}
                   <Button size="sm" variant="outline"
