@@ -315,24 +315,38 @@ for (const route of ROUTES) {
     let html = baseHtml;
 
     // Update title
+    const titleBefore = html;
     html = html.replace(/<title>[^<]*<\/title>/, `<title>${route.title}</title>`);
+    if (html === titleBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <title> (patrón no encontrado)`);
 
     // Update description
+    const descBefore = html;
     html = html.replace(/(<meta name="description" content=")[^"]*(" \/>)/, `$1${route.description}$2`);
     html = html.replace(/(<meta name="description" content=")[^"]*("\s*\/>)/, `$1${route.description}$2`);
+    if (html === descBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <meta name="description"> (patrón no encontrado)`);
 
     // Update canonical
+    const canonicalBefore = html;
     html = html.replace(/(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/, `$1${route.canonical}$2`);
+    if (html === canonicalBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
 
     // Add visible SEO content + hide script
+    // Usamos una regex que captura la etiqueta <div id="root" ...></div> completa,
+    // sea cual sea el resto de atributos (role="main", clases, etc.), en vez de
+    // buscar el string literal exacto '<div id="root"></div>'. Esto evita que el
+    // prerender deje de funcionar silenciosamente si el div root cambia de atributos.
+    const rootDivRegex = /<div id="root"[^>]*><\/div>/;
+    if (!rootDivRegex.test(html)) {
+      throw new Error(`No se encontró <div id="root">...</div> en dist/index.html — revisa si cambió el marcado`);
+    }
     html = html.replace(
-      '<div id="root"></div>',
-      `<div id="seo-prerender" style="font-family:Inter,system-ui,sans-serif;color:#e2e8f0;background:#0a0a0f;padding:2rem;max-width:900px;margin:0 auto;line-height:1.6;">
+      rootDivRegex,
+      (match) => `<div id="seo-prerender" style="font-family:Inter,system-ui,sans-serif;color:#e2e8f0;background:#0a0a0f;padding:2rem;max-width:900px;margin:0 auto;line-height:1.6;">
 ${route.body}
 <p style="margin-top:2rem;color:#6366f1;font-size:0.875rem;">← <a href="https://www.marisai.es" style="color:#a855f7;text-decoration:none;">Maris AI — Crear apps con IA en español</a></p>
 </div>
 ${HIDE_SCRIPT}
-<div id="root"></div>`
+${match}`
     );
 
     writeFileSync(join(DIST, route.file), html, "utf-8");
