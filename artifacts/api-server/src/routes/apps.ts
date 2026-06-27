@@ -15,7 +15,8 @@ function getOpenAIApps(): OpenAI {
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
-import { validateBundle, type ValidationReport } from "../lib/validate";
+import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
+import * as esbuild from "esbuild";
 
 // ── Validación de integridad del bundle ──────────────────────────────────────
 // Detecta archivos TSX/TS truncados que pasan el QA pero fallan en el preview.
@@ -3044,9 +3045,94 @@ export async function generateApp(
       agentModelPlan,
     );
 
+    // Backend en modo edición — antes este bloque NO existía: el modo Edit
+    // solo tocaba el frontend, así que un job pausado tipo "Continúa con el
+    // backend" terminaba "con éxito" sin haber generado ningún backend en
+    // absoluto, porque generateBackendCode solo se invocaba en la rama de
+    // generación NUEVA (más abajo en este archivo), nunca aquí.
+    // Mismo criterio que la generación nueva: solo se construye si el plan
+    // original necesita backend Y el prompt de esta edición lo pide
+    // explícitamente (evita generar backend no solicitado en ediciones
+    // normales de frontend).
+    let editedBackendCode = previous.backendCode || "";
+    const wantsBackendNow = /\b(backend|servidor|base de datos|api|endpoint)\b/i.test(cleanedPrompt);
+    if (wantsBackendNow) {
+      await log("coder", "Construyendo el backend solicitado — API, rutas y base de datos…");
+      // Reutilizamos el plan original de la app (dataModels/files) si está
+      // disponible en previous; si no, dejamos que el propio prompt indique
+      // qué necesita el Backend Engineer.
+      const editPlan: ProjectPlan = {
+        title: previous.title,
+        description: previous.description,
+        techStack: previous.techStack || ["React", "Node", "TypeScript"],
+        pages: (previous as any).plannedPages || [],
+        components: [],
+        hooks: [],
+        utils: [],
+        dataModels: (previous as any).dataModels || [],
+        frontendFiles: ((previous as any).plannedPages || []).map((p: any) => p.route).filter(Boolean),
+        backendNeeded: true,
+        database: (previous as any).database,
+        backendFiles: [],
+      };
+      try {
+        const backendGen = await generateBackendCode(editPlan, prompt, "", agentModelPlan, []);
+        if (backendGen.code && backendGen.code.length > 100 && !backendGen.code.startsWith("No backend")) {
+          // Validación sintáctica real del backend generado — antes esto se
+          // devolvía sin ninguna comprobación. validateBundle (esbuild) está
+          // pensado para frontend/JSX, así que aquí se usa esbuild.transform
+          // por archivo (no requiere resolver imports ni un entry concreto,
+          // suficiente para detectar TypeScript/sintaxis roto).
+          const checkBackendSyntax = async (code: string): Promise<{ ok: boolean; issues: Array<{ file: string; problem: string; fix: string }> }> => {
+            const vfs = parseBundleToVFS(code);
+            const issues: Array<{ file: string; problem: string; fix: string }> = [];
+            for (const [filePath, content] of Object.entries(vfs)) {
+              if (!/\.(ts|tsx|js|jsx)$/.test(filePath)) continue;
+              try {
+                await esbuild.transform(content, {
+                  loader: filePath.endsWith(".tsx") ? "tsx" : filePath.endsWith(".ts") ? "ts" : filePath.endsWith(".jsx") ? "jsx" : "js",
+                  target: "es2022",
+                });
+              } catch (transformErr: any) {
+                const msg = String(transformErr?.message || transformErr).split("\n")[0];
+                issues.push({ file: filePath, problem: `Syntax error: ${msg}`, fix: "Fix the syntax so the file compiles." });
+              }
+            }
+            return { ok: issues.length === 0, issues };
+          };
+
+          let candidateBackend = backendGen.code;
+          let backendCheck = await checkBackendSyntax(candidateBackend);
+          const MAX_BACKEND_REPAIR_CYCLES = 3;
+          for (let cycle = 1; cycle <= MAX_BACKEND_REPAIR_CYCLES && !backendCheck.ok; cycle++) {
+            await log("coder", `🔧 El backend generado tiene ${backendCheck.issues.length} error(es) de sintaxis — reparando (intento ${cycle}/${MAX_BACKEND_REPAIR_CYCLES})…`, "warn");
+            const patched = await patchBundle(candidateBackend, backendCheck.issues, language, "", agentModelPlan.agents.patcher.model);
+            if (!patched || patched === candidateBackend) {
+              await log("coder", "El reparador no consiguió corregir el backend en este ciclo.", "warn");
+              break;
+            }
+            candidateBackend = patched;
+            backendCheck = await checkBackendSyntax(candidateBackend);
+          }
+
+          if (backendCheck.ok) {
+            editedBackendCode = candidateBackend;
+            await log("coder", `✅ Backend listo y validado sintácticamente: ${Math.round(editedBackendCode.length / 1000)} KB.`);
+          } else {
+            await log("coder", `⚠️ El backend generado sigue con ${backendCheck.issues.length} error(es) tras ${MAX_BACKEND_REPAIR_CYCLES} intentos de reparación — se conserva el backend anterior para no entregar algo roto.`, "warn");
+          }
+        } else {
+          await log("coder", "El Backend Engineer no produjo código nuevo — se conserva el backend anterior.", "warn");
+        }
+      } catch (backendErr) {
+        logger.warn({ backendErr }, "edit-mode: generación de backend falló, conservando backend anterior");
+        await log("coder", "No se pudo construir el backend en este intento — se conserva el backend anterior. Puedes volver a pedirlo.", "warn");
+      }
+    }
+
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
     log("system", "Empaquetando todo…");
-    return { ...result, frontendCode: fixedFrontend };
+    return { ...result, frontendCode: fixedFrontend, backendCode: editedBackendCode };
   }
 
   // Phase gates
