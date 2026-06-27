@@ -459,6 +459,19 @@ const DEFAULT_VERSIONS: Record<string, string> = {
   "tailwind-merge": "2.5.5",
   "date-fns": "3.6.0",
   zod: "3.23.8",
+  // Añadidas junto con la ampliación de librerías permitidas en el Frontend
+  // Engineer (apps.ts, lista de imports permitidos) — sin esta entrada, el
+  // bundle generado podía importar estas librerías correctamente desde el
+  // sandbox E2B (npm install real, sin este mapa), pero el sistema de
+  // Preview (este archivo, vía esm.sh sin npm install) caía al último
+  // recurso de "latest" sin garantía, o se quedaba colgado resolviendo el
+  // import — causa real confirmada de "La página tardó demasiado en
+  // aparecer" en apps que sí usan recharts/react-hook-form.
+  "framer-motion": "11.11.17",
+  recharts: "2.13.3",
+  "react-hook-form": "7.54.0",
+  "@hookform/resolvers": "3.9.1",
+  "react-day-picker": "9.4.0",
 };
 
 /**
