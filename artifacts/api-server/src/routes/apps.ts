@@ -308,6 +308,7 @@ Usa '// === FILE: <path> ===' para separar archivos. Incluye siempre:
 - src/middleware/auth.ts (JWT verify si hay autenticacion)
 - src/lib/logger.ts, src/lib/asyncHandler.ts, src/lib/errors.ts
 - src/db/seed.ts (datos reales en espanol, no lorem ipsum)
+- openapi.yaml (especificacion OpenAPI 3.0 de TODOS los endpoints reales que generaste — ver seccion OPENAPI abajo)
 
 Stack: Node 20 + Express 5 + TypeScript + Mongoose + MongoDB. Zod para validacion. Codigo real, sin stubs.
 
@@ -385,6 +386,14 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - JWT_SECRET, MONGODB_URI, PORT, CORS_ORIGIN, NODE_ENV obligatorios
     - Documentar para que sirve cada variable
 
+14. OPENAPI — documentacion para integraciones futuras (ERPs, CRMs, apps externas):
+    - Genera openapi.yaml con especificacion OpenAPI 3.0 completa
+    - info.title = nombre del proyecto, info.version = "1.0.0"
+    - Documenta TODOS los endpoints reales que generaste — paths, methods, parameters, requestBody (schema basado en los Zod schemas), responses (200/201/400/401/404/500) con ejemplos reales
+    - components.schemas debe reflejar los Mongoose models (campos y tipos correctos)
+    - components.securitySchemes con bearerAuth (JWT) si el proyecto tiene autenticacion
+    - Este archivo es lo que permite a un desarrollador o a otra IA conectar este backend con sistemas externos sin tener que leer el codigo fuente
+
 Si el plan no necesita backend: {"backendCode":"No backend required for this app."}
 
 Rules:
@@ -431,6 +440,7 @@ Usa '// === FILE: <path> ===' para separar archivos. Incluye siempre:
 - src/middleware/auth.ts (JWT verify si hay autenticacion)
 - src/lib/logger.ts, src/lib/asyncHandler.ts, src/lib/errors.ts
 - src/db/seed.ts (script de Prisma seed con datos reales en espanol, no lorem ipsum)
+- openapi.yaml (especificacion OpenAPI 3.0 de TODOS los endpoints reales que generaste — ver seccion OPENAPI abajo)
 
 Stack: Node 20 + Express 5 + TypeScript + Prisma + PostgreSQL. Zod para validacion. Codigo real, sin stubs.
 
@@ -513,6 +523,14 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - JWT_SECRET, DATABASE_URL (postgresql://...), PORT, CORS_ORIGIN, NODE_ENV obligatorios
     - Documentar para que sirve cada variable
     - Incluir en package.json los scripts: "db:migrate": "prisma migrate dev", "db:seed": "tsx prisma/seed.ts", "db:generate": "prisma generate"
+
+15. OPENAPI — documentacion para integraciones futuras (ERPs, CRMs, apps externas):
+    - Genera openapi.yaml con especificacion OpenAPI 3.0 completa
+    - info.title = nombre del proyecto, info.version = "1.0.0"
+    - Documenta TODOS los endpoints reales que generaste — paths, methods, parameters, requestBody (schema basado en los Zod schemas), responses (200/201/400/401/404/500) con ejemplos reales
+    - components.schemas debe reflejar los modelos de prisma/schema.prisma (campos, tipos y relaciones correctas)
+    - components.securitySchemes con bearerAuth (JWT) si el proyecto tiene autenticacion
+    - Este archivo es lo que permite a un desarrollador o a otra IA conectar este backend con sistemas externos sin tener que leer el codigo fuente
 
 Si el plan no necesita backend: {"backendCode":"No backend required for this app."}
 
