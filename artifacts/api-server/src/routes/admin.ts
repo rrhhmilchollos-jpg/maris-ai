@@ -611,6 +611,49 @@ router.post("/admin/jobs/:id/retry", async (req: any, res: any): Promise<void> =
     return;
   }
 
+  // Guardia: este endpoint resetea progress a 0 y reencola el JOB DE
+  // GENERACIÓN COMPLETO — correcto para un job normal genuinamente colgado,
+  // pero CATASTRÓFICO para un job en flujo de reparación in-situ (status
+  // repairing/repaired-pending-review), que no tiene ningún pipeline de
+  // generación corriendo de fondo que "reencolar" — solo tiene una promesa
+  // de autoRepairBundle ejecutándose en background sobre una app ya
+  // existente. Reencolarlo como si fuera generación normal perdía el
+  // progreso real y relanzaba TODO el pipeline desde cero (Architect →
+  // Frontend → ...), exactamente el síntoma reportado: "vuelve a empezar
+  // en vez de seguir donde se quedó".
+  if ((job as any).status === "repairing" || (job as any).status === "repaired-pending-review") {
+    const appId = (job as any).appId;
+    if (!appId) {
+      res.status(409).json({ error: "Este job de reparación no tiene una app asociada para relanzar la reparación." });
+      return;
+    }
+    const repairInstruction = String(job.prompt || "").replace(/^\[ADMIN (REPAIR|RECOVERY)\]\s*/, "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim() || "Continúa y completa esta app.";
+    await GenerationJob.findByIdAndUpdate(id, {
+      $set: { status: "repairing", phase: "repairing", updatedAt: new Date() }, // mantiene el progress actual, NO lo resetea
+    });
+    res.json({ id: String(job._id), status: "repairing", message: "Relanzando la reparación in-situ sobre la app existente, sin perder el progreso." });
+    void autoRepairBundle({
+      appId: String(appId),
+      userId: String((job as any).userId),
+      trigger: "manual",
+      errorSummary: repairInstruction,
+      maxCycles: 6,
+      log: logger.child({ module: "admin-retry-repair", jobId: id }),
+    }).then(async (success) => {
+      await GenerationJob.findByIdAndUpdate(id, {
+        $set: success
+          ? { status: "repaired-pending-review", phase: "done", progress: 100, errorMessage: null }
+          : { status: "failed", phase: "done", errorMessage: "La reparación automática no produjo cambios válidos tras relanzarla." },
+      });
+    }).catch(async (err) => {
+      logger.error({ err, jobId: id }, "admin-retry-repair: autoRepairBundle falló");
+      await GenerationJob.findByIdAndUpdate(id, {
+        $set: { status: "failed", phase: "done", errorMessage: String(err?.message || err).slice(0, 500) },
+      });
+    });
+    return;
+  }
+
   const ageMs = Date.now() - new Date(job.updatedAt).getTime();
   const STALE_MS = 15 * 60 * 1000;
   const retryable =
