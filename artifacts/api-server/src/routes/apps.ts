@@ -2942,6 +2942,25 @@ export async function generateApp(
 
   if (typeof plan.backendNeeded !== "boolean") plan.backendNeeded = false;
 
+  // Aviso de honestidad para proyectos ultra-complejos — ERPs, ecosistemas
+  // empresariales multi-módulo, ecommerce con inventario+contabilidad, etc.
+  // Maris AI puede generar un MVP funcional, pero un sistema de producción
+  // de ese tamaño necesita iteración manual y, probablemente, un equipo de
+  // desarrollo. Avisamos ANTES de generar para que el usuario decida con
+  // información real, en vez de descubrirlo al ver un resultado incompleto.
+  if (agentModelPlan.tier === "ultra") {
+    await log(
+      "architect",
+      `🔎 Este proyecto tiene una complejidad muy alta (sistema multi-módulo / nivel empresarial). ` +
+      `Maris AI va a generar un MVP funcional centrado en lo más importante, pero un sistema de este tamaño ` +
+      `en producción normalmente necesita iteración manual adicional y, en muchos casos, el apoyo de un equipo ` +
+      `de desarrollo o un agente de código más avanzado (ej. Cursor, Claude Code) sobre el código exportado. ` +
+      `Recomendación: usa este MVP para validar la idea y la estructura de datos, expórtalo a GitHub, y construye ` +
+      `las partes más críticas (integraciones, automatizaciones, transacciones complejas) de forma incremental.`,
+      "warn",
+    );
+  }
+
   // Guardia de tamaño — si el arquitecto generó un plan demasiado grande, lo
   // recortamos antes de que llegue al frontend engineer para evitar timeouts.
   // MISMO límite para TODOS los planes (free y paid) — el motor es idéntico;
