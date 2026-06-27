@@ -11,6 +11,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import React, { useState, useEffect, useRef } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -1152,7 +1164,7 @@ function LiveMonitorPanel() {
                           }
                         </Button>
                       </div>
-                      <div className="flex gap-1 flex-wrap">
+                      <div className="flex items-center gap-1 flex-wrap">
                         {[
                           "Completa las páginas que faltan",
                           "Genera solo la landing page sin backend",
@@ -1167,6 +1179,40 @@ function LiveMonitorPanel() {
                             {s}
                           </button>
                         ))}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="text-[10px] px-2 py-1 rounded border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-colors font-medium flex items-center gap-1">
+                              Más opciones <ChevronDown className="h-3 w-3" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-64 max-h-[70vh] overflow-y-auto">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">
+                              Catálogo de instrucciones por categoría
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            {REPAIR_INSTRUCTION_CATEGORIES.map(category => (
+                              <DropdownMenuSub key={category.label}>
+                                <DropdownMenuSubTrigger className="text-xs">
+                                  <span className="mr-2">{category.icon}</span>
+                                  {category.label}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuPortal>
+                                  <DropdownMenuSubContent className="w-72">
+                                    {category.options.map(option => (
+                                      <DropdownMenuItem
+                                        key={option}
+                                        className="text-xs cursor-pointer"
+                                        onClick={() => setRepairPrompt(p => ({ ...p, [job.id]: option }))}
+                                      >
+                                        {option}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuPortal>
+                              </DropdownMenuSub>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   </div>
@@ -1453,6 +1499,77 @@ function ClerkSyncPanel() {
     </Card>
   );
 }
+
+// Catálogo de instrucciones de reparación/mejora para el panel de soporte,
+// organizado por categoría. Antes solo había 4 chips planos — esto da al
+// equipo de soporte un vocabulario completo y consistente para dirigir a los
+// agentes de reparación (autoRepairBundle), sin tener que escribir cada
+// instrucción desde cero cada vez.
+const REPAIR_INSTRUCTION_CATEGORIES: Array<{ label: string; icon: string; options: string[] }> = [
+  {
+    label: "Contenido y páginas",
+    icon: "📄",
+    options: [
+      "Completa las páginas que faltan según el plan original",
+      "Rellena los textos de marcador de posición (lorem ipsum) con contenido real en español",
+      "Añade la sección de FAQ que falta",
+      "Completa el footer con enlaces reales",
+      "Genera solo la landing page sin backend",
+    ],
+  },
+  {
+    label: "Diseño y UI",
+    icon: "🎨",
+    options: [
+      "Corrige el espaciado y alineación de los componentes principales",
+      "Hace que el diseño sea coherente entre todas las páginas",
+      "Mejora el contraste de colores para accesibilidad",
+      "Corrige el menú de navegación para que funcione en móvil",
+      "Simplifica la app a las funciones básicas",
+    ],
+  },
+  {
+    label: "Backend y datos",
+    icon: "🗄️",
+    options: [
+      "Completa los endpoints del backend que faltan",
+      "Corrige los modelos de datos para que coincidan con el frontend",
+      "Añade validación de formularios en el backend",
+      "Corrige la autenticación de usuarios",
+      "Conecta el frontend con los endpoints reales del backend",
+    ],
+  },
+  {
+    label: "Errores técnicos",
+    icon: "🐛",
+    options: [
+      "Corrige errores de TypeScript del frontend",
+      "Corrige imports rotos o componentes faltantes",
+      "Corrige errores de consola del navegador",
+      "Corrige rutas de navegación que no funcionan",
+      "Corrige el botón o formulario que no responde",
+    ],
+  },
+  {
+    label: "Rendimiento",
+    icon: "⚡",
+    options: [
+      "Optimiza las imágenes para que carguen más rápido",
+      "Añade paginación a las listas largas",
+      "Elimina renders innecesarios y mejora la fluidez",
+      "Añade estados de carga (loading) donde falten",
+    ],
+  },
+  {
+    label: "SEO y metadatos",
+    icon: "🔎",
+    options: [
+      "Añade título y meta descripción a cada página",
+      "Añade textos alternativos (alt) a las imágenes",
+      "Añade datos estructurados básicos (Schema.org)",
+    ],
+  },
+];
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
