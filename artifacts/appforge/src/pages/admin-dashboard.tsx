@@ -1129,6 +1129,50 @@ function LiveMonitorPanel() {
                         </Button>
                       </div>
                     )}
+                    {/* Job pausado esperando confirmación del admin (ej. "El backend se
+                        ha pausado para tu revisión. Dime 'Continúa con el backend'") —
+                        esto NO es un fallo que reparar, es el pipeline esperando la
+                        palabra exacta que activa la siguiente fase. Botón directo en
+                        vez de tener que escribirla a mano cada vez. */}
+                    {(() => {
+                      const pauseLog = [...jobLogs].reverse().find((l: any) =>
+                        /se ha pausado para tu revisión/i.test(l.message || ""),
+                      );
+                      if (!pauseLog) return null;
+                      const suggestedInstruction = /backend/i.test(pauseLog.message)
+                        ? "Continúa con el backend"
+                        : "Continúa con la siguiente fase";
+                      return (
+                        <div className="p-3 border-t border-amber-500/20 bg-amber-500/5">
+                          <p className="text-xs text-amber-300 mb-2">
+                            ⏸️ Este job está pausado esperando tu confirmación — no es un fallo.
+                          </p>
+                          <Button
+                            size="sm"
+                            className="w-full h-8 bg-amber-600 hover:bg-amber-700 text-white text-xs"
+                            disabled={actionLoading[`continue_${job.id}`]}
+                            onClick={async () => {
+                              setActionLoading(p => ({ ...p, [`continue_${job.id}`]: true }));
+                              try {
+                                const d = await apiFetch<any>(`/api/admin/jobs/${job.id}/continue`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ instruction: suggestedInstruction }),
+                                });
+                                toast({ title: "▶️ Continuando", description: d.message });
+                                await fetchJobs();
+                              } catch (e: any) {
+                                toast({ title: "Error", description: e.message, variant: "destructive" });
+                              } finally {
+                                setActionLoading(p => ({ ...p, [`continue_${job.id}`]: false }));
+                              }
+                            }}
+                          >
+                            {actionLoading[`continue_${job.id}`] ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : "▶️"} {suggestedInstruction}
+                          </Button>
+                        </div>
+                      );
+                    })()}
                     <div className="p-3 space-y-2">
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1">
                         <Zap className="h-3 w-3 text-violet-400" />

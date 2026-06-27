@@ -1730,6 +1730,65 @@ router.post("/admin/jobs/:id/approve-for-client", async (req: any, res: any): Pr
   res.json({ ok: true, appId: String(job.appId), message: "App aprobada — ya es visible para el cliente." });
 });
 
+// POST /api/admin/jobs/:id/continue
+// Para el caso real distinto de "reparar algo roto": un job que se detuvo
+// EN UN PUNTO VÁLIDO esperando confirmación del admin (ej. "Frontend
+// terminado. El backend se ha pausado para tu revisión. Si te gusta el
+// diseño, dime 'Continúa con el backend'"). No hay nada que arreglar — el
+// pipeline simplemente está esperando la palabra exacta que activa la
+// siguiente fase (ver runBackend en apps.ts: busca "backend"/"servidor"/
+// "base de datos" en el prompt). autoRepairBundle (usado por /recover) no
+// sirve aquí porque parchea un bundle YA completo — esto necesita el
+// pipeline de generación completo en modo edición para construir el backend
+// que nunca se generó.
+router.post("/admin/jobs/:id/continue", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const sourceJob = await GenerationJob.findById(req.params.id).lean() as any;
+  if (!sourceJob) {
+    res.status(404).json({ error: `Job ${req.params.id} no encontrado.` });
+    return;
+  }
+  if (sourceJob.status === "running" || sourceJob.status === "queued" || sourceJob.status === "repairing") {
+    res.status(409).json({ error: `Este job sigue en estado "${sourceJob.status}" — espera a que termine antes de continuarlo.` });
+    return;
+  }
+  const baseAppId = sourceJob.appId || sourceJob.editAppId;
+  if (!baseAppId) {
+    res.status(400).json({ error: "Este job no tiene una app asociada sobre la que continuar." });
+    return;
+  }
+  const continueInstruction = String(req.body?.instruction || "Continúa con el backend").trim();
+
+  const trackingJobId = new mongoose.Types.ObjectId().toString();
+  const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-continue. ${continueInstruction}`;
+  await GenerationJob.create({
+    _id: trackingJobId,
+    userId: sourceJob.userId,
+    prompt: generationPrompt,
+    editAppId: String(baseAppId),
+    appId: String(baseAppId),
+    kind: "edit",
+    coderModel: "claude-sonnet-4-6",
+    language: sourceJob.language || "typescript",
+    status: "queued",
+    phase: "queued",
+    progress: 0,
+    isAdmin: true,
+    hasEverPaid: true,
+  });
+  await GeneratedApp.findByIdAndUpdate(baseAppId, {
+    $set: { pendingAdminApproval: true, pendingApprovalSince: new Date() },
+  });
+  await enqueueGenerateJob(trackingJobId);
+  logger.info({ trackingJobId, sourceJobId: String(sourceJob._id), baseAppId }, "Admin continued paused job");
+  res.status(201).json({
+    ok: true,
+    jobId: trackingJobId,
+    appId: String(baseAppId),
+    message: `Continuando: "${continueInstruction}" — sobre la app existente, sin perder el frontend ya generado.`,
+  });
+});
+
 // ─── Admin: Recuperar por email — busca el último job fallido del usuario ──────
 // POST /api/admin/recover-by-email  { email: "..." }
 router.post("/admin/recover-by-email", async (req: any, res: any): Promise<void> => {
