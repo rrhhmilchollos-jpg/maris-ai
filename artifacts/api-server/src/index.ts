@@ -1,3 +1,6 @@
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
+import { verifyToken } from "@clerk/express";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
@@ -8,6 +11,7 @@ import { runAutopilotTick } from "./lib/aiAutopilot";
 import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
+import { attachPresenceHandlers } from "./lib/presence";
  
 const rawPort = process.env["PORT"] || "3000";
 const port = Number(rawPort);
@@ -16,8 +20,56 @@ if (Number.isNaN(port) || port <= 0) {
   logger.warn(`Invalid PORT value: "${rawPort}". Defaulting to 3000.`);
 }
 const finalPort = (Number.isNaN(port) || port <= 0) ? 3000 : port;
+
+// ENCONTRADO: el servidor usaba app.listen(...) directamente, que crea un
+// http.Server interno sin darnos acceso a la referencia — necesario para
+// adjuntar socket.io al MISMO servidor HTTP (no uno nuevo en otro puerto).
+// httpServer.listen(...) es funcionalmente idéntico a app.listen(...) — la
+// API de Express delega en el http.Server subyacente de todas formas —
+// así que este cambio no altera ningún comportamiento existente del
+// servidor HTTP/Express, solo nos da la referencia que necesitábamos.
+const httpServer = http.createServer(app);
+
+// Presencia en tiempo real (ver lib/presence.ts) — qué usuarios tienen
+// Maris AI abierto AHORA MISMO, no solo cuándo entraron por última vez.
+// Autenticación real con el mismo mecanismo que el resto de la API
+// (Clerk) — el cliente manda su token de sesión en el handshake
+// (socket.handshake.auth.token), se verifica aquí con verifyToken antes
+// de aceptar la conexión, igual que requireAuth ya hace para rutas HTTP
+// normales (lib/auth.ts) — ningún socket queda sin autenticar.
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: [
+      "https://www.marisai.es",
+      "https://marisai.es",
+      /\.marisai\.es$/,
+    ],
+    credentials: true,
+  },
+});
+
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token || typeof token !== "string") {
+      return next(new Error("Authentication error: token required"));
+    }
+    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+    const userId = payload.sub;
+    if (!userId) {
+      return next(new Error("Authentication error: invalid token"));
+    }
+    socket.data.userId = userId;
+    next();
+  } catch (err) {
+    logger.warn({ err }, "Presence socket auth failed");
+    next(new Error("Authentication error: invalid token"));
+  }
+});
+
+attachPresenceHandlers(io);
  
-app.listen(finalPort, async (err) => {
+httpServer.listen(finalPort, async (err?: Error) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);

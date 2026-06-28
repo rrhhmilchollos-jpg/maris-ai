@@ -28,6 +28,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { AdminNewsEditor } from "@/components/admin-news-editor";
+import { AdminPresencePanel } from "@/components/admin-presence-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,10 +58,10 @@ import {
   ChevronDown, ChevronUp, History, DollarSign, Lock, Unlock, Loader2,
   StickyNote, Send, ExternalLink, Wallet, ArrowUpRight, ArrowDownRight,
   Globe, Mail, Calendar, Hash, Cpu, ChevronRight, AlertCircle, CheckCircle,
-  Zap, TrendingUp, TrendingDown, Star,
+  Zap, TrendingUp, TrendingDown, Star, Wifi,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news";
+type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news" | "presence";
 
 interface MemoryEntry {
   id: string;
@@ -390,6 +391,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
         <Tabs defaultValue={initialTab} className="w-full">
           <TabsList className="bg-card/40 border border-white/5 flex-wrap h-auto gap-1 p-1">
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Usuarios</TabsTrigger>
+            <TabsTrigger value="presence"><Wifi className="h-4 w-4 mr-2" /> En vivo</TabsTrigger>
             <TabsTrigger value="apps"><Code2 className="h-4 w-4 mr-2" /> Apps</TabsTrigger>
             <TabsTrigger value="memory" onClick={() => { if (!memory) void loadMemory(); }}>
               <Sparkles className="h-4 w-4 mr-2" /> Memoria
@@ -524,6 +526,11 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── PRESENCE TAB ── */}
+          <TabsContent value="presence" className="mt-4">
+            <AdminPresencePanel />
           </TabsContent>
 
           {/* ── APPS TAB ── */}

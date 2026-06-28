@@ -15,6 +15,7 @@ import { useUser } from "@clerk/react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 import { setSentryUser } from "@/lib/sentry";
+import { usePresence } from "@/hooks/use-presence";
 
 // Pages — lazy loaded para reducir bundle inicial y mejorar LCP/FCP
 const LandingPage = lazy(() => import("@/pages/landing"));
@@ -165,6 +166,11 @@ function SignUpPage() {
   );
 }
 
+function PresenceTracker() {
+  usePresence();
+  return null;
+}
+
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
   const queryClient = useQueryClient();
@@ -300,6 +306,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <PresenceTracker />
         <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/" component={HomeRedirect} />

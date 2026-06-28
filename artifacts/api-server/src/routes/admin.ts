@@ -865,6 +865,39 @@ router.post("/admin/sync-clerk-users", async (_req, res): Promise<void> => {
   }
 });
 
+// ─── Presencia en tiempo real ──────────────────────────────────────────────
+// Qué usuarios tienen Maris AI abierto AHORA MISMO (no "última vez que
+// entraron", que ya existía como lastLoginAt pero no responde a esta
+// pregunta). Ver lib/presence.ts para el detalle del mecanismo (socket.io
+// con autenticación Clerk real en el handshake).
+router.get("/admin/presence", async (_req, res) => {
+  await connectDB();
+  const { listOnlineUsers } = await import("../lib/presence");
+  const online = listOnlineUsers();
+  if (online.length === 0) {
+    return void res.json({ online: [], count: 0 });
+  }
+  const userIds = online.map((o) => o.userId);
+  const users = await User.find({ _id: { $in: userIds } }).lean();
+  const userMap = new Map(users.map((u) => [String(u._id), u]));
+  res.json({
+    count: online.length,
+    online: online.map((o) => {
+      const u = userMap.get(o.userId);
+      return {
+        userId: o.userId,
+        email: u?.email ?? o.email ?? null,
+        fullName: u?.fullName ?? null,
+        imageUrl: u?.imageUrl ?? null,
+        sockets: o.sockets,
+        connectedAt: o.connectedAt.toISOString(),
+        lastActivityAt: o.lastActivityAt.toISOString(),
+        currentPage: o.currentPage ?? null,
+      };
+    }),
+  });
+});
+
 router.get("/admin/metrics", async (_req, res) => {
   await connectDB();
   const now = new Date();
