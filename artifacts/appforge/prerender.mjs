@@ -20,7 +20,7 @@ const ROUTES = [
     body: `<h1>Precios de Maris AI — Crea apps con IA</h1>
 <p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan.</p>
 <h2>Plan Gratuito</h2>
-<ul><li>15 créditos gratis al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
+<ul><li>78 créditos gratis al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
 <h2>Pack Starter — 20€</h2>
 <ul><li>160 créditos</li><li>Aproximadamente 16 apps completas</li><li>Créditos que nunca caducan</li></ul>
 <h2>Pack Pro — 45€</h2>
@@ -30,7 +30,7 @@ const ROUTES = [
 <h2>Preguntas frecuentes sobre precios</h2>
 <dl>
 <dt>¿Los créditos caducan?</dt><dd>No. Los créditos de Maris AI nunca caducan. Puedes usarlos cuando quieras.</dd>
-<dt>¿Necesito tarjeta para empezar?</dt><dd>No. Los 15 créditos gratuitos se activan al registrarte sin tarjeta.</dd>
+<dt>¿Necesito tarjeta para empezar?</dt><dd>No. Los 78 créditos gratuitos se activan al registrarte sin tarjeta.</dd>
 <dt>¿Qué puedo crear con los créditos?</dt><dd>Apps completas, landings, dashboards, e-commerce, CRMs y cualquier tipo de aplicación web.</dd>
 </dl>`
   },
@@ -112,7 +112,7 @@ const ROUTES = [
 <ul>
 <li>Maris AI está completamente en español. Lovable solo en inglés.</li>
 <li>Maris AI tiene 9 agentes IA especializados. Lovable tiene 1 agente genérico.</li>
-<li>Maris AI ofrece 15 créditos gratis sin tarjeta. Lovable requiere pago desde el inicio.</li>
+<li>Maris AI ofrece 78 créditos gratis sin tarjeta. Lovable requiere pago desde el inicio.</li>
 <li>Maris AI tiene soporte en español. Lovable solo en inglés.</li>
 <li>Maris AI tiene precios en euros. Lovable cobra en dólares.</li>
 </ul>
@@ -267,7 +267,7 @@ const ROUTES = [
 <h2>Paso a paso: crea tu primera app sin programar</h2>
 <ol>
 <li><strong>Define tu idea</strong> — ¿Qué problema resuelve tu app? ¿Quién la usará? ¿Qué funcionalidades necesita?</li>
-<li><strong>Regístrate en Maris AI</strong> — Crea tu cuenta gratis en marisai.es. Recibes 15 créditos sin tarjeta.</li>
+<li><strong>Regístrate en Maris AI</strong> — Crea tu cuenta gratis en marisai.es. Recibes 78 créditos sin tarjeta.</li>
 <li><strong>Describe tu app</strong> — Escribe en español qué quieres construir. Cuanto más detallado, mejor resultado.</li>
 <li><strong>Los 9 agentes trabajan</strong> — En menos de 5 minutos, el equipo de agentes IA genera tu app completa.</li>
 <li><strong>Personaliza y despliega</strong> — Ajusta el diseño mediante chat y publica tu app en internet.</li>
@@ -345,6 +345,82 @@ const ROUTES = [
 <h2>5. Contacto</h2>
 <p>Maris AI Inc. — Email: privacy@marisai.es — Sitio web: www.marisai.es</p>`
   },
+  {
+    path: "/en",
+    file: "en/index.html",
+    title: "Maris AI — Build Apps with AI, No Coding Required",
+    description: "Describe your idea and 9 specialized AI agents generate your complete app in under 5 minutes. No coding needed. Free for entrepreneurs worldwide.",
+    canonical: "https://www.marisai.es/en",
+    body: `<h1>Maris AI — Build Apps with AI, No Coding Required</h1>
+<p>Maris AI is a vibe coding platform born in Spain, now open to entrepreneurs worldwide. 9 specialized AI agents generate your complete app in under 5 minutes — no coding skills needed.</p>
+<h2>What is Maris AI?</h2>
+<p>Maris AI is a strong alternative to Bolt.new, Lovable and Emergent. Support and the core interface are in Spanish, but anyone — Spanish or English speaking — can sign up and build with Maris AI today.</p>
+<ul>
+<li>9 specialized AI agents working in parallel</li>
+<li>Express + MongoDB backend included automatically</li>
+<li>78 free credits, no credit card required</li>
+<li>Credits that never expire</li>
+<li>100% exportable code to GitHub, no vendor lock-in</li>
+<li>Euro pricing, GDPR compliant</li>
+</ul>
+<h2>The 9 Maris AI agents</h2>
+<ol>
+<li><strong>Researcher</strong> — Researches the market and defines project requirements</li>
+<li><strong>Architect</strong> — Designs the complete technical architecture</li>
+<li><strong>Designer</strong> — Creates the visual system, color palette and typography</li>
+<li><strong>Frontend Engineer</strong> — Generates React + TypeScript + Tailwind CSS code</li>
+<li><strong>Backend Engineer</strong> — Builds the REST API with Express + MongoDB</li>
+<li><strong>QA Auditor</strong> — Reviews errors, accessibility and security</li>
+<li><strong>PM Agent</strong> — Validates the result matches the original request</li>
+<li><strong>Image Agent</strong> — Generates real AI images</li>
+<li><strong>Visual Evaluator</strong> — Analyzes real screenshots with Claude Vision</li>
+</ol>
+<h2>Frequently asked questions</h2>
+<dl>
+<dt>Do I need coding skills?</dt><dd>No. You describe your idea and Maris AI generates all the code automatically.</dd>
+<dt>How much does Maris AI cost?</dt><dd>78 free credits when you sign up, no credit card. Packages start at €20 for 160 credits that never expire.</dd>
+<dt>Is the generated code mine?</dt><dd>Yes, 100% yours. Exportable to GitHub with no restrictions.</dd>
+<dt>Is support available in English?</dt><dd>Support is primarily in Spanish, focused on the Spanish-speaking market — but anyone can sign up and use the platform regardless of language.</dd>
+</dl>
+<h2>Types of apps you can build</h2>
+<ul>
+<li>CRM and customer management</li>
+<li>Online stores with Stripe</li>
+<li>Educational platforms</li>
+<li>Restaurant apps</li>
+<li>Clinic management</li>
+<li>Analytics dashboards</li>
+<li>Marketplaces and directories</li>
+<li>Landing pages</li>
+<li>Professional portfolios</li>
+<li>Booking and appointment apps</li>
+<li>SaaS with subscriptions</li>
+<li>APIs and backends</li>
+</ul>`
+  },
+  {
+    path: "/en/pricing",
+    file: "en/pricing/index.html",
+    title: "Maris AI Pricing — 78 Free Credits, No Credit Card",
+    description: "Start free with 78 credits, no credit card. Packages from €20 for 160 credits that never expire. Build apps with AI at the best price.",
+    canonical: "https://www.marisai.es/en/pricing",
+    body: `<h1>Maris AI Pricing — Build apps with AI</h1>
+<p>Start free, no credit card required. Credits never expire.</p>
+<h2>Free Plan</h2>
+<ul><li>78 free credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
+<h2>Starter Pack — €20</h2>
+<ul><li>160 credits</li><li>About 16 complete apps</li><li>Credits that never expire</li></ul>
+<h2>Pro Pack — €45</h2>
+<ul><li>400 credits</li><li>About 40 complete apps</li><li>Priority support</li></ul>
+<h2>Business Pack — €80</h2>
+<ul><li>800 credits</li><li>About 80 complete apps</li><li>Dedicated support</li></ul>
+<h2>Pricing FAQ</h2>
+<dl>
+<dt>Do credits expire?</dt><dd>No. Maris AI credits never expire. Use them whenever you want.</dd>
+<dt>Do I need a card to start?</dt><dd>No. The 78 free credits activate when you sign up, no card required.</dd>
+<dt>What can I build with credits?</dt><dd>Complete apps, landing pages, dashboards, e-commerce, CRMs, and any type of web application.</dd>
+</dl>`
+  },
 ];
 
 const HIDE_SCRIPT = `<script>
@@ -388,6 +464,32 @@ for (const route of ROUTES) {
     const canonicalBefore = html;
     html = html.replace(/(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/, `$1${route.canonical}$2`);
     if (html === canonicalBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
+
+    // hreflang — SOLO entre páginas que tienen una contraparte real traducida.
+    // No se añade hreflang especulativo a páginas sin traducción real: eso
+    // le diría a Google que existe una versión que no existe, justo el tipo
+    // de error de hreflang que penaliza confianza, no la falta del propio
+    // hreflang.
+    // Primero se elimina cualquier hreflang heredado del index.html base
+    // (ej. el de la home, fijo en ese archivo) — cada ruta define el suyo
+    // desde cero para evitar duplicados o pares incorrectos.
+    html = html.replace(/<link rel="alternate" hreflang="[^"]*" href="[^"]*"\s*\/>\n?\s*/g, "");
+    const HREFLANG_PAIRS = {
+      "/": { en: "https://www.marisai.es/en", "x-default": "https://www.marisai.es/" },
+      "/pricing": { en: "https://www.marisai.es/en/pricing", "x-default": "https://www.marisai.es/pricing" },
+      "/en": { es: "https://www.marisai.es/", "x-default": "https://www.marisai.es/" },
+      "/en/pricing": { es: "https://www.marisai.es/pricing", "x-default": "https://www.marisai.es/pricing" },
+    };
+    const hreflangEntry = HREFLANG_PAIRS[route.path];
+    if (hreflangEntry) {
+      const hreflangTags = Object.entries(hreflangEntry)
+        .map(([lang, href]) => `<link rel="alternate" hreflang="${lang}" href="${href}" />`)
+        .join("\n  ");
+      html = html.replace(
+        /(<link rel="canonical" href="[^"]*" id="canonical-tag" \/>)/,
+        `$1\n  ${hreflangTags}`,
+      );
+    }
 
     // Eliminar esquemas JSON-LD específicos de la HOME en cualquier página
     // que no sea la home. CONFIRMADO contra la documentación oficial de
