@@ -3380,9 +3380,63 @@ export async function generateApp(
       }
     }
 
+    onProgress?.({ phase: "parsing", progress: 88, note: "Revisando calidad de los cambios…" });
+
+    // QA Auditor en modo edición — ENCONTRADO: reviewBundle() (10 categorías:
+    // imports rotos, accesibilidad, performance, UX, seguridad, etc.) solo se
+    // invocaba en la rama de generación NUEVA de este mismo archivo (más
+    // abajo, "Phase 4"); el flujo de edición devolvía el resultado justo
+    // aquí, antes de llegar a esa fase, así que ediciones iterativas nunca
+    // pasaban por este filtro de calidad — solo por runValidatePatchLoop
+    // (validateBundle/esbuild), que detecta errores de sintaxis/compilación
+    // pero no problemas de accesibilidad, performance o UX que una edición
+    // puede introducir en componentes ya existentes sin romper la compilación.
+    // Esto es la causa técnica concreta detrás de la deuda técnica al
+    // refactorizar/editar que se observa en cualquier plataforma de vibe
+    // coding cuando el QA solo corre en la generación inicial.
+    let finalFrontendAfterQa = fixedFrontend;
+    try {
+      const editQaPlan: ProjectPlan = {
+        title: previous.title,
+        description: previous.description,
+        techStack: previous.techStack || ["React", "TypeScript", "Tailwind"],
+        pages: (previous as any).plannedPages || [],
+        components: [],
+        hooks: [],
+        utils: [],
+        dataModels: (previous as any).dataModels || [],
+        frontendFiles: ((previous as any).plannedPages || []).map((p: any) => p.route).filter(Boolean),
+        backendNeeded: !!editedBackendCode,
+        database: (previous as any).database,
+        backendFiles: [],
+      };
+      const editQaReport = await reviewBundle(fixedFrontend, editQaPlan, agentModelPlan);
+      if (!editQaReport.ok && editQaReport.issues.length > 0) {
+        await log("qa", `🔍 QA detectó ${editQaReport.issues.length} problema(s) tras la edición — aplicando correcciones antes de entregar…`, "warn");
+        const qaPatched = await runValidatePatchLoop(
+          fixedFrontend,
+          editQaReport,
+          onProgress,
+          88,
+          language,
+          log,
+          { validate: true, patch: true },
+          agentModelPlan,
+          3, // menos ciclos que la generación inicial: aquí solo corregimos lo que el QA marcó, no repetimos la validación sintáctica completa que ya pasó arriba
+        );
+        if (qaPatched && qaPatched.length > 500) {
+          finalFrontendAfterQa = qaPatched;
+        }
+      } else {
+        await log("qa", "✅ QA: sin problemas de calidad detectados tras la edición.");
+      }
+    } catch (qaErr) {
+      logger.warn({ qaErr }, "edit-mode: QA Auditor falló, entregando bundle sin esta revisión adicional");
+    }
+
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
     log("system", "Empaquetando todo…");
-    return { ...result, frontendCode: fixedFrontend, backendCode: editedBackendCode };
+    return { ...result, frontendCode: finalFrontendAfterQa, backendCode: editedBackendCode };
   }
 
   // Phase gates
