@@ -3254,13 +3254,72 @@ export async function generateApp(
     });
 
     const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
-    // NOTA: si milestoneResult.platform === "mobile-native", este bundle es código
-    // React Native/Expo, no React web. runTestingAgent fue diseñado para proyectos
-    // web (Vitest/Playwright sobre Vite) — si no reconoce el código móvil, el
-    // try/catch de runPhase ya capturará el fallo y caerá al pipeline robusto
-    // estándar (mismo comportamiento de seguridad que el resto de este bloque).
-    // Mejora pendiente: un testing agent específico para Expo/React Native.
-    if (milestoneFrontend.length >= 200 && /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/.test(milestoneFrontend)) {
+    // ENCONTRADO en producción (cliente real, "FootballValue" — 21 hitos
+    // generados CON ÉXITO, incluidos 5 hitos de frontend distintos, pero el
+    // proyecto entero se descartó y cayó al pipeline robusto de fallback de
+    // todas formas) Y CAUSA RAÍZ CONFIRMADA tras investigar a fondo (no es
+    // una suposición): el prompt de generación NORMAL de frontend (no por
+    // hitos) exige explícitamente el archivo "src/App.tsx" con ese nombre
+    // fijo (confirmado en este mismo archivo, líneas ~193 y ~2126, y en
+    // buildMobileFrontendSystemPrompt para mobile-native) — pero el
+    // planificador POR HITOS (CoreOrchestrator.ts) describía el hito
+    // "FRONTEND CORE" de forma genérica ("layout, routing, componentes
+    // compartidos") SIN exigir ese nombre ni esa firma exacta, dejando al
+    // modelo libertad para llamar al componente raíz Main, Root, Layout,
+    // etc. — la regex de detección de abajo SIEMPRE habría fallado en ese
+    // caso, con o sin bug de extracción de archivo. CORREGIDO EN DOS
+    // FRENTES: (1) el prompt del hito FRONTEND CORE en CoreOrchestrator.ts
+    // ahora exige explícitamente "App.tsx" + "export default function
+    // App()", igual que los otros dos prompts de frontend del proyecto —
+    // arregla la causa para generaciones NUEVAS. (2) como red de seguridad
+    // para proyectos donde el modelo no siga la instrucción al 100% (o ya
+    // generados antes de este fix), la detección de abajo busca primero
+    // "App.tsx"/"App.jsx" con la firma exacta (caso ideal) y, si no
+    // aparece, intenta una segunda pasada más tolerante sobre el archivo de
+    // frontend MÁS LARGO del bundle (heurística razonable: el componente
+    // raíz con todo el routing/layout suele ser el archivo de frontend más
+    // grande) buscando cualquier "export default function <Nombre>" que
+    // contenga indicios de ser la raíz (uso de Router/Navigation/Routes).
+    const frontendFiles = milestoneFrontend.split("// === FILE: ").filter((f) => f.trim().length > 0);
+    const exactAppFile = frontendFiles.find((f) => f.includes("App.tsx") || f.includes("App.jsx") || f.includes("App.js"));
+    const ROOT_COMPONENT_PATTERN = /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/;
+    let hasRecognizableAppComponent = !!exactAppFile && ROOT_COMPONENT_PATTERN.test(exactAppFile);
+    if (!hasRecognizableAppComponent && frontendFiles.length > 0) {
+      // Red de seguridad: el archivo de frontend más largo + un export
+      // default que use Router/Navigation es una heurística razonable para
+      // identificar el componente raíz aunque no se llame literalmente "App".
+      const largestFile = frontendFiles.reduce((a, b) => (b.length > a.length ? b : a));
+      const hasDefaultExport = /export\s+default\s+function\s+\w+|export\s+default\s+\w+/.test(largestFile);
+      const looksLikeRoot = /Router|Navigation|Routes|NavigationContainer|BrowserRouter/.test(largestFile);
+      hasRecognizableAppComponent = hasDefaultExport && looksLikeRoot;
+    }
+    // INVESTIGADO (a petición del usuario, partiendo del comentario de
+    // abajo que decía "mejora pendiente: testing agent específico para
+    // Expo/React Native"): confirmado que runTestingAgent SÍ es compatible
+    // con código React Native/Expo real, sin necesitar un agente separado:
+    // (1) validateBundle (validate.ts) usa esbuild con packages:"external"
+    // — trata TODO paquete npm (react-native, expo, @react-navigation/*)
+    // como externo sin necesitar tenerlo instalado, así que es agnóstico
+    // de plataforma — solo verifica sintaxis JS/TS válida e imports
+    // relativos dentro del propio bundle. (2) La detección de "enlaces
+    // rotos" busca href="..." (atributo HTML) — en código RN real
+    // simplemente no hay ningún href, así que esa sección no encuentra
+    // coincidencias de forma natural, sin romper nada. (3) Confirmado en
+    // buildMobileFrontendSystemPrompt() (arriba en este archivo) que
+    // nuestro propio prompt YA exige generar App.tsx con la firma EXACTA
+    // "export default function App()" — el mismo patrón que ya busca la
+    // regex de abajo, así que no hace falta un patrón nuevo para Expo
+    // Router (que además no generamos: nuestro stack obligatorio es
+    // App.tsx + React Navigation, confirmado en el mismo prompt).
+    // CONCLUSIÓN: el problema real nunca fue la compatibilidad de
+    // runTestingAgent con RN — era el bug de extracción de archivo
+    // corregido arriba (buscar "App" en el bundle completo en vez de
+    // dentro de App.tsx específicamente), que afectaba a CUALQUIER
+    // plataforma (web o móvil) con varios archivos de frontend. Si
+    // runTestingAgent fallara de verdad con código RN por algún motivo no
+    // previsto, el try/catch de runPhase ya lo captura y cae al pipeline
+    // robusto estándar — red de seguridad que se mantiene sin cambios.
+    if (milestoneFrontend.length >= 200 && hasRecognizableAppComponent) {
       const testedMilestone = await runPhase("testing", () =>
         runTestingAgent(milestoneFrontend, {
           jobId: jobId || "unknown",

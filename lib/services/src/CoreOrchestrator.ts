@@ -41,7 +41,7 @@ ESTRUCTURA POR CAPAS — genera los hitos agrupados en estas capas, EN ESTE ORDE
 2. BACKEND CORE — autenticación, middleware, configuración base (helmet, cors, rate limit, logger, errors). 1 hito. targetWorkspace: "apps/api".
 3. BACKEND MODULES — un hito POR CADA módulo de negocio real (ej: en un ERP: facturación, inventario, clientes, RRHH, contabilidad serían hitos separados). Esto es lo que hace que un proyecto complejo se modele bien: no comprimas 5 módulos de negocio en 1 archivo. targetWorkspace: "apps/api".
 4. INTEGRATIONS — un hito por integración externa relevante si las hay (pagos, email, webhooks). targetWorkspace: "apps/api".
-5. FRONTEND CORE — layout, routing, componentes compartidos (Navbar, Sidebar, auth guard). 1-2 hitos. targetWorkspace: "apps/web".
+5. FRONTEND CORE — layout, routing, componentes compartidos (Navbar, Sidebar, auth guard). 1-2 hitos. targetWorkspace: "apps/web". OBLIGATORIO: uno de estos hitos debe generar el archivo "App.tsx" (exactamente ese nombre, en la raíz de src/) con la firma EXACTA "export default function App()" como componente raíz que monta el router y el layout — el sistema de testing automático busca específicamente este archivo y este patrón para validar el frontend generado; un nombre o firma distintos (Main, Root, Layout, etc.) hace que esa validación se omita aunque el código sea funcionalmente correcto.
 6. FRONTEND MODULES — un hito por cada área funcional del frontend que corresponda a un módulo de backend (dashboard, listados, formularios de cada módulo). targetWorkspace: "apps/web".
 7. DOCS — openapi.yaml documentando TODOS los endpoints reales generados en los hitos de backend. targetWorkspace: "apps/api".
 
