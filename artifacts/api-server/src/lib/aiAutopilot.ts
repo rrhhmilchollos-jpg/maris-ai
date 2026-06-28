@@ -137,12 +137,35 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
         ? `[ADMIN REPAIR] ${parsed.repairInstruction}\n\nPrompt original: ${cleanPrompt}`
         : `[ADMIN REPAIR] Corrige los errores que impidieron la generación anterior. Prompt original: ${cleanPrompt}`;
 
+      // ENCONTRADO en producción (cliente real, proyecto "club de swingers en
+      // Valencia"): cuando errorType="memory" (el modelo se quedó sin espacio
+      // de salida a mitad de un cambio grande en modo edición — el propio
+      // mensaje de error que ve el usuario dice literalmente "cambia al
+      // modelo de calidad desde el menú Modelo"), este bloque relanzaba el
+      // job de reparación con el MISMO coderModel ("claude-sonnet-4-6") que
+      // ya había demostrado no tener suficiente capacidad de salida para ese
+      // cambio. El repairInstruction que la IA generaba SÍ recomendaba
+      // fragmentar o subir de modelo, pero esa recomendación nunca se
+      // aplicaba de verdad al job — solo viajaba como texto dentro del
+      // prompt, sin cambiar ningún parámetro real. Resultado observado en
+      // logs reales: el job de reparación volvía a fallar exactamente por el
+      // mismo motivo (mismo stack trace, mismo "El cambio era demasiado
+      // grande"), y el ciclo se repetía indefinidamente sin que el usuario
+      // viera ningún avance.
+      // FIX: si el error que disparó esta reparación fue por memoria/tamaño
+      // de salida, forzamos el modelo de mayor capacidad (claude-opus-4-7)
+      // en el job de reparación — la misma acción que el sistema ya le
+      // recomienda hacer manualmente al usuario, ahora aplicada de verdad de
+      // forma automática. Para el resto de errorType (timeout, syntax,
+      // api_limit) se mantiene sonnet, que es el comportamiento original.
+      const repairCoderModel = parsed.errorType === "memory" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+
       await GenerationJob.create({
         _id: newJobId,
         userId: job.userId,
         prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-fix. ${repairPrompt}`,
         editAppId: baseAppId,
-        coderModel: "claude-sonnet-4-6",
+        coderModel: repairCoderModel,
         language: job.language || "typescript",
         kind: "edit",
         status: "queued", phase: "queued", progress: 0,
@@ -150,7 +173,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
         autoFixedFromJobId: jobId,
       });
       await enqueueGenerateJob(newJobId);
-      logger.info({ jobId, newJobId, strategy: parsed.fixStrategy }, "aiAutopilot: corrección automática lanzada");
+      logger.info({ jobId, newJobId, strategy: parsed.fixStrategy, repairCoderModel }, "aiAutopilot: corrección automática lanzada");
 
     } else if (parsed.fixStrategy === "regenerate" && !baseAppId) {
       // Regenerar desde cero
