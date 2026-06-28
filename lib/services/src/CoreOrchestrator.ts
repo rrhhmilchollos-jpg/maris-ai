@@ -178,7 +178,20 @@ export class CoreOrchestrator {
    * dinámico según la complejidad, agrupados por capas con dependencias.
    */
   async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {
-    const response = await anthropic.messages.create({
+    // ENCONTRADO en producción (cliente real atascado, error confirmado en
+    // el log exacto de Railway con stack trace completo): "Streaming is
+    // required for operations that may take longer than 10 minutes" — un
+    // rechazo duro del SDK de Anthropic en TypeScript (no del backend) para
+    // llamadas NO-streaming cuando max_tokens es alto, porque ese tipo de
+    // llamada puede tardar más de los 10 minutos que soporta una conexión
+    // HTTP normal sin streaming. Subir max_tokens (necesario para evitar el
+    // truncamiento del JSON, corregido en un fix anterior) hizo este error
+    // más probable, no menos. FIX: .stream({...}).finalMessage() — devuelve
+    // exactamente el mismo objeto Message completo que .create(), con la
+    // única diferencia de que usa Server-Sent Events por debajo (mantiene
+    // la conexión viva con eventos en vez de esperar en silencio), evitando
+    // el límite de 10 minutos sin cambiar nada del resto de esta función.
+    const response = await anthropic.messages.stream({
       model: this.options.model!,
       // ENCONTRADO en producción: 4000 tokens (luego subido a 8000) seguían
       // resultando insuficientes para planificar proyectos verdaderamente
@@ -198,7 +211,7 @@ export class CoreOrchestrator {
       max_tokens: 24000,
       system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userPrompt }],
-    });
+    }).finalMessage();
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}';
     const cleanedJson = this.cleanJsonResponse(rawText);
@@ -247,7 +260,11 @@ export class CoreOrchestrator {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        const response = await anthropic.messages.create({
+        // Mismo motivo que en planMonorepoProject (ver el comentario
+        // detallado de arriba): .stream().finalMessage() en vez de
+        // .create() evita el rechazo "Streaming is required..." del SDK
+        // para llamadas largas, sin cambiar el objeto Message devuelto.
+        const response = await anthropic.messages.stream({
           model: this.options.model!,
           max_tokens: 8192,
           system: [
@@ -258,7 +275,7 @@ export class CoreOrchestrator {
             role: "user",
             content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
           }],
-        });
+        }).finalMessage();
         const code = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
         if (code) return { ...milestone, code };
         throw new Error("Respuesta vacía del modelo");
