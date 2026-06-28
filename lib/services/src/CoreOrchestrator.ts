@@ -140,9 +140,23 @@ export class CoreOrchestrator {
   }
 
   private cleanJsonResponse(text: string): string {
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonMatch && jsonMatch[1]) return jsonMatch[1].trim();
-    return text.trim();
+    // ENCONTRADO en producción (job 6a41707651a370bb964b513d y varios más,
+    // mismo error repetido 5 veces consecutivas hasta agotar reintentos):
+    // la regex original solo reconocía un bloque ```json ... ``` CERRADO.
+    // Cuando la respuesta del planificador se trunca por max_tokens antes
+    // de llegar al ``` de cierre (proyectos muy complejos, como
+    // "FootballValue" con scraping+ML+múltiples módulos de apuestas), la
+    // regex no encontraba coincidencia y el código caía a `text.trim()`,
+    // devolviendo el texto CON el prefijo ```json todavía pegado —
+    // JSON.parse fallaba con "Unexpected token '`'" de forma determinista
+    // en cada uno de los 5 reintentos automáticos, porque la causa (el
+    // texto truncado) era la misma cada vez. Ahora se quita el prefijo
+    // ```json (o ```) exista o no el cierre, y se quita un ``` de cierre
+    // solo si está presente.
+    let cleaned = text.trim();
+    cleaned = cleaned.replace(/^```(?:json)?\s*/, "");
+    cleaned = cleaned.replace(/\s*```\s*$/, "");
+    return cleaned.trim();
   }
 
   /**
@@ -152,7 +166,14 @@ export class CoreOrchestrator {
   async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {
     const response = await anthropic.messages.create({
       model: this.options.model!,
-      max_tokens: 4000,
+      // ENCONTRADO en producción: 4000 tokens resultaban insuficientes para
+      // planificar proyectos "ultra complejos" (score >= 10, ej. un tipster
+      // deportivo con scraping + ML + múltiples módulos de apuestas +
+      // frontend) — la respuesta se truncaba a mitad del JSON antes de
+      // cerrar el bloque ```json, causando el bug de parseo corregido
+      // arriba en cleanJsonResponse. Aumentado a un valor que da margen
+      // real para listar todos los hitos con sus dependencias sin cortar.
+      max_tokens: 8000,
       system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userPrompt }],
     });
