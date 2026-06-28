@@ -12,6 +12,7 @@ import sitemapRouter from "./routes/sitemap";
 import videoRouter from "./routes/video";
 import watermarkRouter from "./routes/watermark";
 import mcpIntegrationsRouter from "./routes/mcpIntegrations";
+import workflowsRouter from "./routes/workflows";
 import { vivaWebhookRouter } from "./routes/vivaWebhook";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
@@ -318,6 +319,7 @@ app.use("/", sitemapRouter);
 app.use("/api", videoRouter);
 app.use("/api", watermarkRouter);
 app.use("/api", mcpIntegrationsRouter);
+app.use("/api", workflowsRouter);
 app.use("/api", vivaWebhookRouter);
 
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)

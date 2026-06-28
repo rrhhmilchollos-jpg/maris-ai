@@ -646,6 +646,100 @@ const NewsArticleSchema = new Schema<INewsArticle>(
 export const NewsArticle: Model<INewsArticle> =
   mongoose.models.NewsArticle || mongoose.model<INewsArticle>("NewsArticle", NewsArticleSchema);
 
+// ─── Workflows (motor de automatización visual, tipo n8n, por app) ──────────
+// Cada app generada puede tener sus propios flujos privados — disparador
+// (evento de negocio o webhook entrante) → nodos de acción/condición/bucle/
+// transformación → efectos (llamar URL externa, webhook saliente ya
+// existente, email, etc.). El grafo en sí (nodos + conexiones) se guarda como
+// JSON flexible porque su forma evoluciona con el editor visual; los campos
+// de control (estado, app, nombre) sí están tipados para poder indexar y
+// filtrar sin tener que parsear el JSON.
+export type WorkflowNodeType =
+  | "trigger" | "action" | "condition" | "loop" | "transform" | "delay" | "webhook-out";
+
+export interface IWorkflowNode {
+  id: string;
+  type: WorkflowNodeType;
+  position: { x: number; y: number };
+  data: Record<string, unknown>; // forma específica según el tipo de nodo — validada en el motor de ejecución, no aquí, para no acoplar el esquema de DB a cada tipo de nodo
+}
+
+export interface IWorkflowEdge {
+  id: string;
+  source: string; // id de IWorkflowNode
+  target: string;
+  sourceHandle?: string; // para nodos con múltiples salidas (ej. condition: "true"/"false"; loop: "each"/"done")
+}
+
+export interface IWorkflow extends Document {
+  appId: string; // referencia a GeneratedApp — los flujos son privados por app, nunca compartidos entre apps de distintos usuarios
+  userId: string;
+  name: string;
+  description?: string;
+  active: boolean;
+  nodes: IWorkflowNode[];
+  edges: IWorkflowEdge[];
+  triggerEventType?: string; // ej. "pedido.creado" — coincide con los eventType de dispatchWebhookEvent ya generados en el backend de la app
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const WorkflowSchema = new Schema<IWorkflow>(
+  {
+    appId: { type: String, required: true, ref: "GeneratedApp", index: true },
+    userId: { type: String, required: true, index: true },
+    name: { type: String, required: true },
+    description: { type: String },
+    active: { type: Boolean, default: false },
+    nodes: { type: [{ type: Schema.Types.Mixed }], default: [] },
+    edges: { type: [{ type: Schema.Types.Mixed }], default: [] },
+    triggerEventType: { type: String },
+  },
+  { timestamps: true },
+);
+
+export const Workflow: Model<IWorkflow> =
+  mongoose.models.Workflow || mongoose.model<IWorkflow>("Workflow", WorkflowSchema);
+
+// ─── Workflow Runs (historial de ejecuciones, para depuración real) ─────────
+export interface IWorkflowNodeRunLog {
+  nodeId: string;
+  status: "success" | "error" | "skipped";
+  startedAt: Date;
+  finishedAt?: Date;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+}
+
+export interface IWorkflowRun extends Document {
+  workflowId: string;
+  appId: string;
+  status: "running" | "success" | "error";
+  triggerPayload?: unknown;
+  nodeLogs: IWorkflowNodeRunLog[];
+  startedAt: Date;
+  finishedAt?: Date;
+  error?: string;
+}
+
+const WorkflowRunSchema = new Schema<IWorkflowRun>(
+  {
+    workflowId: { type: String, required: true, ref: "Workflow", index: true },
+    appId: { type: String, required: true, index: true },
+    status: { type: String, enum: ["running", "success", "error"], default: "running" },
+    triggerPayload: { type: Schema.Types.Mixed },
+    nodeLogs: { type: [{ type: Schema.Types.Mixed }], default: [] },
+    startedAt: { type: Date, default: Date.now },
+    finishedAt: { type: Date },
+    error: { type: String },
+  },
+  { timestamps: true },
+);
+
+export const WorkflowRun: Model<IWorkflowRun> =
+  mongoose.models.WorkflowRun || mongoose.model<IWorkflowRun>("WorkflowRun", WorkflowRunSchema);
+
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 
