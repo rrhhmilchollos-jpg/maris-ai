@@ -21,9 +21,16 @@ import { logger } from "../lib/logger";
 export const vivaWebhookRouter = Router();
 
 const VIVA_IS_PRODUCTION = process.env.NODE_ENV === "production" && process.env.VIVA_USE_DEMO !== "true";
-const VIVA_API_URL = VIVA_IS_PRODUCTION
-  ? "https://api.vivapayments.com"
-  : "https://demo-api.vivapayments.com";
+// IMPORTANTE: el endpoint de verificación de webhooks vive en un dominio
+// DISTINTO al de la API de pagos (api.vivapayments.com, usado en
+// lib/vivaPayments.ts para crear órdenes y verificar transacciones).
+// CONFIRMADO contra el código fuente real del paquete oficial de la
+// comunidad (sebdesign/laravel-viva-payments, Client::PRODUCTION_URL) tras
+// que la URL api.vivapayments.com/api/messages/config/token devolviera
+// 404 real en producción — esa ruta simplemente no existe en ese dominio.
+const VIVA_WEBHOOK_BASE_URL = VIVA_IS_PRODUCTION
+  ? "https://www.vivapayments.com"
+  : "https://demo.vivapayments.com";
 
 /**
  * GET /api/webhooks/viva — usado por Viva.com solo durante el paso de
@@ -42,7 +49,7 @@ vivaWebhookRouter.get("/webhooks/viva", async (_req: Request, res: Response) => 
     }
 
     const basicAuth = Buffer.from(`${merchantId}:${apiKey}`).toString("base64");
-    const tokenRes = await fetch(`${VIVA_API_URL}/api/messages/config/token`, {
+    const tokenRes = await fetch(`${VIVA_WEBHOOK_BASE_URL}/api/messages/config/token`, {
       headers: { Authorization: `Basic ${basicAuth}` },
     });
     if (!tokenRes.ok) {
