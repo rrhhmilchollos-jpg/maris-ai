@@ -52,7 +52,7 @@ export interface EmergentArchitectBlueprint {
   dataModels: Array<{ name: string; fields: string[]; relations?: string[] }>;
   apiEndpoints: Array<{ method: string; path: string; purpose: string }>;
   backendNeeded: boolean;
-  database?: "mongodb" | "postgresql";
+  database?: "mongodb" | "postgresql" | "mysql";
   techStack: string[];
   frontendFiles: string[];
   backendFiles: string[];
@@ -113,7 +113,7 @@ PROCESO:
 4. Define la jerarquía de componentes y páginas
 5. Evalúa la complejidad real del proyecto
 6. Decide si se necesita backend (sé agresivo: cualquier app con usuarios, datos persistentes, pagos o APIs externas NECESITA backend)
-7. Si hay backend, elige la base de datos: MongoDB o PostgreSQL (ver criterio abajo)
+7. Si hay backend, elige la base de datos: MongoDB, PostgreSQL o MySQL (ver criterio abajo)
 
 CRITERIO PARA ELEGIR BASE DE DATOS (campo "database"):
 Usa "postgresql" cuando el proyecto tenga CUALQUIERA de estas características:
@@ -121,8 +121,9 @@ Usa "postgresql" cuando el proyecto tenga CUALQUIERA de estas características:
 - Necesidad de transacciones atómicas multi-tabla (ej: pagos, reservas con bloqueo de inventario, transferencias de saldo)
 - Datos tabulares con muchos JOINs esperados (ej: reporting, BI, dashboards analíticos complejos)
 - complexity es "advanced" o "enterprise" Y el dominio es financiero, de inventario, o de gestión empresarial (ERP-like)
+Usa "mysql" únicamente cuando el usuario pida explícitamente MySQL/MariaDB, o el proyecto deba integrarse con un sistema empresarial existente que ya use MySQL (ERPs/CRMs heredados, WordPress/WooCommerce, hosting compartido tipo cPanel) — sin esa señal explícita, prefiere "postgresql" para casos relacionales.
 Usa "mongodb" en el resto de casos (por defecto): contenido flexible, prototipos, blogs, catálogos simples, SaaS estándar, apps sociales, dashboards básicos, CRMs ligeros.
-Ante la duda, prefiere "mongodb" — es la opción por defecto de la plataforma y la más probada. Solo eligas "postgresql" cuando el criterio anterior aplique claramente.
+Ante la duda, prefiere "mongodb" — es la opción por defecto de la plataforma y la más probada. Solo eligas "postgresql" o "mysql" cuando el criterio anterior aplique claramente.
 
 REGLAS CRÍTICAS:
 - Genera TODOS los archivos necesarios en frontendFiles (no solo los principales)
