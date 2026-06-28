@@ -1099,12 +1099,39 @@ router.post("/admin/e2b-toggle", (req, res) => {
 router.post("/admin/users/:id/send-compensation-email", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const targetId = req.params.id;
-  const { subject, message, creditsAdded } = req.body;
+  const { subject, message, creditsAdded, attachment } = req.body;
 
   const user = await User.findById(targetId).lean();
   if (!user) {
     res.status(404).json({ error: "Usuario no encontrado" });
     return;
+  }
+
+  // Validación del adjunto del LADO DEL SERVIDOR — nunca confiar solo en el
+  // límite ya aplicado en el cliente (admin.tsx, 5MB). attachment.content ya
+  // viene en base64 desde el frontend (FileReader.readAsDataURL), así que el
+  // tamaño real en bytes es aproximadamente content.length * 0.75.
+  let validAttachment: { filename: string; content: string } | undefined;
+  if (attachment && typeof attachment.content === "string" && typeof attachment.filename === "string") {
+    const approxBytes = (attachment.content.length * 3) / 4;
+    // ENCONTRADO: express.json() en app.ts está configurado con limit:"2mb"
+    // para TODO el body de la petición — el adjunto en base64 comparte ese
+    // límite con el resto del JSON (asunto, mensaje, etc.), así que el techo
+    // real aquí es más bajo que el límite de 40MB de Resend. Se deja un
+    // margen prudente por debajo de los 2MB del límite global de Express
+    // para no fallar con un error genérico de "payload too large" antes de
+    // llegar siquiera a esta validación — si en el futuro se necesitan
+    // capturas más grandes, hay que subir TAMBIÉN el limit de express.json,
+    // no solo este número.
+    const MAX_ATTACHMENT_BYTES = 1.5 * 1024 * 1024;
+    if (approxBytes > MAX_ATTACHMENT_BYTES) {
+      res.status(400).json({ error: "El adjunto supera el tamaño máximo permitido (1.5MB)." });
+      return;
+    }
+    // Saneamos el nombre de archivo — evita inyectar caracteres extraños en
+    // la cabecera del adjunto que Resend reciba.
+    const safeFilename = attachment.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 150) || "captura.png";
+    validAttachment = { filename: safeFilename, content: attachment.content };
   }
 
   const recipientEmail = user.email;
@@ -1163,6 +1190,7 @@ router.post("/admin/users/:id/send-compensation-email", async (req: any, res: an
           to: [recipientEmail],
           subject: emailSubject,
           html: htmlBody,
+          ...(validAttachment ? { attachments: [validAttachment] } : {}),
         }),
       });
       if (response.ok) {

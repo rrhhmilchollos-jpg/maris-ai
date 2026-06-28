@@ -58,7 +58,7 @@ import {
   ChevronDown, ChevronUp, History, DollarSign, Lock, Unlock, Loader2,
   StickyNote, Send, ExternalLink, Wallet, ArrowUpRight, ArrowDownRight,
   Globe, Mail, Calendar, Hash, Cpu, ChevronRight, AlertCircle, CheckCircle,
-  Zap, TrendingUp, TrendingDown, Star, Wifi,
+  Zap, TrendingUp, TrendingDown, Star, Wifi, Paperclip,
 } from "lucide-react";
 
 type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news" | "presence";
@@ -273,7 +273,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [refundDialog, setRefundDialog] = useState<{ user: AdminUser; amount: number; reason: string } | null>(null);
   const [stripeRefundDialog, setStripeRefundDialog] = useState<{ user: AdminUser; sessionId: string; amount: number; reason: string } | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
-  const [emailDialog, setEmailDialog] = useState<{ user: AdminUser; subject: string; message: string; creditsAdded: number } | null>(null);
+  const [emailDialog, setEmailDialog] = useState<{ user: AdminUser; subject: string; message: string; creditsAdded: number; attachment?: { filename: string; content: string } } | null>(null);
   const [emailSending, setEmailSending] = useState(false);
   const [newNote, setNewNote] = useState("");
 
@@ -1432,6 +1432,62 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                     min={0}
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label>Captura de pantalla (opcional)</Label>
+                  {emailDialog.attachment ? (
+                    <div className="flex items-center justify-between gap-2 bg-black/20 border border-white/10 rounded-md px-3 py-2">
+                      <span className="flex items-center gap-2 text-sm text-white truncate">
+                        <Paperclip className="h-4 w-4 text-violet-400 shrink-0" />
+                        {emailDialog.attachment.filename}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 shrink-0"
+                        onClick={() => setEmailDialog({ ...emailDialog, attachment: undefined })}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-2 bg-black/20 border border-dashed border-white/15 hover:border-violet-500/50 rounded-md px-3 py-3 text-sm text-muted-foreground cursor-pointer transition-colors">
+                      <Plus className="h-4 w-4" />
+                      Adjuntar captura de la app generada (máx. 1.5MB)
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file) return;
+                          // Límite real del servidor: express.json() está
+                          // configurado con limit:"2mb" para TODO el body de
+                          // la petición (admin.ts) — 1.5MB de margen aquí
+                          // evita que el cliente acepte un archivo que el
+                          // servidor luego rechazaría.
+                          if (file.size > 1.5 * 1024 * 1024) {
+                            toast({ title: 'Archivo demasiado grande', description: 'Máximo 1.5MB para la captura.', variant: 'destructive' });
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            const dataUrl = reader.result as string;
+                            // dataUrl viene como "data:image/png;base64,XXXX" — Resend
+                            // solo quiere el contenido base64 puro, sin el prefijo.
+                            const base64Content = dataUrl.split(',')[1] || '';
+                            setEmailDialog((prev) => prev ? {
+                              ...prev,
+                              attachment: { filename: file.name, content: base64Content },
+                            } : prev);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             )}
             <DialogFooter>
@@ -1450,6 +1506,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         subject: emailDialog.subject,
                         message: emailDialog.message,
                         creditsAdded: emailDialog.creditsAdded || undefined,
+                        attachment: emailDialog.attachment || undefined,
                       }),
                     });
                     toast({
