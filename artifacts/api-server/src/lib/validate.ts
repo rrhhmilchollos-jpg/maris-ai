@@ -52,6 +52,57 @@ function detectWouterAnchorNesting(
   return issues;
 }
 
+/**
+ * esbuild's `packages: "external"` (necesario para validar solo el código del
+ * usuario, no si los paquetes npm existen) significa que esbuild NUNCA puede
+ * detectar "esta función no existe en este paquete real" — solo valida
+ * sintaxis. CASO REAL ENCONTRADO EN PRODUCCIÓN (app "MesaYa"): un archivo
+ * importaba `useNavigate` de "wouter" (existe en react-router-dom, no en
+ * wouter) — esbuild lo validaba como sintácticamente correcto, todos los
+ * ciclos de reparación automática lo daban por bueno, y la app crasheaba en
+ * el navegador real con "module does not provide an export named...". El
+ * error pasó completamente desapercibido por todas las validaciones
+ * automáticas durante DOS reparaciones distintas, hasta que un humano abrió
+ * el preview real.
+ *
+ * Esta función mantiene una lista corta y de mantenimiento bajo de
+ * confusiones conocidas y confirmadas entre paquetes similares — no intenta
+ * resolver tipos reales de cada paquete (sería mucho más caro y complejo),
+ * solo atrapa los patrones específicos que YA hemos visto romper apps reales.
+ */
+const KNOWN_BAD_PACKAGE_IMPORTS: Array<{ pattern: RegExp; message: string }> = [
+  {
+    pattern: /import\s*\{[^}]*\buseNavigate\b[^}]*\}\s*from\s*["']wouter["']/,
+    message: "useNavigate does not exist in \"wouter\" (it's from react-router-dom). Use: const [, setLocation] = useLocation(); then setLocation(\"/path\") instead of navigate(\"/path\").",
+  },
+  {
+    pattern: /import\s*\{[^}]*\buseHistory\b[^}]*\}\s*from\s*["']wouter["']/,
+    message: "useHistory does not exist in \"wouter\" (it's from react-router-dom v5). Use: const [, setLocation] = useLocation(); then setLocation(\"/path\") to navigate.",
+  },
+  {
+    pattern: /import\s*\{[^}]*\buseParams\b[^}]*\}\s*from\s*["']wouter["']/,
+    message: "useParams does not exist in \"wouter\" (it's from react-router-dom). Use: const [match, params] = useRoute(\"/path/:id\"); then params.id.",
+  },
+];
+
+function detectKnownBadPackageImports(
+  vfs: Record<string, string>,
+): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx?$/.test(file)) continue;
+    for (const { pattern, message } of KNOWN_BAD_PACKAGE_IMPORTS) {
+      const m = pattern.exec(contents);
+      if (m) {
+        const line = contents.slice(0, m.index).split("\n").length;
+        issues.push({ file, line, message });
+      }
+    }
+    if (issues.length > 10) return issues;
+  }
+  return issues;
+}
+
 const SKIP_PREFIXES = ["tests/", "e2e/", "__tests__/", "test/"];
 const SKIP_EXACT = new Set([
   "package.json",
@@ -298,6 +349,12 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // with "Failed to execute 'removeChild' on 'Node'" and silently empties
     // the page. Catch the pattern statically so the patcher can fix it.
     issues.push(...detectWouterAnchorNesting(vfs));
+    // Same idea, different failure mode: imports that exist in a similar,
+    // more popular package (react-router-dom) but NOT in the package this
+    // bundle actually uses (wouter) — esbuild's packages:"external" means it
+    // never resolves real exports, so this slips through silently and only
+    // surfaces as a runtime crash in the real browser.
+    issues.push(...detectKnownBadPackageImports(vfs));
 
     const ok = issues.length === 0;
     logger.info({ ok, issuesCount: issues.length, duration: Date.now() - started }, "VALIDATOR: Finalizado con éxito.");
