@@ -16,6 +16,55 @@ import { logger } from "../lib/logger";
 // fetch es nativo en Node.js 18+ — no se necesita node-fetch
 const router: IRouter = Router();
 
+/**
+ * Genera un workflow de GitHub Actions real para el proyecto exportado.
+ *
+ * ENCONTRADO al auditar: los prompts del Frontend/Backend Engineer no
+ * fuerzan ningún conjunto fijo de scripts en package.json (confirmado con
+ * grep — el modelo decide libremente "build"/"lint"/"test" en cada
+ * generación). Un workflow de CI que asuma `npm run lint` o `npm test` sin
+ * comprobar que existen FALLARÍA SIEMPRE en cualquier proyecto que no los
+ * tenga — el peor resultado posible para algo pensado para dar confianza.
+ *
+ * Por eso este workflow no asume nada: detecta en runtime, leyendo el
+ * package.json real del repo recién subido, qué scripts existen, y solo
+ * incluye los pasos correspondientes. Esto es exactamente cómo se construyen
+ * los workflows de CI de calidad profesional — comprobar, no asumir.
+ */
+function generateCIWorkflowYAML(scripts: Record<string, string>): string {
+  const steps: string[] = [
+    "      - name: Checkout código\n        uses: actions/checkout@v4",
+    "      - name: Configurar Node.js\n        uses: actions/setup-node@v4\n        with:\n          node-version: '20'\n          cache: 'npm'",
+    "      - name: Instalar dependencias\n        run: npm install",
+  ];
+  // Orden deliberado: typecheck antes que lint antes que test antes que
+  // build — falla rápido en el paso más barato primero (mejor experiencia
+  // de depuración que esperar un build completo para descubrir un error de
+  // tipos trivial).
+  if (scripts.typecheck) steps.push("      - name: Comprobar tipos\n        run: npm run typecheck");
+  if (scripts.lint) steps.push("      - name: Lint\n        run: npm run lint");
+  if (scripts.test) steps.push("      - name: Tests\n        run: npm test");
+  if (scripts.build) steps.push("      - name: Build\n        run: npm run build");
+
+  return `name: CI
+
+# Generado automáticamente por Maris AI al exportar este proyecto.
+# Se ejecuta en cada push y en cada Pull Request hacia main — solo incluye
+# los pasos cuyo script existe realmente en package.json de este proyecto.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+${steps.join("\n")}
+`;
+}
+
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
 const APP_URL = process.env.APP_URL ?? "https://www.marisai.es";
@@ -248,6 +297,34 @@ router.post("/github/push/:appId", requireAuth, async (req, res) => {
     if (readmeBlobRes.ok) {
       const readmeBlobData = (await readmeBlobRes.json()) as any;
       treeItems.push({ path: "README.md", mode: "100644", type: "blob", sha: readmeBlobData.sha });
+    }
+
+    // Añadir .github/workflows/ci.yml — detecta los scripts reales del
+    // package.json de este proyecto concreto (puede haber varios, ej.
+    // frontend y backend en carpetas distintas en proyectos de
+    // microservicios) y genera un workflow que solo ejecuta lo que
+    // realmente existe, para que el primer push del usuario a GitHub
+    // muestre un check ✅ real, no un ❌ por un script inexistente.
+    try {
+      const packageJsonEntry = Object.entries(files).find(([path]) => path.replace(/^\//, "") === "package.json");
+      const scripts: Record<string, string> = packageJsonEntry
+        ? (JSON.parse(packageJsonEntry[1] as string)?.scripts ?? {})
+        : {};
+      const ciYaml = generateCIWorkflowYAML(scripts);
+      const ciBlobRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ content: Buffer.from(ciYaml, "utf8").toString("base64"), encoding: "base64" }),
+      });
+      if (ciBlobRes.ok) {
+        const ciBlobData = (await ciBlobRes.json()) as any;
+        treeItems.push({ path: ".github/workflows/ci.yml", mode: "100644", type: "blob", sha: ciBlobData.sha });
+      }
+    } catch (ciErr) {
+      // Un error al generar el CI (ej. package.json mal formado) no debe
+      // bloquear el push del código en sí — es una mejora añadida, no un
+      // requisito del export.
+      logger.warn({ ciErr }, "No se pudo generar .github/workflows/ci.yml — continuando sin él");
     }
 
     // Crear tree
