@@ -77,7 +77,7 @@ router.post("/watermark/:appId/remove", requireAuth, async (req: Request, res: R
           quantity: 1,
         },
       ],
-      success_url: `${process.env.MARIS_AI_PUBLIC_URL}/app/${appId}?watermark_removed=true`,
+      success_url: `${process.env.MARIS_AI_PUBLIC_URL}/app/${appId}?watermark_removed=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.MARIS_AI_PUBLIC_URL}/app/${appId}?watermark_cancelled=true`,
       metadata: {
         appId: appId.toString(),

@@ -57,6 +57,7 @@ export function generateWatermarkCSS(config: WatermarkConfig = DEFAULT_WATERMARK
       color: #0066cc;
       text-decoration: none;
       margin-left: 4px;
+      pointer-events: auto;
     }
 
     .maris-ai-watermark a:hover {
@@ -78,7 +79,7 @@ export function generateWatermarkCSS(config: WatermarkConfig = DEFAULT_WATERMARK
 export function generateWatermarkHTML(removeWatermarkUrl?: string): string {
   return `
     <div class="maris-ai-watermark">
-      Hecho con <strong>Maris AI</strong>
+      Hecho con <a href="https://www.marisai.es" target="_blank" rel="noopener" style="font-weight:700">Maris AI</a>
       ${removeWatermarkUrl ? `<a href="${removeWatermarkUrl}" target="_blank">Eliminar</a>` : ""}
     </div>
   `;

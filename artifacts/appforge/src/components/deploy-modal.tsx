@@ -28,6 +28,7 @@ import {
   ChevronDown,
   KeyRound,
   ChevronUp,
+  Tag,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch, getGetMyStatsQueryKey } from "@/lib/api-client";
@@ -207,6 +208,11 @@ export function DeployModal({
   /* ── Env vars ── */
   const [envExpanded, setEnvExpanded] = useState(false);
 
+  /* ── Watermark removal ── */
+  const [watermarkHasMark, setWatermarkHasMark] = useState<boolean | null>(null);
+  const [watermarkPrice, setWatermarkPrice] = useState<number>(9.99);
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
+
   /* ── Fetch deployment status on mount ── */
   useEffect(() => {
     apiFetch<DeploymentStatusResponse>(`/api/apps/${appId}/deployment-status`)
@@ -220,6 +226,52 @@ export function DeployModal({
       })
       .catch(() => {});
   }, [appId]);
+
+  /* ── Fetch watermark status on mount ── */
+  useEffect(() => {
+    apiFetch<{ hasWatermark: boolean; watermarkRemovalPrice: number }>(`/api/watermark/${appId}/status`)
+      .then((d) => {
+        setWatermarkHasMark(d.hasWatermark);
+        setWatermarkPrice(d.watermarkRemovalPrice ?? 9.99);
+      })
+      .catch(() => {});
+  }, [appId]);
+
+  /* ── Watermark removal: abre Stripe Checkout ── */
+  const handleRemoveWatermark = useCallback(async () => {
+    setWatermarkLoading(true);
+    try {
+      const data = await apiFetch<{ sessionUrl?: string; error?: string }>(`/api/watermark/${appId}/remove`, { method: "POST" });
+      if (data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+      } else {
+        throw new Error(data.error || "No se pudo iniciar el pago");
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "No se pudo iniciar el pago", variant: "destructive" });
+    } finally {
+      setWatermarkLoading(false);
+    }
+  }, [appId, toast]);
+
+  /* ── Watermark removal: verificar tras volver de Stripe ── */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("watermark_removed") !== "true") return;
+    const sessionId = params.get("session_id");
+    if (!sessionId) return;
+    apiFetch<{ success: boolean; hasWatermark: boolean }>(`/api/watermark/${appId}/verify-removal`, {
+      method: "POST",
+      body: JSON.stringify({ sessionId }),
+    })
+      .then((d) => {
+        if (d.success) {
+          setWatermarkHasMark(false);
+          toast({ title: "✅ Marca de agua eliminada", description: "Tu app ya no muestra 'Hecho con Maris AI'." });
+        }
+      })
+      .catch(() => {});
+  }, [appId, toast]);
 
   /* ── Initial deploy ── */
   const handleInitialDeploy = useCallback(async () => {
@@ -675,6 +727,39 @@ export function DeployModal({
                   <Lock className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                   <p className="text-xs text-yellow-400">Actualiza tu plan para conectar tu propio dominio</p>
                 </div>
+              )}
+            </div>
+
+            {/* Watermark removal */}
+            <div className="border-b border-white/[0.07] px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.04]">
+                  <Tag className={`h-4 w-4 ${watermarkHasMark === false ? "text-emerald-400" : "text-[#c084fc]"}`} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-white">Marca de agua "Hecho con Maris AI"</p>
+                  {watermarkHasMark === false ? (
+                    <p className="text-xs text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />Eliminada — tu app no la muestra
+                    </p>
+                  ) : (
+                    <p className="text-xs text-white/35">Tu app muestra "Hecho con Maris AI" en una esquina</p>
+                  )}
+                </div>
+                {watermarkHasMark !== false && (
+                  <button
+                    onClick={handleRemoveWatermark}
+                    disabled={watermarkLoading || watermarkHasMark === null}
+                    className="rounded-lg bg-[#7c3aed] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
+                  >
+                    {watermarkLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Eliminar por ${watermarkPrice.toFixed(2)}€`}
+                  </button>
+                )}
+              </div>
+              {watermarkHasMark !== false && (
+                <p className="mt-2.5 text-xs text-white/25">
+                  Pago único. Tu app deja de mostrar la marca de agua y el enlace a Maris AI permanentemente.
+                </p>
               )}
             </div>
 

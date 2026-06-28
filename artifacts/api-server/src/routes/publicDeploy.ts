@@ -150,6 +150,14 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
       title: row.title,
       slug,
       kind: row.kind,
+      // ENCONTRADO: el sistema de watermark.ts existía completo (CSS, HTML,
+      // lógica de cuándo mostrarlo) pero nunca se conectaba aquí — ninguna
+      // app pública mostraba realmente la marca de agua "Hecho con Maris
+      // AI" ni generaba el backlink real a marisai.es. shouldHaveWatermark
+      // ya decide correctamente: oculta para apps que ya pagaron por
+      // quitarla (row.hasWatermark === false tras el pago).
+      hasWatermark: (row as any).hasWatermark !== false,
+      removeWatermarkUrl: `https://www.marisai.es/dashboard?app=${String((row as any)._id)}`,
     });
     res.setHeader("Cache-Control", "no-store, max-age=0");
     res.setHeader("Content-Type", "text/html; charset=utf-8");

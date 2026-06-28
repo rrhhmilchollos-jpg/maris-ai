@@ -1,6 +1,7 @@
 import * as esbuild from "esbuild";
 import { randomInt } from "node:crypto";
 import { bundleToFiles } from "./exportZip";
+import { injectWatermarkToHTML } from "./watermark";
 
 /**
  * Bundles the generated frontend into a single self-contained HTML page that
@@ -33,6 +34,18 @@ export async function buildDeployHtml(opts: {
    * paths (ZIP / GitHub / Vercel).
    */
   kind?: string | null;
+  /**
+   * Si es true, inyecta la marca de agua "Hecho con Maris AI" (con enlace
+   * real a marisai.es) antes de </body>. ENCONTRADO: todo el sistema de
+   * watermark.ts (CSS, HTML, lógica shouldHaveWatermark) existía completo
+   * y bien construido, pero injectWatermarkToHTML nunca se llamaba desde
+   * ningún punto real del flujo de deploy — ninguna app generada, de
+   * ningún cliente, mostraba nunca la marca de agua ni generaba el
+   * backlink real a marisai.es que se pretendía con este sistema.
+   */
+  hasWatermark?: boolean;
+  /** URL a la que apunta el botón "Eliminar" del watermark (página de pago). */
+  removeWatermarkUrl?: string;
 }): Promise<string> {
   if (isNonJsKindLocal(opts.kind)) {
     return buildNonJsLandingHtml({
@@ -426,10 +439,15 @@ ${code}
 
   // Limpiar referencias a assets externos incorrectos (marisai.es/assets)
   // que pueden aparecer si el bundle fue desplegado previamente en Vercel
-  return html.replace(
+  const cleanedHtml = html.replace(
     /<link[^>]+href="https?:\/\/(?:www\.)?marisai\.es\/assets\/[^"]*"[^>]*>/gi,
     "<!-- asset eliminado -->"
   );
+
+  if (opts.hasWatermark) {
+    return injectWatermarkToHTML(cleanedHtml, undefined, opts.removeWatermarkUrl);
+  }
+  return cleanedHtml;
 }
 
 function pickEntry(vfs: Record<string, string>): string | null {
