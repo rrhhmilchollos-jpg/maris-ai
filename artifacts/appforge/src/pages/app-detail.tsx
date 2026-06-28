@@ -27,6 +27,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { DeployModal } from "@/components/deploy-modal";
 import { WorkflowListPanel } from "@/components/workflow-list-panel";
+import { StressTestModal } from "@/components/stress-test-modal";
 import { GitHubButton } from "@/components/github-button";
 import { LivePreview } from "@/components/live-preview";
 import { parseBundle } from "@/lib/parseBundle";
@@ -58,6 +59,7 @@ import {
   Zap,
   Share2,
   Workflow as WorkflowIcon,
+  Activity,
   Rocket,
   RefreshCcw,
   Maximize2,
@@ -238,6 +240,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showWorkflows, setShowWorkflows] = useState(false);
+  const [showStressTest, setShowStressTest] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
@@ -797,6 +800,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 </div>
                 <Button onClick={() => setShowWorkflows(true)} variant="outline" className="shrink-0 border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]">
                   <WorkflowIcon className="mr-2 h-4 w-4" /> Abrir flujos
+                </Button>
+              </div>
+            </div>
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Prueba de estrés</p>
+                  <p className="mt-1 text-xs text-white/50">Lanza tráfico real contra tu app desplegada y mide cómo responde bajo carga.</p>
+                </div>
+                <Button onClick={() => setShowStressTest(true)} variant="outline" className="shrink-0 border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]">
+                  <Activity className="mr-2 h-4 w-4" /> Probar carga
                 </Button>
               </div>
             </div>
@@ -1823,6 +1837,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     {/* Automatización (flujos visuales tipo n8n, privados de esta app) */}
     {showWorkflows && (
       <WorkflowListPanel appId={id} onClose={() => setShowWorkflows(false)} />
+    )}
+
+    {/* Prueba de estrés (tráfico real contra el deploy en producción) */}
+    {showStressTest && (
+      <StressTestModal
+        appId={id}
+        isDeployed={!!(app?.marisaiSubdomain || ((app as any)?.customDomain && (app as any)?.customDomainVerified))}
+        onClose={() => setShowStressTest(false)}
+      />
     )}
     </>
   );
