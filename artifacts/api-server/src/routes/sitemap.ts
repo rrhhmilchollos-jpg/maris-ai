@@ -1,10 +1,25 @@
 import { Router, Request, Response } from "express";
+import { NewsArticle } from "@workspace/db/schema";
+import { connectDB } from "../lib/db";
 
 const router = Router();
 
 /**
  * Sitemap principal — servido desde el backend para que Google Search Console lo encuentre.
  * Las landings y rutas SPA se incluyen aquí.
+ *
+ * ENCONTRADO: los artículos individuales de /news/<slug> NUNCA aparecían
+ * aquí — la lista de URLs era fija y escrita a mano, sin consultar la base
+ * de datos real de NewsArticle. Solo existían en news-sitemap.ts, que usa
+ * el namespace especializado de Google News (news:news) — confirmado
+ * contra la documentación oficial de Google que ese formato es para la
+ * pestaña de Noticias/Discover, no para la indexación de búsqueda general,
+ * y que Google solo procesa esas URLs como "noticias" si el dominio está
+ * dado de alta en Google News Publisher Center. Sin esto, los artículos
+ * quedaban "Descubierta: actualmente sin indexar, sin rastreo nunca
+ * intentado" en Search Console — Google sabía que existían (por enlaces
+ * internos) pero nunca recibió la señal estándar de sitemap.xml normal
+ * diciéndole que son contenido de búsqueda general indexable.
  */
 router.get("/api/sitemap.xml", async (_req: Request, res: Response) => {
   const today = new Date().toISOString().split("T")[0];
@@ -35,6 +50,25 @@ router.get("/api/sitemap.xml", async (_req: Request, res: Response) => {
     { loc: "https://www.marisai.es/legal/aviso-legal", freq: "yearly", priority: "0.3" },
     { loc: "https://www.marisai.es/legal/cookies", freq: "yearly", priority: "0.3" },
   ];
+
+  // Artículos individuales — consultados en tiempo real, no codificados a
+  // mano (a diferencia de la lista fija de arriba, los artículos cambian
+  // constantemente y no es viable mantenerlos uno por uno aquí).
+  try {
+    await connectDB();
+    const articles = await NewsArticle.find({}).select("slug publishedAt").sort({ publishedAt: -1 }).limit(1000).lean();
+    for (const article of articles) {
+      urls.push({
+        loc: `https://www.marisai.es/news/${article.slug}`,
+        freq: "monthly",
+        priority: "0.6",
+      });
+    }
+  } catch {
+    // Si la consulta a la base de datos falla, el sitemap se sirve igual
+    // con el resto de URLs fijas — un fallo aquí no debe romper todo el
+    // sitemap completo, solo omitir temporalmente los artículos dinámicos.
+  }
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n`;
