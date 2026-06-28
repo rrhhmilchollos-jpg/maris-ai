@@ -568,6 +568,13 @@ async function generateSingleFileContent(
   const systemPrompt = `You are Maris AI's Single-File Repair Engineer — generate ONE complete, working file.
 ${isTS ? "TypeScript (.tsx/.ts): include proper type annotations." : "JavaScript (.jsx/.js): no TypeScript syntax."}
 ALL user-visible copy MUST be in Spanish (es-ES). Code identifiers in English.
+
+ROUTING — this project uses "wouter", NOT react-router-dom. This is the #1 source of broken repairs — do not mix the two APIs:
+- Navigation: \`const [location, setLocation] = useLocation();\` then \`setLocation("/path")\` to navigate. wouter has NO "useNavigate" hook — never import or call useNavigate, it does not exist in this package and the import will crash the whole app at runtime.
+- Links: \`import { Link } from "wouter"\` then \`<Link href="/path">text</Link>\` (prop is "href", not "to").
+- Route params: \`const [match, params] = useRoute("/users/:id");\` then \`params.id\`.
+- If other files in this bundle already import from "wouter" with a certain pattern, follow that exact pattern for consistency — do not introduce a different routing library's conventions even if they're more common in general React knowledge.
+
 Output STRICT JSON only: {"content":"the full file content as a single string"}
 Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
 
@@ -584,10 +591,46 @@ Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
     const raw = (response.content[0] as any).text ?? "";
     const parsed = extractJsonObject<{ content?: string }>(raw);
     if (!parsed || typeof parsed.content !== "string" || parsed.content.trim().length < 20) return null;
+
+    const knownBadImport = findKnownBadImport(parsed.content);
+    if (knownBadImport) {
+      // No aceptar contenido con un import que sabemos, con certeza, que no
+      // existe en el paquete real (caso real: useNavigate importado de
+      // wouter — esa función no existe en ese paquete, crashea la app
+      // entera en runtime con "module does not provide an export named...",
+      // y esbuild NO lo detecta porque no resuelve tipos/exports reales del
+      // paquete, solo sintaxis). Devolver null aquí activa el único
+      // reintento automático ya existente en patchBundleMultiFile.
+      return null;
+    }
     return parsed.content;
   } catch {
     return null;
   }
+}
+
+// Patrones de imports conocidos como rotos para las librerías que el
+// Frontend Engineer tiene permitido usar — contaminación frecuente del
+// modelo con la API de una librería más popular y similar (ej: confundir
+// wouter con react-router-dom). Lista corta y de mantenimiento bajo:
+// añadir aquí solo cuando se confirme un caso real en producción, no
+// especular con problemas hipotéticos.
+const KNOWN_BAD_IMPORT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  {
+    pattern: /import\s*\{[^}]*\buseNavigate\b[^}]*\}\s*from\s*["']wouter["']/,
+    reason: "useNavigate no existe en wouter (es de react-router-dom) — wouter usa useLocation()[1] para navegar",
+  },
+  {
+    pattern: /import\s*\{[^}]*\buseHistory\b[^}]*\}\s*from\s*["']wouter["']/,
+    reason: "useHistory no existe en wouter — wouter usa useLocation()[1] para navegar",
+  },
+];
+
+function findKnownBadImport(content: string): string | null {
+  for (const { pattern, reason } of KNOWN_BAD_IMPORT_PATTERNS) {
+    if (pattern.test(content)) return reason;
+  }
+  return null;
 }
 
 export async function patchBundleMultiFile(
