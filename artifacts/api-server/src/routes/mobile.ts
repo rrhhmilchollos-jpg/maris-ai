@@ -6,8 +6,8 @@
  */
 
 import { Router, Request, Response } from "express";
-import { auth } from "../middleware/auth";
-import { GeneratedApp } from "../models/GeneratedApp";
+import { requireAuth } from "../lib/auth";
+import { GeneratedApp } from "@workspace/db/schema";
 import { buildAPK, buildAAB, cleanBuild } from "../lib/androidBuilder";
 import { generateIOSProject, updateXcodeTeamId, prepareIOSProjectForDownload } from "../lib/iosProjectGenerator";
 import { generateMobileProjectStructure } from "../lib/capacitorGenerator";
@@ -22,14 +22,14 @@ const router = Router();
  * POST /api/mobile/apps/:appId/init-capacitor
  * Inicializa Capacitor en un proyecto existente
  */
-router.post("/apps/:appId/init-capacitor", auth, async (req: Request, res: Response) => {
+router.post("/apps/:appId/init-capacitor", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
     const { platforms = ["android", "ios"] } = req.body;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -38,9 +38,9 @@ router.post("/apps/:appId/init-capacitor", auth, async (req: Request, res: Respo
     // Generar estructura de archivos móviles
     const mobileStructure = generateMobileProjectStructure({
       appId: app._id.toString(),
-      appName: app.name,
-      packageName: `com.${app.name.toLowerCase().replace(/\s+/g, "")}`,
-      bundleId: `com.${app.name.toLowerCase().replace(/\s+/g, "")}`,
+      appName: app.title,
+      packageName: `com.${app.title.toLowerCase().replace(/\s+/g, "")}`,
+      bundleId: `com.${app.title.toLowerCase().replace(/\s+/g, "")}`,
     });
 
     // Actualizar el proyecto con la estructura móvil
@@ -73,14 +73,14 @@ router.post("/apps/:appId/init-capacitor", auth, async (req: Request, res: Respo
  * POST /api/mobile/apps/:appId/build-android
  * Compila la app a APK
  */
-router.post("/apps/:appId/build-android", auth, async (req: Request, res: Response) => {
+router.post("/apps/:appId/build-android", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
     const { releaseType = "debug" } = req.body;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -135,13 +135,13 @@ router.post("/apps/:appId/build-android", auth, async (req: Request, res: Respon
  * POST /api/mobile/apps/:appId/build-aab
  * Compila la app a AAB (Android App Bundle)
  */
-router.post("/apps/:appId/build-aab", auth, async (req: Request, res: Response) => {
+router.post("/apps/:appId/build-aab", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -192,14 +192,14 @@ router.post("/apps/:appId/build-aab", auth, async (req: Request, res: Response) 
  * GET /api/mobile/apps/:appId/download-apk
  * Descarga el APK compilado
  */
-router.get("/apps/:appId/download-apk", auth, async (req: Request, res: Response) => {
+router.get("/apps/:appId/download-apk", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
     const { type = "debug" } = req.query;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -212,7 +212,7 @@ router.get("/apps/:appId/download-apk", auth, async (req: Request, res: Response
       return res.status(404).json({ error: "APK not found. Please build first." });
     }
 
-    res.download(apkPath, `${app.name}-${type}.apk`);
+    res.download(apkPath, `${app.title}-${type}.apk`);
   } catch (error) {
     logger.error({ error }, "Failed to download APK");
     res.status(500).json({ error: "Failed to download APK" });
@@ -223,13 +223,13 @@ router.get("/apps/:appId/download-apk", auth, async (req: Request, res: Response
  * GET /api/mobile/apps/:appId/download-aab
  * Descarga el AAB compilado
  */
-router.get("/apps/:appId/download-aab", auth, async (req: Request, res: Response) => {
+router.get("/apps/:appId/download-aab", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -240,7 +240,7 @@ router.get("/apps/:appId/download-aab", auth, async (req: Request, res: Response
       return res.status(404).json({ error: "AAB not found. Please build first." });
     }
 
-    res.download(aabPath, `${app.name}-release.aab`);
+    res.download(aabPath, `${app.title}-release.aab`);
   } catch (error) {
     logger.error({ error }, "Failed to download AAB");
     res.status(500).json({ error: "Failed to download AAB" });
@@ -251,14 +251,14 @@ router.get("/apps/:appId/download-aab", auth, async (req: Request, res: Response
  * POST /api/mobile/apps/:appId/build-ios
  * Prepara el proyecto para Xcode
  */
-router.post("/apps/:appId/build-ios", auth, async (req: Request, res: Response) => {
+router.post("/apps/:appId/build-ios", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
     const { teamId } = req.body;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -272,8 +272,8 @@ router.post("/apps/:appId/build-ios", auth, async (req: Request, res: Response) 
 
     const result = await generateIOSProject({
       projectPath,
-      bundleId: `com.${app.name.toLowerCase().replace(/\s+/g, "")}`,
-      appName: app.name,
+      bundleId: `com.${app.title.toLowerCase().replace(/\s+/g, "")}`,
+      appName: app.title,
       teamId,
     });
 
@@ -316,13 +316,13 @@ router.post("/apps/:appId/build-ios", auth, async (req: Request, res: Response) 
  * GET /api/mobile/apps/:appId/download-xcode-project
  * Descarga el proyecto de Xcode como ZIP
  */
-router.get("/apps/:appId/download-xcode-project", auth, async (req: Request, res: Response) => {
+router.get("/apps/:appId/download-xcode-project", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
@@ -337,7 +337,7 @@ router.get("/apps/:appId/download-xcode-project", auth, async (req: Request, res
     await prepareIOSProjectForDownload(projectPath);
 
     // Crear ZIP
-    const zipPath = path.join(projectPath, `${app.name}-ios.zip`);
+    const zipPath = path.join(projectPath, `${app.title}-ios.zip`);
     const output = fs.createWriteStream(zipPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
 
@@ -347,7 +347,7 @@ router.get("/apps/:appId/download-xcode-project", auth, async (req: Request, res
     });
 
     output.on("close", () => {
-      res.download(zipPath, `${app.name}-ios.zip`, (err) => {
+      res.download(zipPath, `${app.title}-ios.zip`, (err: Error | null) => {
         if (err) logger.error({ error: err }, "Failed to download ZIP");
         // Limpiar archivo temporal
         fs.unlink(zipPath, () => {});
@@ -367,21 +367,29 @@ router.get("/apps/:appId/download-xcode-project", auth, async (req: Request, res
  * GET /api/mobile/apps/:appId/build-status
  * Obtiene el estado de la última compilación
  */
-router.get("/apps/:appId/build-status", auth, async (req: Request, res: Response) => {
+router.get("/apps/:appId/build-status", requireAuth, async (req: any, res: any) => {
   try {
     const { appId } = req.params;
 
     // Verificar que el usuario es el propietario
     const app = await GeneratedApp.findById(appId);
-    if (!app || app.userId !== req.user?.id) {
+    if (!app || app.userId !== req.userId) {
       return res.status(404).json({ error: "App not found" });
     }
 
+    // NOTA: lastBuildType/lastBuildTime/buildStatus/projectType nunca se
+    // añadieron al esquema real de GeneratedApp (@workspace/db/schema) — este
+    // endpoint, junto con el resto de mobile.ts, nunca llegó a registrarse en
+    // el router principal del servidor, así que esta función de seguimiento
+    // de builds móviles quedó incompleta. Se usa (app as any) para no
+    // bloquear la compilación; si se decide activar este flujo, hay que
+    // añadir estos 4 campos al esquema de IGeneratedApp primero.
+    const appAny = app as any;
     res.json({
-      lastBuildType: app.lastBuildType || null,
-      lastBuildTime: app.lastBuildTime || null,
-      buildStatus: app.buildStatus || "not-built",
-      projectType: app.projectType || "web",
+      lastBuildType: appAny.lastBuildType || null,
+      lastBuildTime: appAny.lastBuildTime || null,
+      buildStatus: appAny.buildStatus || "not-built",
+      projectType: appAny.projectType || "web",
     });
   } catch (error) {
     logger.error({ error }, "Failed to get build status");

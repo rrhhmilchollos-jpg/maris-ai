@@ -248,7 +248,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   });
 
   const text = response.content
-    .map((b) => (b.type === "text" ? b.text : ""))
+    .map((b: { type: string; text?: string }) => (b.type === "text" ? b.text : ""))
     .filter(Boolean)
     .join("\n");
 

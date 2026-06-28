@@ -73,12 +73,12 @@ router.post("/imagen/generate", requireAuth, async (req: Request, res: Response)
     const imageUrl = `data:${mimeType};base64,${base64}`;
 
     logger.info({ promptLength: prompt.length }, "Imagen AI: generada correctamente");
-    res.json({ imageUrl, prompt: enhancedPrompt, style, aspectRatio });
+    return res.json({ imageUrl, prompt: enhancedPrompt, style, aspectRatio });
 
   } catch (error: any) {
     logger.error({ error: error.message }, "Imagen AI: error");
     // Devolver fallback en lugar de error — mejor UX
-    res.json({
+    return res.json({
       imageUrl: `https://picsum.photos/seed/${Date.now()}/1280/720`,
       fallback: true,
       error: "API de imagen no disponible — usando placeholder",
@@ -128,10 +128,10 @@ router.post("/video/generate", requireAuth, async (req: Request, res: Response) 
       return res.status(500).json({ error: "Error en Luma AI", details: err });
     }
 
-    const data = await lumaResponse.json();
+    const data = await lumaResponse.json() as { id: string };
     logger.info({ jobId: data.id }, "Luma AI: job creado");
 
-    res.json({
+    return res.json({
       status: "processing",
       jobId: data.id,
       estimatedTime: duration * 3,
@@ -141,14 +141,14 @@ router.post("/video/generate", requireAuth, async (req: Request, res: Response) 
 
   } catch (error: any) {
     logger.error({ error: error.message }, "Video AI: error");
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
 // ─── GET /api/video/status/:jobId ────────────────────────────────────────────
 router.get("/video/status/:jobId", requireAuth, async (req: Request, res: Response) => {
-  const { jobId } = req.params;
-  
+  const jobId = String(req.params.jobId);
+
   // Fallback frame-based jobs
   if (jobId.startsWith("gemini-frames-")) {
     return res.json({ status: "completed", videoUrl: null, fallbackFrames: true });
@@ -161,16 +161,16 @@ router.get("/video/status/:jobId", requireAuth, async (req: Request, res: Respon
     const response = await fetch(`https://api.lumalabs.ai/dream-machine/v1/generations/${jobId}`, {
       headers: { "Authorization": `Bearer ${lumaApiKey}` },
     });
-    const data = await response.json();
-    
-    res.json({
+    const data = await response.json() as { state?: string; assets?: { video?: string; image?: string } };
+
+    return res.json({
       status: data.state === "completed" ? "completed" : data.state === "failed" ? "error" : "processing",
       videoUrl: data.assets?.video || null,
       thumbnailUrl: data.assets?.image || null,
       progress: data.state === "completed" ? 100 : 50,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 

@@ -430,7 +430,7 @@ router.post("/apps/:appId/github", requireAuth, async (req: Request, res: Respon
  */
 router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId } = req.params;
+    const appId = String(req.params.appId);
     const userId = getAuthenticatedUserId(req);
     const { autoFix = false } = req.body || {};
 

@@ -183,30 +183,45 @@ async function analyzeAndRepairWithPreview(opts: {
   const { appId, userId, userIntent, log } = opts;
 
   try {
-    const { analyzePreviewScreenshots } = await import("./visualTester");
+    // BUG PREEXISTENTE ENCONTRADO Y CORREGIDO: este código llamaba a
+    // analyzePreviewScreenshots con una firma antigua y ya eliminada
+    // ({appId, previewUrl, userIntent, log}) — la función real espera
+    // {shots, app, prompt}, recibiendo las capturas YA TOMADAS en vez de
+    // capturarlas ella misma desde una URL. Causaba un error de tipos en
+    // cada build (TS2561/TS2339) y, en runtime, habría fallado siempre con
+    // "shots is not iterable" o similar — esta rama de auto-reparación
+    // visual nunca pudo haber funcionado tal como estaba.
+    const { analyzePreviewScreenshots, takeScreenshots } = await import("./visualTester");
     const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
     const previewUrl = `${baseUrl}/api/apps/${appId}/preview`;
 
-    log.info({ previewUrl }, "Analyzing preview with Claude Vision");
+    log.info({ previewUrl }, "Capturing preview screenshots for visual analysis");
+    const shots = await takeScreenshots(previewUrl);
+    if (!shots || shots.length === 0) {
+      log.warn({ previewUrl }, "No se pudieron capturar screenshots del preview — saltando análisis visual");
+      return;
+    }
+
+    const app = await GeneratedApp.findById(appId, { title: 1, description: 1 }).lean() as any;
+    log.info({ previewUrl, shots: shots.length }, "Analyzing preview with Claude Vision");
 
     const report = await analyzePreviewScreenshots({
-      appId,
-      previewUrl,
-      userIntent,
-      log,
+      shots,
+      app: { title: app?.title || "App", description: app?.description },
+      prompt: userIntent,
     });
 
     if (!report) return;
 
-    const criticalIssues = report.issues?.filter((i: any) => i.severity === "critical") || [];
-    const score = report.score || 0;
+    const criticalIssues = report.issues?.filter((i) => i.severity === "critical") || [];
+    const score = report.overallScore || 0;
 
     log.info({ score, criticalCount: criticalIssues.length }, "Preview analysis complete");
 
     // Si hay issues críticos o score bajo → auto-reparar
     if (criticalIssues.length > 0 || score < 60) {
       const errorSummary = criticalIssues
-        .map((i: any) => `[${i.type}] ${i.description} → ${i.fix}`)
+        .map((i) => `[${i.type}] ${i.description}${i.cssfix ? ` → ${i.cssfix}` : ""}`)
         .join("\n");
 
       await autoRepairBundle({

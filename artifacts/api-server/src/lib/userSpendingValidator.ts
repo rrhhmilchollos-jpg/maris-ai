@@ -5,8 +5,7 @@
  * Lógica interna: No mostrar límites al usuario.
  */
 
-import { User } from "../models/User";
-import { GeneratedApp } from "../models/GeneratedApp";
+import { User, GeneratedApp } from "@workspace/db/schema";
 import { logger } from "./logger";
 
 // Constantes de negocio (internas)

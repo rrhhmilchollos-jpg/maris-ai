@@ -68,7 +68,7 @@ async function sendEmail(opts: {
 function alertHtml(opts: {
   emoji: string;
   title: string;
-  urgency: "🔴 URGENTE" | "🟡 AVISO" | "🟢 INFO";
+  urgency: "🔴 URGENTE" | "🟡 AVISO" | "🟢 INFO" | "📡 ACTIVIDAD";
   fields: Array<{ label: string; value: string }>;
   actionUrl?: string;
   actionLabel?: string;

@@ -2373,7 +2373,7 @@ router.post("/admin/security/block", requireAdmin, async (req, res) => {
   if (!ip) return res.status(400).json({ error: "IP requerida" });
   blockIP(ip);
   logger.warn({ ip }, "[SECURITY] IP bloqueada manualmente por admin");
-  res.json({ ok: true, message: `IP ${ip} bloqueada.` });
+  return res.json({ ok: true, message: `IP ${ip} bloqueada.` });
 });
 
 // POST /api/admin/security/unblock — desbloquear IP
@@ -2381,7 +2381,7 @@ router.post("/admin/security/unblock", requireAdmin, async (req, res) => {
   const { ip } = req.body;
   if (!ip) return res.status(400).json({ error: "IP requerida" });
   const removed = unblockIP(ip);
-  res.json({ ok: removed, message: removed ? `IP ${ip} desbloqueada.` : `IP ${ip} no estaba bloqueada.` });
+  return res.json({ ok: removed, message: removed ? `IP ${ip} desbloqueada.` : `IP ${ip} no estaba bloqueada.` });
 });
 
 export default router;

@@ -104,7 +104,7 @@ export function ipBlockMiddleware(req: Request, res: Response, next: NextFunctio
       message: "Tu acceso ha sido restringido. Contacta con soporte si crees que es un error.",
     });
   }
-  next();
+  return next();
 }
 
 // ─── 2. Rutas trampa (Honeypots) ─────────────────────────────────────────────
@@ -262,7 +262,7 @@ export function injectionDetectionMiddleware(req: Request, res: Response, next: 
     return res.status(400).json({ error: "invalid_input", message: "Solicitud inválida." });
   }
 
-  next();
+  return next();
 }
 
 // ─── 7. Watermark en exports ──────────────────────────────────────────────────

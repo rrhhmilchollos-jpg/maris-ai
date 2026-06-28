@@ -5,7 +5,6 @@
  * Permite a los usuarios generar imágenes dentro de sus aplicaciones.
  */
 
-import axios, { AxiosInstance } from "axios";
 import { logger } from "./logger";
 
 export interface ImageGenerationRequest {
@@ -35,19 +34,47 @@ export interface NanoBananaConfig {
 }
 
 class NanoBananaProClient {
-  private client: AxiosInstance;
-  private apiKey: string;
+  private baseURL: string;
+  private timeout: number;
+  private headers: Record<string, string>;
 
   constructor(config: NanoBananaConfig) {
-    this.apiKey = config.apiKey;
-    this.client = axios.create({
-      baseURL: config.apiUrl,
-      timeout: config.timeout || 60000,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-    });
+    this.baseURL = config.apiUrl;
+    this.timeout = config.timeout || 60000;
+    this.headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.apiKey}`,
+    };
+  }
+
+  // Reemplaza el cliente axios — esta librería no estaba en las dependencias
+  // del proyecto y este archivo nunca llegó a conectarse a ninguna ruta real
+  // (huérfano, igual que mobile.ts). En vez de añadir axios solo para un
+  // archivo no usado en producción, se mantiene el mismo comportamiento
+  // (baseURL + headers + timeout) con fetch nativo, ya el patrón preferido
+  // en el resto del proyecto para clientes HTTP de integraciones externas.
+  private async request<T = any>(
+    method: "GET" | "POST",
+    path: string,
+    body?: unknown,
+  ): Promise<{ data: T }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+    try {
+      const res = await fetch(`${this.baseURL}${path}`, {
+        method,
+        headers: this.headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`NanoBananaPro request failed: ${res.status} ${res.statusText}`);
+      }
+      const data = (await res.json()) as T;
+      return { data };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -61,7 +88,7 @@ class NanoBananaProClient {
     try {
       logger.info({ prompt: request.prompt }, "Generating image with NanoBananaPro");
 
-      const response = await this.client.post("/v1/images/generations", {
+      const response = await this.request("POST", "/v1/images/generations", {
         prompt: request.prompt,
         style: request.style || "realistic",
         size: request.size || "512x512",
@@ -139,12 +166,14 @@ class NanoBananaProClient {
 
     try {
       const imageUrl = result.images[0].url;
-      const imageResponse = await axios.get(imageUrl, {
-        responseType: "arraybuffer",
-      });
+      const imageRes = await fetch(imageUrl);
+      if (!imageRes.ok) {
+        throw new Error(`Failed to download image: ${imageRes.status} ${imageRes.statusText}`);
+      }
+      const imageBuffer = Buffer.from(await imageRes.arrayBuffer());
 
       const fs = await import("node:fs").then((m) => m.promises);
-      await fs.writeFile(outputPath, imageResponse.data);
+      await fs.writeFile(outputPath, imageBuffer);
 
       logger.info({ outputPath }, "Image saved successfully");
       return true;
@@ -159,7 +188,7 @@ class NanoBananaProClient {
    */
   async getAvailableStyles(): Promise<string[]> {
     try {
-      const response = await this.client.get("/v1/styles");
+      const response = await this.request("GET", "/v1/styles");
       return response.data.styles || [];
     } catch (error) {
       logger.warn({ error }, "Failed to fetch available styles");
@@ -179,7 +208,7 @@ class NanoBananaProClient {
    */
   async getAvailableModels(): Promise<string[]> {
     try {
-      const response = await this.client.get("/v1/models");
+      const response = await this.request("GET", "/v1/models");
       return response.data.models || [];
     } catch (error) {
       logger.warn({ error }, "Failed to fetch available models");

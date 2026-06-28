@@ -1229,7 +1229,7 @@ Sin preambulos. Directo al contenido de cada seccion.`;
             ? `Investiga en profundidad y genera el brief completo para: "${cleanPrompt}"`
             : `Genera el brief de investigacion completo para: "${cleanPrompt}"`,
           maxIterations: 4, // Aumentado de 3 a 4 para mas iteraciones de busqueda
-          ctx: { log: logFn ?? (() => {}) },
+          ctx: { log: logFn ?? (async () => {}) },
         });
 
         if (result.text.trim().length > 100) {
@@ -1305,7 +1305,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
     ? `${scopeHint}\n\nDesign the file structure for this app:\n\n${cleanPrompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
     : `${scopeHint}\n\nDesign the file structure for this app:\n\n${cleanPrompt}${templateNote}`;
 
-  const response = await withTimeoutOrThrow(
+  const response = await withTimeoutOrThrow<any>(
     anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 6000,
