@@ -3228,7 +3228,35 @@ export async function generateApp(
   // estándar de una sola pasada tiene límites reales de tamaño de salida.
   // También se puede forzar manualmente con MARIS_USE_MILESTONE_ORCHESTRATOR=true
   // para proyectos de menor complejidad (uso experimental/pruebas).
-  const wantsFullBuild = prompt.toLowerCase().includes("crea") || prompt.toLowerCase().includes("app") || !previous;
+  //
+  // ENCONTRADO en producción (cliente real, proyecto "Fantasy Web" ya
+  // existente — el reporte mostraba 'No se pudo generar el plan de hitos —
+  // respuesta del planificador inválida.', con el log real confirmando que
+  // el modelo devolvió texto conversacional ('Analizando...') en vez de
+  // JSON): el usuario pegó el reporte COMPLETO de Testing Visual (8
+  // problemas con descripciones largas) como mensaje de "arregla esto" —
+  // ese texto menciona la palabra "app" varias veces de forma incidental
+  // ("Fantasy Web app", "componente de la app"), y la condición de abajo
+  // SOLO miraba si el prompt contenía "crea"/"app" en cualquier parte,
+  // ignorando por completo que `previous` (el proyecto ya existente) era
+  // una señal muchísimo más fiable de que esto era una EDICIÓN, no una
+  // construcción desde cero — el planificador de hitos (diseñado para
+  // proyectos nuevos, con un formato de salida JSON estricto) recibió un
+  // prompt que parecía un reporte de soporte técnico, no una descripción
+  // de proyecto, y respondió de forma conversacional en vez de seguir el
+  // formato esperado.
+  // FIX: si ya existe un proyecto previo, la palabra "crea"/"app" suelta en
+  // CUALQUIER PARTE del texto ya no es suficiente para forzar una
+  // reconstrucción completa — se exige que el prompt EMPIECE con una
+  // intención explícita de construir desde cero (las primeras ~60
+  // caracteres, donde normalmente vive la instrucción real del usuario,
+  // no un reporte largo pegado después). Sin proyecto previo, el
+  // comportamiento original se mantiene sin cambios (cualquier mención de
+  // "crea"/"app" sigue activando una construcción completa, correcto para
+  // un proyecto que aún no existe).
+  const promptStart = prompt.toLowerCase().slice(0, 60);
+  const hasExplicitBuildIntent = promptStart.includes("crea") || promptStart.includes("app");
+  const wantsFullBuild = !previous || hasExplicitBuildIntent;
   const isUltraComplex = agentModelPlan.tier === "ultra";
   const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" || isUltraComplex;
 

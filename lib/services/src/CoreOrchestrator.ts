@@ -230,9 +230,79 @@ export class CoreOrchestrator {
         milestones,
       };
     } catch (error) {
+      // ENCONTRADO en producción (causa raíz real ya corregida en
+      // apps.ts — un prompt de EDICIÓN, con un reporte largo pegado,
+      // se enrutó por error a este planificador de PROYECTOS NUEVOS,
+      // que respondió con texto conversacional, 'Analizando...', en
+      // vez de JSON puro): como red de seguridad adicional para
+      // cualquier otro caso futuro donde el modelo antepusiera texto
+      // explicativo a pesar de la instrucción de "ÚNICAMENTE JSON",
+      // se intenta una segunda extracción — buscar el primer bloque
+      // {...} balanceado dentro del texto completo — antes de
+      // rendirse. Esto no sustituye el fix de la causa raíz, es una
+      // capa extra de tolerancia para no perder el job entero si el
+      // JSON real sí está presente, solo rodeado de texto.
+      const extracted = this.extractFirstJsonObject(rawText);
+      if (extracted) {
+        try {
+          const result = JSON.parse(extracted);
+          const milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
+            ...m,
+            targetWorkspace: typeof m.targetWorkspace === "string" ? m.targetWorkspace : "apps/api",
+            dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
+          }));
+          console.warn("⚠️ El planificador devolvió texto junto al JSON — se recuperó el objeto JSON embebido correctamente.");
+          return {
+            database: result.database === "postgresql" ? "postgresql" : "mongodb",
+            platform: result.platform === "mobile-native" ? "mobile-native" : "web",
+            architecture: result.architecture === "microservices" ? "microservices" : "monolith",
+            milestones,
+          };
+        } catch {
+          // El bloque extraído tampoco era JSON válido — cae al error final de abajo.
+        }
+      }
       console.error("❌ Error parseando JSON de la planificación de hitos:", error);
       throw new Error("No se pudo generar el plan de hitos — respuesta del planificador inválida.");
     }
+  }
+
+  /**
+   * Busca el primer objeto JSON balanceado ({...}) dentro de un texto que
+   * puede contener contenido conversacional antes o después — red de
+   * seguridad para cuando el modelo no sigue al pie de la letra la
+   * instrucción de "devuelve ÚNICAMENTE JSON". Cuenta llaves respetando
+   * strings entre comillas (para no confundir una "}" dentro de un string
+   * con el cierre real del objeto).
+   */
+  private extractFirstJsonObject(text: string): string | null {
+    const start = text.indexOf("{");
+    if (start === -1) return null;
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escapeNext = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return null;
   }
 
   /** Construye el bloque de contexto con el código real de los hitos en los que depende uno nuevo. */
