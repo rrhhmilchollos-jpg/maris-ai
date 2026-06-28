@@ -502,14 +502,30 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
 
       {/* Empty state */}
       {!result && !running && !error && (
-        <div className="p-6 text-center">
+        <div className="p-6 text-center space-y-3">
           <Camera className="h-8 w-8 text-white/15 mx-auto mb-2" />
           <p className="text-[11px] text-white/40">
             Captura screenshots reales de tu app y detecta errores visuales con Claude Vision.
           </p>
-          <p className="text-[10px] text-white/25 mt-1">
+          <p className="text-[10px] text-white/25">
             Analiza diseño responsivo en desktop, tablet y móvil simultáneamente.
           </p>
+          {/* ENCONTRADO en producción: un cliente con un proyecto importado y
+              errores reales (página en blanco) copió el reporte de problemas
+              detectados y lo pegó manualmente como mensaje de chat en vez de
+              usar el botón de abajo — eso confundió al clasificador de
+              intención del sistema (un reporte largo de bugs no es lo mismo
+              que pedir una app nueva) y el job acabó fallando varias veces.
+              Este recordatorio explica el flujo correcto: los botones de
+              aquí abajo ya aplican las correcciones directamente, sin
+              necesidad de copiar ni pegar nada en el chat. */}
+          <div className="mt-3 mx-auto max-w-[280px] rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2.5 text-left">
+            <p className="text-[10px] font-medium text-violet-300 mb-1">Cómo usarlo</p>
+            <ol className="text-[10px] text-white/45 space-y-1 list-decimal list-inside">
+              <li>Pulsa <span className="text-white/65 font-medium">Analizar</span> para detectar los problemas.</li>
+              <li>Si encuentra alguno, pulsa <span className="text-white/65 font-medium">Autofix IA</span> y se corrigen automáticamente — no hace falta copiar el reporte ni pegarlo en el chat.</li>
+            </ol>
+          </div>
         </div>
       )}
     </div>

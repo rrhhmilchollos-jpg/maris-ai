@@ -86,7 +86,28 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   const wordCount = trimmed.split(/\s+/).length;
   const spanish = analyzeSpanishIntent(trimmed);
 
-  if (spanish.isFullBuild || FULL_BUILD_RX.test(trimmed) || !hasExistingApp) {
+  // ENCONTRADO en producción (mismo incidente real ya corregido en
+  // apps.ts/wantsFullBuild — un usuario pegó el reporte completo de
+  // Testing Visual de un proyecto YA EXISTENTE como mensaje de "arregla
+  // esto", y el job acabó en el planificador de proyectos NUEVOS): aquí en
+  // heuristicPlan() existía el mismo riesgo estructural. spanish.isFullBuild
+  // ya viene `false` con 99% de confianza desde analyzeSpanishIntent() — un
+  // léxico mucho más fiable que un regex de texto libre — pero
+  // FULL_BUILD_RX.test(trimmed) se evaluaba contra TODO el texto, sin
+  // límite, así que un mensaje largo (un reporte de bugs pegado, un log
+  // copiado, etc.) tiene más superficie para un falso positivo accidental
+  // en cualquier punto del texto, aunque la intención real al principio
+  // del mensaje sea clarísima. FIX: cuando ya existe un proyecto, el
+  // regex de "full build" solo se evalúa contra el INICIO del mensaje
+  // (donde vive la instrucción real del usuario) — igual que el fix ya
+  // aplicado en apps.ts. Sin proyecto previo, comportamiento original sin
+  // cambios (ahí cualquier mención en cualquier parte del texto es
+  // razonable, porque por definición no hay nada que editar).
+  const fullBuildSignal = hasExistingApp
+    ? FULL_BUILD_RX.test(trimmed.slice(0, 80))
+    : FULL_BUILD_RX.test(trimmed);
+
+  if (spanish.isFullBuild || fullBuildSignal || !hasExistingApp) {
     return { ...PLAN_FULL, reason: !hasExistingApp ? "App nueva (sin código previo)." : "Petición describe una app entera." };
   }
   // Bug/dependency reports take precedence over the cosmetic regex so a
@@ -95,7 +116,7 @@ function heuristicPlan(prompt: string, hasExistingApp: boolean): ExecutionPlan {
   if ((spanish.isBugFix || BUG_RX.test(trimmed)) && hasExistingApp) {
     return { ...PLAN_FEATURE, reason: "Reporte de error o dependencia — ejecuto arquitecto + validación completa." };
   }
-  if ((spanish.isDirectEdit || DIRECT_EDIT_RX.test(trimmed)) && hasExistingApp && wordCount <= 28 && !spanish.isBugFix && !BUG_RX.test(trimmed) && !spanish.isFullBuild && !FULL_BUILD_RX.test(trimmed)) {
+  if ((spanish.isDirectEdit || DIRECT_EDIT_RX.test(trimmed)) && hasExistingApp && wordCount <= 28 && !spanish.isBugFix && !BUG_RX.test(trimmed) && !spanish.isFullBuild && !fullBuildSignal) {
     return { ...PLAN_FAST_PATCH, reason: "Léxico español: petición directa de añadir/modificar/eliminar; tocar solo el archivo o elemento objetivo." };
   }
   if (FEATURE_RX.test(trimmed) && hasExistingApp) {
@@ -145,7 +166,15 @@ export async function planExecution(
   const deterministicFeature = options.hasExistingApp && (
     spanish.isBugFix || spanish.isDevOperation || FEATURE_RX.test(normalizedPrompt) || BUG_RX.test(normalizedPrompt)
   );
-  const deterministicFullBuild = !options.hasExistingApp || spanish.isFullBuild || FULL_BUILD_RX.test(normalizedPrompt);
+  // Mismo criterio que en heuristicPlan(): con proyecto existente, el regex de
+  // "full build" solo se evalúa contra el inicio del mensaje, no contra un
+  // texto largo completo (reporte de bugs pegado, etc.) — evita que esta
+  // bandera (usada solo para decidir si saltar la llamada a Anthropic) quede
+  // desincronizada con la razón real ya decidida por heuristicPlan() arriba.
+  const fullBuildSignal = options.hasExistingApp
+    ? FULL_BUILD_RX.test(normalizedPrompt.slice(0, 80))
+    : FULL_BUILD_RX.test(normalizedPrompt);
+  const deterministicFullBuild = !options.hasExistingApp || spanish.isFullBuild || fullBuildSignal;
   if (deterministicFeature || deterministicFullBuild) {
     logger.info({ scope: heuristic.scope, reason: heuristic.reason }, "TOKEN_OPTIMIZER: planner LLM skipped by deterministic Spanish rules");
     return heuristic;
