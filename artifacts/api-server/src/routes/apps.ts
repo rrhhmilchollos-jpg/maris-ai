@@ -612,6 +612,11 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - components.securitySchemes con bearerAuth (JWT) si el proyecto tiene autenticacion
     - Este archivo es lo que permite a un desarrollador o a otra IA conectar este backend con sistemas externos sin tener que leer el codigo fuente
 
+16. CONNECTION POOLING — crítico para soportar tráfico concurrente real sin agotar las conexiones a la base de datos (un servidor Postgres gestionado tipo Supabase/Railway/Neon suele limitar a 60-100 conexiones simultáneas; sin pooling, cada request abre su propia conexión y ese límite se agota rápido bajo carga):
+    - En el connection string de DATABASE_URL en .env.example, añade el parámetro de pool: postgresql://user:pass@host:5432/db?connection_limit=10&pool_timeout=20 (Prisma respeta estos parámetros nativamente, sin necesitar un PgBouncer externo para la mayoría de cargas).
+    - Si el plan describe explícitamente alta concurrencia esperada (miles de usuarios, picos de tráfico, "tiempo real", dashboards con muchos usuarios viendo a la vez), documenta en un comentario al inicio de prisma/schema.prisma que en producción real se recomienda añadir PgBouncer (o el pooler nativo del proveedor, ej. Supabase Pooler en modo transaction) entre la app y la base de datos, y usar DIRECT_URL aparte para las migraciones (que no pueden pasar por un pooler en modo transacción) — esto es exactamente el patrón que Prisma documenta oficialmente para este escenario.
+    - PrismaClient debe instanciarse UNA SOLA VEZ como singleton (ya cubierto en src/lib/prisma.ts) — nunca crear una instancia nueva por request, eso es la causa más común de agotar conexiones bajo carga.
+
 Si el plan no necesita backend: {"backendCode":"No backend required for this app."}
 
 Rules:
@@ -763,6 +768,11 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - components.schemas debe reflejar los modelos de prisma/schema.prisma
     - components.securitySchemes con bearerAuth (JWT) si el proyecto tiene autenticacion
     - Este archivo es lo que permite a un desarrollador, a un integrador de sistemas, o a otra IA conectar este backend con el ERP/CRM/sistema heredado sin tener que leer el codigo fuente
+
+16. CONNECTION POOLING — crítico para soportar tráfico concurrente real, y aún más relevante en proyectos MySQL porque suelen integrarse con un servidor ya existente compartido con otros sistemas (ERP/CRM/WordPress), donde el límite de conexiones (max_connections, frecuentemente 100-150 en hosting compartido tipo cPanel) NO es exclusivo de esta app:
+    - En el connection string de DATABASE_URL en .env.example, añade el parámetro de pool: mysql://user:pass@host:3306/db?connection_limit=10&pool_timeout=20 (Prisma respeta estos parámetros nativamente).
+    - Si el servidor MySQL es compartido con otros sistemas (ERP/CRM/WordPress ya existentes — el caso típico que justifica elegir MySQL en primer lugar), documenta en un comentario al inicio de prisma/schema.prisma que connection_limit debe fijarse pensando en cuántas conexiones puede ceder esta app sin afectar al resto de sistemas que ya usan ese mismo servidor, no solo en la carga propia de esta app.
+    - PrismaClient debe instanciarse UNA SOLA VEZ como singleton (ya cubierto en src/lib/prisma.ts) — nunca crear una instancia nueva por request, eso es la causa más común de agotar conexiones bajo carga.
 
 Si el plan no necesita backend: {"backendCode":"No backend required for this app."}
 

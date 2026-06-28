@@ -13,10 +13,23 @@ import { logger } from "./logger";
 //   - Retries are handled by re-setting status to "queued" up to MAX_ATTEMPTS.
 // ---------------------------------------------------------------------------
 
+// CONCURRENCIA — auditado a petición del usuario tras una limitación señalada
+// externamente sobre "tolerar millones de usuarios concurrentes". El límite
+// real no está en este código (el bloqueo atómico vía findOneAndUpdate ya
+// es correcto y libre de condiciones de carrera, confirmado leyendo
+// registerGenerateWorker más abajo) sino en cuántas generaciones simultáneas
+// puede absorber la cuenta de Anthropic sin entrar en rate limiting 429
+// (manejado con reintentos en shared-agents.ts, pero cada 429 retrasa esa
+// generación). DEFAULT_CONCURRENCY=3 era un valor conservador sin
+// justificación numérica explícita en el código — se mantiene como
+// predeterminado seguro, pero JOB_CONCURRENCY ahora permite subir el techo
+// hasta 25 (antes 10) para quien tenga un tier de Anthropic con más
+// capacidad y quiera absorber más tráfico simultáneo de generación.
 export const GENERATE_QUEUE =
   process.env.GENERATE_QUEUE_NAME ?? "appforge.generate-app";
 
 const DEFAULT_CONCURRENCY = 3;
+const MAX_CONCURRENCY = 25;
 const DEFAULT_POLL_INTERVAL_MS = process.env.JOB_POLL_INTERVAL_MS ? Number.parseInt(process.env.JOB_POLL_INTERVAL_MS, 10) : 500; // Ultra-optimizado: 500ms para arranque instantáneo
 export const MAX_ATTEMPTS = 3; // Retry limit
 
@@ -117,7 +130,7 @@ export async function registerGenerateWorker(
     if (!raw) return DEFAULT_CONCURRENCY;
     const n = Number.parseInt(raw, 10);
     if (!Number.isFinite(n) || n < 1) return DEFAULT_CONCURRENCY;
-    return Math.min(n, 10);
+    return Math.min(n, MAX_CONCURRENCY);
   })();
 
   logger.info({ concurrency }, "Generation worker registered");
