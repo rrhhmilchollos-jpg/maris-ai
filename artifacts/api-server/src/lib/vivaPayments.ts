@@ -1,0 +1,184 @@
+/**
+ * vivaPayments.ts
+ *
+ * Integración con Viva.com Smart Checkout (pagos con tarjeta vía OAuth2).
+ * Pensada como alternativa/complemento a Stripe para el mercado español,
+ * usando la cuenta de comercio real del usuario en Viva.com.
+ *
+ * Flujo:
+ * 1. getAccessToken() — obtiene un Bearer token vía client_credentials
+ *    (cacheado en memoria mientras sea válido, igual que el resto de
+ *    clientes de integración del proyecto).
+ * 2. createPaymentOrder() — crea la orden de pago (POST /checkout/v2/orders)
+ *    y devuelve la URL de Smart Checkout a la que redirigir al cliente.
+ * 3. verifyTransaction() — tras el webhook o el retorno del cliente,
+ *    confirma el estado real de la transacción vía API antes de dar
+ *    por válido el pago (nunca fiarse solo de la redirección del navegador).
+ *
+ * IMPORTANTE — no existe forma de distinguir tarjetas prepago/regalo de
+ * tarjetas de débito/crédito normales vía la API de Viva (confirmado en su
+ * documentación oficial): técnicamente son tarjetas Visa/Mastercard igual
+ * que cualquier otra, la diferencia la decide el banco emisor del cliente,
+ * no Viva ni este código. No se intenta filtrar esto aquí.
+ */
+import { logger } from "./logger";
+
+const IS_PRODUCTION = process.env.NODE_ENV === "production" && process.env.VIVA_USE_DEMO !== "true";
+
+const VIVA_ACCOUNTS_URL = IS_PRODUCTION
+  ? "https://accounts.vivapayments.com/connect/token"
+  : "https://demo-accounts.vivapayments.com/connect/token";
+
+const VIVA_API_URL = IS_PRODUCTION
+  ? "https://api.vivapayments.com"
+  : "https://demo-api.vivapayments.com";
+
+const VIVA_CHECKOUT_URL = IS_PRODUCTION
+  ? "https://www.vivapayments.com/web/checkout"
+  : "https://demo.vivapayments.com/web/checkout";
+
+export interface VivaPaymentOrderRequest {
+  amount: number; // En céntimos — ej. 999 = 9,99€
+  customerTrns: string; // Descripción mostrada al cliente
+  merchantTrns?: string; // Referencia interna corta
+  customerEmail?: string;
+  customerFullName?: string;
+  requestLang?: string; // ej. "es-ES"
+  sourceCode?: string; // Si tienes varios "payment sources" configurados en Viva
+}
+
+export interface VivaTransaction {
+  transactionId: string;
+  orderCode: number;
+  statusId: string; // F = Finished (pago completado con éxito)
+  amount: number;
+  email?: string;
+  fullName?: string;
+  cardNumber?: string;
+  cardTypeId?: number; // 0=Visa, 1=Mastercard, 2=Diners, 3=Amex, 6=Maestro...
+}
+
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Obtiene un access token OAuth2 vía client_credentials, cacheado en
+ * memoria del proceso mientras quede vigente (los tokens de Viva duran
+ * 3600s; renovamos con 60s de margen de seguridad).
+ */
+export async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now()) {
+    return cachedToken.token;
+  }
+
+  const clientId = process.env.VIVA_SMART_CHECKOUT_CLIENT_ID;
+  const clientSecret = process.env.VIVA_SMART_CHECKOUT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error("VIVA_SMART_CHECKOUT_CLIENT_ID / VIVA_SMART_CHECKOUT_CLIENT_SECRET no configuradas");
+  }
+
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+
+  const res = await fetch(VIVA_ACCOUNTS_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${basicAuth}`,
+    },
+    body: "grant_type=client_credentials",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Viva OAuth2 token request failed: ${res.status} ${text.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as { access_token: string; expires_in: number };
+  cachedToken = {
+    token: data.access_token,
+    // Margen de 60s para evitar usar un token que expire a mitad de una llamada.
+    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+  };
+  return data.access_token;
+}
+
+/**
+ * Crea una orden de pago en Viva Smart Checkout y devuelve la URL a la que
+ * redirigir al cliente para completar el pago con tarjeta.
+ */
+export async function createPaymentOrder(opts: VivaPaymentOrderRequest): Promise<{ orderCode: number; checkoutUrl: string }> {
+  const token = await getAccessToken();
+
+  const payload: Record<string, unknown> = {
+    amount: opts.amount,
+    customerTrns: opts.customerTrns,
+    merchantTrns: opts.merchantTrns,
+    paymentTimeout: 1800, // 30 minutos para completar el pago
+    disableWallet: true, // Solo tarjeta — sin Viva Wallet, según lo pedido
+    disableCash: true, // Sin pago en efectivo (Viva Spot)
+  };
+  if (opts.customerEmail || opts.customerFullName) {
+    payload.customer = {
+      email: opts.customerEmail,
+      fullName: opts.customerFullName,
+      requestLang: opts.requestLang || "es-ES",
+    };
+  }
+  if (opts.sourceCode) payload.sourceCode = opts.sourceCode;
+
+  const res = await fetch(`${VIVA_API_URL}/checkout/v2/orders`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    logger.error({ status: res.status, body: text }, "Viva createPaymentOrder failed");
+    throw new Error(`Viva createPaymentOrder failed: ${res.status} ${text.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as { orderCode: number };
+  return {
+    orderCode: data.orderCode,
+    checkoutUrl: `${VIVA_CHECKOUT_URL}?ref=${data.orderCode}`,
+  };
+}
+
+/**
+ * Confirma el estado real de una transacción vía API — nunca fiarse solo
+ * de la redirección del navegador del cliente (puede manipularse) ni de un
+ * webhook sin verificar; esto es la fuente de verdad real.
+ */
+export async function verifyTransaction(transactionId: string): Promise<VivaTransaction | null> {
+  const token = await getAccessToken();
+
+  const res = await fetch(`${VIVA_API_URL}/checkout/v2/transactions/${transactionId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    const text = await res.text().catch(() => "");
+    throw new Error(`Viva verifyTransaction failed: ${res.status} ${text.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as any;
+  return {
+    transactionId: data.transactionId ?? transactionId,
+    orderCode: data.orderCode,
+    statusId: data.statusId,
+    amount: data.amount,
+    email: data.email,
+    fullName: data.fullName,
+    cardNumber: data.cardNumber,
+    cardTypeId: data.cardTypeId,
+  };
+}
+
+/** statusId "F" = Finished — el único valor que representa un pago completado con éxito. */
+export function isTransactionPaid(tx: VivaTransaction): boolean {
+  return tx.statusId === "F";
+}

@@ -237,13 +237,19 @@ export function DeployModal({
       .catch(() => {});
   }, [appId]);
 
-  /* ── Watermark removal: abre Stripe Checkout ── */
+  /* ── Watermark removal: selector de proveedor de pago ── */
+  const [watermarkProvider, setWatermarkProvider] = useState<"stripe" | "viva">("stripe");
+
   const handleRemoveWatermark = useCallback(async () => {
     setWatermarkLoading(true);
     try {
-      const data = await apiFetch<{ sessionUrl?: string; error?: string }>(`/api/watermark/${appId}/remove`, { method: "POST" });
-      if (data.sessionUrl) {
-        window.location.href = data.sessionUrl;
+      const endpoint = watermarkProvider === "viva"
+        ? `/api/watermark/${appId}/remove-viva`
+        : `/api/watermark/${appId}/remove`;
+      const data = await apiFetch<{ sessionUrl?: string; checkoutUrl?: string; error?: string }>(endpoint, { method: "POST" });
+      const redirectUrl = data.sessionUrl || data.checkoutUrl;
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
       } else {
         throw new Error(data.error || "No se pudo iniciar el pago");
       }
@@ -252,18 +258,31 @@ export function DeployModal({
     } finally {
       setWatermarkLoading(false);
     }
-  }, [appId, toast]);
+  }, [appId, toast, watermarkProvider]);
 
-  /* ── Watermark removal: verificar tras volver de Stripe ── */
+  /* ── Watermark removal: verificar tras volver de Stripe o Viva.com ── */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("watermark_removed") !== "true") return;
+
+    // Stripe vuelve con ?session_id=..., Viva.com vuelve con ?t=<transactionId>
     const sessionId = params.get("session_id");
-    if (!sessionId) return;
-    apiFetch<{ success: boolean; hasWatermark: boolean }>(`/api/watermark/${appId}/verify-removal`, {
-      method: "POST",
-      body: JSON.stringify({ sessionId }),
-    })
+    const vivaTransactionId = params.get("t");
+
+    const verify = sessionId
+      ? apiFetch<{ success: boolean; hasWatermark: boolean }>(`/api/watermark/${appId}/verify-removal`, {
+          method: "POST",
+          body: JSON.stringify({ sessionId }),
+        })
+      : vivaTransactionId
+      ? apiFetch<{ success: boolean; hasWatermark: boolean }>(`/api/watermark/${appId}/verify-removal-viva`, {
+          method: "POST",
+          body: JSON.stringify({ transactionId: vivaTransactionId }),
+        })
+      : null;
+    if (!verify) return;
+
+    verify
       .then((d) => {
         if (d.success) {
           setWatermarkHasMark(false);
@@ -757,9 +776,25 @@ export function DeployModal({
                 )}
               </div>
               {watermarkHasMark !== false && (
-                <p className="mt-2.5 text-xs text-white/25">
-                  Pago único. Tu app deja de mostrar la marca de agua y el enlace a Maris AI permanentemente.
-                </p>
+                <>
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    <button
+                      onClick={() => setWatermarkProvider("stripe")}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${watermarkProvider === "stripe" ? "bg-[#7c3aed] text-white" : "bg-white/[0.04] text-white/40 hover:text-white/70"}`}
+                    >
+                      Tarjeta (Stripe)
+                    </button>
+                    <button
+                      onClick={() => setWatermarkProvider("viva")}
+                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${watermarkProvider === "viva" ? "bg-[#7c3aed] text-white" : "bg-white/[0.04] text-white/40 hover:text-white/70"}`}
+                    >
+                      Tarjeta (Viva.com)
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-white/25">
+                    Pago único. Tu app deja de mostrar la marca de agua y el enlace a Maris AI permanentemente.
+                  </p>
+                </>
               )}
             </div>
 

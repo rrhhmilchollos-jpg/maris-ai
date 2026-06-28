@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { GeneratedApp } from "@workspace/db/schema";
 import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
+import { createPaymentOrder, verifyTransaction, isTransactionPaid } from "../lib/vivaPayments";
 
 const router = Router();
 
@@ -141,6 +142,87 @@ router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request
     }
   } catch (error) {
     logger.error({ err: error }, "Error verifying watermark removal:");
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+/**
+ * POST /api/watermark/:appId/remove-viva
+ * Crear una orden de pago en Viva.com para eliminar la marca de agua
+ * (alternativa a Stripe, usando la cuenta de comercio real en España).
+ */
+router.post("/watermark/:appId/remove-viva", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { appId } = req.params;
+    const userId = (req as any).auth?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
+    if (!appData) {
+      return res.status(404).json({ error: "App no encontrada" });
+    }
+    if (!(appData as any).hasWatermark) {
+      return res.status(400).json({ error: "Esta app ya no tiene marca de agua" });
+    }
+
+    const priceEur = (appData as any).watermarkRemovalPrice ?? 9.99;
+    const { orderCode, checkoutUrl } = await createPaymentOrder({
+      amount: Math.round(priceEur * 100), // Viva espera céntimos
+      customerTrns: `Eliminar Marca de Agua - ${(appData as any).title}`,
+      merchantTrns: `watermark_removal:${appId}`,
+      requestLang: "es-ES",
+    });
+
+    await GeneratedApp.updateOne({ _id: appId }, { watermarkRemovalVivaOrderCode: orderCode });
+
+    return res.json({ orderCode, checkoutUrl, price: priceEur });
+  } catch (error) {
+    logger.error({ err: error }, "Error creating Viva payment order for watermark removal:");
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+/**
+ * POST /api/watermark/:appId/verify-removal-viva
+ * Verificar si la marca de agua ha sido eliminada tras un pago con Viva.com.
+ * El frontend llama a esto al volver de Viva con el parámetro `t`
+ * (transaction ID) que Viva añade a la Success URL.
+ */
+router.post("/watermark/:appId/verify-removal-viva", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { appId } = req.params;
+    const userId = (req as any).auth?.userId;
+    const { transactionId } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+    if (!transactionId) {
+      return res.status(400).json({ error: "transactionId es requerido" });
+    }
+
+    const tx = await verifyTransaction(transactionId);
+    if (!tx || !isTransactionPaid(tx)) {
+      return res.status(400).json({
+        success: false,
+        message: "El pago no ha sido procesado",
+        statusId: tx?.statusId ?? null,
+      });
+    }
+
+    await GeneratedApp.updateOne(
+      { _id: appId, userId },
+      { hasWatermark: false, watermarkRemovalVivaOrderCode: null },
+    );
+    return res.json({
+      success: true,
+      message: "Marca de agua eliminada exitosamente",
+      hasWatermark: false,
+    });
+  } catch (error) {
+    logger.error({ err: error }, "Error verifying Viva watermark removal:");
     return res.status(500).json({ error: "Error interno del servidor" });
   }
 });
