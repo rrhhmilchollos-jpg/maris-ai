@@ -1630,9 +1630,19 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                       <span className={`h-2 w-2 rounded-full ${hasRenderableCode ? "bg-emerald-400" : "bg-white/20"}`} />
                       <span>{showStaticBuildState ? "Esperando código…" : "Vista en vivo activa"}</span>
                     </div>
-                    <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-3 md:px-4 py-1.5 text-[12px] md:text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
-                      {hasRenderableCode ? "Resume" : "Cerrar"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-3 md:px-4 py-1.5 text-[12px] md:text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
+                        {hasRenderableCode ? "Resume" : "Cerrar"}
+                      </button>
+                      <button
+                        onClick={handleClosePreview}
+                        title="Cerrar vista previa"
+                        aria-label="Cerrar vista previa"
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-white/40 transition hover:bg-white/[0.08] hover:text-white"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </>
