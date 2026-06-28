@@ -295,9 +295,25 @@ export class CoreOrchestrator {
         serviceBundles[svc] = toBundle(allGenerated.filter((item) => item.serviceName === svc));
       }
     }
+    // ENCONTRADO: el hito de docker-compose.yml (targetWorkspace ".", sin
+    // serviceName propio porque describe TODOS los servicios juntos) caía
+    // en este mismo filtro "todo lo que no es apps/web" junto con el resto
+    // del backend — terminaba mezclado dentro de backendCode con el mismo
+    // formato "// === FILE: ..." que cualquier archivo backend normal, sin
+    // ninguna distinción que permitiera presentárselo al usuario como el
+    // archivo que de verdad distingue "carpetas de código separadas" de
+    // "microservicios reales que se levantan con un solo comando" (el propio
+    // prompt de arriba lo describe así, pero el código nunca lo trataba de
+    // forma especial). Se extraen aquí explícitamente los archivos de
+    // infraestructura a nivel raíz del proyecto (targetWorkspace ".") en su
+    // propio campo, separados del resto del backend.
+    const rootInfraFiles = allGenerated.filter((item) => item.targetWorkspace === ".");
+    const rootInfraBundle = rootInfraFiles.length > 0 ? toBundle(rootInfraFiles) : "";
+    const hasDockerCompose = rootInfraFiles.some((item) => item.filePath.toLowerCase().includes("docker-compose"));
+
     const nonWebBackend = architecture === "microservices"
-      ? toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web' && !item.serviceName))
-      : toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web'));
+      ? toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web' && item.targetWorkspace !== '.' && !item.serviceName))
+      : toBundle(allGenerated.filter((item) => item.targetWorkspace !== 'apps/web' && item.targetWorkspace !== '.'));
 
     return {
       database,
@@ -306,6 +322,8 @@ export class CoreOrchestrator {
       frontendCode: toBundle(allGenerated.filter((item) => item.targetWorkspace === 'apps/web')),
       backendCode: nonWebBackend,
       serviceBundles, // {} en monolito; { "billing": "...", "inventory": "..." } en microservicios
+      rootInfraBundle, // "" si no hay archivos a nivel raíz; si no, docker-compose.yml + README de topología, listos para presentar como archivos propios del proyecto (no enterrados dentro de backendCode)
+      hasDockerCompose,
       milestones: allGenerated,
     };
   }

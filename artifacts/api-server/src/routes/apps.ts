@@ -3208,12 +3208,21 @@ export async function generateApp(
             .map(([svc, code]) => `// ════════════════════ SERVICIO: ${svc} ════════════════════\n// Este servicio es independiente — su propio package.json, su propio\n// servidor Express, su propia base de datos. Despliega cada servicio\n// por separado (ej. cada uno en su propio contenedor/proceso).\n${code}`)
             .join("\n\n")
         : null;
+      // Archivos de infraestructura a nivel raíz (docker-compose.yml +
+      // README de topología) — antes se mezclaban sin distinción dentro del
+      // backendCode de microservicios; ahora se anteponen con un marcador
+      // claro, ya que docker-compose.yml es el archivo que el usuario
+      // necesita ejecutar primero (docker compose up) para levantar todo el
+      // sistema junto, no un archivo backend más entre los demás.
+      const rootInfraSection = milestoneResult.rootInfraBundle
+        ? `// ════════════════════ INFRAESTRUCTURA DEL PROYECTO (raíz) ════════════════════\n// Estos archivos van en la RAÍZ del proyecto, no dentro de ningún servicio.\n${milestoneResult.hasDockerCompose ? "// Ejecuta 'docker compose up' desde la raíz para levantar todos los servicios y sus bases de datos juntos.\n" : ""}${milestoneResult.rootInfraBundle}\n\n`
+        : "";
       return {
         title: "Proyecto Generado por Hitos",
         description: `Sistema construido mediante Task Splitting por capas (${milestoneResult.milestones?.length ?? 0} hitos, base de datos: ${milestoneResult.database ?? "mongodb"}, arquitectura: ${archDescription})`,
         techStack: ["React", "Node", "TypeScript", milestoneResult.database === "postgresql" ? "PostgreSQL" : "MongoDB", ...(milestoneResult.architecture === "microservices" ? ["Microservicios"] : [])],
         frontendCode: testedMilestone,
-        backendCode: microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito."
+        backendCode: rootInfraSection + (microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito.")
       };
     }
 
