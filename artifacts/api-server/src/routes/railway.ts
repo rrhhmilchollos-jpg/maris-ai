@@ -84,6 +84,11 @@ router.post("/apps/:appId/deploy-backend", requireAuth, async (req: Request, res
 
     const app = await GeneratedApp.findOne({ _id: appId, userId }).lean();
     if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if ((app as any).architecture === "serverless") {
+      return res.status(400).json({
+        error: "Esta app usa arquitectura serverless — su backend ya se despliega automáticamente junto al frontend en Vercel (carpeta api/), no necesita ni puede desplegarse a Railway.",
+      });
+    }
     if (!(app as any).backendCode || (app as any).backendCode.length < 50) {
       return res.status(400).json({ error: "Esta app no tiene backend que desplegar." });
     }

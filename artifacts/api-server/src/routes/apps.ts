@@ -150,8 +150,9 @@ ANTI-DESVIO ESPECIFICO: Genera EXACTAMENTE las paginas y componentes del plan. N
 
 CONEXION CON EL BACKEND REAL EN PRODUCCION (critico si backendNeeded=true):
 - En el preview/sandbox, frontend y backend comparten origen, asi que rutas relativas como fetch("/api/...") funcionan sin configuracion.
-- En produccion real, el frontend se despliega a Vercel y el backend a un dominio DISTINTO (Railway) — una ruta relativa fetch("/api/...") en produccion apuntaria al propio dominio de Vercel, donde no hay ningun backend escuchando, y fallaria silenciosamente con un error de red o un 404 de Vercel.
-- Por eso, TODA llamada del frontend a su propio backend debe construirse con una funcion helper centralizada en src/lib/api.ts:
+- En produccion real con arquitectura "monolith" o "microservices", el frontend se despliega a Vercel y el backend a un dominio DISTINTO (Railway) — una ruta relativa fetch("/api/...") en produccion apuntaria al propio dominio de Vercel, donde no hay ningun backend escuchando, y fallaria silenciosamente con un error de red o un 404 de Vercel.
+- EXCEPCION — arquitectura "serverless": en ese caso el backend (carpeta api/ en la raiz, ver SERVERLESS_BACKEND_GUIDANCE) se despliega en el MISMO proyecto y dominio de Vercel que el frontend — fetch("/api/...") con ruta relativa SI funciona correctamente en produccion sin ninguna configuracion adicional, porque no hay un segundo dominio distinto al que apuntar. No generes la convencion VITE_API_URL/apiUrl() en este caso, seria una complejidad innecesaria sin ningun beneficio real.
+- Por eso, para "monolith"/"microservices", TODA llamada del frontend a su propio backend debe construirse con una funcion helper centralizada en src/lib/api.ts:
   export const API_BASE_URL = import.meta.env.VITE_API_URL || "";
   export function apiUrl(path: string) { return API_BASE_URL + path; }
 - Usa siempre fetch(apiUrl("/api/recurso")), nunca fetch("/api/recurso") directamente — esto hace que el mismo codigo funcione en el preview (VITE_API_URL vacio, rutas relativas) y en produccion (VITE_API_URL apuntando al dominio real de Railway una vez desplegado).
@@ -863,10 +864,11 @@ Elige "mobile-native" SOLO cuando el usuario pida explícitamente una app móvil
 En "mobile-native": techStack debe ser ["React Native", "Expo", "TypeScript"] en vez del stack web habitual, y NO debe incluirse vercel.json ni nada específico de despliegue web.
 Por defecto (y en caso de duda) usa "web" — es la opción probada y la que cubre el 95%+ de los casos reales, incluyendo cualquier necesidad "móvil" vía diseño responsive.
 
-ARCHITECTURE CHOICE — campo "architecture": "monolith" | "microservices":
+ARCHITECTURE CHOICE — campo "architecture": "monolith" | "microservices" | "serverless":
 Elige "microservices" SOLO cuando se cumplan AMBAS condiciones:
 1. El proyecto es genuinamente complejo (equivalente a complexity "enterprise"/"advanced", varios dominios de negocio claramente independientes — ej: un ERP con facturación + inventario + RRHH + CRM, una plataforma con módulos que escalarían y se desplegarían por separado en una empresa real).
 2. El usuario lo pide explícitamente o describe necesidades que solo tienen sentido con servicios independientes (ej: "que cada módulo escale por separado", "arquitectura de microservicios", "cada equipo debe poder desplegar su parte sin afectar al resto").
+Elige "serverless" cuando el usuario lo pida explícitamente ("serverless", "funciones serverless", "Lambda", "Vercel Functions", "sin gestionar servidor"), o cuando el backend sea genuinamente ligero y de baja frecuencia (un puñado de endpoints CRUD simples, sin lógica de fondo continua, sin WebSockets, sin necesidad de mantener conexiones persistentes) — ahí serverless es estrictamente mejor que pagar por un servidor Express corriendo 24/7 sin aprovecharlo. NO elijas "serverless" si el plan incluye colas de mensajería en segundo plano (BACKGROUND_JOB_QUEUE_BACKEND_GUIDANCE, requiere un Worker de proceso largo), WebSockets/tiempo real continuo, o microservices — esas necesidades son incompatibles con el modelo de ejecución de funciones serverless (procesos de corta duración, sin estado entre invocaciones).
 En CUALQUIER otro caso usa "monolith" (la opción por defecto, casi siempre la correcta): un monolito bien estructurado es más simple de mantener, depurar y desplegar que microservicios prematuros — la sabiduría de ingeniería real es "empieza monolito, divide cuando el dolor real lo justifique", no al revés.
 Si elige "microservices": describe en dataModels/frontendFiles qué dominios de negocio existen, para que el siguiente agente (el orquestador de hitos) pueda dividir el backend en servicios reales por dominio, cada uno con su propia base de datos y API, comunicándose por HTTP/eventos — no microservicios de juguete que comparten la misma base de datos.
 
@@ -1097,6 +1099,22 @@ BACKGROUND JOB QUEUE — cuando el plan incluya un servicio con kind="generic-re
 - Documenta en .env.example: REDIS_URL=redis://default:password@host:6379 con un comentario indicando que Railway, Upstash y Redis Cloud ofrecen un tier gratuito suficiente para empezar.
 `;
 
+const SERVERLESS_BACKEND_GUIDANCE = `
+ARQUITECTURA SERVERLESS — cuando plan.architecture sea "serverless" (el usuario lo pidio explicitamente, o el backend es genuinamente ligero: pocos endpoints CRUD simples sin trabajo de fondo continuo):
+GENERA UN ARCHIVO POR ENDPOINT en la carpeta api/ en la RAIZ del proyecto (NO src/routes/, NO un servidor Express con app.listen) — Vercel detecta automaticamente cualquier archivo .ts dentro de api/ como una funcion serverless independiente, sin necesitar configuracion adicional ni ningun plugin.
+- Cada archivo exporta: import type { VercelRequest, VercelResponse } from "@vercel/node"; export default async function handler(req: VercelRequest, res: VercelResponse) { ... } — esta es la firma estandar y obligatoria, confirmada contra la documentacion oficial de Vercel.
+- Las rutas dinamicas usan corchetes en el nombre de archivo: api/productos/[id].ts maneja /api/productos/123, leyendo req.query.id.
+- CONEXION A BASE DE DATOS — critico para evitar agotar el pool bajo carga (cada invocacion puede ser un proceso nuevo, no un servidor persistente con un unico pool compartido): cachea la conexion en una variable global del modulo (let cachedConnection: typeof mongoose | null = null fuera del handler; si ya existe, reutilizala en vez de reconectar) — Vercel mantiene el modulo "caliente" entre invocaciones consecutivas en el mismo contenedor con bastante frecuencia, asi que esto reduce conexiones nuevas reales de forma significativa aunque no las elimina del todo.
+- LIMITACIONES REALES de Vercel Functions que el codigo y el .env.example deben respetar y documentar (no ignorar):
+  - Tiempo maximo de ejecucion: 10 segundos en el plan gratuito (Hobby), 60s en Pro — cualquier operacion que pueda tardar mas (procesamiento pesado, llamadas a IA lentas, generacion de reportes grandes) NO es apta para este endpoint serverless; si el plan tiene ese tipo de trabajo, usa BACKGROUND_JOB_QUEUE_BACKEND_GUIDANCE en su lugar, son arquitecturas incompatibles entre si.
+  - Tamano maximo del payload de request/response: 4.5 MB — para subida de archivos grandes, sube directamente a un almacenamiento externo (S3, Cloudinary, ya cubierto en otras guias) en vez de pasar el archivo por la funcion.
+  - Sin estado entre invocaciones distintas (cada invocacion puede ejecutarse en un contenedor diferente) — nunca guardes datos en memoria esperando que la siguiente peticion los encuentre ahi, todo el estado real va en la base de datos.
+  - Cold starts: la primera peticion tras un periodo de inactividad puede tardar 1-3 segundos extra en arrancar — esto es normal y esperado en serverless, documentalo en el README en vez de tratarlo como un bug.
+- Genera vercel.json en la raiz SOLO si el proyecto necesita rewrites/headers especiales — Vercel detecta la carpeta api/ automaticamente sin necesitar declararla.
+- Genera .env.example con las mismas variables que usaria un backend tradicional (DATABASE_URL, JWT_SECRET, etc.) — se configuran igual, como Environment Variables del proyecto de Vercel (el mismo proyecto del frontend, no uno separado).
+- NO generes package.json con "start"/"dev" tipo servidor (no hay servidor que arrancar) — los scripts relevantes son los del propio frontend Vite (build), las funciones de api/ se despliegan automaticamente como parte del mismo build.
+`;
+
 const GENERIC_INTEGRATION_BACKEND_GUIDANCE = `
 GENERIC ERP/CRM CONNECTOR — cuando el plan incluya un servicio con kind="generic-rest":
 - Genera src/integrations/<nombreSistema>Client.ts: un cliente HTTP (fetch nativo o axios) con:
@@ -1160,6 +1178,7 @@ export interface GeneratedAppPayload {
   backendCode: string;
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
   requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
+  architecture?: "monolith" | "microservices" | "serverless";
 }
 
 
@@ -1219,7 +1238,7 @@ interface ProjectPlan {
   backendNeeded: boolean;
   database?: "mongodb" | "postgresql" | "mysql";
   platform?: "web" | "mobile-native";
-  architecture?: "monolith" | "microservices";
+  architecture?: "monolith" | "microservices" | "serverless";
   backendFiles: string[];
 }
 
@@ -2043,6 +2062,7 @@ Backend plan (implement every listed file with real Express handlers):
 ${planSummary}
 ${genericIntegrations.length ? `\n${GENERIC_INTEGRATION_BACKEND_GUIDANCE}\n` : ""}
 ${needsBackgroundQueue ? `\n${BACKGROUND_JOB_QUEUE_BACKEND_GUIDANCE}\n` : ""}
+${plan.architecture === "serverless" ? `\n${SERVERLESS_BACKEND_GUIDANCE}\n` : ""}
 Now produce the JSON object with backendCode.`;
 
   try {
@@ -4022,6 +4042,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
       : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
+    architecture: plan.architecture,
   };
 }
 
@@ -5870,6 +5891,7 @@ export async function runJobById(jobId: string): Promise<void> {
         backendCode: finalResult.backendCode,
         plannedPages: finalResult.plannedPages || [],
         requiredEnvVars: finalResult.requiredEnvVars || [],
+        architecture: finalResult.architecture,
         language: job.language,
         kind: job.kind,
         status: "ready",

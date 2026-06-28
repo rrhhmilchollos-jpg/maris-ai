@@ -1472,14 +1472,16 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               />
             </div>
 
-            <div className="hidden md:block">
-              <RailwayDeployButton
-                appId={id}
-                githubRepoFullName={(app as any)?.githubRepoFullName}
-                railwayBackendUrl={(app as any)?.railwayBackendUrl}
-                railwayDeploymentStatus={(app as any)?.railwayDeploymentStatus}
-              />
-            </div>
+            {(app as any)?.architecture !== "serverless" && (
+              <div className="hidden md:block">
+                <RailwayDeployButton
+                  appId={id}
+                  githubRepoFullName={(app as any)?.githubRepoFullName}
+                  railwayBackendUrl={(app as any)?.railwayBackendUrl}
+                  railwayDeploymentStatus={(app as any)?.railwayDeploymentStatus}
+                />
+              </div>
+            )}
 
             <button onClick={handleShare} className="hidden md:inline-flex h-8 items-center gap-1.5 rounded-md border border-white/[0.07] bg-white/[0.04] px-3 text-[13px] font-semibold text-white/70 hover:bg-white/[0.07] hover:text-white transition">
               <Share2 className="h-3.5 w-3.5" />Share

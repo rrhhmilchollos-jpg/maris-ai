@@ -153,6 +153,12 @@ export interface IGeneratedApp {
   railwayBackendUrl?: string;
   railwayDeploymentStatus?: "not_deployed" | "deploying" | "deployed" | "failed";
   railwayDeploymentError?: string;
+  // Arquitectura elegida por el Architect durante la generación — ENCONTRADO:
+  // este campo solo vivía en el ProjectPlan en memoria, nunca se persistía,
+  // así que tras la generación no había forma de saber si una app concreta
+  // era "serverless" (backend ya viaja con el frontend a Vercel, nada que
+  // desplegar a Railway) sin volver a inspeccionar el código generado.
+  architecture?: "monolith" | "microservices" | "serverless";
   requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
   // ID Universal Maris AI — formato PRJ-<timestamp_base36>-<random6>
   // Identifica al proyecto de forma única en todo el ecosistema de Maris AI
@@ -223,6 +229,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     railwayBackendUrl: { type: String },
     railwayDeploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
     railwayDeploymentError: { type: String },
+    architecture: { type: String, enum: ["monolith", "microservices", "serverless"] },
     requiredEnvVars: [
       {
         name: { type: String, required: true },
