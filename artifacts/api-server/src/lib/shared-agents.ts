@@ -158,7 +158,30 @@ const AI_CALL_TIMEOUT_MS = 90_000;
 export async function createClaudeMessageWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
   let lastError: unknown;
   const MAX_RETRIES = 3;
-  
+
+  // PROMPT CACHING AUTOMÁTICO — esta función es el punto central por el que
+  // pasan prácticamente todos los agentes (Backend Engineer, Designer,
+  // Patcher, etc.), muchos con system prompts grandes y FIJOS (el texto
+  // nunca cambia entre llamadas: DESIGNER_SYSTEM_PROMPT ~3350 tokens,
+  // BACKEND_SYSTEM_PROMPT_POSTGRES ~2650 tokens) — el caso de uso ideal
+  // para prompt caching de Anthropic (90% de descuento en tokens leídos de
+  // caché). Confirmado en el panel de uso real: 0% de tasa de aciertos de
+  // caché en toda la plataforma, a pesar de que estos prompts se repiten en
+  // miles de llamadas al día sin cambiar una letra.
+  // Conversión automática y transparente: si params.system es un string
+  // (el caso normal en todo el código existente) y supera el mínimo
+  // cacheable de Sonnet (1024 tokens ≈ 4000 caracteres, usamos un margen
+  // conservador), lo convertimos al formato de bloques con cache_control.
+  // Si ya viene en formato array (algún caller ya lo gestiona explícitamente
+  // como en otros puntos de apps.ts), no lo tocamos — evita doble conversión.
+  const MIN_CACHEABLE_CHARS = 3500; // ≈ 1024 tokens con margen conservador
+  if (typeof params.system === "string" && params.system.length >= MIN_CACHEABLE_CHARS) {
+    params = {
+      ...params,
+      system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
+    };
+  }
+
   // OPTIMIZACIÓN DE CONTEXTO: Si el historial de mensajes es muy largo, comprimimos el pasado
   if (params.messages && params.messages.length > 10) {
     logger.info({ role, originalLength: params.messages.length }, "CONTE TEXT OPTIMIZER: Comprimiendo historial de mensajes...");

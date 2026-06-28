@@ -1585,6 +1585,17 @@ function fallbackClaudeModels(model: AgentModelChoice["model"]): ClaudeCoderMode
 
 async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ClaudeCoderModel }> {
   let lastError: unknown;
+  // Misma conversión automática a prompt caching que createClaudeMessageWithFallback
+  // (shared-agents.ts) — algunos callers de esta función ya convertían el
+  // system a array con cache_control manualmente, otros no (ej. el del
+  // patcher rápido más abajo, system.slice(0, 2000) sin cache_control). Esto
+  // cubre el caso general sin depender de que cada caller lo recuerde.
+  if (typeof params.system === "string" && params.system.length >= 3500) {
+    params = {
+      ...params,
+      system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
+    };
+  }
   for (const candidate of fallbackClaudeModels(model)) {
     try {
       let accumulated = "";
