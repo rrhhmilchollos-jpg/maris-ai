@@ -37,6 +37,12 @@ export interface IUser {
   githubId?: string;
   githubAvatarUrl?: string;
   githubConnectedAt?: Date;
+  // Railway API token — propiedad del propio usuario, el backend de cada
+  // app se despliega en SU cuenta de Railway, no en una compartida de
+  // Maris AI. Se guarda igual que el resto de credenciales de servicios
+  // externos del usuario (ver githubAccessToken arriba).
+  railwayApiToken?: string;
+  railwayConnectedAt?: Date;
   // ID Universal Maris AI — formato USR-<timestamp_base36>-<random6>
   // Identifica al usuario de forma única en todo el ecosistema de Maris AI
   marisId?: string;
@@ -83,6 +89,8 @@ const UserSchema = new Schema<IUser>(
     githubId: { type: String },
     githubAvatarUrl: { type: String },
     githubConnectedAt: { type: Date },
+    railwayApiToken: { type: String },
+    railwayConnectedAt: { type: Date },
     // ID Universal Maris AI
     marisId: { type: String, unique: true, sparse: true, index: true },
     // Correcciones de soporte admin — inmutables desde el cliente
@@ -136,6 +144,15 @@ export interface IGeneratedApp {
   customDomainVerified?: boolean;
   lastDeployedAt?: Date;
   deploymentLogs?: string;
+  // Backend real desplegado en Railway (no solo el frontend a Vercel) —
+  // ver lib/railwayDeploy.ts. railwayBackendUrl es la URL pública real que
+  // el frontend usa para hacer fetch a su propio backend en producción.
+  railwayProjectId?: string;
+  railwayServiceId?: string;
+  railwayEnvironmentId?: string;
+  railwayBackendUrl?: string;
+  railwayDeploymentStatus?: "not_deployed" | "deploying" | "deployed" | "failed";
+  railwayDeploymentError?: string;
   requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
   // ID Universal Maris AI — formato PRJ-<timestamp_base36>-<random6>
   // Identifica al proyecto de forma única en todo el ecosistema de Maris AI
@@ -200,6 +217,12 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     customDomainVerified: { type: Boolean, default: false },
     lastDeployedAt: { type: Date },
     deploymentLogs: { type: String },
+    railwayProjectId: { type: String },
+    railwayServiceId: { type: String },
+    railwayEnvironmentId: { type: String },
+    railwayBackendUrl: { type: String },
+    railwayDeploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
+    railwayDeploymentError: { type: String },
     requiredEnvVars: [
       {
         name: { type: String, required: true },

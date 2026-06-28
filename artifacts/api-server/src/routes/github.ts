@@ -8,7 +8,7 @@
  * POST /api/github/push/:appId      → Sube el proyecto a GitHub como repositorio
  */
 
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { requireAuth } from "../lib/auth";
 import { connectDB } from "../lib/db";
 import { User, GeneratedApp } from "@workspace/db/schema";
@@ -198,7 +198,11 @@ router.delete("/github/disconnect", requireAuth, async (req, res) => {
 });
 
 // ─── Subir proyecto a GitHub ──────────────────────────────────────────────────
-router.post("/github/push/:appId", requireAuth, async (req, res) => {
+// Exportado como función nombrada (en vez de solo el callback inline de
+// router.post) para que deployment.ts pueda reutilizar exactamente esta
+// misma lógica desde /api/apps/:appId/github — antes esa ruta era un mock
+// que nunca llamaba a este código real (ver comentario en deployment.ts).
+export async function githubPushHandler(req: Request, res: Response) {
   const { appId } = req.params;
   const { repoName, isPrivate = true, description = "" } = req.body as { repoName?: string; isPrivate?: boolean; description?: string };
 
@@ -386,6 +390,8 @@ router.post("/github/push/:appId", requireAuth, async (req, res) => {
     logger.error({ err }, "POST /github/push error");
     return res.status(500).json({ error: "Error interno al subir el proyecto a GitHub" });
   }
-});
+}
+
+router.post("/github/push/:appId", requireAuth, githubPushHandler);
 
 export default router;

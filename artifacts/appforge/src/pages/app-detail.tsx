@@ -29,6 +29,7 @@ import { DeployModal } from "@/components/deploy-modal";
 import { WorkflowListPanel } from "@/components/workflow-list-panel";
 import { StressTestModal } from "@/components/stress-test-modal";
 import { GitHubButton } from "@/components/github-button";
+import { RailwayDeployButton } from "@/components/railway-deploy-button";
 import { LivePreview } from "@/components/live-preview";
 import { parseBundle } from "@/lib/parseBundle";
 import { Layout } from "@/components/layout";
@@ -1468,6 +1469,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 appDescription={app?.description ?? ""}
                 githubRepoUrl={(app as any)?.githubRepoUrl}
                 onSuccess={() => queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) })}
+              />
+            </div>
+
+            <div className="hidden md:block">
+              <RailwayDeployButton
+                appId={id}
+                githubRepoFullName={(app as any)?.githubRepoFullName}
+                railwayBackendUrl={(app as any)?.railwayBackendUrl}
+                railwayDeploymentStatus={(app as any)?.railwayDeploymentStatus}
               />
             </div>
 

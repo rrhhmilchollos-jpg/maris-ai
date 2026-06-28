@@ -409,19 +409,22 @@ router.post("/apps/:appId/code-review", requireAuth, async (req: Request, res: R
 
 /**
  * POST /api/apps/:appId/github
- * Sincronización con GitHub
+ * ENCONTRADO: este endpoint era un mock — devolvía una URL inventada
+ * (https://github.com/marisai-user/...) cuando la app no tenía un repo
+ * todavía, sin llamar nunca al flujo real de creación de repositorio
+ * (POST /api/github/push/:appId en github.ts, que sí crea el repo real,
+ * sube los archivos, y guarda githubRepoUrl/githubRepoFullName). El botón
+ * de GitHub del frontend (github-button.tsx) llama a ESTA ruta, así que
+ * estaba completamente desconectado del sistema real — el usuario veía
+ * "Sincronizado con GitHub correctamente" sin que ningún repo real se
+ * hubiera creado nunca. Esto también bloqueaba el deploy de backend a
+ * Railway, que depende de githubRepoFullName existiendo de verdad.
+ * Redirige internamente a la lógica real en vez de mantener dos
+ * implementaciones del mismo flujo.
  */
 router.post("/apps/:appId/github", requireAuth, async (req: Request, res: Response) => {
-  const { appId } = req.params;
-  const userId = getAuthenticatedUserId(req);
-  const appData = await GeneratedApp.findOne({ _id: appId, userId });
-  if (!appData) return res.status(404).json({ error: "App not found" });
-  
-  return res.json({ 
-    success: true, 
-    repoUrl: appData.githubRepoUrl || `https://github.com/marisai-user/${appData.publicSlug || appId}`,
-    message: "Sincronizado con GitHub correctamente" 
-  });
+  const { githubPushHandler } = await import("./github");
+  return githubPushHandler(req, res);
 });
 
 /**

@@ -14,6 +14,7 @@ import watermarkRouter from "./routes/watermark";
 import mcpIntegrationsRouter from "./routes/mcpIntegrations";
 import workflowsRouter from "./routes/workflows";
 import stressTestRouter from "./routes/stressTest";
+import railwayRouter from "./routes/railway";
 import { vivaWebhookRouter } from "./routes/vivaWebhook";
 import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
@@ -322,6 +323,7 @@ app.use("/api", watermarkRouter);
 app.use("/api", mcpIntegrationsRouter);
 app.use("/api", workflowsRouter);
 app.use("/api", stressTestRouter);
+app.use("/api", railwayRouter);
 app.use("/api", vivaWebhookRouter);
 
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
