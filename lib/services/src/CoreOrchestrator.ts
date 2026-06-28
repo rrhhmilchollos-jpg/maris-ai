@@ -166,14 +166,22 @@ export class CoreOrchestrator {
   async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {
     const response = await anthropic.messages.create({
       model: this.options.model!,
-      // ENCONTRADO en producción: 4000 tokens resultaban insuficientes para
-      // planificar proyectos "ultra complejos" (score >= 10, ej. un tipster
-      // deportivo con scraping + ML + múltiples módulos de apuestas +
-      // frontend) — la respuesta se truncaba a mitad del JSON antes de
-      // cerrar el bloque ```json, causando el bug de parseo corregido
-      // arriba en cleanJsonResponse. Aumentado a un valor que da margen
-      // real para listar todos los hitos con sus dependencias sin cortar.
-      max_tokens: 8000,
+      // ENCONTRADO en producción: 4000 tokens (luego subido a 8000) seguían
+      // resultando insuficientes para planificar proyectos verdaderamente
+      // "ultra complejos" (score >= 10 — ej. un tipster deportivo con
+      // scraping + ML + múltiples módulos de apuestas + frontend, score 14
+      // confirmado en logs reales) — la respuesta se truncaba a mitad del
+      // JSON antes de cerrar el bloque ```json, causando el bug de parseo
+      // ya corregido en cleanJsonResponse (que ahora además maneja el caso
+      // de truncamiento aunque vuelva a ocurrir). A petición explícita del
+      // usuario tras un incidente real con un cliente, se sube a un valor
+      // con mucho más margen — confirmado contra la documentación oficial
+      // de Anthropic que claude-sonnet-4-6 soporta hasta 64.000 tokens de
+      // salida en la API síncrona; 24.000 da margen real de sobra para
+      // listar decenas de hitos con sus dependencias sin acercarse al
+      // límite absoluto del modelo (evitando coste/latencia innecesarios
+      // de pedir el máximo posible cuando no hace falta).
+      max_tokens: 24000,
       system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userPrompt }],
     });
