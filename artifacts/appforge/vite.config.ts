@@ -84,6 +84,25 @@ export default defineConfig({
     cssCodeSplit: true,
     reportCompressedSize: false,
     sourcemap: false,
-
+    rollupOptions: {
+      output: {
+        // AUDITORÍA REAL: el bundle principal (index-*.js) pesaba 685KB sin
+        // comprimir y se cargaba en TODA página, incluida la landing
+        // pública, sin que ningún visitante anónimo necesite realmente el
+        // SDK completo de autenticación o librerías de gráficos en ese
+        // momento. Sin manualChunks definido, Rollup decide la división
+        // automáticamente sin ninguna guía — separar explícitamente las
+        // librerías más pesadas en sus propios chunks permite que el
+        // navegador los cachee de forma independiente entre despliegues
+        // (cambiar código de la app no invalida el caché de estas
+        // librerías, que rara vez cambian de versión) y reduce el JS que
+        // debe parsearse antes de pintar la landing pública.
+        manualChunks: {
+          "vendor-clerk": ["@clerk/react", "@clerk/themes", "@clerk/localizations"],
+          "vendor-charts": ["recharts"],
+          "vendor-query": ["@tanstack/react-query"],
+        },
+      },
+    },
   },
 });

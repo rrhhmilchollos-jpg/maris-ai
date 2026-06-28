@@ -389,6 +389,29 @@ for (const route of ROUTES) {
     html = html.replace(/(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/, `$1${route.canonical}$2`);
     if (html === canonicalBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
 
+    // Eliminar esquemas JSON-LD específicos de la HOME en cualquier página
+    // que no sea la home. CONFIRMADO contra la documentación oficial de
+    // Google (developers.google.com/search/docs/appearance/structured-data/sd-policies):
+    // "Don't mark up irrelevant or misleading content... unrelated to the
+    // focus of a page" — antes de este fix, el FAQPage (8 preguntas sobre
+    // Maris AI en general), HowTo (guía de uso) y Product (con reseñas)
+    // se servían IDÉNTICOS en /legal/cookies, /legal/privacidad, etc.,
+    // donde no tienen relación con el contenido real de la página. Esto es
+    // justo el patrón que la documentación describe como elegible para
+    // manual action de "spammy structured markup" — no solo peso extra.
+    // Organization, WebSite y BreadcrumbList SÍ son universales (describen
+    // el sitio en general, no un contenido específico) y se mantienen en
+    // todas las páginas.
+    if (route.path !== "/") {
+      const SCHEMA_TYPES_HOME_ONLY = ["Person", "SoftwareApplication", "FAQPage", "HowTo", "Product"];
+      for (const schemaType of SCHEMA_TYPES_HOME_ONLY) {
+        const schemaRegex = new RegExp(
+          `<script type="application/ld\\+json">\\{"@context":"https://schema\\.org","@type":"${schemaType}".*?<\\/script>`,
+        );
+        html = html.replace(schemaRegex, "");
+      }
+    }
+
     // Add visible SEO content + hide script
     // Usamos una regex que captura la etiqueta <div id="root" ...></div> completa,
     // sea cual sea el resto de atributos (role="main", clases, etc.), en vez de
