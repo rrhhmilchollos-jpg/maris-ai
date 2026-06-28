@@ -153,7 +153,7 @@ CONEXION CON EL BACKEND REAL EN PRODUCCION (critico si backendNeeded=true):
 - En produccion real, el frontend se despliega a Vercel y el backend a un dominio DISTINTO (Railway) — una ruta relativa fetch("/api/...") en produccion apuntaria al propio dominio de Vercel, donde no hay ningun backend escuchando, y fallaria silenciosamente con un error de red o un 404 de Vercel.
 - Por eso, TODA llamada del frontend a su propio backend debe construirse con una funcion helper centralizada en src/lib/api.ts:
   export const API_BASE_URL = import.meta.env.VITE_API_URL || "";
-  export function apiUrl(path: string) { return `${API_BASE_URL}${path}`; }
+  export function apiUrl(path: string) { return \`\${API_BASE_URL}\${path}\`; }
 - Usa siempre fetch(apiUrl("/api/recurso")), nunca fetch("/api/recurso") directamente — esto hace que el mismo codigo funcione en el preview (VITE_API_URL vacio, rutas relativas) y en produccion (VITE_API_URL apuntando al dominio real de Railway una vez desplegado).
 - Vite expone automaticamente cualquier variable de entorno que empiece por VITE_ via import.meta.env — no necesitas configuracion adicional en vite.config.ts para esto, es el mecanismo nativo.
 
