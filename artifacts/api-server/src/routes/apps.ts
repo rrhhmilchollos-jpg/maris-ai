@@ -1070,7 +1070,23 @@ OUTGOING AUTOMATION WEBHOOKS (kind:"webhook", name:"Webhooks salientes (automati
 - envVars for this service should be empty or minimal (no fixed target URL — the whole point is that the END USER of the generated app configures their own destination URLs at runtime via a settings screen, not a fixed env var chosen at generation time).
 - setupSteps must explain: (1) once deployed, the app owner can register their own webhook URLs (e.g. their n8n webhook trigger URL) from within the app's own settings/webhooks screen, (2) each subscription gets its own signing secret shown once at creation, to configure HMAC verification on the n8n/Zapier/Make side, (3) this gives the generated app the CAPABILITY to notify any external automation tool via the generic HTTP+JSON+HMAC contract those tools already support — it is not a native/certified integration with any one of them specifically.
 
+BACKGROUND JOB QUEUE (kind:"generic-rest", name:"Cola de procesamiento en segundo plano"):
+- Use this kind when the plan involves work that should NOT block the HTTP response — sending bulk/transactional emails, generating PDFs or reports, processing/resizing uploaded files or videos, reconciling large datasets, or any "procesar en segundo plano", "enviar miles de emails", "generar reporte pesado", "procesar archivo grande" requirement. Without this, the generated backend would await that work inline, risking request timeouts and a backend that blocks under load — exactly the kind of architecture gap that makes a generated app fragile under real traffic.
+- envVars must include "REDIS_URL" (BullMQ requires a real Redis instance — this is infrastructure the end user must provision, e.g. Railway/Upstash/Redis Cloud all have a free tier sufic iente for moderate load; this is NOT optional infra, be explicit about it in setupSteps).
+- setupSteps must explain: (1) the user needs a real Redis instance and must set REDIS_URL to its connection string before the queue works, (2) which background tasks this app offloads to the queue and why (so the user understands what stops working if Redis is unreachable — see the honest degradation guidance in the backend prompt), (3) free-tier Redis providers they can use to get started without paying anything.
+
 Output ONLY the JSON object.`;
+
+const BACKGROUND_JOB_QUEUE_BACKEND_GUIDANCE = `
+BACKGROUND JOB QUEUE — cuando el plan incluya un servicio con kind="generic-rest" y name="Cola de procesamiento en segundo plano" (trabajo que no debe bloquear la respuesta HTTP: emails masivos, generación de PDFs/reportes, procesamiento de archivos/imágenes/vídeo subidos, reconciliación de datasets grandes):
+- Usa BullMQ sobre Redis (import { Queue, Worker } from "bullmq"; import IORedis from "ioredis") — la librería más usada y mejor documentada de Node.js para colas reales, ya en uso con buena calidad en la propia infraestructura de Maris AI.
+- Genera src/lib/queue.ts: conexión IORedis (maxRetriesPerRequest: null, requerido por BullMQ) leída de process.env.REDIS_URL, y una o más Queue con nombres descriptivos del dominio (ej. "email-queue", "report-queue", "file-processing-queue") — no una única cola genérica "jobs" si hay tipos de trabajo claramente distintos con necesidades de reintento/prioridad diferentes.
+- Genera src/workers/<nombre>.worker.ts por cada cola: un Worker que procesa los jobs reales (enviar el email, generar el PDF, procesar el archivo) con concurrency razonable (2-5, no ilimitada — un worker mal acotado puede saturar la propia base de datos del proyecto bajo carga, el mismo problema documentado en el connection pooling de PostgreSQL/MySQL).
+- En los endpoints HTTP que disparan trabajo pesado: NUNCA hagas el trabajo inline. Usa await queue.add(jobName, payload, { attempts: 3, backoff: { type: "exponential", delay: 2000 } }) y responde inmediatamente con 202 Accepted + un id de job, no esperes a que termine.
+- Genera un endpoint GET /api/jobs/:id/status que consulte el estado real del job en BullMQ (job.getState()) — el frontend debe poder consultar el progreso, no asumir que ya terminó.
+- DEGRADACIÓN HONESTA si Redis no está configurado: al arrancar, comprueba si REDIS_URL existe y es una URL real (esquema redis:// o rediss://, no la URL REST de un proveedor pegada por error — error común documentado: confundir la REST API de un proveedor con su URL TCP real). Si no está configurada, loguea una advertencia clara explicando qué funcionalidades quedan deshabilitadas (qué endpoints fallarán y por qué) en vez de crashear el proceso entero al arrancar — el resto de la app (lo que no depende de la cola) debe seguir funcionando.
+- Documenta en .env.example: REDIS_URL=redis://default:password@host:6379 con un comentario indicando que Railway, Upstash y Redis Cloud ofrecen un tier gratuito suficiente para empezar.
+`;
 
 const GENERIC_INTEGRATION_BACKEND_GUIDANCE = `
 GENERIC ERP/CRM CONNECTOR — cuando el plan incluya un servicio con kind="generic-rest":
@@ -2005,6 +2021,7 @@ async function generateBackendCode(
     return { code: "No backend required for this app.", truncated: false };
   }
   const genericIntegrations = integrationServices.filter((s) => s.kind === "generic-rest" || s.kind === "webhook");
+  const needsBackgroundQueue = integrationServices.some((s) => s.kind === "generic-rest" && s.name === "Cola de procesamiento en segundo plano");
   const planSummary = JSON.stringify({
     title: plan.title,
     dataModels: plan.dataModels,
@@ -2016,6 +2033,7 @@ ${templateContext ? `\n${templateContext}\n` : ""}
 Backend plan (implement every listed file with real Express handlers):
 ${planSummary}
 ${genericIntegrations.length ? `\n${GENERIC_INTEGRATION_BACKEND_GUIDANCE}\n` : ""}
+${needsBackgroundQueue ? `\n${BACKGROUND_JOB_QUEUE_BACKEND_GUIDANCE}\n` : ""}
 Now produce the JSON object with backendCode.`;
 
   try {
