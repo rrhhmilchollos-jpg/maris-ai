@@ -833,6 +833,20 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 <PhaseIcon className={`h-5 w-5 text-[#a78bfa] ${isWorking ? "animate-pulse" : ""}`} />
                 <span className="font-semibold">{isWorking ? phaseInfo.label : "Sin trabajos activos"}</span>
               </div>
+              {job?.status === "queued" && job?.queuePosition != null && (
+                <div className="mt-3 rounded-xl border border-[#7c3aed]/20 bg-[#7c3aed]/[0.06] px-4 py-3">
+                  <p className="text-sm text-white/85">
+                    {job.queuePosition === 0
+                      ? "Eres el siguiente — empezará en cuanto se libere un agente."
+                      : `Hay ${job.queuePosition} generación${job.queuePosition === 1 ? "" : "es"} delante de la tuya.`}
+                  </p>
+                  {job.estimatedWaitSeconds != null && job.estimatedWaitSeconds > 0 && (
+                    <p className="mt-1 text-xs text-white/45">
+                      Tiempo estimado de espera: {job.estimatedWaitSeconds < 60 ? `${job.estimatedWaitSeconds}s` : `${Math.round(job.estimatedWaitSeconds / 60)} min`}
+                    </p>
+                  )}
+                </div>
+              )}
               {job?.errorMessage && <p className="mt-3 text-sm text-red-300">{job.errorMessage}</p>}
             </div>
             <div className="mt-5 grid gap-3">

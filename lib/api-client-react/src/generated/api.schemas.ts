@@ -376,6 +376,10 @@ export interface GenerationJob {
   errorMessage?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Cuántos jobs en cola (de cualquier usuario) se crearon antes que este — solo presente cuando status es "queued" */
+  queuePosition?: number | null;
+  /** Estimación en segundos, recalculada en cada consulta a partir del tiempo medio real de las últimas generaciones completadas */
+  estimatedWaitSeconds?: number | null;
 }
 
 export type JobLogEntryLevel =
