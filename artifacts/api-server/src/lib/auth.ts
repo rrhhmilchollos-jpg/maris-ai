@@ -58,6 +58,26 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
         $set: { lastLoginIp: ip, lastLoginAt: new Date() }
       });
     }
+    // Sincronización PEREZOSA del teléfono: ensureUser se ejecuta en CADA
+    // petición autenticada (requireAuth la llama siempre) — llamar a la API
+    // de Clerk en cada una sería un coste y una latencia innecesarios. Solo
+    // se consulta a Clerk cuando de verdad falta el teléfono en nuestra
+    // base de datos (usuarios creados antes de activar la verificación
+    // obligatoria, o algún caso límite donde no se guardó la primera vez) —
+    // una vez sincronizado, no se vuelve a llamar a Clerk por este motivo.
+    if (!existing.phoneNumber) {
+      try {
+        const clerkUser = await clerkClient.users.getUser(clerkUserId);
+        const phoneNumber = clerkUser.primaryPhoneNumber?.phoneNumber;
+        if (phoneNumber) {
+          await User.findByIdAndUpdate(clerkUserId, { $set: { phoneNumber } });
+          existing.phoneNumber = phoneNumber;
+        }
+      } catch {
+        // No crítico — si falla, simplemente no se sincroniza esta vez y se
+        // reintentará en la siguiente petición autenticada de este usuario.
+      }
+    }
     return ensureAdminCredits(existing);
   }
  
@@ -69,6 +89,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
     "";
   const fullName =
     [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || undefined;
+  const phoneNumber = clerkUser.primaryPhoneNumber?.phoneNumber;
 
   // Compatibilidad con usuarios históricos: puede existir el mismo email con otro _id.
   // En ese caso no insertamos un duplicado que rompería el índice único de email; devolvemos
@@ -78,6 +99,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
     const updates: Partial<IUser> = {};
     if (fullName && !existingByEmail.fullName) updates.fullName = fullName;
     if (clerkUser.imageUrl && !existingByEmail.imageUrl) updates.imageUrl = clerkUser.imageUrl;
+    if (phoneNumber && !existingByEmail.phoneNumber) updates.phoneNumber = phoneNumber;
     if (Object.keys(updates).length > 0 && existingByEmail._id) {
       await User.findByIdAndUpdate(existingByEmail._id, { $set: updates });
       Object.assign(existingByEmail, updates);
@@ -104,6 +126,7 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
         email,
         fullName,
         imageUrl: clerkUser.imageUrl ?? undefined,
+        phoneNumber: phoneNumber ?? undefined,
         credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 15 : 0),
         planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 50 : 0),
         freeCreditsUsed: shouldGiveFreeCredits,

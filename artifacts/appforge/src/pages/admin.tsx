@@ -93,6 +93,7 @@ interface AdminUser {
   registrationIp?: string | null;
   lastLoginIp?: string | null;
   lastLoginAt?: string | null;
+  phoneNumber?: string | null;
   totalSpent?: number;
   plan?: string;
 }
@@ -917,6 +918,9 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                         <div className="space-y-0 rounded-lg border border-white/5 overflow-hidden">
                           <InfoRow label="ID de usuario" value={<span className="font-mono text-xs">{selectedUser.id}</span>} />
                           <InfoRow label="Email" value={selectedUser.email} />
+                          {selectedUser.phoneNumber && (
+                            <InfoRow label="Teléfono" value={<span className="font-mono text-xs">{selectedUser.phoneNumber}</span>} />
+                          )}
                           <InfoRow label="Plan" value={<Badge variant="outline" className="text-[10px] border-white/10">{selectedUser.plan || "free"}</Badge>} />
                           <InfoRow label="Registrado" value={format(new Date(selectedUser.createdAt), "d MMM yyyy 'a las' HH:mm", { locale: es })} />
                           {selectedUser.lastLoginIp && (

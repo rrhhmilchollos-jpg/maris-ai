@@ -16,6 +16,16 @@ export interface IUser {
   registrationIp?: string;
   lastLoginIp?: string;
   lastLoginAt?: Date;
+  // Teléfono verificado vía Clerk (formato E.164, ej. "+34600123456") —
+  // capturado y obligatorio desde el registro (configurado en el panel de
+  // Clerk: User & authentication → Phone → "Required") para poder avisar
+  // al cliente por WhatsApp en caso de incidencias reales, además del
+  // correo electrónico. Se sincroniza desde Clerk en ensureUser() — Clerk
+  // es la fuente de verdad de la verificación en sí (el OTP, el estado
+  // verificado/no verificado), aquí solo guardamos una copia de trabajo
+  // para poder consultarla directamente desde MongoDB sin llamar a la API
+  // de Clerk cada vez (ej. al enviar la disculpa por WhatsApp desde el panel admin).
+  phoneNumber?: string;
   // Moderación
   isSuspended?: boolean;
   suspendedAt?: Date;
@@ -68,6 +78,7 @@ const UserSchema = new Schema<IUser>(
     registrationIp: { type: String },
     lastLoginIp: { type: String },
     lastLoginAt: { type: Date },
+    phoneNumber: { type: String },
     // Moderación
     isSuspended: { type: Boolean, default: false },
     suspendedAt: { type: Date },

@@ -140,6 +140,7 @@ router.get("/admin/users", async (_req, res) => {
       registrationIp: u.registrationIp,
       lastLoginIp: (u as any).lastLoginIp ?? null,
       lastLoginAt: (u as any).lastLoginAt?.toISOString() ?? null,
+      phoneNumber: (u as any).phoneNumber ?? null,
       isSuspended: u.isSuspended ?? false,
       suspendedAt: u.suspendedAt?.toISOString(),
       suspendReason: u.suspendReason,
