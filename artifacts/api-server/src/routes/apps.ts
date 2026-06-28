@@ -6007,6 +6007,19 @@ router.get("/apps/:id/preview-debug", async (req: any, res: any) => {
       esbuildOk: !esbuildError,
       appTsxContent: extractFile("src/App.tsx"),
       mainTsxContent: extractFile("src/main.tsx"),
+      // Búsqueda directa del patrón conocido como roto, en TODOS los
+      // archivos del bundle — para diagnosticar de forma remota en qué
+      // archivo concreto persiste un error sin tener que pedir cada
+      // archivo uno por uno.
+      useNavigateOccurrences: files
+        .map((f) => ({ file: f, content: extractFile(f) }))
+        .filter((f) => f.content && /useNavigate/.test(f.content))
+        .map((f) => ({
+          file: f.file,
+          matchedLines: (f.content as string)
+            .split("\n")
+            .filter((line) => line.includes("useNavigate")),
+        })),
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
