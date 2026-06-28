@@ -119,7 +119,21 @@ export interface CoreOrchestratorOptions {
   backendQualityPrompt?: string;
   /** Modelo a usar — por defecto el más capaz disponible para proyectos complejos. */
   model?: string;
-  /** Máximo de hitos a generar en paralelo dentro de la misma capa (las capas en sí son secuenciales). */
+  /**
+   * Máximo de hitos a generar en paralelo dentro de la misma capa (las
+   * capas en sí son secuenciales, por las dependencias reales entre ellas
+   * — ej. no se puede generar el frontend antes de que termine el backend
+   * que consume). Subido de 4 a 8 (por defecto) a petición explícita del
+   * usuario tras un incidente real con un cliente: con 22 hitos repartidos
+   * en 7 capas (~3 por capa de media), muchas capas ya cabían en un solo
+   * lote con concurrencia 4, pero las capas con más hitos (ej. todos los
+   * módulos de backend de un dominio complejo) se beneficiaban de más
+   * paralelismo real. El límite global de jobs simultáneos en toda la
+   * plataforma (JOB_CONCURRENCY, hasta 25) es independiente de este valor
+   * — esta concurrencia es DENTRO de un único job, así que subirla no
+   * compite contra ese límite ni dispara más jobs en paralelo de los que
+   * ya había, solo acelera el trabajo interno de uno que ya estaba activo.
+   */
   concurrencyPerLayer?: number;
 }
 
@@ -134,7 +148,7 @@ export class CoreOrchestrator {
     this.projectRoot = projectRoot;
     this.options = {
       model: options.model ?? "claude-sonnet-4-6",
-      concurrencyPerLayer: options.concurrencyPerLayer ?? 4,
+      concurrencyPerLayer: options.concurrencyPerLayer ?? 8,
       backendQualityPrompt: options.backendQualityPrompt ?? "",
     };
   }
