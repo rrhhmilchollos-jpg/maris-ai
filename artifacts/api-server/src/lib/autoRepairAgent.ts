@@ -28,7 +28,7 @@ import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspac
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const HEALTH_CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutos
 const ERROR_THRESHOLD_FOR_REPAIR = 3;              // 3 errores → auto-reparar
-const MAX_AUTO_REPAIR_CYCLES = 3;                  // Máximo 3 ciclos de reparación
+const MAX_AUTO_REPAIR_CYCLES = 6;                  // Máximo 6 ciclos de reparación — antes 3, insuficiente: el caso real "MesaYa" necesitó 4 ciclos completos tras el modo multi-archivo para terminar de compilar. Con 3, ese mismo caso real (que afecta a cualquier cliente, no solo a soporte) se habría quedado sin reparar del todo. Ahora igualado al límite que ya usa el flujo de soporte (admin.ts), que demostró ser suficiente en producción real.
 const REPAIR_COOLDOWN_MS = 10 * 60 * 1000;        // 10 min entre reparaciones del mismo app
 
 // ─── Schema: AppRepairLog ─────────────────────────────────────────────────────
