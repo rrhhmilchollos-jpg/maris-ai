@@ -13,12 +13,14 @@ import {
   Database, FileText, Table2, Github, MessageSquare, 
   Zap, CheckCircle2, XCircle, ChevronDown, ChevronUp,
   ExternalLink, Key, RefreshCw, Plug, Lock, Unlock,
-  Globe, Mail, Calendar, ShoppingCart, CreditCard, Image
+  Globe, Mail, Calendar, ShoppingCart, CreditCard, Image,
+  Building2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api-client";
 
 export interface MCPConnector {
   id: string;
@@ -27,7 +29,7 @@ export interface MCPConnector {
   icon: React.ComponentType<any>;
   color: string;
   bgColor: string;
-  category: "base-de-datos" | "productividad" | "codigo" | "comunicacion" | "pagos" | "almacenamiento" | "ia";
+  category: "base-de-datos" | "productividad" | "codigo" | "comunicacion" | "pagos" | "almacenamiento" | "ia" | "empresarial";
   envVars: { key: string; label: string; placeholder: string; secret?: boolean }[];
   docsUrl: string;
   features: string[];
@@ -219,6 +221,87 @@ export const MCP_CONNECTORS: MCPConnector[] = [
     docsUrl: "https://shopify.dev/docs",
     features: ["Productos", "Pedidos", "Clientes", "Inventario"],
   },
+  {
+    id: "salesforce",
+    name: "Salesforce",
+    description: "Conecta tu CRM de Salesforce para leer y escribir leads, oportunidades y cuentas.",
+    icon: Building2,
+    color: "text-sky-400",
+    bgColor: "bg-sky-500/10 border-sky-500/20",
+    category: "empresarial",
+    envVars: [
+      { key: "SALESFORCE_INSTANCE_URL", label: "URL de instancia", placeholder: "https://midominio.my.salesforce.com" },
+      { key: "SALESFORCE_ACCESS_TOKEN", label: "Access Token (OAuth2)", placeholder: "00D...", secret: true },
+    ],
+    docsUrl: "https://developer.salesforce.com/docs",
+    features: ["Leads y oportunidades", "Cuentas y contactos", "Flujos de ventas", "Reporting"],
+    badge: "Empresarial",
+  },
+  {
+    id: "hubspot",
+    name: "HubSpot",
+    description: "Conecta tu CRM de HubSpot para sincronizar contactos, empresas y negocios.",
+    icon: Building2,
+    color: "text-orange-400",
+    bgColor: "bg-orange-500/10 border-orange-500/20",
+    category: "empresarial",
+    envVars: [
+      { key: "HUBSPOT_ACCESS_TOKEN", label: "Private App Access Token", placeholder: "pat-na1-...", secret: true },
+    ],
+    docsUrl: "https://developers.hubspot.com/docs",
+    features: ["Contactos y empresas", "Pipeline de negocios", "Marketing automation", "Tickets de soporte"],
+    badge: "Empresarial",
+  },
+  {
+    id: "zoho-crm",
+    name: "Zoho CRM",
+    description: "Conecta tu Zoho CRM para gestionar leads, contactos y módulos personalizados.",
+    icon: Building2,
+    color: "text-red-400",
+    bgColor: "bg-red-500/10 border-red-500/20",
+    category: "empresarial",
+    envVars: [
+      { key: "ZOHO_ACCESS_TOKEN", label: "Access Token (OAuth2)", placeholder: "1000.xxx...", secret: true },
+      { key: "ZOHO_API_DOMAIN", label: "Dominio de API (opcional)", placeholder: "www.zohoapis.com" },
+    ],
+    docsUrl: "https://www.zoho.com/crm/developer/docs/api/v6/",
+    features: ["Leads y contactos", "Módulos personalizados", "Automatización de ventas", "Informes"],
+    badge: "Empresarial",
+  },
+  {
+    id: "dynamics365",
+    name: "Microsoft Dynamics 365",
+    description: "Conecta tu Dynamics 365 (Sales/Customer Service) para leer y escribir entidades de negocio.",
+    icon: Building2,
+    color: "text-blue-400",
+    bgColor: "bg-blue-500/10 border-blue-500/20",
+    category: "empresarial",
+    envVars: [
+      { key: "DYNAMICS_RESOURCE_URL", label: "URL del entorno", placeholder: "https://miorg.crm.dynamics.com" },
+      { key: "DYNAMICS_ACCESS_TOKEN", label: "Access Token (Azure AD)", placeholder: "eyJ0...", secret: true },
+    ],
+    docsUrl: "https://learn.microsoft.com/dynamics365/customer-engagement/web-api/",
+    features: ["Entidades de negocio", "Web API completa", "Integración con Azure AD", "Power Platform"],
+    badge: "Empresarial",
+  },
+  {
+    id: "sap-business-one",
+    name: "SAP Business One",
+    description: "Conecta tu SAP Business One (Service Layer) para integrar con tu ERP existente.",
+    icon: Building2,
+    color: "text-indigo-400",
+    bgColor: "bg-indigo-500/10 border-indigo-500/20",
+    category: "empresarial",
+    envVars: [
+      { key: "SAP_SERVICE_LAYER_URL", label: "URL del Service Layer", placeholder: "https://servidor-sap:50000/b1s/v1" },
+      { key: "SAP_COMPANY_DB", label: "CompanyDB", placeholder: "MIEMPRESA_PROD" },
+      { key: "SAP_USERNAME", label: "Usuario", placeholder: "manager" },
+      { key: "SAP_PASSWORD", label: "Contraseña", placeholder: "••••••••", secret: true },
+    ],
+    docsUrl: "https://help.sap.com/docs/SAP_BUSINESS_ONE",
+    features: ["Órdenes de venta y compra", "Artículos e inventario", "Socios de negocio", "Integración ERP real"],
+    badge: "Empresarial",
+  },
 ];
 
 const CATEGORIES = [
@@ -229,6 +312,7 @@ const CATEGORIES = [
   { id: "pagos", label: "Pagos" },
   { id: "codigo", label: "Código" },
   { id: "almacenamiento", label: "Almacenamiento" },
+  { id: "empresarial", label: "Empresarial (CRM/ERP)" },
   { id: "ia", label: "IA" },
 ];
 
@@ -238,6 +322,7 @@ interface ConnectorState {
   expanded: boolean;
   testing: boolean;
   testResult?: "ok" | "error";
+  testMessage?: string;
 }
 
 interface MCPIntegrationsPanelProps {
@@ -273,22 +358,35 @@ export function MCPIntegrationsPanel({ onConnectorChange, className }: MCPIntegr
   async function testAndConnect(connector: MCPConnector) {
     const state = getState(connector.id);
     setStates(prev => ({ ...prev, [connector.id]: { ...state, testing: true } }));
-    
-    // Simular test de conexión (en producción llamaría a /api/mcp/test)
-    await new Promise(r => setTimeout(r, 1200));
-    
-    const allFilled = connector.envVars
-      .filter(v => !v.key.includes("opcional") && !v.label.includes("opcional"))
-      .every(v => state.values[v.key]?.trim());
-    
-    const result = allFilled ? "ok" : "error";
+
+    // ENCONTRADO: esta función simulaba la conexión con un retraso falso de
+    // 1.2s y solo comprobaba si los campos estaban rellenos, sin verificar
+    // nunca nada real (el propio comentario original decía "en producción
+    // llamaría a /api/mcp/test" — ese endpoint nunca se construyó hasta
+    // ahora). Llamada real al backend, que hace una petición mínima ("ping"
+    // / "whoami") a la API oficial de cada servicio con las credenciales
+    // introducidas.
+    let result: "ok" | "error" = "error";
+    let message = "";
+    try {
+      const response = await apiFetch<{ ok: boolean; message: string }>("/api/mcp/test", {
+        method: "POST",
+        body: JSON.stringify({ connectorId: connector.id, values: state.values }),
+      });
+      result = response.ok ? "ok" : "error";
+      message = response.message;
+    } catch {
+      result = "error";
+      message = "No se pudo contactar con el servidor. Inténtalo de nuevo.";
+    }
+
     const connected = result === "ok";
-    
+
     setStates(prev => ({
       ...prev,
-      [connector.id]: { ...state, testing: false, testResult: result, connected, expanded: !connected }
+      [connector.id]: { ...state, testing: false, testResult: result, testMessage: message, connected, expanded: !connected }
     }));
-    
+
     if (connected && onConnectorChange) {
       onConnectorChange(connector.id, true, state.values);
     }
@@ -458,8 +556,8 @@ export function MCPIntegrationsPanel({ onConnectorChange, className }: MCPIntegr
                         : "bg-red-500/10 text-red-400 border border-red-500/20"
                     )}>
                       {state.testResult === "ok"
-                        ? <><CheckCircle2 className="h-3.5 w-3.5" /> Conexión verificada — los agentes ya pueden usar {connector.name}</>
-                        : <><XCircle className="h-3.5 w-3.5" /> Rellena todos los campos obligatorios para conectar</>
+                        ? <><CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> {state.testMessage || `Conexión verificada — los agentes ya pueden usar ${connector.name}`}</>
+                        : <><XCircle className="h-3.5 w-3.5 shrink-0" /> {state.testMessage || "Rellena todos los campos obligatorios para conectar"}</>
                       }
                     </div>
                   )}
