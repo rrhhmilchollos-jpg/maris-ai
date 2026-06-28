@@ -484,3 +484,172 @@ export async function patchBundle(
     null,
   );
 }
+
+/* ----------------------- multi-file patcher -------------------------------- */
+/**
+ * patchBundle estándar (16K max_tokens, una sola respuesta JSON) está pensado
+ * para parches quirúrgicos: 1-2 archivos pequeños. CASO REAL ENCONTRADO Y
+ * DOCUMENTADO (app "MesaYa"): una reparación que necesitaba regenerar un
+ * App.tsx grande (1000+ líneas, roto a mitad) Y crear 3 páginas nuevas
+ * completas (Dashboard/Reservas/NuevaReserva) excede por mucho lo que cabe en
+ * una sola respuesta JSON de 16K tokens — el modelo se queda sin presupuesto
+ * a mitad de generación, produce JSON inválido/truncado, y patchBundle
+ * devuelve null silenciosamente ("La reparación automática no produjo
+ * cambios válidos"), sin ninguna pista real de qué pasó.
+ *
+ * patchBundleMultiFile divide esto en pasos independientes y verificables:
+ * 1. Una llamada de PLANIFICACIÓN (barata, sin generar contenido) que decide
+ *    qué archivos hay que tocar/crear y por qué — nunca el contenido en sí.
+ * 2. Una llamada de GENERACIÓN POR ARCHIVO, cada una con su propio
+ *    presupuesto completo de 16K tokens — un archivo de página real nunca
+ *    se acerca a ese límite, así que el riesgo de truncamiento desaparece.
+ * Si un archivo individual falla, solo se reintenta ese archivo (1 vez),
+ * no toda la reparación — más barato y más fiable que repetir el ciclo
+ * completo.
+ */
+export interface MultiFilePlanItem {
+  path: string;
+  action: "rewrite" | "create" | "delete";
+  reason: string;
+}
+
+async function planMultiFileRepair(
+  bundle: string,
+  errorSummary: string,
+  language: GenLanguage,
+  model: string,
+): Promise<MultiFilePlanItem[] | null> {
+  const compactedBundle = compactBundleForPrompt(bundle, [errorSummary], 50_000);
+  const planPrompt = `You are Maris AI's Repair Planner. Given a broken/incomplete bundle and a repair instruction, decide WHICH FILES need to change — do NOT write any file content yet, only the plan.
+
+INSTRUCTION:
+${errorSummary.slice(0, 2000)}
+
+CURRENT BUNDLE (relevant files):
+${compactedBundle}
+
+Output STRICT JSON only:
+{"plan":[{"path":"src/App.tsx","action":"rewrite","reason":"corrupted, cut mid-generation"},{"path":"src/pages/Dashboard.tsx","action":"create","reason":"missing page referenced by App.tsx route"}]}
+
+RULES:
+- action is exactly one of: "rewrite" (file exists but is broken/incomplete), "create" (file is missing entirely), "delete" (file should be removed).
+- List EVERY file that genuinely needs a change — don't omit any to save space, this step is cheap.
+- Do not include files that are already correct and don't need touching.
+- Output ONLY the JSON object.`;
+
+  try {
+    const response = await createClaudeMessageWithFallback("patcher", model, {
+      max_tokens: 2000,
+      system: "Output JSON only. No markdown, no explanation outside the JSON object.",
+      messages: [{ role: "user", content: planPrompt }],
+    });
+    const raw = (response.content[0] as any).text ?? "";
+    const parsed = extractJsonObject<{ plan?: MultiFilePlanItem[] }>(raw);
+    if (!parsed || !Array.isArray(parsed.plan) || parsed.plan.length === 0) return null;
+    return parsed.plan.filter((p) => p && typeof p.path === "string" && p.action);
+  } catch {
+    return null;
+  }
+}
+
+async function generateSingleFileContent(
+  bundle: string,
+  filePath: string,
+  action: "rewrite" | "create",
+  reason: string,
+  errorSummary: string,
+  language: GenLanguage,
+  model: string,
+): Promise<string | null> {
+  const isTS = language === "typescript";
+  const existingFile = bundleFilesForPrompt(bundle).find((f) => f.path === filePath);
+  const compactedBundle = compactBundleForPrompt(bundle, [filePath, errorSummary], 40_000);
+
+  const systemPrompt = `You are Maris AI's Single-File Repair Engineer — generate ONE complete, working file.
+${isTS ? "TypeScript (.tsx/.ts): include proper type annotations." : "JavaScript (.jsx/.js): no TypeScript syntax."}
+ALL user-visible copy MUST be in Spanish (es-ES). Code identifiers in English.
+Output STRICT JSON only: {"content":"the full file content as a single string"}
+Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
+
+  const userPrompt = action === "create"
+    ? `Create this NEW file from scratch: ${filePath}\nReason: ${reason}\nOriginal repair instruction (for context/consistency with the rest of the app):\n${errorSummary.slice(0, 1500)}\n\nOTHER FILES IN THIS BUNDLE (for context — shared types, components, styling conventions, routing):\n${compactedBundle}\n\nReturn the COMPLETE content of ${filePath} as JSON: {"content":"..."}`
+    : `Rewrite this BROKEN file completely: ${filePath}\nReason it's broken: ${reason}\nOriginal repair instruction:\n${errorSummary.slice(0, 1500)}\n\nCURRENT (BROKEN) CONTENT of ${filePath}:\n${existingFile?.content?.slice(0, 8000) || "(file content not found in bundle — treat as needing full reconstruction based on context below)"}\n\nOTHER FILES IN THIS BUNDLE (for context — imports, shared types, routing that must stay consistent):\n${compactedBundle}\n\nReturn the COMPLETE fixed content of ${filePath} as JSON: {"content":"..."}`;
+
+  try {
+    const response = await createClaudeMessageWithFallback("patcher", model, {
+      max_tokens: 16000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+    const raw = (response.content[0] as any).text ?? "";
+    const parsed = extractJsonObject<{ content?: string }>(raw);
+    if (!parsed || typeof parsed.content !== "string" || parsed.content.trim().length < 20) return null;
+    return parsed.content;
+  } catch {
+    return null;
+  }
+}
+
+export async function patchBundleMultiFile(
+  bundle: string,
+  errorSummary: string,
+  language: GenLanguage = "typescript",
+  model: string = "claude-sonnet-4-6",
+  onProgress?: (message: string) => void,
+): Promise<{ result: string | null; filesAttempted: number; filesSucceeded: number }> {
+  const emit = onProgress || (() => {});
+
+  emit("🗺️ Planificando qué archivos necesitan cambiarse…");
+  const plan = await planMultiFileRepair(bundle, errorSummary, language, model);
+  if (!plan || plan.length === 0) {
+    emit("⚠️ No se pudo generar un plan de reparación multi-archivo.");
+    return { result: null, filesAttempted: 0, filesSucceeded: 0 };
+  }
+  emit(`📋 Plan: ${plan.length} archivo(s) — ${plan.map((p) => `${p.action}:${p.path}`).join(", ")}`);
+
+  let currentBundle = bundle;
+  const changedFiles: Record<string, string> = {};
+  const deletedFiles: string[] = [];
+  let filesSucceeded = 0;
+
+  for (const item of plan) {
+    if (item.action === "delete") {
+      deletedFiles.push(item.path);
+      filesSucceeded++;
+      emit(`🗑️ ${item.path} marcado para eliminar.`);
+      continue;
+    }
+    emit(`✏️ Generando ${item.path} (${item.action === "create" ? "nuevo archivo" : "reescritura completa"})…`);
+
+    let content = await generateSingleFileContent(currentBundle, item.path, item.action, item.reason, errorSummary, language, model);
+    if (!content) {
+      // Un reintento por archivo — si falla dos veces, se sigue con el resto
+      // del plan en vez de abortar toda la reparación por un solo archivo.
+      emit(`🔁 Reintentando ${item.path}…`, );
+      content = await generateSingleFileContent(currentBundle, item.path, item.action, item.reason, errorSummary, language, model);
+    }
+
+    if (!content) {
+      emit(`❌ No se pudo generar ${item.path} tras 2 intentos — se conserva el contenido anterior de este archivo.`, );
+      continue;
+    }
+
+    changedFiles[item.path] = content;
+    // Fusionar inmediatamente para que el siguiente archivo del plan tenga
+    // contexto actualizado (ej: si Dashboard.tsx importa algo de App.tsx que
+    // se acaba de corregir, debe verlo ya corregido, no el original roto).
+    currentBundle = mergePatchIntoBundle(currentBundle, { [item.path]: content }, []);
+    filesSucceeded++;
+    emit(`✅ ${item.path} generado (${Math.round(content.length / 1000)} KB).`);
+  }
+
+  if (filesSucceeded === 0) {
+    return { result: null, filesAttempted: plan.length, filesSucceeded: 0 };
+  }
+
+  const merged = mergePatchIntoBundle(bundle, changedFiles, deletedFiles);
+  if (!merged || merged.length < 100) {
+    return { result: null, filesAttempted: plan.length, filesSucceeded };
+  }
+  return { result: merged, filesAttempted: plan.length, filesSucceeded };
+}

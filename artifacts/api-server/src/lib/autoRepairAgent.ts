@@ -20,7 +20,7 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
-import { patchBundle, type QAIssue } from "./shared-agents";
+import { patchBundle, patchBundleMultiFile, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
 import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
@@ -331,8 +331,35 @@ export async function autoRepairBundle(opts: {
       const patchedCode = await patchBundle(currentCode, issuesForThisCycle, repairKind, "", "claude-sonnet-4-6");
       if (!patchedCode || patchedCode === currentCode) {
         log.warn({ cycle }, "Patcher no produjo cambios en este ciclo");
+
+        // FALLBACK MULTI-ARCHIVO — solo en el primer ciclo: el patcher
+        // estándar (16K tokens, una sola respuesta JSON) puede fallar
+        // silenciosamente cuando la reparación implica regenerar un archivo
+        // grande y/o crear varios archivos nuevos completos (caso real
+        // documentado: app "MesaYa", App.tsx corrupto + 3 páginas
+        // faltantes) — el modelo se queda sin presupuesto de tokens y
+        // produce JSON truncado/inválido. patchBundleMultiFile divide esto
+        // en una llamada de planificación + una llamada completa por
+        // archivo, con su propio presupuesto de 16K tokens cada una.
+        if (cycle === 1) {
+          await jlog(`⚠️ El reparador estándar no consiguió generar un cambio — probando con el modo multi-archivo (para reparaciones grandes)…`, "warn");
+          const multiFileResult = await patchBundleMultiFile(
+            currentCode,
+            errorSummary,
+            repairKind,
+            "claude-sonnet-4-6",
+            (msg) => { void jlog(msg); },
+          );
+          if (multiFileResult.result) {
+            currentCode = multiFileResult.result;
+            lastFixSummary = `Bundle reparado automáticamente en modo multi-archivo (${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s))`;
+            await jlog(`✅ Modo multi-archivo completado: ${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) generados correctamente.`);
+            continue; // saltar al siguiente ciclo de validación normal
+          }
+          await jlog(`❌ El modo multi-archivo tampoco consiguió reparar la app (${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivos completados).`, "error");
+          return false;
+        }
         await jlog(`⚠️ El reparador no consiguió generar un cambio en este ciclo.`, "warn");
-        if (cycle === 1) return false; // primer intento sin cambios → nada que reportar
         break; // ciclos posteriores sin cambios → entregamos lo mejor que tenemos
       }
       currentCode = patchedCode;
