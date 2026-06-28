@@ -35,6 +35,7 @@ interface PresenceResponse {
 export function AdminPresencePanel() {
   const [data, setData] = useState<PresenceResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -48,6 +49,28 @@ export function AdminPresencePanel() {
       setLoading(false);
     }
   }, []);
+
+  // ENCONTRADO: el botón de refrescar ya llamaba a load() correctamente al
+  // pulsarlo (el onClick estaba bien conectado), pero no daba NINGUNA señal
+  // visual de que algo había pasado — sin animación, sin estado de carga —
+  // así que, salvo que el número de usuarios conectados cambiara justo en
+  // ese instante, parecía que el botón "no hacía nada" aunque sí estuviera
+  // refrescando el dato por debajo. FIX: estado refreshing dedicado para la
+  // pulsación manual (distinto de loading, que es solo la carga inicial),
+  // que gira el icono y deshabilita el botón mientras dura la petición —
+  // un mínimo de 400ms de giro incluso si la respuesta es instantánea, para
+  // que el feedback sea perceptible y no parpadee de forma casi invisible.
+  const handleManualRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const start = Date.now();
+    await load();
+    const elapsed = Date.now() - start;
+    const MIN_VISIBLE_MS = 400;
+    if (elapsed < MIN_VISIBLE_MS) {
+      await new Promise((resolve) => setTimeout(resolve, MIN_VISIBLE_MS - elapsed));
+    }
+    setRefreshing(false);
+  }, [load]);
 
   useEffect(() => {
     load();
@@ -76,8 +99,8 @@ export function AdminPresencePanel() {
               Usuarios con Maris AI abierto en este instante — se actualiza solo cada 5s.
             </CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={load}>
-            <RefreshCw className="h-4 w-4" />
+          <Button variant="ghost" size="sm" onClick={handleManualRefresh} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           </Button>
         </CardHeader>
         <CardContent>
