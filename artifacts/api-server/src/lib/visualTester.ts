@@ -506,195 +506,163 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
  * `// === FILE: <path> ===` separator convention used by the rest of the
  * generator.
  */
+/**
+ * Aplica correcciones al bundle basándose en los issues detectados por Claude Vision.
+ *
+ * Hay DOS caminos según la gravedad:
+ *
+ * A) DAÑO ESTRUCTURAL (cualquier issue crítico): delega al CoreOrchestrator
+ *    (edición por hitos) que toca cada archivo por separado — sin límite de tokens.
+ *    El prompt incluye: issues exactos de Claude Vision + App.tsx actual + prompt
+ *    original del usuario. El orquestador sabe exactamente qué está roto y qué
+ *    tiene que construir.
+ *
+ * B) ISSUES NO ESTRUCTURALES (solo mayores/menores de CSS/responsive): patcher
+ *    de una sola pasada con 12k tokens — suficiente para estilos y layout.
+ */
 async function applyVisualFixes(opts: {
   bundle: string;
   issues: VisualIssue[];
   app: { title: string; description?: string | null };
-  /** Prompt original del usuario — CRÍTICO para el camino estructural:
-   *  el CoreOrchestrator necesita saber qué app construir (clínica dental,
-   *  CRM, etc.) para reconstruir los componentes faltantes con contenido real.
-   *  Sin este campo, el planificador de edición solo ve "problemas detectados"
-   *  pero no sabe QUÉ funcionalidades crear para solucionarlos. */
+  /** Prompt original del usuario — el orquestador lo necesita para saber
+   *  qué módulos construir (dashboard dental, pacientes, citas, etc.). */
   userPrompt?: string;
-  /** Backend actual del proyecto — necesario solo para el camino por hitos
-   *  (reconstrucción estructural), que puede tocar también archivos backend
-   *  si el issue lo requiere (ej. una ruta API que falta para el contenido). */
   backendCode?: string;
 }): Promise<{ frontendCode: string; backendCode?: string } | null> {
   const { bundle, issues, app } = opts;
 
-  const fixList = issues
+  // Issues no-menores ordenados por severidad — esto es exactamente lo que
+  // Claude Vision reportó, incluyendo descripción completa y cssfix.
+  const actionableIssues = issues
     .filter((i) => i.severity !== "minor")
-    .slice(0, 8)
-    .map(
-      (i, idx) =>
-        `${idx + 1}. [${i.severity}/${i.viewport}] ${i.type}: ${i.description}\n   Sugerencia: ${i.cssfix}`,
-    )
-    .join("\n");
+    .slice(0, 10);
 
-  // Detectar si hay issues críticos de blank_page o missing_content que requieren reconstrucción
-  const hasCriticalStructure = issues.some(i =>
-    i.severity === "critical" && (i.type === "blank_page" || i.type === "missing_content" || i.type === "missing_navbar" || i.type === "prompt_mismatch")
-  );
+  if (actionableIssues.length === 0) return null;
 
-  // ENCONTRADO en producción (mismo patrón EXACTO que el ya corregido en
-  // singleEditPass de apps.ts): el camino de "una sola pasada" de abajo pide
-  // TODOS los archivos cambiados de vuelta en una única llamada con
-  // max_tokens:12000. Para daño estructural real — pantalla negra, navbar
-  // ausente, contenido completo faltante, prompt_mismatch — el propio
-  // prompt de abajo ya admite explícitamente "puedes modificar MÚLTIPLES
-  // archivos si es necesario", que es justo el escenario donde 12000 tokens
-  // no bastan (caso real confirmado: proyecto importado de un club en
-  // Valencia, reporte de Testing Visual con blank_page + missing_navbar +
-  // missing_content a la vez) — la respuesta se trunca, changedFiles queda
-  // vacío o incompleto, y applyVisualFixesAndSave hace `break` en silencio
-  // sin dejar la app realmente arreglada, exactamente el bucle de fallos ya
-  // diagnosticado y corregido en otros puntos del sistema hoy mismo.
-  // FIX: cuando hay daño estructural crítico, se delega al mismo motor de
-  // edición por hitos (CoreOrchestrator.editProjectIncremental) que ya
-  // resolvió este problema en el flujo normal de edición — el planificador
-  // decide qué archivos concretos tocar/crear (router, App.tsx, navbar,
-  // home con contenido real) y cada uno se genera por separado, sin el
-  // techo de una sola llamada. Para issues NO estructurales (estilos,
-  // contraste, overlapping, responsive) se mantiene el camino original de
-  // una sola pasada — esos sí caben sobradamente en una llamada y no hay
-  // motivo para complicarlos con el coste extra de planificar por hitos.
-  if (hasCriticalStructure) {
-    rootLogger.info({ issueCount: issues.length }, "[applyVisualFixes] Daño estructural crítico detectado — delegando a CoreOrchestrator.editProjectIncremental (edición por hitos) en vez de una sola pasada.");
+  // CAMINO A: cualquier critical activa el orquestador por hitos.
+  // No filtramos por tipo — cualquier issue crítico (blank_page, 404, missing_navbar,
+  // missing_content, prompt_mismatch, broken_layout, console_errors) requiere
+  // reconstrucción estructural que supera los 12k tokens del patcher single-pass.
+  const hasCritical = actionableIssues.some((i) => i.severity === "critical");
+
+  if (hasCritical) {
+    rootLogger.info(
+      { issueCount: actionableIssues.length, types: actionableIssues.filter(i=>i.severity==="critical").map(i=>i.type) },
+      "[applyVisualFixes] Issues críticos → CoreOrchestrator (edición por hitos)",
+    );
     try {
       const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
-      // ENCONTRADO (causa raíz de por qué el autofix no arreglaba issues
-      // críticos como blank_page + missing_content + missing_navbar en apps
-      // de clínicas dentales, CRMs, etc.): el structuralPrompt que se pasaba
-      // al CoreOrchestrator NO incluía el prompt original del usuario —
-      // el planificador de edición recibía solo los problemas detectados
-      // ("pantalla muestra 404", "falta navbar") pero no SABÍA qué
-      // funcionalidades construir para solucionarlos (dashboard dental,
-      // gestión de pacientes, citas, facturación...). El resultado era que
-      // el orquestador generaba un App.tsx y un navbar genéricos, sin el
-      // contenido real que el usuario había pedido, sin que el score de la
-      // siguiente iteración mejorara suficiente para cerrar el ciclo.
-      // FIX: incluir el prompt original completo del usuario en el
-      // structuralPrompt — con él, el planificador sabe exactamente qué
-      // módulos crear (Pacientes, Citas, Facturación, Notificaciones para
-      // una clínica dental; o lo que sea que el prompt original describía)
-      // y los genera con contenido real y funcional, no con placeholders.
-      const userPromptBlock = opts.userPrompt
-        ? `\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${opts.userPrompt.slice(0, 3000)}`
-        : `\n\nDescripción del proyecto: ${app.description ?? "(sin descripción disponible)"}`;
-      // Extraer App.tsx del bundle actual para que el code agent vea
-      // exactamente qué está roto y pueda arreglar el catch-all 404
-      function extractFile(bun: string, name: string): string {
-        const pat = new RegExp(`// === FILE: ${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')} ===\n([\s\S]*?)(?=\n// === FILE:|$)`);
-        const m = bun.match(pat); return m ? m[1].trim() : "";
-      }
-      const appContent = extractFile(bundle,"src/App.tsx")||extractFile(bundle,"src/app.tsx")||extractFile(bundle,"src/main.tsx")||"";
-      const routerBlock = appContent ? `\n\nCONTENIDO ACTUAL DE src/App.tsx (busca el catch-all 404 y muévelo al final):\n\`\`\`tsx\n${appContent.slice(0,4000)}\n\`\`\`` : "";
 
-      const userPromptBlock = opts.userPrompt
-        ? `\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${opts.userPrompt.slice(0, 3000)}`
-        : `\n\nDescripción del proyecto: ${app.description ?? "(sin descripción disponible)"}`;
-      const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — TESTING VISUAL] La aplicación "${app.title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.${userPromptBlock}${routerBlock}\n\nProblemas detectados (ordenados por severidad):\n${fixList}\n\nINSTRUCCIONES OBLIGATORIAS (en orden de prioridad):\n1. ROUTER FIX (causa más frecuente del 404): en src/App.tsx, el catch-all <Route path="*"> o <Route component={NotFound}> DEBE estar en el ÚLTIMO lugar — si está antes de <Route path="/">, muévelo al final.\n2. Verifica que la ruta '/' tenga un componente asignado con contenido real visible.\n3. Si falta NavBar, añade una con enlaces a todos los módulos pedidos.\n4. Si el contenido principal está vacío, reconstrúyelo con TODAS las funcionalidades del prompt — usa mock data realista.\n5. Toca SOLO los archivos que realmente necesitan cambios.`;
+      // Bloque con los issues EXACTOS de Claude Vision — descripción completa,
+      // tipo, viewport y sugerencia de fix tal como los reportó el modelo.
+      const issuesBlock = actionableIssues.map((i, n) =>
+        `ISSUE ${n + 1} [${i.severity.toUpperCase()}] tipo="${i.type}" viewport="${i.viewport}"\n` +
+        `  Descripción: ${i.description}\n` +
+        `  Fix sugerido: ${i.cssfix || "(ver instrucciones generales)"}`
+      ).join("\n\n");
+
+      // Contexto del usuario: qué app quería construir
+      const userContext = opts.userPrompt
+        ? `PROMPT ORIGINAL DEL USUARIO (funcionalidades que debe tener la app):\n${opts.userPrompt.slice(0, 3000)}`
+        : `Descripción del proyecto: ${app.description ?? "(sin descripción disponible)"}`;
+
+      // App.tsx actual — para que el code agent vea exactamente el código roto
+      function extractFile(bun: string, name: string): string {
+        const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const m = bun.match(new RegExp(\`// === FILE: \${esc} ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)\`));
+        return m ? m[1].trim() : "";
+      }
+      const appTsx = extractFile(bundle, "src/App.tsx")
+        || extractFile(bundle, "src/app.tsx")
+        || extractFile(bundle, "src/main.tsx")
+        || "";
+      const routerBlock = appTsx
+        ? \`\n\nCÓDIGO ACTUAL DE src/App.tsx (el archivo del router — busca el catch-all 404 y muévelo al final de todas las rutas):\n\\`\\`\\`tsx\n\${appTsx.slice(0, 4000)}\n\\`\\`\\`\`
+        : "";
+
+      const structuralPrompt =
+        \`[REPARACIÓN AUTOMÁTICA — TESTING VISUAL IA]\n\` +
+        \`App: "\${app.title}"\n\n\` +
+        \`\${userContext}\${routerBlock}\n\n\` +
+        \`ISSUES DETECTADOS POR CLAUDE VISION (estos son los errores exactos — repáralos todos):\n\${issuesBlock}\n\n\` +
+        \`INSTRUCCIONES DE REPARACIÓN (en orden de prioridad):\n\` +
+        \`1. ROUTER/404: en src/App.tsx mover el catch-all <Route path="*"> al ÚLTIMO lugar. La ruta '/' debe renderizar el componente principal real.\n\` +
+        \`2. NAVBAR: si falta, crear un componente <Navbar> visible con enlaces a todos los módulos del prompt y añadirlo al layout.\n\` +
+        \`3. CONTENIDO: si el componente de la ruta '/' está vacío o retorna null, reconstruirlo con TODAS las funcionalidades pedidas en el prompt — dashboard, gestión de pacientes, citas, facturación, notificaciones — con mock data realista en español.\n\` +
+        \`4. Tocar TODOS los archivos necesarios: App.tsx (router), componentes de página vacíos, Navbar si no existe.\n\` +
+        \`5. NO dejar ningún componente con return null o con TODOs — contenido real siempre.\`;
+
       const editResult = await orchestrator.editProjectIncremental(
         structuralPrompt,
         bundle,
         opts.backendCode || "",
-        () => { /* sin callback de progreso aquí — este camino se invoca desde un ciclo de fondo sin UI en vivo */ },
+        () => {},
       );
-      if (editResult.frontendCode && editResult.frontendCode.trim().length > 0) {
-        // Solo devolvemos backendCode si de verdad cambió respecto al
-        // original — evita persistir un backendCode "igual pero
-        // reordenado" en cada ciclo cuando el orquestador no necesitó
-        // tocar nada del backend para resolver el issue.
-        const backendChanged = !!opts.backendCode && editResult.backendCode && editResult.backendCode !== opts.backendCode;
-        return { frontendCode: editResult.frontendCode, backendCode: backendChanged ? editResult.backendCode : undefined };
+      if (editResult.frontendCode?.trim().length > 0) {
+        const backendChanged = !!opts.backendCode
+          && editResult.backendCode
+          && editResult.backendCode !== opts.backendCode;
+        return {
+          frontendCode: editResult.frontendCode,
+          backendCode: backendChanged ? editResult.backendCode : undefined,
+        };
       }
-      rootLogger.warn("[applyVisualFixes] editProjectIncremental no devolvió un bundle de frontend válido — cayendo al camino de una sola pasada como respaldo.");
-    } catch (structuralError) {
-      rootLogger.warn({ err: structuralError }, "[applyVisualFixes] editProjectIncremental falló — cayendo al camino de una sola pasada como respaldo.");
+      rootLogger.warn("[applyVisualFixes] editProjectIncremental no devolvió bundle válido — fallback a single-pass");
+    } catch (err) {
+      rootLogger.warn({ err }, "[applyVisualFixes] editProjectIncremental falló — fallback a single-pass");
     }
-    // Red de seguridad: si el orquestador por hitos falla por cualquier
-    // motivo, NO se pierde la capacidad de intentar un arreglo — cae al
-    // camino histórico de una sola pasada de abajo, igual que antes de
-    // este cambio.
   }
 
-  const compactBundle = compactBundleForPrompt(bundle, issues.map((i) => `${i.type} ${i.description} ${i.cssfix}`), 65_000);
-  rootLogger.info({ originalTokens: estimatePromptTokens(bundle), compactTokens: estimatePromptTokens(compactBundle), issueCount: issues.length }, "TOKEN_OPTIMIZER: visual fixes compacted bundle");
+  // CAMINO B: patcher single-pass para issues no estructurales (responsive, contraste, etc.)
+  const fixList = actionableIssues.map((i, n) =>
+    \`\${n + 1}. [\${i.severity}/\${i.viewport}] \${i.type}: \${i.description}\n   Fix: \${i.cssfix}\`
+  ).join("\n");
 
-  const prompt = `Eres el Visual Fix Agent de Maris AI — especialista en reparaciones quirurgicas de UI/UX sin romper funcionalidad.
-
-App: ${app.title}
-Descripcion: ${app.description ?? "(no disponible)"}
-
-PROBLEMAS A ARREGLAR (ordenados por severidad):
-${fixList}
-
-${hasCriticalStructure ? `⚠️ MODO RECONSTRUCCIÓN ACTIVADO: Hay problemas críticos de estructura (pantalla en blanco, contenido faltante, navbar ausente).
-En este modo DEBES:
-1. Revisar el App.tsx/main.tsx y asegurarte de que la ruta '/' renderiza el componente principal real
-2. Si el router tiene un catch-all 404 interceptando '/', moverlo al final o eliminarlo
-3. Si el componente principal no existe o está vacío, crear contenido real visible con mock data
-4. Añadir una NavBar funcional si no existe
-5. Asegurarte de que el componente raiz tiene 'min-h-screen' y contenido visible
-6. Puedes modificar MULTIPLES archivos si es necesario para arreglar la estructura
-` : ""}
-
-REGLAS:
-- Devuelve SOLO JSON con changedFiles. NO el bundle completo.
-- changedFiles[ruta] = contenido COMPLETO del archivo modificado (no parcial).
-- Para blank_page/missing_content: RECONSTRUYE los componentes rotos con contenido real visible.
-- Para missing_navbar: Añade NavBar con 'fixed top-0 left-0 right-0 z-50' o bottom nav en mobile.
-- Para prompt_mismatch: Construye las vistas que el prompt pedia con mock data realista.
-- Para responsive: usa breakpoints Tailwind sm: md: lg: correctamente.
-- Para contraste bajo: usa clases de color Tailwind con ratio WCAG AA.
-- Para overlapping: usa z-index apropiados o corrige layout flex/grid.
-- Para touch_targets_small: min h-11 w-11 en botones y links en mobile.
-- Si el router tiene un 404 catch-all antes de las rutas reales, muévelo al final.
-- Incluye TODOS los archivos que necesiten cambios para que la app sea visible.
-
-RESPUESTA JSON (sin markdown, sin backticks):
-{
-  "changedFiles": { 
-    "src/App.tsx": "contenido completo actualizado",
-    "src/pages/HomePage.tsx": "contenido completo si necesita cambios"
-  },
-  "fixesSummary": ["descripcion breve de cada fix"]
-}
-
-ARCHIVOS RELEVANTES:
-${compactBundle}`;
+  const compactBundle = compactBundleForPrompt(
+    bundle,
+    actionableIssues.map((i) => \`\${i.type} \${i.description} \${i.cssfix}\`),
+    65_000,
+  );
+  rootLogger.info(
+    { tokens: estimatePromptTokens(compactBundle), issues: actionableIssues.length },
+    "[applyVisualFixes] single-pass patcher",
+  );
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 12000,  // Aumentado de 8000 a 12000 para patches mas completos
-    messages: [{ role: "user", content: prompt }],
+    max_tokens: 12000,
+    messages: [{
+      role: "user",
+      content:
+        \`Eres el Visual Fix Agent de Maris AI. Aplica estos fixes al bundle sin romper nada más.\n\` +
+        \`App: \${app.title}\n\` +
+        \`Prompt original: \${(opts.userPrompt || app.description || "").slice(0, 1000)}\n\n\` +
+        \`ISSUES A REPARAR:\n\${fixList}\n\n\` +
+        \`REGLAS:\n\` +
+        \`- Devuelve SOLO JSON: { "changedFiles": { "ruta": "contenido completo" }, "fixesSummary": [...] }\n\` +
+        \`- Para missing_navbar: añade NavBar con links a todas las secciones\n\` +
+        \`- Para blank_page: asegúrate de que '/' renderiza contenido real\n\` +
+        \`- Para responsive: usa breakpoints Tailwind sm: md: lg:\n\` +
+        \`- Mueve cualquier catch-all 404 al final del router\n\n\` +
+        \`BUNDLE:\n\${compactBundle}\`
+    }],
   });
 
   const text = response.content
-    .map((b: { type: string; text?: string }) => (b.type === "text" ? b.text : ""))
-    .filter(Boolean)
-    .join("\n")
-    .trim()
-    .replace(/^```(?:[a-zA-Z]+)?\n?/, "")
-    .replace(/\n?```$/, "")
-    .trim();
+    .map((b: any) => b.type === "text" ? b.text : "")
+    .filter(Boolean).join("\n").trim()
+    .replace(/^```(?:[a-zA-Z]+)?\n?/, "").replace(/\n?```$/, "").trim();
 
   const parsed = extractJsonObject<{ changedFiles?: Record<string, string>; deletedFiles?: string[]; frontendCode?: string }>(text);
   if (parsed?.changedFiles && Object.keys(parsed.changedFiles).length > 0) {
     return { frontendCode: mergePatchIntoBundle(bundle, parsed.changedFiles, Array.isArray(parsed.deletedFiles) ? parsed.deletedFiles : []) };
   }
-  if (parsed?.frontendCode && parsed.frontendCode.includes("// === FILE:")) return { frontendCode: parsed.frontendCode };
-  if (!text.includes("// === FILE:")) return null;
-  if (text.length < bundle.length / 3) return null;
-  return { frontendCode: text };
+  if (parsed?.frontendCode?.includes("// === FILE:")) return { frontendCode: parsed.frontendCode };
+  if (text.includes("// === FILE:") && text.length >= bundle.length / 3) return { frontendCode: text };
+  return null;
 }
 
-/**
- * Analyze screenshots already captured (e.g. from preview URL) with Claude Vision.
- * Returns a VisualAnalysis without needing a publicSlug or deployed app.
- * Used by the visual-test endpoint when app is not yet deployed publicly.
- */
+
 export async function analyzePreviewScreenshots(opts: {
   shots: ViewportShot[];
   app: { title: string; description?: string | null };
