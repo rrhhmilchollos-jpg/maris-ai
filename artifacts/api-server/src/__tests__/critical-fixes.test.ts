@@ -576,6 +576,37 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 22: Directiva de "Fachada Interactiva" inyectada en el prompt del
+// Agente Arquitecto para usuarios gratuitos. Antes: el arquitecto diseñaba
+// siempre un plan de 20+ hitos (modelos, controllers, servicios, middleware)
+// que luego se truncaba mecánicamente a 7, generando dependencias rotas y
+// una app incompleta sin impacto visual. Ahora: cuando maxMilestonesOverride
+// está activo (usuario gratuito con proyecto ultra-complejo), el prompt del
+// arquitecto recibe instrucciones específicas para diseñar desde el principio
+// una estructura minimalista orientada a impacto visual inmediato: backend
+// Express de un solo archivo, mockData.ts con datos simulados realistas,
+// imágenes reales de Unsplash, Tailwind intensivo. El usuario gratuito ve
+// una app atractiva y funcional en segundos; si quiere la arquitectura
+// completa, pasa a plan de pago.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const servicesSrc = readServicesSrc("CoreOrchestrator.ts");
+  check(
+    "FIX 22a: el Agente Arquitecto recibe la directiva de Fachada Interactiva cuando maxMilestonesOverride está activo",
+    /FREE_TIER_ARCHITECT_DIRECTIVE/.test(servicesSrc) && /Fachada Interactiva/.test(servicesSrc),
+  );
+  check(
+    "FIX 22b: la directiva prohíbe URLs de imágenes inventadas y exige Unsplash con palabras clave reales",
+    /unsplash\.com.*w=800/.test(servicesSrc) || /images\.unsplash\.com/.test(servicesSrc),
+    "Sin URLs de Unsplash reales, la app del usuario gratuito mostrará imágenes rotas — exactamente lo contrario del 'impacto visual inmediato' que busca la estrategia de conversión.",
+  );
+  check(
+    "FIX 22c: el prompt del arquitecto gratuito prohíbe el backend separado en múltiples archivos",
+    /UN SOLO archivo.*apps\/api\/src\/index\.ts|backend.*UN SOLO archivo/.test(servicesSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

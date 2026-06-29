@@ -303,6 +303,49 @@ export class CoreOrchestrator {
     // única diferencia de que usa Server-Sent Events por debajo (mantiene
     // la conexión viva con eventos en vez de esperar en silencio), evitando
     // el límite de 10 minutos sin cambiar nada del resto de esta función.
+
+    // PLAN GRATUITO — FACHADA INTERACTIVA (maxMilestonesOverride activo):
+    // En vez de dejar que el arquitecto diseñe un plan de 20+ hitos y luego
+    // truncarlo mecánicamente (lo que genera dependencias rotas y estructura
+    // incompleta), inyectamos las instrucciones directamente en el prompt
+    // para que el arquitecto piense desde el principio en términos de impacto
+    // visual máximo con recursos mínimos — la estrategia real que usa Emergent.sh.
+    // El usuario gratuito ve una app atractiva, funcional e impactante en
+    // segundos. Si quiere la arquitectura completa con backend real, BD y
+    // todos los módulos, pasa a plan de pago.
+    const FREE_TIER_ARCHITECT_DIRECTIVE = this.options.maxMilestonesOverride
+      ? `\n\n[DIRECTIVA PLAN GRATUITO — MÁXIMO ${this.options.maxMilestonesOverride} HITOS — LEE ESTO PRIMERO]\nEste proyecto se genera para un usuario del plan gratuito. Tu objetivo es IMPACTO VISUAL INMEDIATO con el mínimo de archivos posible. Sigue estas reglas estrictamente:
+
+ARQUITECTURA OBLIGATORIA — "Fachada Interactiva" (Mocked Full-Stack):
+- SIEMPRE "monolith" (nunca microservicios en plan gratuito).
+- SIEMPRE "mongodb" como base de datos (más simple de simular).
+- El backend completo en UN SOLO archivo: apps/api/src/index.ts (servidor Express mínimo, <50 líneas, solo levanta el puerto y tiene 2-3 rutas GET que devuelven JSON estático). Sin modelos, sin controladores, sin servicios separados.
+- El frontend en 4-5 archivos máximo: main.tsx (punto de entrada), App.tsx (router con wouter, catch-all AL FINAL), mockData.ts (datos simulados), y 1-2 páginas visuales (Home.tsx, Dashboard.tsx o la equivalente al dominio pedido).
+
+REGLAS DE IMPACTO VISUAL (obligatorias en todos los hitos de frontend):
+- mockData.ts: arrays de objetos con datos realistas del dominio (usuarios, productos, reservas, etc.) + funciones con setTimeout para simular latencia de red. CERO llamadas reales a la BD — todo el estado vive en memoria mientras el usuario navega.
+- Imágenes REALES: usa SIEMPRE URLs de Unsplash con palabras clave del dominio (formato: https://images.unsplash.com/photo-XXXXXXXX?w=800&q=80). NUNCA placeholder.it, NUNCA URLs inventadas, NUNCA "imagen de ejemplo". Una fotografía real cambia completamente la percepción de calidad del usuario.
+- Tailwind CSS intensivo: botones con hover, tarjetas con sombra, gradientes, iconos SVG inline o de lucide-react. La app debe parecer un producto real de startup desde el primer segundo.
+- Navegación fluida: el router de App.tsx debe permitir ir de la pantalla principal al dashboard/panel interior sin recargas.
+
+ESTRUCTURA DE HITOS RECOMENDADA (máximo ${this.options.maxMilestonesOverride}):
+1. mockData.ts — datos simulados del dominio (layer: "data", targetWorkspace: "apps/web")
+2. server/index.ts — backend Express mínimo con 2-3 rutas GET estáticas (layer: "backend-core", targetWorkspace: "apps/api")
+3. App.tsx — router principal con wouter, layout base, catch-all AL FINAL (layer: "frontend-core", targetWorkspace: "apps/web")
+4. Home.tsx — pantalla principal con hero visual, imágenes Unsplash, botones atractivos (layer: "frontend-module", targetWorkspace: "apps/web")
+5. Dashboard.tsx o la página interior equivalente — panel con datos del mockData, tablas/tarjetas interactivas (layer: "frontend-module", targetWorkspace: "apps/web")
+Puedes añadir 1-2 hitos más si el dominio lo requiere (ej. una página de detalle o un formulario de contacto), pero NUNCA superes el límite de ${this.options.maxMilestonesOverride} hitos totales.
+
+PROHIBICIONES ABSOLUTAS en plan gratuito:
+- NO generes hitos de modelos de BD separados (schemas Mongoose/Prisma).
+- NO generes middleware, auth, servicios, controladores como archivos separados.
+- NO uses URLs de imágenes inventadas o placeholder.
+- NO coloques el catch-all de wouter antes de las rutas reales (produce 404 en toda la app).
+[FIN DIRECTIVA PLAN GRATUITO]\n`
+      : "";
+
+    const enrichedPrompt = FREE_TIER_ARCHITECT_DIRECTIVE + userPrompt;
+
     const response = await anthropic.messages.stream({
       model: this.options.model!,
       // ENCONTRADO en producción: 4000 tokens (luego subido a 8000) seguían
@@ -322,7 +365,7 @@ export class CoreOrchestrator {
       // de pedir el máximo posible cuando no hace falta).
       max_tokens: 24000,
       system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [{ role: "user", content: enrichedPrompt }],
     }).finalMessage();
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}';
