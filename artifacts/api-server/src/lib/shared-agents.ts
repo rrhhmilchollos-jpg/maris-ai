@@ -479,7 +479,7 @@ export async function patchBundle(
     (async () => {
       try {
         const response = await createClaudeMessageWithFallback("patcher", model, {
-          max_tokens: 16000,
+          max_tokens: 24000,
           system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
             {
@@ -562,7 +562,7 @@ RULES:
 
   try {
     const response = await createClaudeMessageWithFallback("patcher", model, {
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: "Output JSON only. No markdown, no explanation outside the JSON object.",
       messages: [{ role: "user", content: planPrompt }],
     });
@@ -607,7 +607,7 @@ Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
 
   try {
     const response = await createClaudeMessageWithFallback("patcher", model, {
-      max_tokens: 16000,
+      max_tokens: 24000,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     });
