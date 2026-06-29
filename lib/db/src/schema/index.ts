@@ -409,6 +409,15 @@ export interface IVisualTestJob extends Document {
   status: "running" | "succeeded" | "failed";
   result?: any; // mismo shape que la respuesta JSON que el endpoint devolvía antes de forma síncrona
   errorMessage?: string;
+  /** ENCONTRADO en un video real del usuario: el frontend simulaba el
+   *  progreso con 7 mensajes fijos cada 4s (28s totales) que se quedaban
+   *  congelados en el último cuando el ciclo real (varias rondas de
+   *  CoreOrchestrator) tardaba más — el usuario veía "Verificando
+   *  mejoras..." fijo durante minutos sin relación con el trabajo real.
+   *  Este campo se actualiza en vivo desde runVisualTester (ver
+   *  visualTester.ts → onProgress) para que el polling del frontend
+   *  muestre la fase REAL en curso, no una simulación. */
+  progressNote?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -421,6 +430,7 @@ const VisualTestJobSchema = new Schema<IVisualTestJob>(
     status: { type: String, default: "running" },
     result: { type: Schema.Types.Mixed },
     errorMessage: { type: String },
+    progressNote: { type: String },
   },
   { timestamps: true },
 );

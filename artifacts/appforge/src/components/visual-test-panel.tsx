@@ -116,7 +116,14 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     while (Date.now() - startedAt < MAX_WAIT_MS) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       const poll = await apiFetch<any>(`/api/apps/${appId}/visual-test/${jobId}`);
-      if (poll.status === "running") continue;
+      if (poll.status === "running") {
+        // Progreso REAL reportado por el backend (ver visualTester.ts →
+        // onProgress) — reemplaza la simulación de pasos fijos que antes
+        // se quedaba congelada en el último mensaje cuando el ciclo real
+        // tardaba más de lo simulado.
+        if (poll.progressNote) setFixProgress(poll.progressNote);
+        continue;
+      }
       if (poll.status === "failed") {
         throw new Error(poll.error || "Error en el test visual");
       }
@@ -138,21 +145,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     setBeforeResult(scanData);
     setCompareMode(false);
     setAutoFixing(true);
-
-    const steps = [
-      "Analizando problemas detectados...",
-      "Generando parches de código...",
-      "Aplicando correcciones al bundle...",
-      "Validando bundle parcheado...",
-      "Re-capturando screenshots para verificar...",
-      "Verificando mejoras con Claude Vision...",
-    ];
-    let step = 0;
-    setFixProgress(steps[0]);
-    const progressInterval = setInterval(() => {
-      step = Math.min(step + 1, steps.length - 1);
-      setFixProgress(steps[step]);
-    }, 4000);
+    setFixProgress("Iniciando autofix...");
 
     try {
       const fixData = await submitVisualTestJob(true);
@@ -170,7 +163,6 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     } catch (err: any) {
       setError(err.message || "Error en el autofix");
     } finally {
-      clearInterval(progressInterval);
       setFixProgress(null);
       setAutoFixing(false);
     }
@@ -188,27 +180,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
       setCompareMode(false);
     }
     setError(null);
-    setFixProgress(null);
-
-    // Simular progreso del autofix en tiempo real
-    let progressInterval: ReturnType<typeof setInterval> | null = null;
-    if (autoFix) {
-      const steps = [
-        "Capturando screenshots del estado actual...",
-        "Claude Vision analizando problemas...",
-        "Generando parches de código...",
-        "Aplicando correcciones al bundle...",
-        "Validando bundle parcheado...",
-        "Re-capturando screenshots para verificar...",
-        "Verificando mejoras con Claude Vision...",
-      ];
-      let step = 0;
-      setFixProgress(steps[0]);
-      progressInterval = setInterval(() => {
-        step = Math.min(step + 1, steps.length - 1);
-        setFixProgress(steps[step]);
-      }, 4000);
-    }
+    setFixProgress(autoFix ? "Iniciando análisis..." : null);
 
     try {
       const data = await submitVisualTestJob(autoFix);
@@ -247,7 +219,6 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     } catch (err: any) {
       setError(err.message || "Error en el test visual");
     } finally {
-      if (progressInterval) clearInterval(progressInterval);
       setFixProgress(null);
       setRunning(false);
       setAutoFixing(false);

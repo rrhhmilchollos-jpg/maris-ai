@@ -775,8 +775,19 @@ export async function runVisualTester(opts: {
   prompt: string;
   autoFix: boolean;
   log?: Logger;
+  /** ENCONTRADO en un video real del usuario probando el producto: el
+   *  panel mostraba una simulación de pasos de progreso con setInterval
+   *  cada 4s (7 pasos = 28s) que se quedaba CONGELADA en el último mensaje
+   *  ("Verificando mejoras con Claude Vision...") durante minutos cuando
+   *  el ciclo real (con varias rondas de CoreOrchestrator) tardaba más de
+   *  esos 28s — el usuario veía un indicador estático sin relación con el
+   *  trabajo real que el backend sí seguía haciendo de fondo. Este
+   *  callback opcional reporta el progreso REAL fase por fase, para que
+   *  el frontend lo muestre tal cual en vez de simularlo. */
+  onProgress?: (note: string) => void | Promise<void>;
 }): Promise<VisualReport> {
-  const { app, baseUrl, prompt, autoFix, log } = opts;
+  const { app, baseUrl, prompt, autoFix, log, onProgress } = opts;
+  const report = async (note: string) => { try { await onProgress?.(note); } catch { /* nunca bloquear el ciclo por un fallo de progreso */ } };
   // Usamos /_inner directamente para que Puppeteer capture el contenido real
   // en lugar del wrapper HTML que solo contiene un <iframe> (que Puppeteer no penetra)
   const url = `${baseUrl.replace(/\/$/, "")}/p/${app.publicSlug}/_inner`;
@@ -797,8 +808,10 @@ export async function runVisualTester(opts: {
   while (cycle < (autoFix ? MAX_FIX_CYCLES : 1)) {
     cycle++;
     log?.info({ appId: app.id, cycle, url }, "VisualTester cycle start");
+    await report(`Ciclo ${cycle}/${autoFix ? MAX_FIX_CYCLES : 1} — capturando screenshots reales...`);
 
     lastShots = await takeScreenshots(url);
+    await report(`Ciclo ${cycle} — Claude Vision analizando la app...`);
     lastAnalysis = await analyzeWithVision(
       lastShots,
       { title: app.title, description: app.description },
@@ -819,6 +832,7 @@ export async function runVisualTester(opts: {
     const fixable = lastAnalysis.issues.filter((i) => i.severity !== "minor");
     if (fixable.length === 0) break;
 
+    await report(`Ciclo ${cycle} — puntuación ${lastAnalysis.overallScore}/100, ${fixable.length} problema(s). Generando el arreglo...`);
     const patchResult = await applyVisualFixes({
       bundle: currentBundle,
       issues: fixable,
@@ -832,6 +846,7 @@ export async function runVisualTester(opts: {
     }
     const patched = patchResult.frontendCode;
 
+    await report(`Ciclo ${cycle} — validando el código generado...`);
     // Validate the patched bundle BEFORE persisting so we never overwrite a
     // working app with a corrupted Claude response. If esbuild can't build it,
     // we keep the old bundle and stop the loop.
@@ -867,6 +882,7 @@ export async function runVisualTester(opts: {
     currentBundle = patched;
     if (patchResult.backendCode) currentBackendCode = patchResult.backendCode;
     fixesApplied++;
+    await report(`Ciclo ${cycle} — corrección aplicada. Re-verificando con Claude Vision...`);
 
     // Snapshot the post-fix bundle so the user can roll back if the visual
     // tester's "improvement" actually regressed something. Fire-and-forget.

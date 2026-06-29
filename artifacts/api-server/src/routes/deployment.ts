@@ -490,7 +490,7 @@ router.get("/apps/:appId/visual-test/:jobId", requireAuth, async (req: Request, 
     if (!job) return res.status(404).json({ error: "Job no encontrado" });
 
     if (job.status === "running") {
-      return res.json({ status: "running" });
+      return res.json({ status: "running", progressNote: job.progressNote || null });
     }
     if (job.status === "failed") {
       return res.json({ status: "failed", error: job.errorMessage || "Error en el test visual" });
@@ -608,6 +608,11 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
       prompt: app.prompt || app.description || app.title || "",
       autoFix,
       log: logger,
+      onProgress: async (note: string) => {
+        try {
+          await (VisualTestJob as any).findByIdAndUpdate(jobId, { progressNote: note });
+        } catch { /* nunca bloquear el ciclo real por un fallo al persistir el progreso */ }
+      },
     });
 
     await finish({
