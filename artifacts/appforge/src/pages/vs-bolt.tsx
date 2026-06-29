@@ -19,6 +19,79 @@ export default function VsBoltPage() {
     let canonical = document.getElementById("canonical-tag") as HTMLLinkElement | null;
     if (!canonical) canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
     if (canonical) canonical.setAttribute("href", "https://www.marisai.es/vs-bolt");
+
+    // ── Datos estructurados (Schema.org) ──────────────────────────
+    // Se inyectan al montar la página y se eliminan al desmontar,
+    // para evitar acumular scripts duplicados al navegar con wouter.
+    const schemaData = [
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: [
+          {
+            "@type": "Question",
+            name: "¿Cuál es la principal diferencia entre Maris AI y Bolt.new?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "La diferencia clave es el idioma, el modelo de precios y el enfoque. Bolt.new está en inglés y usa tokens impredecibles donde el coste real varía según la complejidad del proyecto. Maris AI está en español con un sistema de créditos transparente donde siempre sabes lo que gastas.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "¿Bolt.new genera el backend completo como Maris AI?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Bolt puede generar código de backend, pero corre en WebContainers (un entorno de navegador). Para producción real necesitas configurar tu propio servidor o un servicio externo. Maris AI genera un backend Express + MongoDB listo para desplegar en Railway con un clic.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "¿Es Bolt.new bueno para emprendedores españoles?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Bolt es una herramienta potente, pero está pensada para developers globales en inglés. La curva de aprendizaje es mayor, el soporte es en inglés y los costes de tokens pueden sorprenderte. Para emprendedores en España sin perfil técnico, Maris AI es más accesible.",
+            },
+          },
+        ],
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "Maris AI",
+        applicationCategory: "DeveloperApplication",
+        operatingSystem: "Web",
+        url: "https://www.marisai.es",
+        description:
+          "Plataforma de vibe coding en español que genera apps completas (frontend, backend y base de datos) mediante 9 agentes de IA.",
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "EUR",
+          description: "78 créditos gratis al registrarse, sin tarjeta de crédito",
+        },
+        inLanguage: "es-ES",
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Inicio", item: "https://www.marisai.es/" },
+          { "@type": "ListItem", position: 2, name: "Maris AI vs Bolt.new", item: "https://www.marisai.es/vs-bolt" },
+        ],
+      },
+    ];
+
+    const scriptTags = schemaData.map((data) => {
+      const script = document.createElement("script");
+      script.type = "application/ld+json";
+      script.text = JSON.stringify(data);
+      document.head.appendChild(script);
+      return script;
+    });
+
+    return () => {
+      scriptTags.forEach((script) => document.head.removeChild(script));
+    };
   }, []);
   const comparison = [
     { feature: "Idioma de la interfaz", maris: "100% Español", bolt: "Inglés", marisWins: true },
