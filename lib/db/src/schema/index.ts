@@ -606,6 +606,19 @@ export interface IAppRuntimeError extends Document {
   stack?: string;
   userAgent?: string;
   pathname?: string;
+  // UNIFICADO: estos tres campos vivían SOLO en una definición DUPLICADA de
+  // este mismo modelo dentro de autoRepairAgent.ts (mismo nombre de
+  // colección Mongoose "AppRuntimeError", registrada por separado vía
+  // mongoose.models.AppRuntimeError || mongoose.model(...) — quien se
+  // registrara primero en el proceso "ganaba", dejando al otro import
+  // operando contra un tipo TypeScript incompleto que no reflejaba los
+  // campos reales ya en uso en producción). Encontrado al conectar la
+  // lectura de errores reales al flujo de edición — unificado aquí en el
+  // schema central; autoRepairAgent.ts ahora importa este mismo modelo en
+  // vez de duplicar su propia definición.
+  slug?: string;
+  count?: number;
+  repaired?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -621,6 +634,9 @@ const AppRuntimeErrorSchema = new Schema<IAppRuntimeError>(
     stack: { type: String },
     userAgent: { type: String },
     pathname: { type: String },
+    slug: { type: String, index: true },
+    count: { type: Number, default: 1 },
+    repaired: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

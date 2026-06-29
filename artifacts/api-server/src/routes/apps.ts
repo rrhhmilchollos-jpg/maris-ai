@@ -5923,6 +5923,39 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
 
+    // ── ERRORES REALES DE RUNTIME — diagnóstico real en vez de adivinar ──────
+    // ENCONTRADO a petición del usuario (caso real: app de clínica dental con
+    // "La página tardó demasiado en aparecer" / root never mounted): el
+    // bundle desplegado YA reporta automáticamente sus errores de runtime al
+    // backend (deployBundle.ts → POST /p/:slug/_error → recordRuntimeError
+    // → colección AppRuntimeError), pero NINGÚN agente de edición/reparación
+    // leía jamás esos datos — el cliente pedía "arréglalo" y el modelo tenía
+    // que adivinar la causa solo a partir de la descripción en texto, sin
+    // ver el error JavaScript real que el propio navegador del cliente ya
+    // había capturado y enviado. Esto conecta esa lectura real: en
+    // ediciones (job.editAppId existe), se consultan los errores NO
+    // reparados más recientes de esta app concreta y se inyectan como
+    // contexto verificado — mismo patrón de enriquecimiento que ya usan RAG
+    // y A/B testing arriba, sin tocar ningún camino de generación individual
+    // (quirúrgico, hitos, una sola pasada) por separado.
+    let runtimeErrorContextBlock = "";
+    if (job.editAppId) {
+      try {
+        const { AppRuntimeError } = await import("@workspace/db/schema");
+        const realErrors = await (AppRuntimeError as any)
+          .find({ appId: String(job.editAppId), repaired: { $ne: true } })
+          .sort({ updatedAt: -1 })
+          .limit(5)
+          .lean();
+        if (realErrors.length > 0) {
+          runtimeErrorContextBlock = `\n\n[ERRORES REALES DE RUNTIME CAPTURADOS POR EL NAVEGADOR DEL CLIENTE — usa esto como diagnóstico verificado, no adivines la causa]\nEstos son los errores JavaScript REALES que ocurrieron cuando la app se ejecutó de verdad en un navegador (no especulación, datos capturados automáticamente):\n${realErrors.map((e: any, i: number) => `${i + 1}. [${e.kind || "error"}] ${e.message}${e.stack ? `\n   Stack: ${e.stack.slice(0, 400)}` : ""}`).join("\n")}\n\nUsa esta información para identificar la causa de raíz exacta (ej. un componente que nunca monta, un import roto, un orden de rutas incorrecto en el router) en vez de adivinar a partir de la descripción del usuario.`;
+          await log("system", `🩺 ${realErrors.length} error(es) de runtime real(es) encontrado(s) para esta app — usando como diagnóstico verificado.`);
+        }
+      } catch (runtimeErrErr) {
+        logger.warn({ runtimeErrErr, jobId }, "Runtime error lookup failed — continuing without it");
+      }
+    }
+
     // ── A/B TESTING — seleccionar variante de system prompt óptima ───────────
     let abVariantId = "default";
     let abPromptModifier = "";
@@ -5933,9 +5966,10 @@ export async function runJobById(jobId: string): Promise<void> {
       abPromptModifier = ab.modifier;
     } catch { /* no bloquear */ }
 
-    // Enriquecer el prompt con RAG + A/B modifier
+    // Enriquecer el prompt con RAG + A/B modifier + errores reales de runtime
     const enrichedJobPrompt = job.prompt +
       (ragContextBlock ? `\n\n${ragContextBlock}` : "") +
+      runtimeErrorContextBlock +
       abPromptModifier;
 
     const result = await generateApp(
@@ -6033,6 +6067,22 @@ export async function runJobById(jobId: string): Promise<void> {
           status: "ready",
         },
       });
+      // Si esta edición usó errores reales de runtime como contexto (ver
+      // bloque "ERRORES REALES DE RUNTIME" más arriba), los marcamos como
+      // reparados — sin esto, la próxima edición seguiría viendo los MISMOS
+      // errores ya abordados, ensuciando el contexto con ruido viejo en vez
+      // de reflejar solo problemas reales pendientes.
+      if (runtimeErrorContextBlock) {
+        try {
+          const { AppRuntimeError } = await import("@workspace/db/schema");
+          await (AppRuntimeError as any).updateMany(
+            { appId: String(job.editAppId), repaired: { $ne: true } },
+            { $set: { repaired: true } },
+          );
+        } catch (markRepairedErr) {
+          logger.warn({ markRepairedErr, jobId }, "Failed to mark runtime errors as repaired — non-blocking");
+        }
+      }
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",

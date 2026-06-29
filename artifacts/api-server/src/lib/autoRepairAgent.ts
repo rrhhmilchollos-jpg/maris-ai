@@ -23,7 +23,7 @@ import { logger } from "./logger";
 import { patchBundle, patchBundleMultiFile, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
-import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
+import { GeneratedApp, User, AppMessage, JobLog, GenerationJob, AppRuntimeError } from "@workspace/db/schema";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const HEALTH_CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutos
@@ -64,35 +64,9 @@ const AppRepairLog: Model<IAppRepairLog> =
   mongoose.models.AppRepairLog ||
   mongoose.model<IAppRepairLog>("AppRepairLog", AppRepairLogSchema);
 
-// ─── Schema: AppRuntimeError (ampliado) ──────────────────────────────────────
-interface IAppRuntimeError extends Document {
-  appId: string;
-  slug: string;
-  message: string;
-  stack?: string;
-  kind: string;
-  count: number;
-  repaired: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const AppRuntimeErrorSchema = new Schema<IAppRuntimeError>(
-  {
-    appId: { type: String, required: true, index: true },
-    slug: { type: String, required: true, index: true },
-    message: { type: String, required: true },
-    stack: String,
-    kind: { type: String, default: "error" },
-    count: { type: Number, default: 1 },
-    repaired: { type: Boolean, default: false },
-  },
-  { timestamps: true },
-);
-
-export const AppRuntimeError: Model<IAppRuntimeError> =
-  mongoose.models.AppRuntimeError ||
-  mongoose.model<IAppRuntimeError>("AppRuntimeError", AppRuntimeErrorSchema);
+// AppRuntimeError unificado en el schema central (@workspace/db/schema) —
+// ver el comentario en lib/db/src/schema/index.ts para el contexto completo
+// de por qué existían dos definiciones separadas del mismo modelo.
 
 // ─── Cooldown tracker en memoria ─────────────────────────────────────────────
 const repairCooldowns = new Map<string, number>();
