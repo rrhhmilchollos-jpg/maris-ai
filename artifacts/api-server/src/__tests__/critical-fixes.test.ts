@@ -1,0 +1,200 @@
+/**
+ * critical-fixes.test.ts
+ *
+ * GUARDIÁN de los fixes críticos del 29 de junio de 2026 — a petición
+ * EXPLÍCITA del usuario tras una sesión completa de investigación y
+ * reparación real del ciclo de generación/edición/Testing Visual de
+ * Maris AI (motivo: una app de clínica dental real terminaba con pantalla
+ * negra/404 y el sistema decía "completado con éxito" sin haberlo
+ * verificado de verdad).
+ *
+ * QUÉ HACE ESTE ARCHIVO: lee el código fuente real de los módulos
+ * afectados y comprueba que cada fix sigue presente, buscando patrones
+ * textuales concretos y verificables — NO opiniones, NO "spirit of the
+ * fix", hechos objetivos que solo pueden ser ciertos si el código de hoy
+ * sigue ahí. Si alguno de estos checks falla, es una señal real y fuerte
+ * de que una edición futura (sin querer) deshizo una protección real
+ * contra un bug que YA OCURRIÓ EN PRODUCCIÓN con un cliente real.
+ *
+ * QUÉ NO HACE: no impide que el código se edite. Si en el futuro decides
+ * deliberadamente cambiar uno de estos comportamientos, edita también el
+ * check correspondiente aquí — este archivo está pensado para detectar
+ * ediciones ACCIDENTALES de otras partes del código que rompan esto sin
+ * que nadie se dé cuenta, no para bloquear cambios intencionados.
+ *
+ * Ejecutar: pnpm --filter @workspace/api-server run test:critical-fixes
+ * (ya incluido en `pnpm run test`, que se ejecuta como parte de `pnpm run
+ * build` — ver prebuild en package.json — así que un build roto en este
+ * sentido falla ANTES de llegar a producción, no después.)
+ */
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const API_SRC = join(__dirname, "..");
+const SERVICES_SRC = join(__dirname, "../../../../lib/services/src");
+
+let failed = 0;
+function check(label: string, cond: boolean, hint?: string): void {
+  if (cond) {
+    console.log(`  ✓ ${label}`);
+  } else {
+    failed++;
+    console.error(`  ✗ ${label}`);
+    if (hint) console.error(`    → ${hint}`);
+  }
+}
+
+function readSrc(relativeToApiSrc: string): string {
+  return readFileSync(join(API_SRC, relativeToApiSrc), "utf-8");
+}
+
+function readServicesSrc(relativeToServicesSrc: string): string {
+  return readFileSync(join(SERVICES_SRC, relativeToServicesSrc), "utf-8");
+}
+
+console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 1 (be7e130): reglas de wouter en EDIT_CODE_AGENT_STATIC — sin esto, el
+// CoreOrchestrator en modo edición genera código con patrones de
+// react-router-dom que no existen en wouter, rompiendo el build entero.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readServicesSrc("CoreOrchestrator.ts");
+  check(
+    "FIX 1: EDIT_CODE_AGENT_STATIC menciona la regla de ORDEN DEL ROUTER",
+    /ORDEN DEL ROUTER/.test(src),
+    "El prompt de edición por hitos debe seguir exigiendo que el catch-all 404 vaya al FINAL del <Switch> — sin esto vuelve el bug de pantalla en blanco/404 que afectó a la app de clínica dental real.",
+  );
+  check(
+    "FIX 1: EDIT_CODE_AGENT_STATIC prohíbe useNavigate/useHistory de wouter",
+    /useNavigate.*NO TIENE|NO TIENE.*useNavigate|wouter NO TIENE/.test(src),
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 2 (be7e130): el endpoint de Testing Visual es asíncrono (VisualTestJob),
+// no síncrono — sin esto, Railway corta la conexión a los 5 minutos y se
+// pierde el trabajo del ciclo de autofix aunque el servidor sí lo completara.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("routes/deployment.ts");
+  check(
+    "FIX 2: POST /visual-test crea un VisualTestJob y responde 202 (asíncrono)",
+    /VisualTestJob.*\.create/.test(src) && /res\.status\(202\)/.test(src),
+    "Si el endpoint vuelve a ser síncrono, las generaciones complejas (varios ciclos de CoreOrchestrator) pueden perderse cuando Railway corta la conexión a los 5 minutos.",
+  );
+  check(
+    "FIX 2: existe el endpoint GET de polling /visual-test/:jobId",
+    /\/apps\/:appId\/visual-test\/:jobId/.test(src),
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 3 (b493b7c): comparación de score antes/después de cada parche, con
+// reversión automática si empeora — sin esto, el Autofix puede terminar en
+// un estado VISUALMENTE PEOR que el inicial sin que nadie lo note.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/visualTester.ts");
+  const regressionMentions = (src.match(/REGRESSED the visual score/g) || []).length;
+  check(
+    "FIX 3: hay detección de regresión de score en AMBOS caminos (runVisualTester y applyVisualFixesAndSave)",
+    regressionMentions >= 2,
+    `Se esperaban al menos 2 menciones de 'REGRESSED the visual score' (una por cada ciclo de autofix), se encontraron ${regressionMentions}. Sin esta comparación, un parche puede arreglar lo pedido y a la vez empeorar otra cosa sin que el sistema lo note ni revierta.`,
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 4 (19d2074): el evaluador visual se ESPERA (await) antes de marcar el
+// job como succeeded — sin esto, el cliente ve "completado con éxito" con
+// la app todavía rota, mientras la reparación real ocurre en segundo plano
+// DESPUÉS de que el cliente ya está mirando la pantalla negra.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("routes/apps.ts");
+  check(
+    "FIX 4: runAutoEvaluator se llama con `await` (bloqueante) antes del succeeded",
+    /visualEvalResult\s*=\s*await runAutoEvaluator/.test(src),
+    "Si vuelve a ser '.catch()' sin await (fire-and-forget), el job se marca succeeded ANTES de que la verificación visual real termine — exactamente el bug que afectó a la app de clínica dental real.",
+  );
+  // Verificación negativa: confirma que NO existe el patrón roto antiguo
+  // (runAutoEvaluator(...).catch(...) sin que el resultado se asigne/espere).
+  const brokenPattern = /runAutoEvaluator\(\{[\s\S]{0,800}?\}\)\.catch\(/;
+  check(
+    "FIX 4: NO ha vuelto el patrón fire-and-forget antiguo (runAutoEvaluator(...).catch(...) sin await)",
+    !brokenPattern.test(src),
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 5 (6b0cf85): errores reales de runtime (AppRuntimeError) inyectados
+// como contexto verificado en ediciones — sin esto, el agente vuelve a
+// adivinar la causa del bug solo a partir de la descripción en texto del
+// cliente, ignorando los errores JavaScript reales ya capturados.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("routes/apps.ts");
+  check(
+    "FIX 5: se consulta AppRuntimeError y se inyecta como contexto en ediciones",
+    /runtimeErrorContextBlock/.test(src) && /AppRuntimeError/.test(src),
+  );
+  check(
+    "FIX 5: el contexto de errores reales se incluye en enrichedJobPrompt",
+    /enrichedJobPrompt\s*=\s*job\.prompt[\s\S]{0,200}runtimeErrorContextBlock/.test(src),
+    "Si runtimeErrorContextBlock deja de concatenarse en enrichedJobPrompt, la lectura de errores reales se vuelve inútil — se consulta pero nunca llega al modelo.",
+  );
+
+  // El schema NO debe volver a estar duplicado con campos distintos — ver
+  // el commit 6b0cf85 para el contexto completo de por qué esto importa.
+  const repairSrc = readSrc("lib/autoRepairAgent.ts");
+  check(
+    "FIX 5b: autoRepairAgent.ts ya NO duplica su propia definición de AppRuntimeError",
+    !/const AppRuntimeErrorSchema = new Schema/.test(repairSrc),
+    "AppRuntimeError debe vivir SOLO en lib/db/schema/index.ts. Si vuelve a duplicarse aquí con campos distintos, el modelo que 'gane' el registro en mongoose.models depende del orden de carga del proceso — riesgo real de inconsistencia silenciosa.",
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 6 (52d4621): patchBundleMultiFile conectado en tester.ts como respaldo
+// cuando el patcher simple (16K tokens, una sola respuesta) falla — sin
+// esto, cualquier reparación que toque varios archivos a la vez se rinde
+// inmediatamente con "El reparador no pudo generar una solución".
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/tester.ts");
+  check(
+    "FIX 6: tester.ts importa y usa patchBundleMultiFile como respaldo",
+    /import\s*\{[^}]*patchBundleMultiFile[^}]*\}/.test(src) && /await patchBundleMultiFile\(/.test(src),
+    "Sin este respaldo, reparaciones que afectan a varios archivos a la vez (caso real: 6 errores en distintos componentes) fallan en silencio en el primer intento, sin segunda oportunidad.",
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 7 (8b4b71b): progreso REAL del CoreOrchestrator conectado (no un
+// callback vacío) — sin esto, el panel de Testing Visual se queda
+// congelado en el mismo mensaje durante varios minutos mientras el
+// CoreOrchestrator SÍ trabaja de fondo, indistinguible de estar colgado.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/visualTester.ts");
+  check(
+    "FIX 7: applyVisualFixes acepta onProgress y lo conecta a editProjectIncremental (no '() => {}' vacío)",
+    /onProgress\?:\s*\(note:\s*string\)\s*=>\s*void/.test(src) &&
+      /editProjectIncremental\(\s*structuralPrompt,\s*bundle,\s*opts\.backendCode \|\| "",\s*\(update: any\) => \{/.test(src),
+    "Si editProjectIncremental vuelve a recibir un callback vacío, el progreso real (archivo por archivo) deja de reportarse y el panel parece atascado aunque esté trabajando.",
+  );
+  check(
+    "FIX 7: runVisualTester propaga su propio report() hacia applyVisualFixes",
+    /onProgress:\s*\(note\)\s*=>\s*\{\s*void report\(/.test(src),
+  );
+}
+
+if (failed > 0) {
+  console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
+  console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
+  process.exit(1);
+}
+console.log("\nTodos los fixes críticos siguen en su sitio.");

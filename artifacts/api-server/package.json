@@ -6,6 +6,7 @@
   "scripts": {
     "vercel-build": "node ./build.mjs",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "prebuild": "pnpm run test:critical-fixes",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "start:worker": "node --enable-source-maps ./dist/worker.mjs",
@@ -13,7 +14,8 @@
     "test:queue": "tsx ./src/__tests__/queue-recovery.test.ts",
     "test:agent-memory": "tsx ./src/__tests__/agent-memory.test.ts",
     "test:evaluator": "tsx ./src/__tests__/evaluator.test.ts",
-    "test": "pnpm run test:spanish-intent && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator",
+    "test:critical-fixes": "tsx ./src/__tests__/critical-fixes.test.ts",
+    "test": "pnpm run test:spanish-intent && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator && pnpm run test:critical-fixes",
     "test:spanish-intent": "tsx ./src/__tests__/spanish-intent-lexicon.test.ts"
   },
   "dependencies": {
