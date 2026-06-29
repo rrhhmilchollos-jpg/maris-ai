@@ -6152,31 +6152,45 @@ export async function runJobById(jobId: string): Promise<void> {
         }
       }
 
-      const app = await GeneratedApp.create({
-        userId: job.userId,
-        title: finalResult.title,
-        prompt: job.prompt,
-        description: finalResult.description,
-        techStack: finalResult.techStack,
-        frontendCode: finalResult.frontendCode,
-        backendCode: finalResult.backendCode,
-        plannedPages: finalResult.plannedPages || [],
-        requiredEnvVars: finalResult.requiredEnvVars || [],
-        architecture: finalResult.architecture,
-        language: job.language,
-        kind: job.kind,
-        status: "ready",
-        publicSlug: makeSlug(),
-        // ID Universal Maris AI — vinculado al usuario propietario
-        // Formato: APP-USR001-001 (usuario 001, primera app de ese usuario)
-        marisId: await (async () => {
-          try {
-            const owner = await User.findById(job.userId).lean() as any;
-            const userMarisId = owner?.marisId ?? MarisId.user();
-            return await generateAppId(userMarisId);
-          } catch { return MarisId.project(MarisId.user()); }
-        })(),
-      });
+      // Wrap con retry para evitar E11000 duplicate key en marisId
+      // (puede ocurrir si dos jobs del mismo usuario terminan en el mismo segundo)
+      let app: any;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          app = await GeneratedApp.create({
+            userId: job.userId,
+            title: finalResult.title,
+            prompt: job.prompt,
+            description: finalResult.description,
+            techStack: finalResult.techStack,
+            frontendCode: finalResult.frontendCode,
+            backendCode: finalResult.backendCode,
+            plannedPages: finalResult.plannedPages || [],
+            requiredEnvVars: finalResult.requiredEnvVars || [],
+            architecture: finalResult.architecture,
+            language: job.language,
+            kind: job.kind,
+            status: "ready",
+            publicSlug: makeSlug(),
+            marisId: await (async () => {
+              try {
+                const owner = await User.findById(job.userId).lean() as any;
+                const userMarisId = owner?.marisId ?? MarisId.user();
+                return await generateAppId(userMarisId);
+              } catch { return MarisId.project(MarisId.user()); }
+            })(),
+          });
+          break; // éxito — salir del loop
+        } catch (createErr: any) {
+          const isDupKey = createErr?.code === 11000 || String(createErr).includes("E11000");
+          if (isDupKey && attempt < 2) {
+            logger.warn({ attempt, jobId }, "marisId collision — retrying with new ID");
+            await new Promise(r => setTimeout(r, 100 * (attempt + 1)));
+            continue;
+          }
+          throw createErr; // re-lanzar si no es duplicate key o agotamos reintentos
+        }
+      }
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { appId: String(app._id) } });
 
       // Mensaje de upgrade para usuarios free — la app YA es completa
