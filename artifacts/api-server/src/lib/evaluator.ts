@@ -694,7 +694,7 @@ ${userIntent.slice(0, 2000)}` : "";
     const validation = await validateBundle(patched);
     if (!validation.ok && validation.issues.length > 0) {
       log.warn(
-        { appId, jobId, round, errors: validation.issues.length },
+        { appId, jobId, round, errors: validation.issues.length, issues: validation.issues.slice(0, 10) },
         "🔁 Patched bundle failed validation — discarding and stopping",
       );
       break;

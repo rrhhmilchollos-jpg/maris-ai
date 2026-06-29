@@ -31,6 +31,23 @@ const finalPort = (Number.isNaN(port) || port <= 0) ? 3000 : port;
 // servidor HTTP/Express, solo nos da la referencia que necesitábamos.
 const httpServer = http.createServer(app);
 
+// ENCONTRADO en logs reales de producción: el ciclo completo de Testing
+// Visual + Autofix (POST /apps/:id/visual-test) puede tardar varios
+// minutos (análisis con Claude Vision + reconstrucción por hitos con
+// CoreOrchestrator, repetido hasta 3 veces) — confirmado en logs de
+// Railway con responseTime de 292507ms y 300010ms (este último abortado).
+// Railway corta conexiones a los 5 minutos por defecto (su límite máximo
+// de plataforma es 15 minutos, configurable a nivel de aplicación) — sin
+// subir esto, el trabajo del ciclo de autofix se pierde a mitad sin que
+// el cliente ni el servidor lo registren como un fallo real. Esto es una
+// red de seguridad mientras se completa la solución de fondo (convertir
+// el endpoint en asíncrono con polling, igual que ya hacen los jobs de
+// generación) — no sustituye a esa solución, solo evita pérdidas de
+// trabajo mientras tanto.
+httpServer.setTimeout(15 * 60 * 1000);
+httpServer.keepAliveTimeout = 15 * 60 * 1000;
+httpServer.headersTimeout = 15 * 60 * 1000 + 5000; // debe ser mayor que keepAliveTimeout, por requerimiento de Node.js
+
 // Presencia en tiempo real (ver lib/presence.ts) — qué usuarios tienen
 // Maris AI abierto AHORA MISMO, no solo cuándo entraron por última vez.
 // Autenticación real con el mismo mecanismo que el resto de la API

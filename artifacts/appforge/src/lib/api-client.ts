@@ -267,6 +267,14 @@ export function usePushAppToGitHub(opts?: { mutation?: Partial<UseMutationOption
 export function useGenerateAppImages(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/images`, { method: "POST" }), ...(opts?.mutation as any) });
 }
+// NOTA: sin consumidores actualmente (verificado por grep en todo el árbol
+// de componentes/páginas). El endpoint POST /visual-test ahora es
+// ASÍNCRONO (ver routes/deployment.ts) — esta mutation solo crea el job y
+// devuelve {jobId, status:"running"}, NO el resultado final. Si se
+// reactiva este hook en el futuro, hace falta hacer polling contra
+// GET /api/apps/:id/visual-test/:jobId hasta status:"succeeded"|"failed"
+// — ver visual-test-panel.tsx → submitVisualTestJob() para el patrón ya
+// implementado y probado.
 export function useVisualTestApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/visual-test`, { method: "POST" }), ...(opts?.mutation as any) });
 }

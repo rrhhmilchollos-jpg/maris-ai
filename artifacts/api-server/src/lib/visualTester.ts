@@ -715,7 +715,7 @@ export async function applyVisualFixesAndSave(opts: {
     // Validate the patched bundle before saving
     const validation = await validateBundle(patched);
     if (!validation.ok) {
-      log?.warn({ appId, cycle, errors: validation.issues.length }, "[applyVisualFixesAndSave] Patched bundle failed validation");
+      log?.warn({ appId, cycle, errors: validation.issues.length, issues: validation.issues.slice(0, 10) }, "[applyVisualFixesAndSave] Patched bundle failed validation");
       break;
     }
 
@@ -838,7 +838,7 @@ export async function runVisualTester(opts: {
     const validation = await validateBundle(patched);
     if (!validation.ok) {
       log?.warn(
-        { appId: app.id, cycle, errors: validation.issues.length },
+        { appId: app.id, cycle, errors: validation.issues.length, issues: validation.issues.slice(0, 10) },
         "VisualTester patched bundle failed validation — keeping previous bundle",
       );
       break;

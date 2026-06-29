@@ -431,43 +431,115 @@ router.post("/apps/:appId/github", requireAuth, async (req: Request, res: Respon
  * POST /api/apps/:appId/visual-test
  * Ejecuta el Visual Testing Agent
  */
+// ENCONTRADO en logs reales de producción (responseTime de hasta 300010ms,
+// abortado por el proxy de Railway a los 5 minutos): el ciclo de Testing
+// Visual + Autofix puede tardar varios minutos (Claude Vision + hasta 3
+// rondas de CoreOrchestrator). Mantener la conexión HTTP abierta durante
+// todo ese tiempo es frágil — cualquier proxy intermedio (Railway, el
+// navegador, una VPN) puede cortarla, perdiendo el resultado aunque el
+// servidor sí completara el trabajo. FIX: este endpoint ahora es
+// ASÍNCRONO — crea un VisualTestJob, responde AL INSTANTE con su id, y
+// ejecuta el trabajo real en segundo plano (sin atar la respuesta HTTP a
+// su duración). El cliente hace polling vía GET .../visual-test/:jobId
+// hasta ver status:"succeeded"|"failed" — mismo patrón ya probado en
+// producción para GenerationJob, no se inventa un mecanismo nuevo.
 router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: Response) => {
   try {
     const appId = String(req.params.appId);
     const userId = getAuthenticatedUserId(req);
     const { autoFix = false } = req.body || {};
 
-    // Load app with all needed fields
-    const { GeneratedApp } = await import("@workspace/db/schema");
+    const { GeneratedApp, VisualTestJob } = await import("@workspace/db/schema");
+    const app = await (GeneratedApp as any).findOne({ _id: appId, userId })
+      .select("_id")
+      .lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const job = await (VisualTestJob as any).create({ appId, userId, autoFix: !!autoFix, status: "running" });
+    const jobId = String(job._id);
+
+    // Lanzado en segundo plano — NO se espera (sin await) para que la
+    // respuesta HTTP salga al instante. Cualquier error se captura y se
+    // persiste en el propio job, nunca se propaga a un proceso sin manejar.
+    runVisualTestWork(appId, userId, !!autoFix, jobId).catch(async (err) => {
+      const { logger } = await import("../lib/logger");
+      logger.error({ err, appId, jobId }, "[visual-test] runVisualTestWork failed unexpectedly");
+      try {
+        await (VisualTestJob as any).findByIdAndUpdate(jobId, {
+          status: "failed",
+          errorMessage: (err as Error)?.message || "Error inesperado",
+        });
+      } catch { /* best-effort */ }
+    });
+
+    return res.status(202).json({ jobId, status: "running" });
+  } catch (error: any) {
+    const { logger } = await import("../lib/logger");
+    logger.error({ err: error }, "[visual-test] Error al crear el job");
+    return res.status(500).json({ error: error.message || "Error al iniciar el test visual" });
+  }
+});
+
+// GET /api/apps/:appId/visual-test/:jobId — polling del resultado
+router.get("/apps/:appId/visual-test/:jobId", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { appId, jobId } = req.params;
+    const userId = getAuthenticatedUserId(req);
+    const { VisualTestJob } = await import("@workspace/db/schema");
+    const job = await (VisualTestJob as any).findOne({ _id: jobId, appId: String(appId), userId }).lean();
+    if (!job) return res.status(404).json({ error: "Job no encontrado" });
+
+    if (job.status === "running") {
+      return res.json({ status: "running" });
+    }
+    if (job.status === "failed") {
+      return res.json({ status: "failed", error: job.errorMessage || "Error en el test visual" });
+    }
+    // succeeded — el resultado completo ya tiene exactamente el shape que
+    // el endpoint devolvía antes de forma síncrona, sin que el frontend
+    // tenga que cambiar cómo lo interpreta.
+    return res.json({ status: "succeeded", ...job.result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || "Error al consultar el test visual" });
+  }
+});
+
+/**
+ * Lógica real del test visual + autofix — extraída del antiguo endpoint
+ * síncrono sin cambiar NADA de su comportamiento interno, solo el momento
+ * en que el resultado se entrega (al VisualTestJob en vez de directamente
+ * a la respuesta HTTP, que ya salió hace tiempo cuando esto termina).
+ */
+async function runVisualTestWork(appId: string, userId: string, autoFix: boolean, jobId: string): Promise<void> {
+  const { GeneratedApp, VisualTestJob } = await import("@workspace/db/schema");
+  const { logger } = await import("../lib/logger");
+
+  const finish = async (result: any) => {
+    await (VisualTestJob as any).findByIdAndUpdate(jobId, { status: "succeeded", result });
+  };
+
+  try {
     const app = await (GeneratedApp as any).findOne({ _id: appId, userId })
       .select("title description frontendCode publicSlug prompt")
       .lean();
 
-    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!app) {
+      await (VisualTestJob as any).findByIdAndUpdate(jobId, { status: "failed", errorMessage: "App no encontrada" });
+      return;
+    }
 
-    // runVisualTester — nombre correcto de la funcion exportada
-    const { runVisualTester, takeScreenshots, VisualTesterError } = await import("../lib/visualTester");
-    const { logger } = await import("../lib/logger");
+    const { runVisualTester, takeScreenshots } = await import("../lib/visualTester");
 
     const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
 
-    // Si no hay publicSlug, usamos la URL de preview interno del API server
-    // para que el test visual funcione aunque la app no esté desplegada públicamente
     let effectiveSlug = app.publicSlug;
-    let usingPreviewFallback = false;
     if (!effectiveSlug) {
-      usingPreviewFallback = true;
-      // Usamos la URL de preview interno: el api-server sirve /api/apps/:id/preview
-      // Necesitamos una URL accesible por puppeteer — usamos localhost si estamos en Railway
       const internalBaseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`;
-      // Hacemos el test directamente sobre la URL de preview sin necesitar publicSlug
       const previewUrl = `${internalBaseUrl}/api/apps/${appId}/preview`;
-      logger.info({ appId, previewUrl }, "[visual-test] No hay publicSlug — usando preview interno");
+      logger.info({ appId, previewUrl, jobId }, "[visual-test] No hay publicSlug — usando preview interno");
 
       try {
-        // Capturamos screenshots del preview interno
         const shots = await takeScreenshots(previewUrl);
-        // Análisis completo con Claude Vision sobre los screenshots del preview
         const { analyzePreviewScreenshots } = await import("../lib/visualTester");
         let analysis = await analyzePreviewScreenshots({
           shots,
@@ -478,7 +550,6 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
         let fixesApplied = 0;
         let cycles = 1;
 
-        // AUTOFIX: Si autoFix=true y hay issues críticos/mayores, aplicar fixes aunque no haya publicSlug
         if (autoFix && !analysis.visuallyCorrect) {
           const { applyVisualFixesAndSave } = await import("../lib/visualTester");
           const fixResult = await applyVisualFixesAndSave({
@@ -494,8 +565,8 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
           cycles = fixResult.cycles;
           analysis = fixResult.finalAnalysis;
         }
-        
-        return res.json({
+
+        await finish({
           success: true,
           visuallyCorrect: analysis.visuallyCorrect,
           overallScore: analysis.overallScore,
@@ -513,12 +584,14 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
             ? `Autofix aplicó ${fixesApplied} corrección(es) automáticamente.`
             : "Analizado desde preview interno. Usa Autofix IA para corregir los problemas detectados."
         });
+        return;
       } catch (previewErr: any) {
-        logger.warn({ appId, err: previewErr?.message }, "[visual-test] Preview interno falló — devolviendo NOT_DEPLOYED");
-        return res.status(400).json({
-          error: "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
-          code: "NOT_DEPLOYED"
+        logger.warn({ appId, jobId, err: previewErr?.message }, "[visual-test] Preview interno falló — devolviendo NOT_DEPLOYED");
+        await (VisualTestJob as any).findByIdAndUpdate(jobId, {
+          status: "failed",
+          errorMessage: "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
         });
+        return;
       }
     }
 
@@ -537,8 +610,7 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
       log: logger,
     });
 
-    // Respuesta estructurada para el frontend VisualTestPanel
-    return res.json({
+    await finish({
       success: true,
       visuallyCorrect: report.finalAnalysis.visuallyCorrect,
       overallScore: report.finalAnalysis.overallScore,
@@ -554,17 +626,14 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
     });
   } catch (error: any) {
     const msg = error.message || "Error en test visual";
-    // Log completo para debug
-    const { logger } = await import("../lib/logger");
-    logger.error({ error: msg, stack: (error as any)?.stack?.slice(0, 500), PUPPETEER_PATH: process.env.PUPPETEER_EXECUTABLE_PATH }, "[visual-test] ERROR COMPLETO");
+    logger.error({ error: msg, jobId, stack: (error as any)?.stack?.slice(0, 500), PUPPETEER_PATH: process.env.PUPPETEER_EXECUTABLE_PATH }, "[visual-test] ERROR COMPLETO");
 
-    // Puppeteer/Chromium no disponible — devolver resultado graceful
     if (
       msg.includes("chromium") || msg.includes("puppeteer") ||
       msg.includes("executable") || msg.includes("no_chromium") ||
       msg.includes("ENOENT") || msg.includes("spawn") || msg.includes("Cannot find")
     ) {
-      return res.json({
+      await finish({
         success: false,
         visuallyCorrect: null,
         overallScore: null,
@@ -573,15 +642,13 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
         fixesApplied: 0,
         error: `Testing visual no disponible. Error: ${msg.slice(0, 200)}`,
         code: "NO_CHROMIUM",
-        debug: {
-          PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH,
-          NODE_ENV: process.env.NODE_ENV,
-        }
       });
+      return;
     }
-    return res.status(500).json({ error: msg, debug: { PUPPETEER_EXECUTABLE_PATH: process.env.PUPPETEER_EXECUTABLE_PATH } });
+    const { VisualTestJob: VTJ } = await import("@workspace/db/schema");
+    await (VTJ as any).findByIdAndUpdate(jobId, { status: "failed", errorMessage: msg });
   }
-});
+}
 
 // GET /api/apps/visual-test/ping — test rápido de Chromium sin autenticación
 router.get("/apps/visual-test/ping", async (_req: Request, res: Response) => {

@@ -94,9 +94,40 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Lanza el autofix automáticamente si el análisis detecta issues críticos/mayores.
-  // El usuario nunca tiene que pulsar "Autofix IA" manualmente: escanea → si hay
-  // problemas graves → el fix se aplica solo → se re-escanea para confirmar.
+  // El backend ahora es ASÍNCRONO (ver routes/deployment.ts): POST crea un
+  // job y responde al instante con su id; el trabajo real (que puede tardar
+  // varios minutos con Claude Vision + CoreOrchestrator) corre en segundo
+  // plano. Sin esto, la conexión HTTP se mantenía abierta todo ese tiempo y
+  // cualquier proxy intermedio (confirmado: Railway corta a los 5 minutos)
+  // podía cortarla a mitad, perdiendo el resultado del trabajo aunque el
+  // servidor sí lo hubiera completado. Aquí se hace polling cada 4s hasta
+  // que el job termine — igual de simple que el polling que ya existe para
+  // GenerationJob en otras partes de la app, sin inventar un patrón nuevo.
+  async function submitVisualTestJob(autoFix: boolean): Promise<any> {
+    const created = await apiFetch<{ jobId: string; status: string }>(`/api/apps/${appId}/visual-test`, {
+      method: "POST",
+      body: JSON.stringify({ autoFix }),
+    });
+    const jobId = created.jobId;
+    const POLL_INTERVAL_MS = 4000;
+    const MAX_WAIT_MS = 14 * 60 * 1000; // por debajo del límite de 15min del servidor, con margen
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < MAX_WAIT_MS) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      const poll = await apiFetch<any>(`/api/apps/${appId}/visual-test/${jobId}`);
+      if (poll.status === "running") continue;
+      if (poll.status === "failed") {
+        throw new Error(poll.error || "Error en el test visual");
+      }
+      // succeeded — poll ya tiene exactamente el shape que el endpoint
+      // devolvía antes de forma síncrona (status + el resto de campos).
+      return poll;
+    }
+    throw new Error("El test visual está tardando más de lo esperado. Vuelve a intentarlo en unos minutos.");
+  }
+
+
   async function runAutoFixIfNeeded(scanData: VisualTestResult) {
     const severe = (scanData.issues || []).filter(
       (i: VisualIssue) => i.severity === "critical" || i.severity === "major"
@@ -124,10 +155,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     }, 4000);
 
     try {
-      const fixData = await apiFetch<any>(`/api/apps/${appId}/visual-test`, {
-        method: "POST",
-        body: JSON.stringify({ autoFix: true }),
-      });
+      const fixData = await submitVisualTestJob(true);
 
       setResult(fixData);
       if (fixData.screenshots?.length > 0) setActiveViewport(fixData.screenshots[0].viewport);
@@ -183,10 +211,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     }
 
     try {
-      const data = await apiFetch<any>(`/api/apps/${appId}/visual-test`, {
-        method: "POST",
-        body: JSON.stringify({ autoFix }),
-      });
+      const data = await submitVisualTestJob(autoFix);
 
       // Chromium no disponible en este entorno
       if (data.code === "NO_CHROMIUM") {

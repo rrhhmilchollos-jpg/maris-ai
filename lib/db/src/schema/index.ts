@@ -387,6 +387,48 @@ export const GenerationJob: Model<IGenerationJob> =
   mongoose.models.GenerationJob ||
   mongoose.model<IGenerationJob>("GenerationJob", GenerationJobSchema);
 
+// ─── Visual Test Jobs ────────────────────────────────────────────────────────
+// ENCONTRADO en logs reales de producción: el ciclo de Testing Visual +
+// Autofix (POST /apps/:id/visual-test) se ejecutaba de forma SÍNCRONA —
+// el cliente esperaba con la conexión HTTP abierta mientras Claude Vision
+// analizaba y CoreOrchestrator reconstruía hasta 3 ciclos. Confirmado con
+// responseTime de hasta 300010ms (abortado) y 292507ms (al límite) en los
+// logs de Railway — su proxy corta conexiones a los 5 minutos por
+// defecto, perdiendo todo el trabajo en curso aunque el servidor sí
+// estuviera procesando bien. Este job, igual de simple que GenerationJob
+// pero sin necesidad de cola con concurrencia (cada visual-test es
+// puntual, no hay volumen comparable a generaciones), permite responder
+// al cliente AL INSTANTE con un jobId, lanzar el trabajo real en segundo
+// plano (sin atar la respuesta HTTP a su duración), y que el frontend
+// haga polling del resultado — mismo patrón ya probado en producción para
+// GenerationJob, sin inventar un mecanismo nuevo.
+export interface IVisualTestJob extends Document {
+  appId: string;
+  userId: string;
+  autoFix: boolean;
+  status: "running" | "succeeded" | "failed";
+  result?: any; // mismo shape que la respuesta JSON que el endpoint devolvía antes de forma síncrona
+  errorMessage?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const VisualTestJobSchema = new Schema<IVisualTestJob>(
+  {
+    appId: { type: String, required: true, index: true },
+    userId: { type: String, required: true, index: true },
+    autoFix: { type: Boolean, default: false },
+    status: { type: String, default: "running" },
+    result: { type: Schema.Types.Mixed },
+    errorMessage: { type: String },
+  },
+  { timestamps: true },
+);
+
+export const VisualTestJob: Model<IVisualTestJob> =
+  mongoose.models.VisualTestJob ||
+  mongoose.model<IVisualTestJob>("VisualTestJob", VisualTestJobSchema);
+
 // ─── App Messages ────────────────────────────────────────────────────────────
 export interface IAppMessage extends Document {
   appId: string;

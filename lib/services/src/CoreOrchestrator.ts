@@ -178,7 +178,24 @@ REGLAS DE GENERACIÓN:
 - Si el hito es "modify_file", se te da el CONTENIDO ACTUAL completo del archivo. Tu trabajo es devolver ese mismo archivo con el cambio pedido aplicado, conservando TODO lo que no esté relacionado con el cambio — imports, componentes, lógica, comentarios. NUNCA borres funcionalidad existente que no se pidió tocar.
 - Si el hito es "create_file", el archivo es nuevo: escríbelo completo y coherente con las convenciones del resto del proyecto (mismo estilo de imports, mismas librerías ya usadas).
 - Código TypeScript/JavaScript real, completo y funcional. CERO TODOs, CERO stubs, CERO placeholders tipo "// implementar después".
-- Usa exactamente los nombres de componentes, funciones y rutas que aparecen en el CONTEXTO DE HITOS ANTERIORES o en el ARCHIVO ACTUAL que se te proporciona — la coherencia con el resto del proyecto es crítica.`;
+- Usa exactamente los nombres de componentes, funciones y rutas que aparecen en el CONTEXTO DE HITOS ANTERIORES o en el ARCHIVO ACTUAL que se te proporciona — la coherencia con el resto del proyecto es crítica.
+
+REGLAS CRÍTICAS DE LA PLATAFORMA — incumplirlas produce un build roto que será descartado y deja al cliente sin el arreglo (mismas reglas que usa el generador de proyectos nuevos, OBLIGATORIAS también aquí):
+
+WOUTER v3 (router de la app) — \`<Link>\` ITSELF renders as the anchor tag. NUNCA anidar \`<a>\` (ni \`<button>\`) dentro de \`<Link>\` — produce \`<a><a>…</a></a>\` inválido que rompe en runtime. Pasa \`className\`/\`onClick\`/\`aria-label\` DIRECTAMENTE a \`<Link>\`:
+- MAL: \`<Link href="/x"><a className="btn">Ir</a></Link>\`
+- BIEN: \`<Link href="/x" className="btn">Ir</Link>\`
+Lo mismo aplica a \`<Route>\` — renderiza los hijos directamente, sin envolver en \`<a>\`.
+NAVEGACIÓN PROGRAMÁTICA — wouter NO TIENE \`useNavigate\` ni \`useHistory\` (son de react-router-dom). Importarlos desde "wouter" rompe TODA la app al cargar con "module does not provide an export named...", antes de que cualquier componente renderice. Usa: \`const [, setLocation] = useLocation();\` y luego \`setLocation("/path")\`.
+PARÁMETROS DE RUTA — wouter NO TIENE \`useParams\` (es de react-router-dom). Usa: \`const [match, params] = useRoute("/path/:id");\` y luego \`params.id\`.
+ORDEN DEL ROUTER — REGLA CRÍTICA (produce página en blanco/404 si se incumple): en el \`<Switch>\`, el catch-all que renderiza NotFound/404 DEBE ser SIEMPRE el ÚLTIMO elemento. Si lo colocas antes de las rutas reales, wouter lo evalúa primero y TODAS las rutas muestran 404:
+  \`<Switch>
+    <Route path="/" component={Home} />
+    <Route path="/seccion-1" component={Seccion1} />
+    {/* ÚLTIMO SIEMPRE — nunca antes de las rutas reales */}
+    <Route component={NotFound} />
+  </Switch>\`
+EXPORTS & IMPORTS — cada \`import { X }\` debe coincidir con un \`export { X }\`/\`export function X\`/\`export const X\` real en el archivo destino. Cada \`import X from\` debe coincidir con un \`export default\`. Mezclar ambos da \`undefined\` y React no renderiza nada.`;
 
 export interface CoreOrchestratorOptions {
   /** Prompt de calidad adicional (las reglas de BACKEND_SYSTEM_PROMPT / BACKEND_SYSTEM_PROMPT_POSTGRES
