@@ -4716,6 +4716,29 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     }
     const userId = req.userId as string;
     const isAdmin = isAdminEmail(req.dbUser?.email);
+
+    // ── PROTECCIÓN ANTI-DOBLE-SUBMIT ─────────────────────────────────────────
+    // Si el usuario pulsa "Generar" dos veces seguidas (doble click, doble tab),
+    // el segundo request llega cuando el primero ya creó un job. Detectamos si
+    // ya hay un job running/queued con el mismo prompt para este usuario y
+    // devolvemos el job existente en vez de crear uno nuevo.
+    const recentDuplicate = await GenerationJob.findOne({
+      userId,
+      prompt: { $regex: prompt.slice(0, 50).replace(/[.*+?^${}()|[\]\]/g, '\$&') },
+      status: { $in: ['queued', 'running'] },
+      createdAt: { $gte: new Date(Date.now() - 10_000) }, // últimos 10 segundos
+    }).select('_id').lean() as any;
+
+    if (recentDuplicate) {
+      return res.status(200).json({
+        id: String(recentDuplicate._id),
+        creditsCost: 0,
+        creditsRemaining: req.dbUser?.credits,
+        deduplicated: true,
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ── SISTEMA DE CRÉDITOS (estrategia Lovable/Base44/Emergent) ─────────────
     // Mismo motor para todos — la primera generación SIEMPRE es una app
     // completa (frontend + backend + BD). El plan free/paid solo cambia el
