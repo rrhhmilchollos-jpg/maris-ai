@@ -6306,9 +6306,27 @@ export async function runJobById(jobId: string): Promise<void> {
     clearInterval(heartbeatInterval);
     logger.error({ err, jobId }, "runJobById: Generation failed");
     const rawMessage = err instanceof Error ? err.message : "Error desconocido";
+
+    // REEMBOLSO AUTOMÁTICO: si la generación falla por error del sistema
+    // (no por créditos agotados del usuario), devolver los créditos.
+    // Sin esto, el usuario pierde créditos por fallos que no son su culpa.
+    const isCreditsError = rawMessage.includes("API_CREDITS_EXHAUSTED");
+    if (!isCreditsError && job.creditsCost && job.creditsCost > 0) {
+      try {
+        const { chargeCredits } = await import("../lib/credits");
+        await chargeCredits({
+          userId: job.userId,
+          isAdmin: false,
+          amount: -(job.creditsCost), // negativo = reembolso
+          description: `Reembolso automático por fallo del sistema en generación de app`,
+        });
+        logger.info({ jobId, refunded: job.creditsCost }, "Credits refunded after generation failure");
+      } catch (refundErr) {
+        logger.warn({ refundErr, jobId }, "Failed to refund credits after generation failure");
+      }
+    }
     
     // Mensaje amigable para el usuario cuando los créditos de API se agotan
-    const isCreditsError = rawMessage.includes("API_CREDITS_EXHAUSTED");
     const errorMessage = isCreditsError
       ? "Las generaciones están temporalmente en pausa por mantenimiento del sistema. Tu créditos NO han sido consumidos. Inténtalo de nuevo en unos minutos."
       : rawMessage;
