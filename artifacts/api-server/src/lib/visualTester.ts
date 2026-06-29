@@ -569,7 +569,7 @@ async function applyVisualFixes(opts: {
       // App.tsx actual — para que el code agent vea exactamente el código roto
       function extractFile(bun: string, name: string): string {
         const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const m = bun.match(new RegExp(\`// === FILE: \${esc} ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)\`));
+        const m = bun.match(new RegExp("// === FILE: " + esc + " ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)"));
         return m ? m[1].trim() : "";
       }
       const appTsx = extractFile(bundle, "src/App.tsx")
@@ -577,20 +577,20 @@ async function applyVisualFixes(opts: {
         || extractFile(bundle, "src/main.tsx")
         || "";
       const routerBlock = appTsx
-        ? \`\n\nCÓDIGO ACTUAL DE src/App.tsx (el archivo del router — busca el catch-all 404 y muévelo al final de todas las rutas):\n\\`\\`\\`tsx\n\${appTsx.slice(0, 4000)}\n\\`\\`\\`\`
+        ? "\n\nCÓDIGO ACTUAL DE src/App.tsx (el archivo del router):\n" + appTsx.slice(0, 4000)
         : "";
 
       const structuralPrompt =
-        \`[REPARACIÓN AUTOMÁTICA — TESTING VISUAL IA]\n\` +
-        \`App: "\${app.title}"\n\n\` +
-        \`\${userContext}\${routerBlock}\n\n\` +
-        \`ISSUES DETECTADOS POR CLAUDE VISION (estos son los errores exactos — repáralos todos):\n\${issuesBlock}\n\n\` +
-        \`INSTRUCCIONES DE REPARACIÓN (en orden de prioridad):\n\` +
-        \`1. ROUTER/404: en src/App.tsx mover el catch-all <Route path="*"> al ÚLTIMO lugar. La ruta '/' debe renderizar el componente principal real.\n\` +
-        \`2. NAVBAR: si falta, crear un componente <Navbar> visible con enlaces a todos los módulos del prompt y añadirlo al layout.\n\` +
-        \`3. CONTENIDO: si el componente de la ruta '/' está vacío o retorna null, reconstruirlo con TODAS las funcionalidades pedidas en el prompt — dashboard, gestión de pacientes, citas, facturación, notificaciones — con mock data realista en español.\n\` +
-        \`4. Tocar TODOS los archivos necesarios: App.tsx (router), componentes de página vacíos, Navbar si no existe.\n\` +
-        \`5. NO dejar ningún componente con return null o con TODOs — contenido real siempre.\`;
+        "[REPARACIÓN AUTOMÁTICA — TESTING VISUAL IA]\n" +
+        "App: " + JSON.stringify(app.title) + "\n\n" +
+        userContext + (routerBlock ? "\n\n" + routerBlock : "") + "\n\n" +
+        "ISSUES DETECTADOS POR CLAUDE VISION (repáralos todos):\n" + issuesBlock + "\n\n" +
+        "INSTRUCCIONES (en orden de prioridad):\n" +
+        "1. ROUTER/404: mover el catch-all <Route path='*'> al ÚLTIMO lugar en App.tsx.\n" +
+        "2. NAVBAR: si falta, crear <Navbar> con links a todos los módulos del prompt.\n" +
+        "3. CONTENIDO: reconstruir componentes vacíos con TODAS las funcionalidades del prompt — dashboard, pacientes, citas, facturación, notificaciones — mock data real en español.\n" +
+        "4. Tocar TODOS los archivos necesarios. NO dejar return null ni TODOs.";
+
 
       const editResult = await orchestrator.editProjectIncremental(
         structuralPrompt,
@@ -615,12 +615,12 @@ async function applyVisualFixes(opts: {
 
   // CAMINO B: patcher single-pass para issues no estructurales (responsive, contraste, etc.)
   const fixList = actionableIssues.map((i, n) =>
-    \`\${n + 1}. [\${i.severity}/\${i.viewport}] \${i.type}: \${i.description}\n   Fix: \${i.cssfix}\`
+    (n + 1) + ". [" + i.severity + "/" + i.viewport + "] " + i.type + ": " + i.description + "\n   Fix: " + i.cssfix
   ).join("\n");
 
   const compactBundle = compactBundleForPrompt(
     bundle,
-    actionableIssues.map((i) => \`\${i.type} \${i.description} \${i.cssfix}\`),
+    actionableIssues.map((i) => i.type + " " + i.description + " " + i.cssfix),
     65_000,
   );
   rootLogger.info(
@@ -634,17 +634,17 @@ async function applyVisualFixes(opts: {
     messages: [{
       role: "user",
       content:
-        \`Eres el Visual Fix Agent de Maris AI. Aplica estos fixes al bundle sin romper nada más.\n\` +
-        \`App: \${app.title}\n\` +
-        \`Prompt original: \${(opts.userPrompt || app.description || "").slice(0, 1000)}\n\n\` +
-        \`ISSUES A REPARAR:\n\${fixList}\n\n\` +
-        \`REGLAS:\n\` +
-        \`- Devuelve SOLO JSON: { "changedFiles": { "ruta": "contenido completo" }, "fixesSummary": [...] }\n\` +
-        \`- Para missing_navbar: añade NavBar con links a todas las secciones\n\` +
-        \`- Para blank_page: asegúrate de que '/' renderiza contenido real\n\` +
-        \`- Para responsive: usa breakpoints Tailwind sm: md: lg:\n\` +
-        \`- Mueve cualquier catch-all 404 al final del router\n\n\` +
-        \`BUNDLE:\n\${compactBundle}\`
+        "Eres el Visual Fix Agent de Maris AI. Aplica estos fixes al bundle sin romper nada más.\n" +
+        "App: " + app.title + "\n" +
+        "Prompt original: " + (opts.userPrompt || app.description || "").slice(0, 1000) + "\n\n" +
+        "ISSUES A REPARAR:\n" + fixList + "\n\n" +
+        "REGLAS:\n" +
+        "- Devuelve SOLO JSON: { \"changedFiles\": { \"ruta\": \"contenido completo\" }, \"fixesSummary\": [...] }\n" +
+        "- Para missing_navbar: añade NavBar con links a todas las secciones\n" +
+        "- Para blank_page: asegúrate de que '/' renderiza contenido real\n" +
+        "- Para responsive: usa breakpoints Tailwind sm: md: lg:\n" +
+        "- Mueve cualquier catch-all 404 al final del router\n\n" +
+        "BUNDLE:\n" + compactBundle
     }],
   });
 
