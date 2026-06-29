@@ -427,11 +427,22 @@ export async function buildDeployHtml(opts: {
 <body>
   <div id="root"></div>
   <script>
-  // Lucide-react icon polyfill — devuelve un div vacío para iconos inexistentes
-  // Se ejecuta antes del módulo principal para interceptar imports dinámicos
+  // Lucide-react icon polyfill
   if (typeof window !== 'undefined') window.__LUCIDE_SAFE_MODE = true;
+  // import.meta.env polyfill — evita "Cannot read properties of undefined (reading 'VITE_API_URL')"
+  // cuando el bundle generado por el agente accede a import.meta.env en el preview inline
+  if (typeof globalThis.importMeta === 'undefined') {
+    Object.defineProperty(globalThis, 'importMeta', { value: { env: {} }, configurable: true });
+  }
   </script>
   <script type="module">
+// import.meta.env polyfill para módulos ES
+if (typeof import.meta.env === 'undefined') {
+  Object.defineProperty(import.meta, 'env', {
+    value: { VITE_API_URL: '', MODE: 'production', DEV: false, PROD: true },
+    configurable: true, writable: true
+  });
+}
 ${code}
   </script>
 </body>
