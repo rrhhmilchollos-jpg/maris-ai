@@ -603,56 +603,72 @@ export async function runAutoEvaluator(opts: {
 
     let patched: string | null = null;
     let patchedBackendCode: string | undefined;
-    const structuralDamage = hasStructuralDamage(report.issues);
+    // Cualquier issue crítico activa el orquestador (no solo los que coincidan
+    // con el regex STRUCTURAL_DAMAGE_KEYWORDS — el regex perdía casos reales
+    // como "La pantalla muestra 404" o "missing_content" con variaciones de texto).
+    const structuralDamage = report.issues.some((i) => i.severity === "critical");
+
     if (structuralDamage) {
       log.info(
-        { appId, jobId, round },
-        "🔁 Daño estructural detectado por el evaluador — delegando a CoreOrchestrator.editProjectIncremental (edición por hitos) en vez del patcher de una sola pasada.",
+        { appId, jobId, round, types: report.issues.filter(i=>i.severity==="critical").map(i=>i.severity+":"+i.description.slice(0,60)) },
+        "🔁 Issues críticos → CoreOrchestrator por hitos",
       );
       try {
         const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
-        // ENCONTRADO (misma causa raíz que en visualTester.ts): el structuralPrompt
-        // NO incluía el userIntent completo — el orquestador solo veía los problemas
-        // detectados pero no sabía QUÉ funcionalidades construir para solucionarlos.
-        // FIX: incluir userIntent completo para que el planificador sepa qué crear.
-        // Extraer App.tsx actual del bundle para dárselo explícitamente al
-        // planner — sin esto, el code agent edita App.tsx en ciegas y sigue
-        // poniendo el catch-all 404 antes de la ruta raíz porque no ve el
-        // código actual que debe corregir.
+
+        // Issues EXACTOS de Claude Vision — descripción completa tal como los reportó
+        const issuesBlock = report.issues
+          .filter((i) => i.severity !== "minor")
+          .slice(0, 10)
+          .map((i, n) =>
+            `ISSUE ${n + 1} [${i.severity.toUpperCase()}]\n` +
+            `  Descripción: ${i.description}\n` +
+            `  Fix sugerido: ${i.fix}`
+          ).join("\n\n");
+
+        // App.tsx actual del bundle para que el code agent vea qué está roto
         function extractFileFromBundle(bundle: string, fileName: string): string {
-          const pattern = new RegExp(`// === FILE: ${fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ===\n([\s\S]*?)(?=\n// === FILE:|$)`);
-          const m = bundle.match(pattern);
+          const esc = fileName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const m = bundle.match(new RegExp(\`// === FILE: \${esc} ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)\`));
           return m ? m[1].trim() : "";
         }
-        const appTsxContent = extractFileFromBundle(currentBundle, "src/App.tsx")
+        const appTsx = extractFileFromBundle(currentBundle, "src/App.tsx")
           || extractFileFromBundle(currentBundle, "src/app.tsx")
           || extractFileFromBundle(currentBundle, "src/main.tsx")
           || "";
-        const routerFileBlock = appTsxContent
-          ? `\n\nCONTENIDO ACTUAL DE src/App.tsx (ESTE ES EL ARCHIVO A ARREGLAR — busca el catch-all 404 y muévelo al final):\n\`\`\`tsx\n${appTsxContent.slice(0, 4000)}\n\`\`\``
+        const routerBlock = appTsx
+          ? \`\n\nCÓDIGO ACTUAL DE src/App.tsx:\n\\`\\`\\`tsx\n\${appTsx.slice(0, 4000)}\n\\`\\`\\`\`
           : "";
 
-        const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL] La aplicación "${(row as any).title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${userIntent.slice(0, 3000)}${routerFileBlock}\n\nProblemas detectados:\n${patcherIssues.map((p, i) => `${i + 1}. ${p.problem}\n   Sugerencia: ${p.fix}`).join("\n")}\n\nINSTRUCCIONES OBLIGATORIAS (en orden de prioridad):\n1. ROUTER FIX (causa más frecuente del 404): en src/App.tsx, el catch-all <Route path="*"> o <Route component={NotFound}> DEBE estar en el ÚLTIMO lugar. Si está antes de <Route path="/">, muévelo al final — esa es la única causa de que la ruta raíz muestre 404.\n2. Verifica que la ruta '/' tenga un componente asignado que no esté vacío ni retorne null.\n3. Si falta NavBar, añade una con enlaces a todos los módulos pedidos en el prompt.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con TODAS las funcionalidades del prompt — usa mock data realista.\n5. Toca SOLO los archivos necesarios: App.tsx siempre, más los componentes de página que estén vacíos.`;
+        const structuralPrompt =
+          \`[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL]\n\` +
+          \`App: "\${(row as any).title}"\n\n\` +
+          \`PROMPT ORIGINAL DEL USUARIO:\n\${userIntent.slice(0, 3000)}\${routerBlock}\n\n\` +
+          \`ISSUES DETECTADOS POR CLAUDE VISION:\n\${issuesBlock}\n\n\` +
+          \`INSTRUCCIONES:\n\` +
+          \`1. ROUTER: mover catch-all <Route path="*"> al ÚLTIMO lugar en src/App.tsx.\n\` +
+          \`2. NAVBAR: crear <Navbar> con links a todos los módulos del prompt si no existe.\n\` +
+          \`3. CONTENIDO: reconstruir componentes vacíos con todas las funcionalidades del prompt + mock data realista en español.\n\` +
+          \`4. Tocar TODOS los archivos necesarios. NO dejar return null ni TODOs.\`;
 
         const editResult = await orchestrator.editProjectIncremental(
           structuralPrompt,
           currentBundle,
           (row as any).backendCode || "",
-          () => { /* sin callback de progreso — este ciclo corre en segundo plano */ },
+          () => {},
         );
-        if (editResult.frontendCode && editResult.frontendCode.trim().length > 0) {
+        if (editResult.frontendCode?.trim().length > 0) {
           patched = editResult.frontendCode;
-          const backendChanged = !!(row as any).backendCode && editResult.backendCode && editResult.backendCode !== (row as any).backendCode;
+          const backendChanged = !!(row as any).backendCode
+            && editResult.backendCode
+            && editResult.backendCode !== (row as any).backendCode;
           patchedBackendCode = backendChanged ? editResult.backendCode : undefined;
         } else {
-          log.warn({ appId, jobId, round }, "🔁 editProjectIncremental no devolvió un bundle válido — cayendo al patcher de una sola pasada como respaldo.");
+          log.warn({ appId, jobId, round }, "🔁 editProjectIncremental sin bundle válido — fallback single-pass");
         }
-      } catch (structuralErr) {
-        log.warn({ err: structuralErr, appId, jobId, round }, "🔁 editProjectIncremental falló — cayendo al patcher de una sola pasada como respaldo.");
+      } catch (err) {
+        log.warn({ err, appId, jobId, round }, "🔁 editProjectIncremental falló — fallback single-pass");
       }
-      // Red de seguridad: si el orquestador por hitos falla por cualquier
-      // motivo, NO se pierde la capacidad de intentar un arreglo — cae al
-      // patchFn histórico de abajo, igual que antes de este cambio.
     }
     if (patched === null) {
       try {
