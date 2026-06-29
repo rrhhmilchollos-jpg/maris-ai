@@ -420,7 +420,7 @@ export class CoreOrchestrator {
         // para llamadas largas, sin cambiar el objeto Message devuelto.
         const response = await anthropic.messages.stream({
           model: this.options.model!,
-          max_tokens: 8192,
+          max_tokens: 16000,
           system: [
             { type: "text", text: CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
             { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}${platformBlock}` },
@@ -704,7 +704,7 @@ export class CoreOrchestrator {
           // es, por diseño del planificador, UN archivo concreto, así que el
           // mismo techo que ya demostró ser suficiente para un archivo de
           // construcción nueva lo es también aquí.
-          max_tokens: 8192,
+          max_tokens: 16000,
           system: [
             { type: "text", text: EDIT_CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
             { type: "text", text: qualityBlock || "Sin reglas de calidad adicionales para este archivo." },
