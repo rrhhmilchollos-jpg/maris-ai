@@ -9,7 +9,7 @@
  * tiene visual testing nativo con screenshots en la consola de chat.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Camera, Loader2, CheckCircle2, AlertTriangle, XCircle,
   Wand2, Monitor, Tablet, Smartphone, ChevronDown, ChevronUp,
@@ -47,6 +47,14 @@ interface VisualTestPanelProps {
   appId: string;
   appSlug?: string;
   className?: string;
+  /** Si true, arranca automáticamente análisis + autofix al montarse — usado
+   *  para la verificación final automática tras una generación exitosa, sin
+   *  que el usuario tenga que pulsar nada. */
+  autoRunOnMount?: boolean;
+  /** Se llama cuando el ciclo automático termina SIN daño grave (visuallyCorrect
+   *  true, o solo quedan issues menores) — el padre usa esto para cerrar el
+   *  panel y mostrar el mensaje de éxito + oferta de seguir editando. */
+  onResolved?: () => void;
 }
 
 const VIEWPORT_ICONS = {
@@ -61,7 +69,7 @@ const SEVERITY_CONFIG = {
   minor: { label: "Menor", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/25", icon: Bug },
 };
 
-export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelProps) {
+export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onResolved }: VisualTestPanelProps) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<VisualTestResult | null>(null);
   const [beforeResult, setBeforeResult] = useState<VisualTestResult | null>(null);
@@ -72,6 +80,19 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
   const [compareMode, setCompareMode] = useState(false);
 
   const [fixProgress, setFixProgress] = useState<string | null>(null);
+  const hasAutoRun = useRef(false);
+
+  // Auto-arranque: análisis + autofix automático en cuanto el panel aparece
+  // (tras un job exitoso) — sin esto, el panel se mostraba vacío esperando
+  // que el usuario pulsara "Analizar" manualmente. useRef evita doble disparo
+  // si el componente re-renderiza antes de que termine el ciclo.
+  useEffect(() => {
+    if (autoRunOnMount && !hasAutoRun.current) {
+      hasAutoRun.current = true;
+      runTest(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function runTest(autoFix = false) {
     // Ya no requerimos appSlug — el backend usa preview interno si no hay slug
@@ -131,6 +152,17 @@ export function VisualTestPanel({ appId, appSlug, className }: VisualTestPanelPr
       }
       if (autoFix && data.fixesApplied > 0) {
         setCompareMode(true);
+      }
+      // Verificación final automática resuelta con éxito: sin críticos ni
+      // mayores pendientes tras el autofix, la app queda funcional para el
+      // cliente. El padre cierra el panel y muestra el mensaje de éxito.
+      if (autoRunOnMount && onResolved) {
+        const remainingSevere = (data.issues || []).filter(
+          (i: VisualIssue) => i.severity === "critical" || i.severity === "major",
+        ).length;
+        if (data.visuallyCorrect || remainingSevere === 0) {
+          onResolved();
+        }
       }
     } catch (err: any) {
       setError(err.message || "Error en el test visual");

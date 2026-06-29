@@ -56,6 +56,7 @@ import {
   Send,
   Loader2,
   Sparkles,
+  CheckCircle2,
   AlertCircle,
   Zap,
   Share2,
@@ -250,6 +251,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const recognitionRef = useRef<any>(null);
   const [copyBlocked, setCopyBlocked] = useState(false);
   const [showVisualTestInline, setShowVisualTestInline] = useState(false);
+  // Tarjeta de éxito que sustituye al panel inline cuando la verificación
+  // automática (autoRunOnMount) confirma que la app quedó funcional —
+  // mensaje claro + oferta de seguir editando, en vez de simplemente
+  // desaparecer en silencio.
+  const [showVisualSuccessCard, setShowVisualSuccessCard] = useState(false);
   // ✅ RESPONSIVE MÓVIL: tab activa en móvil (chat o preview)
   const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
   const [previewSize, setPreviewSize] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -1072,7 +1078,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-[11px] text-cyan-400 font-medium">
                   <Eye className="h-3.5 w-3.5" />
-                  Testing visual automático — Claude Vision analiza tu app
+                  Testing visual automático — Claude Vision verifica tu app
                 </div>
                 <button onClick={() => setShowVisualTestInline(false)}
                   className="text-white/25 hover:text-white/60 transition-colors">
@@ -1082,7 +1088,45 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <VisualTestPanel
                 appId={app?._id || app?.id || ""}
                 appSlug={app?.publicSlug || undefined}
+                autoRunOnMount
+                onResolved={() => {
+                  setShowVisualTestInline(false);
+                  setShowVisualSuccessCard(true);
+                }}
               />
+            </div>
+          )}
+
+          {/* ─── Tarjeta de éxito tras verificación automática resuelta ─── */}
+          {showVisualSuccessCard && (
+            <div className="mx-2 md:mx-6 mb-4 animate-in slide-in-from-bottom-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] p-4">
+              <div className="flex items-start gap-3">
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/15 border border-emerald-500/25">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-white">
+                    ¡Tu {app?.platform === "mobile-native" ? "app" : "web"} está generada con éxito! 🎉
+                  </p>
+                  <p className="mt-0.5 text-[12px] text-white/55">
+                    Verificada visualmente — ya puedes seguir editándola o hacer el deploy cuando quieras.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowVisualSuccessCard(false);
+                      setDraft("¿Qué más puedo mejorar?");
+                    }}
+                    className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-[#8b5cf6]/35 bg-[#7c3aed]/10 px-3 py-1.5 text-[12px] font-semibold text-[#a78bfa] transition hover:bg-[#7c3aed]/20 hover:text-white"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    ¿Puedo mejorar esto?
+                  </button>
+                </div>
+                <button onClick={() => setShowVisualSuccessCard(false)}
+                  className="text-white/25 hover:text-white/60 transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           )}
         </div>
