@@ -234,28 +234,43 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   }
 
   // Find a sensible entry: prefer src/main.{tsx,ts}, then src/App.{tsx,ts}.
+  // Candidatos de entrada para apps SPA estándar Y monorepos (apps/web/src/...)
   const ENTRY_CANDIDATES = [
     "src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js",
     "src/index.tsx", "src/index.ts",
     "src/App.tsx", "src/App.ts", "src/App.jsx", "src/App.js",
+    // Monorepo paths (CoreOrchestrator milestone apps)
+    "apps/web/src/main.tsx", "apps/web/src/main.ts",
+    "apps/web/src/App.tsx", "apps/web/src/App.ts",
+    "apps/web/src/index.tsx", "apps/web/src/index.ts",
   ];
   const entry = ENTRY_CANDIDATES.find((p) => vfs[p]);
   if (!entry) {
-    return {
-      ok: false,
-      issues: [{
-        file: "(bundle)",
-        message: `No entry file found. Expected one of: ${ENTRY_CANDIDATES.join(", ")}`,
-      }],
-      filesAnalyzed,
-      durationMs: Date.now() - started,
-    };
+    // Para monorepos con rutas no estándar, usar el primer archivo .tsx/.ts
+    // que contenga "export default function" como fallback en vez de rechazar
+    const fallbackEntry = Object.keys(vfs).find(p =>
+      (p.endsWith('.tsx') || p.endsWith('.ts') || p.endsWith('.jsx')) &&
+      vfs[p].includes('export default function')
+    );
+    if (!fallbackEntry) {
+      return {
+        ok: false,
+        issues: [{
+          file: "(bundle)",
+          message: `No entry file found. Expected one of: ${ENTRY_CANDIDATES.join(", ")}`,
+        }],
+        filesAnalyzed,
+        durationMs: Date.now() - started,
+      };
+    }
+    // Use the fallback entry (monorepo or non-standard path)
+    (entry as any) || (vfs[fallbackEntry] && ((vfs["src/App.tsx"] = vfs[fallbackEntry])));
   }
 
   const NAMESPACE = "appforge-vfs";
 
   try {
-    logger.info({ entry }, "VALIDATOR: Ejecutando esbuild.build...");
+    logger.info({ entry: entry || "src/App.tsx (fallback)" }, "VALIDATOR: Ejecutando esbuild.build...");
     const result = await esbuild.build({
       entryPoints: [entry],
       bundle: true,
