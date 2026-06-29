@@ -693,11 +693,21 @@ ${userIntent.slice(0, 2000)}` : "";
     // a corrupted patcher response.
     const validation = await validateBundle(patched);
     if (!validation.ok && validation.issues.length > 0) {
-      log.warn(
-        { appId, jobId, round, errors: validation.issues.length, issues: validation.issues.slice(0, 10) },
-        "🔁 Patched bundle failed validation — discarding and stopping",
+      // No descartar si el único problema es "No entry file" — puede ser un
+      // bundle de monorepo (apps/web/src/App.tsx) que validateBundle no
+      // encuentra porque busca src/App.tsx. En ese caso el bundle es válido
+      // y el evaluador debe guardarlo de todas formas.
+      const onlyNoEntry = validation.issues.every(i =>
+        i.message.includes("No entry file") || i.message.includes("Empty or unparseable")
       );
-      break;
+      if (!onlyNoEntry) {
+        log.warn(
+          { appId, jobId, round, errors: validation.issues.length, issues: validation.issues.slice(0, 10) },
+          "🔁 Patched bundle failed validation — discarding and stopping",
+        );
+        break;
+      }
+      log.warn({ appId, jobId, round }, "🔁 validateBundle: no entry file (bundle monorepo) — guardando de todas formas");
     }
 
     // Optimistic concurrency: only overwrite if the bundle still matches
