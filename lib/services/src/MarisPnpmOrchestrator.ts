@@ -60,7 +60,7 @@ export class MarisPnpmOrchestrator {
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: [{ type: "text", text: PNPM_PLANNER_SYSTEM, cache_control: { type: "ephemeral" } }] as any,
       messages: [
         { role: "user", content: userPrompt },
@@ -76,7 +76,7 @@ export class MarisPnpmOrchestrator {
     } catch {
       const fb = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: [{ type: "text", text: PNPM_PLANNER_SYSTEM, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userPrompt }],
       });
@@ -97,7 +97,7 @@ export class MarisPnpmOrchestrator {
 
       const agentResponse = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 8000, // suficiente para App.tsx completo con router y todos los módulos
+        max_tokens: 16000, // suficiente para App.tsx completo con router y todos los módulos
         system: [
           { type: "text", text: PNPM_CODE_AGENT_SYSTEM, cache_control: { type: "ephemeral" } },
           { type: "text", text: `Estado del proyecto:\n${this.appStateSummary || 'Iniciando.'}` },
