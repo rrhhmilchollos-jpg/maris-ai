@@ -296,6 +296,36 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 12: el PM Agent REPARA de verdad los blockers que detecta, en vez de
+// solo registrarlos en el log y entregar la app igual. ENCONTRADO a
+// petición del usuario investigando "qué agente le falta al sistema":
+// de los 6 agentes documentados en emergentAgentPipeline.ts (Architect,
+// Designer, Developer, Integration, PM, Patcher), solo PM Agent se
+// invocaba alguna vez en el pipeline real — y solo UNA VEZ, sin reparar
+// nada con lo que encontraba. runInvisibleRepairLoop (Patcher Agent +
+// re-validación en bucle, hasta 3 ciclos) existía completo y nunca se
+// llamaba desde ningún punto real. Además, el propio Patcher Agent dentro
+// de ese bucle tenía el mismo problema de truncamiento ya corregido hoy
+// en tester.ts (enviaba solo 12000 chars de entrada y pedía el bundle
+// COMPLETO en una sola respuesta de 8192 tokens) — sustituido por
+// patchBundleMultiFile al conectarlo.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 12: apps.ts usa runInvisibleRepairLoop (bucle real) en vez de una sola llamada a runPMAgent",
+    /runInvisibleRepairLoop/.test(appsSrc),
+    "Sin esto, el PM Agent vuelve a detectar blockers y solo registrarlos en el log sin repararlos — la app se entrega al cliente con problemas conocidos sin corregir.",
+  );
+  const pipelineSrc = readSrc("lib/emergentAgentPipeline.ts");
+  check(
+    "FIX 12: runInvisibleRepairLoop usa patchBundleMultiFile (no el patcher de una sola pasada limitado a 12000 chars)",
+    /patchBundleMultiFile/.test(pipelineSrc),
+    "Sin esto, el Patcher Agent vuelve a ver solo una fracción del bundle y a intentar devolver el proyecto completo en una única respuesta — riesgo real de truncamiento en proyectos con varios archivos.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

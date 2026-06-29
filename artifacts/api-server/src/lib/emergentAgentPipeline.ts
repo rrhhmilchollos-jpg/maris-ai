@@ -27,11 +27,10 @@ import {
   detectIntegrations,
   buildIntegrationAgentPrompt,
   buildPMAgentPrompt,
-  FILE_TOOLS_SYSTEM_BLOCK,
   type PMValidationResult,
   type IntegrationSpec,
 } from "./fileToolsAgent";
-import { extractJsonObject, createClaudeMessageWithFallback } from "./shared-agents";
+import { extractJsonObject, createClaudeMessageWithFallback, patchBundleMultiFile } from "./shared-agents";
 
 // ─── Tipos del pipeline ───────────────────────────────────────────────────────
 
@@ -589,27 +588,30 @@ export async function runInvisibleRepairLoop(
       .map((b) => `- [${b.severity.toUpperCase()}] ${b.requirement}: ${b.found}. Fix: ${b.fix}`)
       .join("\n");
 
+    // ENCONTRADO al conectar este bucle al flujo real (a petición del
+    // usuario, "qué le falta enseñar al sistema"): el Patcher Agent
+    // original aquí solo enviaba los PRIMEROS 12000 caracteres del bundle
+    // al modelo (el resto del proyecto, invisible para el parche) y le
+    // pedía el BUNDLE COMPLETO corregido en una única respuesta de 8192
+    // tokens — para cualquier proyecto real con varios archivos, esto se
+    // trunca silenciosamente, perdiendo parte del proyecto sin que la
+    // salvaguarda de longitud (>50% del original) lo detectara siempre.
+    // Mismo problema, mismo fix ya probado hoy en tester.ts: usar
+    // patchBundleMultiFile (planificación + generación completa POR
+    // archivo, cada uno con su propio presupuesto de tokens) en vez de
+    // una sola pasada sobre un fragmento parcial del bundle.
     try {
-      const patchResponse = await createClaudeMessageWithFallback("patcher", "claude-sonnet-4-6", {
-        model: "claude-sonnet-4-6",
-        max_tokens: 8192,
-        system: `Eres el Patcher Agent de Maris AI. Aplica los fixes indicados al bundle de código.
-${FILE_TOOLS_SYSTEM_BLOCK}
-Responde SOLO JSON: {"frontendCode": "bundle completo corregido"}`,
-        messages: [
-          {
-            role: "user",
-            content: `PROBLEMAS A CORREGIR:\n${issuesList}\n\nBUNDLE ACTUAL (primeros 12000 chars):\n${currentCode.slice(0, 12000)}\n\nAplica SOLO los fixes listados. Responde el JSON con el bundle completo corregido.`,
-          },
-        ],
-      });
+      const multiFileResult = await patchBundleMultiFile(
+        currentCode,
+        issuesList,
+        "typescript",
+        "claude-sonnet-4-6",
+        (msg) => log(`[Patcher] ${msg}`),
+      );
 
-      const raw = patchResponse.content?.[0]?.text ?? "";
-      const parsed = extractJsonObject<{ frontendCode?: string }>(raw);
-
-      if (parsed?.frontendCode && parsed.frontendCode.length > currentCode.length * 0.5) {
-        currentCode = parsed.frontendCode;
-        log(`✓ Patcher: parche aplicado en ciclo ${cycles}`);
+      if (multiFileResult.result) {
+        currentCode = multiFileResult.result;
+        log(`✓ Patcher: parche aplicado en ciclo ${cycles} (${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s))`);
       } else {
         log(`⚠️ Patcher: parche inválido en ciclo ${cycles}, continuando con código anterior`);
         break;

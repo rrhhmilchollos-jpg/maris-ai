@@ -4194,7 +4194,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
 
   /* === Phase 6: validate → patch loop (Final Polish) === */
   await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
-  const finalFrontend = await runPhase("validate-patch-loop", () =>
+  let finalFrontend = await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
       testedFrontend,
       report,
@@ -4225,17 +4225,41 @@ Output STRICT JSON only, no markdown, no explanation.`,
     complexity: agentModelPlan.tier === "ultra" ? "enterprise" : agentModelPlan.tier === "robust" ? "advanced" : agentModelPlan.tier === "standard" ? "standard" : "basic",
   };
   try {
-    const pmValidation = await runPMAgent(prompt, emergentBlueprint, finalFrontend, (msg) => void log("qa", msg));
+    // ENCONTRADO a petición del usuario investigando "qué le falta enseñar
+    // al sistema de generación": runPMAgent (la única llamada real de los
+    // 6 agentes documentados en emergentAgentPipeline.ts que de verdad se
+    // usaba) YA detectaba blockers reales, los registraba en el log con
+    // todo detalle ("PM Agent detectó N blocker(s): ...") — pero nunca
+    // hacía NADA con esa información para corregirlos. El sistema sabía
+    // exactamente qué estaba mal y se lo decía al admin en los logs, pero
+    // entregaba la app al cliente con esos blockers intactos igualmente.
+    // runInvisibleRepairLoop (Patcher Agent + re-validación con el mismo
+    // PM Agent, hasta 3 ciclos) YA EXISTÍA completo en el mismo archivo,
+    // documentado en el diseño original de 6 agentes — pero NUNCA se
+    // llamaba desde ningún punto del pipeline real (confirmado con grep
+    // en todo el árbol de rutas). Ahora se usa en su lugar: si hay
+    // blockers reales, se repara automáticamente con el Patcher Agent
+    // antes de entregar el resultado, en vez de solo registrar el
+    // problema y seguir adelante con la app rota.
+    const { runInvisibleRepairLoop } = await import("../lib/emergentAgentPipeline");
+    const repairResult = await runInvisibleRepairLoop(
+      finalFrontend,
+      emergentBlueprint,
+      prompt,
+      (msg) => void log("qa", msg),
+    );
+    finalFrontend = repairResult.finalCode;
+    const pmValidation = repairResult.pmValidation;
     if (pmValidation.score >= 80) {
-      await log("qa", `✅ PM Agent: app aprobada (${pmValidation.score}/100). ${pmValidation.summary}`);
+      await log("qa", `✅ PM Agent: app aprobada (${pmValidation.score}/100) tras ${repairResult.cycles} ciclo(s). ${pmValidation.summary}`);
     } else if (pmValidation.score >= 60) {
-      await log("qa", `⚠️ PM Agent: score ${pmValidation.score}/100 — ${pmValidation.summary}`, "warn");
+      await log("qa", `⚠️ PM Agent: score ${pmValidation.score}/100 tras ${repairResult.cycles} ciclo(s) — ${pmValidation.summary}`, "warn");
     } else {
-      await log("qa", `🔧 PM Agent: score ${pmValidation.score}/100 — se recomienda revisar la app antes del deploy.`, "warn");
+      await log("qa", `🔧 PM Agent: score ${pmValidation.score}/100 tras ${repairResult.cycles} ciclo(s) — se recomienda revisar la app antes del deploy.`, "warn");
     }
     const blockers = pmValidation.issues.filter(i => i.severity === "blocker");
     if (blockers.length > 0) {
-      await log("qa", `⚠️ PM Agent detectó ${blockers.length} blocker(s): ${blockers.map(b => b.requirement).join(", ")}`, "warn");
+      await log("qa", `⚠️ PM Agent: ${blockers.length} blocker(s) persisten tras el bucle de reparación: ${blockers.map(b => b.requirement).join(", ")}`, "warn");
     }
   } catch (pmErr) {
     await log("qa", "PM Agent: validación omitida por error interno.", "warn");
