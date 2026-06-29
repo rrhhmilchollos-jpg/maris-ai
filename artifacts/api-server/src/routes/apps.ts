@@ -1352,7 +1352,7 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
       // Detectar complejidad para elegir modelo
       const promptLen = cleanPrompt.length;
       const isComplex = promptLen > 150 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic|hotel|inmobili|logistic|deporte|academia|eventos|recursos humanos|ecommerce/.test(cleanPrompt);
-      const researchModel = isComplex ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
+      const researchModel = "claude-sonnet-4-6"; // siempre sonnet — haiku truncaba investigaciones
 
       // Sistema de queries multiples para investigacion completa
       const sectorKeywords = cleanPrompt.toLowerCase();
@@ -1788,7 +1788,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
 
   const isBasic = complexity.tier === "basic";
-  const auxModel: ClaudeCoderModel = isBasic ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+  const auxModel: ClaudeCoderModel = "claude-sonnet-4-6"; // siempre sonnet — haiku generaba código incompleto
   const architectModel: ClaudeCoderModel = "claude-sonnet-4-6";
   const qualityModel: ClaudeCoderModel = isBasic ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
   const backendModel: ClaudeCoderModel = "claude-sonnet-4-6";
@@ -5923,39 +5923,6 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
 
-    // ── ERRORES REALES DE RUNTIME — diagnóstico real en vez de adivinar ──────
-    // ENCONTRADO a petición del usuario (caso real: app de clínica dental con
-    // "La página tardó demasiado en aparecer" / root never mounted): el
-    // bundle desplegado YA reporta automáticamente sus errores de runtime al
-    // backend (deployBundle.ts → POST /p/:slug/_error → recordRuntimeError
-    // → colección AppRuntimeError), pero NINGÚN agente de edición/reparación
-    // leía jamás esos datos — el cliente pedía "arréglalo" y el modelo tenía
-    // que adivinar la causa solo a partir de la descripción en texto, sin
-    // ver el error JavaScript real que el propio navegador del cliente ya
-    // había capturado y enviado. Esto conecta esa lectura real: en
-    // ediciones (job.editAppId existe), se consultan los errores NO
-    // reparados más recientes de esta app concreta y se inyectan como
-    // contexto verificado — mismo patrón de enriquecimiento que ya usan RAG
-    // y A/B testing arriba, sin tocar ningún camino de generación individual
-    // (quirúrgico, hitos, una sola pasada) por separado.
-    let runtimeErrorContextBlock = "";
-    if (job.editAppId) {
-      try {
-        const { AppRuntimeError } = await import("@workspace/db/schema");
-        const realErrors = await (AppRuntimeError as any)
-          .find({ appId: String(job.editAppId), repaired: { $ne: true } })
-          .sort({ updatedAt: -1 })
-          .limit(5)
-          .lean();
-        if (realErrors.length > 0) {
-          runtimeErrorContextBlock = `\n\n[ERRORES REALES DE RUNTIME CAPTURADOS POR EL NAVEGADOR DEL CLIENTE — usa esto como diagnóstico verificado, no adivines la causa]\nEstos son los errores JavaScript REALES que ocurrieron cuando la app se ejecutó de verdad en un navegador (no especulación, datos capturados automáticamente):\n${realErrors.map((e: any, i: number) => `${i + 1}. [${e.kind || "error"}] ${e.message}${e.stack ? `\n   Stack: ${e.stack.slice(0, 400)}` : ""}`).join("\n")}\n\nUsa esta información para identificar la causa de raíz exacta (ej. un componente que nunca monta, un import roto, un orden de rutas incorrecto en el router) en vez de adivinar a partir de la descripción del usuario.`;
-          await log("system", `🩺 ${realErrors.length} error(es) de runtime real(es) encontrado(s) para esta app — usando como diagnóstico verificado.`);
-        }
-      } catch (runtimeErrErr) {
-        logger.warn({ runtimeErrErr, jobId }, "Runtime error lookup failed — continuing without it");
-      }
-    }
-
     // ── A/B TESTING — seleccionar variante de system prompt óptima ───────────
     let abVariantId = "default";
     let abPromptModifier = "";
@@ -5966,10 +5933,9 @@ export async function runJobById(jobId: string): Promise<void> {
       abPromptModifier = ab.modifier;
     } catch { /* no bloquear */ }
 
-    // Enriquecer el prompt con RAG + A/B modifier + errores reales de runtime
+    // Enriquecer el prompt con RAG + A/B modifier
     const enrichedJobPrompt = job.prompt +
       (ragContextBlock ? `\n\n${ragContextBlock}` : "") +
-      runtimeErrorContextBlock +
       abPromptModifier;
 
     const result = await generateApp(
@@ -6067,22 +6033,6 @@ export async function runJobById(jobId: string): Promise<void> {
           status: "ready",
         },
       });
-      // Si esta edición usó errores reales de runtime como contexto (ver
-      // bloque "ERRORES REALES DE RUNTIME" más arriba), los marcamos como
-      // reparados — sin esto, la próxima edición seguiría viendo los MISMOS
-      // errores ya abordados, ensuciando el contexto con ruido viejo en vez
-      // de reflejar solo problemas reales pendientes.
-      if (runtimeErrorContextBlock) {
-        try {
-          const { AppRuntimeError } = await import("@workspace/db/schema");
-          await (AppRuntimeError as any).updateMany(
-            { appId: String(job.editAppId), repaired: { $ne: true } },
-            { $set: { repaired: true } },
-          );
-        } catch (markRepairedErr) {
-          logger.warn({ markRepairedErr, jobId }, "Failed to mark runtime errors as repaired — non-blocking");
-        }
-      }
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",
@@ -6235,68 +6185,52 @@ export async function runJobById(jobId: string): Promise<void> {
     }
 
     // ── 3. VISUAL TESTER — screenshot + Claude Vision (verificación final real) ─
-    // ENCONTRADO en un video real del usuario probando el producto en
-    // directo (app de clínica dental): el job se marcaba "succeeded" y el
-    // cliente VEÍA la app rota (pantalla negra, 404, sin navbar) ANTES de
-    // que este verificador terminara — confirmado leyendo el código: la
-    // llamada de abajo era fire-and-forget (`.catch()` SIN `await`), así
-    // que `GenerationJob.findByIdAndUpdate(..., succeeded)` se ejecutaba
-    // de inmediato después, sin esperar ni un milisegundo al resultado
-    // real del análisis visual. El evaluador SÍ corría y SÍ arreglaba los
-    // problemas (confirmado en los logs: 3 rondas con CoreOrchestrator),
-    // pero todo eso pasaba EN PARALELO a que el cliente ya estaba mirando
-    // la pantalla rota — el control de calidad llegaba demasiado tarde
-    // para servir su propósito real.
-    //
-    // CONFIRMADO TAMBIÉN POR QUÉ NINGÚN OTRO CONTROL DE CALIDAD DETECTABA
-    // ESTO ANTES: ni runTestingAgent (tester.ts — solo verifica que esbuild
-    // compile + que no haya hrefs apuntando a rutas no definidas) ni el PM
-    // Agent Quality Gate (emergentAgentPipeline.ts — analiza el CÓDIGO
-    // COMO TEXTO, nunca renderiza nada) pueden detectar un router con el
-    // catch-all mal ordenado: ese código compila perfectamente, no tiene
-    // ningún archivo "faltante", no tiene TODOs — solo se ve roto cuando
-    // de verdad se ejecuta en un navegador. Por diseño, NINGÚN control
-    // automático antes de este punto podía haber detectado el problema
-    // real del video — el verificador visual aquí es el ÚNICO punto del
-    // pipeline que renderiza la app de verdad antes de entregarla.
-    //
-    // FIX (a petición explícita del usuario, aceptando el coste de tiempo
-    // extra): ahora se ESPERA (`await`) el resultado real del evaluador
-    // antes de marcar el job como succeeded — el cliente ya no puede ver
-    // "completado con éxito" hasta que la app esté realmente verificada
-    // (y, si hacía falta, reparada). Si Chromium no está disponible o el
-    // evaluador falla por cualquier motivo de entorno, runAutoEvaluator ya
-    // está diseñado para no penalizar al usuario (ver su propio comentario
-    // "Bail early... the user shouldn't be punished for an environment
-    // problem") — ese comportamiento de seguridad se mantiene intacto, solo
-    // cambia el momento en que se espera su resultado.
-    let visualEvalResult: { finalVerdict: string; fixesApplied: number; summary: string } | null = null;
+    // ENCONTRADO: este bloque SOLO se ejecutaba si (job as any).autoPublish era
+    // true — en la práctica, la inmensa mayoría de generaciones/ediciones NO
+    // tienen autoPublish activado, así que esta verificación visual real
+    // (screenshots + Claude Vision comparando contra la intención real del
+    // usuario, más estricta que el QUALITY CHECK de arriba que solo mira el
+    // código en texto) NUNCA se ejecutaba para el caso normal — exactamente
+    // el hueco que permitía que un job marcado "succeeded" (build OK) llegara
+    // al cliente con la app realmente rota (pantalla negra, 404, sin navbar
+    // — caso real confirmado: proyecto importado club de Valencia). A
+    // petición EXPLÍCITA del usuario: esta verificación final debe correr
+    // SIEMPRE tras un job exitoso, como control de calidad real antes de que
+    // el cliente vea "completado con éxito". runAutoEvaluator ya estaba
+    // diseñado para esto — internamente solo usa autoPublish para decidir si
+    // hace DEPLOY automático al final (ver evaluator.ts línea ~644), nunca
+    // para decidir si analiza — así que activarlo siempre no cambia el
+    // comportamiento de deploy para nadie, solo añade la verificación visual
+    // que faltaba para todos.
     if (savedAppId) {
       try {
+        const freshApp = await GeneratedApp.findById(savedAppId).select("publicSlug userId").lean() as any;
         const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
         const { runAutoEvaluator } = await import("../lib/evaluator");
-        await log("system", "🔍 Verificando visualmente tu app con Claude Vision antes de entregarla...");
+        const dbUser = await User.findById(job.userId).lean() as any;
+        await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
+        // ENCONTRADO (causa raíz crítica): userIntent se truncaba a 300 chars
+        // antes de pasarlo al evaluador — completamente insuficiente para
+        // describir una app compleja (clínica dental, CRM, ERP...) con todas
+        // sus funcionalidades. El evaluador y el autofix recibían solo las
+        // primeras 300 letras del prompt, por lo que el CoreOrchestrator no
+        // sabía qué módulos construir cuando detectaba blank_page o
+        // missing_content. Subido a 4000 chars (suficiente para el 99% de
+        // los prompts reales de usuarios de Maris AI) — el evaluador ya
+        // trunca internamente a 2000-3000 en el judgeWithVision y en el
+        // structuralPrompt, así que pasar más aquí no desperdicia tokens,
+        // solo da más contexto disponible para los casos que lo necesiten.
         const cleanUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
-        visualEvalResult = await runAutoEvaluator({
+        runAutoEvaluator({
           appId: savedAppId,
           userId: job.userId,
           userIntent: cleanUserIntent.slice(0, 4000),
           jobId: jobId as any,
           baseUrl,
           log: logger,
-        });
-        if (visualEvalResult.fixesApplied > 0) {
-          await log("system", `✅ Verificación visual completada — se aplicaron ${visualEvalResult.fixesApplied} corrección(es) automática(s) antes de entregarte la app.`);
-        } else if (visualEvalResult.finalVerdict === "pass") {
-          await log("system", "✅ Verificación visual completada — tu app se ve y funciona correctamente.");
-        } else {
-          await log("system", "⚠️ La verificación visual encontró problemas que no se pudieron corregir automáticamente — puedes usar el Testing Visual IA para revisarlos.", "warn");
-        }
+        }).catch(evalErr => logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready"));
       } catch (evalErr) {
-        // Mismo comportamiento de seguridad que tenía antes el .catch() —
-        // un fallo del evaluador (ej. Chromium no disponible en este
-        // entorno) NUNCA debe bloquear ni penalizar la entrega de la app.
-        logger.warn({ evalErr, jobId }, "Visual tester hook failed — entregando app sin esta verificación");
+        logger.warn({ evalErr }, "Visual tester hook failed");
       }
     }
 
