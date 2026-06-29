@@ -629,7 +629,7 @@ export async function runAutoEvaluator(opts: {
         // App.tsx actual del bundle para que el code agent vea qué está roto
         function extractFileFromBundle(bundle: string, fileName: string): string {
           const esc = fileName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const m = bundle.match(new RegExp(\`// === FILE: \${esc} ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)\`));
+          const m = bundle.match(new RegExp("// === FILE: " + esc + " ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)"));
           return m ? m[1].trim() : "";
         }
         const appTsx = extractFileFromBundle(currentBundle, "src/App.tsx")
@@ -637,19 +637,20 @@ export async function runAutoEvaluator(opts: {
           || extractFileFromBundle(currentBundle, "src/main.tsx")
           || "";
         const routerBlock = appTsx
-          ? \`\n\nCÓDIGO ACTUAL DE src/App.tsx:\n\\`\\`\\`tsx\n\${appTsx.slice(0, 4000)}\n\\`\\`\\`\`
+          ? "\n\nCÓDIGO ACTUAL DE src/App.tsx:\n" + appTsx.slice(0, 4000)
           : "";
 
         const structuralPrompt =
-          \`[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL]\n\` +
-          \`App: "\${(row as any).title}"\n\n\` +
-          \`PROMPT ORIGINAL DEL USUARIO:\n\${userIntent.slice(0, 3000)}\${routerBlock}\n\n\` +
-          \`ISSUES DETECTADOS POR CLAUDE VISION:\n\${issuesBlock}\n\n\` +
-          \`INSTRUCCIONES:\n\` +
-          \`1. ROUTER: mover catch-all <Route path="*"> al ÚLTIMO lugar en src/App.tsx.\n\` +
-          \`2. NAVBAR: crear <Navbar> con links a todos los módulos del prompt si no existe.\n\` +
-          \`3. CONTENIDO: reconstruir componentes vacíos con todas las funcionalidades del prompt + mock data realista en español.\n\` +
-          \`4. Tocar TODOS los archivos necesarios. NO dejar return null ni TODOs.\`;
+          "[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL]\n" +
+          "App: " + JSON.stringify((row as any).title) + "\n\n" +
+          "PROMPT ORIGINAL DEL USUARIO:\n" + userIntent.slice(0, 3000) + (routerBlock ? "\n\n" + routerBlock : "") + "\n\n" +
+          "ISSUES DETECTADOS POR CLAUDE VISION:\n" + issuesBlock + "\n\n" +
+          "INSTRUCCIONES:\n" +
+          "1. ROUTER: mover catch-all <Route path='*'> al ÚLTIMO lugar en src/App.tsx.\n" +
+          "2. NAVBAR: crear <Navbar> con links a todos los módulos del prompt si no existe.\n" +
+          "3. CONTENIDO: reconstruir componentes vacíos con todas las funcionalidades del prompt + mock data realista en español.\n" +
+          "4. Tocar TODOS los archivos necesarios. NO dejar return null ni TODOs.";
+
 
         const editResult = await orchestrator.editProjectIncremental(
           structuralPrompt,
