@@ -208,23 +208,6 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
         setCompareMode(true);
       }
 
-      // AUTO-ACTIVAR AUTOFIX: si el análisis (no el fix) detectó issues críticos
-      // o mayores, lanzar el autofix automáticamente sin que el usuario tenga
-      // que pulsar nada. El flujo completo es:
-      //   Analizar → detecta errores → autofix se activa solo → re-escanea → muestra resultado
-      if (!autoFix && !data.visuallyCorrect) {
-        const severe = (data.issues || []).filter(
-          (i: VisualIssue) => i.severity === "critical" || i.severity === "major"
-        );
-        if (severe.length > 0) {
-          // Pequeña pausa para que el usuario vea brevemente el resultado del análisis
-          // antes de que arranque el autofix — da sensación de flujo en dos pasos
-          await new Promise(r => setTimeout(r, 800));
-          runAutoFixIfNeeded(data);
-          return; // runAutoFixIfNeeded actualizará el estado cuando termine
-        }
-      }
-
       // Verificación final automática resuelta con éxito: sin críticos ni
       // mayores pendientes tras el autofix, la app queda funcional para el
       // cliente. El padre cierra el panel y muestra el mensaje de éxito.
@@ -303,15 +286,15 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
           )}
           <Button
             size="sm"
-            onClick={() => runTest(false)}
+            onClick={() => runTest(true)}
             disabled={running || autoFixing}
-            title="Escanea la app y corrige automáticamente cualquier error crítico detectado"
+            title="Escanea la app, detecta errores y los repara automáticamente"
             className="h-7 text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white px-2"
           >
-            {running
-              ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Analizando...</>
+            {(running || autoFixing)
+              ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{autoFixing ? "Reparando..." : "Escaneando..."}</>
               : result
-              ? <><RefreshCw className="h-3 w-3 mr-1" />Re-escanear</>
+              ? <><RefreshCw className="h-3 w-3 mr-1" />Re-escanear y reparar</>
               : <><Zap className="h-3 w-3 mr-1" />Escanear y reparar</>
             }
           </Button>
