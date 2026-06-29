@@ -615,7 +615,24 @@ export async function runAutoEvaluator(opts: {
         // NO incluía el userIntent completo — el orquestador solo veía los problemas
         // detectados pero no sabía QUÉ funcionalidades construir para solucionarlos.
         // FIX: incluir userIntent completo para que el planificador sepa qué crear.
-        const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL] La aplicación "${(row as any).title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${userIntent.slice(0, 3000)}\n\nProblemas detectados:\n${patcherIssues.map((p, idx) => `${idx + 1}. ${p.problem}\n   Sugerencia: ${p.fix}`).join("\n")}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional con todos los módulos pedidos en el prompt original.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con TODAS las funcionalidades pedidas en el prompt original — usa mock data realista (no "Lorem ipsum").\n5. Toca o crea TODOS los archivos necesarios — App.tsx, router, páginas, componentes, navbar — para que la app sea completamente funcional.\n6. Cada módulo pedido en el prompt (dashboard, pacientes, citas, facturación, etc.) debe tener su propia página/ruta con contenido real visible.`;
+        // Extraer App.tsx actual del bundle para dárselo explícitamente al
+        // planner — sin esto, el code agent edita App.tsx en ciegas y sigue
+        // poniendo el catch-all 404 antes de la ruta raíz porque no ve el
+        // código actual que debe corregir.
+        function extractFileFromBundle(bundle: string, fileName: string): string {
+          const pattern = new RegExp(`// === FILE: ${fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ===\n([\s\S]*?)(?=\n// === FILE:|$)`);
+          const m = bundle.match(pattern);
+          return m ? m[1].trim() : "";
+        }
+        const appTsxContent = extractFileFromBundle(currentBundle, "src/App.tsx")
+          || extractFileFromBundle(currentBundle, "src/app.tsx")
+          || extractFileFromBundle(currentBundle, "src/main.tsx")
+          || "";
+        const routerFileBlock = appTsxContent
+          ? `\n\nCONTENIDO ACTUAL DE src/App.tsx (ESTE ES EL ARCHIVO A ARREGLAR — busca el catch-all 404 y muévelo al final):\n\`\`\`tsx\n${appTsxContent.slice(0, 4000)}\n\`\`\``
+          : "";
+
+        const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL] La aplicación "${(row as any).title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${userIntent.slice(0, 3000)}${routerFileBlock}\n\nProblemas detectados:\n${patcherIssues.map((p, i) => `${i + 1}. ${p.problem}\n   Sugerencia: ${p.fix}`).join("\n")}\n\nINSTRUCCIONES OBLIGATORIAS (en orden de prioridad):\n1. ROUTER FIX (causa más frecuente del 404): en src/App.tsx, el catch-all <Route path="*"> o <Route component={NotFound}> DEBE estar en el ÚLTIMO lugar. Si está antes de <Route path="/">, muévelo al final — esa es la única causa de que la ruta raíz muestre 404.\n2. Verifica que la ruta '/' tenga un componente asignado que no esté vacío ni retorne null.\n3. Si falta NavBar, añade una con enlaces a todos los módulos pedidos en el prompt.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con TODAS las funcionalidades del prompt — usa mock data realista.\n5. Toca SOLO los archivos necesarios: App.tsx siempre, más los componentes de página que estén vacíos.`;
 
         const editResult = await orchestrator.editProjectIncremental(
           structuralPrompt,
