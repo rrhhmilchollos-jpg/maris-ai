@@ -113,6 +113,66 @@ interface GeneratedMilestone extends Milestone {
   code: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MODO EDICIÓN POR HITOS — extensión para proyectos YA EXISTENTES (importados
+// de otra IA, o cualquier proyecto previo de Maris AI), con el mismo rigor que
+// buildProjectIncremental pero sin partir de cero: cada hito puede ser
+// "modify_file" (toca un archivo real ya existente, recibiendo su contenido
+// COMPLETO actual como contexto obligatorio para no perder nada) o
+// "create_file" (archivo nuevo necesario para el cambio pedido, igual que un
+// hito normal de construcción). A petición explícita del usuario tras varios
+// incidentes reales con proyectos importados (ej. "club de swingers en
+// Valencia") que se quedaban atascados en el límite de tokens del pipeline de
+// edición de una sola pasada (singleEditPass) — la causa raíz era que ESE
+// pipeline nunca trocea el trabajo, mientras que la construcción nueva sí lo
+// hace desde el principio vía CoreOrchestrator. Esta extensión da a las
+// ediciones el mismo troceo real por hitos pequeños que ya tiene la
+// construcción nueva, eliminando el cuello de botella de fondo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EditMilestone {
+  id: number;
+  action: "modify_file" | "create_file";
+  /** Ruta EXACTA tal como aparece en el bundle actual (// === FILE: <path> ===). */
+  filePath: string;
+  /** Qué cambiar en este archivo concreto — instrucción específica, no el prompt genérico del usuario. */
+  description: string;
+  dependsOn: number[];
+}
+
+interface GeneratedEditMilestone extends EditMilestone {
+  code: string;
+}
+
+const EDIT_PLANNER_SYSTEM_STATIC = `Eres el Arquitecto de Sistemas Senior de Maris AI. Recibes una petición de MODIFICACIÓN sobre un proyecto que YA EXISTE (no es un proyecto nuevo) y la divides en hitos de edición reales y manejables.
+
+PRINCIPIO RECTOR: NUNCA pierdas código existente. Cada hito debe describir el cambio CONCRETO que hay que hacer en UN archivo, no reescribir el proyecto entero. Si un archivo no necesita tocarse para cumplir la petición del usuario, NO generes un hito para él — solo incluye los archivos que de verdad hay que crear o modificar.
+
+Recibirás la lista de archivos que YA EXISTEN en el proyecto (solo sus rutas, sin contenido — el contenido se te dará después, archivo por archivo, cuando se genere ese hito concreto). Con esa lista y la petición del usuario, decide:
+- "modify_file": el cambio afecta a un archivo de la lista que YA EXISTE. Usa la ruta EXACTA tal como aparece en la lista.
+- "create_file": el cambio necesita un archivo que NO está en la lista (ej. un componente nuevo, una ruta backend nueva).
+
+NÚMERO DE HITOS: tantos como archivos distintos haya que tocar o crear — ni más ni menos. Una corrección de un bug visual puede ser 1-3 hitos; una funcionalidad nueva mediana puede ser 4-10. No fragmentes en exceso (no dividas un mismo archivo en varios hitos) ni comprimas en exceso (no metas cambios de archivos no relacionados en un mismo hito).
+
+Cada hito debe especificar "dependsOn": [ids de otros hitos de ESTA MISMA edición cuyo resultado necesita ver como contexto antes de generarse] — por ejemplo, si un hito de frontend depende de un endpoint nuevo creado en otro hito de backend en esta misma edición.
+
+Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
+{
+  "milestones": [
+    { "id": 1, "action": "modify_file", "filePath": "src/pages/HomePage.tsx", "description": "La pantalla aparece en negro porque falta el componente raíz que monta las rutas — añade el layout principal y renderiza <Outlet /> o las rutas hijas correspondientes.", "dependsOn": [] },
+    { "id": 2, "action": "create_file", "filePath": "src/components/EventCard.tsx", "description": "Componente nuevo para mostrar cada evento del club con fecha, título y botón de reserva, usado desde HomePage.tsx", "dependsOn": [1] }
+  ]
+}`;
+
+const EDIT_CODE_AGENT_STATIC = `Eres el Ingeniero de Software Senior de Maris AI, especializado en EDITAR código existente sin perder nada que no se haya pedido cambiar.
+
+REGLAS DE GENERACIÓN:
+- Genera EXCLUSIVAMENTE el código fuente COMPLETO y final del archivo solicitado (el archivo entero, ya con el cambio aplicado) — sin explicaciones, sin markdown, sin backticks.
+- Si el hito es "modify_file", se te da el CONTENIDO ACTUAL completo del archivo. Tu trabajo es devolver ese mismo archivo con el cambio pedido aplicado, conservando TODO lo que no esté relacionado con el cambio — imports, componentes, lógica, comentarios. NUNCA borres funcionalidad existente que no se pidió tocar.
+- Si el hito es "create_file", el archivo es nuevo: escríbelo completo y coherente con las convenciones del resto del proyecto (mismo estilo de imports, mismas librerías ya usadas).
+- Código TypeScript/JavaScript real, completo y funcional. CERO TODOs, CERO stubs, CERO placeholders tipo "// implementar después".
+- Usa exactamente los nombres de componentes, funciones y rutas que aparecen en el CONTEXTO DE HITOS ANTERIORES o en el ARCHIVO ACTUAL que se te proporciona — la coherencia con el resto del proyecto es crítica.`;
+
 export interface CoreOrchestratorOptions {
   /** Prompt de calidad adicional (las reglas de BACKEND_SYSTEM_PROMPT / BACKEND_SYSTEM_PROMPT_POSTGRES
    *  de apps.ts) para que los hitos de backend usen el mismo quality bar que el pipeline estándar. */
@@ -463,5 +523,290 @@ export class CoreOrchestrator {
     await fs.ensureDir(path.dirname(absolutePath));
     await fs.writeFile(absolutePath, code, 'utf-8');
     console.log(`💾 Guardado con éxito en: ${absolutePath}`);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // MODO EDICIÓN POR HITOS — métodos equivalentes a planMonorepoProject /
+  // generateMilestone / buildProjectIncremental, pero operando sobre un
+  // bundle ya existente en vez de generar desde cero. Ver el comentario de
+  // cabecera de EditMilestone más arriba para el porqué de esta extensión.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Parsea un bundle "// === FILE: <path> ===" en un mapa { ruta → contenido }.
+   * Implementación AUTOCONTENIDA y deliberadamente independiente de la
+   * equivalente en artifacts/api-server/src/lib/fileToolsAgent.ts: este
+   * paquete (@workspace/services) no depende del api-server en su
+   * package.json (y el api-server SÍ depende de @workspace/services), así
+   * que importar desde allí crearía una dependencia circular real entre
+   * paquetes del monorepo. Misma lógica exacta, sin esa dependencia.
+   */
+  private parseBundleToMap(bundle: string): Map<string, string> {
+    const files = new Map<string, string>();
+    const parts = bundle.split(/\/\/ === FILE: /);
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const nl = part.indexOf("\n");
+      if (nl === -1) continue;
+      const rawPath = part.slice(0, nl).trim().replace(/ ===$/, "").trim();
+      if (!rawPath) continue;
+      files.set(rawPath, part.slice(nl + 1));
+    }
+    return files;
+  }
+
+  private mapToBundle(files: Map<string, string>): string {
+    const parts: string[] = [];
+    for (const [filePath, content] of files.entries()) {
+      parts.push(`// === FILE: ${filePath} ===\n${content}`);
+    }
+    return parts.join("\n\n");
+  }
+
+  /**
+   * FASE 1 (modo edición): planifica los hitos de MODIFICACIÓN necesarios
+   * para cumplir la petición del usuario sobre un proyecto que YA EXISTE.
+   * Solo se le pasan las RUTAS de los archivos actuales (no su contenido
+   * completo — eso inflaría el prompt del planificador sin necesidad; cada
+   * hito recibe el contenido real del archivo concreto que le toca, no de
+   * todos), igual de barato en tokens que planMonorepoProject.
+   */
+  async planProjectEdit(
+    userPrompt: string,
+    existingFilePaths: { frontend: string[]; backend: string[] },
+  ): Promise<{ milestones: EditMilestone[] }> {
+    const fileList = [
+      ...existingFilePaths.frontend.map((p) => `- ${p} (frontend)`),
+      ...existingFilePaths.backend.map((p) => `- ${p} (backend)`),
+    ].join("\n");
+
+    const response = await anthropic.messages.stream({
+      model: this.options.model!,
+      // Mismo límite que planMonorepoProject (24000) — el motivo es idéntico:
+      // listas de hitos largas (proyectos importados grandes con muchos
+      // archivos a tocar) no deben truncarse antes de cerrar el JSON.
+      max_tokens: 24000,
+      system: [{ type: "text", text: EDIT_PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
+      messages: [{
+        role: "user",
+        content: `ARCHIVOS QUE YA EXISTEN EN EL PROYECTO:\n${fileList || "(proyecto sin archivos detectados — trata todo como create_file)"}\n\nPETICIÓN DEL USUARIO:\n${userPrompt}`,
+      }],
+    }).finalMessage();
+
+    const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const cleanedJson = this.cleanJsonResponse(rawText);
+
+    try {
+      const result = JSON.parse(cleanedJson);
+      const milestones: EditMilestone[] = (result.milestones || []).map((m: any) => ({
+        id: m.id,
+        action: m.action === "create_file" ? "create_file" : "modify_file",
+        filePath: String(m.filePath || "").trim(),
+        description: String(m.description || ""),
+        dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
+      })).filter((m: EditMilestone) => m.filePath);
+      return { milestones };
+    } catch (error) {
+      // Misma red de seguridad que planMonorepoProject: si el modelo añadió
+      // texto conversacional alrededor del JSON, lo recuperamos buscando el
+      // primer objeto balanceado en vez de fallar directamente.
+      const extracted = this.extractFirstJsonObject(rawText);
+      if (extracted) {
+        try {
+          const result = JSON.parse(extracted);
+          const milestones: EditMilestone[] = (result.milestones || []).map((m: any) => ({
+            id: m.id,
+            action: m.action === "create_file" ? "create_file" : "modify_file",
+            filePath: String(m.filePath || "").trim(),
+            description: String(m.description || ""),
+            dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
+          })).filter((m: EditMilestone) => m.filePath);
+          console.warn("⚠️ El planificador de edición devolvió texto junto al JSON — se recuperó el objeto JSON embebido correctamente.");
+          return { milestones };
+        } catch {
+          /* el bloque extraído tampoco era JSON válido — cae al error final de abajo */
+        }
+      }
+      console.error("❌ Error parseando JSON del plan de edición:", error);
+      throw new Error("No se pudo generar el plan de edición — respuesta del planificador inválida.");
+    }
+  }
+
+  /** Construye el bloque de contexto para un hito de edición: el archivo
+   *  ACTUAL completo (si modify_file y existe) + los hitos de ESTA edición
+   *  en los que depende (si ya se generaron). */
+  private buildEditContext(
+    milestone: EditMilestone,
+    currentFiles: Map<string, string>,
+    generatedByMilestoneId: Map<number, GeneratedEditMilestone>,
+  ): string {
+    const blocks: string[] = [];
+    if (milestone.action === "modify_file") {
+      const currentContent = currentFiles.get(milestone.filePath);
+      blocks.push(
+        currentContent
+          ? `ARCHIVO ACTUAL (${milestone.filePath}) — modifícalo, NO lo reescribas desde cero, conserva todo lo que no esté relacionado con el cambio pedido:\n${currentContent.trim()}`
+          : `AVISO: el planificador marcó este hito como "modify_file" pero el archivo "${milestone.filePath}" no se encontró en el bundle actual — trátalo como un archivo nuevo coherente con el resto del proyecto.`
+      );
+    }
+    const depBlocks = milestone.dependsOn
+      .map((id) => generatedByMilestoneId.get(id))
+      .filter((m): m is GeneratedEditMilestone => Boolean(m))
+      .map((m) => `// === ARCHIVO YA EDITADO/CREADO EN ESTA MISMA EDICIÓN: ${m.filePath} ===\n${m.code.trim()}`);
+    if (depBlocks.length) blocks.push(`CONTEXTO DE OTROS HITOS DE ESTA EDICIÓN:\n\n${depBlocks.join("\n\n")}`);
+    return blocks.join("\n\n") || "No hay contexto adicional relevante para este hito.";
+  }
+
+  private async generateEditMilestone(
+    milestone: EditMilestone,
+    currentFiles: Map<string, string>,
+    generatedByMilestoneId: Map<number, GeneratedEditMilestone>,
+  ): Promise<GeneratedEditMilestone> {
+    const MAX_ATTEMPTS = 3;
+    let lastError: unknown;
+    const editContext = this.buildEditContext(milestone, currentFiles, generatedByMilestoneId);
+    const qualityBlock = this.options.backendQualityPrompt && !milestone.filePath.startsWith("src/") && !milestone.filePath.includes("apps/web")
+      ? `\n\nQUALITY BAR OBLIGATORIO (mismas reglas que el resto de la plataforma):\n${this.options.backendQualityPrompt.slice(0, 6000)}`
+      : "";
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        // Mismo motivo de .stream().finalMessage() que en generateMilestone:
+        // evita el rechazo "Streaming is required..." del SDK para llamadas
+        // que puedan tardar, sin cambiar el objeto Message devuelto.
+        const response = await anthropic.messages.stream({
+          model: this.options.model!,
+          // Mismo límite que generateMilestone (8192) — cada hito de edición
+          // es, por diseño del planificador, UN archivo concreto, así que el
+          // mismo techo que ya demostró ser suficiente para un archivo de
+          // construcción nueva lo es también aquí.
+          max_tokens: 8192,
+          system: [
+            { type: "text", text: EDIT_CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
+            { type: "text", text: qualityBlock || "Sin reglas de calidad adicionales para este archivo." },
+          ] as any,
+          messages: [{
+            role: "user",
+            content: `Acción: ${milestone.action === "create_file" ? "CREAR archivo nuevo" : "MODIFICAR archivo existente"}.\nArchivo: ${milestone.filePath}\n\nCambio a aplicar: ${milestone.description}\n\n${editContext}\n\nDevuelve SOLO el código COMPLETO y final del archivo, sin explicaciones ni markdown.`,
+          }],
+        }).finalMessage();
+        const code = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
+        if (code) return { ...milestone, code };
+        throw new Error("Respuesta vacía del modelo");
+      } catch (error) {
+        lastError = error;
+        console.error(`⚠️ Hito de edición ${milestone.id} (${milestone.filePath}) — intento ${attempt}/${MAX_ATTEMPTS}:`, error);
+        if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
+    throw new Error(`Fallo crítico tras ${MAX_ATTEMPTS} intentos en hito de edición ${milestone.id} (${milestone.filePath}): ${lastError}`);
+  }
+
+  /**
+   * FASE 2 (modo edición): aplica los hitos planificados por planProjectEdit
+   * sobre el bundle actual, archivo por archivo, sin reescribir nada que no
+   * esté en el plan. Devuelve el bundle de frontend y backend actualizados,
+   * con el MISMO formato (// === FILE: ...) que el resto del sistema espera,
+   * para que sea compatible con runTestingAgent y con el resto del pipeline
+   * de validación/guardado sin ningún cambio en esas partes.
+   *
+   * No hay capas secuenciales por dependencia de arquitectura como en
+   * buildProjectIncremental (data → backend → frontend) porque una edición
+   * no construye un sistema desde cero — sí se respeta dependsOn entre
+   * hitos de la MISMA edición, ejecutando en orden topológico simple por
+   * lotes (igual que el agrupado por capas, pero con una sola "capa" lógica
+   * cuyo orden lo da dependsOn en vez de un layer fijo).
+   */
+  async editProjectIncremental(
+    userPrompt: string,
+    previousFrontendCode: string,
+    previousBackendCode: string,
+    wsNotificationCallback: Function,
+  ): Promise<{ frontendCode: string; backendCode: string; milestones: GeneratedEditMilestone[] }> {
+    const frontendFiles = this.parseBundleToMap(previousFrontendCode || "");
+    const backendFiles = this.parseBundleToMap(previousBackendCode || "");
+    const allCurrentFiles = new Map<string, string>([...frontendFiles, ...backendFiles]);
+
+    const { milestones } = await this.planProjectEdit(userPrompt, {
+      frontend: Array.from(frontendFiles.keys()),
+      backend: Array.from(backendFiles.keys()),
+    });
+
+    if (!milestones.length) {
+      throw new Error("El planificador de edición no devolvió ningún hito — no se pudo determinar qué archivos modificar.");
+    }
+
+    wsNotificationCallback({
+      status: `🚀 Plan de edición aprobado: ${milestones.length} archivo(s) a ${milestones.filter((m) => m.action === "modify_file").length > 0 ? "modificar/crear" : "crear"}. Iniciando edición por hitos...`,
+      progress: 8,
+    });
+
+    const generatedByMilestoneId = new Map<number, GeneratedEditMilestone>();
+    const concurrency = this.options.concurrencyPerLayer!;
+    const remaining = [...milestones];
+    const done = new Set<number>();
+    let completed = 0;
+    const total = milestones.length;
+
+    // Orden topológico simple por lotes: en cada vuelta, procesa todos los
+    // hitos cuyas dependencias ya están resueltas (o no tienen ninguna),
+    // hasta concurrency a la vez — mismo patrón de ejecución por lotes que
+    // buildProjectIncremental usa por capa, aplicado aquí por dependencia
+    // real en vez de por capa fija (una edición no tiene capas de
+    // arquitectura, solo el orden que el propio plan declaró).
+    let safetyCounter = 0;
+    while (remaining.length > 0 && safetyCounter < total + 1) {
+      safetyCounter++;
+      const ready = remaining.filter((m) => m.dependsOn.every((id) => done.has(id)));
+      // Si ningún hito restante tiene sus dependencias listas (plan con
+      // referencias circulares o a IDs inexistentes), procesa el resto
+      // igualmente para no bloquear la edición — mejor entregar algo que
+      // quedarse colgado por un plan mal formado.
+      const batchSource = ready.length > 0 ? ready : remaining;
+      const batch = batchSource.slice(0, concurrency);
+
+      const results = await Promise.all(batch.map((m) => this.generateEditMilestone(m, allCurrentFiles, generatedByMilestoneId)));
+      for (const generated of results) {
+        generatedByMilestoneId.set(generated.id, generated);
+        // El archivo recién editado/creado pasa a estar disponible como
+        // contexto "actual" también para hitos siguientes que dependan de
+        // su ruta sin haberlo declarado explícitamente como dependsOn.
+        allCurrentFiles.set(generated.filePath, generated.code);
+        done.add(generated.id);
+        completed++;
+        wsNotificationCallback({
+          status: `🔨 ${generated.filePath} ${generated.action === "create_file" ? "creado" : "actualizado"}.`,
+          progress: 8 + Math.round((completed / total) * 90),
+          step: generated.id,
+          previewAvailable: true,
+        });
+        const idx = remaining.findIndex((m) => m.id === generated.id);
+        if (idx !== -1) remaining.splice(idx, 1);
+      }
+    }
+
+    wsNotificationCallback({ status: "🚀 ¡Edición completa aplicada e integrada!", progress: 100, step: total });
+
+    // Reconstruye los bundles finales: cada archivo tocado/creado se aplica
+    // sobre su mapa de origen (frontend o backend) según dónde estaba antes,
+    // o según convención de ruta si es nuevo (apps/web o src/ del lado
+    // frontend se asume frontend; el resto, backend) — el resto de archivos
+    // NO tocados se conserva exactamente igual que estaba.
+    const allGenerated = Array.from(generatedByMilestoneId.values());
+    for (const generated of allGenerated) {
+      const isFrontendFile = frontendFiles.has(generated.filePath)
+        || (!backendFiles.has(generated.filePath) && /^(src\/|apps\/web\/|public\/|index\.html)/.test(generated.filePath));
+      if (isFrontendFile) {
+        frontendFiles.set(generated.filePath, generated.code);
+      } else {
+        backendFiles.set(generated.filePath, generated.code);
+      }
+    }
+
+    return {
+      frontendCode: this.mapToBundle(frontendFiles),
+      backendCode: this.mapToBundle(backendFiles),
+      milestones: allGenerated,
+    };
   }
 }

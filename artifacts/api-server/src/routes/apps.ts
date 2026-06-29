@@ -3450,13 +3450,141 @@ export async function generateApp(
         result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
       }
     } else {
-      // Cambio complejo → pipeline completo
-      result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+      // ENCONTRADO en producción, MISMA RAÍZ que el bug ya corregido en
+      // wantsFullBuild (apps.ts) y en planner.ts: cuando previous existe
+      // (cualquier proyecto YA EXISTENTE, generado por Maris AI o
+      // IMPORTADO de otra IA) y el cambio es complejo (score > 2), este
+      // bloque caía SIEMPRE a singleEditPass — el pipeline de una sola
+      // pasada que envía el bundle completo y espera el JSON completo de
+      // vuelta de una vez. Un proyecto importado de otra IA con muchos
+      // archivos (decenas de KB) sumado a un cambio complejo agota el
+      // límite de tokens de salida del modelo incluso tras el reintento
+      // estricto interno de singleEditPass — confirmado en logs reales de
+      // producción ("El cambio era demasiado grande para una sola pasada",
+      // caso real: proyecto importado de un club en Valencia, reporte largo
+      // de Testing Visual con 8 problemas a corregir a la vez). El propio
+      // sistema de autopilot detectaba esto como errorType:"memory" y
+      // recomendaba "fragmenta el cambio" — pero ningún código fragmentaba
+      // nada de verdad; solo singleEditPass volvía a intentarse entero.
+      //
+      // A petición EXPLÍCITA del usuario: las construcciones NUEVAS ya
+      // resuelven este mismo problema de fondo con CoreOrchestrator
+      // (trocear en hitos pequeños en vez de un bloque gigante). Esta
+      // misma robustez se extiende ahora a EDICIONES de proyectos
+      // existentes (sea su origen Maris AI o importado) vía
+      // CoreOrchestrator.editProjectIncremental — un planificador que
+      // identifica qué archivos concretos hay que tocar/crear y genera
+      // cada uno por separado, con el archivo actual completo como
+      // contexto para no perder nada de lo que no se pidió cambiar (ver
+      // CoreOrchestrator.ts para el diseño completo). Esto aplica a TODA
+      // edición compleja, no solo a proyectos importados — mismo motor,
+      // sin distinción de origen, tal y como se pidió.
+      //
+      // Red de seguridad: si el orquestador de edición falla por cualquier
+      // motivo (planificador devuelve 0 hitos, error de red, lo que sea),
+      // SE MANTIENE el fallback automático a singleEditPass — el
+      // comportamiento que ya existía antes de este cambio sigue
+      // disponible como red de seguridad, nunca se pierde la capacidad de
+      // entregar algo al usuario.
+      let usedOrchestratorEdit = false;
+      try {
+        await log("system", "🏗️ Activando edición por hitos (CoreOrchestrator) — divide el cambio en archivos concretos en vez de reescribir todo el proyecto de una vez...");
+        const editOrchestrator = new CoreOrchestrator(process.cwd(), {
+          model: "claude-sonnet-4-6",
+          backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
+        });
+        const editResult = await editOrchestrator.editProjectIncremental(
+          prompt,
+          previous.frontendCode,
+          previous.backendCode,
+          async (update: any) => {
+            onProgress?.({ phase: "generating", progress: 20 + Math.round((update.progress || 0) * 0.5), note: update.status });
+            await log("coder", update.status);
+          },
+        );
+        if (editResult.frontendCode && editResult.frontendCode.trim().length > 0) {
+          result = {
+            title: previous.title,
+            description: previous.description,
+            techStack: previous.techStack,
+            frontendCode: editResult.frontendCode,
+            backendCode: editResult.backendCode || previous.backendCode,
+            plannedPages: (previous as any).plannedPages || [],
+            requiredEnvVars: (previous as any).requiredEnvVars || [],
+          };
+          usedOrchestratorEdit = true;
+        } else {
+          await log("system", "El orquestador de edición no produjo un bundle de frontend válido; continúo con el pipeline robusto de una sola pasada como respaldo.", "warn");
+        }
+      } catch (editOrchestratorError) {
+        logger.warn({ err: editOrchestratorError }, "editProjectIncremental falló — cayendo al pipeline de respaldo (singleEditPass)");
+        await log("system", "La edición por hitos no pudo completarse; continúo con el pipeline robusto de respaldo.", "warn");
+      }
+      if (!usedOrchestratorEdit) {
+        // Cambio complejo, sin éxito en el orquestador de edición → respaldo histórico
+        result = await singleEditPass(prompt, previous, onChars, coderModel, language, log);
+      }
     }
     log("coder", "Código listo, comprobando que todo encaje…");
 
+    // ENCONTRADO: en modo edición, runValidatePatchLoop (análisis estático +
+    // reparación) ya existía, pero la construcción NUEVA pasa por dos capas
+    // de calidad ADICIONALES antes de ese mismo paso: reviewBundle (QA
+    // semántico — revisa lógica/bugs, no solo sintaxis) y runTestingAgent
+    // (detección de enlaces rotos de navegación entre páginas + su propio
+    // ciclo de reparación). A petición EXPLÍCITA del usuario: el mismo nivel
+    // de rigor de construcción nueva se extiende ahora a TODA edición de
+    // proyecto existente, sin distinguir su origen. Se omite SOLO cuando el
+    // plan reducido (fast-patch original o cambio simple promovido) dice
+    // explícitamente que hay que saltar validación — mismo criterio que ya
+    // usaba runValidatePatchLoop con phaseGates.validate.
+    let qualityCheckedFrontend = result.frontendCode;
+    if (execPlan.phases.includes("validate")) {
+      const editAsPlan: ProjectPlan = {
+        title: previous.title,
+        description: previous.description,
+        techStack: previous.techStack || ["React", "Node", "TypeScript"],
+        pages: [],
+        components: [],
+        hooks: [],
+        utils: [],
+        dataModels: [],
+        frontendFiles: [],
+        backendNeeded: false,
+        backendFiles: [],
+      };
+      await log("qa", "Revisando bundle editado en busca de bugs…");
+      const editReview = await reviewBundle(qualityCheckedFrontend, editAsPlan, agentModelPlan).catch((e) => {
+        logger.warn({ e }, "reviewBundle falló en modo edición — continúo sin bloquear la edición");
+        return { ok: true, issues: [] } as QAReport;
+      });
+      const editIssueCount = editReview.issues?.length ?? 0;
+      await log("qa", editIssueCount > 0 ? `${editIssueCount} issue(s) detectada(s) en la edición — pasando al Testing Agent.` : "Sin issues detectadas en la revisión de la edición.", editIssueCount > 0 ? "warn" : "info");
+
+      qualityCheckedFrontend = await runPhase("testing", async () => {
+        const tested = await runTestingAgent(qualityCheckedFrontend, {
+          jobId: jobId || "unknown",
+          prompt,
+          plan: editAsPlan,
+          language,
+          log,
+          onProgress,
+        });
+        const navIssues = await validateBundle(tested);
+        if (navIssues.issues.length > 0) {
+          logger.warn(`[QA] Se detectaron ${navIssues.issues.length} problemas de navegación tras el Testing Agent en modo edición.`);
+        }
+        return tested;
+      }).catch((e) => {
+        logger.warn({ e }, "runTestingAgent falló en modo edición — continúo con el bundle previo a este paso");
+        return qualityCheckedFrontend;
+      });
+    } else {
+      await log("system", "Plan dice saltar validación (alcance reducido) — se omiten QA y Testing Agent en esta edición.", "warn");
+    }
+
     const fixedFrontend = await runValidatePatchLoop(
-      result.frontendCode,
+      qualityCheckedFrontend,
       { ok: true, issues: [] },
       onProgress,
       70,
