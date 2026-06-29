@@ -6,7 +6,7 @@ import {
   CreditTransaction,
   AgentNote,
 } from "@workspace/db/schema";
-import { SUBSCRIPTION_PLANS } from "../lib/stripe";
+import { SUBSCRIPTION_PLANS } from "../lib/payments";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();

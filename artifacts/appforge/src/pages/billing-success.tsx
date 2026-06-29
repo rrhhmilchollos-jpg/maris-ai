@@ -13,7 +13,12 @@ export default function BillingSuccessPage() {
   const queryClient = useQueryClient();
   
   const searchParams = new URLSearchParams(window.location.search);
-  const sessionId = searchParams.get("session_id");
+  // Viva.com Smart Checkout añade "t" (transactionId) y "s" (orderCode) a
+  // la URL de retorno configurada en su panel — confirmado contra la
+  // documentación oficial. session_id se mantiene como fallback por si
+  // queda algún enlace antiguo de Stripe en correos ya enviados.
+  const transactionId = searchParams.get("t") ?? searchParams.get("session_id");
+  const orderCode = searchParams.get("s");
 
   const confirmMutation = useConfirmCheckout({
     mutation: {
@@ -33,10 +38,10 @@ export default function BillingSuccessPage() {
   });
 
   useEffect(() => {
-    if (sessionId && !confirmMutation.isPending && !confirmMutation.isSuccess && !confirmMutation.isError) {
-      confirmMutation.mutate({ data: { sessionId } });
+    if (transactionId && !confirmMutation.isPending && !confirmMutation.isSuccess && !confirmMutation.isError) {
+      confirmMutation.mutate({ data: { transactionId, orderCode } });
     }
-  }, [sessionId, confirmMutation]);
+  }, [transactionId, orderCode, confirmMutation]);
 
   return (
     <Layout>
@@ -45,7 +50,7 @@ export default function BillingSuccessPage() {
           
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
 
-          {confirmMutation.isPending || (!sessionId) ? (
+          {confirmMutation.isPending || (!transactionId) ? (
             <CardContent className="pt-12 pb-8 flex flex-col items-center text-center">
               <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
               <CardTitle className="text-2xl mb-2">Confirmando pago</CardTitle>

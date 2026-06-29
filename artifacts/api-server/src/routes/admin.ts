@@ -423,7 +423,7 @@ router.post("/admin/users/:id/stripe-refund", async (req: any, res: any): Promis
   }
 
   try {
-    const { getStripe } = await import("../lib/stripe");
+    const { getStripe } = await import("../lib/payments");
     const stripe = await getStripe();
     if (!stripe) {
       res.status(503).json({ error: "Stripe no está configurado en este servidor" });

@@ -11,7 +11,7 @@ export interface IUser {
   isPremium?: boolean;
   isAdmin?: boolean;
   freeCreditsUsed?: boolean;
-  hasEverPaid?: boolean;       // true en cuanto Stripe confirma el primer pago
+  hasEverPaid?: boolean;       // true en cuanto se confirma el primer pago (Stripe o Viva)
   firstPaidAt?: Date;          // fecha del primer pago confirmado
   registrationIp?: string;
   lastLoginIp?: string;
@@ -39,6 +39,16 @@ export interface IUser {
   planCredits?: number;
   planExpiresAt?: Date;
   stripeSubscriptionId?: string;
+  // Viva.com — migración desde Stripe. La recurrencia de Viva NO usa un
+  // objeto "Subscription" como Stripe: el primer pago se crea con
+  // allowRecurring=true, y los cobros mensuales siguientes son
+  // transacciones NUEVAS que referencian el transactionId de ESE primer
+  // pago (ver lib/payments.ts → chargeRecurringPayment). Por eso aquí se
+  // guarda el transactionId inicial, no un ID de "suscripción" como tal —
+  // es la pieza que el cron mensual necesita para poder cobrar de nuevo.
+  vivaInitialTransactionId?: string;
+  vivaSourceCode?: string; // sourceCode usado en el pago inicial — el cobro recurrente debe usar el mismo
+  vivaLastChargeAt?: Date; // último cobro recurrente exitoso — evita doble cobro el mismo ciclo
   // Notas de admin
   adminNotes?: Array<{ text: string; createdAt: Date }>;
   // GitHub OAuth
@@ -94,6 +104,9 @@ const UserSchema = new Schema<IUser>(
     planCredits: { type: Number, default: 0 },
     planExpiresAt: { type: Date },
     stripeSubscriptionId: { type: String },
+    vivaInitialTransactionId: { type: String },
+    vivaSourceCode: { type: String },
+    vivaLastChargeAt: { type: Date },
     // GitHub OAuth
     githubAccessToken: { type: String },
     githubLogin: { type: String },
@@ -290,6 +303,7 @@ export interface ICreditTransaction extends Document {
   amount: number;
   description: string;
   stripeSessionId?: string;
+  vivaOrderCode?: string; // idempotencia para pagos de Viva.com, equivalente a stripeSessionId
   createdAt: Date;
   updatedAt: Date;
 }
@@ -301,6 +315,7 @@ const CreditTransactionSchema = new Schema<ICreditTransaction>(
     amount: { type: Number, required: true },
     description: { type: String, required: true },
     stripeSessionId: { type: String },
+    vivaOrderCode: { type: String },
   },
   { timestamps: true },
 );

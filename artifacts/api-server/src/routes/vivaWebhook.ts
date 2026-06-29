@@ -66,11 +66,18 @@ vivaWebhookRouter.get("/webhooks/viva", async (_req: Request, res: Response) => 
 });
 
 /**
- * POST /api/webhooks/viva — recibe eventos reales. Por ahora solo nos
- * interesa "Transaction Payment Created" (EventTypeId 1796) para confirmar
- * pagos de eliminación de marca de agua, identificados por el prefijo
- * "watermark_removal:" en merchantTrns (el mismo valor que enviamos al
- * crear la orden en vivaPayments.ts).
+ * POST /api/webhooks/viva — recibe eventos reales de "Transaction Payment
+ * Created" (EventTypeId 1796), en paralelo a la confirmación en
+ * /billing/confirm cuando el cliente vuelve del checkout — para que el
+ * sistema reaccione aunque el cliente cierre la pestaña antes de volver.
+ *
+ * Distingue el tipo de pago por el prefijo de MerchantTrns (el mismo valor
+ * que nosotros mismos pusimos al crear la orden — ver vivaPayments.ts /
+ * routes/billing.ts):
+ *   - "watermark_removal:<appId>"                  → quitar marca de agua
+ *   - "topup:<userId>:<packageId>:<credits>"        → top-up de pack
+ *   - "topup-custom:<userId>:<credits>"             → top-up personalizado
+ *   - "subscription:<userId>:<planId>"              → primer pago de suscripción
  *
  * Viva exige responder 2xx siempre que se reciba correctamente el evento,
  * sin importar si encontramos o no algo que hacer con él — de lo contrario
@@ -79,21 +86,83 @@ vivaWebhookRouter.get("/webhooks/viva", async (_req: Request, res: Response) => 
 vivaWebhookRouter.post("/webhooks/viva", async (req: Request, res: Response) => {
   try {
     const body = req.body as {
-      EventData?: { StatusId?: string; MerchantTrns?: string; TransactionId?: string };
+      EventData?: { StatusId?: string; MerchantTrns?: string; TransactionId?: string; OrderCode?: number; SourceCode?: string };
       EventTypeId?: number;
     };
 
     // 1796 = Transaction Payment Created (pago completado con éxito)
     if (body.EventTypeId === 1796 && body.EventData?.StatusId === "F") {
       const merchantTrns = body.EventData.MerchantTrns || "";
-      const match = merchantTrns.match(/^watermark_removal:(.+)$/);
-      if (match) {
-        const appId = match[1];
+      const transactionId = body.EventData.TransactionId;
+      const orderCode = body.EventData.OrderCode;
+
+      const watermarkMatch = merchantTrns.match(/^watermark_removal:(.+)$/);
+      if (watermarkMatch) {
+        const appId = watermarkMatch[1];
         await GeneratedApp.updateOne(
           { _id: appId },
           { hasWatermark: false, watermarkRemovalVivaOrderCode: null },
         );
-        logger.info({ appId, transactionId: body.EventData.TransactionId }, "Watermark eliminada vía webhook de Viva.com");
+        logger.info({ appId, transactionId }, "Watermark eliminada vía webhook de Viva.com");
+      }
+
+      // Mismo patrón que watermark_removal arriba: procesamos en segundo
+      // plano (independiente de que el cliente haya vuelto o no a la web)
+      // reutilizando EXACTAMENTE la misma lógica que /billing/confirm —
+      // creditPurchase ya es idempotente por (userId, vivaOrderCode), así
+      // que si el cliente SÍ vuelve a la web y /confirm ya lo procesó, este
+      // webhook simplemente no duplica nada (alreadyProcessed:true).
+      const topupMatch = merchantTrns.match(/^topup(?:-custom)?:([^:]+):(?:[^:]+:)?(\d+)$/);
+      if (topupMatch) {
+        const [, userId, creditsStr] = topupMatch;
+        const credits = Number(creditsStr);
+        if (userId && Number.isFinite(credits) && credits > 0) {
+          const { creditPurchase } = await import("../lib/credits");
+          const { User } = await import("@workspace/db/schema");
+          const result = await creditPurchase({
+            userId,
+            amount: credits,
+            vivaOrderCode: String(orderCode ?? transactionId ?? merchantTrns),
+            description: `Top-up de ${credits} créditos (Viva.com, vía webhook)`,
+          });
+          if (!result.alreadyProcessed) {
+            await User.findByIdAndUpdate(userId, {
+              $set: { hasEverPaid: true },
+              $setOnInsert: { firstPaidAt: new Date() },
+            });
+          }
+          logger.info({ userId, credits, transactionId, alreadyProcessed: result.alreadyProcessed }, "Top-up confirmado vía webhook de Viva.com");
+        }
+      }
+
+      const subMatch = merchantTrns.match(/^subscription:([^:]+):([^:]+)$/);
+      if (subMatch) {
+        const [, userId, planId] = subMatch;
+        if (userId && planId && transactionId) {
+          const { SUBSCRIPTION_PLANS } = await import("../lib/payments");
+          const { grantPlanCredits } = await import("../lib/credits");
+          const { User } = await import("@workspace/db/schema");
+          const plan = SUBSCRIPTION_PLANS.find((p) => p.id === planId);
+          if (plan) {
+            const currentUser = await User.findById(userId, { vivaInitialTransactionId: 1 }).lean() as any;
+            if (currentUser?.vivaInitialTransactionId !== transactionId) {
+              const periodEnd = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+              await grantPlanCredits({
+                clerkUserId: userId,
+                planId: plan.id,
+                creditsPerMonth: plan.creditsPerMonth,
+                periodEnd,
+                vivaInitialTransactionId: transactionId,
+                vivaSourceCode: body.EventData?.SourceCode,
+              });
+              await User.findByIdAndUpdate(userId, {
+                $set: { isPremium: true, hasEverPaid: true },
+                $setOnInsert: { firstPaidAt: new Date() },
+              });
+              logger.info({ userId, planId, transactionId }, "Suscripción activada vía webhook de Viva.com");
+            }
+          }
+        }
       }
     }
 

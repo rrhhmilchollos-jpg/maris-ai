@@ -16,7 +16,6 @@ import workflowsRouter from "./routes/workflows";
 import stressTestRouter from "./routes/stressTest";
 import railwayRouter from "./routes/railway";
 import { vivaWebhookRouter } from "./routes/vivaWebhook";
-import { stripeWebhookRouter } from "./routes/stripeWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
 import adminRouter from "./routes/admin";
@@ -208,8 +207,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Stripe webhook needs the raw body — mount BEFORE express.json()
-app.use("/api/billing/webhook", stripeWebhookRouter);
+// ENCONTRADO: el webhook de Stripe ya no se monta — Maris AI migró por
+// completo de Stripe a Viva.com como pasarela de pago (a petición explícita
+// del usuario, su cuenta bancaria real). El webhook equivalente de Viva
+// (vivaWebhookRouter, ya montado más abajo en este archivo) cubre ahora
+// top-ups, suscripciones y eliminación de marca de agua.
  
 // ── CORS — anti-hacking: allowlist en vez de "allow all" ───────────────────
 const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [

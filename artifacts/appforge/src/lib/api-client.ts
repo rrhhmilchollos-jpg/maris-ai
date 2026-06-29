@@ -136,7 +136,7 @@ export function useListTemplates(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListTemplatesQueryKey(), queryFn: () => apiFetch("/api/templates"), ...(opts?.query as any) });
 }
 export function useCreateCheckoutSession(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
-  return useMutation<any, any, any>({ mutationFn: ({ priceId }: { priceId: string }) => apiFetch("/api/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priceId }) }), ...(opts?.mutation as any) });
+  return useMutation<any, any, any>({ mutationFn: ({ packageId }: { packageId: string }) => apiFetch("/api/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ packageId }) }), ...(opts?.mutation as any) });
 }
 export function useListCreditPackages(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListCreditPackagesQueryKey(), queryFn: () => apiFetch("/api/billing/packages"), ...(opts?.query as any) });

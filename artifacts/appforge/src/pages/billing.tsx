@@ -46,7 +46,7 @@ export default function BillingPage() {
       },
       onError: (err: any) => {
         const raw = (err?.message || "").toString();
-        if (raw.includes("503") || raw.toLowerCase().includes("stripe")) {
+        if (raw.includes("503") || raw.toLowerCase().includes("viva")) {
           setCheckoutError(
             "Los pagos aún se están configurando. Vuelve a intentarlo en unos minutos.",
           );
@@ -60,11 +60,11 @@ export default function BillingPage() {
     },
   });
 
-  const handleBuyPackage = (priceId: string, packageId: string) => {
+  const handleBuyPackage = (packageId: string) => {
     setCheckoutError(null);
     setCancelNotice(null);
     setLoadingPackageId(packageId);
-    checkoutMutation.mutate({ priceId });
+    checkoutMutation.mutate({ packageId });
   };
 
   const handleCustomBuy = async () => {
@@ -172,7 +172,7 @@ export default function BillingPage() {
 
                         {/* Botón */}
                         <Button
-                          onClick={() => handleBuyPackage(pkg.priceId, pkg.id)}
+                          onClick={() => handleBuyPackage(pkg.id)}
                           disabled={loadingPackageId === pkg.id || checkoutMutation.isPending}
                           className={`w-full font-bold py-3 px-4 rounded-xl transition-all text-base uppercase tracking-wider ${
                             isPopular

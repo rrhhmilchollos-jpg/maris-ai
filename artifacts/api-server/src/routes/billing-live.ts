@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { connectDB } from "../lib/db";
 import { requireAuth } from "../lib/auth";
 import { User } from "@workspace/db/schema";
-import { SUBSCRIPTION_PLANS } from "../lib/stripe";
+import { SUBSCRIPTION_PLANS } from "../lib/payments";
 
 const router: IRouter = Router();
 

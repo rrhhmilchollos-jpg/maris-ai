@@ -8,6 +8,7 @@ import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
 import { startAppHealthMonitor } from "./lib/autoRepairAgent";
 import { runAutopilotTick } from "./lib/aiAutopilot";
+import { runRecurringBillingTick } from "./lib/recurringBilling";
 import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
@@ -125,6 +126,23 @@ httpServer.listen(finalPort, async (err?: Error) => {
     logger.info("AI Autopilot started (health monitor, auto-fix, daily summary)");
   } catch (autopilotErr) {
     logger.error({ err: autopilotErr }, "Failed to start AI Autopilot");
+  }
+
+  // 6b) Recurring Billing (Viva.com) — cobro mensual de suscripciones.
+  // A diferencia de Stripe, Viva.com no cobra suscripciones solo: cada
+  // cuota es una llamada nuestra (ver lib/recurringBilling.ts). Cada hora
+  // es suficiente margen frente a la ventana de renovación de 24h sin
+  // sobrecargar la API de Viva con comprobaciones innecesarias.
+  try {
+    runRecurringBillingTick().catch((err) => logger.error({ err }, "Recurring billing initial tick failed"));
+    const recurringInterval = setInterval(
+      () => runRecurringBillingTick().catch((err) => logger.error({ err }, "Recurring billing tick failed")),
+      60 * 60 * 1000,
+    );
+    recurringInterval.unref();
+    logger.info("Recurring Billing (Viva.com) started — hourly tick");
+  } catch (recurringErr) {
+    logger.error({ err: recurringErr }, "Failed to start Recurring Billing");
   }
 
   // IndexNow — notificar a Bing/DuckDuckGo/Yandex/Ecosia de todas las URLs

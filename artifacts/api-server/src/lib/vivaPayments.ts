@@ -45,6 +45,13 @@ export interface VivaPaymentOrderRequest {
   customerFullName?: string;
   requestLang?: string; // ej. "es-ES"
   sourceCode?: string; // Si tienes varios "payment sources" configurados en Viva
+  /** true para el primer pago de una suscripción — el cliente da su
+   *  consentimiento explícito en Smart Checkout para que se le cobre de
+   *  nuevo en el futuro sin estar presente. Confirmado contra la
+   *  documentación oficial de Viva: solo los métodos de pago que soportan
+   *  recurrencia se muestran al cliente cuando este flag está activo (en
+   *  la práctica, tarjeta — que es la única forma de pago que aceptamos). */
+  allowRecurring?: boolean;
 }
 
 export interface VivaTransaction {
@@ -55,7 +62,13 @@ export interface VivaTransaction {
   email?: string;
   fullName?: string;
   cardNumber?: string;
-  cardTypeId?: number; // 0=Visa, 1=Mastercard, 2=Diners, 3=Amex, 6=Maestro...
+  cardTypeId?: number; // 0=Visa, 1=Mastercard, 2=Diners, 3=Amex, 6=Maestro... (NO confirmado oficialmente, ver lib/payments.ts)
+  /** La referencia que NOSOTROS pusimos al crear la orden (createPaymentOrder)
+   *  — fuente de verdad para saber qué se está pagando al confirmar el pago. */
+  merchantTrns?: string;
+  /** Solo relevante para pagos recurrentes — el sourceCode usado en el pago
+   *  inicial debe reutilizarse en cada cobro mensual siguiente. */
+  sourceCode?: string;
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -116,6 +129,7 @@ export async function createPaymentOrder(opts: VivaPaymentOrderRequest): Promise
     disableWallet: true, // Solo tarjeta — sin Viva Wallet, según lo pedido
     disableCash: true, // Sin pago en efectivo (Viva Spot)
   };
+  if (opts.allowRecurring) payload.allowRecurring = true;
   if (opts.customerEmail || opts.customerFullName) {
     payload.customer = {
       email: opts.customerEmail,
@@ -175,10 +189,68 @@ export async function verifyTransaction(transactionId: string): Promise<VivaTran
     fullName: data.fullName,
     cardNumber: data.cardNumber,
     cardTypeId: data.cardTypeId,
+    merchantTrns: data.merchantTrns,
+    sourceCode: data.sourceCode,
   };
 }
 
 /** statusId "F" = Finished — el único valor que representa un pago completado con éxito. */
 export function isTransactionPaid(tx: VivaTransaction): boolean {
   return tx.statusId === "F";
+}
+
+/**
+ * Cobra un pago recurrente (la cuota mensual de una suscripción) referenciando
+ * el transactionId del PRIMER pago — el que el cliente autorizó explícitamente
+ * con allowRecurring=true en Smart Checkout. Confirmado contra la
+ * documentación oficial de Viva.com: a diferencia de Stripe, Viva no tiene un
+ * objeto "Subscription" que se cobre solo — cada cuota es una transacción
+ * NUEVA creada por el comercio (nosotros) referenciando esa transacción
+ * inicial, vía POST /api/transactions/{parentTransactionId} con Basic Auth
+ * (Nº de comerciante : Clave API — NO el OAuth2 de Smart Checkout, son
+ * credenciales y endpoints distintos, igual que ya distingue
+ * vivaWebhook.ts para la verificación del webhook).
+ */
+export async function chargeRecurringPayment(opts: {
+  parentTransactionId: string;
+  amount: number; // céntimos
+  customerTrns: string;
+  merchantTrns?: string;
+  sourceCode?: string; // DEBE ser el mismo sourceCode que el pago inicial, o se cobra en el source por defecto
+}): Promise<{ transactionId: string; statusId: string } | null> {
+  const merchantId = process.env.VIVA_MERCHANT_ID;
+  const apiKey = process.env.VIVA_API_KEY;
+  if (!merchantId || !apiKey) {
+    throw new Error("VIVA_MERCHANT_ID / VIVA_API_KEY no configuradas — no se puede cobrar el pago recurrente");
+  }
+  const basicAuth = Buffer.from(`${merchantId}:${apiKey}`).toString("base64");
+
+  const payload: Record<string, unknown> = {
+    amount: opts.amount,
+    customerTrns: opts.customerTrns,
+    merchantTrns: opts.merchantTrns,
+  };
+  if (opts.sourceCode) payload.sourceCode = opts.sourceCode;
+
+  const res = await fetch(`${VIVA_API_URL}/api/transactions/${opts.parentTransactionId}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    logger.error({ status: res.status, body: text, parentTransactionId: opts.parentTransactionId }, "Viva chargeRecurringPayment failed");
+    return null;
+  }
+
+  const data = (await res.json()) as { TransactionId?: string; StatusId?: string; ErrorCode?: number };
+  if (!data.TransactionId || data.ErrorCode) {
+    logger.warn({ data, parentTransactionId: opts.parentTransactionId }, "Viva chargeRecurringPayment returned an error in the response body");
+    return null;
+  }
+  return { transactionId: data.TransactionId, statusId: data.StatusId ?? "" };
 }

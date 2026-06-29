@@ -1,6 +1,6 @@
 import { connectDB } from "./db";
 import { User, CreditTransaction } from "@workspace/db/schema";
-import { CREDIT_PACKAGES } from "./stripe";
+import { CREDIT_PACKAGES } from "./payments";
  
 /**
  * Lifetime EUR spent by the user, in cents.
@@ -47,21 +47,29 @@ export async function userHasAnyPurchase(userId: string): Promise<boolean> {
 }
  
 /**
- * Atomically credit a Stripe purchase to the user, with idempotency on
- * (userId, stripeSessionId).
+ * Atomically credit a purchase (Stripe o Viva.com) to the user, with
+ * idempotency on (userId, stripeSessionId) o (userId, vivaOrderCode) —
+ * exactamente uno de los dos debe proporcionarse según el proveedor de
+ * pago que confirmó la transacción.
  */
 export async function creditPurchase(opts: {
   userId: string;
   amount: number;
-  stripeSessionId: string;
+  stripeSessionId?: string;
+  vivaOrderCode?: string;
   description: string;
 }): Promise<{ creditsAdded: number; alreadyProcessed: boolean; newBalance: number }> {
   await connectDB();
-  const { userId, amount, stripeSessionId, description } = opts;
- 
-  // Idempotency check — if a transaction with this sessionId already exists, skip.
+  const { userId, amount, stripeSessionId, vivaOrderCode, description } = opts;
+
+  if (!stripeSessionId && !vivaOrderCode) {
+    throw new Error("creditPurchase requiere stripeSessionId o vivaOrderCode para garantizar idempotencia");
+  }
+
+  // Idempotency check — if a transaction with this sessionId/orderCode already exists, skip.
+  const idempotencyQuery = stripeSessionId ? { userId, stripeSessionId } : { userId, vivaOrderCode };
   const existing = await CreditTransaction.findOne(
-    { userId, stripeSessionId },
+    idempotencyQuery,
     { _id: 1 },
   ).lean();
  
@@ -81,6 +89,7 @@ export async function creditPurchase(opts: {
     amount,
     description,
     stripeSessionId,
+    vivaOrderCode,
   });
  
   const updated = await User.findByIdAndUpdate(
@@ -168,16 +177,25 @@ export async function chargeCredits(opts: {
  * Dar créditos del plan al usuario al inicio o renovación de suscripción.
  * Los créditos del plan caducan al final del ciclo (se resetean en cada renovación).
  * Los créditos comprados (top-up) NO se tocan.
+ *
+ * Stripe y Viva.com usan campos distintos para identificar la suscripción
+ * (Stripe: un ID de objeto Subscription que se cobra solo; Viva: el
+ * transactionId del primer pago, que el cron mensual referencia para cada
+ * cobro siguiente — ver vivaPayments.ts → chargeRecurringPayment). Por eso
+ * ambos son opcionales aquí: el caller pasa el que corresponda según el
+ * proveedor que confirmó el pago.
  */
 export async function grantPlanCredits(opts: {
   clerkUserId: string;
   planId: string;
   creditsPerMonth: number;
   periodEnd: number; // timestamp Unix
-  stripeSubscriptionId: string;
+  stripeSubscriptionId?: string;
+  vivaInitialTransactionId?: string;
+  vivaSourceCode?: string;
 }): Promise<void> {
   await connectDB();
-  const { clerkUserId, planId, creditsPerMonth, periodEnd, stripeSubscriptionId } = opts;
+  const { clerkUserId, planId, creditsPerMonth, periodEnd, stripeSubscriptionId, vivaInitialTransactionId, vivaSourceCode } = opts;
 
   const planExpiresAt = new Date(periodEnd * 1000);
 
@@ -212,7 +230,9 @@ export async function grantPlanCredits(opts: {
           planCredits: creditsPerMonth,
           credits: newTotalCredits,
           planExpiresAt,
-          stripeSubscriptionId,
+          ...(stripeSubscriptionId ? { stripeSubscriptionId } : {}),
+          ...(vivaInitialTransactionId ? { vivaInitialTransactionId, vivaLastChargeAt: new Date() } : {}),
+          ...(vivaSourceCode ? { vivaSourceCode } : {}),
         },
       });
       break;
