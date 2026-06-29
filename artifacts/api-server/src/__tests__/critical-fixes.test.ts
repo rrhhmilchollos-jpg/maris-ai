@@ -427,6 +427,30 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 17: planMultiFileRepair usa un formato de etiquetas tipo XML
+// (<file><path>...</path>...</file>) en vez de JSON para el plan de
+// reparación. ENCONTRADO en producción (mismo caso real de 23-24
+// blockers): con un plan de 25-30 archivos, un corte de tokens a mitad de
+// la lista en JSON invalida el array ENTERO — extractJsonObject exige un
+// '{'...'}' balanceado de principio a fin, así que ni los archivos
+// listados ANTES del corte se recuperan. Con bloques <file> independientes,
+// un corte a mitad del archivo N nunca invalida los N-1 anteriores que sí
+// cerraron completos.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/shared-agents.ts");
+  check(
+    "FIX 17a: existe extractResilientFilePlan que recupera bloques <file> cerrados aunque la respuesta se corte",
+    /export function extractResilientFilePlan/.test(src),
+    "Sin esta función, un plan de reparación grande sigue dependiendo de extractJsonObject, que pierde el plan ENTERO si se corta a mitad — incluso los archivos listados antes del corte.",
+  );
+  check(
+    "FIX 17b: planMultiFileRepair usa extractResilientFilePlan, no extractJsonObject, para el plan",
+    /const plan = extractResilientFilePlan\(raw\)/.test(src),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

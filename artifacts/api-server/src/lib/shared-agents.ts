@@ -121,6 +121,38 @@ export function extractJsonObject<T = any>(raw: string): T | null {
   return null;
 }
 
+/**
+ * Reemplaza extractJsonObject para el plan de reparación multi-archivo
+ * (planMultiFileRepair) — formato de etiquetas tipo XML en vez de JSON.
+ * ENCONTRADO en producción (caso real: PM Agent detectó 23-24 blockers en
+ * un proyecto complejo): con un plan de 25-30 archivos, un corte de
+ * tokens a mitad de la lista en JSON invalida el array ENTERO — ni
+ * siquiera los archivos listados ANTES del corte se recuperan, porque
+ * extractJsonObject exige un '{'...'}' balanceado de principio a fin.
+ * Aquí cada <file>...</file> es un bloque independiente: la regex solo
+ * recoge bloques que cerraron por completo, así que un corte a mitad del
+ * archivo N nunca invalida los N-1 anteriores, que sí llegaron a
+ * cerrarse. No usa el flag "s" (dotAll) de regex porque Node soporta esa
+ * sintaxis desde ES2018, pero [\s\S] es equivalente y evita cualquier
+ * duda de compatibilidad — capturas no codiciosas (.*?) para no
+ * desbordarse hacia el siguiente bloque <file> si hay varios.
+ */
+export function extractResilientFilePlan(raw: string): MultiFilePlanItem[] {
+  const plans: MultiFilePlanItem[] = [];
+  const fileRegex = /<file>\s*<path>([\s\S]*?)<\/path>\s*<action>(rewrite|create|delete)<\/action>\s*<reason>([\s\S]*?)<\/reason>\s*<\/file>/g;
+  let match: RegExpExecArray | null;
+  while ((match = fileRegex.exec(raw)) !== null) {
+    const path = match[1].trim();
+    if (!path) continue;
+    plans.push({
+      path,
+      action: match[2] as "rewrite" | "create" | "delete",
+      reason: match[3].trim(),
+    });
+  }
+  return plans;
+}
+
 export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
     p,
@@ -559,6 +591,19 @@ async function planMultiFileRepair(
   // generateSingleFileContent), así que el riesgo de truncamiento de JSON
   // es mucho menor aquí, pero necesita más espacio real para listar todo.
   const compactedBundle = compactBundleForPrompt(bundle, [errorSummary], 50_000);
+  // ENCONTRADO en producción (caso real: PM Agent detectó 23-24 blockers en
+  // un solo proyecto): aunque ya subimos max_tokens y el límite de
+  // errorSummary, un plan con 25-30 archivos reales sigue siendo un riesgo
+  // real de truncamiento en JSON — si el corte ocurre a mitad de la lista,
+  // extractJsonObject (que exige un '{'...'}' balanceado) invalida el
+  // array ENTERO, perdiendo incluso los archivos que sí se listaron
+  // completos antes del corte. FIX: formato de etiquetas tipo XML en vez
+  // de JSON — cada <file> es un bloque independiente y autocontenido; si
+  // el stream se corta a mitad del archivo N, los N-1 anteriores ya
+  // cerraron su etiqueta </file> y se recuperan igual (ver
+  // extractResilientFilePlan más abajo). Mismo principio que ya usa
+  // CoreOrchestrator con texto plano para el contenido de un archivo —
+  // aquí se aplica a la LISTA de archivos a reparar.
   const planPrompt = `You are Maris AI's Repair Planner. Given a broken/incomplete bundle and a repair instruction, decide WHICH FILES need to change — do NOT write any file content yet, only the plan.
 
 INSTRUCTION:
@@ -567,25 +612,34 @@ ${errorSummary.slice(0, 6000)}
 CURRENT BUNDLE (relevant files):
 ${compactedBundle}
 
-Output STRICT JSON only:
-{"plan":[{"path":"src/App.tsx","action":"rewrite","reason":"corrupted, cut mid-generation"},{"path":"src/pages/Dashboard.tsx","action":"create","reason":"missing page referenced by App.tsx route"}]}
+Return the repair plan using STRICT XML-like tags. Do NOT wrap it in JSON, markdown code blocks, or any other format. If your response gets truncated by a length limit, the system will still process every <file> block that closed completely before the cut — so always finish each <file> block fully before starting the next one.
+
+Format each file entry EXACTLY like this, one after another, with no separators between them:
+<file><path>src/App.tsx</path><action>rewrite</action><reason>corrupted, cut mid-generation</reason></file>
+<file><path>src/pages/Dashboard.tsx</path><action>create</action><reason>missing page referenced by App.tsx route</reason></file>
 
 RULES:
 - action is exactly one of: "rewrite" (file exists but is broken/incomplete), "create" (file is missing entirely), "delete" (file should be removed).
 - List EVERY file that genuinely needs a change — don't omit any to save space, this step is cheap.
 - Do not include files that are already correct and don't need touching.
-- Output ONLY the JSON object.`;
+- Output ONLY the <file> blocks, nothing else — no preamble, no explanation, no markdown fences.`;
 
   try {
     const response = await createClaudeMessageWithFallback("patcher", model, {
       max_tokens: 8000,
-      system: "Output JSON only. No markdown, no explanation outside the JSON object.",
+      system: "Output ONLY <file>...</file> blocks, one after another. No JSON, no markdown fences, no explanation outside the blocks.",
       messages: [{ role: "user", content: planPrompt }],
     });
     const raw = (response.content[0] as any).text ?? "";
-    const parsed = extractJsonObject<{ plan?: MultiFilePlanItem[] }>(raw);
-    if (!parsed || !Array.isArray(parsed.plan) || parsed.plan.length === 0) return null;
-    return parsed.plan.filter((p) => p && typeof p.path === "string" && p.action);
+    const plan = extractResilientFilePlan(raw);
+    if (plan.length === 0) return null;
+    // Aviso informativo (no bloqueante) si la respuesta parece haberse
+    // cortado a mitad de un bloque — los bloques que SÍ cerraron completos
+    // ya están en `plan` de todas formas, esto es solo para diagnóstico.
+    if (!raw.trim().endsWith("</file>")) {
+      logger.warn({ filesRecovered: plan.length }, "[planMultiFileRepair] La respuesta parece truncada — procesando los bloques <file> que sí cerraron completos");
+    }
+    return plan;
   } catch {
     return null;
   }
