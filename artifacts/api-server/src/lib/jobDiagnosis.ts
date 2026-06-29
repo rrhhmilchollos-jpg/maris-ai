@@ -96,7 +96,7 @@ export function diagnoseFromLogs(
   logs: Array<{ agent: string; level: string; message: string; createdAt: string | Date }>,
   job: { status?: string; errorMessage?: string },
 ): JobDiagnosisResult {
-  const findings: DiagnosisFinding[] = logs
+  const rawFindings: DiagnosisFinding[] = logs
     .filter((l) => l.level === "warn" || l.level === "error")
     .map((l) => ({
       file: extractFilePath(l.message),
@@ -107,6 +107,20 @@ export function diagnoseFromLogs(
       createdAt: typeof l.createdAt === "string" ? l.createdAt : l.createdAt.toISOString(),
     }))
     .reverse(); // más recientes primero — lo más probable es que la causa esté cerca del final
+
+  // Deduplicación por mensaje: si el mismo aviso aparece N veces (ej. el
+  // mismo warning en un bucle de reparación), solo se muestra una vez — la
+  // más reciente. Sin esto, el panel mostraba la "misma alerta repetida
+  // 20 veces" haciendo imposible distinguir problemas distintos.
+  const seenMessages = new Set<string>();
+  const findings: DiagnosisFinding[] = [];
+  for (const f of rawFindings) {
+    const key = `${f.agent}::${f.message.slice(0, 120)}`;
+    if (!seenMessages.has(key)) {
+      seenMessages.add(key);
+      findings.push(f);
+    }
+  }
 
   const topSuspect = findings.length
     ? findings.reduce((best, f) => {
