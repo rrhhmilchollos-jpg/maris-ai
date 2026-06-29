@@ -123,7 +123,7 @@ export interface AppRuntimeError {
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 export function useGetMe(opts?: { query?: Partial<UseQueryOptions> }) {
-  return useQuery<any>({ queryKey: getGetMeQueryKey(), queryFn: () => apiFetch("/api/me"), ...(opts?.query as any) });
+  return useQuery<any>({ queryKey: getGetMeQueryKey(), queryFn: () => apiFetch("/api/me"), refetchInterval: 30_000, staleTime: 15_000, ...(opts?.query as any) });
 }
 export function useGetMyStats(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetMyStatsQueryKey(), queryFn: () => apiFetch("/api/me/stats"), ...(opts?.query as any) });
