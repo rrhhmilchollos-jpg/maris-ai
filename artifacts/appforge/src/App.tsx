@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
+import { Component, useEffect, useRef, useState, useCallback, lazy, Suspense, type ReactNode } from "react";
 import { trackPageView } from "@/lib/analytics";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
@@ -269,9 +269,46 @@ function SignUpPage() {
   );
 }
 
+/**
+ * PresenceTracker envuelto en su propio error boundary aislado.
+ * Si Socket.io falla (WebSocket cerrado, token inválido, red caída),
+ * el error se captura aquí y NO se propaga al ErrorBoundary global
+ * que tumbaría toda la aplicación con "Error de autenticación".
+ */
 function PresenceTracker() {
   usePresence();
   return null;
+}
+
+/**
+ * Wrapper que aísla completamente los errores de PresenceTracker.
+ * Usa un mini error boundary inline que simplemente renderiza null
+ * si hay un error — presencia es best-effort, no crítica.
+ */
+class PresenceErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error) {
+    // Silenciar completamente — presencia es opcional
+    console.debug("[Maris AI] Error de presencia silenciado:", error?.message);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+function SafePresenceTracker() {
+  return (
+    <PresenceErrorBoundary>
+      <PresenceTracker />
+    </PresenceErrorBoundary>
+  );
 }
 
 function ClerkQueryClientCacheInvalidator() {
@@ -410,7 +447,7 @@ function ClerkProviderWithRoutes() {
         <ClerkLoaded>
           <QueryClientProvider client={queryClient}>
             <ClerkQueryClientCacheInvalidator />
-            <PresenceTracker />
+            <SafePresenceTracker />
             <Suspense fallback={<PageLoader />}>
               <Switch>
                 <Route path="/" component={HomeRedirect} />

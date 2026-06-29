@@ -14,6 +14,13 @@ interface State {
  * ErrorBoundary global de Maris AI.
  * Captura cualquier error de renderizado (incluyendo fallos de Clerk, imports dinámicos, etc.)
  * y muestra un mensaje útil en lugar de una pantalla en negro.
+ *
+ * IMPORTANTE: La detección de "error de Clerk" se basa en el mensaje y stack
+ * del error. Sin embargo, errores de Socket.io/WebSocket pueden tener "clerk"
+ * en su stack trace porque el scheduler de React (empaquetado en vendor-clerk)
+ * es quien procesa el error. Por eso se excluyen explícitamente los errores
+ * que mencionan "WebSocket" o "socket" en su mensaje — esos NO son errores
+ * de autenticación reales.
  */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -36,13 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
     } catch (_) {}
     console.error("[Maris AI] Error crítico de renderizado:", error, info);
 
-    // ENCONTRADO a petición del usuario: este ErrorBoundary etiqueta como
-    // "error de autenticación" cualquier excepción que mencione "clerk" en
-    // su mensaje/stack — pero en producción ese mensaje genérico es lo
-    // único que llega a verse, sin ningún registro del error REAL. Esto
-    // reporta el error exacto (mensaje + stack + componentStack + ruta) al
-    // backend, best-effort y sin bloquear el render del fallback — un
-    // fallo al reportar nunca debe añadir un segundo error sobre el primero.
+    // Reportar el error exacto al backend (best-effort)
     try {
       const apiBase = (import.meta as any).env?.VITE_API_URL || "";
       fetch(`${apiBase}/api/panel-error`, {
@@ -56,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
           userId: (window as any).Clerk?.user?.id,
         }),
         keepalive: true,
-      }).catch(() => { /* best-effort — nunca debe romper el fallback de error */ });
+      }).catch(() => { /* best-effort */ });
     } catch (_) { /* best-effort */ }
   }
 
@@ -70,11 +71,31 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
-      const isClerkError =
-        this.state.error?.message?.includes("Clerk") ||
-        this.state.error?.message?.includes("clerk") ||
-        this.state.error?.message?.includes("publishableKey") ||
-        this.state.error?.stack?.includes("clerk");
+      const errorMsg = this.state.error?.message || "";
+      const errorStack = this.state.error?.stack || "";
+
+      // Excluir errores de WebSocket/Socket.io de ser clasificados como
+      // errores de Clerk — estos errores pueden tener "clerk" en el stack
+      // porque el bundle de vendor-clerk incluye el scheduler de React.
+      const isSocketError =
+        /websocket|socket\.io|socket/i.test(errorMsg) ||
+        /WebSocket is closed/i.test(errorMsg);
+
+      const isClerkError = !isSocketError && (
+        errorMsg.includes("Clerk") ||
+        errorMsg.includes("clerk") ||
+        errorMsg.includes("publishableKey") ||
+        // Solo considerar "clerk" en el stack si el MENSAJE también
+        // sugiere un problema de autenticación real (no un error genérico
+        // que simplemente pasa por el scheduler empaquetado en vendor-clerk)
+        (errorStack.includes("clerk") && (
+          errorMsg.includes("auth") ||
+          errorMsg.includes("token") ||
+          errorMsg.includes("session") ||
+          errorMsg.includes("publishable") ||
+          errorMsg.includes("Clerk")
+        ))
+      );
 
       return (
         <div

@@ -15,64 +15,120 @@ declare global {
 /**
  * Mantiene una conexión socket.io autenticada mientras el usuario tiene
  * Maris AI abierto, para que el panel admin pueda ver "quién está
- * conectado ahora mismo" (ver lib/presence.ts en el backend, y la sección
- * "Presencia en vivo" del panel admin).
+ * conectado ahora mismo".
  *
- * Se monta una sola vez a nivel de aplicación (no por página) — un solo
- * socket por sesión de navegador, no uno nuevo en cada navegación.
+ * IMPORTANTE: Este hook es puramente informativo para el equipo de soporte.
+ * Cualquier fallo de conexión se silencia completamente — NUNCA debe
+ * propagarse un error al árbol de React ni al ErrorBoundary, porque eso
+ * tumbaría la aplicación entera mostrando "El sistema de autenticación no
+ * pudo cargarse" (el ErrorBoundary detecta "clerk" en el stack trace del
+ * scheduler de React y lo interpreta como fallo de Clerk).
  *
- * No requiere ningún cambio de comportamiento visible para el usuario
- * normal: si la conexión falla (red, servidor caído, etc.), socket.io
- * reintenta solo con backoff exponencial — no se muestra ningún error en
- * la interfaz, esto es puramente informativo para el equipo de soporte.
+ * Problema original: Socket.io, al fallar la conexión WebSocket (token
+ * aún no sincronizado, red inestable, servidor reiniciando), entraba en
+ * un bucle de reconexión agresivo que saturaba el event loop de React,
+ * provocando un error no capturado que el ErrorBoundary atrapaba.
+ *
+ * Solución: reconexión limitada (máximo 3 intentos con backoff largo),
+ * y envuelto en try/catch total para que NINGÚN error escape al render.
  */
 export function usePresence() {
   const { isSignedIn } = useUser();
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
+    // Solo conectar si el usuario está autenticado
     if (!isSignedIn) return;
 
     let cancelled = false;
 
-    (async () => {
-      const token = await window.Clerk?.session?.getToken?.();
-      if (cancelled || !token) return;
+    const connect = async () => {
+      try {
+        const token = await window.Clerk?.session?.getToken?.();
+        if (cancelled || !token) return;
 
-      const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
-      const socket = io(baseUrl, {
-        auth: { token },
-        // Reconexión automática indefinida con backoff — comportamiento
-        // por defecto de socket.io, documentado oficialmente como seguro
-        // para no sobrecargar el servidor en caso de caída temporal.
-        reconnection: true,
-      });
-      socketRef.current = socket;
+        const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+        const socket = io(baseUrl, {
+          auth: { token },
+          // CRÍTICO: Limitar reconexión para evitar bucle infinito que
+          // bloquea el hilo principal y tumba la app.
+          reconnection: true,
+          reconnectionAttempts: 3,        // máximo 3 intentos
+          reconnectionDelay: 2000,        // esperar 2s entre intentos
+          reconnectionDelayMax: 10000,    // máximo 10s entre intentos
+          timeout: 10000,                 // timeout de conexión 10s
+          // Usar solo polling primero, upgrade a websocket después —
+          // evita el error "WebSocket is closed before the connection
+          // is established" que ocurre cuando el handshake aún no
+          // completó y el navegador cierra el WS prematuramente.
+          transports: ["polling", "websocket"],
+          upgrade: true,
+        });
 
-      const reportPage = () => {
-        socket.emit("presence:page", window.location.pathname);
-      };
-      socket.on("connect", reportPage);
+        if (cancelled) {
+          socket.disconnect();
+          return;
+        }
 
-      // Re-informar la página actual cuando el usuario navega dentro de la
-      // SPA sin recargar (popstate cubre back/forward; las navegaciones
-      // por click usan history.pushState, que no dispara popstate por sí
-      // solo, así que también escuchamos un evento ligero de cambio de ruta
-      // si el router de la app ya lo emite — en su ausencia, el intervalo
-      // de abajo actúa como red de seguridad sin depender de integrarse con
-      // el router interno.
-      window.addEventListener("popstate", reportPage);
-      const pageCheckInterval = setInterval(reportPage, 15000);
+        socketRef.current = socket;
 
-      return () => {
-        window.removeEventListener("popstate", reportPage);
-        clearInterval(pageCheckInterval);
-      };
-    })();
+        const reportPage = () => {
+          try {
+            socket.emit("presence:page", window.location.pathname);
+          } catch (_) {
+            // Silenciar — nunca propagar errores de presencia
+          }
+        };
+
+        socket.on("connect", reportPage);
+
+        // Silenciar TODOS los errores de socket — presencia es best-effort
+        socket.on("connect_error", (err) => {
+          // Log silencioso para debugging, pero NUNCA throw
+          console.debug("[Maris AI Presence] connect_error (silenciado):", err?.message);
+        });
+
+        socket.on("error", (err) => {
+          console.debug("[Maris AI Presence] error (silenciado):", err);
+        });
+
+        // Si se agotan los reintentos, desconectar limpiamente
+        socket.io.on("reconnect_failed", () => {
+          console.debug("[Maris AI Presence] Reconexión agotada — desconectando limpiamente.");
+          try {
+            socket.disconnect();
+          } catch (_) {}
+          socketRef.current = null;
+        });
+
+        window.addEventListener("popstate", reportPage);
+        const pageCheckInterval = setInterval(reportPage, 15000);
+
+        // Guardar cleanup en el ref para el desmontaje
+        (socketRef as any).__cleanup = () => {
+          window.removeEventListener("popstate", reportPage);
+          clearInterval(pageCheckInterval);
+        };
+      } catch (err) {
+        // CRÍTICO: Capturar CUALQUIER error para que nunca escape al
+        // árbol de React. Presencia es opcional — si falla, la app
+        // debe seguir funcionando normalmente.
+        console.debug("[Maris AI Presence] Error silenciado:", err);
+      }
+    };
+
+    // Retrasar la conexión 3 segundos después del login para dar tiempo
+    // a que la sesión de Clerk se estabilice completamente y el token
+    // sea válido en el backend.
+    const delayTimer = setTimeout(connect, 3000);
 
     return () => {
       cancelled = true;
-      socketRef.current?.disconnect();
+      clearTimeout(delayTimer);
+      try {
+        (socketRef as any).__cleanup?.();
+        socketRef.current?.disconnect();
+      } catch (_) {}
       socketRef.current = null;
     };
   }, [isSignedIn]);
