@@ -94,6 +94,60 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Lanza el autofix automáticamente si el análisis detecta issues críticos/mayores.
+  // El usuario nunca tiene que pulsar "Autofix IA" manualmente: escanea → si hay
+  // problemas graves → el fix se aplica solo → se re-escanea para confirmar.
+  async function runAutoFixIfNeeded(scanData: VisualTestResult) {
+    const severe = (scanData.issues || []).filter(
+      (i: VisualIssue) => i.severity === "critical" || i.severity === "major"
+    );
+    if (severe.length === 0 || scanData.visuallyCorrect) return; // nada que arreglar
+
+    // Guardar estado antes del fix para el modo comparación
+    setBeforeResult(scanData);
+    setCompareMode(false);
+    setAutoFixing(true);
+
+    const steps = [
+      "Analizando problemas detectados...",
+      "Generando parches de código...",
+      "Aplicando correcciones al bundle...",
+      "Validando bundle parcheado...",
+      "Re-capturando screenshots para verificar...",
+      "Verificando mejoras con Claude Vision...",
+    ];
+    let step = 0;
+    setFixProgress(steps[0]);
+    const progressInterval = setInterval(() => {
+      step = Math.min(step + 1, steps.length - 1);
+      setFixProgress(steps[step]);
+    }, 4000);
+
+    try {
+      const fixData = await apiFetch<any>(`/api/apps/${appId}/visual-test`, {
+        method: "POST",
+        body: JSON.stringify({ autoFix: true }),
+      });
+
+      setResult(fixData);
+      if (fixData.screenshots?.length > 0) setActiveViewport(fixData.screenshots[0].viewport);
+      if (fixData.fixesApplied > 0) setCompareMode(true);
+
+      if (onResolved) {
+        const remainingSevere = (fixData.issues || []).filter(
+          (i: VisualIssue) => i.severity === "critical" || i.severity === "major"
+        ).length;
+        if (fixData.visuallyCorrect || remainingSevere === 0) onResolved();
+      }
+    } catch (err: any) {
+      setError(err.message || "Error en el autofix");
+    } finally {
+      clearInterval(progressInterval);
+      setFixProgress(null);
+      setAutoFixing(false);
+    }
+  }
+
   async function runTest(autoFix = false) {
     // Ya no requerimos appSlug — el backend usa preview interno si no hay slug
     if (autoFix) {
@@ -153,6 +207,24 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
       if (autoFix && data.fixesApplied > 0) {
         setCompareMode(true);
       }
+
+      // AUTO-ACTIVAR AUTOFIX: si el análisis (no el fix) detectó issues críticos
+      // o mayores, lanzar el autofix automáticamente sin que el usuario tenga
+      // que pulsar nada. El flujo completo es:
+      //   Analizar → detecta errores → autofix se activa solo → re-escanea → muestra resultado
+      if (!autoFix && !data.visuallyCorrect) {
+        const severe = (data.issues || []).filter(
+          (i: VisualIssue) => i.severity === "critical" || i.severity === "major"
+        );
+        if (severe.length > 0) {
+          // Pequeña pausa para que el usuario vea brevemente el resultado del análisis
+          // antes de que arranque el autofix — da sensación de flujo en dos pasos
+          await new Promise(r => setTimeout(r, 800));
+          runAutoFixIfNeeded(data);
+          return; // runAutoFixIfNeeded actualizará el estado cuando termine
+        }
+      }
+
       // Verificación final automática resuelta con éxito: sin críticos ni
       // mayores pendientes tras el autofix, la app queda funcional para el
       // cliente. El padre cierra el panel y muestra el mensaje de éxito.
@@ -233,13 +305,14 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
             size="sm"
             onClick={() => runTest(false)}
             disabled={running || autoFixing}
+            title="Escanea la app y corrige automáticamente cualquier error crítico detectado"
             className="h-7 text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white px-2"
           >
             {running
               ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Analizando...</>
               : result
-              ? <><RefreshCw className="h-3 w-3 mr-1" />Re-test</>
-              : <><Camera className="h-3 w-3 mr-1" />Analizar</>
+              ? <><RefreshCw className="h-3 w-3 mr-1" />Re-escanear</>
+              : <><Zap className="h-3 w-3 mr-1" />Escanear y reparar</>
             }
           </Button>
         </div>
@@ -555,7 +628,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
             <p className="text-[10px] font-medium text-violet-300 mb-1">Cómo usarlo</p>
             <ol className="text-[10px] text-white/45 space-y-1 list-decimal list-inside">
               <li>Pulsa <span className="text-white/65 font-medium">Analizar</span> para detectar los problemas.</li>
-              <li>Si encuentra alguno, pulsa <span className="text-white/65 font-medium">Autofix IA</span> y se corrigen automáticamente — no hace falta copiar el reporte ni pegarlo en el chat.</li>
+              <li>Si hay errores críticos o mayores, el <span className="text-white/65 font-medium">Autofix IA</span> se activa automáticamente — no hace falta pulsar nada más.</li>
             </ol>
           </div>
         </div>
