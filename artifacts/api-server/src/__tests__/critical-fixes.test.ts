@@ -218,6 +218,44 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 9: Prevención de archivos vacíos + soporte de <Routes> en validaciones
+// El CoreOrchestrator ya no lanza error fatal si un hito falla 3 veces —
+// usa el contenido original (modify_file) o un placeholder mínimo (create_file).
+// Las validaciones de routing ahora cubren tanto <Switch> (wouter) como
+// <Routes> (react-router-dom v6), que es el router que usan muchas apps.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const orchestratorSrc = readServicesSrc("CoreOrchestrator.ts");
+  check(
+    "FIX 9a: CoreOrchestrator generateEditMilestone tiene fallback (no lanza error fatal)",
+    /usando fallback tras/.test(orchestratorSrc) && /Conservando contenido original/.test(orchestratorSrc),
+    "Sin este fallback, un solo hito que falle 3 veces mata toda la edición y deja archivos vacíos o la app incompleta.",
+  );
+  check(
+    "FIX 9b: CoreOrchestrator generateMilestone (creación) tiene fallback con placeholder",
+    /usando placeholder tras.*intentos fallidos/.test(orchestratorSrc),
+    "Sin placeholder, un hito de creación que falle produce un archivo vacío que rompe el build.",
+  );
+  check(
+    "FIX 9c: parseBundleToMap filtra archivos vacíos/insignificantes",
+    /contenido vacío\/insignificante/.test(orchestratorSrc),
+    "Sin este filtro, archivos con contenido vacío (parse mal formado) se propagan al bundle final.",
+  );
+
+  const validateSrc = readSrc("lib/validate.ts");
+  check(
+    "FIX 9d: detectCatchAllBeforeRoutes soporta <Routes> (react-router-dom v6)",
+    /hasRoutes/.test(validateSrc) && /<Routes/.test(validateSrc),
+    "Sin soporte de <Routes>, apps que usan react-router-dom v6 no se validan y el catch-all mal posicionado pasa desapercibido.",
+  );
+  check(
+    "FIX 9e: detectMissingRootRoute soporta <Routes> y prop 'index'",
+    /\bindex\b/.test(validateSrc) && /<Routes/.test(validateSrc),
+    "react-router-dom v6 usa <Route index> como ruta raíz — sin detectarla, se reporta un falso positivo.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

@@ -119,14 +119,18 @@ function detectCatchAllBeforeRoutes(vfs: Record<string, string>): BuildIssue[] {
   const issues: BuildIssue[] = [];
   for (const [file, contents] of Object.entries(vfs)) {
     if (!/\.(t|j)sx$/.test(file)) continue;
-    if (!/<Switch/.test(contents)) continue;
+    // Soportar tanto <Switch> (wouter) como <Routes> (react-router-dom v6)
+    const hasSwitch = /<Switch/.test(contents);
+    const hasRoutes = /<Routes/.test(contents);
+    if (!hasSwitch && !hasRoutes) continue;
 
-    // Extraer cada bloque <Switch>...</Switch>
-    const switchRegex = /<Switch[^>]*>([\s\S]*?)<\/Switch>/g;
+    // Extraer cada bloque <Switch>...</Switch> o <Routes>...</Routes>
+    const containerTag = hasSwitch ? "Switch" : "Routes";
+    const containerRegex = new RegExp(`<${containerTag}[^>]*>([\\s\\S]*?)<\\/${containerTag}>`, "g");
     let switchMatch: RegExpExecArray | null;
-    while ((switchMatch = switchRegex.exec(contents)) !== null) {
+    while ((switchMatch = containerRegex.exec(contents)) !== null) {
       const switchBody = switchMatch[1];
-      // Encontrar todas las <Route ...> dentro del Switch
+      // Encontrar todas las <Route ...> dentro del Switch/Routes
       const routeRegex = /<Route\b([^>]*?)(?:\/>|>)/g;
       const routes: Array<{ props: string; index: number; isCatchAll: boolean }> = [];
       let routeMatch: RegExpExecArray | null;
@@ -148,9 +152,9 @@ function detectCatchAllBeforeRoutes(vfs: Record<string, string>): BuildIssue[] {
           issues.push({
             file,
             line,
-            message: "Catch-all/404 route is NOT the last child of <Switch>. This causes ALL routes to show 404. Move <Route path=\"*\"> or <Route component={NotFound}> to the LAST position inside <Switch>.",
+            message: `Catch-all/404 route is NOT the last child of <${containerTag}>. This causes ALL routes to show 404. Move <Route path="*"> to the LAST position inside <${containerTag}>.`,
           });
-          break; // Un issue por Switch es suficiente
+          break; // Un issue por container es suficiente
         }
       }
     }
@@ -160,7 +164,7 @@ function detectCatchAllBeforeRoutes(vfs: Record<string, string>): BuildIssue[] {
 
 /**
  * DETECCIÓN DE RUTA RAÍZ AUSENTE O VACÍA.
- * Si el archivo de router (App.tsx o equivalente) tiene un <Switch> pero NO
+ * Si el archivo de router (App.tsx o equivalente) tiene un <Switch>/<Routes> pero NO
  * tiene una <Route path="/"> que renderice algo, la app mostrará 404 o
  * pantalla en blanco en la URL base.
  */
@@ -169,19 +173,23 @@ function detectMissingRootRoute(vfs: Record<string, string>): BuildIssue[] {
   // Solo verificar en archivos que parezcan ser el router principal
   const routerFiles = Object.entries(vfs).filter(([file, contents]) =>
     /\.(t|j)sx$/.test(file) &&
-    /<Switch/.test(contents) &&
+    (/<Switch/.test(contents) || /<Routes/.test(contents)) &&
     (file.includes("App") || file.includes("Router") || file.includes("router") || file.includes("routes"))
   );
   for (const [file, contents] of routerFiles) {
+    const containerTag = /<Switch/.test(contents) ? "Switch" : "Routes";
     // Verificar si hay una ruta para "/"
-    const hasRootRoute = /<Route\b[^>]*path\s*=\s*["']\/["'][^>]*>/.test(contents) ||
-                         /<Route\b[^>]*path\s*=\s*\{\s*["']\/["']\s*\}[^>]*>/.test(contents);
+    // react-router-dom v6 usa path="/" o index (sin path explícito pero con prop index)
+    const hasRootRoute = /<Route\b[^>]*path\s*=\s*["']\/["'][^>]*/.test(contents) ||
+                         /<Route\b[^>]*path\s*=\s*\{\s*["']\/["']\s*\}[^>]*/.test(contents) ||
+                         /<Route\b[^>]*\bindex\b[^>]*/.test(contents);
     if (!hasRootRoute) {
-      const switchLine = contents.slice(0, contents.indexOf("<Switch")).split("\n").length;
+      const containerPos = contents.indexOf(`<${containerTag}`);
+      const containerLine = containerPos >= 0 ? contents.slice(0, containerPos).split("\n").length : 1;
       issues.push({
         file,
-        line: switchLine,
-        message: 'No <Route path="/"> found inside <Switch>. The app will show 404 or blank page at the root URL. Add a route for path="/" that renders the main/home component.',
+        line: containerLine,
+        message: `No <Route path="/"> found inside <${containerTag}>. The app will show 404 or blank page at the root URL. Add a route for path="/" that renders the main/home component.`,
       });
     }
   }
