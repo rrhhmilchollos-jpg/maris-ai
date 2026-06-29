@@ -542,11 +542,27 @@ async function planMultiFileRepair(
   language: GenLanguage,
   model: string,
 ): Promise<MultiFilePlanItem[] | null> {
+  // ENCONTRADO en producción (caso real: PM Agent detectó 23-24 blockers,
+  // uno por cada archivo de un proyecto complejo — Landing, Dashboard,
+  // Search, ListingDetail, Favorites, Settings, Navbar, Footer, varios
+  // hooks y utils): este planificador SOLO devolvía 1 archivo en el plan
+  // final ("0/1 archivo(s) completados", confirmado en logs reales).
+  // Causa real: errorSummary se recortaba a 2000 caracteres antes de
+  // mostrárselo al planificador — con 23-24 nombres de archivo y sus
+  // razones en una sola lista de texto, ese límite corta la lista a mitad,
+  // y el modelo solo ve (y por tanto solo planifica) una fracción real de
+  // los archivos que de verdad necesitan arreglo. Además max_tokens:4000
+  // para la SALIDA del plan es insuficiente para listar 23+ objetos JSON
+  // con path/action/reason cada uno. Subido ambos límites — el plan en sí
+  // es una lista corta de metadatos (no el contenido de los archivos, que
+  // ya se generó como texto plano más abajo, ver el fix de
+  // generateSingleFileContent), así que el riesgo de truncamiento de JSON
+  // es mucho menor aquí, pero necesita más espacio real para listar todo.
   const compactedBundle = compactBundleForPrompt(bundle, [errorSummary], 50_000);
   const planPrompt = `You are Maris AI's Repair Planner. Given a broken/incomplete bundle and a repair instruction, decide WHICH FILES need to change — do NOT write any file content yet, only the plan.
 
 INSTRUCTION:
-${errorSummary.slice(0, 2000)}
+${errorSummary.slice(0, 6000)}
 
 CURRENT BUNDLE (relevant files):
 ${compactedBundle}
@@ -562,7 +578,7 @@ RULES:
 
   try {
     const response = await createClaudeMessageWithFallback("patcher", model, {
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: "Output JSON only. No markdown, no explanation outside the JSON object.",
       messages: [{ role: "user", content: planPrompt }],
     });
@@ -584,6 +600,26 @@ async function generateSingleFileContent(
   language: GenLanguage,
   model: string,
 ): Promise<string | null> {
+  // ENCONTRADO en producción (caso real: proyecto con 23-24 archivos
+  // bloqueantes detectados por el PM Agent, el Patcher Agent multi-archivo
+  // fallaba con "0/1 archivo(s) completados" en bucle): pedir el contenido
+  // de un archivo grande (ej. App.tsx de un proyecto complejo) ENVUELTO EN
+  // JSON ({"content":"..."}) añade overhead real de escapado (cada salto
+  // de línea se convierte en \n, cada comilla en \", etc.) que infla el
+  // tamaño necesario en tokens de salida. Si el modelo se queda sin
+  // presupuesto de max_tokens a mitad de generar ese string JSON (muy
+  // plausible con un archivo real de cientos de líneas), la respuesta se
+  // corta con una comilla sin cerrar — extractJsonObject (que busca un
+  // '{'...'}' balanceado) NUNCA encuentra el cierre y devuelve null SIN
+  // recuperar nada del contenido real ya generado, indistinguible de
+  // cualquier otro tipo de fallo. CONFIRMADO con código real ejecutado
+  // simulando exactamente este truncamiento. FIX: igual que ya hace
+  // CoreOrchestrator.ts (mucho más probado en producción hoy mismo) —
+  // pedir el código como TEXTO PLANO directo, sin envoltorio JSON, con
+  // limpieza de fences markdown al final. Sin el overhead de escapado, y
+  // si AÚN así se trunca, el contenido parcial real queda disponible
+  // (aunque se descarte por la validación de longitud mínima existente)
+  // en vez de perderse dentro de un JSON roto sin ningún diagnóstico.
   const isTS = language === "typescript";
   const existingFile = bundleFilesForPrompt(bundle).find((f) => f.path === filePath);
   const compactedBundle = compactBundleForPrompt(bundle, [filePath, errorSummary], 40_000);
@@ -598,12 +634,11 @@ ROUTING — this project uses "wouter", NOT react-router-dom. This is the #1 sou
 - Route params: \`const [match, params] = useRoute("/users/:id");\` then \`params.id\`.
 - If other files in this bundle already import from "wouter" with a certain pattern, follow that exact pattern for consistency — do not introduce a different routing library's conventions even if they're more common in general React knowledge.
 
-Output STRICT JSON only: {"content":"the full file content as a single string"}
-Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
+Output EXCLUSIVELY the raw file content. No JSON wrapper, no markdown fences, no explanation before or after — just the code, starting from the first line of the file.`;
 
   const userPrompt = action === "create"
-    ? `Create this NEW file from scratch: ${filePath}\nReason: ${reason}\nOriginal repair instruction (for context/consistency with the rest of the app):\n${errorSummary.slice(0, 1500)}\n\nOTHER FILES IN THIS BUNDLE (for context — shared types, components, styling conventions, routing):\n${compactedBundle}\n\nReturn the COMPLETE content of ${filePath} as JSON: {"content":"..."}`
-    : `Rewrite this BROKEN file completely: ${filePath}\nReason it's broken: ${reason}\nOriginal repair instruction:\n${errorSummary.slice(0, 1500)}\n\nCURRENT (BROKEN) CONTENT of ${filePath}:\n${existingFile?.content?.slice(0, 8000) || "(file content not found in bundle — treat as needing full reconstruction based on context below)"}\n\nOTHER FILES IN THIS BUNDLE (for context — imports, shared types, routing that must stay consistent):\n${compactedBundle}\n\nReturn the COMPLETE fixed content of ${filePath} as JSON: {"content":"..."}`;
+    ? `Create this NEW file from scratch: ${filePath}\nReason: ${reason}\nOriginal repair instruction (for context/consistency with the rest of the app):\n${errorSummary.slice(0, 1500)}\n\nOTHER FILES IN THIS BUNDLE (for context — shared types, components, styling conventions, routing):\n${compactedBundle}\n\nReturn ONLY the complete raw content of ${filePath}, no JSON, no markdown.`
+    : `Rewrite this BROKEN file completely: ${filePath}\nReason it's broken: ${reason}\nOriginal repair instruction:\n${errorSummary.slice(0, 1500)}\n\nCURRENT (BROKEN) CONTENT of ${filePath}:\n${existingFile?.content?.slice(0, 8000) || "(file content not found in bundle — treat as needing full reconstruction based on context below)"}\n\nOTHER FILES IN THIS BUNDLE (for context — imports, shared types, routing that must stay consistent):\n${compactedBundle}\n\nReturn ONLY the complete fixed raw content of ${filePath}, no JSON, no markdown.`;
 
   try {
     const response = await createClaudeMessageWithFallback("patcher", model, {
@@ -612,10 +647,16 @@ Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
       messages: [{ role: "user", content: userPrompt }],
     });
     const raw = (response.content[0] as any).text ?? "";
-    const parsed = extractJsonObject<{ content?: string }>(raw);
-    if (!parsed || typeof parsed.content !== "string" || parsed.content.trim().length < 20) return null;
+    // Limpieza de fences markdown que el modelo a veces añade a pesar de
+    // la instrucción — mismo patrón ya usado y probado en CoreOrchestrator.
+    const content = raw
+      .trim()
+      .replace(/^```(?:tsx?|jsx?|typescript|javascript)?\n?/, "")
+      .replace(/\n?```$/, "")
+      .trim();
+    if (content.length < 20) return null;
 
-    const knownBadImport = findKnownBadImport(parsed.content);
+    const knownBadImport = findKnownBadImport(content);
     if (knownBadImport) {
       // No aceptar contenido con un import que sabemos, con certeza, que no
       // existe en el paquete real (caso real: useNavigate importado de
@@ -626,7 +667,7 @@ Output ONLY the JSON object — no markdown, no explanation, no backticks.`;
       // reintento automático ya existente en patchBundleMultiFile.
       return null;
     }
-    return parsed.content;
+    return content;
   } catch {
     return null;
   }

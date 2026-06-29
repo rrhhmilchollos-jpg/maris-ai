@@ -403,6 +403,30 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 16: el Patcher Agent multi-archivo (patchBundleMultiFile) ya no pide
+// el contenido de cada archivo envuelto en JSON (riesgo real de
+// truncamiento total con archivos grandes) ni recorta el resumen de
+// errores a un tamaño insuficiente para proyectos con muchos blockers.
+// ENCONTRADO con el propio panel de diagnóstico (jobDiagnosis.ts, FIX
+// anterior) en un caso real de producción: PM Agent detectó 23-24
+// blockers, pero el plan final solo contenía 1 archivo, y ESE archivo
+// tampoco se generó — "0/1 archivo(s) completados" en bucle.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/shared-agents.ts");
+  check(
+    "FIX 16a: generateSingleFileContent pide texto plano, no JSON envuelto ({\"content\":...})",
+    !/Output STRICT JSON only: \{"content"/.test(src) && /Output EXCLUSIVELY the raw file content/.test(src),
+    "Pedir el contenido de un archivo grande envuelto en JSON añade overhead de escapado real — si el modelo se queda sin tokens a mitad, la respuesta se corta con una comilla sin cerrar y extractJsonObject devuelve null SIN recuperar nada, indistinguible de cualquier otro fallo.",
+  );
+  check(
+    "FIX 16b: planMultiFileRepair ya no recorta errorSummary a 2000 chars (insuficiente para proyectos con muchos blockers)",
+    !/errorSummary\.slice\(0, 2000\)/.test(src),
+    "Con 23+ archivos bloqueantes listados en el errorSummary, 2000 caracteres corta la lista a mitad — el planificador solo ve una fracción de los archivos que de verdad necesitan arreglo.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
