@@ -154,13 +154,20 @@ Recibirás la lista de archivos que YA EXISTEN en el proyecto (solo sus rutas, s
 
 NÚMERO DE HITOS: tantos como archivos distintos haya que tocar o crear — ni más ni menos. Una corrección de un bug visual puede ser 1-3 hitos; una funcionalidad nueva mediana puede ser 4-10. No fragmentes en exceso (no dividas un mismo archivo en varios hitos) ni comprimas en exceso (no metas cambios de archivos no relacionados en un mismo hito).
 
+DIAGNÓSTICO CRÍTICO — BUG 404 / PANTALLA EN BLANCO (el caso más frecuente en reparaciones):
+Cuando el problema es "la app muestra 404 en la ruta /" o "pantalla en blanco", la causa raíz es SIEMPRE una de estas tres, en este orden de probabilidad:
+1. CATCH-ALL 404 ANTES DE LA RUTA RAÍZ: el router tiene una ruta catch-all o 404 (<Route path="*"> o <Route component={NotFound}>) colocada ANTES de <Route path="/"> — el router la evalúa primero y nunca llega a la ruta real. FIX: mover el catch-all al ÚLTIMO lugar de la lista de rutas.
+2. COMPONENTE RAÍZ VACÍO O CON ERROR: App.tsx o el componente raíz de la ruta "/" está vacío, retorna null, o tiene un error de compilación que impide que React lo monte. FIX: reconstruir el componente con contenido real visible.
+3. IMPORT ROTO: el componente que debería renderizarse en "/" importa algo que no existe (ruta incorrecta, nombre de archivo con distinta capitalización). FIX: corregir el import.
+PARA BUG 404: SIEMPRE incluye src/App.tsx (o el archivo de router que exista) como primer hito modify_file con la descripción técnica exacta del fix.
+
 Cada hito debe especificar "dependsOn": [ids de otros hitos de ESTA MISMA edición cuyo resultado necesita ver como contexto antes de generarse] — por ejemplo, si un hito de frontend depende de un endpoint nuevo creado en otro hito de backend en esta misma edición.
 
 Devuelve ÚNICAMENTE un objeto JSON con este formato exacto:
 {
   "milestones": [
-    { "id": 1, "action": "modify_file", "filePath": "src/pages/HomePage.tsx", "description": "La pantalla aparece en negro porque falta el componente raíz que monta las rutas — añade el layout principal y renderiza <Outlet /> o las rutas hijas correspondientes.", "dependsOn": [] },
-    { "id": 2, "action": "create_file", "filePath": "src/components/EventCard.tsx", "description": "Componente nuevo para mostrar cada evento del club con fecha, título y botón de reserva, usado desde HomePage.tsx", "dependsOn": [1] }
+    { "id": 1, "action": "modify_file", "filePath": "src/App.tsx", "description": "La ruta raíz '/' muestra 404 porque el catch-all <Route path='*' component={NotFound}/> está colocado ANTES de las rutas reales. Mover el catch-all al final de la lista de rutas. Verificar que <Route path='/' component={Dashboard}/> (o el componente principal) esté presente y sea el primero.", "dependsOn": [] },
+    { "id": 2, "action": "modify_file", "filePath": "src/pages/HomePage.tsx", "description": "El componente de la ruta raíz estaba vacío — rellenarlo con el contenido real del dashboard de la clínica dental: métricas, pacientes del día, citas próximas.", "dependsOn": [1] }
   ]
 }`;
 
