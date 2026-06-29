@@ -5933,10 +5933,35 @@ export async function runJobById(jobId: string): Promise<void> {
       abPromptModifier = ab.modifier;
     } catch { /* no bloquear */ }
 
-    // Enriquecer el prompt con RAG + A/B modifier
+    // FIX 5: Consultar errores reales de runtime y añadirlos como contexto —
+    // sin esto, el agente adivina la causa del bug solo por la descripción
+    // del usuario, ignorando los errores JavaScript reales ya capturados.
+    let runtimeErrorContextBlock = "";
+    if (job.editAppId && previousApp) {
+      try {
+        const recentErrors = await AppRuntimeError
+          .find({ appId: String(job.editAppId) })
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean() as any[];
+        if (recentErrors.length > 0) {
+          const errorLines = recentErrors
+            .map((e: any) => `- [${e.errorType || "error"}] ${(e.message || "").slice(0, 200)}`)
+            .join("\n");
+          runtimeErrorContextBlock =
+            `\n\n[ERRORES REALES DE RUNTIME CAPTURADOS EN LA APP]\n` +
+            `Los siguientes errores JavaScript se capturaron automáticamente de la app en producción:\n` +
+            errorLines +
+            `\nCorrige específicamente estos errores en tu edición.`;
+        }
+      } catch { /* no bloquear la generación */ }
+    }
+
+    // Enriquecer el prompt con RAG + A/B modifier + runtime errors
     const enrichedJobPrompt = job.prompt +
       (ragContextBlock ? `\n\n${ragContextBlock}` : "") +
-      abPromptModifier;
+      abPromptModifier +
+      runtimeErrorContextBlock;
 
     const result = await generateApp(
       enrichedJobPrompt, // ← Prompt enriquecido con RAG + A/B testing
@@ -6221,14 +6246,22 @@ export async function runJobById(jobId: string): Promise<void> {
         // structuralPrompt, así que pasar más aquí no desperdicia tokens,
         // solo da más contexto disponible para los casos que lo necesiten.
         const cleanUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
-        runAutoEvaluator({
-          appId: savedAppId,
-          userId: job.userId,
-          userIntent: cleanUserIntent.slice(0, 4000),
-          jobId: jobId as any,
-          baseUrl,
-          log: logger,
-        }).catch(evalErr => logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready"));
+        // FIX 4: await bloqueante — el job NO se marca succeeded hasta que la
+        // verificación visual termine. Sin await, el cliente ve "completado"
+        // con la app todavía rota mientras la reparación ocurre en background.
+        let visualEvalResult: any = null;
+        try {
+          visualEvalResult = await runAutoEvaluator({
+            appId: savedAppId,
+            userId: job.userId,
+            userIntent: cleanUserIntent.slice(0, 4000),
+            jobId: jobId as any,
+            baseUrl,
+            log: logger,
+          });
+        } catch (evalErr) {
+          logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready");
+        }
       } catch (evalErr) {
         logger.warn({ evalErr }, "Visual tester hook failed");
       }
