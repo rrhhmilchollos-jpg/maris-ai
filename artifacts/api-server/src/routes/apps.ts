@@ -6239,11 +6239,13 @@ export async function runJobById(jobId: string): Promise<void> {
       try {
         const { runPostGenerationRepair } = await import("../lib/autoRepairAgent");
         // Lanzar en background — no bloquear el succeeded
+        const _truncatedFiles = (finalResult as any)._truncatedFiles as string[] | undefined;
         runPostGenerationRepair({
           appId: String(savedAppId),
           userId: String(job.userId),
-          userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
+          userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 4000),
           jobId: String(jobId),
+          truncatedFiles: _truncatedFiles,
         }).catch(repairErr => logger.warn({ repairErr, jobId }, "Post-generation repair failed"));
       } catch { /* nunca bloquear el succeeded */ }
     }
