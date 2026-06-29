@@ -1487,7 +1487,7 @@ Sin preambulos. Directo al contenido de cada seccion.`;
       // Fallback mejorado: llamada directa con contexto de sector
       try {
         const response = await createClaudeMessageWithFallback("researcher", researchModel, {
-          max_tokens: 2000, // Aumentado de 1500 a 2000
+          max_tokens: 6000,
           system: `Eres el Researcher Agent de Maris AI. Genera un brief de investigacion completo en espanol con las secciones: PRODUCTO, AUDIENCIA, PAGINAS CLAVE, REFERENCIAS VISUALES, INTEGRACIONES, CONTEXTO COMPETITIVO. Sector detectado: ${sectorContext}. Max 600 palabras.`,
           messages: [{ role: "user", content: `Brief completo para: "${cleanPrompt}"` }],
         });
@@ -1550,7 +1550,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
   const response = await withTimeoutOrThrow<any>(
     anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 6000,
+      max_tokens: 12000,
       system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
       messages: [{ role: "user", content: userContent }],
     }),
@@ -1628,7 +1628,7 @@ Crea el sistema visual completo. Detecta el sector, elige paleta, valida WCAG AA
     try {
       const response = await withTimeoutOrThrow(
         createClaudeMessageWithFallback("designer", designerModel, {
-          max_tokens: 6000,
+          max_tokens: 10000,
           system: DESIGNER_SYSTEM_PROMPT,
           messages: [{ role: "user", content: userContent }],
         }),
@@ -1956,7 +1956,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // niveles es el coste en créditos de la generación, no la capacidad del
     // motor (estrategia Lovable/Base44/Emergent: 1 app completa gratis, luego
     // créditos limitados para seguir iterando).
-    const maxTokensFrontend = 40000; // suficiente para apps completas con backend (CRA, CRM, etc.)
+    const maxTokensFrontend = 64000; // máximo de claude-sonnet-4-6 — apps complejas necesitan espacio para generar todos los archivos sin truncar
     const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
@@ -2178,7 +2178,7 @@ async function specifyIntegrations(
     (async () => {
       try {
         const response = await createClaudeMessageWithFallback("integrator", agentPlan.agents.integrator.model, {
-          max_tokens: 800,
+          max_tokens: 3000,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
             {
@@ -2339,7 +2339,7 @@ REGLAS:
         const sample = compactBundleForPrompt(frontendCode, plan.frontendFiles ?? [], 60_000);
 
         const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
-          max_tokens: 2000,  // Aumentado de 700 a 2000
+          max_tokens: 4000,
           system: QA_SYSTEM,
           messages: [
             {
@@ -2411,7 +2411,7 @@ async function generateTests(
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
         const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
-          max_tokens: 3000,
+          max_tokens: 6000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
             {
