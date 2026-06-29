@@ -147,6 +147,98 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// Etiquetas legibles para cada categoría de problema real detectada por el
+// backend (jobDiagnosis.ts) — basadas en los patrones reales investigados
+// y corregidos hoy (404 persistente, archivos vacíos, límite de tokens,
+// clasificación frontend/backend equivocada, regresión visual, build roto,
+// transacciones de dinero sin proteger).
+const DIAGNOSIS_CATEGORY_LABELS: Record<string, { label: string; icon: string; color: string }> = {
+  router_404: { label: "Router / 404 persistente", icon: "🧭", color: "text-red-400 bg-red-500/10 border-red-500/20" },
+  archivo_vacio_o_incompleto: { label: "Archivo vacío o incompleto", icon: "📄", color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
+  limite_de_tokens: { label: "Límite de tokens (cambio demasiado grande)", icon: "✂️", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  clasificacion_frontend_backend: { label: "Archivo en el bundle equivocado", icon: "🔀", color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
+  regresion_visual: { label: "Regresión visual (empeoró tras el arreglo)", icon: "📉", color: "text-pink-400 bg-pink-500/10 border-pink-500/20" },
+  build_roto: { label: "Build roto (error de sintaxis)", icon: "🛑", color: "text-red-400 bg-red-500/10 border-red-500/20" },
+  transaccion_atomica: { label: "Transacción de dinero/saldo", icon: "💰", color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" },
+  otro: { label: "Otro problema", icon: "⚠️", color: "text-white/60 bg-white/5 border-white/10" },
+};
+
+interface DiagnosisFinding {
+  file?: string;
+  agent: string;
+  level: "warn" | "error";
+  message: string;
+  category: string;
+  createdAt: string;
+}
+interface JobDiagnosisResult {
+  jobId: string;
+  hasFailed: boolean;
+  finalErrorMessage?: string;
+  findings: DiagnosisFinding[];
+  topSuspect: DiagnosisFinding | null;
+}
+
+function JobDiagnosisPanel({ jobId }: { jobId: string }) {
+  const [diagnosis, setDiagnosis] = useState<JobDiagnosisResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    apiFetch<JobDiagnosisResult>(`/api/admin/jobs/${jobId}/diagnosis`)
+      .then(setDiagnosis)
+      .catch(() => setDiagnosis(null))
+      .finally(() => setLoading(false));
+  }, [jobId]);
+
+  if (loading) return <div className="px-4 py-2 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" />Diagnosticando…</div>;
+  if (!diagnosis || diagnosis.findings.length === 0) return null;
+
+  const { topSuspect, findings } = diagnosis;
+  const cat = topSuspect ? DIAGNOSIS_CATEGORY_LABELS[topSuspect.category] : null;
+
+  return (
+    <div className="mx-4 my-2">
+      {topSuspect && cat && (
+        <div className={`p-3 rounded border ${cat.color}`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <span>{cat.icon}</span>
+              <span>Diagnóstico: {cat.label}</span>
+              {topSuspect.file && <code className="px-1.5 py-0.5 rounded bg-black/30 text-[11px]">{topSuspect.file}</code>}
+            </div>
+            {findings.length > 1 && (
+              <button onClick={() => setExpanded(!expanded)} className="text-[11px] underline opacity-70 hover:opacity-100">
+                {expanded ? "Ocultar" : `Ver los ${findings.length} problema(s) detectados`}
+              </button>
+            )}
+          </div>
+          <p className="text-xs mt-1.5 opacity-90">{topSuspect.message}</p>
+          <p className="text-[10px] mt-1 opacity-60">Agente: {topSuspect.agent} · {format(new Date(topSuspect.createdAt), "HH:mm:ss")}</p>
+        </div>
+      )}
+      {expanded && (
+        <div className="mt-2 space-y-1.5">
+          {findings.map((f, i) => {
+            const fCat = DIAGNOSIS_CATEGORY_LABELS[f.category];
+            return (
+              <div key={i} className={`p-2 rounded border text-[11px] ${fCat.color}`}>
+                <div className="flex items-center gap-1.5 font-medium">
+                  <span>{fCat.icon}</span>
+                  <span>{fCat.label}</span>
+                  {f.file && <code className="px-1 rounded bg-black/30">{f.file}</code>}
+                </div>
+                <p className="mt-0.5 opacity-80">{f.message}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JobLogsPanel({ jobId }: { jobId: string }) {
   const [logs, setLogs] = useState<Array<{ id: string; agent: string; level: string; message: string; createdAt: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -2397,6 +2489,7 @@ export default function AdminDashboardPage() {
                                           <span className="font-semibold">Error:</span> {job.errorMessage}
                                         </div>
                                       )}
+                                      <JobDiagnosisPanel jobId={String(job.id)} />
                                       <JobLogsPanel jobId={String(job.id)} />
                                     </div>
                                   </TableCell>

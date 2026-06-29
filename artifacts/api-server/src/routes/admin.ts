@@ -14,6 +14,7 @@ import {
   AppRevision,
 } from "@workspace/db/schema";
 import { restoreAppRevision } from "../lib/appRevisions";
+import { diagnoseFromLogs } from "../lib/jobDiagnosis";
 import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
 import { bulkCreateProjectSeeds } from "../lib/projectSeeds";
@@ -195,6 +196,28 @@ router.get("/admin/jobs/:id/logs", async (req: any, res: any): Promise<void> => 
       createdAt: l.createdAt,
     })),
   });
+});
+
+// ─── Diagnóstico real de un job roto ─────────────────────────────────────────
+// GET /api/admin/jobs/:id/diagnosis
+// A petición EXPLÍCITA del usuario, tras varias sesiones de hoy investigando
+// manualmente (pegando logs en bruto uno por uno) por qué un proyecto
+// concreto terminó roto — este endpoint automatiza esa misma investigación:
+// agrega los JobLog ya guardados (warn/error) y produce un resumen directo
+// al grano (archivo afectado si se pudo extraer, categoría del problema,
+// y el sospechoso principal), sin inventar ningún dato nuevo — solo
+// presenta mejor lo que el sistema ya registra hoy en cada generación.
+router.get("/admin/jobs/:id/diagnosis", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const job = await GenerationJob.findById(req.params.id).select("status errorMessage").lean() as any;
+  if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
+  const logs = await JobLog.find({ jobId: req.params.id }).sort({ _id: 1 }).lean();
+  const diagnosis = diagnoseFromLogs(
+    req.params.id,
+    logs.map((l: any) => ({ agent: l.agent, level: l.level, message: l.message, createdAt: l.createdAt })),
+    job,
+  );
+  res.json(diagnosis);
 });
 
 // ─── Search user by email ─────────────────────────────────────────────────────
