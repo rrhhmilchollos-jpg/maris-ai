@@ -621,9 +621,9 @@ export async function runAutoEvaluator(opts: {
           .filter((i) => i.severity !== "minor")
           .slice(0, 10)
           .map((i, n) =>
-            `ISSUE ${n + 1} [${i.severity.toUpperCase()}]\n` +
-            `  Descripción: ${i.description}\n` +
-            `  Fix sugerido: ${i.fix}`
+            "ISSUE " + (n + 1) + " [" + i.severity.toUpperCase() + "]\n" +
+            "  Descripción: " + i.description + "\n" +
+            "  Fix sugerido: " + i.fix
           ).join("\n\n");
 
         // App.tsx actual del bundle para que el code agent vea qué está roto
