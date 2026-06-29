@@ -6201,10 +6201,22 @@ export async function runJobById(jobId: string): Promise<void> {
         const { runAutoEvaluator } = await import("../lib/evaluator");
         const dbUser = await User.findById(job.userId).lean() as any;
         await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
+        // ENCONTRADO (causa raíz crítica): userIntent se truncaba a 300 chars
+        // antes de pasarlo al evaluador — completamente insuficiente para
+        // describir una app compleja (clínica dental, CRM, ERP...) con todas
+        // sus funcionalidades. El evaluador y el autofix recibían solo las
+        // primeras 300 letras del prompt, por lo que el CoreOrchestrator no
+        // sabía qué módulos construir cuando detectaba blank_page o
+        // missing_content. Subido a 4000 chars (suficiente para el 99% de
+        // los prompts reales de usuarios de Maris AI) — el evaluador ya
+        // trunca internamente a 2000-3000 en el judgeWithVision y en el
+        // structuralPrompt, así que pasar más aquí no desperdicia tokens,
+        // solo da más contexto disponible para los casos que lo necesiten.
+        const cleanUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
         runAutoEvaluator({
           appId: savedAppId,
           userId: job.userId,
-          userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
+          userIntent: cleanUserIntent.slice(0, 4000),
           jobId: jobId as any,
           baseUrl,
           log: logger,
