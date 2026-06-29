@@ -582,8 +582,19 @@ async function applyVisualFixes(opts: {
       const userPromptBlock = opts.userPrompt
         ? `\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${opts.userPrompt.slice(0, 3000)}`
         : `\n\nDescripción del proyecto: ${app.description ?? "(sin descripción disponible)"}`;
-      const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — TESTING VISUAL] La aplicación "${app.title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.${userPromptBlock}\n\nProblemas detectados (ordenados por severidad):\n${fixList}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional con todos los módulos pedidos en el prompt original.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con TODAS las funcionalidades pedidas en el prompt original — usa mock data realista (no "Lorem ipsum").\n5. Toca o crea TODOS los archivos necesarios — App.tsx, router, páginas, componentes, navbar — para que la app sea completamente funcional.\n6. Cada módulo pedido en el prompt (dashboard, pacientes, citas, facturación, etc.) debe tener su propia página/ruta con contenido real visible.`;
+      // Extraer App.tsx del bundle actual para que el code agent vea
+      // exactamente qué está roto y pueda arreglar el catch-all 404
+      function extractFile(bun: string, name: string): string {
+        const pat = new RegExp(`// === FILE: ${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')} ===\n([\s\S]*?)(?=\n// === FILE:|$)`);
+        const m = bun.match(pat); return m ? m[1].trim() : "";
+      }
+      const appContent = extractFile(bundle,"src/App.tsx")||extractFile(bundle,"src/app.tsx")||extractFile(bundle,"src/main.tsx")||"";
+      const routerBlock = appContent ? `\n\nCONTENIDO ACTUAL DE src/App.tsx (busca el catch-all 404 y muévelo al final):\n\`\`\`tsx\n${appContent.slice(0,4000)}\n\`\`\`` : "";
 
+      const userPromptBlock = opts.userPrompt
+        ? `\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${opts.userPrompt.slice(0, 3000)}`
+        : `\n\nDescripción del proyecto: ${app.description ?? "(sin descripción disponible)"}`;
+      const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — TESTING VISUAL] La aplicación "${app.title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.${userPromptBlock}${routerBlock}\n\nProblemas detectados (ordenados por severidad):\n${fixList}\n\nINSTRUCCIONES OBLIGATORIAS (en orden de prioridad):\n1. ROUTER FIX (causa más frecuente del 404): en src/App.tsx, el catch-all <Route path="*"> o <Route component={NotFound}> DEBE estar en el ÚLTIMO lugar — si está antes de <Route path="/">, muévelo al final.\n2. Verifica que la ruta '/' tenga un componente asignado con contenido real visible.\n3. Si falta NavBar, añade una con enlaces a todos los módulos pedidos.\n4. Si el contenido principal está vacío, reconstrúyelo con TODAS las funcionalidades del prompt — usa mock data realista.\n5. Toca SOLO los archivos que realmente necesitan cambios.`;
       const editResult = await orchestrator.editProjectIncremental(
         structuralPrompt,
         bundle,
