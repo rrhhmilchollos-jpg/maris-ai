@@ -66,23 +66,58 @@ const io = new SocketIOServer(httpServer, {
   },
 });
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token;
-    if (!token || typeof token !== "string") {
-      return next(new Error("Authentication error: token required"));
+// ENCONTRADO en producción (reportado por el usuario: "Error de
+// autenticación — el sistema de autenticación no pudo cargarse" en el
+// navegador, junto con GET .../socket.io/... 400 (Bad Request) visible en
+// la consola): verifyToken() de Clerk SIN la opción `jwtKey` verifica el
+// JWT contactando a la API de Clerk para obtener las claves públicas
+// (JWKS) — documentado oficialmente como "Networkless if jwtKey is
+// provided. Otherwise, performs a network call." Esa respuesta SÍ se
+// cachea en memoria del proceso (ver @clerk/backend/dist —
+// loadClerkJWKFromRemote + cacheHasExpired), pero la caché se vacía en
+// cada reinicio del proceso — justo después de cada deploy en Railway,
+// las primeras conexiones de socket dependen de esa llamada de red real
+// a Clerk, y un fallo o lentitud puntual ahí (red, rate limit, hiccup del
+// lado de Clerk) tumba la conexión con un 400 sin que el código tenga
+// ningún defecto en sí. FIX: reintento con backoff corto SOLO para
+// fallos que parecen de red/disponibilidad (no para un token
+// genuinamente inválido/expirado, que debe rechazarse de inmediato sin
+// reintentar) — da una segunda oportunidad real a la llamada antes de
+// rechazar la conexión.
+async function verifySocketToken(token: string): Promise<string | null> {
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+      return payload.sub || null;
+    } catch (err: any) {
+      // Un error de firma/expiración/formato es un rechazo LEGÍTIMO — no
+      // tiene sentido reintentar algo que va a fallar siempre igual.
+      const msg = String(err?.message || err?.reason || "");
+      const looksLikeRealRejection = /expired|invalid signature|malformed|not active yet/i.test(msg);
+      if (looksLikeRealRejection || attempt === MAX_ATTEMPTS) {
+        logger.warn({ err, attempt }, "Presence socket auth failed");
+        return null;
+      }
+      // Fallo probablemente transitorio (red/JWKS) — pequeño backoff antes
+      // de reintentar, sin bloquear el event loop más de lo necesario.
+      await new Promise((r) => setTimeout(r, 300 * attempt));
     }
-    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
-    const userId = payload.sub;
-    if (!userId) {
-      return next(new Error("Authentication error: invalid token"));
-    }
-    socket.data.userId = userId;
-    next();
-  } catch (err) {
-    logger.warn({ err }, "Presence socket auth failed");
-    next(new Error("Authentication error: invalid token"));
   }
+  return null;
+}
+
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token || typeof token !== "string") {
+    return next(new Error("Authentication error: token required"));
+  }
+  const userId = await verifySocketToken(token);
+  if (!userId) {
+    return next(new Error("Authentication error: invalid token"));
+  }
+  socket.data.userId = userId;
+  next();
 });
 
 attachPresenceHandlers(io);
