@@ -888,8 +888,33 @@ export class CoreOrchestrator {
     // NO tocados se conserva exactamente igual que estaba.
     const allGenerated = Array.from(generatedByMilestoneId.values());
     for (const generated of allGenerated) {
+      // ENCONTRADO en producción con un caso real (app de clínica dental,
+      // edición con 22 hitos): archivos backend NUEVOS como
+      // "src/routes/auth.ts", "src/lib/auth.ts" o
+      // "src/services/notifications.ts" se clasificaban como FRONTEND —
+      // confirmado con código real ejecutado replicando exactamente esta
+      // situación. La condición anterior, para archivos NUEVOS (no
+      // presentes ya en frontendFiles ni backendFiles), solo comprobaba
+      // si la ruta empezaba con "src/" — pero TANTO el frontend como el
+      // backend de un proyecto Maris AI usan su propio "src/" interno
+      // (src/App.tsx del lado web, src/index.ts o src/routes/*.ts del
+      // lado servidor), así que ese patrón por sí solo no distingue nada
+      // real. Archivos de servidor terminaban mezclados dentro del bundle
+      // de frontendCode, corrompiendo su estructura de forma silenciosa
+      // (cada archivo individual sigue compilando bien, solo está en el
+      // bundle equivocado) — esto explica por qué el Testing Agent y QA
+      // decían "todo bien" mientras Claude Vision veía un 404 puro: el
+      // 404 no viene de un error de sintaxis, viene de que el frontend
+      // real entregado al navegador no es el que se generó.
+      // FIX: para archivos NUEVOS, primero se comprueban patrones de ruta
+      // INEQUÍVOCAMENTE de backend (rutas de servidor, servicios, prisma,
+      // middlewares, lib/auth del lado servidor) antes de asumir frontend
+      // por defecto — el patrón de frontend ya no basta por sí solo.
+      const looksLikeBackendPath = /^(src\/routes\/|src\/services\/|src\/middlewares?\/|src\/controllers\/|src\/models\/|prisma\/|apps\/api\/|server\/|api\/)/.test(generated.filePath)
+        || /^src\/(index|server|app)\.(ts|js)$/.test(generated.filePath)
+        || /^src\/lib\/(auth|db|database|prisma)\.(ts|js)$/.test(generated.filePath);
       const isFrontendFile = frontendFiles.has(generated.filePath)
-        || (!backendFiles.has(generated.filePath) && /^(src\/|apps\/web\/|public\/|index\.html)/.test(generated.filePath));
+        || (!backendFiles.has(generated.filePath) && !looksLikeBackendPath && /^(src\/|apps\/web\/|public\/|index\.html)/.test(generated.filePath));
       if (isFrontendFile) {
         frontendFiles.set(generated.filePath, generated.code);
       } else {

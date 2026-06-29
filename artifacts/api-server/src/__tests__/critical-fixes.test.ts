@@ -326,6 +326,27 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 13: editProjectIncremental clasifica correctamente archivos NUEVOS de
+// backend (rutas, servicios, prisma) en vez de asumir frontend solo porque
+// la ruta empieza con "src/". ENCONTRADO con un log real de producción
+// (edición de 22 hitos en una app de clínica dental): el evaluador visual
+// veía 404 puro en TODAS las resoluciones mientras Testing Agent y QA
+// decían "todo bien" — confirmado con código real ejecutado que archivos
+// backend nuevos como "src/routes/auth.ts" se clasificaban como FRONTEND,
+// contaminando ese bundle de forma silenciosa (cada archivo individual
+// sigue compilando bien, solo está en el bundle equivocado — ningún
+// validador de sintaxis puede detectar esto).
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readServicesSrc("CoreOrchestrator.ts");
+  check(
+    "FIX 13: editProjectIncremental detecta rutas inequívocas de backend (looksLikeBackendPath) antes de asumir frontend por defecto",
+    /looksLikeBackendPath/.test(src),
+    "Sin esto, archivos backend NUEVOS (src/routes/*.ts, src/services/*.ts, prisma/*) cuya ruta empiece con 'src/' se clasifican como frontend, contaminando ese bundle de forma silenciosa — 404 persistente sin que ningún validador de sintaxis lo detecte.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
