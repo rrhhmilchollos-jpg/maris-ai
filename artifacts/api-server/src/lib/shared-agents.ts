@@ -688,6 +688,20 @@ ROUTING — this project uses "wouter", NOT react-router-dom. This is the #1 sou
 - Route params: \`const [match, params] = useRoute("/users/:id");\` then \`params.id\`.
 - If other files in this bundle already import from "wouter" with a certain pattern, follow that exact pattern for consistency — do not introduce a different routing library's conventions even if they're more common in general React knowledge.
 
+CRITICAL ROUTING RULE — CATCH-ALL ORDER INSIDE <Switch> (if this file contains or touches the app's router): the compiler accepts a <Route> in ANY position, so this bug is invisible to TypeScript/esbuild — it only shows up as a 404 on every single route once deployed. The catch-all/fallback route MUST ALWAYS be the absolute LAST child of <Switch>. If you place it above the real routes, wouter matches it first and the entire app shows 404, even though the build is 100% valid:
+❌ WRONG (breaks every route with a 404):
+\`<Switch>
+  <Route path="/:rest*" component={NotFound} />
+  <Route path="/" component={Home} />
+  <Route path="/dashboard" component={Dashboard} />
+</Switch>\`
+✅ CORRECT:
+\`<Switch>
+  <Route path="/" component={Home} />
+  <Route path="/dashboard" component={Dashboard} />
+  <Route path="/:rest*" component={NotFound} />
+</Switch>\`
+
 Output EXCLUSIVELY the raw file content. No JSON wrapper, no markdown fences, no explanation before or after — just the code, starting from the first line of the file.`;
 
   const userPrompt = action === "create"

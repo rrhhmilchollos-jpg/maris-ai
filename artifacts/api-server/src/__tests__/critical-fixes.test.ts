@@ -451,6 +451,24 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 18: generateSingleFileContent (Patcher Agent de un solo archivo)
+// también exige el orden correcto del catch-all en <Switch> — mismo bug
+// real investigado hoy (404 en todas las rutas, compila perfecto, ningún
+// linter lo detecta) pero en un PUNTO DISTINTO del sistema: si este
+// Patcher reescribe App.tsx para reparar cualquier otro problema, sin
+// esta regla podía mover o recrear el catch-all en la posición
+// incorrecta sin que nada se lo advirtiera.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/shared-agents.ts");
+  check(
+    "FIX 18: generateSingleFileContent exige que el catch-all sea SIEMPRE el último hijo de <Switch>",
+    /CRITICAL ROUTING RULE — CATCH-ALL ORDER/.test(src),
+    "Sin esta regla, el Patcher Agent de un solo archivo puede reescribir App.tsx (para reparar cualquier otro problema) y mover el catch-all a una posición incorrecta — la app compila perfecto pero muestra 404 en todas las rutas.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
