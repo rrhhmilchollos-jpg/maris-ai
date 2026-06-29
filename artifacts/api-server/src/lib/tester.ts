@@ -1,6 +1,6 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { validateBundle } from "./validate";
-import { patchBundle, type GenLanguage, type BuildIssue, type ValidationReport } from "./shared-agents";
+import { patchBundle, patchBundleMultiFile, type GenLanguage, type BuildIssue, type ValidationReport } from "./shared-agents";
 import { logger } from "./logger";
 
 export interface TestResult {
@@ -117,7 +117,37 @@ export async function runTestingAgent(
     );
 
     if (!patched) {
-      log("testing", "⚠️ El reparador no pudo generar una solución en este ciclo.", "warn");
+      // ENCONTRADO en producción (mismo patrón EXACTO ya documentado y
+      // corregido en autoRepairAgent.ts para el caso real "MesaYa"):
+      // patchBundle estándar (16K tokens, una sola respuesta JSON) puede
+      // fallar silenciosamente cuando hay que reparar varios archivos a la
+      // vez (confirmado en logs reales: "Reparando 6 error(es):
+      // appforge-vfs:src/components/ui/index.ts, ...") — el modelo se
+      // queda sin presupuesto de tokens y produce JSON truncado/inválido,
+      // devolviendo null sin ninguna pista real de qué pasó. Este Testing
+      // Agent (tester.ts) seguía usando SOLO el patcher simple, sin la
+      // solución multi-archivo que ya existe en shared-agents.ts y que ya
+      // se usa en autoRepairAgent.ts — conectado aquí también, mismo
+      // patrón probado: una llamada de planificación + una llamada
+      // completa por archivo, cada una con su propio presupuesto de 16K
+      // tokens, eliminando el riesgo de truncamiento por acumular todo en
+      // una sola respuesta.
+      log("testing", "⚠️ El reparador estándar no consiguió generar un cambio — probando con el modo multi-archivo (para reparaciones grandes)…", "warn");
+      const errorSummary = report.issues.map((issue) => `[${issue.file}] ${issue.message}`).join("\n");
+      const multiFileResult = await patchBundleMultiFile(
+        currentBundle,
+        errorSummary,
+        language,
+        "claude-sonnet-4-6",
+        (msg) => log("testing", msg),
+      );
+      if (multiFileResult.result) {
+        currentBundle = multiFileResult.result;
+        log("testing", `✅ Modo multi-archivo completado: ${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) generados correctamente. Re-validando en el siguiente ciclo...`);
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      log("testing", `⚠️ El modo multi-archivo tampoco pudo generar una solución en este ciclo (${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) completados).`, "warn");
       break;
     }
 
