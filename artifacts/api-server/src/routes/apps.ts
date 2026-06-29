@@ -3317,7 +3317,19 @@ export async function generateApp(
     // grande) buscando cualquier "export default function <Nombre>" que
     // contenga indicios de ser la raíz (uso de Router/Navigation/Routes).
     const frontendFiles = milestoneFrontend.split("// === FILE: ").filter((f) => f.trim().length > 0);
-    const exactAppFile = frontendFiles.find((f) => f.includes("App.tsx") || f.includes("App.jsx") || f.includes("App.js"));
+    // Mismo bug y mismo fix que en tester.ts (ver su comentario detallado):
+    // .includes("App.tsx") coincide con CUALQUIER archivo que mencione ese
+    // texto en su contenido (ej. un comentario "se usa dentro de App.tsx"
+    // en otro componente), no necesariamente con el archivo cuya RUTA sea
+    // App.tsx. Esto decide hasRecognizableAppComponent — si apunta al
+    // archivo equivocado, el sistema puede saltarse runTestingAgent sin
+    // necesidad (o peor, dar un falso positivo/negativo sobre el
+    // componente raíz real) sin que el verdadero App.tsx tenga ningún
+    // problema.
+    const exactAppFile = frontendFiles.find((f) => {
+      const declaredPath = f.split("\n")[0].split(" ===")[0].trim();
+      return /(^|\/)App\.(tsx|jsx|js)$/.test(declaredPath);
+    });
     const ROOT_COMPONENT_PATTERN = /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/;
     let hasRecognizableAppComponent = !!exactAppFile && ROOT_COMPONENT_PATTERN.test(exactAppFile);
     if (!hasRecognizableAppComponent && frontendFiles.length > 0) {

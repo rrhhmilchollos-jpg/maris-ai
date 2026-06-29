@@ -347,6 +347,34 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 14: la detección de App.tsx (en tester.ts para enlaces rotos, y en
+// apps.ts para hasRecognizableAppComponent) usa la RUTA exacta del archivo,
+// no si su CONTENIDO menciona el texto "App.tsx" en cualquier lugar.
+// ENCONTRADO simulando una generación real para un cliente (salón de
+// apuestas, plataforma completa, tier ultra): replicado con código real
+// ejecutado que un comentario normal en OTRO archivo ("se usa dentro de
+// App.tsx") hace que el detector tome ESE archivo como si fuera el router
+// real — sin rutas reales que extraer, TODOS los enlaces internos
+// legítimos se marcan como "rotos" sin estarlo. Esto coincide exactamente
+// con el patrón real reportado por el usuario: "404 en todos los
+// archivos" mientras Testing Agent/QA dicen "todo bien".
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const testerSrc = readSrc("lib/tester.ts");
+  check(
+    "FIX 14a: tester.ts busca App.tsx por RUTA declarada exacta, no por contenido (.includes)",
+    /const appFile = files\.find\(f => \{[\s\S]{0,200}declaredPath/.test(testerSrc),
+    "Sin esto, un comentario en cualquier otro archivo que mencione 'App.tsx' puede hacer que el detector de enlaces rotos analice el archivo equivocado, marcando TODOS los enlaces reales como rotos.",
+  );
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 14b: apps.ts (hasRecognizableAppComponent) busca App.tsx por RUTA declarada exacta, no por contenido",
+    /const exactAppFile = frontendFiles\.find\(\(f\) => \{[\s\S]{0,200}declaredPath/.test(appsSrc),
+    "Mismo bug que en tester.ts, distinto punto de uso: decide si runTestingAgent se ejecuta siquiera sobre el componente raíz real.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

@@ -52,8 +52,26 @@ export async function runTestingAgent(
     const brokenLinks: BuildIssue[] = [];
     const files = currentBundle.split("// === FILE: ");
     const routes = new Set();
-    // Extraer rutas definidas en App.tsx
-    const appFile = files.find(f => f.includes("App.tsx") || f.includes("App.jsx"));
+    // ENCONTRADO en producción (caso real: 22 hitos en una app de gestión
+    // dental, "404 en todas las resoluciones" detectado por Claude Vision
+    // mientras este Testing Agent decía "todas las pruebas pasaron"):
+    // `files.find(f => f.includes("App.tsx"))` no busca el archivo CUYA
+    // RUTA sea App.tsx — busca el PRIMER archivo cuyo CONTENIDO contenga
+    // ese texto en cualquier parte. Confirmado con código real ejecutado:
+    // un componente cualquiera con un comentario como "// se usa dentro
+    // de App.tsx" (patrón habitual y razonable que un modelo SÍ escribe)
+    // coincide ANTES que el App.tsx real si aparece antes en el bundle —
+    // `routes` queda vacío o con rutas de un archivo que no es el router,
+    // y entonces TODOS los enlaces internos reales de la app se marcan
+    // como "rotos" sin estarlo, disparando reparaciones sobre un
+    // diagnóstico equivocado. FIX: comparar la RUTA real del archivo
+    // (primera línea de cada bloque, antes de su propio "===" de cierre),
+    // no su contenido — exactamente como exige el formato real
+    // "// === FILE: <ruta> ===\n<contenido>".
+    const appFile = files.find(f => {
+      const declaredPath = f.split("\n")[0].split(" ===")[0].trim();
+      return /(^|\/)App\.(tsx|jsx)$/.test(declaredPath);
+    });
     if (appFile) {
       const routeMatches = appFile.matchAll(/path=["'](\/.*?)["']/g);
       for (const m of routeMatches) routes.add(m[1]);
