@@ -1,8 +1,8 @@
-import { useEffect, useRef, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import { trackPageView } from "@/lib/analytics";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, Show, useClerk, ClerkLoaded, ClerkLoading } from "@clerk/react";
 import { shadcn } from "@clerk/themes";
 import { esES } from "@clerk/localizations";
 
@@ -73,10 +73,6 @@ const queryClient = new QueryClient({
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-const clerkJsUrl =
-  import.meta.env.VITE_CLERK_JS_URL ||
-  "https://clerk.marisai.es/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
-
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {
@@ -137,6 +133,113 @@ const clerkAppearance = {
     main: "p-8",
   },
 };
+
+/**
+ * ClerkLoadingFallback — Se muestra mientras Clerk está inicializándose.
+ * Incluye un mecanismo de timeout: si Clerk no carga en 8 segundos,
+ * ofrece al usuario la opción de recargar la página.
+ */
+function ClerkLoadingFallback() {
+  const [showRetry, setShowRetry] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowRetry(true), 8000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#09090b] px-4">
+      <div className="flex flex-col items-center gap-4">
+        <img src={`${window.location.origin}${basePath}/logo.svg`} alt="Maris AI" className="h-10 w-auto" />
+        <Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" />
+        <p className="text-sm text-[#a1a1aa]">Cargando autenticación...</p>
+        {showRetry && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <p className="text-xs text-[#a1a1aa] text-center max-w-xs">
+              La carga está tardando más de lo esperado.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-md bg-[#a855f7] px-4 py-2 text-sm font-medium text-white hover:bg-[#9333ea] transition-colors"
+            >
+              Recargar página
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ClerkRecoveryGuard — Detecta cuando Clerk se queda atascado en estado "loading"
+ * y fuerza una recarga automática del componente o de la página.
+ * 
+ * El problema original: clerk.browser.js se carga desde clerk.marisai.es con una
+ * redirección 307, lo que puede tardar >10s. Cuando hay una race condition entre
+ * la carga del script y la inicialización de React, Clerk se queda en "loading"
+ * permanentemente y el formulario de login nunca se renderiza.
+ * 
+ * Solución: Este componente monitoriza el estado de Clerk y si después de un
+ * timeout razonable sigue en "loading", intenta forzar Clerk.load() manualmente.
+ * Si eso también falla, recarga la página automáticamente.
+ */
+function ClerkRecoveryGuard({ children }: { children: React.ReactNode }) {
+  const [recovered, setRecovered] = useState(false);
+  const attemptedRef = useRef(false);
+
+  useEffect(() => {
+    // Verificar periódicamente si Clerk está atascado
+    const checkInterval = setInterval(() => {
+      const clerk = (window as any).Clerk;
+      if (!clerk) return;
+
+      // Si Clerk ya está ready, no hacer nada
+      if (clerk.status === "ready" || clerk.loaded === true) {
+        clearInterval(checkInterval);
+        return;
+      }
+
+      // Si Clerk está en "loading" por más de 10 segundos, intentar recuperar
+      if (clerk.status === "loading" && !attemptedRef.current) {
+        attemptedRef.current = true;
+        console.warn("[Maris AI] Clerk atascado en 'loading'. Intentando recuperación...");
+
+        // Intentar forzar la carga
+        if (typeof clerk.load === "function") {
+          clerk.load().then(() => {
+            console.info("[Maris AI] Clerk recuperado exitosamente.");
+            setRecovered(true);
+            // Forzar re-render de toda la app
+            window.dispatchEvent(new Event("clerk-recovered"));
+          }).catch(() => {
+            console.error("[Maris AI] No se pudo recuperar Clerk. Recargando página...");
+            window.location.reload();
+          });
+        } else {
+          // Si no hay método load, recargar
+          window.location.reload();
+        }
+      }
+    }, 2000); // Verificar cada 2 segundos
+
+    // Timeout máximo: si después de 15 segundos Clerk no está listo, recargar
+    const maxTimeout = setTimeout(() => {
+      const clerk = (window as any).Clerk;
+      if (clerk && clerk.status !== "ready" && clerk.loaded !== true) {
+        console.error("[Maris AI] Timeout máximo alcanzado. Recargando página...");
+        window.location.reload();
+      }
+    }, 15000);
+
+    return () => {
+      clearInterval(checkInterval);
+      clearTimeout(maxTimeout);
+    };
+  }, []);
+
+  return <>{children}</>;
+}
 
 function SignInPage() {
   return (
@@ -271,14 +374,10 @@ function AdminGated({ children }: { children: React.ReactNode }) {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
-  const ClerkProviderInternal = ClerkProvider as React.ComponentType<
-    React.ComponentProps<typeof ClerkProvider> & { __internal_clerkJSUrl?: string }
-  >;
 
   return (
-    <ClerkProviderInternal
+    <ClerkProvider
       publishableKey={clerkPubKey}
-      __internal_clerkJSUrl={clerkJsUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
@@ -304,129 +403,136 @@ function ClerkProviderWithRoutes() {
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
     >
-      <QueryClientProvider client={queryClient}>
-        <ClerkQueryClientCacheInvalidator />
-        <PresenceTracker />
-        <Suspense fallback={<PageLoader />}>
-          <Switch>
-            <Route path="/" component={HomeRedirect} />
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
+      <ClerkRecoveryGuard>
+        <ClerkLoading>
+          <ClerkLoadingFallback />
+        </ClerkLoading>
+        <ClerkLoaded>
+          <QueryClientProvider client={queryClient}>
+            <ClerkQueryClientCacheInvalidator />
+            <PresenceTracker />
+            <Suspense fallback={<PageLoader />}>
+              <Switch>
+                <Route path="/" component={HomeRedirect} />
+                <Route path="/sign-in/*?" component={SignInPage} />
+                <Route path="/sign-up/*?" component={SignUpPage} />
 
-            <Route path="/onboarding">
-              <Gated><OnboardingPage /></Gated>
-            </Route>
+                <Route path="/onboarding">
+                  <Gated><OnboardingPage /></Gated>
+                </Route>
 
-            <Route path="/dashboard">
-              <Gated><DashboardPage /></Gated>
-            </Route>
+                <Route path="/dashboard">
+                  <Gated><DashboardPage /></Gated>
+                </Route>
 
-            <Route path="/app/:id">
-              {(params) => <Gated><AppDetailPage params={params} /></Gated>}
-            </Route>
+                <Route path="/app/:id">
+                  {(params) => <Gated><AppDetailPage params={params} /></Gated>}
+                </Route>
 
-            <Route path="/billing">
-              <Gated><BillingPage /></Gated>
-            </Route>
+                <Route path="/billing">
+                  <Gated><BillingPage /></Gated>
+                </Route>
 
-            <Route path="/billing/success">
-              <Gated><BillingSuccessPage /></Gated>
-            </Route>
+                <Route path="/billing/success">
+                  <Gated><BillingSuccessPage /></Gated>
+                </Route>
 
-            <Route path="/admin">
-              <AdminGated><AdminPage /></AdminGated>
-            </Route>
+                <Route path="/admin">
+                  <AdminGated><AdminPage /></AdminGated>
+                </Route>
 
-            <Route path="/admin/jobs">
-              <AdminGated><AdminPage initialTab="queue" /></AdminGated>
-            </Route>
+                <Route path="/admin/jobs">
+                  <AdminGated><AdminPage initialTab="queue" /></AdminGated>
+                </Route>
 
-            <Route path="/admin/memory">
-              <AdminGated><AdminPage initialTab="memory" /></AdminGated>
-            </Route>
+                <Route path="/admin/memory">
+                  <AdminGated><AdminPage initialTab="memory" /></AdminGated>
+                </Route>
 
-            <Route path="/admin/dashboard">
-              <AdminGated><AdminDashboardPage /></AdminGated>
-            </Route>
+                <Route path="/admin/dashboard">
+                  <AdminGated><AdminDashboardPage /></AdminGated>
+                </Route>
 
-            <Route path="/news">
-              <NewsPage />
-            </Route>
+                <Route path="/news">
+                  <NewsPage />
+                </Route>
 
-            <Route path="/news/:slug">
-              <NewsDetailPage />
-            </Route>
+                <Route path="/news/:slug">
+                  <NewsDetailPage />
+                </Route>
 
-            {/* ── Páginas de comparativa SEO ─────────────────────────── */}
-            <Route path="/vs-emergent">
-              <VsCompetidoresPage />
-            </Route>
+                {/* ── Páginas de comparativa SEO ─────────────────────────── */}
+                <Route path="/vs-emergent">
+                  <VsCompetidoresPage />
+                </Route>
 
-            <Route path="/vs-lovable">
-              <VsLovablePage />
-            </Route>
+                <Route path="/vs-lovable">
+                  <VsLovablePage />
+                </Route>
 
-            <Route path="/vs-bolt">
-              <VsBoltPage />
-            </Route>
+                <Route path="/vs-bolt">
+                  <VsBoltPage />
+                </Route>
 
-            <Route path="/vs-base44">
-              <VsBase44Page />
-            </Route>
+                <Route path="/vs-base44">
+                  <VsBase44Page />
+                </Route>
 
-            <Route path="/pricing">
-              <PricingPage />
-            </Route>
+                <Route path="/pricing">
+                  <PricingPage />
+                </Route>
 
-            <Route path="/glosario">
-              <GlossaryPage />
-            </Route>
+                <Route path="/glosario">
+                  <GlossaryPage />
+                </Route>
 
-            <Route path="/que-es-vibe-coding">
-              <QueEsVibeCodingPage />
-            </Route>
+                <Route path="/que-es-vibe-coding">
+                  <QueEsVibeCodingPage />
+                </Route>
 
-            <Route path="/que-es-un-agente-de-ia">
-              <QueEsAgenteIaPage />
-            </Route>
+                <Route path="/que-es-un-agente-de-ia">
+                  <QueEsAgenteIaPage />
+                </Route>
 
-            <Route path="/desarrollo-no-code-guia">
-              <DesarrolloNoCodeGuiaPage />
-            </Route>
+                <Route path="/desarrollo-no-code-guia">
+                  <DesarrolloNoCodeGuiaPage />
+                </Route>
 
-            <Route path="/showcase/:slug">
-              <ShowcaseDetailPage />
-            </Route>
+                <Route path="/showcase/:slug">
+                  <ShowcaseDetailPage />
+                </Route>
 
-            <Route path="/showcase">
-              <ShowcasePage />
-            </Route>
+                <Route path="/showcase">
+                  <ShowcasePage />
+                </Route>
 
-            <Route path="/crm/fisioterapeuta">
-              <FisioterapeutaCRM />
-            </Route>
+                <Route path="/crm/fisioterapeuta">
+                  <FisioterapeutaCRM />
+                </Route>
 
-            <Route path="/legal/privacidad">
-              <PrivacidadPage />
-            </Route>
+                <Route path="/legal/privacidad">
+                  <PrivacidadPage />
+                </Route>
 
-            <Route path="/legal/aviso-legal">
-              <AvisoLegalPage />
-            </Route>
+                <Route path="/legal/aviso-legal">
+                  <AvisoLegalPage />
+                </Route>
 
-            <Route path="/legal/cookies">
-              <CookiesPage />
-            </Route>
+                <Route path="/legal/cookies">
+                  <CookiesPage />
+                </Route>
 
-            <Route path="/__debug-preview/:id">
-              {(params) => <DebugPreviewPage params={params as { id: string }} />}
-            </Route>
+                <Route path="/__debug-preview/:id">
+                  {(params) => <DebugPreviewPage params={params as { id: string }} />}
+                </Route>
 
-            <Route component={NotFound} />
-          </Switch>
-        </Suspense>
-      </QueryClientProvider>
-    </ClerkProviderInternal>
+                <Route component={NotFound} />
+              </Switch>
+            </Suspense>
+          </QueryClientProvider>
+        </ClerkLoaded>
+      </ClerkRecoveryGuard>
+    </ClerkProvider>
   );
 }
 
