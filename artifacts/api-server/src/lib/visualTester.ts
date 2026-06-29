@@ -432,7 +432,7 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 3000,
+      max_tokens: 4000,
       messages: [{ role: "user", content }],
     });
     text = response.content
@@ -641,7 +641,7 @@ async function applyVisualFixes(opts: {
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 12000,
+    max_tokens: 20000,
     messages: [{
       role: "user",
       content:
