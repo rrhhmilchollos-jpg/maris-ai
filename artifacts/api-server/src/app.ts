@@ -344,6 +344,13 @@ const BOT_RENDER_ROUTE_MAP: Record<string, string> = {
   "/": "/bot-render/",
   "/pricing": "/bot-render/pricing",
   "/vs-emergent": "/bot-render/vs-emergent",
+  "/vs-base44": "/bot-render/vs-base44",
+  "/vs-lovable": "/bot-render/vs-lovable",
+  "/vs-bolt": "/bot-render/vs-bolt",
+  "/que-es-vibe-coding": "/bot-render/que-es-vibe-coding",
+  "/que-es-un-agente-de-ia": "/bot-render/que-es-un-agente-de-ia",
+  "/glosario": "/bot-render/glosario",
+  "/desarrollo-no-code-guia": "/bot-render/desarrollo-no-code-guia",
   "/news": "/bot-render/news",
 };
 app.use((req, res, next) => {
