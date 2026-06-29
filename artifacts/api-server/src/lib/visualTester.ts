@@ -510,6 +510,12 @@ async function applyVisualFixes(opts: {
   bundle: string;
   issues: VisualIssue[];
   app: { title: string; description?: string | null };
+  /** Prompt original del usuario — CRÍTICO para el camino estructural:
+   *  el CoreOrchestrator necesita saber qué app construir (clínica dental,
+   *  CRM, etc.) para reconstruir los componentes faltantes con contenido real.
+   *  Sin este campo, el planificador de edición solo ve "problemas detectados"
+   *  pero no sabe QUÉ funcionalidades crear para solucionarlos. */
+  userPrompt?: string;
   /** Backend actual del proyecto — necesario solo para el camino por hitos
    *  (reconstrucción estructural), que puede tocar también archivos backend
    *  si el issue lo requiere (ej. una ruta API que falta para el contenido). */
@@ -557,7 +563,26 @@ async function applyVisualFixes(opts: {
     rootLogger.info({ issueCount: issues.length }, "[applyVisualFixes] Daño estructural crítico detectado — delegando a CoreOrchestrator.editProjectIncremental (edición por hitos) en vez de una sola pasada.");
     try {
       const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
-      const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — TESTING VISUAL] La aplicación "${app.title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nProblemas detectados (ordenados por severidad):\n${fixList}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional y visible.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con contenido real y coherente con la descripción del proyecto: "${app.description ?? "(sin descripción disponible)"}".\n5. Toca o crea TODOS los archivos que sean necesarios para que la app sea visible y funcional — no te limites a un solo archivo si el problema lo requiere.`;
+      // ENCONTRADO (causa raíz de por qué el autofix no arreglaba issues
+      // críticos como blank_page + missing_content + missing_navbar en apps
+      // de clínicas dentales, CRMs, etc.): el structuralPrompt que se pasaba
+      // al CoreOrchestrator NO incluía el prompt original del usuario —
+      // el planificador de edición recibía solo los problemas detectados
+      // ("pantalla muestra 404", "falta navbar") pero no SABÍA qué
+      // funcionalidades construir para solucionarlos (dashboard dental,
+      // gestión de pacientes, citas, facturación...). El resultado era que
+      // el orquestador generaba un App.tsx y un navbar genéricos, sin el
+      // contenido real que el usuario había pedido, sin que el score de la
+      // siguiente iteración mejorara suficiente para cerrar el ciclo.
+      // FIX: incluir el prompt original completo del usuario en el
+      // structuralPrompt — con él, el planificador sabe exactamente qué
+      // módulos crear (Pacientes, Citas, Facturación, Notificaciones para
+      // una clínica dental; o lo que sea que el prompt original describía)
+      // y los genera con contenido real y funcional, no con placeholders.
+      const userPromptBlock = opts.userPrompt
+        ? `\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${opts.userPrompt.slice(0, 3000)}`
+        : `\n\nDescripción del proyecto: ${app.description ?? "(sin descripción disponible)"}`;
+      const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — TESTING VISUAL] La aplicación "${app.title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.${userPromptBlock}\n\nProblemas detectados (ordenados por severidad):\n${fixList}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional con todos los módulos pedidos en el prompt original.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con TODAS las funcionalidades pedidas en el prompt original — usa mock data realista (no "Lorem ipsum").\n5. Toca o crea TODOS los archivos necesarios — App.tsx, router, páginas, componentes, navbar — para que la app sea completamente funcional.\n6. Cada módulo pedido en el prompt (dashboard, pacientes, citas, facturación, etc.) debe tener su propia página/ruta con contenido real visible.`;
 
       const editResult = await orchestrator.editProjectIncremental(
         structuralPrompt,
@@ -699,6 +724,7 @@ export async function applyVisualFixesAndSave(opts: {
       bundle: currentBundle,
       issues: fixable,
       app: { title: app.title, description: app.description },
+      userPrompt: prompt,
       backendCode: currentBackendCode,
     });
     if (!patchResult) {
@@ -818,6 +844,7 @@ export async function runVisualTester(opts: {
       bundle: currentBundle,
       issues: fixable,
       app: { title: app.title, description: app.description },
+      userPrompt: prompt,
       backendCode: currentBackendCode,
     });
     if (!patchResult) {
