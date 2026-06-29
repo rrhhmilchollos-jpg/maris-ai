@@ -40,9 +40,14 @@ import { sendAutoPublishEmail, sendNeedsReviewEmail } from "./notify";
 
 /** Hard cap on the number of vision-driven patch rounds the evaluator runs.
  *  The first round is the initial "is this any good?" judgment; rounds
- *  2..MAX_VISION_ROUNDS are patcher iterations. The spec says "máximo 2
- *  rondas extras" — so total visions = 1 (initial) + 2 (post-patch). */
-const MAX_VISION_ROUNDS = 3;
+ *  2..MAX_VISION_ROUNDS are patcher iterations.
+ *  ENCONTRADO: 3 rondas (1 análisis + 2 fixes) eran insuficientes para daño
+ *  estructural real (blank_page + missing_content + missing_navbar a la vez):
+ *  el primer fix normalmente arregla el router/App.tsx (la pantalla ya
+ *  muestra algo), pero el segundo ciclo detecta que aún falta navbar o
+ *  contenido real → necesitamos al menos una ronda más. Subido a 5:
+ *  1 análisis inicial + hasta 4 ciclos de fix+reanalysis. */
+const MAX_VISION_ROUNDS = 5;
 
 type Severity = "critical" | "major" | "minor";
 
@@ -242,9 +247,19 @@ Sé estricto pero JUSTO: el objetivo es decidir si esta app está lista para
 publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   });
 
+  // ENCONTRADO: claude-haiku-4-5 con max_tokens:1500 era insuficiente para
+  // analizar 3 screenshots completos (desktop+tablet+mobile) con contenido
+  // complejo — el modelo a veces truncaba el JSON antes de cerrar el array
+  // de issues, o listaba solo 1-2 issues cuando había 5-6 reales. Se sube
+  // a claude-sonnet-4-6 con más tokens para el análisis visual: la calidad
+  // del diagnóstico determina si el autofix sabe qué arreglar, por lo que
+  // usar el modelo más capaz aquí tiene impacto directo en la tasa de éxito
+  // del loop de reparación. El coste adicional (una llamada de análisis más
+  // cara) está justificado: es la diferencia entre un autofix que sabe qué
+  // hacer y uno que genera un fix genérico que no resuelve el problema real.
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 1500,
+    model: "claude-sonnet-4-6",
+    max_tokens: 3000,
     messages: [{ role: "user", content }],
   });
 
@@ -596,7 +611,11 @@ export async function runAutoEvaluator(opts: {
       );
       try {
         const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
-        const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL] La aplicación "${(row as any).title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nProblemas detectados:\n${patcherIssues.map((p, idx) => `${idx + 1}. ${p.problem}\n   Sugerencia: ${p.fix}`).join("\n")}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional y visible.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con contenido real y coherente con la descripción del proyecto: "${(row as any).description ?? "(sin descripción disponible)"}".\n5. Toca o crea TODOS los archivos que sean necesarios para que la app sea visible y funcional — no te limites a un solo archivo si el problema lo requiere.`;
+        // ENCONTRADO (misma causa raíz que en visualTester.ts): el structuralPrompt
+        // NO incluía el userIntent completo — el orquestador solo veía los problemas
+        // detectados pero no sabía QUÉ funcionalidades construir para solucionarlos.
+        // FIX: incluir userIntent completo para que el planificador sepa qué crear.
+        const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL] La aplicación "${(row as any).title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nPROMPT ORIGINAL DEL USUARIO (lo que la app debe implementar completamente):\n${userIntent.slice(0, 3000)}\n\nProblemas detectados:\n${patcherIssues.map((p, idx) => `${idx + 1}. ${p.problem}\n   Sugerencia: ${p.fix}`).join("\n")}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional con todos los módulos pedidos en el prompt original.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con TODAS las funcionalidades pedidas en el prompt original — usa mock data realista (no "Lorem ipsum").\n5. Toca o crea TODOS los archivos necesarios — App.tsx, router, páginas, componentes, navbar — para que la app sea completamente funcional.\n6. Cada módulo pedido en el prompt (dashboard, pacientes, citas, facturación, etc.) debe tener su propia página/ruta con contenido real visible.`;
 
         const editResult = await orchestrator.editProjectIncremental(
           structuralPrompt,
@@ -621,7 +640,11 @@ export async function runAutoEvaluator(opts: {
     if (patched === null) {
       try {
         const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;
-        patched = await patchFn(currentBundle, patcherIssues, language, "");
+        // Incluir userIntent en el quality bar del patcher para que sepa
+        // qué funcionalidades reconstruir si los issues lo requieren.
+        const patchQualityBar = userIntent ? `PROMPT ORIGINAL DEL USUARIO (referencia para reconstruir contenido faltante):
+${userIntent.slice(0, 2000)}` : "";
+        patched = await patchFn(currentBundle, patcherIssues, language, patchQualityBar);
       } catch (err) {
         log.warn({ err, appId, jobId, round }, "🔁 Patcher threw — stopping evaluator loop");
         break;
