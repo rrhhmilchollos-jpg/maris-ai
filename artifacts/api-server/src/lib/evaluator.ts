@@ -259,7 +259,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   // hacer y uno que genera un fix genérico que no resuelve el problema real.
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 3000,
+    max_tokens: 4000,
     messages: [{ role: "user", content }],
   });
 
