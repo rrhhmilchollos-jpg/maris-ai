@@ -251,6 +251,14 @@ WOUTER v3 — the preview ships wouter ^3.x, where \`<Link>\` ITSELF renders as 
 - RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
 The same applies to \`<Route>\` — render children directly, do not wrap in \`<a>\`.
 PROGRAMMATIC NAVIGATION — wouter has NO \`useNavigate\` or \`useHistory\` hook (those are react-router-dom). Importing either from "wouter" crashes the ENTIRE app at load time with "module does not provide an export named...", before any component even renders. Use \`const [, setLocation] = useLocation();\` then call \`setLocation("/path")\` to navigate programmatically (e.g. after a form submit or login success).
+ROUTER ORDER — REGLA CRÍTICA (produce página en blanco/404 si se incumple): en el \`<Switch>\` de wouter, el catch-all que renderiza NotFound/404 DEBE ser SIEMPRE el ÚLTIMO elemento. Si lo colocas antes de las rutas reales, wouter lo evalúa primero y TODAS las rutas muestran 404. Estructura obligatoria:
+  \`<Switch>
+    <Route path="/" component={Home} />
+    <Route path="/seccion-1" component={Seccion1} />
+    <Route path="/seccion-2" component={Seccion2} />
+    {/* ÚLTIMO SIEMPRE — nunca antes de las rutas reales */}
+    <Route component={NotFound} />
+  </Switch>\`
 
 EXPORTS & IMPORTS — be consistent so imports actually resolve at runtime:
 - Match every \`import { X }\` to a named \`export { X }\`/\`export function X\`/\`export const X\` in the target file. Match every \`import X from\` to an \`export default …\`. Mixing the two yields \`undefined\` and React renders nothing.
