@@ -375,6 +375,34 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 15: la regla de transacciones atómicas (crítica para dinero/saldo/
+// inventario) ya no depende de que el planificador haya usado la palabra
+// exacta "transaccional" en la descripción del hito — el generador de
+// código la evalúa por sí mismo en base al TIPO de operación (saldo,
+// inventario, escrituras relacionadas), tanto en construcción nueva
+// (CODE_AGENT_STATIC) como en edición (EDIT_CODE_AGENT_STATIC, que antes
+// no tenía esta regla en absoluto).
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readServicesSrc("CoreOrchestrator.ts");
+  check(
+    "FIX 15a: la regla de transacciones ya no depende de que el hito 'mencione' la palabra transaccional",
+    !/Si el hito menciona operaciones multi-tabla o transaccionales/.test(src),
+    "El patrón frágil original solo activaba la regla si el planificador usaba ciertas palabras — un hito de 'Apuestas y boleto' o 'Depósitos' implica dinero real igual que uno que lo dijera explícitamente.",
+  );
+  check(
+    "FIX 15b: CODE_AGENT_STATIC (construcción nueva) exige evaluar SALDO/INVENTARIO por sí mismo",
+    /EVALÚALA TÚ MISMO/.test(src) && /SALDO\/BALANCE\/CRÉDITO/.test(src),
+  );
+  const editBlockMatch = src.match(/const EDIT_CODE_AGENT_STATIC = `([\s\S]*?)REGLAS CRÍTICAS DE LA PLATAFORMA/);
+  check(
+    "FIX 15c: EDIT_CODE_AGENT_STATIC (edición) también exige evaluar transacciones por sí mismo",
+    !!editBlockMatch && /TRANSACCIONES ATÓMICAS/.test(editBlockMatch[1]),
+    "El camino de EDICIÓN no tenía ninguna regla de transacciones — un cliente editando para añadir un módulo de pagos/apuestas no recibía ninguna protección contra inconsistencias de saldo.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
