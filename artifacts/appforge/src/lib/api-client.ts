@@ -19,6 +19,35 @@ async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // ENCONTRADO en producción (confirmado con un servidor Express real y
+  // fetch reales, reproduciendo el bug paso a paso): la mayoría de las
+  // llamadas POST/PUT/PATCH de Maris AI pasaban `body: JSON.stringify(...)`
+  // SIN especificar el header Content-Type. fetch() sin Content-Type
+  // explícito y con un body de tipo string usa "text/plain;charset=UTF-8"
+  // por defecto — y express.json() (el body-parser del backend) SOLO
+  // parsea el body cuando el Content-Type es application/json. Resultado
+  // real observado: req.body llegaba como {} vacío en el backend, así que
+  // cualquier `const { autoFix = false } = req.body || {}` caía SIEMPRE al
+  // valor por defecto, sin importar lo que el frontend creía estar
+  // enviando — esto es lo que impedía que el Autofix IA del Testing Visual
+  // arrancara nunca, tanto en el auto-arranque como pulsando el botón
+  // manualmente, y probablemente afectaba en silencio a otras 13 llamadas
+  // del frontend con el mismo patrón (creación de workflows, toggle de
+  // showcase, etc.) — confirmado por código, no solo sospecha, con un
+  // grep estructural sobre todo el árbol de componentes/páginas.
+  // FIX CENTRALIZADO: si hay un body Y el caller no fijó ya su propio
+  // Content-Type (ej. multipart/form-data con boundary automático para
+  // FormData, que NUNCA debe forzarse aquí), añadimos
+  // "application/json" automáticamente. Arreglar esto en un solo sitio
+  // (en vez de en cada una de las 14+ llamadas individuales) garantiza que
+  // ninguna llamada futura pueda volver a caer en el mismo bug por
+  // descuido.
+  const hasContentType = headers.has("Content-Type");
+  const bodyIsFormData = typeof FormData !== "undefined" && options?.body instanceof FormData;
+  if (options?.body && !hasContentType && !bodyIsFormData) {
+    headers.set("Content-Type", "application/json");
+  }
+
   return headers;
 }
 
