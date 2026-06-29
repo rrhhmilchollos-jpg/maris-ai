@@ -424,6 +424,10 @@ export async function runAutoEvaluator(opts: {
     userId: string;
     log: Logger;
   }) => Promise<{ url: string; slug: string }>;
+  /** Máximo de rondas de reparación visual. Por defecto MAX_VISION_ROUNDS (5).
+   * Para usuarios gratuitos se puede bajar a 2 para reducir el coste sin
+   * afectar a clientes de pago que ya generan ingresos reales. */
+  maxRepairRounds?: number;
 }): Promise<AutoEvaluatorResult> {
   const { appId, userId, userIntent, jobId, baseUrl, log } = opts;
   const evalFn = opts.__evaluator ?? evaluateApp;
@@ -529,9 +533,10 @@ export async function runAutoEvaluator(opts: {
   let lastReport: EvaluatorReport | null = null;
   let fixesApplied = 0;
   let round = 0;
+  const visionRoundLimit = opts.maxRepairRounds ?? MAX_VISION_ROUNDS;
 
   // Round budget: 1 initial vision + up to 2 post-patch visions = 3 total.
-  while (round < MAX_VISION_ROUNDS) {
+  while (round < visionRoundLimit) {
     round++;
     let report: EvaluatorReport;
     try {
@@ -595,13 +600,13 @@ export async function runAutoEvaluator(opts: {
     );
 
     // Fail path. If we've used our budget, stop.
-    if (round >= MAX_VISION_ROUNDS) {
+    if (round >= visionRoundLimit) {
       log.info(
         { appId, jobId, round, issues: report.issues.length },
         "👁 Evaluator exhausted retries — leaving for manual review",
       );
       recordEvalLog(
-        `⚠️ Se agotaron los intentos automáticos (${MAX_VISION_ROUNDS} ronda(s)). Marcando como "necesita revisión".`,
+        `⚠️ Se agotaron los intentos automáticos (${visionRoundLimit} ronda(s)). Marcando como "necesita revisión".`,
         "warn",
       );
       break;

@@ -3391,6 +3391,21 @@ export async function generateApp(
   }
 
   if (wantsFullBuild && useMilestoneOrchestrator) {
+    // DEGRADACIÓN INTELIGENTE PARA USUARIOS GRATUITOS (hasEverPaid=false):
+    // Un proyecto NUEVO ultra-complejo (24+ hitos, 3-6€ en tokens reales)
+    // consumido por un usuario que nunca ha pagado es puro coste sin retorno.
+    // Estrategia: generar el NÚCLEO FUNCIONAL de la app (las capas más críticas
+    // — datos, backend core, frontend core) con un máximo de 7 hitos, en vez
+    // del plan completo de 20-30 hitos. Esto da al usuario una app visible y
+    // funcional (~70% del valor) a ~¼ del coste de tokens, y la interfaz le
+    // ofrece "expandir a la arquitectura completa" a cambio de su primer pago.
+    // Los usuarios que SÍ han pagado alguna vez reciben siempre el plan completo
+    // sin límite, independientemente de su saldo actual.
+    const FREE_USER_MAX_MILESTONES = 7;
+    const isDegradedFreeTier = !hasEverPaid && isUltraComplex;
+    if (isDegradedFreeTier) {
+      await log("system", `✨ Generando el núcleo esencial de tu app (${FREE_USER_MAX_MILESTONES} módulos clave). Después podrás expandirla a la arquitectura completa.`);
+    }
     await log("system", isUltraComplex
       ? "🏗️ Proyecto de alta complejidad detectado — activando construcción por hitos (modela cada módulo por separado en vez de comprimirlo todo en un único intento)..."
       : "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
@@ -3399,6 +3414,7 @@ export async function generateApp(
       // El orquestador decide mongodb/postgresql por hito; le damos AMBOS quality
       // bars y dejamos que use el que corresponda según database por hito de backend.
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
+      maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
     });
     await log("system", "📋 Analizando arquitectura y planificando hitos por capas (datos → backend core → módulos → integraciones → frontend)...");
 
@@ -4381,6 +4397,12 @@ Output STRICT JSON only, no markdown, no explanation.`,
       emergentBlueprint,
       prompt,
       (msg) => void log("qa", msg),
+      undefined,
+      // Usuarios gratuitos (hasEverPaid=false): máximo 1 ciclo de reparación.
+      // Clientes de pago o que ya pagaron alguna vez: 3 ciclos completos.
+      // Esto reduce el coste de reparación gratuita en ~66% sin afectar a
+      // quienes generan ingresos reales.
+      hasEverPaid ? undefined : 1,
     );
     finalFrontend = repairResult.finalCode;
     const pmValidation = repairResult.pmValidation;
@@ -6453,6 +6475,10 @@ export async function runJobById(jobId: string): Promise<void> {
             jobId: jobId as any,
             baseUrl,
             log: logger,
+            // Usuarios gratuitos: máximo 2 rondas del evaluador visual (1 análisis
+            // + 1 parche). Clientes de pago: 5 rondas completas. Reduce el coste
+            // del evaluador visual gratuito en ~60% sin afectar a quienes pagan.
+            maxRepairRounds: hasEverPaid ? undefined : 2,
           });
         } catch (evalErr) {
           logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready");

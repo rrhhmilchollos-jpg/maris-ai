@@ -236,6 +236,16 @@ export interface CoreOrchestratorOptions {
    * ya había, solo acelera el trabajo interno de uno que ya estaba activo.
    */
   concurrencyPerLayer?: number;
+  /**
+   * Si se especifica, el planificador NO puede generar más hitos que este
+   * número. Usado para degradar proyectos ultra-complejos a un subconjunto
+   * manejable cuando el usuario no ha pagado nunca (hasEverPaid=false) —
+   * estrategia de conversión: genera el núcleo funcional de la app con un
+   * coste de tokens mucho menor, y la interfaz le ofrece "expandir a la
+   * arquitectura completa" a cambio de activar su primer plan de pago.
+   * undefined = sin límite (comportamiento por defecto para usuarios de pago).
+   */
+  maxMilestonesOverride?: number;
 }
 
 const LAYER_ORDER = ["data", "backend-core", "backend-module", "integration", "frontend-core", "frontend-module", "docs"];
@@ -251,6 +261,7 @@ export class CoreOrchestrator {
       model: options.model ?? "claude-sonnet-4-6",
       concurrencyPerLayer: options.concurrencyPerLayer ?? 8,
       backendQualityPrompt: options.backendQualityPrompt ?? "",
+      maxMilestonesOverride: options.maxMilestonesOverride,
     };
   }
 
@@ -319,11 +330,25 @@ export class CoreOrchestrator {
 
     try {
       const result = JSON.parse(cleanedJson);
-      const milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
+      let milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
         ...m,
         targetWorkspace: typeof m.targetWorkspace === "string" ? m.targetWorkspace : "apps/api",
         dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
       }));
+      // DEGRADACIÓN PARA USUARIOS GRATUITOS: si maxMilestonesOverride está
+      // activo (viene de apps.ts cuando hasEverPaid=false en un proyecto
+      // ultra-complejo), truncar la lista de hitos al máximo permitido.
+      // Se conservan los hitos de las capas más críticas primero (data →
+      // backend-core → frontend-core) según LAYER_ORDER, priorizando lo
+      // que da una app visible y funcional con el mínimo de tokens.
+      if (this.options.maxMilestonesOverride && milestones.length > this.options.maxMilestonesOverride) {
+        const layerPriority = ["data", "backend-core", "frontend-core", "backend-module", "frontend-module", "integration", "docs"];
+        milestones = milestones
+          .slice()
+          .sort((a, b) => (layerPriority.indexOf(a.layer) - layerPriority.indexOf(b.layer)))
+          .slice(0, this.options.maxMilestonesOverride);
+        console.warn(`[maxMilestonesOverride] Plan de ${result.milestones.length} hitos reducido a ${milestones.length} para usuario gratuito.`);
+      }
       return {
         database: result.database === "postgresql" ? "postgresql" : "mongodb",
         platform: result.platform === "mobile-native" ? "mobile-native" : "web",
@@ -347,11 +372,19 @@ export class CoreOrchestrator {
       if (extracted) {
         try {
           const result = JSON.parse(extracted);
-          const milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
+          let milestones: Milestone[] = (result.milestones || []).map((m: any) => ({
             ...m,
             targetWorkspace: typeof m.targetWorkspace === "string" ? m.targetWorkspace : "apps/api",
             dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
           }));
+          if (this.options.maxMilestonesOverride && milestones.length > this.options.maxMilestonesOverride) {
+            const layerPriority = ["data", "backend-core", "frontend-core", "backend-module", "frontend-module", "integration", "docs"];
+            milestones = milestones
+              .slice()
+              .sort((a, b) => (layerPriority.indexOf(a.layer) - layerPriority.indexOf(b.layer)))
+              .slice(0, this.options.maxMilestonesOverride);
+            console.warn(`[maxMilestonesOverride fallback] Plan reducido a ${milestones.length} hitos para usuario gratuito.`);
+          }
           console.warn("⚠️ El planificador devolvió texto junto al JSON — se recuperó el objeto JSON embebido correctamente.");
           return {
             database: result.database === "postgresql" ? "postgresql" : "mongodb",

@@ -515,6 +515,37 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 20: Degradación inteligente para usuarios gratuitos (hasEverPaid=false)
+// en proyectos ultra-complejos — limita hitos, ciclos de reparación PM Agent
+// y rondas del evaluador visual, sin afectar a usuarios que han pagado.
+// MOTIVACIÓN: cálculo real con datos de código confirmó que un proyecto
+// ultra (24 hitos) cuesta 3.24-5.64€ en tokens a Anthropic, y el 100%
+// de ese coste lo asume el dueño de la plataforma cuando el usuario es
+// gratuito (nunca ha comprado créditos reales) y no convierte a pago.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const servicesSrc = readServicesSrc("CoreOrchestrator.ts");
+  check(
+    "FIX 20a: CoreOrchestratorOptions tiene maxMilestonesOverride para limitar hitos de usuarios gratuitos",
+    /maxMilestonesOverride\?: number/.test(servicesSrc),
+  );
+  check(
+    "FIX 20b: CoreOrchestrator aplica maxMilestonesOverride priorizando las capas más críticas",
+    /layerPriority.*data.*backend-core.*frontend-core/.test(servicesSrc),
+  );
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 20c: apps.ts pasa maxMilestonesOverride al CoreOrchestrator para usuarios gratuitos ultra-complejos",
+    /isDegradedFreeTier.*FREE_USER_MAX_MILESTONES|maxMilestonesOverride: isDegradedFreeTier/.test(appsSrc),
+  );
+  const pipelineSrc = readSrc("lib/emergentAgentPipeline.ts");
+  check(
+    "FIX 20d: runInvisibleRepairLoop acepta maxCycles para limitar reparaciones gratuitas",
+    /maxCycles\?: number/.test(pipelineSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

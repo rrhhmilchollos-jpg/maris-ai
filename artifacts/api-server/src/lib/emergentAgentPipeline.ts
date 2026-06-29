@@ -552,20 +552,22 @@ export async function runInvisibleRepairLoop(
   blueprint: EmergentArchitectBlueprint,
   originalPrompt: string,
   log: (msg: string) => void,
-  onProgress?: (update: { phase: string; progress: number; note?: string }) => void
+  onProgress?: (update: { phase: string; progress: number; note?: string }) => void,
+  maxCycles?: number,
 ): Promise<{ finalCode: string; pmValidation: PMValidationResult; cycles: number }> {
   let currentCode = frontendCode;
   let cycles = 0;
+  const cycleLimit = maxCycles ?? MAX_PM_REPAIR_CYCLES;
   let pmValidation: PMValidationResult;
 
-  while (cycles < MAX_PM_REPAIR_CYCLES) {
+  while (cycles < cycleLimit) {
     cycles++;
 
     // PM Agent valida el código actual
     pmValidation = await runPMAgent(originalPrompt, blueprint, currentCode, log);
 
     if (pmValidation.readyForDeploy && pmValidation.issues.filter((i) => i.severity === "blocker").length === 0) {
-      log(`🎯 Bucle de reparación: app aprobada en ciclo ${cycles}/${MAX_PM_REPAIR_CYCLES}`);
+      log(`🎯 Bucle de reparación: app aprobada en ciclo ${cycles}/${cycleLimit}`);
       return { finalCode: currentCode, pmValidation, cycles };
     }
 
@@ -576,11 +578,11 @@ export async function runInvisibleRepairLoop(
       return { finalCode: currentCode, pmValidation, cycles };
     }
 
-    log(`🔧 Bucle de reparación invisible: ${blockers.length} blocker(s) — ciclo ${cycles}/${MAX_PM_REPAIR_CYCLES}`);
+    log(`🔧 Bucle de reparación invisible: ${blockers.length} blocker(s) — ciclo ${cycles}/${cycleLimit}`);
     onProgress?.({
       phase: "patching",
       progress: 85 + cycles * 3,
-      note: `🔧 Reparando ${blockers.length} problema(s) (ciclo ${cycles}/${MAX_PM_REPAIR_CYCLES})...`,
+      note: `🔧 Reparando ${blockers.length} problema(s) (ciclo ${cycles}/${cycleLimit})...`,
     });
 
     // Patcher Agent corrige los blockers
