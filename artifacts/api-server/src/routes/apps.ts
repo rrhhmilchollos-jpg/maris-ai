@@ -6823,4 +6823,37 @@ try {
   }
 });
 
+// POST /api/panel-error — reporte real de errores del propio panel de
+// Maris AI (no de las apps generadas por los clientes, ver AppRuntimeError
+// para eso). Capturado por error-boundary.tsx en el frontend. NO requiere
+// requireAuth a propósito: si el fallo es justo de autenticación (Clerk no
+// cargó), exigir un token válido para reportarlo sería contradictorio —
+// perderíamos justo los casos que más necesitamos ver. userId es opcional
+// y best-effort (si el frontend logra obtenerlo de window.Clerk antes de
+// que falle del todo).
+router.post("/panel-error", async (req: Request, res: Response) => {
+  try {
+    const { message, stack, componentStack, pathname, userId } = req.body || {};
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "message requerido" });
+    }
+    const { PanelRuntimeError } = await import("@workspace/db/schema");
+    await (PanelRuntimeError as any).create({
+      userId: typeof userId === "string" ? userId : undefined,
+      message: message.slice(0, 500),
+      stack: typeof stack === "string" ? stack.slice(0, 3000) : undefined,
+      componentStack: typeof componentStack === "string" ? componentStack.slice(0, 2000) : undefined,
+      pathname: typeof pathname === "string" ? pathname.slice(0, 300) : undefined,
+      userAgent: (req.headers["user-agent"] as string)?.slice(0, 300),
+    });
+    logger.warn({ message, pathname, userId }, "[panel-error] Error real del panel capturado");
+    return res.status(204).end();
+  } catch (err) {
+    // Reportar un error nunca debe en sí mismo producir un error visible
+    // para el usuario — best-effort silencioso desde la perspectiva del cliente.
+    logger.warn({ err }, "[panel-error] Failed to record panel error");
+    return res.status(204).end();
+  }
+});
+
 export default router;

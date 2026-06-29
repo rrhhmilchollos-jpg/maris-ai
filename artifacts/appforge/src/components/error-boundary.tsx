@@ -35,6 +35,29 @@ export class ErrorBoundary extends Component<Props, State> {
       }
     } catch (_) {}
     console.error("[Maris AI] Error crítico de renderizado:", error, info);
+
+    // ENCONTRADO a petición del usuario: este ErrorBoundary etiqueta como
+    // "error de autenticación" cualquier excepción que mencione "clerk" en
+    // su mensaje/stack — pero en producción ese mensaje genérico es lo
+    // único que llega a verse, sin ningún registro del error REAL. Esto
+    // reporta el error exacto (mensaje + stack + componentStack + ruta) al
+    // backend, best-effort y sin bloquear el render del fallback — un
+    // fallo al reportar nunca debe añadir un segundo error sobre el primero.
+    try {
+      const apiBase = (import.meta as any).env?.VITE_API_URL || "";
+      fetch(`${apiBase}/api/panel-error`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: error.message,
+          stack: error.stack,
+          componentStack: info.componentStack,
+          pathname: typeof window !== "undefined" ? window.location.pathname : undefined,
+          userId: (window as any).Clerk?.user?.id,
+        }),
+        keepalive: true,
+      }).catch(() => { /* best-effort — nunca debe romper el fallback de error */ });
+    } catch (_) { /* best-effort */ }
   }
 
   handleReload = () => {

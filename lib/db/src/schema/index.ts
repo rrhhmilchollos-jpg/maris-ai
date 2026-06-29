@@ -645,6 +645,44 @@ export const AppRuntimeError: Model<IAppRuntimeError> =
   mongoose.models.AppRuntimeError ||
   mongoose.model<IAppRuntimeError>("AppRuntimeError", AppRuntimeErrorSchema);
 
+// ─── Panel Runtime Errors ────────────────────────────────────────────────────
+// ENCONTRADO a petición del usuario: un error de React en el panel de admin
+// del propio Maris AI ("Error de autenticación... el sistema de
+// autenticación no pudo cargarse") resultó ser un mensaje ENGAÑOSO — el
+// ErrorBoundary global (error-boundary.tsx) etiqueta como "error de Clerk"
+// CUALQUIER excepción cuyo stack mencione la palabra "clerk", lo cual es
+// casi cualquier componente de la app (casi todos importan hooks de Clerk
+// en algún punto del árbol). Sin logging real en producción, no había
+// forma de ver el error EXACTO sin reproducirlo en vivo. Distinto de
+// AppRuntimeError (que es para errores de las apps GENERADAS por los
+// clientes) — este modelo es para errores del propio producto Maris AI.
+export interface IPanelRuntimeError extends Document {
+  userId?: string;
+  message: string;
+  stack?: string;
+  componentStack?: string;
+  pathname?: string;
+  userAgent?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const PanelRuntimeErrorSchema = new Schema<IPanelRuntimeError>(
+  {
+    userId: { type: String, index: true },
+    message: { type: String, required: true },
+    stack: { type: String },
+    componentStack: { type: String },
+    pathname: { type: String },
+    userAgent: { type: String },
+  },
+  { timestamps: true },
+);
+
+export const PanelRuntimeError: Model<IPanelRuntimeError> =
+  mongoose.models.PanelRuntimeError ||
+  mongoose.model<IPanelRuntimeError>("PanelRuntimeError", PanelRuntimeErrorSchema);
+
 // ─── Agent Notes (user preferences + app notes) ───────────────────────────────
 export interface IAgentNote extends Document {
   userId: string;
