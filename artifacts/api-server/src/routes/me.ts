@@ -64,7 +64,7 @@ router.get("/me", requireAuth, async (req, res) => {
       planCreditsPerMonth: currentPlan.creditsPerMonth,
       planExpiresAt: u.planExpiresAt?.toISOString() ?? null,
       planActive,
-      hasActiveSubscription: !!u.stripeSubscriptionId && planActive,
+      hasActiveSubscription: !!(u.vivaInitialTransactionId || u.stripeSubscriptionId) && planActive,
     });
   } catch (err) {
     logger.error({ err }, "GET /me error");

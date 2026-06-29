@@ -3215,7 +3215,7 @@ export async function generateApp(
   // (ver POST /api/apps más abajo): la generación inicial gratis consume la
   // mayor parte de los 50 créditos de bienvenida — el usuario obtiene UNA app
   // completa y funcional, y a partir de ahí modifica/añade/elimina con los
-  // créditos que le queden. Al realizar su primera compra Stripe,
+  // créditos que le queden. Al realizar su primera compra (Viva.com),
   // hasEverPaid=true.
   const hasEverPaid = !!(requestContext?.hasEverPaid);
   const isFreeUser = !hasEverPaid && !previous; // ediciones siempre permitidas
@@ -4744,7 +4744,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     // completa (frontend + backend + BD). El plan free/paid solo cambia el
     // COSTE en créditos, no la completitud:
     //
-    // PAID (verificado por Stripe):
+    // PAID (verificado por Viva.com):
     //   - Coste = KIND_COSTS[kind] × 10
     //   - landing    = 1 × 10 = 10 créditos
     //   - vue/svelte  = 2 × 10 = 20 créditos

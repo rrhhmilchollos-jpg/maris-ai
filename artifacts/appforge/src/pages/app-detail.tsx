@@ -99,6 +99,8 @@ import {
   Eye,
   Mic,
   MicOff,
+  AlertTriangle,
+  ShoppingCart,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
@@ -278,9 +280,26 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   });
   const { data: me } = useGetMe();
   const isAdmin = !!me?.isAdmin;
-  const { data: stats } = useGetMyStats();
+  const { data: stats } = useGetMyStats({ query: { refetchInterval: 5000 } });
   const credits = stats?.credits ?? 0;
   const outOfCredits = credits <= 0 && !isAdmin;
+
+  // Polling: detectar recarga de créditos cuando el usuario está bloqueado
+  useEffect(() => {
+    if (!outOfCredits) return;
+    const interval = setInterval(async () => {
+      try {
+        const fresh = await apiFetch<any>("/api/me/stats");
+        if (fresh?.credits > 0) {
+          queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          toast({ title: "\u2705 \u00a1Cr\u00e9ditos recargados!", description: `Tienes ${fresh.credits} cr\u00e9ditos. \u00a1Ya puedes seguir editando tu app!` });
+        }
+      } catch { /* silencioso */ }
+    }, 6000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outOfCredits]);
 
   const { data: notificationsData } = useGetNotifications();
   const unreadCount: number = notificationsData?.unreadCount ?? 0;
@@ -406,7 +425,15 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         toast({ title: "Respuesta inesperada", description: "No se ha iniciado ningún trabajo de modificación.", variant: "destructive" });
       },
       onError: (err: any) => {
-        toast({ title: "No se pudo enviar", description: err?.message ?? "Error", variant: "destructive" });
+        const msg = err?.message || "";
+        if (msg.includes("402") || msg.toLowerCase().includes("cr\u00e9ditos insuficientes")) {
+          // Forzar refresco de stats para activar el overlay de sin cr\u00e9ditos
+          queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+          toast({ title: "Sin cr\u00e9ditos", description: "Compra m\u00e1s cr\u00e9ditos para seguir editando tu app.", variant: "destructive" });
+        } else {
+          toast({ title: "No se pudo enviar", description: msg || "Error", variant: "destructive" });
+        }
       },
     },
   });
@@ -418,6 +445,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   }, [messages, activeJobId]);
 
   const handleSend = () => {
+    if (outOfCredits) return; // Bloqueado — sin créditos
     const trimmed = draft.trim();
     if (trimmed.length < 2 || sendMutation.isPending || isActivelyProcessing) return;
     sendMutation.mutate({
@@ -1143,24 +1171,46 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </Button>
           )}
           {!isAwaitingApproval && (
-            <div className="rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
+            <div className="relative rounded-2xl border border-white/[0.09] bg-[#0d0f1a] shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
+              {/* === OVERLAY: SIN CRÉDITOS === */}
+              {outOfCredits && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-2xl bg-[#0d0f1a]/97 backdrop-blur-sm border-2 border-red-500/30">
+                  <div className="text-center px-6 max-w-sm">
+                    <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-3">
+                      <AlertTriangle className="h-6 w-6 text-red-400" />
+                    </div>
+                    <h3 className="text-base font-bold text-white mb-1.5">Te has quedado sin créditos</h3>
+                    <p className="text-sm text-white/50 mb-4">Compra más créditos para poder seguir trabajando con los agentes.</p>
+                    <Button
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 font-bold text-white shadow-lg shadow-green-500/20"
+                      onClick={() => setLocation("/billing")}
+                    >
+                      <ShoppingCart className="mr-2 h-4 w-4" />
+                      Comprar créditos
+                    </Button>
+                    <p className="text-[11px] text-white/30 mt-2 animate-pulse">Se reactivará automáticamente al recargar...</p>
+                  </div>
+                </div>
+              )}
               <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
               <Textarea
                 value={draft}
-                onChange={(event) => setDraft(event.target.value)}
+                onChange={(event) => { if (!outOfCredits) setDraft(event.target.value); }}
                 onKeyDown={(e) => {
+                  if (outOfCredits) { e.preventDefault(); return; }
                   // Enter solo = enviar | Shift+Enter = nueva línea
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     if (draft.trim().length >= 2 && !sendMutation.isPending && !isActivelyProcessing) handleSend();
                   }
                 }}
-                placeholder="Escribe un mensaje al agente..."
-                className="min-h-[64px] md:min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2"
+                placeholder={outOfCredits ? "Sin créditos — compra más para continuar..." : "Escribe un mensaje al agente..."}
+                disabled={outOfCredits}
+                className={`min-h-[64px] md:min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2 ${outOfCredits ? "opacity-40 cursor-not-allowed" : ""}`}
               />
               <div className="flex items-center justify-between px-3 pb-3">
                 <div className="flex items-center gap-1">
-                  <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={sendMutation.isPending || isActivelyProcessing} />
+                  <AttachmentPicker attachments={chatAttachments} onChange={setChatAttachments} disabled={outOfCredits || sendMutation.isPending || isActivelyProcessing} />
                   <button type="button" title="Marcar" className="grid h-8 w-8 place-items-center rounded-lg text-white/30 hover:bg-white/[0.05] hover:text-white/60 transition">
                     <Star className="h-4 w-4" />
                   </button>
@@ -1175,8 +1225,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   {/* Botón micrófono — Speech to Text */}
                   <button
                     type="button"
-                    title={isRecording ? "Detener grabación" : "Hablar con el agente"}
+                    title={outOfCredits ? "Sin créditos" : isRecording ? "Detener grabación" : "Hablar con el agente"}
+                    disabled={outOfCredits}
                     onClick={() => {
+                      if (outOfCredits) return;
                       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
                       if (!SpeechRecognition) {
                         toast({ title: "Navegador no compatible", description: "El reconocimiento de voz requiere Chrome o Edge. Prueba con uno de ellos.", variant: "destructive" });
@@ -1230,7 +1282,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   {/* Botón enviar */}
                   <button
                     onClick={handleSend}
-                    disabled={draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing}
+                    disabled={outOfCredits || draft.trim().length < 2 || sendMutation.isPending || isActivelyProcessing}
                     className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#9333ea] text-white shadow-[0_4px_14px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
                     {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

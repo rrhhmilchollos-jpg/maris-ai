@@ -23,6 +23,7 @@ router.get(
       plan: 1,
       planExpiresAt: 1,
       stripeSubscriptionId: 1,
+      vivaInitialTransactionId: 1,
     }).lean();
 
     if (!user) {
@@ -47,7 +48,7 @@ router.get(
       planExpiresAt: user.planExpiresAt?.toISOString() ?? null,
       planUsagePercent,
       isOutOfCredits,
-      hasActiveSubscription: !!user.stripeSubscriptionId && !!user.planExpiresAt && new Date(user.planExpiresAt) > new Date(),
+      hasActiveSubscription: !!(user.vivaInitialTransactionId || user.stripeSubscriptionId) && !!user.planExpiresAt && new Date(user.planExpiresAt) > new Date(),
       timestamp: new Date().toISOString(),
     });
   },

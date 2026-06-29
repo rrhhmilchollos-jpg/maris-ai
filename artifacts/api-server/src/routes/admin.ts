@@ -412,6 +412,10 @@ router.post("/admin/users/:id/credits", async (req: any, res: any): Promise<void
 });
 
 // ─── Stripe card refund (real money back to card) ───────────────────────────
+// DEPRECADO — Solo para reembolsar pagos LEGADOS hechos con Stripe antes de
+// la migración a Viva.com. NO usar para pagos nuevos. Si STRIPE_SECRET_KEY no
+// está configurada, responde 503. Se mantendrá hasta que todos los pagos
+// legados hayan pasado su período de reembolso (90 días desde la migración).
 router.post("/admin/users/:id/stripe-refund", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const targetId = req.params.id;
