@@ -216,6 +216,78 @@ function AppPreviewWaitingState() {
   );
 }
 
+interface GatingQuestion {
+  id: string;
+  topic: "database" | "auth_roles" | "integrations";
+  question: string;
+  options: string[];
+}
+
+// ENCONTRADO a petición explícita del usuario, conectando el Gating
+// Question Block (estilo Emergent.sh) ya implementado en el backend de hoy
+// mismo: el botón genérico "Aprobar y continuar" ya existente (usado para
+// OTRA faceta distinta, "structure") llamaba a approveMutation con un solo
+// clic sin recoger ninguna respuesta real — si se dejaba así, las 3
+// preguntas críticas de clarificación técnica (base de datos, roles/auth,
+// integraciones de pago) se "aprobarían" sin que el cliente las viera ni
+// respondiera, rompiendo por completo el propósito del bloqueo. Este
+// formulario sustituye a ese botón SOLO cuando job.phase es
+// "awaiting_technical_clarification" — el resto de pausas (ej. "structure")
+// siguen usando el botón genérico exactamente como antes.
+function GatingQuestionsForm({
+  questions,
+  isPending,
+  onSubmit,
+}: {
+  questions: GatingQuestion[];
+  isPending: boolean;
+  onSubmit: (answers: Record<string, string>) => void;
+}) {
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const allAnswered = questions.every((q) => !!selected[q.id]);
+
+  return (
+    <div className="space-y-4 px-2 md:px-4">
+      <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-4 py-3 text-center text-[14px] font-semibold text-[#60a5fa]">
+        <div className="flex items-center justify-center gap-3">
+          <Info className="h-5 w-5 shrink-0" />
+          <span>Antes de empezar, confirma estos detalles para que Maris AI no asuma nada que no pediste</span>
+        </div>
+      </div>
+      {questions.map((q) => (
+        <div key={q.id} className="rounded-2xl border border-white/[0.09] bg-[#0d0f1a] p-4 space-y-2.5">
+          <p className="text-[15px] font-semibold text-white/90">{q.question}</p>
+          <div className="space-y-1.5">
+            {q.options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setSelected((prev) => ({ ...prev, [q.id]: opt }))}
+                className={`w-full text-left rounded-lg border px-3.5 py-2.5 text-[14px] transition ${
+                  selected[q.id] === opt
+                    ? "border-[#7c3aed] bg-[#7c3aed]/15 text-white"
+                    : "border-white/[0.08] bg-white/[0.02] text-white/70 hover:bg-white/[0.05]"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <Button
+        size="lg"
+        onClick={() => onSubmit(selected)}
+        disabled={!allAnswered || isPending}
+        className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white shadow-[0_0_22px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-50"
+      >
+        {isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5 fill-current" />}
+        Confirmar y empezar a construir
+      </Button>
+    </div>
+  );
+}
+
 export default function AppDetailPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const [, setLocation] = useLocation();
@@ -470,10 +542,34 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     });
   };
 
+  const handleSubmitGatingAnswers = (selected: Record<string, string>) => {
+    const approvalJobId = effectiveJobId;
+    if (!approvalJobId) {
+      toast({
+        title: "Sin trabajo de generación activo",
+        description: "No encuentro el identificador del trabajo que debe aprobarse. Recarga la pantalla.",
+        variant: "destructive",
+      });
+      return;
+    }
+    approveMutation.mutate({
+      id: String(approvalJobId),
+      data: { facet: "technical_architecture", answers: selected },
+    });
+  };
+
   const phaseInfo = PHASE_LABELS[job?.phase ?? "queued"] ?? PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
   const jobStatus = job?.status ?? activeAppJob?.status;
   const isAwaitingApproval = jobStatus === "awaiting_approval";
+  // Distingue la pausa REAL del Gating Question Block (con preguntas
+  // estructuradas que el cliente debe responder) de cualquier otra pausa
+  // genérica preexistente (ej. facet "structure") — solo la primera
+  // sustituye el botón "Aprobar y continuar" por el formulario de preguntas.
+  const isAwaitingTechnicalClarification = isAwaitingApproval && job?.phase === "awaiting_technical_clarification";
+  const gatingQuestions: GatingQuestion[] = isAwaitingTechnicalClarification
+    ? (job?.checkpointData?.questions ?? [])
+    : [];
   const isActivelyProcessing = effectiveJobId !== null && !isAwaitingApproval;
   const isWorking = isActivelyProcessing || isAwaitingApproval;
   const firstName = me?.name?.split(" ")?.[0] || me?.firstName || user?.firstName || "Ivan";
@@ -934,7 +1030,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     // ── CHAT (tab por defecto) ──
     return (
       <>
-        {isAwaitingApproval && (
+        {isAwaitingApproval && !isAwaitingTechnicalClarification && (
           <div className="px-4 md:px-6 pt-4 md:pt-6">
             <div className="rounded-lg border border-[#1d4ed8]/35 bg-[#0f2244]/70 px-4 md:px-6 py-3.5 text-center text-[14px] md:text-[15px] font-semibold text-[#60a5fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <div className="flex items-center justify-center gap-3">
@@ -1159,7 +1255,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           )}
         </div>
         <div className="space-y-2 px-2 md:px-4 pb-24 md:pb-6">
-          {isAwaitingApproval && (
+          {isAwaitingTechnicalClarification && gatingQuestions.length > 0 ? (
+            <GatingQuestionsForm
+              questions={gatingQuestions}
+              isPending={approveMutation.isPending}
+              onSubmit={handleSubmitGatingAnswers}
+            />
+          ) : isAwaitingApproval && (
             <Button
               size="lg"
               onClick={handleApprove}

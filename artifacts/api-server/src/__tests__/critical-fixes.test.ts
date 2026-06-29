@@ -34,6 +34,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_SRC = join(__dirname, "..");
 const SERVICES_SRC = join(__dirname, "../../../../lib/services/src");
+const APPFORGE_SRC = join(__dirname, "../../../appforge/src");
 
 let failed = 0;
 function check(label: string, cond: boolean, hint?: string): void {
@@ -52,6 +53,10 @@ function readSrc(relativeToApiSrc: string): string {
 
 function readServicesSrc(relativeToServicesSrc: string): string {
   return readFileSync(join(SERVICES_SRC, relativeToServicesSrc), "utf-8");
+}
+
+function readAppforgeSrc(relativeToAppforgeSrc: string): string {
+  return readFileSync(join(APPFORGE_SRC, relativeToAppforgeSrc), "utf-8");
 }
 
 console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
@@ -466,6 +471,47 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
     "FIX 18: generateSingleFileContent exige que el catch-all sea SIEMPRE el último hijo de <Switch>",
     /CRITICAL ROUTING RULE — CATCH-ALL ORDER/.test(src),
     "Sin esta regla, el Patcher Agent de un solo archivo puede reescribir App.tsx (para reparar cualquier otro problema) y mover el catch-all a una posición incorrecta — la app compila perfecto pero muestra 404 en todas las rutas.",
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 19: Gating Question Block (estilo Emergent.sh) conectado a la
+// infraestructura de pausa/reanudación que YA EXISTÍA completa en
+// producción (GenerationJob.awaitingApproval / checkpointData /
+// approvedFacets, y el endpoint POST /jobs/:id/approve) pero que NINGÚN
+// punto real de generateApp disparaba jamás. Antes de lanzar un proyecto
+// NUEVO y ULTRA-COMPLEJO directo a la generación por hitos, se pregunta
+// una vez por los 3 puntos ciegos que más rompen proyectos reales
+// (base de datos, roles/auth, integraciones de pago) — y, al reanudar,
+// las respuestas reales del cliente se inyectan como contexto del
+// sistema, no se vuelven a adivinar.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 19a: existe generateGatingQuestions, que analiza el prompt y genera hasta 3 preguntas críticas",
+    /async function generateGatingQuestions/.test(appsSrc),
+  );
+  check(
+    "FIX 19b: generateApp dispara la pausa real (phase: \"awaiting_technical_clarification\") para proyectos nuevos ultra-complejos",
+    /if \(!previous && isUltraComplex && jobId\)/.test(appsSrc) && /phase: "awaiting_technical_clarification"/.test(appsSrc),
+    "Sin esto, la infraestructura de pausa (awaitingApproval/checkpointData/approvedFacets) sigue completa en la base de datos pero sin ningún punto real que la dispare — exactamente como estaba antes de este fix.",
+  );
+  check(
+    "FIX 19c: las respuestas reales del cliente se inyectan como contexto al reanudar, no se vuelven a adivinar",
+    /DETALLES TÉCNICOS CONFIRMADOS POR EL USUARIO/.test(appsSrc),
+  );
+  const jobsSrc = readSrc("routes/jobs.ts");
+  check(
+    "FIX 19d: POST /jobs/:id/approve acepta y guarda las respuestas reales (answers), no solo el nombre de la faceta",
+    /const \{ facet, answers \} = req\.body/.test(jobsSrc),
+    "Sin esto, el sistema sabe QUE el cliente respondió pero no QUÉ respondió — la pausa no tendría ningún efecto real sobre la generación posterior.",
+  );
+  const appDetailSrc = readAppforgeSrc("pages/app-detail.tsx");
+  check(
+    "FIX 19e: el frontend muestra un formulario real con las preguntas (GatingQuestionsForm), no solo el botón genérico 'Aprobar y continuar'",
+    /function GatingQuestionsForm/.test(appDetailSrc) && /isAwaitingTechnicalClarification/.test(appDetailSrc),
+    "Sin este formulario, el botón genérico ya existente para OTRA faceta distinta ('structure') aprobaría la pausa de clarificación técnica con un solo clic, sin que el cliente viera ni respondiera ninguna de las 3 preguntas — rompiendo el propósito completo del Gating Question Block.",
   );
 }
 

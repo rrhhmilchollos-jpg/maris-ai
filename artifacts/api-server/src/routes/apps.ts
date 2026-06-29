@@ -1189,6 +1189,30 @@ export interface GeneratedAppPayload {
   architecture?: "monolith" | "microservices" | "serverless";
 }
 
+// ENCONTRADO a petición explícita del usuario (siguiendo el diagnóstico de
+// que la infraestructura de pausa — GenerationJob.awaitingApproval,
+// checkpointData, approvedFacets, y el endpoint POST /jobs/:id/approve —
+// ya existía completa en producción, pero NADA en generateApp la
+// disparaba jamás): este es el objeto que activa esa infraestructura por
+// primera vez. Tipo de unión (en vez de `any`) para que TypeScript
+// proteja el resto del flujo: cualquier caller que reciba esto debe
+// comprobar explícitamente `"phase" in result` antes de tratarlo como un
+// GeneratedAppPayload completo.
+export interface GatingCheckpointPayload {
+  phase: "awaiting_technical_clarification";
+  checkpointData: {
+    questions: GatingQuestion[];
+    originalPrompt: string;
+  };
+}
+
+export interface GatingQuestion {
+  id: string;
+  topic: "database" | "auth_roles" | "integrations";
+  question: string;
+  options: string[];
+}
+
 
 
 export interface AttachmentContext {
@@ -3154,6 +3178,46 @@ export type PhaseErrorReporter = (
   extras?: Record<string, unknown>,
 ) => void;
 
+// ENCONTRADO a petición explícita del usuario, siguiendo el diagnóstico de
+// que la infraestructura de pausa (GenerationJob.awaitingApproval,
+// checkpointData, approvedFacets, POST /jobs/:id/approve) existía completa
+// en producción pero NADA en generateApp la activaba jamás — el "Gating
+// Question Block" al estilo Emergent.sh: antes de lanzar un proyecto
+// ULTRA-COMPLEJO nuevo (SaaS completo, roles cruzados, pasarelas de pago)
+// directamente a la fase de generación por hitos, este agente rápido
+// analiza el prompt y extrae hasta 3 preguntas críticas sobre los puntos
+// ciegos que más rompen proyectos reales: tipo de base de datos,
+// autenticación/roles, e integraciones de terceros (pagos, APIs externas).
+// Devuelve [] si el prompt ya es lo bastante específico en estas 3 áreas
+// (ej. el cliente ya dijo "con Stripe y PostgreSQL") — nunca se le
+// pregunta al cliente algo que ya respondió él mismo en su propio prompt.
+async function generateGatingQuestions(clientPrompt: string): Promise<GatingQuestion[]> {
+  try {
+    const response = await anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      system: `Analyze the user's software request (in Spanish). Identify genuine ambiguity in exactly 3 critical areas that most commonly break complex software projects: Database (SQL vs NoSQL and which engine), Authentication/Roles (who can do what), and Third-Party Integrations (payments, external APIs). For each area, generate ONE short, specific, multiple-choice question in Spanish ONLY IF the user's prompt does not already make a clear, confident choice for that area — if the prompt already answers it (e.g. explicitly mentions "Stripe" or "PostgreSQL" or describes the exact roles), DO NOT ask about that area again.
+
+Output STRICT JSON only, no markdown, no explanation:
+{"questions":[{"id":"database","topic":"database","question":"¿Qué tipo de base de datos prefieres para este proyecto?","options":["PostgreSQL (relacional, ideal si hay pagos/facturación)","MongoDB (NoSQL, más flexible para datos variables)","No tengo preferencia, decide tú"]},{"id":"auth_roles","topic":"auth_roles","question":"¿Qué tipos de usuario tendrá la plataforma?","options":["Solo un tipo de usuario (clientes)","Clientes + un panel de administrador","Varios roles distintos con permisos diferentes"]},{"id":"integrations","topic":"integrations","question":"¿Qué pasarela de pago necesitas integrar?","options":["Stripe","PayPal","Ninguna pasarela de pago por ahora"]}]}
+
+If the prompt already resolves all 3 areas with confidence, return {"questions":[]}.
+"id" must be exactly one of: "database", "auth_roles", "integrations" — never invent a different id, and never return more than one question per topic.`,
+      messages: [{ role: "user", content: clientPrompt.slice(0, 4000) }],
+    }).finalMessage();
+    const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const parsed = extractJsonObject<{ questions?: GatingQuestion[] }>(raw);
+    if (!parsed || !Array.isArray(parsed.questions)) return [];
+    const validTopics = new Set(["database", "auth_roles", "integrations"]);
+    return parsed.questions.filter(
+      (q) => q && validTopics.has(q.topic) && typeof q.question === "string" && Array.isArray(q.options) && q.options.length >= 2,
+    );
+  } catch (err) {
+    logger.warn({ err }, "[generateGatingQuestions] Falló — continuando sin preguntas de clarificación");
+    return [];
+  }
+}
+
 export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
@@ -3166,7 +3230,7 @@ export async function generateApp(
   agentMemory?: AgentMemoryContext,
   requestContext?: RouteGenerationRequestContext,
   jobId?: string,
-): Promise<GeneratedAppPayload> {
+): Promise<GeneratedAppPayload | GatingCheckpointPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -3267,6 +3331,64 @@ export async function generateApp(
   const wantsFullBuild = !previous || hasExplicitBuildIntent;
   const isUltraComplex = agentModelPlan.tier === "ultra";
   const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" || isUltraComplex;
+
+  // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
+  // A petición EXPLÍCITA del usuario: antes de lanzar un proyecto NUEVO
+  // (!previous — nunca en ediciones de un proyecto ya existente, donde ya
+  // hay contexto real) y ULTRA-COMPLEJO directamente a la fase de
+  // generación por hitos, se pausa UNA VEZ para preguntar los 3 puntos
+  // ciegos que más rompen proyectos reales (base de datos, roles/auth,
+  // integraciones de pago) — en vez de que el orquestador "vaya con los
+  // ojos cerrados" asumiendo flujos que el cliente nunca especificó.
+  // Reutiliza la infraestructura YA EXISTENTE en producción (GenerationJob
+  // .awaitingApproval / .checkpointData / .approvedFacets y el endpoint
+  // POST /jobs/:id/approve, completamente funcionales pero sin ningún
+  // punto real que los disparara hasta ahora) — no se inventa ningún
+  // mecanismo nuevo de pausa/reanudación, solo se conecta el cable que
+  // faltaba. Solo se pausa una vez por job: si approvedFacets ya incluye
+  // "technical_architecture" (el cliente ya respondió, o el job se
+  // reanudó tras la aprobación), se salta esta sección y se continúa
+  // directo a la generación, igual que antes de este cambio.
+  if (!previous && isUltraComplex && jobId) {
+    try {
+      const jobForGating = await GenerationJob.findById(jobId).select("approvedFacets checkpointData").lean() as any;
+      const alreadyApproved = (jobForGating?.approvedFacets || []).includes("technical_architecture");
+      if (!alreadyApproved) {
+        const questions = await generateGatingQuestions(prompt);
+        if (questions.length > 0) {
+          await log("system", "❓ Proyecto de alta complejidad — antes de empezar, necesito confirmar algunos detalles técnicos clave para no asumir nada que no hayas pedido...");
+          return {
+            phase: "awaiting_technical_clarification",
+            checkpointData: {
+              questions,
+              originalPrompt: prompt,
+            },
+          };
+        }
+        // Sin preguntas (el prompt ya resolvía las 3 áreas con confianza) —
+        // continúa directo a la generación, sin pausa innecesaria.
+      } else {
+        // El cliente ya respondió las preguntas de clarificación — sus
+        // respuestas reales (guardadas por POST /jobs/:id/approve en
+        // checkpointData.answers) se inyectan como CONTEXTO DEL SISTEMA al
+        // prompt, para que el generador de hitos sepa con precisión qué
+        // base de datos, roles o pasarela de pago usar, en vez de tener
+        // que volver a adivinarlo desde el prompt original sin más detalle.
+        const answers = jobForGating?.checkpointData?.answers as Record<string, string> | undefined;
+        if (answers && Object.keys(answers).length > 0) {
+          const answersBlock = Object.entries(answers)
+            .map(([topic, answer]) => `- ${topic}: ${answer}`)
+            .join("\n");
+          prompt = `${prompt}\n\n[DETALLES TÉCNICOS CONFIRMADOS POR EL USUARIO — usa esto con precisión, no asumas nada distinto]\n${answersBlock}`;
+        }
+      }
+    } catch (gatingErr) {
+      // Best-effort, igual que el resto de verificaciones "extra" del
+      // pipeline: un fallo aquí (ej. Mongo lento, Claude caído) NUNCA debe
+      // bloquear la generación — simplemente se continúa sin la pausa.
+      logger.warn({ gatingErr, jobId }, "[gating] Falló la comprobación de clarificación — continuando sin pausa");
+    }
+  }
 
   if (wantsFullBuild && useMilestoneOrchestrator) {
     await log("system", isUltraComplex
@@ -6042,18 +6164,18 @@ export async function runJobById(jobId: string): Promise<void> {
       jobId,
     );
 
-    if ((result as any).phase?.startsWith("awaiting_")) {
-      const checkpoint = result as any;
+    if ("phase" in result && result.phase?.startsWith("awaiting_")) {
+      const checkpoint = result as GatingCheckpointPayload;
       await GenerationJob.findByIdAndUpdate(jobId, {
         $set: {
           status: "awaiting_approval",
           phase: checkpoint.phase,
           awaitingApproval: true,
-          checkpointData: checkpoint,
+          checkpointData: checkpoint.checkpointData,
           updatedAt: new Date(),
         },
       });
-      await log("system", "⏸️ Generación pausada: esperando aprobación del usuario.");
+      await log("system", `⏸️ Generación pausada: esperando que confirmes ${checkpoint.checkpointData.questions.length} detalle(s) técnico(s) antes de continuar.`);
       return;
     }
 

@@ -113,7 +113,16 @@ router.post("/jobs/:id/approve", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
     const userId = req.userId as string;
-    const { facet } = req.body;
+    // ENCONTRADO a petición explícita del usuario, conectando el Gating
+    // Question Block al endpoint que ya existía: este endpoint solo
+    // recibía `facet` (ej. "technical_architecture") y la marcaba como
+    // aprobada, pero NUNCA recibía las respuestas reales del cliente a
+    // cada pregunta — el sistema sabía QUE el cliente respondió, pero no
+    // QUÉ respondió (¿PostgreSQL o MongoDB? ¿Stripe o PayPal?). `answers`
+    // es opcional para no romper cualquier otro uso futuro de esta misma
+    // ruta con una faceta distinta que no necesite respuestas (aprobación
+    // simple sin preguntas asociadas).
+    const { facet, answers } = req.body;
 
     if (!facet) return res.status(400).json({ error: "facet es requerido" });
 
@@ -131,6 +140,14 @@ router.post("/jobs/:id/approve", requireAuth, async (req: any, res: any) => {
       approvedFacets.push(facet);
     }
     checkpoint.approvedFacets = approvedFacets;
+    // Guardar las respuestas reales del cliente, indexadas por el id de la
+    // pregunta (ej. {"database": "PostgreSQL...", "auth_roles": "...",
+    // "integrations": "Stripe"}) — generateApp las lee de aquí al
+    // reanudar para inyectarlas como contexto real del prompt, en vez de
+    // tener que volver a adivinar lo que el cliente ya confirmó.
+    if (answers && typeof answers === "object" && !Array.isArray(answers)) {
+      checkpoint.answers = { ...(checkpoint.answers || {}), ...answers };
+    }
 
     await GenerationJob.findByIdAndUpdate(req.params.id, {
       $set: {
