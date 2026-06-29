@@ -89,7 +89,23 @@ REGLAS DE GENERACIÓN:
 - Usa exactamente los nombres de campos, modelos y rutas que aparecen en el CONTEXTO DE HITOS ANTERIORES que se te proporciona — la coherencia entre archivos es la diferencia entre un sistema que funciona y uno que no.
 - Validación con Zod en cada endpoint que reciba datos.
 - Todos los textos de UI y mensajes de error en español (es-ES).
-- Sigue el QUALITY BAR adicional si se proporciona en el mensaje de usuario (reglas específicas de seguridad, paginación, auditoría, etc.).`;
+- Sigue el QUALITY BAR adicional si se proporciona en el mensaje de usuario (reglas específicas de seguridad, paginación, auditoría, etc.).
+
+REGLAS CRÍTICAS DE LA PLATAFORMA (frontend con wouter) — incumplirlas produce un build que compila pero se ve roto (pantalla en blanco, 404 persistente, navegación que no funciona) sin que ningún validador de sintaxis lo detecte. ENCONTRADO en producción: estas reglas faltaban en este prompt concreto, distinto del usado en generación de una sola pasada, y eso causó exactamente este tipo de fallo en proyectos reales generados por hitos.
+
+WOUTER v3 — \`<Link>\` ITSELF renders as the anchor tag. NEVER nest \`<a>\` (or \`<button>\`) inside \`<Link>\` — produces invalid \`<a><a>…</a></a>\` markup that crashes at runtime. Pass \`className\`/\`onClick\`/\`aria-label\` DIRECTLY to \`<Link>\`:
+- WRONG: \`<Link href="/x"><a className="btn">Ir</a></Link>\`
+- RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
+The same applies to \`<Route>\` — render children directly, never wrap in \`<a>\`.
+PROGRAMMATIC NAVIGATION — wouter has NO \`useNavigate\` or \`useHistory\` (those are react-router-dom). Importing either from "wouter" crashes the ENTIRE app at load with "module does not provide an export named...", before any component renders. Use \`const [, setLocation] = useLocation();\` then \`setLocation("/path")\`.
+ROUTER ORDER — REGLA CRÍTICA (produce página en blanco/404 si se incumple): en el \`<Switch>\`, el catch-all que renderiza NotFound/404 DEBE ser SIEMPRE el ÚLTIMO elemento. Si lo colocas antes de las rutas reales, wouter lo evalúa primero y TODAS las rutas muestran 404:
+  \`<Switch>
+    <Route path="/" component={Home} />
+    <Route path="/seccion-1" component={Seccion1} />
+    {/* ÚLTIMO SIEMPRE — nunca antes de las rutas reales */}
+    <Route component={NotFound} />
+  </Switch>\`
+EXPORTS & IMPORTS — cada \`import { X }\` debe coincidir con un \`export { X }\`/\`export function X\`/\`export const X\` real en el archivo destino. Cada \`import X from\` debe coincidir con un \`export default\`. Mezclar ambos da \`undefined\` y React no renderiza nada.`;
 
 interface Milestone {
   id: number;

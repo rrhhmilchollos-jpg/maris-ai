@@ -256,6 +256,46 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 11: reglas de wouter en CODE_AGENT_STATIC (construcción NUEVA por
+// hitos) — distinto del FIX 1, que protege EDIT_CODE_AGENT_STATIC (modo
+// EDICIÓN). ENCONTRADO investigando por qué un proyecto NUEVO (no una
+// edición) seguía generando 404 persistente a pesar de que el camino de
+// edición ya tenía estas reglas desde hoy mismo: CODE_AGENT_STATIC (el
+// prompt que genera CADA archivo individual en buildProjectIncremental,
+// usado en CUALQUIER generación nueva que active el sistema de hitos)
+// nunca tuvo estas reglas — solo el de edición las tenía. El modelo podía
+// generar perfectamente el primer archivo con el router bien ordenado,
+// pero al generar un componente de navegación o un archivo posterior sin
+// estas reglas, introducir el mismo patrón roto sin que nada lo evitara.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readServicesSrc("CoreOrchestrator.ts");
+  // Extracción robusta: desde el inicio de CODE_AGENT_STATIC hasta el
+  // siguiente límite conocido del archivo (interface Milestone) — más
+  // fiable que intentar parsear backticks escapados dentro del propio
+  // template literal con una regex (probado real: una regex con [^\`]
+  // se corta en el primer backtick ESCAPADO real del contenido, dando
+  // un bloque incompleto y falsos negativos).
+  const startIdx = src.indexOf("const CODE_AGENT_STATIC = `");
+  const endIdx = src.indexOf("interface Milestone");
+  const codeAgentBlock = startIdx !== -1 && endIdx !== -1 ? src.slice(startIdx, endIdx) : "";
+  check(
+    "FIX 11: CODE_AGENT_STATIC (construcción nueva) se encontró y delimitó correctamente",
+    codeAgentBlock.length > 0,
+    "No se pudo extraer el contenido de CODE_AGENT_STATIC — revisa si su declaración o el límite siguiente (interface Milestone) cambiaron de forma, y actualiza este check.",
+  );
+  check(
+    "FIX 11: CODE_AGENT_STATIC (construcción nueva) menciona ROUTER ORDER",
+    /ROUTER ORDER/.test(codeAgentBlock),
+    "Sin esta regla en el prompt de CONSTRUCCIÓN NUEVA (no edición), proyectos nuevos generados por hitos pueden seguir produciendo 404 persistente porque el modelo nunca recibió la instrucción de poner el catch-all al final del <Switch>.",
+  );
+  check(
+    "FIX 11: CODE_AGENT_STATIC (construcción nueva) prohíbe useNavigate/useHistory de wouter",
+    /wouter has NO/.test(codeAgentBlock),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
