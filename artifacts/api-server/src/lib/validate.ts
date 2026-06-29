@@ -103,6 +103,141 @@ function detectKnownBadPackageImports(
   return issues;
 }
 
+/**
+ * DETECCIÓN DE ROUTER CATCH-ALL MAL POSICIONADO (causa raíz #1 de 404 en apps generadas).
+ * Detecta cuando una ruta catch-all (<Route path="*"> o <Route> sin path, que renderiza
+ * NotFound/404) está ANTES de las rutas reales dentro de un <Switch>. En wouter (y
+ * react-router), el primer match gana — si el catch-all está primero, TODAS las rutas
+ * muestran 404.
+ *
+ * ENCONTRADO EN PRODUCCIÓN: app "Clínica Dental" (pepepepe00089@gmail.com) — pasó
+ * esbuild + testing + QA sin issues, pero el evaluador visual detectó 404 en todas
+ * las rutas. La causa era exactamente este patrón: <Route component={NotFound}/>
+ * colocado como primer hijo de <Switch>.
+ */
+function detectCatchAllBeforeRoutes(vfs: Record<string, string>): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx$/.test(file)) continue;
+    if (!/<Switch/.test(contents)) continue;
+
+    // Extraer cada bloque <Switch>...</Switch>
+    const switchRegex = /<Switch[^>]*>([\s\S]*?)<\/Switch>/g;
+    let switchMatch: RegExpExecArray | null;
+    while ((switchMatch = switchRegex.exec(contents)) !== null) {
+      const switchBody = switchMatch[1];
+      // Encontrar todas las <Route ...> dentro del Switch
+      const routeRegex = /<Route\b([^>]*?)(?:\/>|>)/g;
+      const routes: Array<{ props: string; index: number; isCatchAll: boolean }> = [];
+      let routeMatch: RegExpExecArray | null;
+      while ((routeMatch = routeRegex.exec(switchBody)) !== null) {
+        const props = routeMatch[1];
+        // Un catch-all es: path="*" O sin atributo path (solo component={NotFound})
+        const hasStar = /path\s*=\s*["'][*]["']/.test(props);
+        const hasNoPath = !/path\s*=/.test(props);
+        const looksLike404 = /NotFound|not-found|Error404|Page404|NoMatch/i.test(props);
+        const isCatchAll = hasStar || (hasNoPath && looksLike404);
+        routes.push({ props, index: routeMatch.index, isCatchAll });
+      }
+      // Si hay un catch-all Y no es el último, es un bug
+      const catchAllIndices = routes.map((r, i) => r.isCatchAll ? i : -1).filter(i => i !== -1);
+      for (const idx of catchAllIndices) {
+        if (idx < routes.length - 1) {
+          // Hay rutas DESPUÉS del catch-all — bug confirmado
+          const line = contents.slice(0, switchMatch.index + routes[idx].index).split("\n").length;
+          issues.push({
+            file,
+            line,
+            message: "Catch-all/404 route is NOT the last child of <Switch>. This causes ALL routes to show 404. Move <Route path=\"*\"> or <Route component={NotFound}> to the LAST position inside <Switch>.",
+          });
+          break; // Un issue por Switch es suficiente
+        }
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * DETECCIÓN DE RUTA RAÍZ AUSENTE O VACÍA.
+ * Si el archivo de router (App.tsx o equivalente) tiene un <Switch> pero NO
+ * tiene una <Route path="/"> que renderice algo, la app mostrará 404 o
+ * pantalla en blanco en la URL base.
+ */
+function detectMissingRootRoute(vfs: Record<string, string>): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  // Solo verificar en archivos que parezcan ser el router principal
+  const routerFiles = Object.entries(vfs).filter(([file, contents]) =>
+    /\.(t|j)sx$/.test(file) &&
+    /<Switch/.test(contents) &&
+    (file.includes("App") || file.includes("Router") || file.includes("router") || file.includes("routes"))
+  );
+  for (const [file, contents] of routerFiles) {
+    // Verificar si hay una ruta para "/"
+    const hasRootRoute = /<Route\b[^>]*path\s*=\s*["']\/["'][^>]*>/.test(contents) ||
+                         /<Route\b[^>]*path\s*=\s*\{\s*["']\/["']\s*\}[^>]*>/.test(contents);
+    if (!hasRootRoute) {
+      const switchLine = contents.slice(0, contents.indexOf("<Switch")).split("\n").length;
+      issues.push({
+        file,
+        line: switchLine,
+        message: 'No <Route path="/"> found inside <Switch>. The app will show 404 or blank page at the root URL. Add a route for path="/" that renders the main/home component.',
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * DETECCIÓN DE EXPORTS/IMPORTS INCONSISTENTES.
+ * Cuando un archivo importa `import X from "./Component"` pero el archivo
+ * destino solo tiene `export function X` (named, no default), o viceversa,
+ * React recibe `undefined` como componente y no renderiza nada — sin error
+ * de build porque esbuild con packages:external no valida esto.
+ */
+function detectExportImportMismatch(vfs: Record<string, string>): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  // Mapear qué tipo de export tiene cada archivo
+  const exportInfo = new Map<string, { hasDefault: boolean; namedExports: string[] }>();
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx?$/.test(file)) continue;
+    const hasDefault = /export\s+default\b/.test(contents);
+    const namedExports: string[] = [];
+    const namedRe = /export\s+(?:function|const|class|let|var|type|interface)\s+(\w+)/g;
+    let nm: RegExpExecArray | null;
+    while ((nm = namedRe.exec(contents)) !== null) {
+      namedExports.push(nm[1]);
+    }
+    exportInfo.set(file, { hasDefault, namedExports });
+  }
+
+  // Verificar imports default que apuntan a archivos sin export default
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx?$/.test(file)) continue;
+    // import Something from "./path"
+    const defaultImportRe = /import\s+(\w+)\s+from\s+["'](\.[\/][^"']+)["']/g;
+    let dim: RegExpExecArray | null;
+    while ((dim = defaultImportRe.exec(contents)) !== null) {
+      const importedName = dim[1];
+      const specifier = dim[2];
+      const resolved = resolveInVFS(file, specifier, vfs);
+      if (!resolved) continue; // Cannot resolve — already caught by esbuild
+      const info = exportInfo.get(resolved);
+      if (info && !info.hasDefault) {
+        // El archivo no tiene export default pero se importa como default
+        const line = contents.slice(0, dim.index).split("\n").length;
+        issues.push({
+          file,
+          line,
+          message: `Default import "${importedName}" from "${specifier}" but "${resolved}" has NO export default. Use named import: import { ${importedName} } from "${specifier}" — or add "export default" to the target file.`,
+        });
+        if (issues.length > 8) return issues;
+      }
+    }
+  }
+  return issues;
+}
+
 const SKIP_PREFIXES = ["tests/", "e2e/", "__tests__/", "test/"];
 const SKIP_EXACT = new Set([
   "package.json",
@@ -370,6 +505,15 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // never resolves real exports, so this slips through silently and only
     // surfaces as a runtime crash in the real browser.
     issues.push(...detectKnownBadPackageImports(vfs));
+    // Validaciones estructurales de router — detectan 404/blank page ANTES
+    // de que el evaluador visual tenga que hacerlo (ahorra un ciclo completo
+    // de evaluación + auto-fix que antes era necesario para cada app con
+    // este bug).
+    issues.push(...detectCatchAllBeforeRoutes(vfs));
+    issues.push(...detectMissingRootRoute(vfs));
+    // Detección de export/import mismatch — causa raíz de componentes que
+    // "no renderizan" sin error visible.
+    issues.push(...detectExportImportMismatch(vfs));
 
     const ok = issues.length === 0;
     logger.info({ ok, issuesCount: issues.length, duration: Date.now() - started }, "VALIDATOR: Finalizado con éxito.");
