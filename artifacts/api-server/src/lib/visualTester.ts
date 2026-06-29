@@ -721,6 +721,7 @@ export async function applyVisualFixesAndSave(opts: {
 
     // Save the patched bundle (and backend, if the structural fix touched it) to DB
     const previousBundle = currentBundle;
+    const previousBackendCode = currentBackendCode;
     const dbUpdate: Record<string, string> = { frontendCode: patched };
     if (patchResult.backendCode) dbUpdate.backendCode = patchResult.backendCode;
     const updated = await GeneratedApp.findOneAndUpdate(
@@ -737,15 +738,33 @@ export async function applyVisualFixesAndSave(opts: {
     fixesApplied++;
 
     // Re-screenshot and re-analyze with the new bundle
+    const scoreBeforeThisPatch = currentAnalysis.overallScore;
     await new Promise((r) => setTimeout(r, 1500));
     try {
       const newShots = await takeScreenshots(previewUrl);
-      currentAnalysis = await analyzeWithVision(
+      const newAnalysis = await analyzeWithVision(
         newShots,
         { title: app.title, description: app.description },
         prompt,
       );
-      log?.info({ appId, cycle, score: currentAnalysis.overallScore }, "[applyVisualFixesAndSave] Re-analysis after fix");
+      log?.info({ appId, cycle, scoreBefore: scoreBeforeThisPatch, scoreAfter: newAnalysis.overallScore }, "[applyVisualFixesAndSave] Re-analysis after fix");
+
+      // Mismo problema confirmado en runVisualTester (ver su comentario
+      // detallado) y corregido aquí con el mismo patrón: si el parche
+      // empeoró la puntuación visual real, se revierte el bundle al estado
+      // anterior en vez de quedarse con una regresión sin detectar.
+      if (newAnalysis.overallScore < scoreBeforeThisPatch) {
+        log?.warn({ appId, cycle, scoreBefore: scoreBeforeThisPatch, scoreAfter: newAnalysis.overallScore }, "[applyVisualFixesAndSave] Patch REGRESSED the visual score — reverting");
+        const revertUpdate: Record<string, string> = { frontendCode: previousBundle };
+        if (patchResult.backendCode && previousBackendCode) revertUpdate.backendCode = previousBackendCode;
+        await GeneratedApp.findOneAndUpdate({ _id: appId }, revertUpdate);
+        currentBundle = previousBundle;
+        if (patchResult.backendCode && previousBackendCode) currentBackendCode = previousBackendCode;
+        fixesApplied = Math.max(0, fixesApplied - 1);
+        // currentAnalysis se queda con el análisis ANTERIOR (no se sobreescribe con newAnalysis) — es el que corresponde al bundle finalmente guardado.
+        break;
+      }
+      currentAnalysis = newAnalysis;
     } catch (reErr) {
       log?.warn({ appId, cycle, err: (reErr as Error).message }, "[applyVisualFixesAndSave] Re-screenshot failed");
       break;
@@ -805,28 +824,33 @@ export async function runVisualTester(opts: {
     summary: "Sin análisis",
   };
 
+  let hasFreshAnalysis = false; // true cuando lastAnalysis ya corresponde al bundle actual (re-análisis del ciclo anterior) — evita una captura+análisis redundante
+
   while (cycle < (autoFix ? MAX_FIX_CYCLES : 1)) {
     cycle++;
     log?.info({ appId: app.id, cycle, url }, "VisualTester cycle start");
-    await report(`Ciclo ${cycle}/${autoFix ? MAX_FIX_CYCLES : 1} — capturando screenshots reales...`);
 
-    lastShots = await takeScreenshots(url);
-    await report(`Ciclo ${cycle} — Claude Vision analizando la app...`);
-    lastAnalysis = await analyzeWithVision(
-      lastShots,
-      { title: app.title, description: app.description },
-      prompt,
-    );
+    if (!hasFreshAnalysis) {
+      await report(`Ciclo ${cycle}/${autoFix ? MAX_FIX_CYCLES : 1} — capturando screenshots reales...`);
+      lastShots = await takeScreenshots(url);
+      await report(`Ciclo ${cycle} — Claude Vision analizando la app...`);
+      lastAnalysis = await analyzeWithVision(
+        lastShots,
+        { title: app.title, description: app.description },
+        prompt,
+      );
 
-    log?.info(
-      {
-        appId: String(app.id),
-        cycle,
-        score: lastAnalysis.overallScore,
-        issues: lastAnalysis.issues.length,
-      },
-      "VisualTester analysis",
-    );
+      log?.info(
+        {
+          appId: String(app.id),
+          cycle,
+          score: lastAnalysis.overallScore,
+          issues: lastAnalysis.issues.length,
+        },
+        "VisualTester analysis",
+      );
+    }
+    hasFreshAnalysis = false; // se vuelve a poner true solo si el siguiente parche mejora y reutilizamos su re-análisis
 
     if (lastAnalysis.visuallyCorrect || !autoFix) break;
     const fixable = lastAnalysis.issues.filter((i) => i.severity !== "minor");
@@ -864,6 +888,7 @@ export async function runVisualTester(opts: {
     // the WHERE matches 0 rows and we abort (better stale screenshot than
     // clobbered user edits).
     const previousBundle = currentBundle;
+    const previousBackendCode = currentBackendCode;
     const dbUpdate: Record<string, string> = { frontendCode: patched };
     if (patchResult.backendCode) dbUpdate.backendCode = patchResult.backendCode;
     const updated = await GeneratedApp.findOneAndUpdate(
@@ -883,6 +908,63 @@ export async function runVisualTester(opts: {
     if (patchResult.backendCode) currentBackendCode = patchResult.backendCode;
     fixesApplied++;
     await report(`Ciclo ${cycle} — corrección aplicada. Re-verificando con Claude Vision...`);
+
+    // ENCONTRADO en un video real del usuario probando el producto: el
+    // score reportado terminó PEOR que al empezar (32→28→22) — confirmado
+    // leyendo el código que NINGÚN punto del ciclo comparaba si el parche
+    // generado por el modelo realmente MEJORABA la puntuación visual real
+    // antes de quedarse con él; solo se validaba que COMPILARA (esbuild),
+    // no que la app se viera mejor según Claude Vision. Un parche puede
+    // arreglar el issue que se le pidió y a la vez introducir una
+    // regresión visual nueva (ej. mover el banner de cookies tapando el
+    // contenido) — confirmado posible al revisar los issues reales del
+    // video, donde Claude Vision señaló exactamente ese tipo de problema.
+    // FIX: tras guardar el parche, re-capturar y re-analizar AHORA MISMO
+    // (no esperar al siguiente ciclo) y comparar el score nuevo contra el
+    // anterior — si empeora, revertir el bundle al estado previo a este
+    // parche y detener el ciclo aquí, devolviendo el mejor resultado real
+    // alcanzado en vez de seguir empeorando sin que nadie lo note.
+    const scoreBeforeThisPatch = lastAnalysis.overallScore;
+    const reShots = await takeScreenshots(url);
+    const reAnalysis = await analyzeWithVision(
+      reShots,
+      { title: app.title, description: app.description },
+      prompt,
+    );
+    log?.info(
+      { appId: app.id, cycle, scoreBefore: scoreBeforeThisPatch, scoreAfter: reAnalysis.overallScore },
+      "VisualTester re-analysis after patch — comparing for regression",
+    );
+
+    if (reAnalysis.overallScore < scoreBeforeThisPatch) {
+      log?.warn(
+        { appId: app.id, cycle, scoreBefore: scoreBeforeThisPatch, scoreAfter: reAnalysis.overallScore },
+        "VisualTester patch REGRESSED the visual score — reverting to previous bundle",
+      );
+      await report(`Ciclo ${cycle} — el arreglo empeoró la puntuación (${scoreBeforeThisPatch}→${reAnalysis.overallScore}). Revirtiendo al estado anterior...`);
+      const revertUpdate: Record<string, string> = { frontendCode: previousBundle };
+      // Solo revertimos backendCode si este parche concreto lo había tocado
+      // — si no lo tocó, dbUpdate nunca lo incluyó y no hay nada que revertir ahí.
+      if (patchResult.backendCode && previousBackendCode) revertUpdate.backendCode = previousBackendCode;
+      await GeneratedApp.findOneAndUpdate(
+        { _id: String(app.id) },
+        revertUpdate,
+      );
+      currentBundle = previousBundle;
+      if (patchResult.backendCode && previousBackendCode) currentBackendCode = previousBackendCode;
+      fixesApplied = Math.max(0, fixesApplied - 1); // el parche se descartó — no cuenta como corrección real aplicada
+      // lastAnalysis se queda con el análisis ANTERIOR (scoreBeforeThisPatch),
+      // que es el que de verdad corresponde al bundle finalmente guardado.
+      break;
+    }
+
+    // El parche mejoró o se mantuvo igual — adoptamos el nuevo análisis
+    // como referencia para decidir si seguir intentando en el próximo ciclo,
+    // evitando repetir una captura+análisis idéntica al inicio del bucle.
+    lastShots = reShots;
+    lastAnalysis = reAnalysis;
+    hasFreshAnalysis = true;
+    if (reAnalysis.visuallyCorrect) break;
 
     // Snapshot the post-fix bundle so the user can roll back if the visual
     // tester's "improvement" actually regressed something. Fire-and-forget.
