@@ -231,9 +231,9 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
   const majorCount = result?.issues?.filter(i => i.severity === "major").length || 0;
 
   return (
-    <div className={cn("rounded-xl border border-white/[0.08] bg-[#0d0d12] overflow-hidden", className)}>
+    <div className={cn("rounded-xl border border-white/[0.08] bg-[#0d0d12] overflow-hidden flex flex-col", className)}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06] shrink-0">
         <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
           <Eye className="h-4 w-4 text-cyan-400" />
         </div>
@@ -307,7 +307,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
 
       {/* Loading state */}
       {running && (
-        <div className="p-6 text-center space-y-2">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-2">
           <Loader2 className="h-8 w-8 text-cyan-400 animate-spin mx-auto" />
           <p className="text-sm text-white/60 font-medium">Capturando screenshots...</p>
           <p className="text-[11px] text-white/30">Claude Vision está analizando el diseño en 3 viewports</p>
@@ -324,7 +324,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
 
       {/* Autofix progress state */}
       {autoFixing && fixProgress && (
-        <div className="p-6 text-center space-y-3">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
           <div className="w-10 h-10 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mx-auto">
             <Wand2 className="h-5 w-5 text-violet-400 animate-pulse" />
           </div>
@@ -349,7 +349,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
 
       {/* Results */}
       {result && !running && (
-        <div>
+        <div className="flex-1 overflow-y-auto">
           {/* Nota de preview fallback */}
           {result.usingPreviewFallback && result.note && (
             <div className="mx-4 mt-3 flex items-start gap-2 text-[11px] text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
@@ -586,7 +586,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
 
       {/* Empty state */}
       {!result && !running && !error && (
-        <div className="p-6 text-center space-y-3">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
           <Camera className="h-8 w-8 text-white/15 mx-auto mb-2" />
           <p className="text-[11px] text-white/40">
             Captura screenshots reales de tu app y detecta errores visuales con Claude Vision.

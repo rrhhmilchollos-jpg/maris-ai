@@ -1567,10 +1567,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {rightPanelTab === "visual-test" ? (
-              <div className="h-full overflow-auto bg-[#0a0d15] p-4">
+              <div className="h-full overflow-hidden bg-[#0a0d15] p-4">
                 <VisualTestPanel
                   appId={app?._id || app?.id || ""}
                   appSlug={app?.publicSlug || undefined}
+                  className="h-full"
                 />
               </div>
             ) : rightPanelTab === "code" ? (
