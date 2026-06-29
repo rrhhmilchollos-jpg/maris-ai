@@ -11,23 +11,6 @@ const ISOLATION_HEADERS = {
   "Cross-Origin-Embedder-Policy": "unsafe-none",
 };
 
-// Plugin que convierte el CSS del bundle en no bloqueante
-function deferNonCriticalCSS() {
-  return {
-    name: "defer-non-critical-css",
-    apply: "build" as const,
-    transformIndexHtml(html: string) {
-      // Vite inyecta el CSS así: <link rel="stylesheet" crossorigin href="/assets/xxx.css">
-      // Lo convertimos en preload no bloqueante
-      return html.replace(
-        /<link rel="stylesheet" crossorigin href="(\/assets\/[^"]+\.css)">/g,
-        (_, href) =>
-          `<link rel="preload" as="style" href="${href}" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="${href}"></noscript>`
-      );
-    },
-  };
-}
-
 export default defineConfig({
   base: "/",
   server: {
@@ -44,7 +27,6 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss({ optimize: true }),
-    deferNonCriticalCSS(),
     compression({
       algorithm: "brotliCompress",
       exclude: [/\.(png|jpe?g|gif|svg|webp|ico|woff2?)$/],
@@ -86,17 +68,6 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        // AUDITORÍA REAL: el bundle principal (index-*.js) pesaba 685KB sin
-        // comprimir y se cargaba en TODA página, incluida la landing
-        // pública, sin que ningún visitante anónimo necesite realmente el
-        // SDK completo de autenticación o librerías de gráficos en ese
-        // momento. Sin manualChunks definido, Rollup decide la división
-        // automáticamente sin ninguna guía — separar explícitamente las
-        // librerías más pesadas en sus propios chunks permite que el
-        // navegador los cachee de forma independiente entre despliegues
-        // (cambiar código de la app no invalida el caché de estas
-        // librerías, que rara vez cambian de versión) y reduce el JS que
-        // debe parsearse antes de pintar la landing pública.
         manualChunks: {
           "vendor-clerk": ["@clerk/react", "@clerk/themes", "@clerk/localizations"],
           "vendor-charts": ["recharts"],
