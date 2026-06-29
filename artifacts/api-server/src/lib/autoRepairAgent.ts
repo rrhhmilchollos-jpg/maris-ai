@@ -21,6 +21,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
 import { patchBundle, patchBundleMultiFile, type QAIssue } from "./shared-agents";
+import { CoreOrchestrator } from "@workspace/services";
 import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
 import { GeneratedApp, User, AppMessage, JobLog, GenerationJob, AppRuntimeError } from "@workspace/db/schema";
@@ -92,8 +93,10 @@ export async function runPostGenerationRepair(opts: {
   userId: string;
   userIntent: string;
   jobId?: string;
+  /** Lista de archivos truncados detectados en la generación */
+  truncatedFiles?: string[];
 }): Promise<void> {
-  const { appId, userId, userIntent } = opts;
+  const { appId, userId, userIntent, truncatedFiles } = opts;
   const log = logger.child({ module: "auto-repair", appId, trigger: "post-generation" });
 
   try {
@@ -114,6 +117,18 @@ export async function runPostGenerationRepair(opts: {
       log.warn({ compileError }, "Bundle compilation failed — triggering auto-repair");
     }
 
+    // Si hay archivos truncados conocidos, reparar aunque compile
+    if (truncatedFiles && truncatedFiles.length > 0 && compiledOk) {
+      await autoRepairBundle({
+        appId,
+        userId,
+        trigger: "post-generation",
+        errorSummary: `${truncatedFiles.length} archivo(s) truncado(s) detectado(s): ${truncatedFiles.join(", ")}. Completar cada archivo con su contenido real y funcional.`,
+        maxCycles: MAX_AUTO_REPAIR_CYCLES,
+        log,
+      });
+      return;
+    }
     if (!compiledOk) {
       // Error de compilación → reparar inmediatamente
       await autoRepairBundle({
@@ -302,6 +317,43 @@ export async function autoRepairBundle(opts: {
         await jlog(`🔍 Quedan ${issuesForThisCycle.length} error(es) de compilación — reintentando…`, "warn");
       }
 
+      // CAMINO ROBUSTO: archivos truncados o muchos errores → CoreOrchestrator
+      // (1 archivo por llamada, sin límite de tokens). patchBundle falla en 
+      // silencio cuando hay 8+ archivos truncados simultáneos (tokens agotados).
+      const isStructuralDamage = (
+        errorSummary.toLowerCase().includes("truncado") ||
+        errorSummary.toLowerCase().includes("truncat") ||
+        errorSummary.toLowerCase().includes("404") ||
+        errorSummary.toLowerCase().includes("blank_page") ||
+        issuesForThisCycle.length >= 4
+      );
+      if (isStructuralDamage && cycle === 1) {
+        await jlog("🏗️ Daño estructural → CoreOrchestrator reparando archivo por archivo…");
+        try {
+          const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
+          const orchPrompt =
+            "[REPARACIÓN AUTOMÁTICA — REPAIR AGENT]\n" +
+            "App: \"" + (app.title || "App") + "\"\n\n" +
+            "PROBLEMA:\n" + errorSummary + "\n\n" +
+            "ERRORES:\n" + issuesForThisCycle.map((e,n) => (n+1)+". "+e.problem+"\n   Fix: "+e.fix).join("\n") + "\n\n" +
+            "INSTRUCCIONES:\n" +
+            "1. Completa TODOS los archivos truncados con su contenido real y funcional.\n" +
+            "2. src/App.tsx: catch-all <Route> siempre al FINAL del Switch.\n" +
+            "3. Sin TODOs, sin stubs, sin placeholders — código real completo.";
+          const orchResult = await orchestrator.editProjectIncremental(
+            orchPrompt, currentCode, (app as any).backendCode || "", 
+            (u: any) => { void jlog("🔨 " + (u.message || "Reparando…")); }
+          );
+          if (orchResult.frontendCode?.trim().length > 100) {
+            currentCode = orchResult.frontendCode;
+            lastFixSummary = "Reparación por hitos: " + issuesForThisCycle.length + " errores corregidos";
+            await jlog("✅ CoreOrchestrator completó la reparación");
+            continue;
+          }
+        } catch (orchErr) {
+          await jlog("⚠️ CoreOrchestrator falló — usando patcher estándar", "warn");
+        }
+      }
       const patchedCode = await patchBundle(currentCode, issuesForThisCycle, repairKind, "", "claude-sonnet-4-6");
       if (!patchedCode || patchedCode === currentCode) {
         log.warn({ cycle }, "Patcher no produjo cambios en este ciclo");
@@ -575,4 +627,27 @@ function buildRepairNotification(trigger: IAppRepairLog["trigger"], errorSummary
 > ${firstError}
 
 La app ha sido reparada y actualizada. Puedes ver los cambios en la vista previa. Si el problema persiste, escríbeme y lo resuelvo manualmente.`;
+}
+
+/**
+ * Llamado cuando el evaluador visual falla por créditos agotados.
+ * En vez de marcar la app como needs_review, lanza el repair agent
+ * que usa el bundle existente + CoreOrchestrator sin llamadas de visión.
+ */
+export async function autoRepairOnCreditsExhausted(opts: { appId: string; userId: string }): Promise<void> {
+  const { appId, userId } = opts;
+  const log = logger.child({ module: "auto-repair", appId, trigger: "credits-exhausted" });
+  log.info("Créditos agotados en evaluador — lanzando repair agent sin visión");
+  try {
+    await autoRepairBundle({
+      appId,
+      userId,
+      trigger: "post-generation",
+      errorSummary: "El evaluador visual no pudo verificar la app por créditos agotados. Verificar y completar archivos truncados, router y contenido.",
+      maxCycles: 3,
+      log,
+    });
+  } catch (err) {
+    log.warn({ err }, "autoRepairOnCreditsExhausted failed silently");
+  }
 }
