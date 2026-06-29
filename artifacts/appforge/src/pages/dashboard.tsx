@@ -477,9 +477,16 @@ export default function DashboardPage() {
     return true;
   };
 
+  const isSubmittingRef = useRef(false);
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
+    // Protección anti-doble-submit: el ref se activa síncronamente antes
+    // de cualquier llamada async, evitando que dos clicks rápidos lancen
+    // dos jobs aunque isWorking aún no se haya actualizado en el estado.
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setTimeout(() => { isSubmittingRef.current = false; }, 5000);
     const isLongPrompt = prompt.trim().length > 100;
     if (!isLongPrompt && !looksLikeBuildIntent(prompt)) {
       const userMsg = prompt.trim();
