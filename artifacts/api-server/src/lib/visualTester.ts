@@ -528,6 +528,15 @@ async function applyVisualFixes(opts: {
    *  qué módulos construir (dashboard dental, pacientes, citas, etc.). */
   userPrompt?: string;
   backendCode?: string;
+  /** ENCONTRADO en un caso real del usuario: cuando el camino del
+   *  CoreOrchestrator se activaba (issue crítico), el callback de progreso
+   *  que se le pasaba era `() => {}` — VACÍO. Mientras el orquestador
+   *  generaba 10 archivos en lotes (varios minutos con llamadas reales a
+   *  Claude), el mensaje "Generando el arreglo..." se quedaba FIJO sin
+   *  ninguna actualización, indistinguible visualmente de estar realmente
+   *  atascado. Este callback opcional conecta ese progreso real, igual que
+   *  ya se hace para el resto de fases del ciclo (ver runVisualTester). */
+  onProgress?: (note: string) => void;
 }): Promise<{ frontendCode: string; backendCode?: string } | null> {
   const { bundle, issues, app } = opts;
 
@@ -596,7 +605,9 @@ async function applyVisualFixes(opts: {
         structuralPrompt,
         bundle,
         opts.backendCode || "",
-        () => {},
+        (update: any) => {
+          if (update?.status) opts.onProgress?.(update.status);
+        },
       );
       if (editResult.frontendCode?.trim().length > 0) {
         const backendChanged = !!opts.backendCode
@@ -684,8 +695,13 @@ export async function applyVisualFixesAndSave(opts: {
   prompt: string;
   maxCycles?: number;
   log?: Logger;
+  /** Mismo motivo que en applyVisualFixes/runVisualTester: sin esto, el
+   *  camino del CoreOrchestrator (issues críticos) no reportaba ningún
+   *  progreso intermedio mientras generaba varios archivos en lotes. */
+  onProgress?: (note: string) => void | Promise<void>;
 }): Promise<{ fixesApplied: number; cycles: number; finalAnalysis: VisualAnalysis }> {
-  const { appId, app, previewUrl, prompt, maxCycles = 3, log } = opts;
+  const { appId, app, previewUrl, prompt, maxCycles = 3, log, onProgress } = opts;
+  const report = async (note: string) => { try { await onProgress?.(note); } catch { /* nunca bloquear el ciclo por un fallo de progreso */ } };
   let currentAnalysis = opts.analysis;
   let currentBundle = app.frontendCode;
   let currentBackendCode = app.backendCode;
@@ -698,6 +714,7 @@ export async function applyVisualFixesAndSave(opts: {
     if (fixable.length === 0) break;
 
     log?.info({ appId, cycle, issues: fixable.length }, "[applyVisualFixesAndSave] Applying fixes");
+    await report(`Ciclo ${cycle} — ${fixable.length} problema(s) detectado(s). Generando el arreglo...`);
 
     const patchResult = await applyVisualFixes({
       bundle: currentBundle,
@@ -705,6 +722,7 @@ export async function applyVisualFixesAndSave(opts: {
       app: { title: app.title, description: app.description },
       userPrompt: prompt,
       backendCode: currentBackendCode,
+      onProgress: (note) => { void report(`Ciclo ${cycle} — ${note}`); },
     });
     if (!patchResult) {
       log?.warn({ appId, cycle }, "[applyVisualFixesAndSave] No patch returned");
@@ -863,6 +881,7 @@ export async function runVisualTester(opts: {
       app: { title: app.title, description: app.description },
       userPrompt: prompt,
       backendCode: currentBackendCode,
+      onProgress: (note) => { void report(`Ciclo ${cycle} — ${note}`); },
     });
     if (!patchResult) {
       log?.warn({ appId: app.id, cycle }, "VisualTester fix returned no patch");

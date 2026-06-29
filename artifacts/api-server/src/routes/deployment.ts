@@ -532,6 +532,16 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
 
     const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
 
+    // Callback de progreso compartido por ambos caminos (con o sin
+    // publicSlug) — persiste en VisualTestJob.progressNote, lo que el
+    // frontend lee durante el polling para mostrar el progreso REAL en
+    // vez de quedarse fijo mientras el CoreOrchestrator genera archivos.
+    const onProgress = async (note: string) => {
+      try {
+        await (VisualTestJob as any).findByIdAndUpdate(jobId, { progressNote: note });
+      } catch { /* nunca bloquear el ciclo real por un fallo al persistir el progreso */ }
+    };
+
     let effectiveSlug = app.publicSlug;
     if (!effectiveSlug) {
       const internalBaseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`;
@@ -560,6 +570,7 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
             prompt: app.prompt || app.description || app.title || "",
             maxCycles: 3,
             log: logger,
+            onProgress,
           });
           fixesApplied = fixResult.fixesApplied;
           cycles = fixResult.cycles;
@@ -608,11 +619,7 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
       prompt: app.prompt || app.description || app.title || "",
       autoFix,
       log: logger,
-      onProgress: async (note: string) => {
-        try {
-          await (VisualTestJob as any).findByIdAndUpdate(jobId, { progressNote: note });
-        } catch { /* nunca bloquear el ciclo real por un fallo al persistir el progreso */ }
-      },
+      onProgress,
     });
 
     await finish({
