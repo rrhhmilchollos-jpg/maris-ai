@@ -547,14 +547,37 @@ export async function runAutoEvaluator(opts: {
         plannedPages: effectivePlannedPages,
         log,
       });
-    } catch (err) {
+    } catch (err: any) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isCredits = errMsg.includes("credit balance") || errMsg.includes("too low") || errMsg.includes("402") || (err?.status === 400 && errMsg.includes("credit"));
+      
+      if (isCredits) {
+        // Créditos agotados — esperar y reintentar hasta 2 veces antes de rendirse
+        log.warn({ appId, jobId, round }, "👁 Evaluator: créditos agotados — esperando 30s y reintentando");
+        await new Promise(r => setTimeout(r, 30_000));
+        // No decrementar round — reintentar esta misma ronda
+        round--;
+        if (round < 0) round = 0;
+        // Si ya llevamos demasiados reintentos, salir del loop
+        if (fixesApplied === 0 && round >= 2) {
+          log.warn({ appId, jobId }, "👁 Créditos agotados tras reintentos — delegando a autoRepairBundle");
+          // Delegar al repair agent que no necesita vision
+          try {
+            const { autoRepairOnCreditsExhausted } = await import("./autoRepairAgent");
+            await autoRepairOnCreditsExhausted({ appId: String(appId), userId: String(userId) });
+          } catch { /* no bloquear */ }
+          break;
+        }
+        continue;
+      }
+      
       log.warn({ err, appId, jobId, round }, "👁 Evaluator threw — treating as fail");
       report = {
         verdict: "fail",
         issues: [],
         summary:
           err instanceof Error
-            ? `El evaluador falló: ${err.message}`
+            ? `El evaluador falló: ${errMsg}`
             : "El evaluador falló por un error inesperado.",
         screenshots: [],
       };
