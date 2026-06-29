@@ -27,6 +27,7 @@
 import type { Logger } from "pino";
 import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { CoreOrchestrator } from "@workspace/services";
 import { patchBundle, type GenLanguage } from "./shared-agents";
 import { validateBundle } from "./validate";
 import {
@@ -271,6 +272,24 @@ export function formatIssuesForPatcher(
       problem: `[${i.severity}] ${i.description}`,
       fix: i.fix || "Aplica el cambio mínimo para solucionar este problema visual.",
     }));
+}
+
+// ENCONTRADO en producción: patchBundle (el patcher usado más abajo en el
+// loop del evaluador) tiene el MISMO patrón frágil ya identificado y
+// corregido en visualTester.ts — una única llamada con max_tokens:16000 que
+// espera TODOS los archivos cambiados de vuelta. EvaluatorIssue no tiene un
+// campo "type" estructurado (a diferencia de VisualIssue en visualTester.ts,
+// que sí distingue blank_page/missing_navbar/etc.) — aquí la severidad y la
+// descripción del problema vienen en texto libre generado por Claude Vision,
+// así que la detección de daño estructural se hace por palabras clave sobre
+// "description"+"fix", en español e inglés (el evaluador puede responder en
+// cualquiera de los dos según el prompt interno de evaluateApp).
+const STRUCTURAL_DAMAGE_KEYWORDS = /(pantalla.*(negra|blanca|vac[ií]a|en blanco)|blank.?page|404|p[aá]gina no encontrada|page not found|sin.*(navbar|navegaci[oó]n|men[uú])|no.*(navbar|barra de navegaci[oó]n)|no existe.*(navbar|navegaci[oó]n|barra)|missing.*nav|no hay contenido|sin contenido|missing content|no se (muestra|renderiza)|no renderiza|componente (ra[ií]z|principal).*(no existe|vac[ií]o|falta)|ruta.*no.*configurada|router.*mal configurado)/i;
+
+function hasStructuralDamage(issues: EvaluatorIssue[]): boolean {
+  return issues.some(
+    (i) => i.severity === "critical" && STRUCTURAL_DAMAGE_KEYWORDS.test(`${i.description} ${i.fix}`),
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -568,12 +587,45 @@ export async function runAutoEvaluator(opts: {
     );
 
     let patched: string | null = null;
-    try {
-      const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;
-      patched = await patchFn(currentBundle, patcherIssues, language, "");
-    } catch (err) {
-      log.warn({ err, appId, jobId, round }, "🔁 Patcher threw — stopping evaluator loop");
-      break;
+    let patchedBackendCode: string | undefined;
+    const structuralDamage = hasStructuralDamage(report.issues);
+    if (structuralDamage) {
+      log.info(
+        { appId, jobId, round },
+        "🔁 Daño estructural detectado por el evaluador — delegando a CoreOrchestrator.editProjectIncremental (edición por hitos) en vez del patcher de una sola pasada.",
+      );
+      try {
+        const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
+        const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL] La aplicación "${(row as any).title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nProblemas detectados:\n${patcherIssues.map((p, idx) => `${idx + 1}. ${p.problem}\n   Sugerencia: ${p.fix}`).join("\n")}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional y visible.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con contenido real y coherente con la descripción del proyecto: "${(row as any).description ?? "(sin descripción disponible)"}".\n5. Toca o crea TODOS los archivos que sean necesarios para que la app sea visible y funcional — no te limites a un solo archivo si el problema lo requiere.`;
+
+        const editResult = await orchestrator.editProjectIncremental(
+          structuralPrompt,
+          currentBundle,
+          (row as any).backendCode || "",
+          () => { /* sin callback de progreso — este ciclo corre en segundo plano */ },
+        );
+        if (editResult.frontendCode && editResult.frontendCode.trim().length > 0) {
+          patched = editResult.frontendCode;
+          const backendChanged = !!(row as any).backendCode && editResult.backendCode && editResult.backendCode !== (row as any).backendCode;
+          patchedBackendCode = backendChanged ? editResult.backendCode : undefined;
+        } else {
+          log.warn({ appId, jobId, round }, "🔁 editProjectIncremental no devolvió un bundle válido — cayendo al patcher de una sola pasada como respaldo.");
+        }
+      } catch (structuralErr) {
+        log.warn({ err: structuralErr, appId, jobId, round }, "🔁 editProjectIncremental falló — cayendo al patcher de una sola pasada como respaldo.");
+      }
+      // Red de seguridad: si el orquestador por hitos falla por cualquier
+      // motivo, NO se pierde la capacidad de intentar un arreglo — cae al
+      // patchFn histórico de abajo, igual que antes de este cambio.
+    }
+    if (patched === null) {
+      try {
+        const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;
+        patched = await patchFn(currentBundle, patcherIssues, language, "");
+      } catch (err) {
+        log.warn({ err, appId, jobId, round }, "🔁 Patcher threw — stopping evaluator loop");
+        break;
+      }
     }
     if (!patched || patched.length < 100 || !patched.includes("// === FILE:")) {
       log.warn({ appId, jobId, round }, "🔁 Patcher returned an unusable bundle — stopping");
@@ -594,9 +646,11 @@ export async function runAutoEvaluator(opts: {
     // Optimistic concurrency: only overwrite if the bundle still matches
     // what we patched against. A racing chat edit must always win.
     const previousBundle = currentBundle;
+    const dbUpdate: Record<string, string> = { frontendCode: patched };
+    if (patchedBackendCode) dbUpdate.backendCode = patchedBackendCode;
     const updated = await GeneratedApp.findOneAndUpdate(
       { _id: String(appId), frontendCode: previousBundle },
-      { frontendCode: patched },
+      dbUpdate,
       { new: false },
     );
     if (!updated) {

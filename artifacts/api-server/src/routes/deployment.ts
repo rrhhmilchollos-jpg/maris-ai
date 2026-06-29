@@ -483,7 +483,7 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
           const { applyVisualFixesAndSave } = await import("../lib/visualTester");
           const fixResult = await applyVisualFixesAndSave({
             appId,
-            app: { title: app.title || "App", description: app.description || null, frontendCode: app.frontendCode || "" },
+            app: { title: app.title || "App", description: app.description || null, frontendCode: app.frontendCode || "", backendCode: app.backendCode || "" },
             analysis,
             previewUrl,
             prompt: app.prompt || app.description || app.title || "",
@@ -528,6 +528,7 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
         title: app.title || "App",
         description: app.description || null,
         frontendCode: app.frontendCode || "",
+        backendCode: app.backendCode || "",
         publicSlug: effectiveSlug,
       },
       baseUrl,

@@ -6176,25 +6176,39 @@ export async function runJobById(jobId: string): Promise<void> {
       } catch { /* nunca bloquear el succeeded */ }
     }
 
-    // ── 3. VISUAL TESTER — screenshot + Claude Vision (solo apps desplegadas) ─
-    // Solo corre si la app tiene un publicSlug (está accesible como URL pública)
-    if (savedAppId && !!(job as any).autoPublish) {
+    // ── 3. VISUAL TESTER — screenshot + Claude Vision (verificación final real) ─
+    // ENCONTRADO: este bloque SOLO se ejecutaba si (job as any).autoPublish era
+    // true — en la práctica, la inmensa mayoría de generaciones/ediciones NO
+    // tienen autoPublish activado, así que esta verificación visual real
+    // (screenshots + Claude Vision comparando contra la intención real del
+    // usuario, más estricta que el QUALITY CHECK de arriba que solo mira el
+    // código en texto) NUNCA se ejecutaba para el caso normal — exactamente
+    // el hueco que permitía que un job marcado "succeeded" (build OK) llegara
+    // al cliente con la app realmente rota (pantalla negra, 404, sin navbar
+    // — caso real confirmado: proyecto importado club de Valencia). A
+    // petición EXPLÍCITA del usuario: esta verificación final debe correr
+    // SIEMPRE tras un job exitoso, como control de calidad real antes de que
+    // el cliente vea "completado con éxito". runAutoEvaluator ya estaba
+    // diseñado para esto — internamente solo usa autoPublish para decidir si
+    // hace DEPLOY automático al final (ver evaluator.ts línea ~644), nunca
+    // para decidir si analiza — así que activarlo siempre no cambia el
+    // comportamiento de deploy para nadie, solo añade la verificación visual
+    // que faltaba para todos.
+    if (savedAppId) {
       try {
         const freshApp = await GeneratedApp.findById(savedAppId).select("publicSlug userId").lean() as any;
-        if (freshApp?.publicSlug) {
-          const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
-          const { runAutoEvaluator } = await import("../lib/evaluator");
-          const dbUser = await User.findById(job.userId).lean() as any;
-          await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
-          runAutoEvaluator({
-            appId: savedAppId,
-            userId: job.userId,
-            userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
-            jobId: jobId as any,
-            baseUrl,
-            log: logger,
-          }).catch(evalErr => logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready"));
-        }
+        const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
+        const { runAutoEvaluator } = await import("../lib/evaluator");
+        const dbUser = await User.findById(job.userId).lean() as any;
+        await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
+        runAutoEvaluator({
+          appId: savedAppId,
+          userId: job.userId,
+          userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").slice(0, 300),
+          jobId: jobId as any,
+          baseUrl,
+          log: logger,
+        }).catch(evalErr => logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready"));
       } catch (evalErr) {
         logger.warn({ evalErr }, "Visual tester hook failed");
       }

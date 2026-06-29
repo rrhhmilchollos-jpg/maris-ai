@@ -4,6 +4,7 @@ type Browser = any; type Page = any;
 import type { Logger } from "pino";
 import { GeneratedApp } from "@workspace/db/schema";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { CoreOrchestrator } from "@workspace/services";
 import { validateBundle } from "./validate";
 import { compactBundleForPrompt, estimatePromptTokens, extractJsonObject, mergePatchIntoBundle } from "./shared-agents";
 import { logger as rootLogger } from "./logger";
@@ -509,11 +510,12 @@ async function applyVisualFixes(opts: {
   bundle: string;
   issues: VisualIssue[];
   app: { title: string; description?: string | null };
-}): Promise<string | null> {
+  /** Backend actual del proyecto — necesario solo para el camino por hitos
+   *  (reconstrucción estructural), que puede tocar también archivos backend
+   *  si el issue lo requiere (ej. una ruta API que falta para el contenido). */
+  backendCode?: string;
+}): Promise<{ frontendCode: string; backendCode?: string } | null> {
   const { bundle, issues, app } = opts;
-
-  const compactBundle = compactBundleForPrompt(bundle, issues.map((i) => `${i.type} ${i.description} ${i.cssfix}`), 65_000);
-  rootLogger.info({ originalTokens: estimatePromptTokens(bundle), compactTokens: estimatePromptTokens(compactBundle), issueCount: issues.length }, "TOKEN_OPTIMIZER: visual fixes compacted bundle");
 
   const fixList = issues
     .filter((i) => i.severity !== "minor")
@@ -528,6 +530,61 @@ async function applyVisualFixes(opts: {
   const hasCriticalStructure = issues.some(i =>
     i.severity === "critical" && (i.type === "blank_page" || i.type === "missing_content" || i.type === "missing_navbar" || i.type === "prompt_mismatch")
   );
+
+  // ENCONTRADO en producción (mismo patrón EXACTO que el ya corregido en
+  // singleEditPass de apps.ts): el camino de "una sola pasada" de abajo pide
+  // TODOS los archivos cambiados de vuelta en una única llamada con
+  // max_tokens:12000. Para daño estructural real — pantalla negra, navbar
+  // ausente, contenido completo faltante, prompt_mismatch — el propio
+  // prompt de abajo ya admite explícitamente "puedes modificar MÚLTIPLES
+  // archivos si es necesario", que es justo el escenario donde 12000 tokens
+  // no bastan (caso real confirmado: proyecto importado de un club en
+  // Valencia, reporte de Testing Visual con blank_page + missing_navbar +
+  // missing_content a la vez) — la respuesta se trunca, changedFiles queda
+  // vacío o incompleto, y applyVisualFixesAndSave hace `break` en silencio
+  // sin dejar la app realmente arreglada, exactamente el bucle de fallos ya
+  // diagnosticado y corregido en otros puntos del sistema hoy mismo.
+  // FIX: cuando hay daño estructural crítico, se delega al mismo motor de
+  // edición por hitos (CoreOrchestrator.editProjectIncremental) que ya
+  // resolvió este problema en el flujo normal de edición — el planificador
+  // decide qué archivos concretos tocar/crear (router, App.tsx, navbar,
+  // home con contenido real) y cada uno se genera por separado, sin el
+  // techo de una sola llamada. Para issues NO estructurales (estilos,
+  // contraste, overlapping, responsive) se mantiene el camino original de
+  // una sola pasada — esos sí caben sobradamente en una llamada y no hay
+  // motivo para complicarlos con el coste extra de planificar por hitos.
+  if (hasCriticalStructure) {
+    rootLogger.info({ issueCount: issues.length }, "[applyVisualFixes] Daño estructural crítico detectado — delegando a CoreOrchestrator.editProjectIncremental (edición por hitos) en vez de una sola pasada.");
+    try {
+      const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
+      const structuralPrompt = `[REPARACIÓN AUTOMÁTICA — TESTING VISUAL] La aplicación "${app.title}" tiene problemas estructurales críticos detectados por análisis visual real (screenshots): la app debe quedar TOTALMENTE FUNCIONAL Y VISIBLE para el cliente, sin pantallas en blanco/negras, sin 404 en la ruta principal, con navegación visible y contenido real renderizado.\n\nProblemas detectados (ordenados por severidad):\n${fixList}\n\nINSTRUCCIONES OBLIGATORIAS:\n1. Revisa el componente raíz (App.tsx/main.tsx) y el router: la ruta '/' DEBE renderizar el componente principal real, no un 404 ni una pantalla vacía.\n2. Si hay un catch-all 404 interceptando la ruta '/', muévelo al final de las rutas o elimínalo.\n3. Si falta una NavBar, añade una funcional y visible.\n4. Si el contenido principal no existe o está vacío, reconstrúyelo con contenido real y coherente con la descripción del proyecto: "${app.description ?? "(sin descripción disponible)"}".\n5. Toca o crea TODOS los archivos que sean necesarios para que la app sea visible y funcional — no te limites a un solo archivo si el problema lo requiere.`;
+
+      const editResult = await orchestrator.editProjectIncremental(
+        structuralPrompt,
+        bundle,
+        opts.backendCode || "",
+        () => { /* sin callback de progreso aquí — este camino se invoca desde un ciclo de fondo sin UI en vivo */ },
+      );
+      if (editResult.frontendCode && editResult.frontendCode.trim().length > 0) {
+        // Solo devolvemos backendCode si de verdad cambió respecto al
+        // original — evita persistir un backendCode "igual pero
+        // reordenado" en cada ciclo cuando el orquestador no necesitó
+        // tocar nada del backend para resolver el issue.
+        const backendChanged = !!opts.backendCode && editResult.backendCode && editResult.backendCode !== opts.backendCode;
+        return { frontendCode: editResult.frontendCode, backendCode: backendChanged ? editResult.backendCode : undefined };
+      }
+      rootLogger.warn("[applyVisualFixes] editProjectIncremental no devolvió un bundle de frontend válido — cayendo al camino de una sola pasada como respaldo.");
+    } catch (structuralError) {
+      rootLogger.warn({ err: structuralError }, "[applyVisualFixes] editProjectIncremental falló — cayendo al camino de una sola pasada como respaldo.");
+    }
+    // Red de seguridad: si el orquestador por hitos falla por cualquier
+    // motivo, NO se pierde la capacidad de intentar un arreglo — cae al
+    // camino histórico de una sola pasada de abajo, igual que antes de
+    // este cambio.
+  }
+
+  const compactBundle = compactBundleForPrompt(bundle, issues.map((i) => `${i.type} ${i.description} ${i.cssfix}`), 65_000);
+  rootLogger.info({ originalTokens: estimatePromptTokens(bundle), compactTokens: estimatePromptTokens(compactBundle), issueCount: issues.length }, "TOKEN_OPTIMIZER: visual fixes compacted bundle");
 
   const prompt = `Eres el Visual Fix Agent de Maris AI — especialista en reparaciones quirurgicas de UI/UX sin romper funcionalidad.
 
@@ -589,12 +646,12 @@ ${compactBundle}`;
 
   const parsed = extractJsonObject<{ changedFiles?: Record<string, string>; deletedFiles?: string[]; frontendCode?: string }>(text);
   if (parsed?.changedFiles && Object.keys(parsed.changedFiles).length > 0) {
-    return mergePatchIntoBundle(bundle, parsed.changedFiles, Array.isArray(parsed.deletedFiles) ? parsed.deletedFiles : []);
+    return { frontendCode: mergePatchIntoBundle(bundle, parsed.changedFiles, Array.isArray(parsed.deletedFiles) ? parsed.deletedFiles : []) };
   }
-  if (parsed?.frontendCode && parsed.frontendCode.includes("// === FILE:")) return parsed.frontendCode;
+  if (parsed?.frontendCode && parsed.frontendCode.includes("// === FILE:")) return { frontendCode: parsed.frontendCode };
   if (!text.includes("// === FILE:")) return null;
   if (text.length < bundle.length / 3) return null;
-  return text;
+  return { frontendCode: text };
 }
 
 /**
@@ -617,7 +674,7 @@ export async function analyzePreviewScreenshots(opts: {
  */
 export async function applyVisualFixesAndSave(opts: {
   appId: string;
-  app: { title: string; description?: string | null; frontendCode: string };
+  app: { title: string; description?: string | null; frontendCode: string; backendCode?: string };
   analysis: VisualAnalysis;
   previewUrl: string;
   prompt: string;
@@ -627,6 +684,7 @@ export async function applyVisualFixesAndSave(opts: {
   const { appId, app, previewUrl, prompt, maxCycles = 3, log } = opts;
   let currentAnalysis = opts.analysis;
   let currentBundle = app.frontendCode;
+  let currentBackendCode = app.backendCode;
   let fixesApplied = 0;
   let cycle = 0;
 
@@ -637,15 +695,17 @@ export async function applyVisualFixesAndSave(opts: {
 
     log?.info({ appId, cycle, issues: fixable.length }, "[applyVisualFixesAndSave] Applying fixes");
 
-    const patched = await applyVisualFixes({
+    const patchResult = await applyVisualFixes({
       bundle: currentBundle,
       issues: fixable,
       app: { title: app.title, description: app.description },
+      backendCode: currentBackendCode,
     });
-    if (!patched) {
+    if (!patchResult) {
       log?.warn({ appId, cycle }, "[applyVisualFixesAndSave] No patch returned");
       break;
     }
+    const patched = patchResult.frontendCode;
 
     // Validate the patched bundle before saving
     const validation = await validateBundle(patched);
@@ -654,11 +714,13 @@ export async function applyVisualFixesAndSave(opts: {
       break;
     }
 
-    // Save the patched bundle to DB
+    // Save the patched bundle (and backend, if the structural fix touched it) to DB
     const previousBundle = currentBundle;
+    const dbUpdate: Record<string, string> = { frontendCode: patched };
+    if (patchResult.backendCode) dbUpdate.backendCode = patchResult.backendCode;
     const updated = await GeneratedApp.findOneAndUpdate(
       { _id: appId, frontendCode: previousBundle },
-      { frontendCode: patched },
+      dbUpdate,
       { new: false },
     );
     if (!updated) {
@@ -666,6 +728,7 @@ export async function applyVisualFixesAndSave(opts: {
       break;
     }
     currentBundle = patched;
+    if (patchResult.backendCode) currentBackendCode = patchResult.backendCode;
     fixesApplied++;
 
     // Re-screenshot and re-analyze with the new bundle
@@ -700,6 +763,7 @@ export async function runVisualTester(opts: {
     title: string;
     description: string | null;
     frontendCode: string;
+    backendCode?: string;
     publicSlug: string;
   };
   baseUrl: string;
@@ -713,6 +777,7 @@ export async function runVisualTester(opts: {
   const url = `${baseUrl.replace(/\/$/, "")}/p/${app.publicSlug}/_inner`;
 
   let currentBundle = app.frontendCode;
+  let currentBackendCode = app.backendCode;
   let cycle = 0;
   let fixesApplied = 0;
   let lastShots: ViewportShot[] = [];
@@ -749,15 +814,17 @@ export async function runVisualTester(opts: {
     const fixable = lastAnalysis.issues.filter((i) => i.severity !== "minor");
     if (fixable.length === 0) break;
 
-    const patched = await applyVisualFixes({
+    const patchResult = await applyVisualFixes({
       bundle: currentBundle,
       issues: fixable,
       app: { title: app.title, description: app.description },
+      backendCode: currentBackendCode,
     });
-    if (!patched) {
+    if (!patchResult) {
       log?.warn({ appId: app.id, cycle }, "VisualTester fix returned no patch");
       break;
     }
+    const patched = patchResult.frontendCode;
 
     // Validate the patched bundle BEFORE persisting so we never overwrite a
     // working app with a corrupted Claude response. If esbuild can't build it,
@@ -776,9 +843,11 @@ export async function runVisualTester(opts: {
     // the WHERE matches 0 rows and we abort (better stale screenshot than
     // clobbered user edits).
     const previousBundle = currentBundle;
+    const dbUpdate: Record<string, string> = { frontendCode: patched };
+    if (patchResult.backendCode) dbUpdate.backendCode = patchResult.backendCode;
     const updated = await GeneratedApp.findOneAndUpdate(
       { _id: String(app.id), frontendCode: previousBundle },
-      { frontendCode: patched },
+      dbUpdate,
       { new: false },
     );
     if (!updated) {
@@ -790,6 +859,7 @@ export async function runVisualTester(opts: {
     }
 
     currentBundle = patched;
+    if (patchResult.backendCode) currentBackendCode = patchResult.backendCode;
     fixesApplied++;
 
     // Snapshot the post-fix bundle so the user can roll back if the visual
