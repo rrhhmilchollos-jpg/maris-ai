@@ -192,6 +192,32 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 8 (9e67eba): validaciones estructurales de router en validate.ts —
+// detectan catch-all 404 mal posicionado, ruta raíz ausente, y export/import
+// mismatch ANTES del evaluador visual. Sin esto, apps con routing roto
+// pasan testing + QA sin issues y solo se detectan en la evaluación visual
+// (un ciclo completo extra de 25 segundos + llamada a Claude Vision).
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const src = readSrc("lib/validate.ts");
+  check(
+    "FIX 8a: validate.ts tiene detectCatchAllBeforeRoutes",
+    /function detectCatchAllBeforeRoutes/.test(src) && /detectCatchAllBeforeRoutes\(vfs\)/.test(src),
+    "Sin esta validación, una <Route path='*'> o <Route component={NotFound}> colocada ANTES de las rutas reales en <Switch> pasa testing sin errores y causa 404 en todas las páginas — exactamente el bug de la app de clínica dental.",
+  );
+  check(
+    "FIX 8b: validate.ts tiene detectMissingRootRoute",
+    /function detectMissingRootRoute/.test(src) && /detectMissingRootRoute\(vfs\)/.test(src),
+    "Sin esta validación, una app sin <Route path='/'> muestra blank page en la URL base sin que el testing lo detecte.",
+  );
+  check(
+    "FIX 8c: validate.ts tiene detectExportImportMismatch",
+    /function detectExportImportMismatch/.test(src) && /detectExportImportMismatch\(vfs\)/.test(src),
+    "Sin esta validación, un import default que apunta a un archivo sin export default produce un componente undefined que no renderiza nada — sin error de build.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
