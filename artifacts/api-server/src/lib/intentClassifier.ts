@@ -28,6 +28,16 @@ export type ClassifiedIntent = {
   reply: string;
   /** Deterministic reason useful for logs/UI badges. */
   reason: string;
+  /**
+   * true SOLO cuando el cambio pedido es estrictamente cosmético/CSS: colores,
+   * tipografía, espaciados, modo oscuro, tamaños visuales, imágenes decorativas.
+   * Ninguna lógica nueva, ningún endpoint, ninguna validación, ningún estado.
+   * Cuando es true, el job de edición puede usar claude-haiku-4-5 en vez de
+   * claude-sonnet-4-6 — Haiku falla en generación de código complejo (confirmado
+   * en producción, ver selectAgentModelPlan) pero resuelve ediciones CSS/Tailwind
+   * de pocas líneas perfectamente y a ~¼ del precio de Sonnet.
+   */
+  isPurelyVisual: boolean;
 };
 
 // ─── CONVERSATIONAL PATTERNS — NUNCA activan agentes ────────────────────────
@@ -216,7 +226,7 @@ const SYSTEM_PROMPT = `Eres el enrutador determinista de intención de Maris AI.
 
 Tu trabajo: leer el último mensaje del usuario en el chat de UNA app YA EXISTENTE y decidir qué motor debe ejecutarlo. Devuelves SOLO un JSON:
 
-{"intent":"question"|"research"|"edit"|"execute","reply":"...","reason":"..."}
+{"intent":"question"|"research"|"edit"|"execute","reply":"...","reason":"...","isPurelyVisual":true|false}
 
 == MOTORES ==
 
@@ -237,6 +247,14 @@ El usuario solo pregunta algo, no pide ninguna acción. "reply" en ESPAÑOL, má
 "conversational" = ENGINE_CHAT.
 El usuario NO pide ninguna acción técnica ni hace ninguna pregunta concreta. Es un mensaje puramente humano: saludo, despedida, agradecimiento, confirmación simple ("ok", "vale", "entendido"), promesa futura ("mañana te digo", "luego te cuento"), estado emocional, comentario sin petición. "reply" vacío — el sistema responde de forma conversacional automáticamente.
 Ejemplos: "mañana te digo todo", "ok perfecto", "gracias", "hola", "hasta luego", "entre mañana o pasado te digo todo lo que hay que hacer".
+
+== CAMPO isPurelyVisual ==
+Evalúa si el cambio pedido es EXCLUSIVAMENTE cosmético/CSS — sin ninguna lógica nueva, sin endpoints, sin validaciones, sin nuevo estado, sin datos.
+isPurelyVisual: TRUE cuando el mensaje es SOLO sobre: colores, fondos, tipografía, tamaños, espaciados, sombras, modo oscuro/claro, opacidad, imágenes decorativas, iconos, bordes, animaciones CSS.
+isPurelyVisual: FALSE cuando el mensaje incluye: añadir páginas, lógica condicional, formularios con validación, conexiones a BD, autenticación, rutas nuevas, funcionalidades de negocio, corrección de errores de lógica.
+En caso de duda → FALSE (es más seguro usar el modelo completo que arriesgar código incompleto).
+Ejemplos TRUE: "cambia el fondo a azul oscuro", "pon el botón en rojo", "activa el modo oscuro", "agranda el logo", "añade sombra a las tarjetas", "cambia la fuente a Inter".
+Ejemplos FALSE: "añade una página de contacto", "haz que el formulario valide el email", "conecta el login con la BD", "arregla el error del dashboard", "cambia el color Y también añade validación".
 
 == REGLAS DE PRIORIDAD ==
 0. Si el mensaje es puramente conversacional (saludo, despedida, agradecimiento, promesa futura, confirmación sin acción) → "conversational"
@@ -321,11 +339,15 @@ function parseClassifierJson(raw: string): ClassifiedIntent | null {
   }
   const reply = typeof parsed?.reply === "string" ? parsed.reply.trim() : "";
   const reason = typeof parsed?.reason === "string" ? parsed.reason.trim().slice(0, 180) : "model";
+  // isPurelyVisual: solo true si el modelo lo afirma explícitamente Y el intent es "edit"
+  // (ningún cambio execute/research/question puede ser "puramente visual")
+  const isPurelyVisual = intent === "edit" && parsed?.isPurelyVisual === true;
   return {
     intent,
     engine: engineForIntent(intent),
     reply: intent === "question" ? reply.slice(0, 800) : "",
     reason,
+    isPurelyVisual,
   };
 }
 
@@ -349,6 +371,7 @@ export async function classifyChatIntent(
       engine: "ENGINE_CLARIFY",
       reply: "",
       reason: "ambiguous-short-message-no-clear-intent",
+      isPurelyVisual: false,
     };
   }
 
@@ -363,6 +386,7 @@ export async function classifyChatIntent(
       engine: "ENGINE_CHAT",
       reply: "",  // El route handler genera la respuesta conversacional
       reason: "conversational-pattern-matched",
+      isPurelyVisual: false,
     };
   }
 
@@ -372,19 +396,19 @@ export async function classifyChatIntent(
   if (execution) {
     const term = firstMatchedTerm(spanish, ["action.", "domain."]) || "datos/CRM";
     ctx.log.info({ reason: "spanish-lexicon exec", hasEdit: edit, spanish }, "Intent classifier short-circuit → execute");
-    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: `spanish-lexicon execute (${term})` };
+    return { intent: "execute", engine: "ENGINE_EXEC", reply: "", reason: `spanish-lexicon execute (${term})`, isPurelyVisual: false };
   }
 
   if (edit) {
     const term = firstMatchedTerm(spanish, ["action.", "domain."]) || "código/UI";
     ctx.log.info({ reason: "spanish-lexicon dev", spanish }, "Intent classifier short-circuit → edit");
-    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: `spanish-lexicon edit (${term})` };
+    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: `spanish-lexicon edit (${term})`, isPurelyVisual: false };
   }
 
   if (research) {
     const term = firstMatchedTerm(spanish, ["action.research", "domain.research"]) || "investigación";
     ctx.log.info({ reason: "spanish-lexicon research", spanish }, "Intent classifier short-circuit → research");
-    return { intent: "research", engine: "ENGINE_RESEARCH", reply: "", reason: `spanish-lexicon research (${term})` };
+    return { intent: "research", engine: "ENGINE_RESEARCH", reply: "", reason: `spanish-lexicon research (${term})`, isPurelyVisual: false };
   }
 
   const controller = new AbortController();
@@ -409,13 +433,13 @@ export async function classifyChatIntent(
     const parsed = parseClassifierJson(text);
     if (!parsed) {
       ctx.log.warn({ rawSnippet: text.slice(0, 200), heuristicResearch: research }, "Intent classifier returned unparseable JSON — defaulting to edit");
-      return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-unparseable" };
+      return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-unparseable", isPurelyVisual: false };
     }
     ctx.log.info({ intent: parsed.intent, engine: parsed.engine, replyLen: parsed.reply.length, reason: parsed.reason }, "Intent classifier decision");
     return parsed;
   } catch (err) {
     ctx.log.warn({ err, heuristicResearch: research }, "Intent classifier failed — defaulting to edit");
-    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-error" };
+    return { intent: "edit", engine: "ENGINE_DEV", reply: "", reason: "fallback-error", isPurelyVisual: false };
   } finally {
     clearTimeout(timeoutHandle);
   }

@@ -5775,7 +5775,15 @@ Por ejemplo:
       prompt: generationPrompt,
       editAppId: req.params.id,
       attachmentIds: safeAttachmentIds,
-      coderModel: app.coderModel || "auto",
+      // ORQUESTACIÓN HÍBRIDA DE MODELOS: si el clasificador de intenciones
+      // detectó que el cambio es EXCLUSIVAMENTE cosmético/CSS (isPurelyVisual=true),
+      // usamos claude-haiku-4-5 en vez de Sonnet — Haiku falla en generación
+      // de código complejo (confirmado en producción: "haiku generaba código
+      // incompleto") pero resuelve ediciones de pocas líneas de CSS/Tailwind
+      // perfectamente y a ~¼ del precio de Sonnet. En cualquier otro caso
+      // (cambio funcional, lógica, nuevas páginas, corrección de errores) se
+      // usa el modelo del propio proyecto (app.coderModel) o el default "auto".
+      coderModel: classified.isPurelyVisual ? "claude-haiku-4-5" : (app.coderModel || "auto"),
       language: app.language || "typescript",
       kind: app.kind || "fullstack",
       status: "queued",

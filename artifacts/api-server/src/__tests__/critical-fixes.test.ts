@@ -546,6 +546,36 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 21: Orquestación híbrida de modelos — Haiku para cambios cosméticos
+// El clasificador de intenciones ya existía (classifyChatIntent) pero no
+// tomaba ninguna decisión de modelo. Ahora devuelve isPurelyVisual:true
+// cuando el cambio es EXCLUSIVAMENTE CSS/cosmético, y el job de edición usa
+// claude-haiku-4-5 en ese caso (¼ del precio de Sonnet). Haiku falla en
+// generación de código complejo (confirmado en producción con el comentario
+// "haiku generaba código incompleto" en selectAgentModelPlan), pero resuelve
+// ediciones de pocas líneas CSS/Tailwind perfectamente — es el único caso
+// donde se activa. Todos los fallbacks devuelven isPurelyVisual: false para
+// garantizar que en caso de duda siempre se usa Sonnet.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const classifierSrc = readSrc("lib/intentClassifier.ts");
+  check(
+    "FIX 21a: ClassifiedIntent tiene el campo isPurelyVisual: boolean",
+    /isPurelyVisual: boolean/.test(classifierSrc),
+  );
+  check(
+    "FIX 21b: parseClassifierJson lee isPurelyVisual del JSON del modelo y solo lo activa para intent=edit",
+    /intent === "edit" && parsed\?\.isPurelyVisual === true/.test(classifierSrc),
+  );
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 21c: el job de edición usa claude-haiku-4-5 cuando isPurelyVisual es true",
+    /classified\.isPurelyVisual.*claude-haiku-4-5/.test(appsSrc),
+    "Sin esto, todos los cambios cosméticos siguen usando Sonnet al precio completo aunque Haiku los resuelva igual de bien.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
