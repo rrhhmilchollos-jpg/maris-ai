@@ -536,8 +536,13 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
   const appsSrc = readSrc("routes/apps.ts");
   check(
-    "FIX 20c: apps.ts pasa maxMilestonesOverride al CoreOrchestrator para usuarios gratuitos ultra-complejos",
+    "FIX 20c: apps.ts pasa maxMilestonesOverride al CoreOrchestrator para usuarios gratuitos",
     /isDegradedFreeTier.*FREE_USER_MAX_MILESTONES|maxMilestonesOverride: isDegradedFreeTier/.test(appsSrc),
+  );
+  check(
+    "FIX 20e: el límite de 7 hitos es ABSOLUTO para usuarios gratuitos — NO depende de isUltraComplex",
+    /^\s*const isDegradedFreeTier = !hasEverPaid;/m.test(appsSrc) && !/^\s*const isDegradedFreeTier = !hasEverPaid && isUltraComplex/m.test(appsSrc),
+    "BUG REAL confirmado en producción con el Job 6a43569d: si isDegradedFreeTier dependía de isUltraComplex, un prompt corto que el router NO clasificaba como ultra-complejo (ej. \"app para grabar libros\") podía entrar igualmente al CoreOrchestrator (la condición de activación usa isUltraComplex con un OR, no un AND) sin ningún límite de hitos — el Arquitecto generó un plan de 23 archivos para un usuario gratuito, 46 llamadas a Sonnet en 2 minutos, la mayoría fallando por saturación de contexto, entregando una app con importaciones fantasma y pantalla en blanco.",
   );
   const pipelineSrc = readSrc("lib/emergentAgentPipeline.ts");
   check(

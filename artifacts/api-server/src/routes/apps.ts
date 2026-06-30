@@ -3392,17 +3392,24 @@ export async function generateApp(
 
   if (wantsFullBuild && useMilestoneOrchestrator) {
     // DEGRADACIÓN INTELIGENTE PARA USUARIOS GRATUITOS (hasEverPaid=false):
-    // Un proyecto NUEVO ultra-complejo (24+ hitos, 3-6€ en tokens reales)
-    // consumido por un usuario que nunca ha pagado es puro coste sin retorno.
-    // Estrategia: generar el NÚCLEO FUNCIONAL de la app (las capas más críticas
-    // — datos, backend core, frontend core) con un máximo de 7 hitos, en vez
-    // del plan completo de 20-30 hitos. Esto da al usuario una app visible y
-    // funcional (~70% del valor) a ~¼ del coste de tokens, y la interfaz le
-    // ofrece "expandir a la arquitectura completa" a cambio de su primer pago.
-    // Los usuarios que SÍ han pagado alguna vez reciben siempre el plan completo
-    // sin límite, independientemente de su saldo actual.
+    // FIX DE EMERGENCIA (a petición explícita del usuario, confirmado en
+    // vivo con el log real del Job 6a43569d): el límite ANTES dependía de
+    // isDegradedFreeTier = !hasEverPaid && isUltraComplex — si el router
+    // clasificaba el prompt como "medium"/"robust" (no "ultra"), el
+    // CoreOrchestrator igualmente se activaba (la condición de arriba usa
+    // useMilestoneOrchestrator = ... || isUltraComplex, con un OR), pero
+    // maxMilestonesOverride NUNCA se aplicaba — dejando que el Arquitecto
+    // diseñara un plan de 23 archivos sin ningún límite para un usuario
+    // que nunca pagó. Resultado real observado: 23 archivos × 2 intentos
+    // = 46 llamadas a Sonnet, la mayoría fallando por saturación de
+    // contexto, entregando una app con "importaciones fantasma" y pantalla
+    // en blanco. FIX: el límite ahora es ABSOLUTO para cualquier usuario
+    // gratuito en construcción nueva, sin importar lo que calcule el
+    // router de complejidad — isUltraComplex ya NO es parte de esta
+    // condición. Los usuarios que SÍ han pagado alguna vez siguen
+    // recibiendo el plan completo sin límite, siempre.
     const FREE_USER_MAX_MILESTONES = 7;
-    const isDegradedFreeTier = !hasEverPaid && isUltraComplex;
+    const isDegradedFreeTier = !hasEverPaid;
     if (isDegradedFreeTier) {
       await log("system", `✨ Generando el núcleo esencial de tu app (${FREE_USER_MAX_MILESTONES} módulos clave). Después podrás expandirla a la arquitectura completa.`);
     }
