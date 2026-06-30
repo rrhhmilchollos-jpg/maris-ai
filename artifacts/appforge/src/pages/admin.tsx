@@ -276,6 +276,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   const [userSearch, setUserSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [userDetailTab, setUserDetailTab] = useState<UserDetailTab>("overview");
+  const [appsDebugResult, setAppsDebugResult] = useState<any>(null);
+  const [appsDebugLoading, setAppsDebugLoading] = useState(false);
   const [moderationReason, setModerationReason] = useState("");
   const [ipToBlock, setIpToBlock] = useState("");
   const [refundDialog, setRefundDialog] = useState<{ user: AdminUser; amount: number; reason: string } | null>(null);
@@ -1057,9 +1059,55 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                             ))}
                           </div>
                         ) : (
-                          <div className="text-center py-12 text-muted-foreground">
+                          <div className="text-center py-8 text-muted-foreground">
                             <Code2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
                             <p className="text-sm">Este usuario no tiene apps generadas</p>
+                            <p className="text-xs mt-1 opacity-60">Si sabes que tiene apps, usa el diagnóstico para ver qué pasa</p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-3 text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                              disabled={appsDebugLoading}
+                              onClick={async () => {
+                                if (!selectedUser) return;
+                                setAppsDebugLoading(true);
+                                setAppsDebugResult(null);
+                                try {
+                                  const r = await apiFetch<any>(`/api/admin/users/${selectedUser.id}/apps-debug`);
+                                  setAppsDebugResult(r);
+                                } catch (e: any) {
+                                  setAppsDebugResult({ error: e?.message });
+                                } finally {
+                                  setAppsDebugLoading(false);
+                                }
+                              }}
+                            >
+                              {appsDebugLoading ? "Diagnosticando…" : "🔍 Diagnosticar discrepancia"}
+                            </Button>
+                            {appsDebugResult && (
+                              <div className="mt-4 text-left rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs font-mono space-y-1 max-h-64 overflow-y-auto">
+                                <div><span className="text-amber-400">ID buscado:</span> {appsDebugResult.searchedId}</div>
+                                <div><span className="text-amber-400">Email:</span> {appsDebugResult.userEmail}</div>
+                                <div><span className="text-amber-400">Apps por ID exacto:</span> {appsDebugResult.appsByExactId?.length ?? 0}</div>
+                                <div><span className="text-amber-400">Jobs encontrados:</span> {appsDebugResult.jobCount}</div>
+                                <div><span className="text-amber-400">AppIds en jobs:</span> {JSON.stringify(appsDebugResult.jobAppIds)}</div>
+                                <div><span className="text-amber-400">Apps vía jobs:</span> {appsDebugResult.appsByJobs?.length ?? 0}</div>
+                                {appsDebugResult.appsByJobs?.map((a: any, i: number) => (
+                                  <div key={i} className="pl-2 text-white/60">
+                                    • {a.title} — userId en BD: <span className={a.userId === selectedUser?.id ? "text-green-400" : "text-red-400"}>{a.userId}</span>
+                                  </div>
+                                ))}
+                                <div><span className="text-amber-400">¿ID coincide con userId en BD?:</span> <span className={appsDebugResult.idMatchesAppUserId ? "text-green-400" : "text-red-400"}>{appsDebugResult.idMatchesAppUserId ? "SÍ ✓" : "NO ✗ — AHÍ ESTÁ EL BUG"}</span></div>
+                                {appsDebugResult.recentAppsInDB?.length > 0 && (
+                                  <div className="mt-2 pt-2 border-t border-white/10">
+                                    <div className="text-amber-400 mb-1">Formato userId en otras apps de la BD:</div>
+                                    {appsDebugResult.recentAppsInDB?.map((a: any, i: number) => (
+                                      <div key={i} className="pl-2 text-white/50">{a.title?.slice(0,20)}: {a.userId}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </TabsContent>

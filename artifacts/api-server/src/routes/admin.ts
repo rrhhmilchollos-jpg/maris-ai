@@ -1494,25 +1494,45 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
   const id = req.params.id;
   const user = await User.findById(id).lean() as any;
 
-  // Buscar apps con distintos criterios para ver cuál funciona
-  const byUserId = await GeneratedApp.countDocuments({ userId: id });
-  const byEmail = user?.email ? await GeneratedApp.countDocuments({ "userEmail": user.email }) : 0;
+  // 1. Buscar apps con el ID exacto que se pasa
+  const byUserId = await GeneratedApp.find({ userId: id }).select("_id title userId createdAt").lean();
 
-  // Ver los últimos jobs del usuario y sus appIds
-  const jobs = await (mongoose.model("GenerationJob") as any)
-    .find({ userId: id }).sort({ createdAt: -1 }).limit(5).select("appId status prompt").lean();
+  // 2. Buscar jobs del usuario y sus appIds
+  const jobs = await GenerationJob
+    .find({ userId: id }).sort({ createdAt: -1 }).limit(20).select("appId editAppId status").lean();
+  const jobAppIds = [...new Set([
+    ...jobs.map((j: any) => j.appId),
+    ...jobs.map((j: any) => j.editAppId),
+  ].filter(Boolean).map(String))];
 
-  // Ver una muestra de apps con su userId real
-  const sampleApps = await GeneratedApp.find({}).sort({ createdAt: -1 }).limit(3).select("userId title").lean();
+  // 3. Buscar las apps que referencian esos appIds
+  const byJobAppIds = jobAppIds.length > 0
+    ? await GeneratedApp.find({ _id: { $in: jobAppIds } }).select("_id title userId createdAt").lean()
+    : [];
+
+  // 4. Ver qué userId tienen esas apps (el dato clave para diagnosticar la discrepancia)
+  const uniqueUserIdsInApps = [...new Set(byJobAppIds.map((a: any) => String(a.userId)))];
+
+  // 5. Ver las últimas 5 apps creadas en toda la BD para comparar formato de userId
+  const recentApps = await GeneratedApp.find({}).sort({ createdAt: -1 }).limit(5).select("_id title userId createdAt").lean();
 
   res.json({
-    searchedUserId: id,
-    userFound: !!user,
+    searchedId: id,
+    userFoundInDB: !!user,
     userEmail: user?.email,
-    appsByUserId: byUserId,
-    appsByEmail: byEmail,
-    recentJobs: jobs.map((j: any) => ({ appId: j.appId, status: j.status, prompt: j.prompt?.slice(0, 50) })),
-    sampleAppsInDB: sampleApps.map((a: any) => ({ userId: a.userId, title: a.title })),
+    // El resultado de buscar apps por el ID exacto que pasamos
+    appsByExactId: byUserId.map((a: any) => ({ id: String(a._id), title: a.title, userId: a.userId })),
+    // Jobs del usuario y los appIds que referencian
+    jobCount: jobs.length,
+    jobAppIds,
+    // Las apps encontradas vía jobs
+    appsByJobs: byJobAppIds.map((a: any) => ({ id: String(a._id), title: a.title, userId: a.userId })),
+    // Los userIds reales guardados en esas apps (puede ser distinto del id que buscamos)
+    userIdsActuallyInApps: uniqueUserIdsInApps,
+    // ¿Coincide el ID que buscamos con el userId real guardado?
+    idMatchesAppUserId: uniqueUserIdsInApps.includes(id),
+    // Muestra de apps recientes para ver el formato de userId en la BD
+    recentAppsInDB: recentApps.map((a: any) => ({ title: a.title, userId: String(a.userId), userId_length: String(a.userId).length })),
   });
 });
 
