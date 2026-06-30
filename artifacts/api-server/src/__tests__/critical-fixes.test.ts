@@ -782,6 +782,31 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 29: requiredEnvVars conectado de verdad en AMBOS flujos de
+// generación. ENCONTRADO a petición explícita del usuario (clon de TikTok
+// real mostrando "esta app no necesita ninguna variable de entorno" pese
+// a usar Cloudinary para los vídeos): el Integration Architect
+// (specifyIntegrations) YA detectaba bien los servicios externos
+// necesarios, pero (a) en el flujo ESTÁNDAR, su resultado solo se usaba
+// para texto markdown (setupNotes), nunca se traducía al campo
+// estructurado requiredEnvVars; (b) en el flujo POR HITOS
+// (CoreOrchestrator, el que usan los proyectos de alta complejidad como
+// un clon de TikTok), specifyIntegrations NUNCA se llamaba en absoluto.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc3 = readSrc("routes/apps.ts");
+  check(
+    "FIX 29a: el flujo estándar de generación traduce integrationSpec.services a requiredEnvVars real (no solo texto markdown)",
+    /requiredEnvVarsFromIntegrations = integrationSpec\.services\.flatMap/.test(appsSrc3),
+  );
+  check(
+    "FIX 29b: el flujo POR HITOS (CoreOrchestrator) también llama a specifyIntegrations y construye requiredEnvVars",
+    /requiredEnvVarsFromMilestones[\s\S]{0,800}specifyIntegrations\(minimalPlanForIntegrations/.test(appsSrc3),
+    "Sin esto, ningún proyecto de alta complejidad (los que más probablemente necesitan servicios externos reales como Cloudinary, OpenAI, etc.) detectaría jamás sus variables de entorno — el formulario del cliente siempre aparecería vacío para este tipo de proyectos.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

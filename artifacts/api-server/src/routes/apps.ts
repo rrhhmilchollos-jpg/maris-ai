@@ -3544,12 +3544,53 @@ export async function generateApp(
       const rootInfraSection = milestoneResult.rootInfraBundle
         ? `// ════════════════════ INFRAESTRUCTURA DEL PROYECTO (raíz) ════════════════════\n// Estos archivos van en la RAÍZ del proyecto, no dentro de ningún servicio.\n${milestoneResult.hasDockerCompose ? "// Ejecuta 'docker compose up' desde la raíz para levantar todos los servicios y sus bases de datos juntos.\n" : ""}${milestoneResult.rootInfraBundle}\n\n`
         : "";
+
+      // ENCONTRADO a petición explícita del usuario (clon de TikTok
+      // mostrando "esta app no necesita ninguna variable de entorno" pese
+      // a usar Cloudinary para los vídeos): el flujo por hitos
+      // (CoreOrchestrator) NUNCA llamaba a specifyIntegrations en
+      // absoluto — el Integration Architect (que SÍ detecta bien
+      // Cloudinary/OpenAI/etc.) solo se invocaba en el flujo estándar de
+      // una sola pasada. Proyectos de alta complejidad como un clon de
+      // TikTok suelen entrar por este camino de hitos, así que ningún
+      // servicio externo se detectaba jamás para ellos. Se reutiliza la
+      // misma función real ya probada, con un ProjectPlan mínimo
+      // construido a partir de los datos ya disponibles en este contexto.
+      let requiredEnvVarsFromMilestones: Array<{ name: string; why: string }> = [];
+      try {
+        const minimalPlanForIntegrations: ProjectPlan = {
+          title: "Proyecto Generado por Hitos",
+          description: prompt.slice(0, 500),
+          techStack: ["React", "Node", "TypeScript"],
+          pages: [],
+          components: [],
+          hooks: [],
+          utils: [],
+          dataModels: [],
+          frontendFiles: [],
+          backendNeeded: !!milestoneResult.backendCode,
+          database: milestoneResult.database,
+          architecture: milestoneResult.architecture,
+          backendFiles: [],
+        };
+        const milestoneIntegrationSpec = await specifyIntegrations(minimalPlanForIntegrations, prompt, agentModelPlan);
+        requiredEnvVarsFromMilestones = milestoneIntegrationSpec.services.flatMap((svc) =>
+          svc.envVars.map((envName) => ({ name: envName, why: `${svc.name}: ${svc.why || "Necesaria para esta integración"}` })),
+        );
+      } catch (integrationErr) {
+        // Best-effort: un fallo aquí nunca debe bloquear la entrega de la
+        // app, que ya se generó con éxito por hitos — simplemente se
+        // entrega sin variables de entorno detectadas.
+        logger.warn({ integrationErr, jobId }, "[milestones] Falló la detección de integraciones — continuando sin requiredEnvVars");
+      }
+
       return {
         title: "Proyecto Generado por Hitos",
         description: `Sistema construido mediante Task Splitting por capas (${milestoneResult.milestones?.length ?? 0} hitos, base de datos: ${milestoneResult.database ?? "mongodb"}, arquitectura: ${archDescription})`,
         techStack: ["React", "Node", "TypeScript", milestoneResult.database === "postgresql" ? "PostgreSQL" : "MongoDB", ...(milestoneResult.architecture === "microservices" ? ["Microservicios"] : [])],
         frontendCode: testedMilestone,
-        backendCode: rootInfraSection + (microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito.")
+        backendCode: rootInfraSection + (microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito."),
+        requiredEnvVars: requiredEnvVarsFromMilestones,
       };
     }
 
@@ -4443,6 +4484,19 @@ Output STRICT JSON only, no markdown, no explanation.`,
   const setupNotes = buildSetupNotes(integrationSpec);
   const testsAppendix = testCode ? `\n\n${testCode}` : "";
 
+  // ENCONTRADO a petición explícita del usuario (clon de TikTok mostrando
+  // "esta app no necesita ninguna variable de entorno" pese a usar
+  // Cloudinary para los vídeos): integrationSpec.services[].envVars ya
+  // tenía la información correcta — el Integration Architect SÍ detecta
+  // bien qué servicios externos necesita la app — pero esa información
+  // nunca se traducía al campo estructurado requiredEnvVars que el
+  // formulario real del cliente (GET/PUT /apps/:id/env) lee. Solo se
+  // usaba para construir setupNotes, texto markdown incrustado como
+  // comentario dentro del propio código — invisible al formulario.
+  const requiredEnvVarsFromIntegrations = integrationSpec.services.flatMap((svc) =>
+    svc.envVars.map((envName) => ({ name: envName, why: `${svc.name}: ${svc.why || "Necesaria para esta integración"}` })),
+  );
+
   return {
     title: plan.title.slice(0, 200),
     description: plan.description.slice(0, 1000),
@@ -4453,6 +4507,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
     architecture: plan.architecture,
+    requiredEnvVars: requiredEnvVarsFromIntegrations,
   };
 }
 
