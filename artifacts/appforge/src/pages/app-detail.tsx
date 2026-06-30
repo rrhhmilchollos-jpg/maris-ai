@@ -108,6 +108,10 @@ import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { VisualTestPanel } from "@/components/visual-test-panel";
 
+// Coste fijo de la "Revisión profunda de errores" (Testing Agent bajo
+// demanda) — debe coincidir con DEEP_TEST_COST en apps.ts.
+const DEEP_TEST_COST = 30;
+
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
   starting:     { label: "Iniciando equipo de 9 agentes…",                    icon: Loader2 },
@@ -951,13 +955,21 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               </div>
               <Button
                 onClick={handleDeepTest}
-                disabled={deepTestMutation.isPending || !hasRenderableCode}
+                disabled={deepTestMutation.isPending || !hasRenderableCode || credits < DEEP_TEST_COST}
                 variant="outline"
-                className="mt-4 w-full border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300 hover:bg-emerald-500/[0.12]"
+                className="mt-4 w-full border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300 hover:bg-emerald-500/[0.12] disabled:opacity-40"
               >
                 {deepTestMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                {deepTestMutation.isPending ? "Revisando…" : `Revisar errores (${"30"} créditos)`}
+                {deepTestMutation.isPending ? "Revisando…" : `Revisar errores (${DEEP_TEST_COST} créditos)`}
               </Button>
+              {!deepTestMutation.isPending && credits < DEEP_TEST_COST && (
+                <p className="mt-2 text-xs text-amber-400/90">
+                  Te faltan {DEEP_TEST_COST - credits} créditos para esta revisión.{" "}
+                  <button type="button" onClick={() => setLocation("/billing")} className="underline hover:text-amber-300">
+                    Comprar créditos
+                  </button>
+                </p>
+              )}
             </div>
             <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
               <div className="flex items-center justify-between gap-4">
