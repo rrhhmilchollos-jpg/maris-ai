@@ -81,6 +81,16 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
         const email = data.email_addresses?.[0]?.email_address ?? "";
         const fullName = [data.first_name, data.last_name].filter(Boolean).join(" ") || undefined;
         const imageUrl = data.image_url ?? undefined;
+        // A petición explícita del usuario, tras confirmar que Clerk YA tiene
+        // verificación de teléfono por SMS OTP nativa (User & Authentication →
+        // Phone, en el panel de Clerk) — NO se construye un sistema de OTP
+        // propio en paralelo (eso crearía una segunda fuente de verdad sobre
+        // quién es el usuario). El campo phoneNumber ya existía en el schema
+        // de User pero nunca se rellenaba porque el webhook no leía
+        // data.phone_numbers del payload real de Clerk. Esto solo conecta el
+        // dato que Clerk YA capturó y verificó por su cuenta — el número
+        // principal del usuario, si proporcionó uno.
+        const phoneNumber = data.phone_numbers?.[0]?.phone_number ?? undefined;
 
         if (!email) {
           logger.warn({ clerkId }, "clerkWebhook: user.created sin email — ignorado");
@@ -100,6 +110,7 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
           email,
           fullName,
           imageUrl,
+          phoneNumber,
           credits: isAdmin ? 999999999 : 45,
           planCredits: isAdmin ? 0 : 45,
           freeCreditsUsed: !isAdmin,
@@ -131,11 +142,13 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
         const email = data.email_addresses?.[0]?.email_address ?? "";
         const fullName = [data.first_name, data.last_name].filter(Boolean).join(" ") || undefined;
         const imageUrl = data.image_url ?? undefined;
+        const phoneNumber = data.phone_numbers?.[0]?.phone_number ?? undefined;
 
         const updates: Record<string, any> = {};
         if (email) updates.email = email;
         if (fullName) updates.fullName = fullName;
         if (imageUrl) updates.imageUrl = imageUrl;
+        if (phoneNumber) updates.phoneNumber = phoneNumber;
 
         if (Object.keys(updates).length > 0) {
           await User.findByIdAndUpdate(clerkId, { $set: updates });
