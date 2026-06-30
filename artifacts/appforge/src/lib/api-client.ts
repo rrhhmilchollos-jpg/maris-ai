@@ -227,7 +227,7 @@ export function useAdminUserTransactions(id: string, opts?: { query?: Partial<Us
 export const getAdminUserAppsQueryKey = (id: string) => ["admin-user-apps", id];
 export function useAdminUserApps(id: string, email?: string, opts?: { query?: Partial<UseQueryOptions> }) {
   const url = email ? `/api/admin/users/${id}/apps?email=${encodeURIComponent(email)}` : `/api/admin/users/${id}/apps`;
-  return useQuery<any>({ queryKey: getAdminUserAppsQueryKey(id), queryFn: () => apiFetch(url), enabled: !!id, ...(opts?.query as any) });
+  return useQuery<any>({ queryKey: getAdminUserAppsQueryKey(id), queryFn: () => apiFetch(url).then((d: any) => d?.apps ?? d), enabled: !!id, ...(opts?.query as any) });
 }
 export function useRetryAdminJob(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/jobs/${id}/retry`, { method: "POST" }), ...(opts?.mutation as any) });
