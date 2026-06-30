@@ -6918,11 +6918,44 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
       await GeneratedApp.updateOne({ _id: req.params.id }, { $set: { lastPaidDeployAt: new Date() } });
     }
 
-    const result = await runDeployForApp({ appId: req.params.id, userId, log: logger });
-    res.status(201).json({ deploymentUrl: result.url, url: result.url, slug: result.slug, creditsCharged, freeRedeploy: withinGraceWindow });
+    // A petición explícita del usuario: stepper de progreso REAL en vivo,
+    // estilo Emergent.sh. El deploy real puede tardar hasta 2 minutos
+    // (waitForVercelDeploymentReady sondea hasta 60 veces cada 2s), así que
+    // en vez de bloquear esta petición HTTP hasta el final, se lanza en
+    // segundo plano y se responde inmediatamente con status "started". El
+    // frontend hace polling de GET /apps/:id/deploy-status, que lee
+    // deployPhase — escrito en vivo dentro de deployAppToVercel en cada
+    // fase real del proceso (no una animación con temporizadores).
+    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch((err) => {
+      logger.error({ err, appId: req.params.id }, "[deploy] Falló el deploy en segundo plano");
+    });
+
+    res.status(202).json({ status: "started", creditsCharged, freeRedeploy: withinGraceWindow });
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/deploy error");
     res.status(500).json({ error: err?.message ?? "Error al desplegar" });
+  }
+});
+
+// ── GET /api/apps/:id/deploy-status ───────────────────────────────────────
+// Polling real del progreso del deploy en curso — alimenta el stepper
+// visual de 6 fases (estilo Emergent.sh) con el estado REAL del proceso.
+router.get("/apps/:id/deploy-status", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId })
+      .select("deployPhase deployStartedAt deployError vercelDeployUrl")
+      .lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    res.json({
+      phase: (app as any).deployPhase ?? null,
+      startedAt: (app as any).deployStartedAt ?? null,
+      error: (app as any).deployError ?? null,
+      deploymentUrl: (app as any).vercelDeployUrl ?? null,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/deploy-status error");
+    res.status(500).json({ error: err?.message ?? "Error al consultar el deploy" });
   }
 });
 

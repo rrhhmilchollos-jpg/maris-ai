@@ -158,6 +158,15 @@ export interface IGeneratedApp {
   // los 5 minutos siguientes, ese re-deploy es gratis; pasada la ventana,
   // vuelve a cobrarse.
   lastPaidDeployAt?: Date;
+  // A petición explícita del usuario: progreso REAL del deploy en vivo,
+  // estilo Emergent.sh — instrumentado dentro de deployAppToVercel para
+  // que cada fase del stepper corresponda a un punto verídico del proceso
+  // real contra la API de Vercel, no a una animación con temporizadores
+  // inventados. El frontend hace polling de estos campos mientras el
+  // deploy está en curso.
+  deployPhase?: "health_check" | "preparing_bundle" | "syncing_env" | "deploying" | "waiting_ready" | "final_check" | "done" | "error" | null;
+  deployStartedAt?: Date;
+  deployError?: string;
   autoPublish?: boolean;
   evaluatorSummary?: string;
   agentNotes?: string;
@@ -238,6 +247,9 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     vercelProjectId: { type: String },
     vercelCustomDomain: { type: String },
     lastPaidDeployAt: { type: Date },
+    deployPhase: { type: String, default: null },
+    deployStartedAt: { type: Date },
+    deployError: { type: String },
     autoPublish: { type: Boolean, default: false },
     evaluatorSummary: { type: String },
     agentNotes: { type: String },

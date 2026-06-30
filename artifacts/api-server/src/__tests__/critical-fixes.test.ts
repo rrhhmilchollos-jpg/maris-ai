@@ -679,6 +679,34 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 26: stepper de deploy REAL en vivo (estilo Emergent.sh), 6 fases
+// escritas en MongoDB en cada punto verídico de deployAppToVercel — sin
+// temporizadores inventados. Conectado al DeployModal YA EXISTENTE (1043
+// líneas, UI completa con proveedores de dominio) en vez de crear un
+// componente nuevo en paralelo — ENCONTRADO durante la implementación: ese
+// componente ya existía pero estaba mayormente desconectado del backend
+// real (6 de sus 8 endpoints esperados no existían).
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const vercelDeploySrc = readSrc("lib/vercelDeploy.ts");
+  check(
+    "FIX 26a: deployAppToVercel escribe deployPhase en vivo en cada fase real del proceso",
+    /deployPhase: "health_check"/.test(vercelDeploySrc) && /deployPhase: "done"/.test(vercelDeploySrc),
+  );
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 26b: POST /apps/:id/deploy es asíncrono (202 + lanza en segundo plano) y existe GET /apps/:id/deploy-status para el polling real",
+    /status\(202\)\.json\(\{ status: "started"/.test(appsSrc) && /router\.get\("\/apps\/:id\/deploy-status"/.test(appsSrc),
+  );
+  const deployModalSrc = readAppforgeSrc("components/deploy-modal.tsx");
+  check(
+    "FIX 26c: DeployModal (componente ya existente) tiene la pantalla del stepper conectada al polling real de deploy-status",
+    /DEPLOY_STEPS/.test(deployModalSrc) && /deploy-status/.test(deployModalSrc),
+    "Sin esto, DeployModal seguiría esperando la URL directamente en la respuesta del POST, que ahora es asíncrono (202) — el deploy parecería fallar silenciosamente.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

@@ -12,6 +12,7 @@ import {
   X,
   Globe,
   CheckCircle2,
+  Circle,
   Loader2,
   ExternalLink,
   AlertTriangle,
@@ -98,7 +99,7 @@ interface DeployModalProps {
   onClose: () => void;
   onDeploySuccess: (url: string) => void;
 }
-type Screen = "initial" | "live" | "providers" | "dns" | "connectors";
+type Screen = "initial" | "live" | "providers" | "dns" | "connectors" | "deploying";
 type PlanId = "starter" | "pro" | "enterprise";
 
 /* ─────────────────────────── Plan data ─────────────────────────── */
@@ -156,6 +157,18 @@ function DnsBadge({ type }: { type: string }) {
   );
 }
 
+/* ── Stepper de deploy real (estilo Emergent.sh, 6 fases verídicas) ──
+   Cada key coincide EXACTAMENTE con el deployPhase escrito en MongoDB
+   dentro de deployAppToVercel — no hay temporizadores ni fases inventadas. */
+const DEPLOY_STEPS: Array<{ key: string; label: string }> = [
+  { key: "health_check", label: "Comprobación inicial del proyecto" },
+  { key: "preparing_bundle", label: "Preparando el paquete de la app" },
+  { key: "syncing_env", label: "Sincronizando configuración" },
+  { key: "deploying", label: "Desplegando a la infraestructura" },
+  { key: "waiting_ready", label: "Esperando confirmación del servidor" },
+  { key: "final_check", label: "Verificación final" },
+];
+
 /* ─────────────────────────── Component ─────────────────────────── */
 export function DeployModal({
   appId,
@@ -181,6 +194,17 @@ export function DeployModal({
   /* ── Deploy state ── */
   const [isDeploying, setIsDeploying] = useState(false);
   const [isRedeploying, setIsRedeploying] = useState(false);
+  // A petición explícita del usuario: stepper de progreso REAL en vivo,
+  // estilo Emergent.sh — conectado al flujo asíncrono real del backend
+  // (POST /apps/:id/deploy ahora responde 202 de inmediato y lanza el
+  // deploy en segundo plano; GET /apps/:id/deploy-status expone
+  // deployPhase, escrito en vivo dentro de deployAppToVercel en cada fase
+  // verídica del proceso real contra la API de Vercel — no temporizadores
+  // inventados). Reutiliza el DeployModal ya existente (no se crea un
+  // modal nuevo en paralelo) — solo se conecta su flujo de deploy.
+  const [deployPhase, setDeployPhase] = useState<string | null>(null);
+  const [deployStartedAt, setDeployStartedAt] = useState<string | null>(null);
+  const [deployErrorMsg, setDeployErrorMsg] = useState<string | null>(null);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
   const [deployUrl, setDeployUrl] = useState(currentDeployUrl || "");
   const [lastDeployedAt, setLastDeployedAt] = useState<string | undefined>();
@@ -277,43 +301,88 @@ export function DeployModal({
       .catch(() => {});
   }, [appId, toast]);
 
+  /* ── Polling real del deploy en curso — frecuencia 2.5s, se auto-apaga al llegar a done/error ── */
+  const pollDeployStatus = useCallback(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const status = await apiFetch<{ phase: string | null; startedAt: string | null; error: string | null; deploymentUrl: string | null }>(
+          `/api/apps/${appId}/deploy-status`,
+        );
+        if (cancelled) return;
+        setDeployPhase(status.phase);
+        setDeployStartedAt(status.startedAt);
+        if (status.phase === "done") {
+          setDeployUrl(status.deploymentUrl || "");
+          setLastDeployedAt(new Date().toISOString());
+          setIsDeploying(false);
+          setIsRedeploying(false);
+          onDeploySuccess(status.deploymentUrl || "");
+          toast({ title: "🚀 ¡App publicada!", description: status.deploymentUrl || "" });
+          setScreen("live");
+          return; // auto-apagado: no se programa el siguiente tick
+        }
+        if (status.phase === "error") {
+          setDeployErrorMsg(status.error || "El despliegue no se pudo completar.");
+          setIsDeploying(false);
+          setIsRedeploying(false);
+          toast({ title: "Error al desplegar", description: status.error || "Inténtalo de nuevo.", variant: "destructive" });
+          return; // auto-apagado
+        }
+        setTimeout(tick, 2500);
+      } catch {
+        if (!cancelled) setTimeout(tick, 2500);
+      }
+    };
+    tick();
+    return () => { cancelled = true; };
+  }, [appId, onDeploySuccess, toast]);
+
   /* ── Initial deploy ── */
   const handleInitialDeploy = useCallback(async () => {
     setIsDeploying(true);
+    setDeployErrorMsg(null);
+    setDeployPhase(null);
+    setScreen("deploying");
     try {
-      const data = await apiFetch<DeployResponse>(`/api/apps/${appId}/deploy`, { method: "POST" });
-      if (data.success === false) throw new Error(data.error || "Error al desplegar");
-      const url = data.deploymentUrl || data.url || "";
-      setDeployUrl(url);
-      if (data.subdomain) setSubdomain(data.subdomain);
-      setLastDeployedAt(new Date().toISOString());
-      onDeploySuccess(url);
-      setScreen("live");
-      toast({ title: "🚀 ¡App publicada!", description: url });
+      const data = await apiFetch<{ status?: string; error?: string; hint?: string; creditsCharged?: number; freeRedeploy?: boolean }>(
+        `/api/apps/${appId}/deploy`,
+        { method: "POST" },
+      );
+      if (data.error) throw new Error(data.hint || data.error);
+      if (data.freeRedeploy) {
+        toast({ title: "Re-deploy gratuito", description: "Dentro de la ventana de 5 minutos del último deploy — sin coste." });
+      }
+      pollDeployStatus();
     } catch (err: any) {
       toast({ title: "Error al desplegar", description: err.message, variant: "destructive" });
-    } finally {
       setIsDeploying(false);
+      setScreen("initial");
     }
-  }, [appId, onDeploySuccess, toast]);
+  }, [appId, pollDeployStatus, toast]);
 
   /* ── Re-deploy ── */
   const handleRedeploy = useCallback(async () => {
     setIsRedeploying(true);
+    setDeployErrorMsg(null);
+    setDeployPhase(null);
+    setScreen("deploying");
     try {
-      const data = await apiFetch<DeployResponse>(`/api/apps/${appId}/deploy`, { method: "POST" });
-      if (data.success === false) throw new Error(data.error || "Error al redesplegar");
-      const url = data.deploymentUrl || data.url || "";
-      setDeployUrl(url);
-      setLastDeployedAt(new Date().toISOString());
-      onDeploySuccess(url);
-      toast({ title: "🚀 Re-deploy completado", description: url });
+      const data = await apiFetch<{ status?: string; error?: string; hint?: string; creditsCharged?: number; freeRedeploy?: boolean }>(
+        `/api/apps/${appId}/deploy`,
+        { method: "POST" },
+      );
+      if (data.error) throw new Error(data.hint || data.error);
+      if (data.freeRedeploy) {
+        toast({ title: "Re-deploy gratuito", description: "Dentro de la ventana de 5 minutos del último deploy — sin coste." });
+      }
+      pollDeployStatus();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
-    } finally {
       setIsRedeploying(false);
+      setScreen("live");
     }
-  }, [appId, onDeploySuccess, toast]);
+  }, [appId, pollDeployStatus, toast]);
 
   /* ── Shut down ── */
   const handleShutDown = useCallback(async () => {
@@ -497,6 +566,55 @@ export function DeployModal({
 
       {/* Modal card */}
       <div className="relative w-full max-w-[480px] rounded-2xl border border-white/[0.08] bg-[#0d0f16] shadow-2xl shadow-black/60 overflow-hidden max-h-[90vh] overflow-y-auto">
+
+        {/* ══════════════ SCREEN: DEPLOYING (stepper real, estilo Emergent.sh) ══════════════ */}
+        {screen === "deploying" && (
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold text-white">Desplegando tu app</h3>
+              {deployStartedAt && (
+                <span className="text-xs text-white/40">
+                  Iniciado a las {new Date(deployStartedAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+            </div>
+            <div className="space-y-2.5">
+              {DEPLOY_STEPS.map((step) => {
+                const stepIndex = DEPLOY_STEPS.findIndex((s) => s.key === step.key);
+                const currentIndex = DEPLOY_STEPS.findIndex((s) => s.key === deployPhase);
+                const isDone = deployPhase === "done";
+                const isErrored = deployPhase === "error";
+                const completed = isDone || (currentIndex >= 0 && stepIndex < currentIndex);
+                const isCurrent = !isDone && !isErrored && stepIndex === currentIndex;
+                return (
+                  <div key={step.key} className="flex items-center gap-3">
+                    {completed ? (
+                      <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+                    ) : isCurrent ? (
+                      <Loader2 className="h-5 w-5 shrink-0 animate-spin text-sky-400" />
+                    ) : (
+                      <Circle className="h-5 w-5 shrink-0 text-white/20" />
+                    )}
+                    <span className={`text-sm ${completed ? "text-emerald-300" : isCurrent ? "text-sky-300 font-medium" : "text-white/40"}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {deployErrorMsg && (
+              <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/[0.06] p-3">
+                <p className="text-sm text-red-400">{deployErrorMsg}</p>
+                <button
+                  onClick={() => setScreen(currentDeployUrl ? "live" : "initial")}
+                  className="mt-3 rounded-lg border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white transition"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══════════════ SCREEN 1: INITIAL ══════════════ */}
         {screen === "initial" && (

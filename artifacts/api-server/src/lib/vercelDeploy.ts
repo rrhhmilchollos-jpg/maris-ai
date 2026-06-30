@@ -61,6 +61,12 @@ export type VercelEnvVar = {
  * Deploy the given app to Vercel. Returns the public URL or a typed failure
  * for the route handler to translate to an HTTP response. Never throws on
  * expected error paths — only on truly unexpected runtime errors.
+ *
+ * A petición explícita del usuario: instrumentado con reporte de progreso
+ * REAL en vivo (deployPhase en MongoDB), estilo Emergent.sh — cada fase del
+ * stepper corresponde a un punto verídico de este flujo real contra la API
+ * de Vercel, sin temporizadores inventados. El frontend hace polling de
+ * GeneratedApp.deployPhase mientras el deploy está en curso.
  */
 export async function deployAppToVercel(opts: {
   appId: string;
@@ -69,18 +75,30 @@ export async function deployAppToVercel(opts: {
 }): Promise<{ ok: true; result: VercelDeployResult } | { ok: false; failure: VercelDeployFailure }> {
   const { appId, userId, log } = opts;
 
+  const setPhase = async (phase: string) => {
+    await GeneratedApp.updateOne({ _id: appId }, { $set: { deployPhase: phase } }).catch(() => {});
+  };
+
+  await GeneratedApp.updateOne(
+    { _id: appId },
+    { $set: { deployPhase: "health_check", deployStartedAt: new Date(), deployError: null } },
+  ).catch(() => {});
+
   const token = process.env.VERCEL_TOKEN;
   if (!token) {
+    await setPhase("error");
     return { ok: false, failure: { kind: "missing_token" } };
   }
 
   const row = await GeneratedApp.findOne({ _id: appId, userId }).lean();
   if (!row) {
+    await setPhase("error");
     return { ok: false, failure: { kind: "app_not_found" } };
   }
 
   const bundleFiles = bundleToFiles(row.frontendCode);
   if (Object.keys(bundleFiles).length === 0) {
+    await setPhase("error");
     return {
       ok: false,
       failure: {
@@ -91,6 +109,7 @@ export async function deployAppToVercel(opts: {
     };
   }
 
+  await setPhase("preparing_bundle");
   const appKind = row.kind ?? "fullstack";
 
   // Detect plain HTML/CSS/JS bundles (no React/Vite entry point).
@@ -157,13 +176,14 @@ export async function deployAppToVercel(opts: {
         : { name: projectName, framework: "vite", ssoProtection: null },
       log,
     });
-    if (!created.ok) return { ok: false, failure: created.failure };
+    if (!created.ok) { await setPhase("error"); return { ok: false, failure: created.failure }; }
     projectId = created.data.id;
 
     await GeneratedApp.updateOne({ _id: appId }, { vercelProjectId: projectId });
   }
 
   await ensureVercelProjectIsPublic({ token, projectId, log });
+  await setPhase("syncing_env");
 
   // For static HTML projects, also reset the framework on the Vercel project itself.
   // If the project was previously created with framework: "vite", Vercel will keep
@@ -185,6 +205,7 @@ export async function deployAppToVercel(opts: {
     log.info({ projectId }, "Reset Vercel project to static HTML (no framework)");
   }
 
+  await setPhase("deploying");
   const deploy = await callVercel<{
     id: string;
     url: string;
@@ -211,8 +232,9 @@ export async function deployAppToVercel(opts: {
     },
     log,
   });
-  if (!deploy.ok) return { ok: false, failure: deploy.failure };
+  if (!deploy.ok) { await setPhase("error"); return { ok: false, failure: deploy.failure }; }
 
+  await setPhase("waiting_ready");
   const ready = await waitForVercelDeploymentReady({ token, deploymentId: deploy.data.id, log });
 
   // Si falla con "No Output Directory named 'dist'" — el proyecto estaba configurado como Vite
@@ -230,6 +252,7 @@ export async function deployAppToVercel(opts: {
     });
 
     // Redeployar como static
+    await setPhase("deploying");
     const staticDeploy = await callVercel<{ id: string; url: string }>({
       token,
       method: "POST",
@@ -243,27 +266,30 @@ export async function deployAppToVercel(opts: {
       },
       log,
     });
-    if (!staticDeploy.ok) return { ok: false, failure: staticDeploy.failure };
+    if (!staticDeploy.ok) { await setPhase("error"); return { ok: false, failure: staticDeploy.failure }; }
 
+    await setPhase("waiting_ready");
     const staticReady = await waitForVercelDeploymentReady({ token, deploymentId: staticDeploy.data.id, log });
-    if (!staticReady.ok) return { ok: false, failure: staticReady.failure };
+    if (!staticReady.ok) { await setPhase("error"); return { ok: false, failure: staticReady.failure }; }
 
+    await setPhase("final_check");
     const staticAlias = await assignStableVercelAlias({ token, deploymentId: staticDeploy.data.id, alias: `${projectName}.vercel.app`, log });
-    if (!staticAlias.ok) return { ok: false, failure: staticAlias.failure };
+    if (!staticAlias.ok) { await setPhase("error"); return { ok: false, failure: staticAlias.failure }; }
 
     const publicUrl = `https://${projectName}.vercel.app`;
-    await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl });
+    await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl, deployPhase: "done" });
     return { ok: true, result: { url: publicUrl, projectId, deploymentId: staticDeploy.data.id } };
   }
 
-  if (!ready.ok) return { ok: false, failure: ready.failure };
+  if (!ready.ok) { await setPhase("error"); return { ok: false, failure: ready.failure }; }
 
+  await setPhase("final_check");
   const alias = await assignStableVercelAlias({ token, deploymentId: deploy.data.id, alias: `${projectName}.vercel.app`, log });
-  if (!alias.ok) return { ok: false, failure: alias.failure };
+  if (!alias.ok) { await setPhase("error"); return { ok: false, failure: alias.failure }; }
 
   const publicUrl = `https://${projectName}.vercel.app`;
 
-  await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl });
+  await GeneratedApp.updateOne({ _id: appId }, { vercelDeployUrl: publicUrl, deployPhase: "done" });
 
   return {
     ok: true,

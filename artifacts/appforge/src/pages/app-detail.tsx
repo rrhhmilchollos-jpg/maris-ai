@@ -44,6 +44,7 @@ import {
 } from "@/components/attachment-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,6 +63,7 @@ import {
   Loader2,
   Sparkles,
   CheckCircle2,
+  Circle,
   AlertCircle,
   Zap,
   Share2,
@@ -303,6 +305,7 @@ function GatingQuestionsForm({
   );
 }
 
+
 export default function AppDetailPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const [, setLocation] = useLocation();
@@ -453,25 +456,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     },
   });
 
+  // Usado por handlePublishGoogle (dispara el deploy y hace su propio
+  // polling de deploy-status). El botón "Deploy app" normal usa
+  // handleDeploy -> setShowDeployModal(true), que abre DeployModal — el
+  // componente que ya tiene el stepper de 6 fases real conectado.
   const deployMutation = useDeployApp({
     mutation: {
-      onSuccess: (result: any) => {
-        queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
-        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
-        const deploymentUrl = result?.deploymentUrl || result?.url;
-        const creditsLine = result?.freeRedeploy
-          ? "Re-deploy gratuito (dentro de la ventana de 5 minutos)."
-          : result?.creditsCharged
-            ? `Se han descontado ${result.creditsCharged} créditos.`
-            : "";
-        toast({
-          title: "Deploy iniciado",
-          description: [deploymentUrl ? `La app está disponible en ${deploymentUrl}` : "El despliegue se ha lanzado correctamente.", creditsLine].filter(Boolean).join(" "),
-        });
-        if (deploymentUrl && typeof window !== "undefined") {
-          window.open(deploymentUrl, "_blank", "noopener,noreferrer");
-        }
-      },
       onError: (err: any) => {
         const isPaymentRequired = err?.error === "Créditos insuficientes";
         toast({
@@ -875,16 +865,40 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         openGoogleIndexing(deployedUrl);
       } else {
         toast({ title: "Desplegando antes de publicar…", description: "Tu app necesita estar desplegada para aparecer en Google. Iniciando deploy automático." });
+        // El endpoint de deploy ahora es asíncrono (202 "started" — ver
+        // POST /apps/:id/deploy). Se hace polling real de deploy-status
+        // hasta que la fase llegue a "done", igual que el stepper de
+        // DeployModal, en vez de esperar la URL en la respuesta directa.
         deployMutation.mutate({ id }, {
-          onSuccess: (result: any) => {
-            const url = result?.deploymentUrl || result?.url;
-            if (openGoogleIndexing(url, preOpenedWindow)) {
-              toast({ title: "App desplegada", description: `Tu app está en ${url}. Search Console se ha abierto para solicitar la indexación.` });
-            }
+          onSuccess: () => {
+            const pollUntilDone = async () => {
+              for (let attempt = 0; attempt < 60; attempt++) {
+                await new Promise((r) => setTimeout(r, 2500));
+                try {
+                  const status = await apiFetch<any>(`/api/apps/${id}/deploy-status`);
+                  if (status.phase === "done" && status.deploymentUrl) {
+                    queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+                    if (openGoogleIndexing(status.deploymentUrl, preOpenedWindow)) {
+                      toast({ title: "App desplegada", description: `Tu app está en ${status.deploymentUrl}. Search Console se ha abierto para solicitar la indexación.` });
+                    }
+                    return;
+                  }
+                  if (status.phase === "error") {
+                    preOpenedWindow?.close();
+                    toast({ title: "No se pudo desplegar", description: status.error || "Intenta publicar de nuevo en unos minutos.", variant: "destructive" });
+                    return;
+                  }
+                } catch { /* sigue intentando */ }
+              }
+              preOpenedWindow?.close();
+              toast({ title: "El despliegue está tardando más de lo normal", description: "Revisa el estado del deploy en el panel e inténtalo de nuevo.", variant: "destructive" });
+            };
+            pollUntilDone();
           },
           onError: (err: any) => {
             preOpenedWindow?.close();
-            toast({ title: "No se pudo desplegar", description: err?.message || "Intenta publicar de nuevo en unos minutos.", variant: "destructive" });
+            const isPaymentRequired = err?.error === "Créditos insuficientes";
+            toast({ title: isPaymentRequired ? "Créditos insuficientes" : "No se pudo desplegar", description: isPaymentRequired ? err?.hint : (err?.message || "Intenta publicar de nuevo en unos minutos."), variant: "destructive" });
           },
         });
       }
