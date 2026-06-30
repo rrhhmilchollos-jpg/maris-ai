@@ -337,7 +337,7 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   const emailHint = (req.query.email as string || "").trim().toLowerCase();
 
   // Estrategia 1: userId directo
-  let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+  let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).lean();
   logger.info({ step: "s1_direct", id, emailHint, found: apps.length }, "admin/users/apps");
 
   // Estrategia 2: por email → MongoDB _id del usuario → userId en apps
@@ -345,18 +345,18 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
     const userByEmail = await User.findOne({ email: emailHint }).select("_id").lean() as any;
     logger.info({ step: "s2_email", userFound: !!userByEmail, dbId: String(userByEmail?._id ?? "") }, "admin/users/apps");
     if (userByEmail) {
-      apps = await GeneratedApp.find({ userId: String(userByEmail._id) }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      apps = await GeneratedApp.find({ userId: String(userByEmail._id) }).sort({ createdAt: -1 }).limit(limit).lean();
       logger.info({ step: "s2_result", found: apps.length }, "admin/users/apps");
     }
   }
 
   // Estrategia 3: jobs del usuario (userId directo) → appIds
   if (apps.length === 0) {
-    const jobs3 = await GenerationJob.find({ userId: id }).sort({ createdAt: -1 }).limit(100).select("appId editAppId").maxTimeMS(8000).lean();
+    const jobs3 = await GenerationJob.find({ userId: id }).sort({ createdAt: -1 }).limit(100).select("appId editAppId").lean();
     const ids3 = [...new Set([...jobs3.map((j: any) => j.appId), ...jobs3.map((j: any) => j.editAppId)].filter(Boolean).map(String))];
     logger.info({ step: "s3_jobs_direct", jobCount: jobs3.length, appIds: ids3 }, "admin/users/apps");
     if (ids3.length > 0) {
-      apps = await GeneratedApp.find({ _id: { $in: ids3 } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      apps = await GeneratedApp.find({ _id: { $in: ids3 } }).sort({ createdAt: -1 }).limit(limit).lean();
       logger.info({ step: "s3_result", found: apps.length }, "admin/users/apps");
     }
   }
@@ -365,11 +365,11 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   if (apps.length === 0 && emailHint) {
     const usersEmail = await User.find({ email: emailHint }).select("_id").lean() as any[];
     const allDbIds = [id, ...usersEmail.map((u: any) => String(u._id))];
-    const jobs4 = await GenerationJob.find({ userId: { $in: allDbIds } }).sort({ createdAt: -1 }).limit(100).select("appId editAppId").maxTimeMS(8000).lean();
+    const jobs4 = await GenerationJob.find({ userId: { $in: allDbIds } }).sort({ createdAt: -1 }).limit(100).select("appId editAppId").lean();
     const ids4 = [...new Set([...jobs4.map((j: any) => j.appId), ...jobs4.map((j: any) => j.editAppId)].filter(Boolean).map(String))];
     logger.info({ step: "s4_alldbs", allDbIds, jobCount: jobs4.length, appIds: ids4 }, "admin/users/apps");
     if (ids4.length > 0) {
-      apps = await GeneratedApp.find({ _id: { $in: ids4 } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      apps = await GeneratedApp.find({ _id: { $in: ids4 } }).sort({ createdAt: -1 }).limit(limit).lean();
       logger.info({ step: "s4_result", found: apps.length, titles: apps.map((a: any) => a.title) }, "admin/users/apps");
     }
   }
