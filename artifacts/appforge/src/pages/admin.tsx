@@ -1104,6 +1104,34 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                                   </div>
                                 ))}
                                 <div><span className="text-amber-400">¿ID coincide con userId en BD?:</span> <span className={appsDebugResult.idMatchesAppUserId ? "text-green-400" : "text-red-400"}>{appsDebugResult.idMatchesAppUserId ? "SÍ ✓" : "NO ✗ — AHÍ ESTÁ EL BUG"}</span></div>
+                                {/* Botón de reasignación cuando hay apps via jobs pero con userId incorrecto */}
+                                {!appsDebugResult.idMatchesAppUserId && appsDebugResult.appsByJobs?.length > 0 && selectedUser && (
+                                  <div className="mt-2 pt-2 border-t border-red-500/20">
+                                    <p className="text-red-400 mb-2">Las apps tienen un userId diferente al esperado. Pulsa para corregirlo automáticamente:</p>
+                                    <button
+                                      className="w-full rounded bg-red-500/20 border border-red-500/30 text-red-300 text-xs py-1.5 hover:bg-red-500/30 transition"
+                                      onClick={async () => {
+                                        if (!confirm(`¿Reasignar ${appsDebugResult.appsByJobs.length} app(s) al usuario ${selectedUser.email}?`)) return;
+                                        let ok = 0;
+                                        for (const app of appsDebugResult.appsByJobs) {
+                                          try {
+                                            await apiFetch(`/api/admin/apps/${app.id}/reassign-user`, {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ targetUserId: selectedUser.id }),
+                                            });
+                                            ok++;
+                                          } catch {}
+                                        }
+                                        toast({ title: `✅ ${ok} app(s) reasignadas`, description: "Cierra y vuelve a abrir la pestaña Apps." });
+                                        setAppsDebugResult(null);
+                                        await refetchUserApps();
+                                      }}
+                                    >
+                                      🔧 Reasignar {appsDebugResult.appsByJobs.length} app(s) a este usuario
+                                    </button>
+                                  </div>
+                                )}
                                 {appsDebugResult.recentAppsInDB?.length > 0 && (
                                   <div className="mt-2 pt-2 border-t border-white/10">
                                     <div className="text-amber-400 mb-1">Formato userId en otras apps de la BD:</div>

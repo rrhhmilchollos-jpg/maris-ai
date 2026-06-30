@@ -1538,6 +1538,22 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
 
 // POST /api/admin/apps/patch-by-slug — parchear app por slug público
 
+// POST /api/admin/apps/:id/reassign-user — reasignar el userId de una app
+// al usuario correcto cuando hay discrepancia en la BD
+router.post("/admin/apps/:id/reassign-user", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { targetUserId } = req.body ?? {};
+  if (!targetUserId) { res.status(400).json({ error: "targetUserId requerido" }); return; }
+  const user = await User.findById(targetUserId).lean() as any;
+  if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+  const app = await GeneratedApp.findById(req.params.id).lean() as any;
+  if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
+  const oldUserId = app.userId;
+  await GeneratedApp.findByIdAndUpdate(req.params.id, { $set: { userId: targetUserId } });
+  logger.info({ appId: req.params.id, oldUserId, newUserId: targetUserId }, "Admin: app userId reasignado");
+  res.json({ ok: true, appId: req.params.id, oldUserId, newUserId: targetUserId, appTitle: app.title });
+});
+
 // POST /api/admin/apps/patch-all — parchear todas las apps que contengan un texto
 router.post("/admin/apps/patch-all", async (req: any, res: any): Promise<void> => {
   await connectDB();
