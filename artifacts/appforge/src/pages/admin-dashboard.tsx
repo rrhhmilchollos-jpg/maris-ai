@@ -1997,7 +1997,22 @@ const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     label: "Seguimiento — ¿cómo va todo?",
     icon: "👋",
     subject: ({ appTitle }) => `👋 ¿Qué tal va "${appTitle}"?`,
-    body: ({ appTitle }) => `Queríamos saber cómo te está yendo con "${appTitle}". Si tienes cualquier duda, sugerencia, o necesitas ayuda con algo, escríbenos y te atendemos directamente.\n\nGracias por confiar en Maris AI.`,
+    body: ({ appTitle, userName }) => `Hola${userName ? ` ${userName}` : ""},
+
+Somos el equipo de Maris AI y queríamos saber cómo te está yendo con "${appTitle}". Nos importa que tu experiencia sea la mejor posible y que tu app quede exactamente como la necesitas.
+
+Si tienes cualquier duda, algo no funciona como esperabas, o simplemente quieres mejorar alguna parte de tu app, estamos aquí para ayudarte:
+
+🎫 Soporte por ticket — Escríbenos directamente respondiendo a este correo y te atendemos en menos de 2 horas.
+
+💬 Soporte por WhatsApp — También puedes contactarnos por WhatsApp al +34 611 935 616. Te respondemos en español, sin bots, directamente con nuestro equipo.
+
+Todo nuestro soporte es en español 🇪🇸 y completamente personalizado — no recibirás respuestas automáticas, sino atención real de personas que conocen la plataforma a fondo.
+
+Gracias por confiar en Maris AI. Estamos aquí para lo que necesites.
+
+Un saludo,
+El equipo de Maris AI`,
     defaultCredits: 0,
   },
 ];
