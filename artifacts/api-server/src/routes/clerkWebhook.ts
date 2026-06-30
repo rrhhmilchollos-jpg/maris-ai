@@ -16,7 +16,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { notifyAdminNewUser, notifyAdminUserDeleted, notifyAdminUserUpdated } from "../lib/notify";
+import { notifyAdminNewUser, notifyAdminUserDeleted, notifyAdminUserUpdated, sendWelcomeEmail } from "../lib/notify";
 import { connectDB } from "../lib/db";
 import { User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
@@ -111,6 +111,18 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
 
         // Notificar al admin por email — nuevo usuario registrado
         notifyAdminNewUser({ userEmail: email, userId: clerkId }).catch(() => {});
+
+        // A petición explícita del usuario: correo de bienvenida REAL al
+        // cliente (hasta hoy solo existían notificaciones al admin, ningún
+        // correo automático dirigido al usuario que se acaba de registrar).
+        // Best-effort: si falla (Resend caído, RESEND_API_KEY no
+        // configurada), NUNCA debe bloquear ni revertir la creación del
+        // usuario, que ya ocurrió arriba.
+        if (!isAdmin) {
+          sendWelcomeEmail({ userEmail: email, userName: fullName, credits: 45 }).catch((err) => {
+            logger.warn({ err, clerkId, email }, "clerkWebhook: fallo enviando correo de bienvenida — usuario creado igualmente");
+          });
+        }
         break;
       }
 

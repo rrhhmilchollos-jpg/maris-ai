@@ -487,3 +487,263 @@ export async function sendSupportTicketCreatedEmail(opts: {
     ticketId: opts.ticketId,
   });
 }
+
+// A petición explícita del usuario: hasta hoy el sistema de correo
+// (notify.ts, vía Resend) solo tenía notificaciones para el ADMIN y casos
+// puntuales como disculpas/revisión necesaria — ningún correo automático
+// dirigido al CLIENTE en los dos momentos más importantes de su primera
+// experiencia: registrarse y ver su primera app funcionando. Mismo estilo
+// visual de marca que sendApologyEmail (header con logo, card oscura,
+// gradiente morado/violeta de Maris AI) para que todos los correos se
+// sientan parte de la misma identidad.
+
+export async function sendWelcomeEmail(opts: {
+  userEmail: string;
+  userName?: string;
+  credits: number;
+}): Promise<boolean> {
+  const { userEmail, userName, credits } = opts;
+  const firstName = userName ? userName.split(" ")[0] : null;
+  const greeting = firstName ? `¡Hola ${firstName}!` : "¡Hola!";
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#09090f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#09090f;padding:40px 16px">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%">
+
+      <tr><td style="padding-bottom:28px;text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:32px;text-align:center">✦</div>
+          <span style="color:#f3f4f6;font-size:18px;font-weight:700;letter-spacing:-0.3px">Maris AI</span>
+        </div>
+      </td></tr>
+
+      <tr><td style="background:#111118;border:1px solid #1f1f2e;border-radius:16px;overflow:hidden">
+
+        <div style="background:linear-gradient(135deg,#7c3aed22 0%,#0ea5e915 50%,#10b98112 100%);border-bottom:1px solid #1f1f2e;padding:36px 36px 28px">
+          <div style="font-size:42px;margin-bottom:14px;line-height:1">🎉</div>
+          <div style="color:#f3f4f6;font-size:22px;font-weight:800;letter-spacing:-0.5px;line-height:1.3;margin-bottom:6px">
+            Bienvenido a Maris AI
+          </div>
+          <div style="color:#6b7280;font-size:14px">Tu cuenta ya está lista para crear apps con inteligencia artificial</div>
+        </div>
+
+        <div style="padding:32px 36px;color:#9ca3af;font-size:14px;line-height:1.8">
+
+          <p style="margin:0 0 16px;color:#d1d5db">${greeting}</p>
+
+          <p style="margin:0 0 20px">Gracias por unirte a Maris AI. Describe tu idea en lenguaje natural y nuestro equipo de agentes de inteligencia artificial generará tu aplicación completa — frontend, backend y base de datos — en minutos.</p>
+
+          <div style="background:linear-gradient(135deg,#7c3aed15,#a855f715);border:1px solid #7c3aed40;border-radius:10px;padding:18px 20px;margin:0 0 24px;display:flex;align-items:center;gap:14px">
+            <div style="font-size:28px;line-height:1">🎁</div>
+            <div>
+              <div style="color:#a78bfa;font-weight:700;font-size:14px;margin-bottom:3px">${credits} créditos de bienvenida</div>
+              <div style="color:#9ca3af;font-size:13px">Suficientes para crear tu primera app completa, sin tarjeta de crédito.</div>
+            </div>
+          </div>
+
+          <div style="text-align:center;margin:28px 0">
+            <a href="https://www.marisai.es/dashboard" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:-0.2px;box-shadow:0 4px 24px #7c3aed40">
+              Crear mi primera app →
+            </a>
+          </div>
+
+          <div style="background:#ffffff06;border:1px solid #1f1f2e;border-radius:10px;padding:20px;margin:0 0 24px">
+            <div style="color:#f3f4f6;font-weight:600;font-size:13px;margin-bottom:14px">Cómo empezar:</div>
+            <div style="display:grid;gap:10px">
+              <div style="color:#9ca3af;font-size:13px">💬 <strong style="color:#d1d5db">Describe tu idea</strong> — escribe en español lo que necesitas, sin tecnicismos</div>
+              <div style="color:#9ca3af;font-size:13px">⚡ <strong style="color:#d1d5db">Espera unos minutos</strong> — nuestros agentes generan el código completo</div>
+              <div style="color:#9ca3af;font-size:13px">✏️ <strong style="color:#d1d5db">Edita con IA</strong> — pide cualquier cambio en lenguaje natural</div>
+              <div style="color:#9ca3af;font-size:13px">🌐 <strong style="color:#d1d5db">Publica en segundos</strong> — despliegue automático con un clic</div>
+            </div>
+          </div>
+
+          <p style="margin:0 0 8px;color:#6b7280;font-size:13px">Si tienes cualquier duda, responde a este email — nuestro equipo te atiende directamente.</p>
+
+          <p style="margin:20px 0 0;color:#d1d5db">¡Bienvenido a bordo! 💜<br>
+          <span style="color:#6b7280">— El equipo de Maris AI</span></p>
+        </div>
+
+        <div style="border-top:1px solid #1f1f2e;padding:16px 36px;background:#0d0d15">
+          <div style="color:#374151;font-size:11px;text-align:center">
+            Maris AI · <a href="https://www.marisai.es" style="color:#7c3aed;text-decoration:none">marisai.es</a>
+            · <a href="https://www.marisai.es/dashboard" style="color:#7c3aed;text-decoration:none">Panel</a>
+            · Soporte: <a href="mailto:soportemarisai@gmail.com" style="color:#7c3aed;text-decoration:none">soportemarisai@gmail.com</a>
+          </div>
+        </div>
+
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  return sendEmail({
+    to: [userEmail],
+    subject: "🎉 Bienvenido a Maris AI — tus créditos ya están listos",
+    html,
+    text: `${greeting}\n\nGracias por unirte a Maris AI. Tienes ${credits} créditos de bienvenida listos para crear tu primera app completa, sin tarjeta de crédito.\n\nEmpieza aquí: https://www.marisai.es/dashboard\n\n¡Bienvenido a bordo!\n\nEl equipo de Maris AI`,
+  });
+}
+
+export async function sendFirstAppReadyEmail(opts: {
+  userEmail: string;
+  userName?: string;
+  appTitle: string;
+  dashboardUrl?: string;
+  creditsRemaining?: number;
+}): Promise<boolean> {
+  const { userEmail, userName, appTitle, dashboardUrl = "https://www.marisai.es/dashboard", creditsRemaining } = opts;
+  const firstName = userName ? userName.split(" ")[0] : null;
+  const greeting = firstName ? `${firstName},` : "Hola,";
+  const creditsBlock = typeof creditsRemaining === "number" ? `
+    <div style="background:#ffffff06;border:1px solid #1f1f2e;border-radius:10px;padding:16px 20px;margin:0 0 20px">
+      <div style="color:#9ca3af;font-size:13px">Te quedan <strong style="color:#a78bfa">${creditsRemaining} créditos</strong> para seguir ajustando tu app o crear una nueva.</div>
+    </div>` : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#09090f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#09090f;padding:40px 16px">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%">
+
+      <tr><td style="padding-bottom:28px;text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:32px;text-align:center">✦</div>
+          <span style="color:#f3f4f6;font-size:18px;font-weight:700;letter-spacing:-0.3px">Maris AI</span>
+        </div>
+      </td></tr>
+
+      <tr><td style="background:#111118;border:1px solid #1f1f2e;border-radius:16px;overflow:hidden">
+
+        <div style="background:linear-gradient(135deg,#10b98122 0%,#7c3aed15 50%,#0ea5e912 100%);border-bottom:1px solid #1f1f2e;padding:36px 36px 28px">
+          <div style="font-size:42px;margin-bottom:14px;line-height:1">🚀</div>
+          <div style="color:#f3f4f6;font-size:22px;font-weight:800;letter-spacing:-0.5px;line-height:1.3;margin-bottom:6px">
+            ¡Tu primera app ya está lista!
+          </div>
+          <div style="color:#6b7280;font-size:14px">"${appTitle}" se generó con éxito</div>
+        </div>
+
+        <div style="padding:32px 36px;color:#9ca3af;font-size:14px;line-height:1.8">
+
+          <p style="margin:0 0 16px;color:#d1d5db">${greeting}</p>
+
+          <p style="margin:0 0 20px">Acabamos de generar <strong style="color:#f3f4f6">"${appTitle}"</strong> y ya puedes verla funcionando en tu panel — frontend, backend y base de datos incluidos.</p>
+
+          ${creditsBlock}
+
+          <div style="text-align:center;margin:28px 0">
+            <a href="${dashboardUrl}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:-0.2px;box-shadow:0 4px 24px #7c3aed40">
+              Ver mi app →
+            </a>
+          </div>
+
+          <div style="background:#ffffff06;border:1px solid #1f1f2e;border-radius:10px;padding:20px;margin:0 0 24px">
+            <div style="color:#f3f4f6;font-weight:600;font-size:13px;margin-bottom:14px">Qué puedes hacer ahora:</div>
+            <div style="display:grid;gap:10px">
+              <div style="color:#9ca3af;font-size:13px">✏️ <strong style="color:#d1d5db">Pide cambios</strong> — escribe en el chat lo que quieres ajustar</div>
+              <div style="color:#9ca3af;font-size:13px">🌐 <strong style="color:#d1d5db">Publícala</strong> — despliegue automático a Vercel con un clic</div>
+              <div style="color:#9ca3af;font-size:13px">📦 <strong style="color:#d1d5db">Exporta el código</strong> — a GitHub, sin restricciones</div>
+            </div>
+          </div>
+
+          <p style="margin:20px 0 0;color:#d1d5db">¡Disfruta de tu app! 💜<br>
+          <span style="color:#6b7280">— El equipo de Maris AI</span></p>
+        </div>
+
+        <div style="border-top:1px solid #1f1f2e;padding:16px 36px;background:#0d0d15">
+          <div style="color:#374151;font-size:11px;text-align:center">
+            Maris AI · <a href="https://www.marisai.es" style="color:#7c3aed;text-decoration:none">marisai.es</a>
+            · <a href="https://www.marisai.es/dashboard" style="color:#7c3aed;text-decoration:none">Panel</a>
+            · Soporte: <a href="mailto:soportemarisai@gmail.com" style="color:#7c3aed;text-decoration:none">soportemarisai@gmail.com</a>
+          </div>
+        </div>
+
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  return sendEmail({
+    to: [userEmail],
+    subject: `🚀 "${appTitle}" ya está lista — tu primera app con Maris AI`,
+    html,
+    text: `${greeting}\n\nAcabamos de generar "${appTitle}" y ya puedes verla en tu panel.\n\nVerla aquí: ${dashboardUrl}\n\n¡Disfruta de tu app!\n\nEl equipo de Maris AI`,
+  });
+}
+
+// A petición explícita del usuario: el panel de admin necesitaba un
+// "desplegable con clichés ya añadidos" para enviar correos a clientes de
+// forma rápida (más allá de las disculpas, que ya existían como caso
+// fijo). Esta función envía un correo de TEXTO LIBRE (asunto + cuerpo,
+// editables por el admin antes de enviar) envuelto con la misma identidad
+// visual de marca que el resto de correos de Maris AI.
+export async function sendCustomAdminEmail(opts: {
+  userEmail: string;
+  userName?: string;
+  subject: string;
+  body: string; // texto plano, párrafos separados por \n\n
+  creditsCompensation?: number;
+}): Promise<boolean> {
+  const { userEmail, userName, subject, body, creditsCompensation = 0 } = opts;
+  const firstName = userName ? userName.split(" ")[0] : null;
+  const greeting = firstName ? `Hola ${firstName},` : "Hola,";
+  const paragraphs = body
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="margin:0 0 16px">${p.replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+  const creditsBlock = creditsCompensation > 0 ? `
+    <div style="background:linear-gradient(135deg,#7c3aed15,#a855f715);border:1px solid #7c3aed40;border-radius:10px;padding:18px 20px;margin:0 0 20px;display:flex;align-items:center;gap:14px">
+      <div style="font-size:28px;line-height:1">🎁</div>
+      <div>
+        <div style="color:#a78bfa;font-weight:700;font-size:14px;margin-bottom:3px">+${creditsCompensation} créditos añadidos a tu cuenta</div>
+      </div>
+    </div>` : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#09090f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#09090f;padding:40px 16px">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%">
+      <tr><td style="padding-bottom:28px;text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;background:linear-gradient(135deg,#7c3aed,#a855f7);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:32px;text-align:center">✦</div>
+          <span style="color:#f3f4f6;font-size:18px;font-weight:700;letter-spacing:-0.3px">Maris AI</span>
+        </div>
+      </td></tr>
+      <tr><td style="background:#111118;border:1px solid #1f1f2e;border-radius:16px;overflow:hidden">
+        <div style="padding:36px 36px 28px;color:#9ca3af;font-size:14px;line-height:1.8">
+          <p style="margin:0 0 16px;color:#d1d5db">${greeting}</p>
+          ${paragraphs}
+          ${creditsBlock}
+          <p style="margin:20px 0 0;color:#d1d5db">— El equipo de Maris AI 💜</p>
+        </div>
+        <div style="border-top:1px solid #1f1f2e;padding:16px 36px;background:#0d0d15">
+          <div style="color:#374151;font-size:11px;text-align:center">
+            Maris AI · <a href="https://www.marisai.es" style="color:#7c3aed;text-decoration:none">marisai.es</a>
+            · Soporte: <a href="mailto:soportemarisai@gmail.com" style="color:#7c3aed;text-decoration:none">soportemarisai@gmail.com</a>
+          </div>
+        </div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  return sendEmail({
+    to: [userEmail],
+    subject,
+    html,
+    text: `${greeting}\n\n${body}${creditsCompensation > 0 ? `\n\nHemos añadido ${creditsCompensation} créditos a tu cuenta.` : ""}\n\nEl equipo de Maris AI`,
+  });
+}

@@ -1636,6 +1636,36 @@ router.post("/admin/jobs/:id/send-apology", async (req: any, res: any): Promise<
   res.json({ ok: sent, userEmail, message: sent ? `Email de disculpas enviado a ${userEmail} ✅` : "Fallo al enviar — revisa RESEND_API_KEY" });
 });
 
+// A petición explícita del usuario: "desplegable con clichés ya añadidos"
+// para enviar correos a clientes de forma rápida desde el panel de admin.
+// El frontend tiene las plantillas predefinidas (bienvenida, disculpas,
+// app lista, incidencia resuelta, etc.) con el texto ya escrito y
+// editable; este endpoint solo envía lo que el admin confirme tras
+// revisar/editar el texto. No requiere un GenerationJob concreto — el
+// admin puede enviarlo directamente desde la ficha de un usuario.
+router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { subject, body, creditsCompensation, recipientEmail } = req.body ?? {};
+  if (!subject || !body) {
+    res.status(400).json({ error: "subject y body son requeridos" }); return;
+  }
+  const dbUser = await User.findById(req.params.id).lean() as any;
+  const userEmail = recipientEmail || dbUser?.email;
+  if (!userEmail) { res.status(400).json({ error: "Usuario sin email" }); return; }
+
+  const { sendCustomAdminEmail } = await import("../lib/notify");
+  const sent = await sendCustomAdminEmail({
+    userEmail,
+    userName: dbUser?.fullName,
+    subject,
+    body,
+    creditsCompensation: typeof creditsCompensation === "number" ? creditsCompensation : 0,
+  });
+
+  logger.info({ userId: req.params.id, userEmail, sent, subject }, "Admin: sent custom templated email");
+  res.json({ ok: sent, userEmail, message: sent ? `Correo enviado a ${userEmail} ✅` : "Fallo al enviar — revisa RESEND_API_KEY" });
+});
+
 router.post("/admin/jobs/fix-false-failed", async (req: any, res: any): Promise<void> => {
   await connectDB();
   // Jobs con status=failed pero phase=done son jobs que completaron correctamente

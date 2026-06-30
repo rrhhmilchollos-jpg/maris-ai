@@ -6548,6 +6548,33 @@ export async function runJobById(jobId: string): Promise<void> {
       if (!(job as any).hasEverPaid && !(job as any).isAdmin) {
         await log("system", "🎉 ¡Tu app completa está lista, con backend y base de datos incluidos! Sigue modificándola con tus créditos restantes — cuando se agoten, activa un plan desde la sección de precios para más créditos y funciones extra.");
       }
+
+      // A petición explícita del usuario: correo de "primera generación
+      // exitosa" — distinto del correo de bienvenida (que se envía al
+      // registrarse, antes de generar nada). Se comprueba con
+      // countDocuments si esta es realmente la PRIMERA app que el usuario
+      // genera con éxito (no solo "es gratis") para no enviarlo en cada
+      // generación posterior. Best-effort: un fallo aquí nunca debe
+      // bloquear la entrega de la app, que ya se guardó arriba.
+      try {
+        const successfulAppsCount = await GeneratedApp.countDocuments({ userId: job.userId });
+        if (successfulAppsCount === 1 && !(job as any).isAdmin) {
+          const owner = await User.findById(job.userId).select("email fullName credits").lean() as any;
+          if (owner?.email) {
+            const { sendFirstAppReadyEmail } = await import("../lib/notify");
+            sendFirstAppReadyEmail({
+              userEmail: owner.email,
+              userName: owner.fullName,
+              appTitle: app.title || "Tu app",
+              creditsRemaining: typeof owner.credits === "number" ? owner.credits : undefined,
+            }).catch((err) => {
+              logger.warn({ err, jobId }, "[email] Fallo enviando correo de primera app lista");
+            });
+          }
+        }
+      } catch (firstAppEmailErr) {
+        logger.warn({ firstAppEmailErr, jobId }, "[email] Fallo comprobando si es la primera app del usuario");
+      }
     }
 
     // ════════════════════════════════════════════════════════════════

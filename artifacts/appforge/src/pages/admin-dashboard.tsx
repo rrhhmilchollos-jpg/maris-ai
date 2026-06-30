@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -788,6 +790,14 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     }}>
                     {apologyLoading === appId ? <Loader2 className="h-3 w-3 animate-spin" /> : "💜 Disculpas"}
                   </Button>
+                  {/* A petición explícita del usuario: desplegable con plantillas de correo
+                      adicionales (bienvenida, app lista, créditos añadidos, seguimiento...) */}
+                  <EmailTemplateMenu
+                    recipientEmail={app.userEmail || email}
+                    userName={app.userName}
+                    appTitle={app.title}
+                    userId={app.userId}
+                  />
                 </div>
               </div>
               {/* Preview — iframe inline con botones externos */}
@@ -1897,6 +1907,165 @@ function ClerkSyncPanel() {
   );
 }
 
+
+// A petición explícita del usuario: "desplegable con clichés ya añadidos"
+// para enviar correos a clientes de forma rápida desde el panel de admin,
+// sin tener que escribir el texto desde cero cada vez. Cada plantilla
+// rellena asunto + cuerpo automáticamente (con el nombre/título de la app
+// ya sustituidos), y el admin puede editar el texto en el Dialog antes de
+// confirmar el envío — nunca se manda nada sin que el admin lo vea primero.
+interface EmailTemplateDef {
+  id: string;
+  label: string;
+  icon: string;
+  subject: (ctx: { appTitle: string; userName: string }) => string;
+  body: (ctx: { appTitle: string; userName: string }) => string;
+  defaultCredits?: number;
+}
+
+const EMAIL_TEMPLATES: EmailTemplateDef[] = [
+  {
+    id: "apology",
+    label: "Disculpas — problema resuelto",
+    icon: "💜",
+    subject: ({ appTitle }) => `✅ "${appTitle}" lista — problema resuelto por soporte`,
+    body: ({ appTitle }) => `Queremos pedirte disculpas sinceras por la experiencia que has tenido con "${appTitle}". Nuestro equipo de soporte ha revisado el problema, aplicado las correcciones necesarias y verificado que todo funciona correctamente.\n\nTu app ya está disponible en tu panel, lista para que la explores, edites y publiques.\n\nSi tienes cualquier otra duda, responde a este email y te atendemos de inmediato.`,
+    defaultCredits: 10,
+  },
+  {
+    id: "incident_resolved",
+    label: "Incidencia técnica resuelta",
+    icon: "🔧",
+    subject: ({ appTitle }) => `🔧 Hemos resuelto la incidencia en "${appTitle}"`,
+    body: ({ appTitle }) => `Te escribimos para confirmarte que la incidencia técnica detectada en "${appTitle}" ya ha sido corregida por nuestro equipo.\n\nPuedes volver a tu panel y comprobar que todo funciona con normalidad. Si notas cualquier otro comportamiento extraño, no dudes en escribirnos.`,
+    defaultCredits: 0,
+  },
+  {
+    id: "credits_added",
+    label: "Créditos añadidos manualmente",
+    icon: "🎁",
+    subject: () => `🎁 Hemos añadido créditos a tu cuenta de Maris AI`,
+    body: () => `Queríamos avisarte de que hemos añadido créditos extra a tu cuenta de Maris AI.\n\nYa están disponibles para que sigas creando o editando tus apps.`,
+    defaultCredits: 20,
+  },
+  {
+    id: "low_credits_reminder",
+    label: "Recordatorio: pocos créditos",
+    icon: "⚡",
+    subject: () => `⚡ Te quedan pocos créditos en Maris AI`,
+    body: () => `Hemos visto que tu saldo de créditos en Maris AI está bajo.\n\nSi quieres seguir creando o editando tus apps sin interrupciones, puedes activar un plan desde la sección de precios — los paquetes empiezan desde 20€ por 160 créditos, que nunca caducan.`,
+    defaultCredits: 0,
+  },
+  {
+    id: "follow_up",
+    label: "Seguimiento — ¿cómo va todo?",
+    icon: "👋",
+    subject: ({ appTitle }) => `👋 ¿Qué tal va "${appTitle}"?`,
+    body: ({ appTitle }) => `Queríamos saber cómo te está yendo con "${appTitle}". Si tienes cualquier duda, sugerencia, o necesitas ayuda con algo, escríbenos y te atendemos directamente.\n\nGracias por confiar en Maris AI.`,
+    defaultCredits: 0,
+  },
+];
+
+function EmailTemplateMenu({
+  recipientEmail,
+  userName,
+  appTitle,
+  userId,
+}: {
+  recipientEmail: string;
+  userName?: string;
+  appTitle?: string;
+  userId: string;
+}) {
+  const { toast } = useToast();
+  const [openTemplate, setOpenTemplate] = useState<EmailTemplateDef | null>(null);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [credits, setCredits] = useState(0);
+  const [recipient, setRecipient] = useState(recipientEmail);
+  const [sending, setSending] = useState(false);
+
+  const handlePickTemplate = (tpl: EmailTemplateDef) => {
+    const ctx = { appTitle: appTitle || "tu app", userName: userName || "" };
+    setOpenTemplate(tpl);
+    setSubject(tpl.subject(ctx));
+    setBody(tpl.body(ctx));
+    setCredits(tpl.defaultCredits || 0);
+    setRecipient(recipientEmail);
+  };
+
+  const handleSend = async () => {
+    if (!recipient || !subject.trim() || !body.trim()) return;
+    setSending(true);
+    try {
+      await apiFetch<any>(`/api/admin/users/${userId}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, body, creditsCompensation: credits || 0, recipientEmail: recipient }),
+      });
+      toast({ title: "✅ Correo enviado", description: `Enviado a ${recipient}` });
+      setOpenTemplate(null);
+    } catch (e: any) {
+      toast({ title: "Error al enviar", description: e.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" variant="outline" className="h-7 text-[10px] border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
+            💌 Enviar correo
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>Plantillas de correo</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {EMAIL_TEMPLATES.map((tpl) => (
+            <DropdownMenuItem key={tpl.id} onClick={() => handlePickTemplate(tpl)}>
+              {tpl.icon} {tpl.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={!!openTemplate} onOpenChange={(o) => !o && setOpenTemplate(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{openTemplate?.icon} {openTemplate?.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-white/50">Destinatario</label>
+              <Input value={recipient} onChange={(e) => setRecipient(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-white/50">Asunto</label>
+              <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-white/50">Mensaje (puedes editarlo antes de enviar)</label>
+              <Textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-white/50">Créditos de compensación (0 = sin créditos)</label>
+              <Input type="number" min={0} value={credits} onChange={(e) => setCredits(Number(e.target.value) || 0)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenTemplate(null)}>Cancelar</Button>
+            <Button onClick={handleSend} disabled={sending || !recipient || !subject.trim() || !body.trim()} className="bg-violet-600 hover:bg-violet-700">
+              {sending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Enviar correo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
