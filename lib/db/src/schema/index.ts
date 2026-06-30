@@ -370,6 +370,19 @@ export interface IGenerationJob extends Document {
   currentAgent?: string;
   awaitingApproval?: boolean;
   approvedFacets?: string[];
+  // A petición explícita del usuario (caso real confirmado: decenas de
+  // jobs "autopilot-quality"/"autopilot-fix" encadenados sin fin contra el
+  // mismo cliente, saturando la cola). autoFixedFromJobId ya existía
+  // (referenciaba solo al padre INMEDIATO, sin protección real contra
+  // cadenas largas). repairChainDepth es NUEVO: se hereda +1 del job padre
+  // en cada reparación automática encadenada, permitiendo bloquear la
+  // cadena completa cuando supera MAX_AUTO_REPAIR_CHAIN_DEPTH, en vez de
+  // solo evitar re-diagnosticar el mismo job dos veces (que no detenía la
+  // cadena, solo evitaba un bucle de UN job consigo mismo).
+  autoFixedFromJobId?: string;
+  repairChainDepth?: number;
+  autoDiagnosed?: boolean;
+  autoDiagnosisNote?: string;
   checkpointData?: any;
   editAppId?: string;
   // Job lanzado automáticamente porque la vista previa no renderizó nada
@@ -409,6 +422,10 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     currentAgent: { type: String },
     awaitingApproval: { type: Boolean, default: false },
     approvedFacets: { type: [String], default: [] },
+    autoFixedFromJobId: { type: String },
+    repairChainDepth: { type: Number, default: 0 },
+    autoDiagnosed: { type: Boolean, default: false },
+    autoDiagnosisNote: { type: String },
     checkpointData: { type: Schema.Types.Mixed },
     editAppId: { type: String },
     isAutoRepair: { type: Boolean, default: false },

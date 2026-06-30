@@ -81,6 +81,31 @@ export async function autoDiagnoseFailedJob(jobId: string): Promise<void> {
     if ((job as any).autoDiagnosed) return;
     await GenerationJob.findByIdAndUpdate(jobId, { $set: { autoDiagnosed: true } });
 
+    // CASO REAL CONFIRMADO por el usuario en producción: decenas de jobs
+    // "autopilot-quality"/"autopilot-fix" encadenados sin fin contra el
+    // mismo cliente, saturando la cola de Monitorización en vivo y
+    // haciendo imposible encontrar el job real de un cliente concreto.
+    // CAUSA RAÍZ: autoFixedFromJobId solo referenciaba al padre INMEDIATO
+    // — la protección "evitar re-diagnóstico" solo evitaba que UN MISMO
+    // job se diagnosticara dos veces, pero nunca limitaba cuántos jobs
+    // NUEVOS podían encadenarse uno tras otro (cada uno con su propio
+    // autoDiagnosed=false). FIX: repairChainDepth se hereda +1 del padre
+    // en cada job nuevo, y si supera el límite, se escala a revisión
+    // humana en vez de seguir generando jobs sin fin.
+    const MAX_AUTO_REPAIR_CHAIN_DEPTH = 3;
+    const currentDepth = (job as any).repairChainDepth || 0;
+    if (currentDepth >= MAX_AUTO_REPAIR_CHAIN_DEPTH) {
+      logger.warn({ jobId, currentDepth }, "aiAutopilot: límite de reparaciones encadenadas alcanzado — escalando a revisión humana");
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: {
+          status: "reviewing",
+          phase: "reviewing",
+          autoDiagnosisNote: `Se alcanzó el límite de ${MAX_AUTO_REPAIR_CHAIN_DEPTH} reparaciones automáticas encadenadas sin éxito. Requiere revisión manual.`,
+        },
+      });
+      return;
+    }
+
     // Obtener logs del job
     const logs = await JobLog.find({ jobId }).sort({ createdAt: -1 }).limit(30).lean() as any[];
     const logText = logs.map((l: any) => `[${l.agent}] ${l.message}`).join("\n").slice(0, 3000);
@@ -171,6 +196,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
         status: "queued", phase: "queued", progress: 0,
         isAdmin: true, hasEverPaid: true,
         autoFixedFromJobId: jobId,
+        repairChainDepth: currentDepth + 1,
       });
       await enqueueGenerateJob(newJobId);
       logger.info({ jobId, newJobId, strategy: parsed.fixStrategy, repairCoderModel }, "aiAutopilot: corrección automática lanzada");
@@ -188,6 +214,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
         status: "queued", phase: "queued", progress: 0,
         isAdmin: true, hasEverPaid: true,
         autoFixedFromJobId: jobId,
+        repairChainDepth: currentDepth + 1,
       });
       await enqueueGenerateJob(newJobId);
       logger.info({ jobId, newJobId }, "aiAutopilot: regeneración desde cero lanzada");

@@ -947,6 +947,35 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 35: bucle infinito de reparaciones automáticas encadenadas — caso
+// real confirmado por el usuario con decenas de jobs "autopilot-quality"/
+// "autopilot-fix" consecutivos del mismo cliente saturando la cola.
+// CAUSA RAÍZ: autoDiagnoseFailedJob tenía protección solo contra
+// re-diagnosticar EL MISMO JOB dos veces (autoDiagnosed=true), pero no
+// contra crear un NUEVO job a partir del fallo del job de reparación, que
+// a su vez fallaba y creaba otro nuevo, etc. — cadena sin límite real.
+// FIX: MAX_AUTO_REPAIR_CHAIN_DEPTH=3. repairChainDepth se hereda +1 en
+// cada job nuevo encadenado. Al superar el límite, se escala a revisión
+// humana en vez de seguir creando jobs sin fin.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const autopilotSrc = readSrc("lib/aiAutopilot.ts");
+  check(
+    "FIX 35a: existe MAX_AUTO_REPAIR_CHAIN_DEPTH que limita la cadena de reparaciones automáticas encadenadas",
+    /const MAX_AUTO_REPAIR_CHAIN_DEPTH = \d+;/.test(autopilotSrc),
+    "Sin esto, autoDiagnoseFailedJob puede crear una cadena infinita de jobs de reparación, uno a partir del fallo del anterior, saturando la cola y haciendo imposible encontrar el job real de un cliente.",
+  );
+  check(
+    "FIX 35b: repairChainDepth se hereda +1 en cada job nuevo de la cadena",
+    /repairChainDepth: currentDepth \+ 1,/.test(autopilotSrc),
+  );
+  check(
+    "FIX 35c: cuando se alcanza el límite, se escala a revisión humana en vez de seguir creando jobs",
+    /currentDepth >= MAX_AUTO_REPAIR_CHAIN_DEPTH/.test(autopilotSrc) && /status: "reviewing"/.test(autopilotSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
