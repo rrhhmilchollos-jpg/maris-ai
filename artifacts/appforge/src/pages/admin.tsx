@@ -4,6 +4,7 @@ import {
   apiFetch,
   useGetAdminOverview,
   useListAdminUsers,
+  useAdminPresence,
   useListAdminApps,
   useListAdminJobs,
   useAdjustUserCredits,
@@ -116,6 +117,13 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
   const { data: overview, isLoading: overviewLoading } = useGetAdminOverview();
   const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useListAdminUsers({ query: { refetchInterval: 30_000 } });
+  // A petición explícita del usuario: la columna "Estado" mostraba siempre
+  // "Activo" para cualquier cuenta no baneada/suspendida (un estado
+  // ADMINISTRATIVO de la cuenta, no si el usuario está conectado ahora
+  // mismo). Refresco cada 5s — más frecuente que la lista de usuarios
+  // porque la presencia cambia en segundos, no en minutos.
+  const { data: presenceData } = useAdminPresence({ query: { refetchInterval: 5_000 } });
+  const onlineUserIds = new Set<string>((presenceData?.online ?? []).map((o: any) => String(o.userId)));
   const { data: apps, isLoading: appsLoading } = useListAdminApps();
   const {
     data: jobsData,
@@ -489,12 +497,18 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                           <TableCell className="text-right font-mono text-primary font-bold">{u.credits}</TableCell>
                           <TableCell className="text-right font-mono">{u.appsGenerated}</TableCell>
                           <TableCell>
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {onlineUserIds.has(String(u.id)) && (
+                                <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400" title="Conectado ahora mismo">
+                                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                                  En línea
+                                </span>
+                              )}
                               {u.isBanned && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Baneado</Badge>}
                               {u.isSuspended && !u.isBanned && <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">Suspendido</Badge>}
                               {(u.blockedIps ?? []).length > 0 && <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/30 text-[10px]">IP bloqueada</Badge>}
                               {!u.isBanned && !u.isSuspended && (u.blockedIps ?? []).length === 0 && (
-                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Activo</Badge>
+                                <Badge className="bg-white/[0.04] text-white/40 border-white/10 text-[10px]">Activo</Badge>
                               )}
                             </div>
                           </TableCell>

@@ -183,6 +183,13 @@ export function useGetAdminOverview(opts?: { query?: Partial<UseQueryOptions> })
 export function useListAdminUsers(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAdminUsersQueryKey(), queryFn: () => apiFetch("/api/admin/users"), ...(opts?.query as any) });
 }
+// A petición explícita del usuario: estado "Activo" dinámico en vivo, no
+// solo "cuenta no baneada". Consulta GET /admin/presence (ya existente,
+// usa el sistema real de Socket.IO con autenticación Clerk real) con
+// refresco frecuente para reflejar quién tiene Maris AI abierto AHORA MISMO.
+export function useAdminPresence(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: ["admin", "presence"], queryFn: () => apiFetch("/api/admin/presence"), ...(opts?.query as any) });
+}
 export function useListAdminApps(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAdminAppsQueryKey(), queryFn: () => apiFetch("/api/admin/apps"), ...(opts?.query as any) });
 }
