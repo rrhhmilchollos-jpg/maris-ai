@@ -6340,6 +6340,55 @@ export async function runJobById(jobId: string): Promise<void> {
         }
       }
 
+      // ── LIMPIEZA AUTOMÁTICA DE REINTENTOS DUPLICADOS ──────────────────────
+      // ENCONTRADO a petición explícita del usuario (caso real: cliente
+      // costerahome@gmail.com, app "MesaYa" — dos GeneratedApp casi
+      // idénticas creadas con segundos de diferencia el mismo día, mismo
+      // prompt con los mismos "EXTRAS CONFIRMADOS POR EL USUARIO"). Causa
+      // real: cuando un job de construcción nueva falla y el cliente (o el
+      // sistema) reintenta, no existía NINGÚN vínculo entre el intento
+      // fallido y el nuevo job — así que un reintento exitoso siempre
+      // generaba una GeneratedApp nueva y desconectada, dejando la app
+      // fallida/incompleta visible para siempre en el panel del cliente.
+      // FIX: antes de crear la app de este job exitoso, buscar si el mismo
+      // usuario tiene otra GeneratedApp creada en los últimos 30 minutos
+      // con un prompt casi idéntico (normalizado, primeros 200 caracteres
+      // — donde vive la parte estable del prompt: título del proyecto y
+      // extras confirmados, que no cambian entre reintentos aunque el
+      // cliente reformule detalles menores). Si la encuentra, es con
+      // altísima probabilidad el intento anterior fallido del MISMO
+      // proyecto — se borra junto con su job asociado antes de crear la
+      // nueva, fusionando efectivamente ambos intentos en uno solo.
+      try {
+        const normalizedPrompt = String(job.prompt || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+        if (normalizedPrompt.length > 20) {
+          const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+          const candidateApps = await GeneratedApp.find({
+            userId: job.userId,
+            createdAt: { $gte: thirtyMinutesAgo },
+          }).select("_id title prompt createdAt").lean();
+          const duplicateApp = candidateApps.find((a: any) => {
+            const otherNormalized = String(a.prompt || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+            return otherNormalized.length > 20 && otherNormalized === normalizedPrompt;
+          });
+          if (duplicateApp) {
+            await GenerationJob.deleteMany({ appId: String(duplicateApp._id) });
+            await GeneratedApp.deleteOne({ _id: duplicateApp._id });
+            logger.info(
+              { jobId, userId: job.userId, removedAppId: String(duplicateApp._id), removedTitle: duplicateApp.title },
+              "Reintento detectado — app y jobs del intento anterior fallido eliminados automáticamente",
+            );
+            await log("system", `🧹 Detectado reintento del mismo proyecto — se ha eliminado automáticamente el intento anterior incompleto.`);
+          }
+        }
+      } catch (dedupErr) {
+        // Best-effort: si la detección de duplicados falla por cualquier
+        // motivo (Mongo lento, etc.), NUNCA debe bloquear la entrega de la
+        // app recién generada con éxito — simplemente se continúa sin
+        // limpiar, igual que antes de este fix.
+        logger.warn({ dedupErr, jobId }, "[dedup-retry] Falló la detección de reintentos duplicados — continuando sin limpiar");
+      }
+
       // Wrap con retry para evitar E11000 duplicate key en marisId
       // (puede ocurrir si dos jobs del mismo usuario terminan en el mismo segundo)
       let app: any;
