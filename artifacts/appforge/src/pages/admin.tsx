@@ -300,10 +300,10 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
     selectedUser?.id ?? "",
     { query: { enabled: !!selectedUser && userDetailTab === "transactions" } }
   );
-  const { data: userAppsData, isLoading: userAppsLoading } = useAdminUserApps(
+  const { data: userAppsData, isLoading: userAppsLoading, refetch: refetchUserApps } = useAdminUserApps(
     selectedUser?.id ?? "",
     selectedUser?.email ?? "",
-    { query: { enabled: !!selectedUser && userDetailTab === "apps" } }
+    { query: { enabled: !!selectedUser && userDetailTab === "apps", staleTime: 0, refetchOnMount: true } }
   );
 
   const loadMemory = async (overrides?: { q?: string; offset?: number }) => {
@@ -1018,6 +1018,12 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
                       {/* Apps */}
                       <TabsContent value="apps" className="mt-0 p-6">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs text-white/40">{(userAppsData as any[])?.length ?? 0} app(s) encontrada(s)</p>
+                          <button onClick={() => refetchUserApps()} className="text-xs text-white/40 hover:text-white flex items-center gap-1 transition">
+                            <RotateCcw className="h-3 w-3" /> Recargar
+                          </button>
+                        </div>
                         {userAppsLoading ? (
                           <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
                         ) : (userAppsData as any[])?.length ? (
