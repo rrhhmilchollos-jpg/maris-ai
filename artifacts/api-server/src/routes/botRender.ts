@@ -294,7 +294,7 @@ router.get("/bot-render/vs-base44", (_req: Request, res: Response) => {
 <li><strong>Exportación de código</strong>: Maris AI genera código 100% exportable a GitHub sin vendor lock-in. Con Base44, el código generado puede tener dependencias de su propia plataforma.</li>
 <li><strong>Backend incluido</strong>: Maris AI genera automáticamente un backend Express + MongoDB completo. Base44 se centra más en el frontend.</li>
 <li><strong>Precios en euros</strong>: Maris AI cobra en euros con cumplimiento RGPD. Ideal para empresas y autónomos en España y Europa.</li>
-<li><strong>Créditos sin caducidad</strong>: Los créditos de Maris AI nunca caducan. 78 créditos gratis al registrarte, sin tarjeta de crédito.</li>
+<li><strong>Créditos sin caducidad</strong>: Los créditos de Maris AI nunca caducan. 45 créditos gratis al registrarte, sin tarjeta de crédito.</li>
 </ul>
 <h2>¿Cuándo elegir Maris AI sobre Base44?</h2>
 <p>Elige Maris AI si necesitas: aplicaciones con backend real y base de datos, código exportable sin restricciones, soporte en español, precios predecibles en euros, o cumplimiento con la normativa europea de datos (RGPD).</p>
@@ -497,7 +497,7 @@ router.get("/bot-render/desarrollo-no-code-guia", (_req: Request, res: Response)
 </ul>
 <h2>¿Es el código generado por IA de calidad profesional?</h2>
 <p>Sí. Maris AI genera código React + TypeScript + Tailwind + Express + MongoDB siguiendo las mejores prácticas de la industria. El código es moderno, escalable y 100% exportable a GitHub sin restricciones.</p>
-<a href="https://www.marisai.es/" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;">Empezar gratis — 78 créditos sin tarjeta</a>
+<a href="https://www.marisai.es/" style="display:inline-block;margin-top:20px;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:8px;">Empezar gratis — 45 créditos sin tarjeta</a>
 </main>`;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=3600");

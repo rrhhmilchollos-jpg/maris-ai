@@ -4931,22 +4931,24 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     //   - fullstack   = 3 × 10 = 30 créditos
     //   - game-3d     = 5 × 10 = 50 créditos
     //
-    // FREE (78 créditos de bienvenida):
+    // FREE (45 créditos de bienvenida):
     //   - Coste = min(KIND_COSTS[kind] × 13, 50) — consume la MAYOR PARTE del
-    //     saldo en ESA primera app completa (igual que "1 deploy = 50
-    //     créditos" en Emergent con solo 5-10 gratis): el usuario obtiene UNA
-    //     app completa y funcional, y le quedan créditos reales para al
-    //     menos una reparación completa si la primera generación no sale
-    //     perfecta (no hay distinción de coste entre generar y reparar — el
-    //     mismo endpoint cobra lo mismo en ambos casos), antes de necesitar
-    //     plan de pago.
-    //   FREE (78 créditos de bienvenida — generación fullstack + 1 reparación completa):
-    //   - landing    = 1 × 13 = 13 créditos → quedan 65 (generación + reparación + margen de sobra)
-    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 52 (generación + reparación con margen)
-    //   - fullstack   = 3 × 13 = 39 créditos → quedan 39 (justo para una reparación completa si la primera falla)
-    //   Estrategia: 1 app fullstack gratuita completa y funcional, CON margen real para
-    //   una reparación si algo sale mal, luego pagar.
-    //   Más generoso que Emergent.sh para dar una primera experiencia fiable, no solo una demo frágil.
+    //     saldo en ESA primera app completa: el usuario obtiene UNA app
+    //     completa y funcional, y le queda un margen PEQUEÑO de créditos
+    //     reales para probar varias ediciones menores (a 0.2 créditos cada
+    //     una en plan gratuito) antes de necesitar comprar más para seguir.
+    //   FREE (45 créditos de bienvenida — generación fullstack + margen de ediciones,
+    //   NO una reparación completa de 39 créditos, a diferencia del valor anterior de 78):
+    //   - landing    = 1 × 13 = 13 créditos → quedan 32 (generación + margen amplio de ediciones)
+    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 19 (generación + margen de ediciones)
+    //   - fullstack   = 3 × 13 = 39 créditos → quedan 6 (generación + ~30 ediciones menores a 0.2 cada una)
+    //   Estrategia: 1 app fullstack gratuita completa y funcional, CON un margen real (no
+    //   simbólico) para que el cliente pruebe ajustar su app antes de tener que pagar —
+    //   pero sin dejar saldo suficiente para una reparación completa adicional gratis.
+    //   A petición explícita del usuario tras confirmar el caso real de costerahome@gmail.com
+    //   (app "MesaYa", coste real de generación: 39 créditos) — bajado de 78 a 45 para que el
+    //   cliente sienta que el saldo "se agota" tras generar + ajustar, en vez de sobrar
+    //   margen para decenas de ediciones gratuitas sin ninguna fricción de conversión.
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;

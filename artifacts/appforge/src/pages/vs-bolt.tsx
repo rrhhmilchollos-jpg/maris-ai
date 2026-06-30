@@ -67,7 +67,7 @@ export default function VsBoltPage() {
           "@type": "Offer",
           price: "0",
           priceCurrency: "EUR",
-          description: "78 créditos gratis al registrarse, sin tarjeta de crédito",
+          description: "45 créditos gratis al registrarse, sin tarjeta de crédito",
         },
         inLanguage: "es-ES",
       },
@@ -287,7 +287,7 @@ export default function VsBoltPage() {
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="bg-primary hover:bg-primary/90 text-white h-14 px-10 text-lg">
-                Empieza gratis — 78 créditos sin tarjeta <ArrowRight className="ml-2 h-5 w-5" />
+                Empieza gratis — 45 créditos sin tarjeta <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
             <p className="text-xs text-muted-foreground mt-4">Sin tarjeta de crédito · En español · Precios transparentes</p>
