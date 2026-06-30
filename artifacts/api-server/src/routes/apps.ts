@@ -6866,6 +6866,127 @@ export async function runDeployForApp(args: {
   };
 }
 
+// ── POST /api/apps/:id/deploy ─────────────────────────────────────────────
+// ENCONTRADO durante la implementación de dominios personalizados: este
+// endpoint NO EXISTÍA — el botón "Deploy app" del cliente (useDeployApp,
+// /api/apps/${id}/deploy) llamaba a una ruta que devolvía 404. runDeployForApp
+// ya estaba completa y se usaba internamente desde el auto-evaluador, pero
+// nunca estuvo expuesta para que el cliente la disparara manualmente.
+router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!(app as any).frontendCode) {
+      return res.status(400).json({ error: "Esta app todavía no tiene código generado — no hay nada que desplegar." });
+    }
+    const result = await runDeployForApp({ appId: req.params.id, userId, log: logger });
+    res.status(201).json({ deploymentUrl: result.url, url: result.url, slug: result.slug });
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/deploy error");
+    res.status(500).json({ error: err?.message ?? "Error al desplegar" });
+  }
+});
+
+// ── Dominio personalizado (DNS) ───────────────────────────────────────────
+// A petición explícita del usuario (decisión final tras valorar y descartar
+// migrar a infraestructura propia/proxy inverso): se mantienen las DNS
+// REALES de Vercel (addVercelDomainForApp/getVercelDomainStatus/
+// removeVercelDomainForApp en vercelDeploy.ts, ya existentes), conectadas
+// aquí por primera vez a un endpoint HTTP, CON un control de negocio real:
+// solo usuarios que han pagado al menos una vez (hasEverPaid=true) pueden
+// conectar un dominio personalizado. Si la suscripción se cancela después,
+// el dominio sigue activo — el control es sobre hasEverPaid (histórico),
+// no sobre el plan actual, exactamente como se acordó.
+
+// POST /api/apps/:id/domain — conectar un dominio personalizado (solo usuarios que han pagado alguna vez)
+router.post("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { domain } = req.body ?? {};
+    if (!domain || typeof domain !== "string" || !domain.includes(".")) {
+      return res.status(400).json({ error: "Dominio inválido. Ejemplo: midominio.com o app.midominio.com" });
+    }
+    const dbUser = await User.findById(userId).select("hasEverPaid isAdmin email").lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+    if (!dbUser?.hasEverPaid && !isAdmin) {
+      return res.status(402).json({
+        error: "Los dominios personalizados son una función de pago",
+        hint: "Activa tu primer plan de pago para desbloquear el mapeo de dominios personalizados. Una vez hayas pagado, el acceso queda activo de forma permanente aunque canceles la suscripción.",
+      });
+    }
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const projectId = (app as any).vercelProjectId;
+    if (!projectId) {
+      return res.status(400).json({ error: "Esta app todavía no se ha desplegado — despliega la app primero antes de conectar un dominio personalizado." });
+    }
+    const { addVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await addVercelDomainForApp({
+      appId: req.params.id,
+      userId,
+      projectId,
+      domain: domain.trim().toLowerCase(),
+      log: logger,
+    });
+    if (!result.ok) {
+      logger.warn({ failure: result.failure, domain }, "[domain] Falló al añadir el dominio en Vercel");
+      return res.status(422).json({ error: "No se pudo conectar el dominio. Comprueba que no esté ya en uso en otro proyecto.", failure: result.failure });
+    }
+    res.status(201).json(result.status);
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/domain error");
+    res.status(500).json({ error: err?.message ?? "Error al conectar el dominio" });
+  }
+});
+
+// GET /api/apps/:id/domain — consultar el estado de verificación DNS
+// (lectura libre, no requiere hasEverPaid — solo bloqueado el añadir uno nuevo)
+router.get("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.json({ domain: null });
+    }
+    const { getVercelDomainStatus } = await import("../lib/vercelDeploy");
+    const result = await getVercelDomainStatus({ projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo consultar el estado del dominio", failure: result.failure });
+    }
+    res.json(result.status);
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/domain error");
+    res.status(500).json({ error: err?.message ?? "Error al consultar el dominio" });
+  }
+});
+
+// DELETE /api/apps/:id/domain — desconectar el dominio personalizado
+router.delete("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.status(400).json({ error: "Esta app no tiene un dominio personalizado conectado." });
+    }
+    const { removeVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await removeVercelDomainForApp({ appId: req.params.id, projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo desconectar el dominio", failure: result.failure });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, "DELETE /api/apps/:id/domain error");
+    res.status(500).json({ error: err?.message ?? "Error al desconectar el dominio" });
+  }
+});
+
 
 // ── NOTIFICACIONES DE SOPORTE — el cliente lee sus avisos de corrección ──────
 // GET /api/notifications — devuelve notificaciones no leídas del usuario autenticado

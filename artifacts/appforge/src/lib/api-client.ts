@@ -261,6 +261,15 @@ export function useDeployApp(opts?: { mutation?: Partial<UseMutationOptions<any,
 export function useDeepTestApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/deep-test`, { method: "POST" }), ...(opts?.mutation as any) });
 }
+export function useGetAppDomain(appId: string, opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: ["apps", appId, "domain"], queryFn: () => apiFetch(`/api/apps/${appId}/domain`), enabled: !!appId, ...(opts?.query as any) });
+}
+export function useConnectAppDomain(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id, domain }: any) => apiFetch(`/api/apps/${id}/domain`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain }) }), ...(opts?.mutation as any) });
+}
+export function useDisconnectAppDomain(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/domain`, { method: "DELETE" }), ...(opts?.mutation as any) });
+}
 export function useDeployAppToVercel(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/deploy/vercel`, { method: "POST" }), ...(opts?.mutation as any) });
 }

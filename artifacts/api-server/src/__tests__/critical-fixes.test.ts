@@ -636,6 +636,31 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 24: endpoint de deploy (que el botón del cliente ya llamaba pero no
+// existía — 404) y dominios personalizados (DNS reales de Vercel, ya
+// existentes en vercelDeploy.ts pero sin ningún endpoint HTTP) conectados,
+// con control de pago real: solo usuarios con hasEverPaid=true pueden
+// conectar un dominio. El acceso es histórico (no depende del plan actual),
+// por decisión explícita del usuario.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 24a: existe el endpoint POST /apps/:id/deploy (el botón Deploy app del cliente llamaba a una ruta que no existía)",
+    /router\.post\("\/apps\/:id\/deploy", requireAuth/.test(appsSrc),
+  );
+  check(
+    "FIX 24b: POST /apps/:id/domain exige hasEverPaid=true (402 si no) antes de conectar un dominio personalizado",
+    /if \(!dbUser\?\.hasEverPaid && !isAdmin\)/.test(appsSrc) && /status\(402\)/.test(appsSrc),
+    "Sin este control, cualquier usuario gratuito podría conectar un dominio personalizado gratis, perdiendo el incentivo real de pago.",
+  );
+  check(
+    "FIX 24c: existen GET y DELETE /apps/:id/domain conectados a las funciones reales de Vercel",
+    /router\.get\("\/apps\/:id\/domain"/.test(appsSrc) && /router\.delete\("\/apps\/:id\/domain"/.test(appsSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

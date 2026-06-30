@@ -19,6 +19,9 @@ import {
   useApproveFacet,
   useDeployApp,
   useDeepTestApp,
+  useGetAppDomain,
+  useConnectAppDomain,
+  useDisconnectAppDomain,
   getGenerationJobLogs,
   getGetGenerationJobLogsQueryKey,
   useGetNotifications,
@@ -40,6 +43,7 @@ import {
   type UploadedAttachment,
 } from "@/components/attachment-picker";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -492,6 +496,54 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       return;
     }
     deepTestMutation.mutate({ id });
+  };
+
+  // A petición explícita del usuario: dominios personalizados, solo para
+  // usuarios que han pagado al menos una vez (hasEverPaid). La
+  // infraestructura real (Vercel) ya existía en vercelDeploy.ts, ahora
+  // conectada a estos endpoints. El control de pago vive en el BACKEND
+  // (única fuente de verdad: devuelve 402 si no ha pagado) — el frontend
+  // no duplica esa lógica, solo muestra el mensaje de upsell que el
+  // servidor ya construye cuando llega ese error.
+  const [domainInput, setDomainInput] = useState("");
+  const { data: domainStatus, refetch: refetchDomain } = useGetAppDomain(id, {
+    query: { refetchInterval: (q: any) => (q?.state?.data?.domain && !q.state.data.verified ? 8000 : false) },
+  });
+  const connectDomainMutation = useConnectAppDomain({
+    mutation: {
+      onSuccess: () => {
+        refetchDomain();
+        toast({ title: "Dominio añadido", description: "Configura los registros DNS que aparecen abajo en tu proveedor de dominios para activarlo." });
+      },
+      onError: (err: any) => {
+        const isPaymentRequired = err?.error === "Los dominios personalizados son una función de pago";
+        toast({
+          title: isPaymentRequired ? "Función de pago" : "No se pudo conectar el dominio",
+          description: err?.hint ?? err?.error ?? err?.message ?? "Error",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+  const disconnectDomainMutation = useDisconnectAppDomain({
+    mutation: {
+      onSuccess: () => {
+        refetchDomain();
+        setDomainInput("");
+        toast({ title: "Dominio desconectado" });
+      },
+      onError: (err: any) => {
+        toast({ title: "No se pudo desconectar el dominio", description: err?.error ?? err?.message ?? "Error", variant: "destructive" });
+      },
+    },
+  });
+  const handleConnectDomain = () => {
+    const trimmed = domainInput.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes(".")) {
+      toast({ title: "Dominio inválido", description: "Escribe un dominio completo, por ejemplo midominio.com", variant: "destructive" });
+      return;
+    }
+    connectDomainMutation.mutate({ id, domain: trimmed });
   };
 
   useEffect(() => {
@@ -969,6 +1021,72 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     Comprar créditos
                   </button>
                 </p>
+              )}
+            </div>
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <div className="flex items-start gap-3">
+                <Globe className="mt-0.5 h-5 w-5 shrink-0 text-sky-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Dominio personalizado</p>
+                  <p className="mt-1 text-xs text-white/50">
+                    Conecta tu propio dominio (ej. midominio.com) apuntando sus DNS a Maris AI. Disponible para clientes que han activado un plan de pago alguna vez — el acceso se mantiene aunque canceles la suscripción más adelante.
+                  </p>
+                </div>
+              </div>
+              {!domainStatus?.domain ? (
+                <div className="mt-4 flex gap-2">
+                  <Input
+                    value={domainInput}
+                    onChange={(e) => setDomainInput(e.target.value)}
+                    placeholder="midominio.com"
+                    disabled={connectDomainMutation.isPending}
+                    className="border-white/10 bg-white/[0.04] text-white placeholder:text-white/30"
+                  />
+                  <Button
+                    onClick={handleConnectDomain}
+                    disabled={connectDomainMutation.isPending || !domainInput.trim()}
+                    variant="outline"
+                    className="shrink-0 border-sky-500/30 bg-sky-500/[0.06] text-sky-300 hover:bg-sky-500/[0.12] disabled:opacity-40"
+                  >
+                    {connectDomainMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Conectar"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${domainStatus.verified ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
+                      <span className="text-sm font-medium text-white">{domainStatus.domain}</span>
+                      <span className={`text-xs ${domainStatus.verified ? "text-emerald-400" : "text-amber-400"}`}>
+                        {domainStatus.verified ? "Verificado" : "Esperando DNS…"}
+                      </span>
+                    </div>
+                    <Button
+                      onClick={() => disconnectDomainMutation.mutate({ id })}
+                      disabled={disconnectDomainMutation.isPending}
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-white/40 hover:text-red-400 hover:bg-red-500/10"
+                    >
+                      {disconnectDomainMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Desconectar"}
+                    </Button>
+                  </div>
+                  {!domainStatus.verified && Array.isArray(domainStatus.recommendedDns) && domainStatus.recommendedDns.length > 0 && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3.5">
+                      <p className="text-xs font-medium text-amber-300/90 mb-2">Añade estos registros DNS en tu proveedor de dominios:</p>
+                      <div className="space-y-1.5">
+                        {domainStatus.recommendedDns.map((rec: any, i: number) => (
+                          <div key={i} className="grid grid-cols-[50px_1fr_1fr] gap-2 text-xs font-mono">
+                            <span className="text-white/40">{rec.type}</span>
+                            <span className="text-white/70">{rec.name}</span>
+                            <span className="text-white/70 truncate">{rec.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[11px] text-white/40">La propagación DNS puede tardar hasta 24 horas. Esta página se actualiza sola.</p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
