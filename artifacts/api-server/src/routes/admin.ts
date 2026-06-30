@@ -336,49 +336,53 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   const id = req.params.id;
   const emailHint = (req.query.email as string || "").trim().toLowerCase();
 
-  // Buscar apps directamente por userId (Clerk ID = User._id)
+  // Estrategia 1: userId directo
   let apps = await GeneratedApp.find({ userId: id }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+  logger.info({ step: "s1_direct", id, emailHint, found: apps.length }, "admin/users/apps");
 
-  // Fallback 1: buscar por email del usuario si se proporcionó
+  // Estrategia 2: por email → MongoDB _id del usuario → userId en apps
   if (apps.length === 0 && emailHint) {
     const userByEmail = await User.findOne({ email: emailHint }).select("_id").lean() as any;
+    logger.info({ step: "s2_email", userFound: !!userByEmail, dbId: String(userByEmail?._id ?? "") }, "admin/users/apps");
     if (userByEmail) {
       apps = await GeneratedApp.find({ userId: String(userByEmail._id) }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      logger.info({ step: "s2_result", found: apps.length }, "admin/users/apps");
     }
   }
 
-  // Fallback 2: buscar via jobs del usuario → appIds
+  // Estrategia 3: jobs del usuario (userId directo) → appIds
   if (apps.length === 0) {
-    const jobAppIds = await GenerationJob
-      .find({ userId: id, appId: { $exists: true, $ne: null } })
-      .sort({ createdAt: -1 }).limit(50).select("appId").maxTimeMS(8000).lean();
-    const appIds = [...new Set(jobAppIds.map((j: any) => String(j.appId)).filter(Boolean))];
-    if (appIds.length > 0) {
-      apps = await GeneratedApp.find({ _id: { $in: appIds } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+    const jobs3 = await GenerationJob.find({ userId: id }).sort({ createdAt: -1 }).limit(100).select("appId editAppId").maxTimeMS(8000).lean();
+    const ids3 = [...new Set([...jobs3.map((j: any) => j.appId), ...jobs3.map((j: any) => j.editAppId)].filter(Boolean).map(String))];
+    logger.info({ step: "s3_jobs_direct", jobCount: jobs3.length, appIds: ids3 }, "admin/users/apps");
+    if (ids3.length > 0) {
+      apps = await GeneratedApp.find({ _id: { $in: ids3 } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      logger.info({ step: "s3_result", found: apps.length }, "admin/users/apps");
     }
   }
 
-  // Fallback 3 (nuevo): buscar apps cuyo userId coincide con el email
-  // directamente — cubre el caso real donde el userId guardado en
-  // GeneratedApp es distinto del Clerk ID del usuario en el panel admin
-  // (puede ocurrir si el usuario fue creado o migrado de forma atípica).
+  // Estrategia 4: todos los _id de MongoDB para ese email + jobs de todos ellos
   if (apps.length === 0 && emailHint) {
-    const usersByEmail = await User.find({ email: emailHint }).select("_id").lean() as any[];
-    const userIds = usersByEmail.map((u: any) => String(u._id));
-    if (userIds.length > 0) {
-      apps = await GeneratedApp.find({ userId: { $in: userIds } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
-    }
-    // Fallback 3b: también buscar jobs por todos esos userIds → appIds
-    if (apps.length === 0 && userIds.length > 0) {
-      const jobAppIds2 = await GenerationJob
-        .find({ userId: { $in: userIds }, appId: { $exists: true, $ne: null } })
-        .sort({ createdAt: -1 }).limit(50).select("appId").maxTimeMS(8000).lean();
-      const appIds2 = [...new Set(jobAppIds2.map((j: any) => String(j.appId)).filter(Boolean))];
-      if (appIds2.length > 0) {
-        apps = await GeneratedApp.find({ _id: { $in: appIds2 } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
-      }
+    const usersEmail = await User.find({ email: emailHint }).select("_id").lean() as any[];
+    const allDbIds = [id, ...usersEmail.map((u: any) => String(u._id))];
+    const jobs4 = await GenerationJob.find({ userId: { $in: allDbIds } }).sort({ createdAt: -1 }).limit(100).select("appId editAppId").maxTimeMS(8000).lean();
+    const ids4 = [...new Set([...jobs4.map((j: any) => j.appId), ...jobs4.map((j: any) => j.editAppId)].filter(Boolean).map(String))];
+    logger.info({ step: "s4_alldbs", allDbIds, jobCount: jobs4.length, appIds: ids4 }, "admin/users/apps");
+    if (ids4.length > 0) {
+      apps = await GeneratedApp.find({ _id: { $in: ids4 } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      logger.info({ step: "s4_result", found: apps.length, titles: apps.map((a: any) => a.title) }, "admin/users/apps");
     }
   }
+
+  // Estrategia 5 (último recurso): búsqueda libre en GeneratedApp por email en campos de texto
+  if (apps.length === 0 && emailHint) {
+    const apps5 = await GeneratedApp.find({ prompt: { $regex: emailHint, $options: "i" } }).sort({ createdAt: -1 }).limit(5).lean();
+    logger.warn({ step: "s5_prompt_search", emailHint, found: apps5.length }, "admin/users/apps — todas las estrategias fallaron, usando búsqueda por prompt");
+    // Solo usar si el resultado es muy relevante (el email aparece en el prompt)
+    if (apps5.length > 0) apps = apps5;
+  }
+
+  logger.info({ step: "final", id, emailHint, total: apps.length }, "admin/users/apps");
 
   res.json({
     apps: apps.map((a: any) => ({
