@@ -18,6 +18,7 @@ import {
   useGetMe,
   useApproveFacet,
   useDeployApp,
+  useDeepTestApp,
   getGenerationJobLogs,
   getGetGenerationJobLogsQueryKey,
   useGetNotifications,
@@ -101,6 +102,7 @@ import {
   MicOff,
   AlertTriangle,
   ShoppingCart,
+  ShieldCheck,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
@@ -452,6 +454,41 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
       },
     },
   });
+
+  // A petición explícita del usuario: el Testing Agent SIEMPRE corre gratis
+  // durante la generación/edición normal — este botón dispara una "Revisión
+  // profunda de errores" ADICIONAL bajo demanda, con coste explícito de 30
+  // créditos, que el cliente decide voluntariamente pedir sobre su app YA
+  // generada.
+  const deepTestMutation = useDeepTestApp({
+    mutation: {
+      onSuccess: (result: any) => {
+        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+        if (result?.id) {
+          setActiveJobId(String(result.id));
+        }
+        toast({
+          title: "Revisión profunda iniciada",
+          description: `Se han descontado ${result?.creditsCost ?? 30} créditos. El Testing Agent está analizando tu app a fondo…`,
+        });
+      },
+      onError: (err: any) => {
+        const required = err?.required;
+        toast({
+          title: err?.error === "Créditos insuficientes" ? "Créditos insuficientes" : "No se pudo iniciar la revisión",
+          description: required ? `Necesitas ${required} créditos para esta revisión.` : (err?.message ?? "Error"),
+          variant: "destructive",
+        });
+      },
+    },
+  });
+  const handleDeepTest = () => {
+    if (!hasRenderableCode) {
+      toast({ title: "Sin código generado", description: "Genera la app primero antes de pedir una revisión profunda.", variant: "destructive" });
+      return;
+    }
+    deepTestMutation.mutate({ id });
+  };
 
   useEffect(() => {
     if (job?.status === "succeeded") {
@@ -900,6 +937,26 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
                 {deployMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
                 {deployMutation.isPending ? "Desplegando" : "Deploy app"}
+              </Button>
+            </div>
+            <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Revisión profunda de errores</p>
+                  <p className="mt-1 text-xs text-white/50">
+                    El Testing Agent vuelve a analizar todo el código de tu app en busca de errores de navegación, rutas rotas o problemas de compilación, y los repara automáticamente.
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleDeepTest}
+                disabled={deepTestMutation.isPending || !hasRenderableCode}
+                variant="outline"
+                className="mt-4 w-full border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-300 hover:bg-emerald-500/[0.12]"
+              >
+                {deepTestMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                {deepTestMutation.isPending ? "Revisando…" : `Revisar errores (${"30"} créditos)`}
               </Button>
             </div>
             <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">

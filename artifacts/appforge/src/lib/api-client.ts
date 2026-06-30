@@ -258,6 +258,9 @@ export function useHealthCheckApp(opts?: { mutation?: Partial<UseMutationOptions
 export function useDeployApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/deploy`, { method: "POST" }), ...(opts?.mutation as any) });
 }
+export function useDeepTestApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
+  return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/deep-test`, { method: "POST" }), ...(opts?.mutation as any) });
+}
 export function useDeployAppToVercel(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}/deploy/vercel`, { method: "POST" }), ...(opts?.mutation as any) });
 }

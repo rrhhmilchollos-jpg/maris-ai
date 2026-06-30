@@ -342,6 +342,13 @@ export interface IGenerationJob extends Document {
   // (detectado vía postMessage desde el iframe). No cuesta créditos, y al
   // terminar (éxito o fallo) se publica un AppMessage avisando al usuario.
   isAutoRepair?: boolean;
+  // A petición explícita del usuario: jobs de "Revisión profunda de errores"
+  // (Testing Agent bajo demanda, 30 créditos, disparado por el cliente desde
+  // un botón en su app ya generada) usan jobKind="deep_test" en vez del flujo
+  // normal de generación/edición. runJobById bifurca al inicio según este
+  // campo — el resto de la infraestructura (cola, heartbeat, logs en vivo,
+  // panel de diagnóstico) se reutiliza sin cambios.
+  jobKind?: "generation" | "deep_test";
   coderModel: string;
   language: string;
   kind: string;
@@ -370,6 +377,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     checkpointData: { type: Schema.Types.Mixed },
     editAppId: { type: String },
     isAutoRepair: { type: Boolean, default: false },
+    jobKind: { type: String, default: "generation" },
     coderModel: { type: String, default: "auto" },
     language: { type: String, default: "typescript" },
     kind: { type: String, default: "fullstack" },

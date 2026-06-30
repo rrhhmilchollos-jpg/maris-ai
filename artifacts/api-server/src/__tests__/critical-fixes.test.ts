@@ -607,6 +607,30 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 23: Testing Agent bajo demanda — "Revisión profunda de errores" (30
+// créditos), disparada SOLO por el cliente desde un botón en su app ya
+// generada. Distinto del Testing Agent automático (runTestingAgent), que
+// ya corría siempre gratis dentro del flujo normal de generación/edición.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 23a: existe el endpoint POST /apps/:id/deep-test con coste fijo de 30 créditos",
+    /DEEP_TEST_COST = 30/.test(appsSrc) && /\/apps\/:id\/deep-test/.test(appsSrc),
+  );
+  check(
+    "FIX 23b: runJobById bifurca a la rama deep_test sin pasar por generateApp",
+    /jobKind === "deep_test"/.test(appsSrc),
+    "Sin esta bifurcación, el job de revisión profunda entraría al pipeline completo de generación, cobrando 30 créditos pero ejecutando algo distinto a lo prometido.",
+  );
+  const appforgeSrc = readAppforgeSrc("pages/app-detail.tsx");
+  check(
+    "FIX 23c: el frontend tiene el botón real conectado a useDeepTestApp",
+    /useDeepTestApp/.test(appforgeSrc) && /handleDeepTest/.test(appforgeSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

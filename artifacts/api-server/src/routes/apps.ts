@@ -5865,6 +5865,70 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
   }
 });
 
+// ── POST /api/apps/:id/deep-test ─────────────────────────────────────────
+// A petición explícita del usuario: el Testing Agent (runTestingAgent) ya
+// se ejecuta SIEMPRE gratis dentro del flujo normal de generación/edición
+// (forma parte del coste base, como confirmamos con el caso real de
+// "MesaYa"). Este endpoint es DISTINTO — una "Revisión profunda de
+// errores" bajo demanda, que el cliente dispara voluntariamente desde un
+// botón en su app YA GENERADA, con un coste fijo y explícito de 30
+// créditos (sin multiplicador free/paid: es la misma revisión exhaustiva
+// para cualquier usuario, y el coste ya refleja lo que cuesta en tokens
+// reales recorrer hasta MAX_FIX_CYCLES=5 ciclos de validación+reparación
+// sobre un bundle completo). No pasa por generateApp ni por el pipeline de
+// generación — runJobById bifurca a esta rama vía jobKind="deep_test".
+const DEEP_TEST_COST = 30;
+router.post("/apps/:id/deep-test", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!(app as any).frontendCode) {
+      return res.status(400).json({ error: "Esta app todavía no tiene código generado — no hay nada que revisar." });
+    }
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: DEEP_TEST_COST,
+      description: `Revisión profunda de errores (Testing Agent bajo demanda): ${app.title?.slice(0, 50) ?? ""}`,
+    });
+
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes",
+        required: DEEP_TEST_COST,
+        current: req.dbUser?.credits,
+        hint: `La revisión profunda de errores cuesta ${DEEP_TEST_COST} créditos.`,
+      });
+    }
+
+    const jobId = new mongoose.Types.ObjectId().toString();
+    await GenerationJob.create({
+      _id: jobId,
+      userId,
+      prompt: app.prompt || "Revisión profunda de errores",
+      editAppId: req.params.id,
+      jobKind: "deep_test",
+      coderModel: app.coderModel || "auto",
+      language: app.language || "typescript",
+      kind: app.kind || "fullstack",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin,
+    });
+
+    await enqueueGenerateJob(jobId);
+    runJobById(jobId).catch(err => logger.error({ err, jobId }, "Immediate job run error (deep-test)"));
+    res.status(201).json({ id: jobId, creditsCost: DEEP_TEST_COST, creditsRemaining: charge.newBalance });
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/deep-test error");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+  }
+});
+
 // ── PUT /api/apps/:id/model ───────────────────────────────────────────────
 router.put("/apps/:id/model", requireAuth, async (req: any, res: any) => {
   try {
@@ -6051,6 +6115,52 @@ export async function runJobById(jobId: string): Promise<void> {
       $set: { partialFrontendCode: code, updatedAt: new Date() },
     });
   };
+
+  // A petición explícita del usuario: "Revisión profunda de errores" — el
+  // Testing Agent (runTestingAgent, ya existente y usado siempre gratis
+  // dentro del flujo normal de generación) se dispara aquí SOLO bajo
+  // demanda explícita del cliente desde un botón en su app ya generada,
+  // con coste de 30 créditos cobrado ANTES de encolar el job (ver el
+  // endpoint POST /apps/:id/deep-test). No pasa por generateApp ni por el
+  // resto del pipeline de generación — solo re-analiza el código YA
+  // EXISTENTE de la app y aplica los mismos ciclos de reparación.
+  if ((job as any).jobKind === "deep_test") {
+    try {
+      const targetAppId = job.editAppId;
+      const targetApp = targetAppId ? await GeneratedApp.findById(targetAppId) : null;
+      if (!targetApp) {
+        await log("system", "❌ No se encontró la app a revisar.", "error");
+        await GenerationJob.findByIdAndUpdate(jobId, { $set: { status: "failed", errorMessage: "App no encontrada", updatedAt: new Date() } });
+        return;
+      }
+      await log("testing", "🔬 Revisión profunda de errores solicitada por el usuario. Analizando el código completo de la app...");
+      const { runTestingAgent } = await import("../lib/tester");
+      const reviewedFrontend = await runTestingAgent((targetApp as any).frontendCode || "", {
+        jobId,
+        prompt: targetApp.prompt || job.prompt,
+        plan: (targetApp as any).plan || null,
+        language: (targetApp as any).language || "typescript",
+        log,
+        onProgress,
+      });
+      await GeneratedApp.findByIdAndUpdate(targetAppId, {
+        $set: { frontendCode: reviewedFrontend, updatedAt: new Date() },
+      });
+      await log("testing", "✅ Revisión profunda completada. Cualquier problema detectado ha sido reparado automáticamente.");
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
+      });
+    } catch (deepTestErr: any) {
+      logger.error({ deepTestErr, jobId }, "[deep_test] Falló la revisión profunda de errores");
+      await log("testing", `❌ La revisión profunda no pudo completarse: ${deepTestErr?.message || "error desconocido"}`, "error");
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: { status: "failed", errorMessage: String(deepTestErr?.message || deepTestErr), updatedAt: new Date() },
+      });
+    } finally {
+      clearInterval(heartbeatInterval);
+    }
+    return;
+  }
 
   try {
     let previousApp: any = undefined;
