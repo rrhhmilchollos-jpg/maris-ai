@@ -661,6 +661,24 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 25: cobro de deploy (5 créditos, ajustado desde la propuesta inicial
+// de 50 — el deploy real no consume tokens de Claude, solo llama a la API
+// de Vercel) con ventana de gracia de 5 minutos para re-deploys gratuitos.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 25a: DEPLOY_COST = 5 (no 50 — el deploy no consume tokens de Claude, coste de infraestructura real cercano a cero)",
+    /const DEPLOY_COST = 5;/.test(appsSrc),
+    "50 créditos por deploy habría dejado a un usuario nuevo sin poder publicar su primera app con el pack de bienvenida (45 créditos no alcanzan ni para generar, 39, más desplegar).",
+  );
+  check(
+    "FIX 25b: existe la ventana de gracia de 5 minutos para re-deploys gratuitos",
+    /DEPLOY_GRACE_WINDOW_MS = 5 \* 60 \* 1000/.test(appsSrc) && /withinGraceWindow/.test(appsSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

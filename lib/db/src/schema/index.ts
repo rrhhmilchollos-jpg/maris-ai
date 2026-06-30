@@ -152,6 +152,12 @@ export interface IGeneratedApp {
   vercelDeployUrl?: string;
   vercelProjectId?: string;
   vercelCustomDomain?: string;
+  // A petición explícita del usuario: ventana de gracia de re-deploy
+  // gratuito. Se registra el momento del último deploy COBRADO (no de
+  // cualquier deploy) — si el cliente vuelve a pulsar "Deploy" dentro de
+  // los 5 minutos siguientes, ese re-deploy es gratis; pasada la ventana,
+  // vuelve a cobrarse.
+  lastPaidDeployAt?: Date;
   autoPublish?: boolean;
   evaluatorSummary?: string;
   agentNotes?: string;
@@ -231,6 +237,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     vercelDeployUrl: { type: String },
     vercelProjectId: { type: String },
     vercelCustomDomain: { type: String },
+    lastPaidDeployAt: { type: Date },
     autoPublish: { type: Boolean, default: false },
     evaluatorSummary: { type: String },
     agentNotes: { type: String },

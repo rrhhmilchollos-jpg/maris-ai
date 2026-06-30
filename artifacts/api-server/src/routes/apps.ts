@@ -6872,6 +6872,19 @@ export async function runDeployForApp(args: {
 // /api/apps/${id}/deploy) llamaba a una ruta que devolvía 404. runDeployForApp
 // ya estaba completa y se usaba internamente desde el auto-evaluador, pero
 // nunca estuvo expuesta para que el cliente la disparara manualmente.
+//
+// COBRO + VENTANA DE GRACIA (a petición explícita del usuario, ajustado de
+// 50 a 5 créditos tras confirmar que el deploy real solo llama a la API de
+// Vercel — sin tokens de Claude, coste de infraestructura real cercano a
+// cero; 50 créditos habría roto el embudo de usuarios nuevos: 45 de
+// bienvenida no habrían alcanzado ni para generar una app fullstack, 39,
+// más el deploy). Con 5 créditos, un usuario nuevo puede generar (39) +
+// desplegar (5) con su pack de bienvenida (45), quedándole 1 crédito.
+// Ventana de gracia de 5 minutos: si el cliente vuelve a pulsar "Deploy"
+// poco después de un deploy ya cobrado (ej. hizo un ajuste rápido), ese
+// re-deploy es gratis — el reloj es interno, nunca se le muestra al cliente.
+const DEPLOY_COST = 5;
+const DEPLOY_GRACE_WINDOW_MS = 5 * 60 * 1000;
 router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
@@ -6880,8 +6893,33 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
     if (!(app as any).frontendCode) {
       return res.status(400).json({ error: "Esta app todavía no tiene código generado — no hay nada que desplegar." });
     }
+
+    const lastPaidDeployAt: Date | undefined = (app as any).lastPaidDeployAt;
+    const withinGraceWindow = !!lastPaidDeployAt && (Date.now() - new Date(lastPaidDeployAt).getTime()) < DEPLOY_GRACE_WINDOW_MS;
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    let creditsCharged = 0;
+    if (!withinGraceWindow && !isAdmin) {
+      const charge = await chargeCredits({
+        userId,
+        isAdmin,
+        amount: DEPLOY_COST,
+        description: `Deploy: ${app.title?.slice(0, 50) ?? ""}`,
+      });
+      if (!charge.ok) {
+        return res.status(402).json({
+          error: "Créditos insuficientes",
+          required: DEPLOY_COST,
+          current: req.dbUser?.credits,
+          hint: `Desplegar tu app cuesta ${DEPLOY_COST} créditos.`,
+        });
+      }
+      creditsCharged = DEPLOY_COST;
+      await GeneratedApp.updateOne({ _id: req.params.id }, { $set: { lastPaidDeployAt: new Date() } });
+    }
+
     const result = await runDeployForApp({ appId: req.params.id, userId, log: logger });
-    res.status(201).json({ deploymentUrl: result.url, url: result.url, slug: result.slug });
+    res.status(201).json({ deploymentUrl: result.url, url: result.url, slug: result.slug, creditsCharged, freeRedeploy: withinGraceWindow });
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/deploy error");
     res.status(500).json({ error: err?.message ?? "Error al desplegar" });

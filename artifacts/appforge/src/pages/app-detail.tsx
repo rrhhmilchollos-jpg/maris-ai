@@ -81,6 +81,7 @@ import {
   Shield,
   ExternalLink,
   Globe,
+  RefreshCw,
   Flame,
   Settings,
   Gift,
@@ -115,6 +116,10 @@ import { VisualTestPanel } from "@/components/visual-test-panel";
 // Coste fijo de la "Revisión profunda de errores" (Testing Agent bajo
 // demanda) — debe coincidir con DEEP_TEST_COST en apps.ts.
 const DEEP_TEST_COST = 30;
+// Coste fijo del deploy y duración de la ventana de gracia de re-deploy
+// gratuito — deben coincidir con DEPLOY_COST / DEPLOY_GRACE_WINDOW_MS en apps.ts.
+const DEPLOY_COST = 5;
+const DEPLOY_GRACE_WINDOW_MS = 5 * 60 * 1000;
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
@@ -365,6 +370,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const { data: stats } = useGetMyStats({ query: { refetchInterval: 5000 } });
   const credits = stats?.credits ?? 0;
   const outOfCredits = credits <= 0 && !isAdmin;
+  // Ventana de gracia de re-deploy gratuito — solo informativo en el texto
+  // del botón; la fuente de verdad real es siempre el backend.
+  const isFreeRedeployNow = !!(app as any)?.lastPaidDeployAt
+    && (Date.now() - new Date((app as any).lastPaidDeployAt).getTime()) < DEPLOY_GRACE_WINDOW_MS;
 
   // Polling: detectar recarga de créditos cuando el usuario está bloqueado
   useEffect(() => {
@@ -448,17 +457,28 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     mutation: {
       onSuccess: (result: any) => {
         queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         const deploymentUrl = result?.deploymentUrl || result?.url;
+        const creditsLine = result?.freeRedeploy
+          ? "Re-deploy gratuito (dentro de la ventana de 5 minutos)."
+          : result?.creditsCharged
+            ? `Se han descontado ${result.creditsCharged} créditos.`
+            : "";
         toast({
           title: "Deploy iniciado",
-          description: deploymentUrl ? `La app está disponible en ${deploymentUrl}` : "El despliegue se ha lanzado correctamente.",
+          description: [deploymentUrl ? `La app está disponible en ${deploymentUrl}` : "El despliegue se ha lanzado correctamente.", creditsLine].filter(Boolean).join(" "),
         });
         if (deploymentUrl && typeof window !== "undefined") {
           window.open(deploymentUrl, "_blank", "noopener,noreferrer");
         }
       },
       onError: (err: any) => {
-        toast({ title: "No se pudo desplegar", description: err?.message ?? "Error", variant: "destructive" });
+        const isPaymentRequired = err?.error === "Créditos insuficientes";
+        toast({
+          title: isPaymentRequired ? "Créditos insuficientes" : "No se pudo desplegar",
+          description: isPaymentRequired ? err?.hint : (err?.message ?? err?.error ?? "Error"),
+          variant: "destructive",
+        });
       },
     },
   });
@@ -992,7 +1012,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <Button onClick={handleShare} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><Share2 className="mr-2 h-4 w-4" /> Compartir enlace</Button>
               <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
                 {deployMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                {deployMutation.isPending ? "Desplegando" : "Deploy app"}
+                {deployMutation.isPending ? "Desplegando" : isFreeRedeployNow ? "Deploy app (gratis)" : `Deploy app (${DEPLOY_COST} créditos)`}
               </Button>
             </div>
             <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">
@@ -1061,15 +1081,27 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                         {domainStatus.verified ? "Verificado" : "Esperando DNS…"}
                       </span>
                     </div>
-                    <Button
-                      onClick={() => disconnectDomainMutation.mutate({ id })}
-                      disabled={disconnectDomainMutation.isPending}
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-white/40 hover:text-red-400 hover:bg-red-500/10"
-                    >
-                      {disconnectDomainMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Desconectar"}
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      {!domainStatus.verified && (
+                        <Button
+                          onClick={() => refetchDomain()}
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-sky-400/80 hover:text-sky-300 hover:bg-sky-500/10"
+                        >
+                          <RefreshCw className="mr-1 h-3 w-3" /> Verificar conexión
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => disconnectDomainMutation.mutate({ id })}
+                        disabled={disconnectDomainMutation.isPending}
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-white/40 hover:text-red-400 hover:bg-red-500/10"
+                      >
+                        {disconnectDomainMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Desconectar"}
+                      </Button>
+                    </div>
                   </div>
                   {!domainStatus.verified && Array.isArray(domainStatus.recommendedDns) && domainStatus.recommendedDns.length > 0 && (
                     <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3.5">
