@@ -4535,6 +4535,22 @@ import mongoose from "mongoose";
 
 const router = Router();
 
+// A petición explícita del usuario: CUALQUIER error técnico en CUALQUIER
+// endpoint que el cliente llame directamente (deploy, dominio, variables
+// de entorno, code-review, rollback, etc.) debe mostrar siempre el mismo
+// mensaje genérico de soporte — nunca el texto crudo del error real (que
+// puede contener mensajes internos de Anthropic, Vercel, MongoDB, u otros
+// proveedores externos, como ya ocurrió en producción con "Your credit
+// balance is too low..."). El mensaje técnico real se registra siempre en
+// el log del servidor (logger.error) para que el equipo lo investigue —
+// solo se oculta de la respuesta HTTP que ve el cliente.
+function safeErrorResponse(res: any, err: unknown, context: string) {
+  logger.error({ err, context }, `[safeErrorResponse] ${context}`);
+  res.status(500).json({
+    error: "Ha ocurrido un problema técnico. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Si tus créditos fueron descontados, se reembolsarán automáticamente.",
+  });
+}
+
 const KIND_COSTS: Record<string, number> = {
   fullstack:    3, // Proyecto complejo full-stack
   landing:      1, // App simple / Landing
@@ -5124,7 +5140,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -5154,7 +5170,7 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
     res.json(serializedApps);
   } catch (err) {
     logger.error({ err }, "GET /api/apps error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -5229,7 +5245,7 @@ router.post("/apps/:id/github", requireAuth, async (req: any, res: any) => {
     });
   } catch (err) {
     logger.error({ err, appId: req.params.id, userId: req.userId }, "POST /api/apps/:id/github error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "No se pudo subir a GitHub" });
+    safeErrorResponse(res, err, "No se pudo subir a GitHub");
   }
 });
 
@@ -5256,7 +5272,7 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err, userId: req.userId, appId: req.params.id }, "DELETE /api/apps/:id error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -5587,7 +5603,7 @@ router.get("/apps/:id/env", requireAuth, async (req: any, res: any) => {
     res.json({ envVars: vars });
   } catch (err: any) {
     logger.error({ err }, "GET /api/apps/:id/env error");
-    res.status(500).json({ error: err?.message ?? "Error al consultar las variables de entorno" });
+    safeErrorResponse(res, err, "Error al consultar las variables de entorno");
   }
 });
 
@@ -5639,7 +5655,7 @@ router.put("/apps/:id/env", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true, updatedCount, failedNames });
   } catch (err: any) {
     logger.error({ err }, "PUT /api/apps/:id/env error");
-    res.status(500).json({ error: err?.message ?? "Error al guardar las variables de entorno" });
+    safeErrorResponse(res, err, "Error al guardar las variables de entorno");
   }
 });
 
@@ -6024,7 +6040,7 @@ Por ejemplo:
     res.status(201).json({ id: jobId, engine: classified.engine, intent: classified.intent, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -6086,7 +6102,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/retry error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -6150,7 +6166,7 @@ router.post("/apps/:id/deep-test", requireAuth, async (req: any, res: any) => {
     res.status(201).json({ id: jobId, creditsCost: DEEP_TEST_COST, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/deep-test error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -6377,10 +6393,33 @@ export async function runJobById(jobId: string): Promise<void> {
       });
     } catch (deepTestErr: any) {
       logger.error({ deepTestErr, jobId }, "[deep_test] Falló la revisión profunda de errores");
-      await log("testing", `❌ La revisión profunda no pudo completarse: ${deepTestErr?.message || "error desconocido"}`, "error");
+      await log("testing", "❌ La revisión profunda no pudo completarse. Hemos enviado un ticket automático a soporte.", "error");
+      // A petición explícita del usuario: cualquier error técnico en
+      // CUALQUIER generación (no solo la principal) debe mostrar siempre
+      // el mismo mensaje genérico al cliente — nunca el texto crudo del
+      // error real (mismo patrón ya aplicado en runJobById más abajo).
       await GenerationJob.findByIdAndUpdate(jobId, {
-        $set: { status: "failed", errorMessage: String(deepTestErr?.message || deepTestErr), updatedAt: new Date() },
+        $set: {
+          status: "failed",
+          errorMessage: "Ha ocurrido un problema técnico al revisar tu app. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Tus créditos se reembolsarán automáticamente.",
+          internalErrorMessage: String(deepTestErr?.message || deepTestErr),
+          updatedAt: new Date(),
+        },
       });
+      // Reembolso automático — el cliente no debe pagar 30 créditos por
+      // una revisión que no pudo completarse por un fallo del sistema.
+      try {
+        const { refundCredits } = await import("../lib/credits");
+        const dbUserForRefund = await User.findById(job.userId).select("isAdmin email").lean() as any;
+        await refundCredits({
+          userId: job.userId,
+          isAdmin: isAdminEmail(dbUserForRefund?.email),
+          amount: DEEP_TEST_COST,
+          description: "Reembolso: revisión profunda de errores falló por un problema técnico",
+        });
+      } catch (refundErr) {
+        logger.warn({ refundErr, jobId }, "[deep_test] Falló el reembolso automático tras un error técnico");
+      }
     } finally {
       clearInterval(heartbeatInterval);
     }
@@ -7185,7 +7224,7 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
     res.status(202).json({ status: "started", creditsCharged, freeRedeploy: withinGraceWindow, isFirstPaidDeploy });
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/deploy error");
-    res.status(500).json({ error: err?.message ?? "Error al desplegar" });
+    safeErrorResponse(res, err, "Error al desplegar");
   }
 });
 
@@ -7207,7 +7246,7 @@ router.get("/apps/:id/deploy-status", requireAuth, async (req: any, res: any) =>
     });
   } catch (err: any) {
     logger.error({ err }, "GET /api/apps/:id/deploy-status error");
-    res.status(500).json({ error: err?.message ?? "Error al consultar el deploy" });
+    safeErrorResponse(res, err, "Error al consultar el deploy");
   }
 });
 
@@ -7234,7 +7273,7 @@ router.delete("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true });
   } catch (err: any) {
     logger.error({ err }, "DELETE /api/apps/:id/deploy error");
-    res.status(500).json({ error: err?.message ?? "Error al apagar el deployment" });
+    safeErrorResponse(res, err, "Error al apagar el deployment");
   }
 });
 
@@ -7286,7 +7325,7 @@ router.post("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
     res.status(201).json(result.status);
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/domain error");
-    res.status(500).json({ error: err?.message ?? "Error al conectar el dominio" });
+    safeErrorResponse(res, err, "Error al conectar el dominio");
   }
 });
 
@@ -7310,7 +7349,7 @@ router.get("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
     res.json(result.status);
   } catch (err: any) {
     logger.error({ err }, "GET /api/apps/:id/domain error");
-    res.status(500).json({ error: err?.message ?? "Error al consultar el dominio" });
+    safeErrorResponse(res, err, "Error al consultar el dominio");
   }
 });
 
@@ -7333,7 +7372,7 @@ router.delete("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true });
   } catch (err: any) {
     logger.error({ err }, "DELETE /api/apps/:id/domain error");
-    res.status(500).json({ error: err?.message ?? "Error al desconectar el dominio" });
+    safeErrorResponse(res, err, "Error al desconectar el dominio");
   }
 });
 
@@ -7387,7 +7426,7 @@ router.post("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) =
     });
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/custom-domain error");
-    res.status(500).json({ error: err?.message ?? "Error al conectar el dominio" });
+    safeErrorResponse(res, err, "Error al conectar el dominio");
   }
 });
 
@@ -7413,7 +7452,7 @@ router.get("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) =>
     });
   } catch (err: any) {
     logger.error({ err }, "GET /api/apps/:id/custom-domain error");
-    res.status(500).json({ error: err?.message ?? "Error al consultar el dominio" });
+    safeErrorResponse(res, err, "Error al consultar el dominio");
   }
 });
 
@@ -7435,7 +7474,7 @@ router.delete("/apps/:id/custom-domain", requireAuth, async (req: any, res: any)
     res.json({ ok: true });
   } catch (err: any) {
     logger.error({ err }, "DELETE /api/apps/:id/custom-domain error");
-    res.status(500).json({ error: err?.message ?? "Error al desconectar el dominio" });
+    safeErrorResponse(res, err, "Error al desconectar el dominio");
   }
 });
 
@@ -7475,7 +7514,7 @@ router.get("/apps/:id/revisions", requireAuth, async (req: any, res: any) => {
     });
   } catch (err: any) {
     logger.error({ err }, "GET /api/apps/:id/revisions error");
-    res.status(500).json({ error: err?.message ?? "Error al consultar el historial de versiones" });
+    safeErrorResponse(res, err, "Error al consultar el historial de versiones");
   }
 });
 
@@ -7534,7 +7573,7 @@ router.post("/apps/:id/rollback", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true, creditsCharged: ROLLBACK_COST, creditsRemaining: charge.newBalance, redeployStarted: true });
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/rollback error");
-    res.status(500).json({ error: err?.message ?? "Error al restaurar la versión" });
+    safeErrorResponse(res, err, "Error al restaurar la versión");
   }
 });
 

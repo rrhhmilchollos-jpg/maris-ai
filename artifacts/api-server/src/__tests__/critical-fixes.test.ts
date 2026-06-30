@@ -911,6 +911,42 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 34: ocultación SISTEMÁTICA de errores técnicos crudos en TODOS los
+// endpoints públicos de apps.ts (deploy, dominio, variables de entorno,
+// code-review, rollback, etc.) — a petición explícita del usuario tras
+// confirmar que el fix anterior (FIX 32) solo cubría un punto de fallo
+// (runJobById), pero había otros 21 puntos en el mismo archivo que
+// devolvían err?.message / err.message directamente al cliente con un
+// 500 — cualquiera de ellos podía filtrar un mensaje técnico crudo de
+// Anthropic, Vercel, MongoDB, etc. Centralizado en una única función
+// safeErrorResponse, que SIEMPRE devuelve el mismo mensaje genérico de
+// soporte sin importar el error real subyacente (el error real se sigue
+// registrando en el log del servidor para diagnóstico interno).
+// EXCEPCIÓN DELIBERADA: GET /apps/:id/preview-debug es una herramienta de
+// diagnóstico técnico interno, no algo que el cliente consulte desde la
+// interfaz — ahí SÍ tiene sentido mantener el error real, para que quien
+// la use pueda diagnosticar el problema exacto.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc6 = readSrc("routes/apps.ts");
+  check(
+    "FIX 34a: existe la función centralizada safeErrorResponse, que siempre devuelve el mismo mensaje genérico de soporte",
+    /function safeErrorResponse\(res: any, err: unknown, context: string\)/.test(appsSrc6),
+  );
+  const rawErrorMatches = appsSrc6.match(/res\.status\(500\)\.json\(\{ error: err[^}]*\}\);/g) || [];
+  // Excluir explícitamente la única excepción deliberada conocida:
+  // "res.status(500).json({ error: err.message });" dentro de
+  // preview-debug, una herramienta de diagnóstico técnico interno donde
+  // SÍ tiene sentido mantener el error real.
+  const rawErrorCount = rawErrorMatches.filter((m) => m !== "res.status(500).json({ error: err.message });").length;
+  check(
+    "FIX 34b: ya no quedan endpoints públicos devolviendo el error crudo directamente (excepto preview-debug, una herramienta de diagnóstico interno deliberadamente excluida)",
+    rawErrorCount === 0,
+    `Se encontraron ${rawErrorCount} endpoint(s) devolviendo err.message/err?.message directamente — cualquiera de ellos podría filtrar un mensaje técnico crudo de un proveedor externo (Anthropic, Vercel, MongoDB) al cliente.`,
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
