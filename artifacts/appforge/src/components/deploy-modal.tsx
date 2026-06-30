@@ -229,8 +229,45 @@ export function DeployModal({
   const [verifiedDomain, setVerifiedDomain] = useState(customDomainVerified ? currentCustomDomain : "");
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
 
-  /* ── Env vars ── */
+  /* ── Env vars (variables de entorno reales del cliente, cifradas en backend) ── */
   const [envExpanded, setEnvExpanded] = useState(false);
+  interface EnvVarRow { name: string; why: string; isSet: boolean; maskedValue: string | null }
+  const [envVars, setEnvVars] = useState<EnvVarRow[]>([]);
+  const [envLoading, setEnvLoading] = useState(false);
+  const [envDrafts, setEnvDrafts] = useState<Record<string, string>>({});
+  const [envSaving, setEnvSaving] = useState(false);
+
+  const loadEnvVars = useCallback(() => {
+    setEnvLoading(true);
+    apiFetch<{ envVars: EnvVarRow[] }>(`/api/apps/${appId}/env`)
+      .then((d) => setEnvVars(d.envVars || []))
+      .catch(() => {})
+      .finally(() => setEnvLoading(false));
+  }, [appId]);
+
+  useEffect(() => {
+    if (envExpanded && envVars.length === 0 && !envLoading) loadEnvVars();
+  }, [envExpanded]);
+
+  const handleSaveEnvVars = useCallback(async () => {
+    const values = Object.fromEntries(Object.entries(envDrafts).filter(([, v]) => v.trim()));
+    if (Object.keys(values).length === 0) return;
+    setEnvSaving(true);
+    try {
+      await apiFetch(`/api/apps/${appId}/env`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values }),
+      });
+      toast({ title: "✅ Variables guardadas", description: "Se cifrarán e inyectarán automáticamente en tu próximo deploy." });
+      setEnvDrafts({});
+      loadEnvVars();
+    } catch (err: any) {
+      toast({ title: "Error al guardar", description: err?.message, variant: "destructive" });
+    } finally {
+      setEnvSaving(false);
+    }
+  }, [appId, envDrafts, loadEnvVars, toast]);
 
   /* ── Watermark removal ── */
   const [watermarkHasMark, setWatermarkHasMark] = useState<boolean | null>(null);
@@ -934,12 +971,38 @@ export function DeployModal({
               </button>
               {envExpanded && (
                 <div className="px-5 pb-4">
-                  <p className="text-xs text-white/40 mb-2">Las variables se sincronizan automáticamente con Vercel al hacer deploy.</p>
-                  <div className="rounded-lg border border-white/[0.06] bg-[#070910] p-3 font-mono text-xs text-white/40 space-y-1">
-                    <div><span className="text-[#c084fc]">VITE_CLERK_PUBLISHABLE_KEY</span> = ••••••••••••</div>
-                    <div><span className="text-[#c084fc]">VITE_API_URL</span> = auto-detected</div>
-                    <div><span className="text-[#c084fc]">NODE_ENV</span> = production</div>
-                  </div>
+                  <p className="text-xs text-white/40 mb-3">Tu app necesita estas claves para conectarse a servicios externos. Se cifran y se inyectan automáticamente al hacer deploy.</p>
+                  {envLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-white/40 py-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando…</div>
+                  ) : envVars.length === 0 ? (
+                    <p className="text-xs text-white/30 py-2">Esta app no necesita ninguna variable de entorno.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {envVars.map((v) => (
+                        <div key={v.name}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-mono font-semibold text-[#c084fc]">{v.name}</span>
+                            {v.isSet && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                          </div>
+                          {v.why && <p className="text-[11px] text-white/35 mb-1.5">{v.why}</p>}
+                          <input
+                            type="password"
+                            value={envDrafts[v.name] ?? ""}
+                            onChange={(e) => setEnvDrafts((d) => ({ ...d, [v.name]: e.target.value }))}
+                            placeholder={v.isSet ? `Configurado: ${v.maskedValue}` : "Introduce el valor…"}
+                            className="w-full rounded-lg border border-white/[0.10] bg-[#070910] px-3 py-2 text-xs font-mono text-white placeholder:text-white/25 focus:border-[#c084fc]/50 focus:outline-none"
+                          />
+                        </div>
+                      ))}
+                      <button
+                        onClick={handleSaveEnvVars}
+                        disabled={envSaving || Object.values(envDrafts).every((v) => !v.trim())}
+                        className="w-full rounded-lg border border-[#c084fc]/30 bg-[#c084fc]/10 py-2 text-xs font-semibold text-[#c084fc] hover:bg-[#c084fc]/20 transition disabled:opacity-40"
+                      >
+                        {envSaving ? <Loader2 className="mx-auto h-3.5 w-3.5 animate-spin" /> : "Guardar variables"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -749,6 +749,39 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 28: variables de entorno del cliente (API keys, secrets) cifradas de
+// verdad (AES-256-GCM) y sincronizadas con Vercel en la fase real
+// syncing_env. ENCONTRADO durante la implementación: la sección
+// "Variables de entorno" de DeployModal mostraba un MOCKUP HARDCODEADO
+// FALSO (3 líneas de texto fijo, sin ningún formulario real) — confirmado
+// leyendo el código antes de tocar nada.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const cryptoSrc = readSrc("lib/secretsCrypto.ts");
+  check(
+    "FIX 28a: existe el módulo de cifrado real (AES-256-GCM) para las variables de entorno del cliente",
+    /aes-256-gcm/.test(cryptoSrc) && /export function encryptSecret/.test(cryptoSrc) && /export function decryptSecret/.test(cryptoSrc),
+  );
+  const vercelDeploySrc2 = readSrc("lib/vercelDeploy.ts");
+  check(
+    "FIX 28b: deployAppToVercel sincroniza de verdad las variables descifradas con la API de Vercel en la fase syncing_env",
+    /decryptEnvVarsForDeploy/.test(vercelDeploySrc2) && /\/v10\/projects\/\$\{projectId\}\/env/.test(vercelDeploySrc2),
+    "Sin esto, syncing_env era solo un marcador de progreso visual sin ninguna llamada real — las claves que el cliente guardara nunca llegarían a la app desplegada.",
+  );
+  const appsSrc2 = readSrc("routes/apps.ts");
+  check(
+    "FIX 28c: existen GET y PUT /apps/:id/env para que el cliente vea y guarde sus variables reales",
+    /router\.get\("\/apps\/:id\/env"/.test(appsSrc2) && /router\.put\("\/apps\/:id\/env"/.test(appsSrc2),
+  );
+  const deployModalSrc2 = readAppforgeSrc("components/deploy-modal.tsx");
+  check(
+    "FIX 28d: DeployModal tiene el formulario real de variables de entorno, no el mockup hardcodeado",
+    /loadEnvVars/.test(deployModalSrc2) && /handleSaveEnvVars/.test(deployModalSrc2) && !/VITE_CLERK_PUBLISHABLE_KEY.*••••••••••••/.test(deployModalSrc2),
+    "Sin esto, el cliente vería siempre el mismo texto fijo falso ('VITE_CLERK_PUBLISHABLE_KEY = ••••••••••••') sin ningún campo real para introducir sus propias claves.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

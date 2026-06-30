@@ -198,7 +198,15 @@ export interface IGeneratedApp {
   // era "serverless" (backend ya viaja con el frontend a Vercel, nada que
   // desplegar a Railway) sin volver a inspeccionar el código generado.
   architecture?: "monolith" | "microservices" | "serverless";
-  requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
+  // A petición explícita del usuario: el cliente introduce sus propias API
+  // keys/secrets (OpenAI, WhatsApp, etc.) para que la app generada se
+  // conecte a servicios externos reales. "value" (legacy, NUNCA usar para
+  // datos nuevos) se mantiene solo por compatibilidad con datos antiguos
+  // sin cifrar — todo valor real nuevo va cifrado en "encryptedValue"
+  // (AES-256-GCM, ver lib/secretsCrypto.ts). El descifrado solo ocurre en
+  // el momento real del deploy, para inyectarlo en Vercel — nunca se
+  // devuelve el valor real al frontend tras guardarse.
+  requiredEnvVars?: Array<{ name: string; why: string; value?: string; encryptedValue?: string }>;
   // ID Universal Maris AI — formato PRJ-<timestamp_base36>-<random6>
   // Identifica al proyecto de forma única en todo el ecosistema de Maris AI
   marisId?: string;
@@ -278,6 +286,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
         name: { type: String, required: true },
         why: { type: String },
         value: { type: String },
+        encryptedValue: { type: String },
       },
     ],
     // ID Universal Maris AI

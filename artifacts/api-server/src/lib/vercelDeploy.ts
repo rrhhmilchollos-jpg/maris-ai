@@ -185,6 +185,46 @@ export async function deployAppToVercel(opts: {
   await ensureVercelProjectIsPublic({ token, projectId, log });
   await setPhase("syncing_env");
 
+  // A petición explícita del usuario: inyección REAL de las variables de
+  // entorno del cliente (API keys de OpenAI, WhatsApp, etc., guardadas
+  // cifradas por el cliente vía PUT /apps/:id/env) en el proyecto de
+  // Vercel, ANTES de lanzar el deployment — así el código generado puede
+  // leerlas con process.env.NOMBRE_VARIABLE cuando arranca en producción.
+  // Se descifran únicamente en este instante, en memoria, nunca se
+  // registran en logs ni se devuelven a ningún cliente HTTP.
+  const envVarsToSync = (row as any).requiredEnvVars;
+  if (Array.isArray(envVarsToSync) && envVarsToSync.length > 0) {
+    try {
+      const { decryptEnvVarsForDeploy } = await import("./secretsCrypto");
+      const decrypted = decryptEnvVarsForDeploy(envVarsToSync);
+      if (decrypted.length > 0) {
+        const synced = await callVercel<unknown>({
+          token,
+          method: "POST",
+          path: `/v10/projects/${projectId}/env`,
+          body: decrypted.map((v) => ({
+            key: v.key,
+            value: v.value,
+            type: "encrypted", // cifrado también en el lado de Vercel — sus "Sensitive Environment Variables"
+            target: ["production"],
+          })),
+          log,
+        });
+        if (!synced.ok) {
+          // Best-effort: si Vercel rechaza alguna variable (ej. ya existe
+          // con el mismo nombre — su API a veces no acepta upsert masivo
+          // en bulk), no se bloquea el deploy. El código generado seguirá
+          // funcionando con cualquier variable que sí se sincronizara.
+          log.warn({ projectId, failure: synced.failure }, "[syncing_env] Algunas variables de entorno no se pudieron sincronizar — continuando con el deploy");
+        } else {
+          log.info({ projectId, count: decrypted.length }, "[syncing_env] Variables de entorno sincronizadas con Vercel");
+        }
+      }
+    } catch (err) {
+      log.warn({ err, projectId }, "[syncing_env] Fallo al sincronizar variables de entorno — continuando sin ellas");
+    }
+  }
+
   // For static HTML projects, also reset the framework on the Vercel project itself.
   // If the project was previously created with framework: "vite", Vercel will keep
   // running `vite build` even if the deployment sends framework: null in projectSettings.

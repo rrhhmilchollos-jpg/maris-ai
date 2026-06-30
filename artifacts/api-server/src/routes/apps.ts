@@ -5500,6 +5500,94 @@ Responde SOLO con JSON estricto, sin markdown:
   }
 });
 
+// ── Variables de entorno del cliente (API keys, secrets) ──────────────────
+// A petición explícita del usuario: la sección "Variables de entorno" del
+// DeployModal ya existente mostraba un MOCKUP HARDCODEADO falso (3 líneas
+// de texto fijo, sin ningún formulario real) — confirmado durante la
+// investigación. Esto la conecta de verdad: el Arquitecto ya declaraba QUÉ
+// variables necesita la app (requiredEnvVars[].name/why, generado durante
+// la construcción), pero el cliente nunca tenía dónde introducir el VALOR
+// real. Los valores se cifran con AES-256-GCM (secretsCrypto.ts) antes de
+// guardarse — nunca en texto plano en MongoDB, y nunca se devuelven
+// descifrados al frontend tras guardarse (solo enmascarados).
+
+// GET /api/apps/:id/env — lista las variables declaradas por el Arquitecto,
+// con el valor enmascarado si ya se configuró (nunca el valor real).
+router.get("/apps/:id/env", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId })
+      .select("requiredEnvVars")
+      .lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const { maskSecret } = await import("../lib/secretsCrypto");
+    const vars = ((app as any).requiredEnvVars || []).map((v: any) => ({
+      name: v.name,
+      why: v.why || "",
+      isSet: !!(v.encryptedValue || v.value),
+      maskedValue: v.encryptedValue
+        ? "••••••••" // no se descifra solo para mostrar — ni siquiera enmascarado con datos reales
+        : (v.value ? maskSecret(String(v.value)) : null),
+    }));
+    res.json({ envVars: vars });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/env error");
+    res.status(500).json({ error: err?.message ?? "Error al consultar las variables de entorno" });
+  }
+});
+
+// PUT /api/apps/:id/env — el cliente guarda el valor real de una o más
+// variables. Body: { values: { "OPENAI_API_KEY": "sk-...", ... } }.
+// Cada valor se cifra individualmente antes de guardarse; un fallo de
+// cifrado en una variable no bloquea el resto.
+router.put("/apps/:id/env", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { values } = req.body ?? {};
+    if (!values || typeof values !== "object" || Array.isArray(values)) {
+      return res.status(400).json({ error: "values debe ser un objeto { NOMBRE_VARIABLE: valor }" });
+    }
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const { encryptSecret } = await import("../lib/secretsCrypto");
+    const existing: any[] = Array.isArray((app as any).requiredEnvVars) ? (app as any).requiredEnvVars : [];
+    const byName = new Map(existing.map((v: any) => [v.name, v]));
+
+    let updatedCount = 0;
+    const failedNames: string[] = [];
+    for (const [name, rawValue] of Object.entries(values)) {
+      if (typeof rawValue !== "string" || !rawValue.trim()) continue;
+      try {
+        const encryptedValue = encryptSecret(rawValue);
+        const current = byName.get(name);
+        if (current) {
+          current.encryptedValue = encryptedValue;
+          current.value = undefined; // limpiar cualquier valor legacy sin cifrar
+        } else {
+          // Variable que el cliente añade manualmente, no declarada por el
+          // Arquitecto — se permite igualmente (ej. una API key adicional
+          // que el cliente sabe que necesita pero la IA no detectó).
+          const newVar = { name, why: "Añadida manualmente por el usuario", encryptedValue };
+          existing.push(newVar);
+          byName.set(name, newVar);
+        }
+        updatedCount++;
+      } catch (err) {
+        logger.warn({ err, name }, "[env] Fallo cifrando una variable de entorno — se omite");
+        failedNames.push(name);
+      }
+    }
+
+    await GeneratedApp.updateOne({ _id: req.params.id }, { $set: { requiredEnvVars: existing } });
+
+    res.json({ ok: true, updatedCount, failedNames });
+  } catch (err: any) {
+    logger.error({ err }, "PUT /api/apps/:id/env error");
+    res.status(500).json({ error: err?.message ?? "Error al guardar las variables de entorno" });
+  }
+});
+
 
 router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
   try {
