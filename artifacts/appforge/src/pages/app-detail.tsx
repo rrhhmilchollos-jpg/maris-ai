@@ -120,7 +120,11 @@ import { VisualTestPanel } from "@/components/visual-test-panel";
 const DEEP_TEST_COST = 30;
 // Coste fijo del deploy y duración de la ventana de gracia de re-deploy
 // gratuito — deben coincidir con DEPLOY_COST / DEPLOY_GRACE_WINDOW_MS en apps.ts.
-const DEPLOY_COST = 5;
+// Coste escalonado del deploy: 5 créditos el primer deploy de cada app, 50
+// a partir del segundo. Deben coincidir con DEPLOY_COST_FIRST /
+// DEPLOY_COST_SUBSEQUENT / DEPLOY_GRACE_WINDOW_MS en apps.ts.
+const DEPLOY_COST_FIRST = 5;
+const DEPLOY_COST_SUBSEQUENT = 50;
 const DEPLOY_GRACE_WINDOW_MS = 5 * 60 * 1000;
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
@@ -377,6 +381,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   // del botón; la fuente de verdad real es siempre el backend.
   const isFreeRedeployNow = !!(app as any)?.lastPaidDeployAt
     && (Date.now() - new Date((app as any).lastPaidDeployAt).getTime()) < DEPLOY_GRACE_WINDOW_MS;
+  // Coste escalonado — informativo, el backend decide el cobro real.
+  const effectiveDeployCost = (app as any)?.lastPaidDeployAt ? DEPLOY_COST_SUBSEQUENT : DEPLOY_COST_FIRST;
 
   // Polling: detectar recarga de créditos cuando el usuario está bloqueado
   useEffect(() => {
@@ -1026,7 +1032,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <Button onClick={handleShare} variant="outline" className="border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]"><Share2 className="mr-2 h-4 w-4" /> Compartir enlace</Button>
               <Button onClick={handleDeploy} disabled={deployMutation.isPending || !hasRenderableCode} className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white hover:from-[#8b5cf6] hover:to-[#a855f7]">
                 {deployMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Rocket className="mr-2 h-4 w-4" />}
-                {deployMutation.isPending ? "Desplegando" : isFreeRedeployNow ? "Deploy app (gratis)" : `Deploy app (${DEPLOY_COST} créditos)`}
+                {deployMutation.isPending ? "Desplegando" : isFreeRedeployNow ? "Deploy app (gratis)" : `Deploy app (${effectiveDeployCost} créditos)`}
               </Button>
             </div>
             <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.035] p-5">

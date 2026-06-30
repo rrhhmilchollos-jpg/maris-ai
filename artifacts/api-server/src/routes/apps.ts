@@ -6948,17 +6948,20 @@ export async function runDeployForApp(args: {
 // ya estaba completa y se usaba internamente desde el auto-evaluador, pero
 // nunca estuvo expuesta para que el cliente la disparara manualmente.
 //
-// COBRO + VENTANA DE GRACIA (a petición explícita del usuario, ajustado de
-// 50 a 5 créditos tras confirmar que el deploy real solo llama a la API de
-// Vercel — sin tokens de Claude, coste de infraestructura real cercano a
-// cero; 50 créditos habría roto el embudo de usuarios nuevos: 45 de
-// bienvenida no habrían alcanzado ni para generar una app fullstack, 39,
-// más el deploy). Con 5 créditos, un usuario nuevo puede generar (39) +
-// desplegar (5) con su pack de bienvenida (45), quedándole 1 crédito.
+// COBRO ESCALONADO + VENTANA DE GRACIA. A petición explícita del usuario:
+// el PRIMER deploy cobrado de cada app cuesta solo 5 créditos (accesible
+// con el regalo de bienvenida — cualquier usuario nuevo puede publicar su
+// primera app bajo un subdominio de Maris AI sin tener que comprar
+// créditos antes). A partir del SEGUNDO deploy cobrado de la misma app,
+// el coste sube automáticamente a 50 créditos — el sistema detecta esto
+// solo (vía GeneratedApp.lastPaidDeployAt), sin que el cliente tenga que
+// hacer nada. Efecto conocido y aceptado: a partir de ahí, redesplegar
+// fuera de la ventana de gracia exige comprar créditos.
 // Ventana de gracia de 5 minutos: si el cliente vuelve a pulsar "Deploy"
 // poco después de un deploy ya cobrado (ej. hizo un ajuste rápido), ese
 // re-deploy es gratis — el reloj es interno, nunca se le muestra al cliente.
-const DEPLOY_COST = 5;
+const DEPLOY_COST_FIRST = 5;
+const DEPLOY_COST_SUBSEQUENT = 50;
 const DEPLOY_GRACE_WINDOW_MS = 5 * 60 * 1000;
 router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
   try {
@@ -6971,6 +6974,18 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
 
     const lastPaidDeployAt: Date | undefined = (app as any).lastPaidDeployAt;
     const withinGraceWindow = !!lastPaidDeployAt && (Date.now() - new Date(lastPaidDeployAt).getTime()) < DEPLOY_GRACE_WINDOW_MS;
+    // A petición explícita del usuario: el PRIMER deploy cobrado de cada
+    // app cuesta DEPLOY_COST_FIRST (5 créditos — accesible incluso con el
+    // regalo de bienvenida, para que cualquier usuario nuevo pueda
+    // publicar su primera app bajo el subdominio de Maris AI). A partir
+    // del segundo deploy cobrado de la MISMA app, el coste sube
+    // automáticamente a DEPLOY_COST_SUBSEQUENT (50 créditos). Se usa
+    // lastPaidDeployAt como indicador real de "esta app ya tuvo al menos
+    // un deploy cobrado" — independiente de la ventana de gracia (un
+    // re-deploy gratuito dentro de los 5 minutos no cuenta como el primer
+    // deploy "de pago" a efectos de este precio escalonado).
+    const isFirstPaidDeploy = !lastPaidDeployAt;
+    const effectiveDeployCost = isFirstPaidDeploy ? DEPLOY_COST_FIRST : DEPLOY_COST_SUBSEQUENT;
 
     const isAdmin = isAdminEmail(req.dbUser?.email);
     let creditsCharged = 0;
@@ -6978,18 +6993,18 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
       const charge = await chargeCredits({
         userId,
         isAdmin,
-        amount: DEPLOY_COST,
-        description: `Deploy: ${app.title?.slice(0, 50) ?? ""}`,
+        amount: effectiveDeployCost,
+        description: `Deploy${isFirstPaidDeploy ? " (primero, subdominio Maris AI)" : ""}: ${app.title?.slice(0, 50) ?? ""}`,
       });
       if (!charge.ok) {
         return res.status(402).json({
           error: "Créditos insuficientes",
-          required: DEPLOY_COST,
+          required: effectiveDeployCost,
           current: req.dbUser?.credits,
-          hint: `Desplegar tu app cuesta ${DEPLOY_COST} créditos.`,
+          hint: `Desplegar tu app cuesta ${effectiveDeployCost} créditos${isFirstPaidDeploy ? " (tu primer deploy)" : ""}.`,
         });
       }
-      creditsCharged = DEPLOY_COST;
+      creditsCharged = effectiveDeployCost;
       await GeneratedApp.updateOne({ _id: req.params.id }, { $set: { lastPaidDeployAt: new Date() } });
     }
 
@@ -7005,7 +7020,7 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
       logger.error({ err, appId: req.params.id }, "[deploy] Falló el deploy en segundo plano");
     });
 
-    res.status(202).json({ status: "started", creditsCharged, freeRedeploy: withinGraceWindow });
+    res.status(202).json({ status: "started", creditsCharged, freeRedeploy: withinGraceWindow, isFirstPaidDeploy });
   } catch (err: any) {
     logger.error({ err }, "POST /api/apps/:id/deploy error");
     res.status(500).json({ error: err?.message ?? "Error al desplegar" });

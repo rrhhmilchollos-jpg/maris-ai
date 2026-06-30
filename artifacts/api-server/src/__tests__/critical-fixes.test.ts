@@ -662,16 +662,25 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// FIX 25: cobro de deploy (5 créditos, ajustado desde la propuesta inicial
-// de 50 — el deploy real no consume tokens de Claude, solo llama a la API
-// de Vercel) con ventana de gracia de 5 minutos para re-deploys gratuitos.
+// FIX 25: cobro de deploy ESCALONADO por app (decisión explícita del
+// usuario, 30 jun 2026): el primer deploy cobrado de cada app cuesta 5
+// créditos (accesible con el regalo de bienvenida — cualquier usuario
+// nuevo puede publicar su primera app), y a partir del segundo deploy de
+// la MISMA app el coste sube automáticamente a 50 créditos — detectado
+// solo por el sistema vía lastPaidDeployAt, sin que el cliente tenga que
+// hacer nada. Con ventana de gracia de 5 minutos para re-deploys gratuitos.
 // ───────────────────────────────────────────────────────────────────────────
 {
   const appsSrc = readSrc("routes/apps.ts");
   check(
-    "FIX 25a: DEPLOY_COST = 5 (no 50 — el deploy no consume tokens de Claude, coste de infraestructura real cercano a cero)",
-    /const DEPLOY_COST = 5;/.test(appsSrc),
-    "50 créditos por deploy habría dejado a un usuario nuevo sin poder publicar su primera app con el pack de bienvenida (45 créditos no alcanzan ni para generar, 39, más desplegar).",
+    "FIX 25a: existen las dos constantes de coste escalonado (5 el primer deploy, 50 a partir del segundo)",
+    /const DEPLOY_COST_FIRST = 5;/.test(appsSrc) && /const DEPLOY_COST_SUBSEQUENT = 50;/.test(appsSrc),
+    "Sin el escalonado, o se cobran 50 créditos desde el primer deploy (un usuario nuevo con el pack de bienvenida de 45 créditos no podría publicar su primera app nunca), o se cobran solo 5 créditos siempre (el negocio pierde el incentivo de conversión en deploys posteriores).",
+  );
+  check(
+    "FIX 25a-bis: el endpoint detecta el primer deploy de cada app vía lastPaidDeployAt, no un contador global del usuario",
+    /isFirstPaidDeploy = !lastPaidDeployAt/.test(appsSrc),
+    "El precio escalonado es POR APP, no por usuario — un mismo usuario puede tener varias apps, y cada una tiene su propio 'primer deploy' a 5 créditos.",
   );
   check(
     "FIX 25b: existe la ventana de gracia de 5 minutos para re-deploys gratuitos",
