@@ -640,6 +640,41 @@ export async function removeVercelDomainForApp(opts: {
   return { ok: true };
 }
 
+// A petición explícita del usuario: completando la pieza que faltaba de
+// DeployModal (componente ya existente). El frontend ya llamaba a
+// DELETE /apps/:id/deploy esperando "apagar" el deployment — esto elimina
+// el proyecto real en Vercel (lo que de verdad apaga la URL pública, no
+// solo limpia un campo en MongoDB) y limpia los campos relacionados.
+export async function shutDownVercelDeployment(opts: {
+  appId: string;
+  projectId: string;
+  log: Logger;
+}): Promise<{ ok: true } | { ok: false; failure: VercelDeployFailure }> {
+  const { appId, projectId, log } = opts;
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) return { ok: false, failure: { kind: "missing_token" } };
+
+  const removed = await callVercel<unknown>({
+    token,
+    method: "DELETE",
+    path: `/v9/projects/${projectId}`,
+    log,
+  });
+  // 404 = el proyecto ya no existe en Vercel (ej. borrado manualmente) —
+  // no es un fallo real desde el punto de vista del cliente, que solo
+  // quiere que la URL deje de estar activa.
+  if (!removed.ok && removed.failure.kind === "vercel_api_error" && removed.failure.status !== 404) {
+    return { ok: false, failure: removed.failure };
+  }
+
+  await GeneratedApp.updateOne(
+    { _id: appId },
+    { $set: { vercelProjectId: null, vercelDeployUrl: null, vercelCustomDomain: null, deployPhase: null } },
+  );
+
+  return { ok: true };
+}
+
 /**
  * Convert a free-form string into a Vercel-legal project name: lowercase
  * letters, digits, hyphens; max 52 chars; must start with a letter or digit.

@@ -707,6 +707,39 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 27: las 4 piezas que DeployModal (componente ya existente) llamaba
+// desde hace tiempo pero que NUNCA EXISTIERON en el backend — devolvían
+// 404 silencioso. code-review (revisión de calidad con IA, informativa, no
+// repara nada), DELETE /apps/:id/deploy (apagar el deployment real en
+// Vercel), y los 3 endpoints custom-domain (alias finos sobre las mismas
+// funciones reales de /apps/:id/domain, sin duplicar lógica de negocio).
+// Watermark NO está en este fix porque ya estaba completo y funcional
+// desde antes — confirmado durante la investigación, no requería cambios.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 27a: existe POST /apps/:id/code-review, la pieza informativa que faltaba de DeployModal",
+    /router\.post\("\/apps\/:id\/code-review"/.test(appsSrc) && /const CODE_REVIEW_COST = 10;/.test(appsSrc),
+  );
+  check(
+    "FIX 27b: existe DELETE /apps/:id/deploy (apagar el deployment real en Vercel, no solo limpiar MongoDB)",
+    /router\.delete\("\/apps\/:id\/deploy"/.test(appsSrc) && /shutDownVercelDeployment/.test(appsSrc),
+  );
+  check(
+    "FIX 27c: existen los 3 endpoints custom-domain como alias de las mismas funciones reales de /apps/:id/domain",
+    /router\.post\("\/apps\/:id\/custom-domain"/.test(appsSrc)
+      && /router\.get\("\/apps\/:id\/custom-domain"/.test(appsSrc)
+      && /router\.delete\("\/apps\/:id\/custom-domain"/.test(appsSrc),
+  );
+  const vercelDeploySrc = readSrc("lib/vercelDeploy.ts");
+  check(
+    "FIX 27d: existe shutDownVercelDeployment, que elimina el proyecto real en Vercel (no solo un campo en MongoDB)",
+    /export async function shutDownVercelDeployment/.test(vercelDeploySrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

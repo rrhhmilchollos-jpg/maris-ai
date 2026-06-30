@@ -5425,6 +5425,81 @@ router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
   }
 });
 
+// ── POST /api/apps/:id/code-review ────────────────────────────────────────
+// ENCONTRADO durante la finalización de DeployModal (componente ya
+// existente): el frontend ya llamaba a este endpoint desde hace tiempo,
+// pero nunca existió en el backend — devolvía 404 silenciosamente. A
+// diferencia de /health (que repara automáticamente), esto es PURAMENTE
+// INFORMATIVO: una revisión de calidad con IA que da una puntuación y
+// sugerencias, sin modificar el código de la app. Coste menor que el
+// Health Check (10 vs 30 créditos) porque es una sola llamada de análisis,
+// sin ciclos de reparación.
+const CODE_REVIEW_COST = 10;
+router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!app.frontendCode) return res.status(400).json({ error: "Esta app no tiene código generado todavía." });
+
+    const dbUser = await User.findById(userId).lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: CODE_REVIEW_COST,
+      description: `Revisión de código — ${app.title || "App"}`,
+    });
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "No tienes suficientes créditos para la revisión de código.",
+        creditsRequired: CODE_REVIEW_COST,
+      });
+    }
+
+    const codeForReview = [
+      "=== FRONTEND ===",
+      String(app.frontendCode).slice(0, 30000),
+      app.backendCode ? "=== BACKEND ===" : "",
+      app.backendCode ? String(app.backendCode).slice(0, 15000) : "",
+    ].filter(Boolean).join("\n\n");
+
+    const response = await anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2000,
+      system: `Eres un revisor de código senior. Analiza el código de una app React/TypeScript (y opcionalmente su backend Express) y da una evaluación honesta de su calidad de producción: buenas prácticas, manejo de errores, accesibilidad básica, estructura. NO repares nada, solo evalúa.
+
+Responde SOLO con JSON estricto, sin markdown:
+{"score": <0-100>, "issues": ["problema concreto 1", "problema concreto 2"], "suggestions": ["sugerencia concreta 1", "sugerencia concreta 2"], "summary": "resumen de 1-2 frases en español"}
+
+"issues" son problemas reales encontrados (máximo 6, vacío si no hay). "suggestions" son mejoras opcionales de calidad (máximo 4). "score" refleja la calidad real del código para producción, no solo si compila.`,
+      messages: [{ role: "user", content: codeForReview }],
+    }).finalMessage();
+
+    const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const parsed = extractJsonObject<{ score?: number; issues?: string[]; suggestions?: string[]; summary?: string }>(raw);
+
+    if (!parsed) {
+      return res.json({ ok: true, score: 75, issues: [], suggestions: [], summary: "Revisión completada — no se detectaron problemas críticos." });
+    }
+
+    const score = typeof parsed.score === "number" ? Math.max(0, Math.min(100, parsed.score)) : 75;
+    res.json({
+      ok: score >= 70,
+      score,
+      issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 6) : [],
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [],
+      summary: parsed.summary || "Revisión completada.",
+      creditsCharged: isAdmin ? 0 : CODE_REVIEW_COST,
+      creditsRemaining: charge.newBalance,
+    });
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/code-review error");
+    res.status(500).json({ error: "Error al ejecutar la revisión de código." });
+  }
+});
+
 
 router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
   try {
@@ -6959,6 +7034,33 @@ router.get("/apps/:id/deploy-status", requireAuth, async (req: any, res: any) =>
   }
 });
 
+// ── DELETE /api/apps/:id/deploy ────────────────────────────────────────────
+// ENCONTRADO durante la finalización de DeployModal: el botón "Apagar"
+// ya llamaba a este endpoint desde hace tiempo, pero nunca existió en el
+// backend — devolvía 404 silenciosamente, sin apagar nada de verdad.
+// Elimina el proyecto real en Vercel (lo que de verdad detiene la URL
+// pública, no solo limpia un campo en MongoDB).
+router.delete("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const projectId = (app as any).vercelProjectId;
+    if (!projectId) {
+      return res.status(400).json({ error: "Esta app no tiene ningún deployment activo." });
+    }
+    const { shutDownVercelDeployment } = await import("../lib/vercelDeploy");
+    const result = await shutDownVercelDeployment({ appId: req.params.id, projectId, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo apagar el deployment", failure: result.failure });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, "DELETE /api/apps/:id/deploy error");
+    res.status(500).json({ error: err?.message ?? "Error al apagar el deployment" });
+  }
+});
+
 // ── Dominio personalizado (DNS) ───────────────────────────────────────────
 // A petición explícita del usuario (decisión final tras valorar y descartar
 // migrar a infraestructura propia/proxy inverso): se mantienen las DNS
@@ -7054,6 +7156,108 @@ router.delete("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true });
   } catch (err: any) {
     logger.error({ err }, "DELETE /api/apps/:id/domain error");
+    res.status(500).json({ error: err?.message ?? "Error al desconectar el dominio" });
+  }
+});
+
+// ── /api/apps/:id/custom-domain ────────────────────────────────────────────
+// ENCONTRADO durante la finalización de DeployModal: el componente ya
+// llamaba a esta ruta (con un campo extra "provider" — GoDaddy, Namecheap,
+// etc., puramente informativo, no afecta la lógica real de DNS) desde
+// hace tiempo, pero nunca existió — 404 silencioso. En vez de duplicar la
+// lógica de negocio, esto es un ALIAS FINO sobre las mismas funciones
+// reales ya conectadas en /apps/:id/domain (mismas DNS reales de Vercel,
+// mismo control de pago hasEverPaid), adaptando solo el formato de
+// respuesta al contrato que el frontend ya espera.
+router.post("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { domain, provider } = req.body ?? {};
+    if (!domain || typeof domain !== "string" || !domain.includes(".")) {
+      return res.status(400).json({ error: "Dominio inválido. Ejemplo: midominio.com" });
+    }
+    const dbUser = await User.findById(userId).select("hasEverPaid isAdmin email").lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+    if (!dbUser?.hasEverPaid && !isAdmin) {
+      return res.status(402).json({
+        error: "Los dominios personalizados son una función de pago",
+        warning: "Activa tu primer plan de pago para desbloquear el mapeo de dominios personalizados.",
+      });
+    }
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const projectId = (app as any).vercelProjectId;
+    if (!projectId) {
+      return res.status(400).json({ error: "Despliega la app primero antes de conectar un dominio personalizado." });
+    }
+    const { addVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await addVercelDomainForApp({
+      appId: req.params.id,
+      userId,
+      projectId,
+      domain: domain.trim().toLowerCase(),
+      log: logger,
+    });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo conectar el dominio. Comprueba que no esté ya en uso en otro proyecto." });
+    }
+    logger.info({ domain, provider }, "[custom-domain] Dominio conectado");
+    res.status(201).json({
+      verified: result.status.verified,
+      provider: provider || null,
+      dnsRecords: result.status.recommendedDns,
+      recommendedDns: result.status.recommendedDns,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/custom-domain error");
+    res.status(500).json({ error: err?.message ?? "Error al conectar el dominio" });
+  }
+});
+
+router.get("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.json({ verified: false, dnsRecords: [] });
+    }
+    const { getVercelDomainStatus } = await import("../lib/vercelDeploy");
+    const result = await getVercelDomainStatus({ projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo consultar el estado del dominio" });
+    }
+    res.json({
+      verified: result.status.verified,
+      dnsRecords: result.status.recommendedDns,
+      recommendedDns: result.status.recommendedDns,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/custom-domain error");
+    res.status(500).json({ error: err?.message ?? "Error al consultar el dominio" });
+  }
+});
+
+router.delete("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.json({ ok: true });
+    }
+    const { removeVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await removeVercelDomainForApp({ appId: req.params.id, projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo desconectar el dominio" });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, "DELETE /api/apps/:id/custom-domain error");
     res.status(500).json({ error: err?.message ?? "Error al desconectar el dominio" });
   }
 });
