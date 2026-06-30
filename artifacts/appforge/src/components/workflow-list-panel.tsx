@@ -30,10 +30,23 @@ export function WorkflowListPanel({ appId, onClose }: { appId: string; onClose: 
   const [newName, setNewName] = useState("");
   const [savingNew, setSavingNew] = useState(false);
   const [openWorkflowId, setOpenWorkflowId] = useState<string | null>(null);
+  // ENCONTRADO a petición explícita del usuario (panel quedándose cargando
+  // para siempre, sin ningún mensaje): load() no tenía try/catch — si la
+  // petición fallaba (causa real: workflows.ts usaba (req as any).auth?.userId,
+  // que SIEMPRE es undefined porque requireAuth asigna req.userId, no
+  // req.auth — ya corregido en el backend), la excepción quedaba sin
+  // capturar, workflows nunca salía de null, y el spinner giraba para
+  // siempre sin que el cliente supiera que algo había fallado de verdad.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await apiFetch<{ workflows: WorkflowSummary[] }>(`/api/apps/${appId}/workflows`);
-    setWorkflows(res.workflows);
+    setLoadError(null);
+    try {
+      const res = await apiFetch<{ workflows: WorkflowSummary[] }>(`/api/apps/${appId}/workflows`);
+      setWorkflows(res.workflows);
+    } catch (err: any) {
+      setLoadError(err?.message || "No se pudieron cargar los flujos de automatización.");
+    }
   }, [appId]);
 
   useEffect(() => { load(); }, [load]);
@@ -80,7 +93,17 @@ export function WorkflowListPanel({ appId, onClose }: { appId: string; onClose: 
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto p-5">
-          {workflows === null ? (
+          {loadError ? (
+            <div className="py-10 text-center">
+              <p className="text-[13px] text-red-400">{loadError}</p>
+              <button
+                onClick={load}
+                className="mt-3 rounded-lg border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white transition"
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : workflows === null ? (
             <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
           ) : workflows.length === 0 && !creating ? (
             <div className="py-10 text-center">

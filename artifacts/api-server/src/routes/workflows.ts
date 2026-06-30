@@ -28,7 +28,7 @@ async function getOwnedApp(appId: string, userId: string) {
 router.get("/apps/:appId/workflows", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });
@@ -44,7 +44,7 @@ router.get("/apps/:appId/workflows", requireAuth, async (req: Request, res: Resp
 router.post("/apps/:appId/workflows", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });
@@ -77,7 +77,7 @@ router.post("/apps/:appId/workflows", requireAuth, async (req: Request, res: Res
 router.get("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId, id } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });
@@ -94,7 +94,7 @@ router.get("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: 
 router.patch("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId, id } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });
@@ -120,7 +120,7 @@ router.patch("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res
 router.delete("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId, id } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });
@@ -137,7 +137,7 @@ router.delete("/apps/:appId/workflows/:id", requireAuth, async (req: Request, re
 router.post("/apps/:appId/workflows/:id/run", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId, id } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });
@@ -173,7 +173,7 @@ router.post("/apps/:appId/workflows/:id/run", requireAuth, async (req: Request, 
 router.get("/apps/:appId/workflows/:id/runs", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId, id } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
     if (!appData) return res.status(404).json({ error: "App no encontrada" });

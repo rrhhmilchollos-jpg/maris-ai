@@ -807,6 +807,30 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 30: el panel de Automatización (flujos tipo n8n por app) se quedaba
+// cargando para siempre, sin ningún mensaje de error. CAUSA RAÍZ
+// CONFIRMADA: workflows.ts usaba (req as any).auth?.userId en sus 7
+// endpoints — req.auth NUNCA existe (requireAuth asigna req.userId, no
+// req.auth) — así que TODOS los endpoints de workflows devolvían 401
+// SIEMPRE, sin importar quién estuviera logueado. Esto inutilizaba por
+// completo la función de Automatización desde que se implementó.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const workflowsSrc = readSrc("routes/workflows.ts");
+  check(
+    "FIX 30a: workflows.ts usa req.userId (el patrón real y correcto), no (req as any).auth?.userId (siempre undefined)",
+    !/\(req as any\)\.auth\?\.userId/.test(workflowsSrc) && /const userId = req\.userId;/.test(workflowsSrc),
+    "Con (req as any).auth?.userId, los 7 endpoints de workflows (listar, crear, editar, borrar, ejecutar, ver historial) devolvían 401 SIEMPRE — la función de Automatización estaba completamente inutilizada en producción, sin que ningún cliente pudiera usarla nunca.",
+  );
+  const workflowPanelSrc = readAppforgeSrc("components/workflow-list-panel.tsx");
+  check(
+    "FIX 30b: el panel de Automatización maneja errores reales en vez de quedarse cargando para siempre en silencio",
+    /catch \(err: any\) \{[\s\S]{0,100}setLoadError/.test(workflowPanelSrc),
+    "Sin try/catch en load(), cualquier fallo del backend (este u otro futuro) deja el spinner girando para siempre sin que el cliente sepa que algo falló.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
