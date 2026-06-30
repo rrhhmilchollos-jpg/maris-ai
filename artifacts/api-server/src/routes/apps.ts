@@ -6381,6 +6381,52 @@ export async function runJobById(jobId: string): Promise<void> {
           status: "ready",
         },
       });
+
+      // MEDIDOR DE CÓMPUTO DINÁMICO (estilo Emergent.sh) — a petición
+      // explícita del usuario. El cobro fijo inicial (POST /apps/:id/messages,
+      // 5 créditos paid / 0.2 free) sigue actuando como filtro de entrada
+      // ANTES de saber qué va a generar Claude — eso no puede cambiar,
+      // porque en ese punto el job todavía no se ha ejecutado. Lo que sí es
+      // nuevo: aquí, con el resultado REAL ya guardado, se mide el tamaño
+      // real del cambio (delta de caracteres entre el código anterior y el
+      // nuevo, no el tamaño total — así una edición pequeña en una app
+      // grande no se cobra como si hubiera reescrito toda la app) y se
+      // cobra un extra dinámico proporcional a ese esfuerzo real, igual que
+      // "un retoque CSS cuesta poco, generar lógica de backend compleja
+      // cuesta mucho más" de Emergent.sh. Best-effort: un fallo aquí nunca
+      // debe revertir la edición ya guardada.
+      try {
+        const prevLen = (typeof previousApp?.frontendCode === "string" ? previousApp.frontendCode.length : 0)
+          + (typeof previousApp?.backendCode === "string" ? previousApp.backendCode.length : 0);
+        const newLen = (typeof finalResult.frontendCode === "string" ? finalResult.frontendCode.length : 0)
+          + (typeof finalResult.backendCode === "string" ? finalResult.backendCode.length : 0);
+        const changedChars = Math.abs(newLen - prevLen);
+        // Tarifa: ~1 crédito por cada 4000 caracteres realmente modificados,
+        // con un techo razonable para no disparar el coste en una sola
+        // edición aunque el delta sea enorme. isAdmin nunca paga.
+        const dynamicIsPaid = !!(job as any).hasEverPaid;
+        const dynamicRate = dynamicIsPaid ? 1 : 0.05; // mismo ratio paid/free que la tarifa fija (5 / 0.2)
+        const rawDynamicCost = Math.floor(changedChars / 4000) * dynamicRate;
+        const dynamicCost = Math.min(rawDynamicCost, dynamicIsPaid ? 25 : 1); // techo: 25 créditos paid, 1 crédito free
+        if (dynamicCost > 0 && !(job as any).isAdmin) {
+          const dynCharge = await chargeCredits({
+            userId: job.userId,
+            isAdmin: false,
+            amount: dynamicCost,
+            description: `Medidor de cómputo dinámico (${changedChars} caracteres modificados): ${finalResult.title || previousApp?.title || ""}`,
+          });
+          if (dynCharge.ok) {
+            logger.info({ jobId, changedChars, dynamicCost, newBalance: dynCharge.newBalance }, "[dynamic-credits] Cobro dinámico aplicado tras edición");
+          } else {
+            // Si no hay saldo para el cobro dinámico, NO se revierte la
+            // edición ya entregada (el usuario ya recibió el trabajo) —
+            // solo se registra que el cobro extra no pudo aplicarse.
+            logger.warn({ jobId, changedChars, dynamicCost }, "[dynamic-credits] Saldo insuficiente para el cobro dinámico — edición entregada igualmente, sin cobro extra");
+          }
+        }
+      } catch (dynamicCostErr) {
+        logger.warn({ dynamicCostErr, jobId }, "[dynamic-credits] Falló el cálculo/cobro del medidor dinámico — continuando sin cobro extra");
+      }
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",
