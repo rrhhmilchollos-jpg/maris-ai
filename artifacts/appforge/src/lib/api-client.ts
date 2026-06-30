@@ -225,8 +225,9 @@ export function useAdminUserTransactions(id: string, opts?: { query?: Partial<Us
   return useQuery<any>({ queryKey: getAdminUserTransactionsQueryKey(id), queryFn: () => apiFetch(`/api/admin/users/${id}/transactions`), enabled: !!id, ...(opts?.query as any) });
 }
 export const getAdminUserAppsQueryKey = (id: string) => ["admin-user-apps", id];
-export function useAdminUserApps(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
-  return useQuery<any>({ queryKey: getAdminUserAppsQueryKey(id), queryFn: () => apiFetch(`/api/admin/users/${id}/apps`), enabled: !!id, ...(opts?.query as any) });
+export function useAdminUserApps(id: string, email?: string, opts?: { query?: Partial<UseQueryOptions> }) {
+  const url = email ? `/api/admin/users/${id}/apps?email=${encodeURIComponent(email)}` : `/api/admin/users/${id}/apps`;
+  return useQuery<any>({ queryKey: getAdminUserAppsQueryKey(id), queryFn: () => apiFetch(url), enabled: !!id, ...(opts?.query as any) });
 }
 export function useRetryAdminJob(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/admin/jobs/${id}/retry`, { method: "POST" }), ...(opts?.mutation as any) });

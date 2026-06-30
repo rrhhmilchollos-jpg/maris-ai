@@ -358,6 +358,28 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
     }
   }
 
+  // Fallback 3 (nuevo): buscar apps cuyo userId coincide con el email
+  // directamente — cubre el caso real donde el userId guardado en
+  // GeneratedApp es distinto del Clerk ID del usuario en el panel admin
+  // (puede ocurrir si el usuario fue creado o migrado de forma atípica).
+  if (apps.length === 0 && emailHint) {
+    const usersByEmail = await User.find({ email: emailHint }).select("_id").lean() as any[];
+    const userIds = usersByEmail.map((u: any) => String(u._id));
+    if (userIds.length > 0) {
+      apps = await GeneratedApp.find({ userId: { $in: userIds } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+    }
+    // Fallback 3b: también buscar jobs por todos esos userIds → appIds
+    if (apps.length === 0 && userIds.length > 0) {
+      const jobAppIds2 = await GenerationJob
+        .find({ userId: { $in: userIds }, appId: { $exists: true, $ne: null } })
+        .sort({ createdAt: -1 }).limit(50).select("appId").maxTimeMS(8000).lean();
+      const appIds2 = [...new Set(jobAppIds2.map((j: any) => String(j.appId)).filter(Boolean))];
+      if (appIds2.length > 0) {
+        apps = await GeneratedApp.find({ _id: { $in: appIds2 } }).sort({ createdAt: -1 }).limit(limit).maxTimeMS(8000).lean();
+      }
+    }
+  }
+
   res.json({
     apps: apps.map((a: any) => ({
       id: String(a._id),

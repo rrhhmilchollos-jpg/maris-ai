@@ -300,6 +300,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
   );
   const { data: userAppsData, isLoading: userAppsLoading } = useAdminUserApps(
     selectedUser?.id ?? "",
+    selectedUser?.email ?? "",
     { query: { enabled: !!selectedUser && userDetailTab === "apps" } }
   );
 
