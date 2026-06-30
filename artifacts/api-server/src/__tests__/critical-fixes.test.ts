@@ -861,6 +861,56 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 32: el mensaje técnico CRUDO de Anthropic (ej. "Your credit balance
+// is too low...") NUNCA debe llegar a la pantalla del cliente — caso real
+// confirmado por el usuario con una captura mostrando ese mensaje exacto.
+// CAUSA RAÍZ: isCreditsError buscaba el marcador "API_CREDITS_EXHAUSTED",
+// que NINGÚN punto del código genera jamás (confirmado: aparece solo en
+// esa comprobación) — la detección NUNCA se activaba para el caso real,
+// dejando pasar el mensaje crudo de Anthropic directo al cliente Y
+// además saltándose el reembolso automático de créditos (el job se
+// marcaba "failed" en vez de "reviewing").
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc5 = readSrc("routes/apps.ts");
+  check(
+    "FIX 32a: isCreditsError usa los indicadores REALES del error de Anthropic (credit_balance), no un marcador inventado que nunca se genera",
+    !/isCreditsError = rawMessage\.includes\("API_CREDITS_EXHAUSTED"\)/.test(appsSrc5) && /credit_balance|insufficient_quota/.test(appsSrc5),
+    "Con el marcador inventado, isCreditsError SIEMPRE era false para el error real de Anthropic — el mensaje técnico crudo se filtraba directo a la pantalla del cliente, dañando la reputación de la plataforma, y el job se marcaba 'failed' saltándose el reembolso automático.",
+  );
+  check(
+    "FIX 32b: el mensaje al cliente nunca es el texto crudo (rawMessage) — siempre un mensaje genérico con indicación de soporte",
+    !/: rawMessage;/.test(appsSrc5) || /internalErrorMessage: rawMessage/.test(appsSrc5),
+    "Sin esto, cualquier error técnico (no solo de créditos) se mostraba en crudo al cliente.",
+  );
+  check(
+    "FIX 32c: el mensaje técnico real se guarda en internalErrorMessage, visible solo en el panel de admin",
+    /internalErrorMessage: rawMessage/.test(appsSrc5),
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 33: botones "Borrar jobs fallidos" y "Eliminar jobs repetidos" en el
+// panel de Monitorización en vivo.
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const adminSrc = readSrc("routes/admin.ts");
+  check(
+    "FIX 33a: existe POST /admin/jobs/delete-failed (borra todos los jobs en estado failed sin necesitar lista de IDs)",
+    /router\.post\("\/admin\/jobs\/delete-failed"/.test(adminSrc),
+  );
+  check(
+    "FIX 33b: existe POST /admin/jobs/delete-duplicates, conservando siempre el más reciente de cada grupo",
+    /router\.post\("\/admin\/jobs\/delete-duplicates"/.test(adminSrc) && /sort\(\{ createdAt: -1 \}\)/.test(adminSrc),
+  );
+  const adminDashSrc = readAppforgeSrc("pages/admin-dashboard.tsx");
+  check(
+    "FIX 33c: los botones reales están conectados en el panel de admin",
+    /Borrar jobs fallidos/.test(adminDashSrc) && /Eliminar jobs repetidos/.test(adminDashSrc),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

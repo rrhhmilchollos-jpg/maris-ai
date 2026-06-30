@@ -361,6 +361,12 @@ export interface IGenerationJob extends Document {
   progress: number;
   appId?: string;
   errorMessage?: string;
+  // A petición explícita del usuario: el mensaje técnico crudo (ej. el
+  // texto literal de Anthropic "Your credit balance is too low...") NUNCA
+  // debe llegar a la pantalla del cliente — solo se guarda aquí, visible
+  // únicamente en el panel de admin, para que el equipo pueda diagnosticar
+  // el problema real sin exponerlo al cliente.
+  internalErrorMessage?: string;
   currentAgent?: string;
   awaitingApproval?: boolean;
   approvedFacets?: string[];
@@ -399,6 +405,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     progress: { type: Number, default: 0 },
     appId: { type: String },
     errorMessage: { type: String },
+    internalErrorMessage: { type: String },
     currentAgent: { type: String },
     awaitingApproval: { type: Boolean, default: false },
     approvedFacets: { type: [String], default: [] },

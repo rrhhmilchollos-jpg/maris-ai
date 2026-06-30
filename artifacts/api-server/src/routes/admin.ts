@@ -609,6 +609,7 @@ router.get("/admin/jobs", async (_req, res) => {
       language: r.language,
       retryCount: r.retryCount ?? 0,
       errorMessage: r.errorMessage,
+      internalErrorMessage: r.internalErrorMessage,
       ageMs: now - new Date(r.updatedAt).getTime(),
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -791,6 +792,7 @@ router.get("/admin/memory", async (req: any, res: any): Promise<void> => {
     entries: rows.map((r) => ({
       id: String(r._id),
       errorMessage: r.errorMessage,
+      internalErrorMessage: r.internalErrorMessage,
       errorContext: r.errorContext,
       patchPreview: r.patch.slice(0, 600),
       patchLength: r.patch.length,
@@ -1390,6 +1392,60 @@ router.post("/admin/jobs/keep-only", async (req: any, res: any): Promise<void> =
   });
   logger.info({ keepJobId, deleted: result.deletedCount }, "Admin: wiped Jobs & Errores, kept only one job");
   res.json({ ok: true, deleted: result.deletedCount, keptJobId: keepJobId });
+});
+
+// A petición explícita del usuario: borrar de un clic TODOS los jobs en
+// estado "failed" de la pantalla "Monitorización en vivo", sin tener que
+// seleccionar IDs uno a uno (a diferencia de /admin/jobs/bulk, que exige
+// una lista de jobIds concreta).
+router.post("/admin/jobs/delete-failed", async (_req: any, res: any): Promise<void> => {
+  await connectDB();
+  const result = await GenerationJob.deleteMany({ status: "failed" });
+  logger.info({ deleted: result.deletedCount }, "Admin: deleted all failed jobs");
+  res.json({ ok: true, deleted: result.deletedCount });
+});
+
+// A petición explícita del usuario: detectar y eliminar jobs duplicados —
+// mismo usuario + mismo prompt (normalizado) creados dentro de una
+// ventana de 30 minutos entre sí (mismo criterio real ya usado para
+// detectar reintentos automáticos al guardar una GeneratedApp). De cada
+// grupo de duplicados se CONSERVA siempre el más reciente.
+router.post("/admin/jobs/delete-duplicates", async (_req: any, res: any): Promise<void> => {
+  await connectDB();
+  const jobs = await GenerationJob.find({})
+    .select("_id userId prompt createdAt")
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const toDelete: string[] = [];
+  const seenGroups: Array<{ userId: string; normalizedPrompt: string; createdAt: Date; keptId: string }> = [];
+
+  for (const job of jobs) {
+    const normalizedPrompt = String(job.prompt || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+    if (normalizedPrompt.length < 10) continue; // prompts muy cortos no son fiables para detectar duplicados
+
+    const match = seenGroups.find((g) =>
+      g.userId === job.userId &&
+      g.normalizedPrompt === normalizedPrompt &&
+      Math.abs(g.createdAt.getTime() - new Date(job.createdAt).getTime()) < 30 * 60 * 1000,
+    );
+
+    if (match) {
+      // Ya vimos un job más reciente igual a este — este es el duplicado a borrar.
+      toDelete.push(String(job._id));
+    } else {
+      seenGroups.push({ userId: job.userId, normalizedPrompt, createdAt: new Date(job.createdAt), keptId: String(job._id) });
+    }
+  }
+
+  if (toDelete.length === 0) {
+    res.json({ ok: true, deleted: 0 });
+    return;
+  }
+
+  const result = await GenerationJob.deleteMany({ _id: { $in: toDelete } });
+  logger.info({ deleted: result.deletedCount, candidates: toDelete.length }, "Admin: deleted duplicate jobs");
+  res.json({ ok: true, deleted: result.deletedCount });
 });
 
 // ─── Admin: Limpiar reviewing huérfanos (jobs atascados en reviewing) ─────────

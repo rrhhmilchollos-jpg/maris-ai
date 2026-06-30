@@ -6998,7 +6998,18 @@ export async function runJobById(jobId: string): Promise<void> {
     // REEMBOLSO AUTOMÁTICO: si la generación falla por error del sistema
     // (no por créditos agotados del usuario), devolver los créditos.
     // Sin esto, el usuario pierde créditos por fallos que no son su culpa.
-    const isCreditsError = rawMessage.includes("API_CREDITS_EXHAUSTED");
+    // BUG REAL CONFIRMADO en producción (captura del cliente mostrando el
+    // mensaje crudo de Anthropic: "Your credit balance is too low..."):
+    // esta comprobación buscaba el texto "API_CREDITS_EXHAUSTED", un
+    // marcador que NINGÚN punto del código genera jamás — confirmado
+    // grep'eando todo el backend, aparece solo aquí. isCreditsError SIEMPRE
+    // era false para este caso real, así que el mensaje crudo de Anthropic
+    // se filtraba directo hasta la pantalla del cliente (pésimo para la
+    // reputación), Y ADEMÁS el job se marcaba "failed" en vez de
+    // "reviewing", saltándose el reembolso automático de creditos.
+    // FIX: se usan los MISMOS indicadores reales que ya funcionan en
+    // shared-agents.ts (isOutOfCredits) para detectar este caso de verdad.
+    const isCreditsError = /credit_balance|insufficient_quota/i.test(rawMessage) || /credit/i.test(rawMessage) && /low|balance|exhaust/i.test(rawMessage);
     if (!isCreditsError && job.creditsCost && job.creditsCost > 0) {
       try {
         const { chargeCredits } = await import("../lib/credits");
@@ -7014,22 +7025,30 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
     
-    // Mensaje amigable para el usuario cuando los créditos de API se agotan
+    // Mensaje amigable para el usuario — NUNCA se muestra el error técnico
+    // crudo (statusCode, stack traces, mensajes internos de proveedores de
+    // IA como "Your credit balance is too low...") porque daña la
+    // reputación de la plataforma. El mensaje técnico real SIEMPRE queda
+    // guardado en el log interno (logger.error de arriba) para que el
+    // equipo lo revise — solo se oculta de la vista del cliente.
     const errorMessage = isCreditsError
-      ? "Las generaciones están temporalmente en pausa por mantenimiento del sistema. Tu créditos NO han sido consumidos. Inténtalo de nuevo en unos minutos."
-      : rawMessage;
+      ? "Hemos detectado una incidencia técnica temporal en el sistema. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Tus créditos NO han sido consumidos — no necesitas hacer nada, te avisaremos en cuanto esté listo."
+      : "Ha ocurrido un problema técnico al generar tu app. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Si tus créditos fueron descontados, se reembolsarán automáticamente.";
     
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: {
         status: isCreditsError ? "reviewing" : "failed",
         phase: isCreditsError ? "reviewing" : "failed",
         errorMessage,
+        // El mensaje técnico real se guarda aparte, SOLO visible en el
+        // panel de admin — nunca en la pantalla del cliente.
+        internalErrorMessage: rawMessage,
         updatedAt: new Date(),
       },
     });
     await log("system", isCreditsError 
       ? "⏸️ Generación pausada temporalmente por mantenimiento del sistema. Tus créditos están seguros. Reintentaremos automáticamente." 
-      : `Error: ${errorMessage}`, "error");
+      : "❌ Ha ocurrido un problema técnico. Se ha enviado un ticket automático a soporte — lo resolveremos en menos de 2 horas.", "error");
 
     if ((job as any).isAutoRepair && job.editAppId && !isCreditsError) {
       await AppMessage.create({

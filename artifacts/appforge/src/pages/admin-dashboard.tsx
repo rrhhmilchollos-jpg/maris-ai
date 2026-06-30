@@ -1053,6 +1053,42 @@ function LiveMonitorPanel() {
           >
             ✅ Corregir failed·done
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-red-500/30 text-red-400 hover:bg-red-500/10"
+            title="Borra todos los jobs en estado 'failed' de la lista"
+            onClick={async () => {
+              if (!confirm("¿Borrar todos los jobs fallidos? Esta acción no se puede deshacer.")) return;
+              try {
+                const d = await apiFetch<any>("/api/admin/jobs/delete-failed", { method: "POST" });
+                toast({ title: "🗑️ Limpieza completada", description: `${d.deleted} job(s) fallido(s) eliminado(s)` });
+                await fetchJobs();
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            🗑️ Borrar jobs fallidos
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+            title="Detecta jobs del mismo usuario con el mismo prompt creados con minutos de diferencia (reintentos) y elimina los duplicados, conservando siempre el más reciente"
+            onClick={async () => {
+              if (!confirm("¿Eliminar jobs repetidos (mismo usuario, mismo prompt, creados con minutos de diferencia)? Se conservará siempre el más reciente de cada grupo.")) return;
+              try {
+                const d = await apiFetch<any>("/api/admin/jobs/delete-duplicates", { method: "POST" });
+                toast({ title: "🧹 Duplicados eliminados", description: `${d.deleted} job(s) repetido(s) eliminado(s)` });
+                await fetchJobs();
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            🧹 Eliminar jobs repetidos
+          </Button>
         </div>
       </div>
 
@@ -2655,7 +2691,12 @@ export default function AdminDashboardPage() {
                                       </div>
                                       {job.errorMessage && (
                                         <div className="mx-4 my-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                                          <span className="font-semibold">Error:</span> {job.errorMessage}
+                                          <span className="font-semibold">Error (mensaje al cliente):</span> {job.errorMessage}
+                                          {job.internalErrorMessage && (
+                                            <div className="mt-1.5 pt-1.5 border-t border-red-500/20 text-red-300/70">
+                                              <span className="font-semibold">Error técnico real (solo admin):</span> {job.internalErrorMessage}
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                       <JobDiagnosisPanel jobId={String(job.id)} />
