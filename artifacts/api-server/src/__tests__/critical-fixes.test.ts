@@ -831,6 +831,36 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FIX 31: Time Machine (historial de revisiones + rollback con 1 crédito)
+// conectado a las funciones reales ya existentes en appRevisions.ts
+// (restoreAppRevision, ya con protecciones reales: bloquea el rollback si
+// hay un job en curso, y crea una copia de seguridad de la versión actual
+// antes de sobrescribir). Usa los campos REALES del schema (summary, no
+// "versionName"/"description" inventados).
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc4 = readSrc("routes/apps.ts");
+  check(
+    "FIX 31a: existe GET /apps/:id/revisions usando revisionSourceLabel real (no campos inventados)",
+    /router\.get\("\/apps\/:id\/revisions"/.test(appsSrc4) && /revisionSourceLabel/.test(appsSrc4),
+  );
+  check(
+    "FIX 31b: existe POST /apps/:id/rollback que cobra 1 crédito, usa restoreAppRevision real, y dispara el redeploy asíncrono automáticamente",
+    /const ROLLBACK_COST = 1;/.test(appsSrc4) && /restoreAppRevision\(\{ appId: req\.params\.id, revisionId, userId \}\)/.test(appsSrc4) && /runDeployForApp\(\{ appId: req\.params\.id, userId, log: logger \}\)\.catch/.test(appsSrc4),
+  );
+  check(
+    "FIX 31c: si la restauración falla, se reembolsa el crédito con refundCredits (la función real para esto)",
+    /refundCredits\(\{ userId, isAdmin, amount: ROLLBACK_COST/.test(appsSrc4),
+    "Sin esto, el cliente pagaría 1 crédito incluso si el rollback falla (ej. la versión ya no existe, o hay un job de generación en curso) — un cobro por algo que nunca ocurrió.",
+  );
+  const deployModalSrc3 = readAppforgeSrc("components/deploy-modal.tsx");
+  check(
+    "FIX 31d: DeployModal tiene la pantalla real de Time Machine conectada a los endpoints reales",
+    /loadRevisions/.test(deployModalSrc3) && /handleConfirmRollback/.test(deployModalSrc3),
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");

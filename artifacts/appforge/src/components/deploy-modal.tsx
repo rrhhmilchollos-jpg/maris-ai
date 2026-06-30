@@ -16,6 +16,7 @@ import {
   Loader2,
   ExternalLink,
   AlertTriangle,
+  History,
   RotateCcw,
   PowerOff,
   ShieldCheck,
@@ -99,7 +100,7 @@ interface DeployModalProps {
   onClose: () => void;
   onDeploySuccess: (url: string) => void;
 }
-type Screen = "initial" | "live" | "providers" | "dns" | "connectors" | "deploying";
+type Screen = "initial" | "live" | "providers" | "dns" | "connectors" | "deploying" | "rollback";
 type PlanId = "starter" | "pro" | "enterprise";
 
 /* ─────────────────────────── Plan data ─────────────────────────── */
@@ -374,6 +375,55 @@ export function DeployModal({
     tick();
     return () => { cancelled = true; };
   }, [appId, onDeploySuccess, toast]);
+
+  /* ── Time Machine (historial de revisiones + rollback) ──
+     A petición explícita del usuario: usa los campos REALES del backend
+     (sourceLabel, summary — no "versionName"/"description", que no
+     existen en el schema real de AppRevision). */
+  interface RevisionRow { id: string; sourceLabel: string; summary: string; createdAt: string }
+  const [revisions, setRevisions] = useState<RevisionRow[] | null>(null);
+  const [revisionsError, setRevisionsError] = useState<string | null>(null);
+  const [confirmingRevisionId, setConfirmingRevisionId] = useState<string | null>(null);
+  const [rollbackSubmitting, setRollbackSubmitting] = useState(false);
+
+  const loadRevisions = useCallback(() => {
+    setRevisionsError(null);
+    apiFetch<{ revisions: RevisionRow[] }>(`/api/apps/${appId}/revisions`)
+      .then((d) => setRevisions(d.revisions || []))
+      .catch((err: any) => setRevisionsError(err?.message || "No se pudo cargar el historial de versiones."));
+  }, [appId]);
+
+  useEffect(() => {
+    if (screen === "rollback" && revisions === null) loadRevisions();
+  }, [screen]);
+
+  const handleConfirmRollback = useCallback(async () => {
+    if (!confirmingRevisionId) return;
+    setRollbackSubmitting(true);
+    try {
+      await apiFetch(`/api/apps/${appId}/rollback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revisionId: confirmingRevisionId }),
+      });
+      setConfirmingRevisionId(null);
+      toast({ title: "✅ Versión restaurada", description: "Se ha iniciado un redespliegue automático con la versión anterior." });
+      // Reutiliza el mismo flujo asíncrono real ya instrumentado — el
+      // stepper muestra el progreso REAL del redeploy disparado por el rollback.
+      setScreen("deploying");
+      setIsDeploying(true);
+      pollDeployStatus();
+    } catch (err: any) {
+      const isPaymentRequired = err?.error === "Créditos insuficientes";
+      toast({
+        title: isPaymentRequired ? "Créditos insuficientes" : "No se pudo restaurar",
+        description: isPaymentRequired ? err?.hint : (err?.message ?? err?.error ?? "Error"),
+        variant: "destructive",
+      });
+    } finally {
+      setRollbackSubmitting(false);
+    }
+  }, [appId, confirmingRevisionId, pollDeployStatus, toast]);
 
   /* ── Initial deploy ── */
   const handleInitialDeploy = useCallback(async () => {
@@ -1007,6 +1057,17 @@ export function DeployModal({
               )}
             </div>
 
+            {/* Time Machine */}
+            <div className="px-5 pb-3">
+              <button
+                onClick={() => setScreen("rollback")}
+                className="flex w-full items-center gap-2.5 rounded-xl border border-white/[0.10] bg-white/[0.04] px-4 py-3 text-sm font-semibold text-white hover:bg-white/[0.08] transition"
+              >
+                <History className="h-4 w-4 text-sky-400" />
+                Historial de versiones
+              </button>
+            </div>
+
             {/* Re-deploy + Shut down */}
             <div className="grid grid-cols-2 gap-3 px-5 py-4">
               <button
@@ -1025,6 +1086,58 @@ export function DeployModal({
                 {isShuttingDown ? <Loader2 className="h-4 w-4 animate-spin" /> : <PowerOff className="h-4 w-4" />}
                 Apagar
               </button>
+            </div>
+          </>
+        )}
+
+        {/* ══════════════ SCREEN: ROLLBACK (Time Machine) ══════════════ */}
+        {screen === "rollback" && (
+          <>
+            <div className="flex items-center gap-3 border-b border-white/[0.07] px-5 py-4">
+              <button onClick={() => setScreen("live")} className="grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <span className="text-base font-bold text-white">Historial de versiones</span>
+              <button onClick={onClose} className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-white/40 hover:bg-white/[0.06] hover:text-white transition">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto p-5">
+              <p className="mb-4 text-xs text-white/40">¿Algo ha salido mal? Restaura tu app a cualquier punto anterior — se desplegará automáticamente en cuanto la restaures.</p>
+              {revisionsError ? (
+                <div className="py-10 text-center">
+                  <p className="text-[13px] text-red-400">{revisionsError}</p>
+                  <button onClick={loadRevisions} className="mt-3 rounded-lg border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold text-white/70 hover:bg-white/10 hover:text-white transition">
+                    Reintentar
+                  </button>
+                </div>
+              ) : revisions === null ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
+              ) : revisions.length === 0 ? (
+                <div className="py-10 text-center">
+                  <History className="mx-auto mb-3 h-8 w-8 text-white/15" />
+                  <p className="text-[13px] text-white/40">Todavía no hay versiones anteriores guardadas.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {revisions.map((rev) => (
+                    <div key={rev.id} className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-sky-400">{rev.sourceLabel}</p>
+                        {rev.summary && <p className="mt-0.5 truncate text-[13px] text-white/70">{rev.summary}</p>}
+                        <p className="mt-0.5 text-[11px] text-white/35">{new Date(rev.createdAt).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" })}</p>
+                      </div>
+                      <button
+                        onClick={() => setConfirmingRevisionId(rev.id)}
+                        className="ml-3 flex shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/[0.08] transition"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Restaurar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1219,6 +1332,39 @@ export function DeployModal({
           </div>
         )}
       </div>
+
+      {/* Modal de confirmación de rollback */}
+      {confirmingRevisionId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => !rollbackSubmitting && setConfirmingRevisionId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-red-500/20 border-t-4 border-t-red-500 bg-[#0d0f16] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-red-500/10">
+              <AlertTriangle className="h-6 w-6 text-red-400" />
+            </div>
+            <p className="text-center text-sm font-semibold text-white">¿Restaurar esta versión?</p>
+            <p className="mt-2 text-center text-xs text-white/40">El código actual de tu app se reemplazará por esta versión anterior, y se desplegará automáticamente. La versión que tienes ahora se guarda como copia de seguridad por si quieres deshacerlo.</p>
+            <div className="mt-4 flex items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs">
+              <span className="text-white/40">Coste</span>
+              <span className="font-semibold text-emerald-400">1 crédito</span>
+            </div>
+            <div className="mt-4 space-y-2">
+              <button
+                onClick={handleConfirmRollback}
+                disabled={rollbackSubmitting}
+                className="w-full rounded-lg bg-red-600 py-2.5 text-xs font-semibold text-white transition hover:bg-red-500 disabled:opacity-50"
+              >
+                {rollbackSubmitting ? "Restaurando…" : "Sí, restaurar esta versión"}
+              </button>
+              <button
+                onClick={() => setConfirmingRevisionId(null)}
+                disabled={rollbackSubmitting}
+                className="w-full rounded-lg bg-white/5 py-2.5 text-xs font-semibold text-white/70 transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7420,6 +7420,105 @@ router.delete("/apps/:id/custom-domain", requireAuth, async (req: any, res: any)
   }
 });
 
+// ── Time Machine (historial de revisiones + rollback) ─────────────────────
+// A petición explícita del usuario: el backend real (AppRevision,
+// snapshotCurrentApp, restoreAppRevision en lib/appRevisions.ts) ya
+// existía COMPLETO — incluyendo proteciones que la propuesta original NO
+// contemplaba (restoreAppRevision ya bloquea el rollback si hay un job de
+// generación en curso, y ya crea automáticamente una copia de la versión
+// actual ANTES de sobrescribir, por si el cliente se equivoca al
+// restaurar). Solo faltaban los endpoints HTTP. Se usan los campos REALES
+// del schema (summary, no "description"; no existe "versionName") y la
+// firma REAL de restoreAppRevision (objeto tipado con reason específico,
+// no un booleano simple).
+
+// GET /api/apps/:id/revisions — historial ordenado de más reciente a más antigua
+router.get("/apps/:id/revisions", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).select("_id").lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const { revisionSourceLabel } = await import("../lib/appRevisions");
+    const revisions = await AppRevision.find({ appId: req.params.id })
+      .sort({ createdAt: -1 })
+      .select("_id source summary createdAt")
+      .limit(50)
+      .lean();
+
+    res.json({
+      revisions: revisions.map((rev: any) => ({
+        id: String(rev._id),
+        sourceLabel: revisionSourceLabel(rev.source),
+        summary: rev.summary || "",
+        createdAt: rev.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/revisions error");
+    res.status(500).json({ error: err?.message ?? "Error al consultar el historial de versiones" });
+  }
+});
+
+// POST /api/apps/:id/rollback — restaura una revisión anterior y dispara
+// el deploy asíncrono real (mismo flujo de 6 fases del stepper) en
+// segundo plano. Coste fijo de 1 crédito.
+const ROLLBACK_COST = 1;
+router.post("/apps/:id/rollback", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { revisionId } = req.body ?? {};
+    if (!revisionId || typeof revisionId !== "string") {
+      return res.status(400).json({ error: "revisionId es requerido" });
+    }
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: ROLLBACK_COST,
+      description: "Rollback (restaurar versión anterior)",
+    });
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes",
+        required: ROLLBACK_COST,
+        hint: `Restaurar una versión anterior cuesta ${ROLLBACK_COST} crédito.`,
+      });
+    }
+
+    const { restoreAppRevision } = await import("../lib/appRevisions");
+    const result = await restoreAppRevision({ appId: req.params.id, revisionId, userId });
+
+    if (!result.ok) {
+      // Best-effort: si la restauración falla, el crédito ya cobrado se
+      // devuelve con refundCredits (la función real para esto, no
+      // chargeCredits con un valor negativo) — el cliente no debe pagar
+      // por un rollback que no ocurrió.
+      const { refundCredits } = await import("../lib/credits");
+      await refundCredits({ userId, isAdmin, amount: ROLLBACK_COST, description: "Reembolso: rollback fallido" }).catch(() => {});
+      const messages: Record<string, string> = {
+        not_found: "La versión que intentas restaurar ya no existe.",
+        forbidden: "App no encontrada.",
+        job_in_flight: "Hay una generación en curso para esta app — espera a que termine antes de restaurar una versión anterior.",
+      };
+      return res.status(422).json({ error: messages[result.reason] || "No se pudo restaurar la versión." });
+    }
+
+    // Disparar el deploy asíncrono real (mismo flujo de 6 fases ya
+    // instrumentado) en segundo plano, sin cobrar de nuevo — el coste del
+    // rollback ya incluye la republicación automática.
+    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch((err) => {
+      logger.error({ err, appId: req.params.id }, "[rollback] El redeploy automático tras el rollback falló");
+    });
+
+    res.json({ ok: true, creditsCharged: ROLLBACK_COST, creditsRemaining: charge.newBalance, redeployStarted: true });
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/rollback error");
+    res.status(500).json({ error: err?.message ?? "Error al restaurar la versión" });
+  }
+});
+
 
 // ── NOTIFICACIONES DE SOPORTE — el cliente lee sus avisos de corrección ──────
 // GET /api/notifications — devuelve notificaciones no leídas del usuario autenticado
