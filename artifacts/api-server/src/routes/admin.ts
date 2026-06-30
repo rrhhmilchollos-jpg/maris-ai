@@ -1369,6 +1369,29 @@ router.delete("/admin/jobs/bulk", async (req: any, res: any): Promise<void> => {
   res.json({ ok: true, deleted: result.deletedCount });
 });
 
+// A petición explícita del usuario: vaciar la pantalla "Jobs & Errores"
+// (todos los GenerationJob de la base de datos, de cualquier usuario)
+// dejando vivo SOLO el job indicado en keepJobId. Esto NO toca GeneratedApp
+// (las apps ya entregadas siguen existiendo), NO toca User, y NO toca
+// CreditTransaction — solo borra registros de la cola/historial de jobs.
+router.post("/admin/jobs/keep-only", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { keepJobId } = req.body ?? {};
+  if (!keepJobId) {
+    res.status(400).json({ error: "keepJobId es requerido" }); return;
+  }
+  const keepJob = await GenerationJob.findById(keepJobId).lean();
+  if (!keepJob) {
+    res.status(404).json({ error: "El job a conservar no existe — no se ha borrado nada." });
+    return;
+  }
+  const result = await GenerationJob.deleteMany({
+    _id: { $ne: keepJobId },
+  });
+  logger.info({ keepJobId, deleted: result.deletedCount }, "Admin: wiped Jobs & Errores, kept only one job");
+  res.json({ ok: true, deleted: result.deletedCount, keptJobId: keepJobId });
+});
+
 // ─── Admin: Limpiar reviewing huérfanos (jobs atascados en reviewing) ─────────
 router.post("/admin/jobs/cleanup-reviewing", async (req: any, res: any): Promise<void> => {
   await connectDB();
