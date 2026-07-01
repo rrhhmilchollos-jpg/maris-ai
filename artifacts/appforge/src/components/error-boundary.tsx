@@ -1,4 +1,5 @@
-import { Component, type ReactNode, type ErrorInfo } from "react";
+import { Component, type ReactNode, type ErrorInfo, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 
 interface Props {
   children: ReactNode;
@@ -8,6 +9,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  errorPathname: string | null; // ruta donde ocurrió el error
 }
 
 /**
@@ -25,11 +27,15 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorPathname: null };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return {
+      hasError: true,
+      error,
+      errorPathname: typeof window !== "undefined" ? window.location.pathname : null,
+    };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -63,6 +69,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleReload = () => {
     window.location.reload();
+  };
+
+  reset = () => {
+    this.setState({ hasError: false, error: null, errorPathname: null });
   };
 
   render() {
@@ -209,4 +219,34 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return this.props.children;
   }
+}
+
+/**
+ * RouteAwareErrorBoundary — wrapper que resetea automáticamente el
+ * ErrorBoundary al cambiar de ruta. Esto evita que un error en la página A
+ * muestre la pantalla de error al navegar a la página B, que puede ser
+ * completamente válida.
+ *
+ * Uso: sustituye <ErrorBoundary> por <RouteAwareErrorBoundary> en main.tsx.
+ */
+export function RouteAwareErrorBoundary({ children, fallback }: Props) {
+  const boundaryRef = useRef<ErrorBoundary>(null);
+  const [location] = useLocation();
+  const prevLocation = useRef(location);
+
+  useEffect(() => {
+    // Solo resetear si la ruta cambió Y hay un error activo
+    if (location !== prevLocation.current) {
+      prevLocation.current = location;
+      if (boundaryRef.current?.state.hasError) {
+        boundaryRef.current.reset();
+      }
+    }
+  }, [location]);
+
+  return (
+    <ErrorBoundary ref={boundaryRef} fallback={fallback}>
+      {children}
+    </ErrorBoundary>
+  );
 }
