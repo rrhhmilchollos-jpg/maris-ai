@@ -3617,6 +3617,25 @@ export async function generateApp(
         const { validateBundle } = await import("../lib/validate");
         return validateBundle(bundle);
       },
+      // Alerta al admin (WhatsApp + email) cuando un hito agota sus 3 intentos
+      // y cae al placeholder. El admin puede intervenir manualmente desde el panel.
+      onMilestoneStuck: async (stuck) => {
+        try {
+          const { notifyAdminMilestoneStuck } = await import("../lib/notify");
+          const dbUser = await (await import("../lib/db")).connectDB().then(() =>
+            (require("@workspace/db/schema").User).findById(job.userId).select("email").lean()
+          ) as any;
+          await notifyAdminMilestoneStuck({
+            projectId: String(jobId || "unknown"),
+            projectName: prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 80),
+            userEmail: dbUser?.email || job.userId || "desconocido",
+            layer: stuck.layer,
+            milestoneName: stuck.milestoneName,
+            attempts: stuck.attempts,
+            lastError: stuck.lastError,
+          });
+        } catch { /* no bloquear la generación por un fallo de alerta */ }
+      },
     });
     await log("system", "📋 Analizando arquitectura y planificando hitos por capas (datos → backend core → módulos → integraciones → frontend)...");
 

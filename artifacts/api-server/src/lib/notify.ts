@@ -6,9 +6,15 @@
  *  - Error de recarga de créditos
  *  - Ticket de soporte nuevo
  *  - Job zombie repetido
+ *  - Hito del orquestador atascado (>2 intentos fallidos)
  *
  * Destinatarios admin: ADMIN_ALERT_EMAILS (var de entorno, separados por coma)
  * Default: soportemarisai@gmail.com, rrhh.milchollos@gmail.com
+ *
+ * Canal WhatsApp (opcional): si WHATSAPP_INSTANCE_ID y WHATSAPP_API_TOKEN
+ * están configurados en Railway, las alertas críticas llegan también al
+ * móvil via Ultramsg. Si no están, el sistema usa solo email como siempre.
+ * Número destino: +34 611 946 289 (configurable via WHATSAPP_ADMIN_PHONE)
  */
 import type { Logger } from "pino";
 import pino from "pino";
@@ -21,6 +27,41 @@ function getAdminEmails(): string[] {
   const env = process.env.ADMIN_ALERT_EMAILS;
   if (env) return env.split(",").map(e => e.trim()).filter(Boolean);
   return ["soportemarisai@gmail.com", "rrhh.milchollos@gmail.com"];
+}
+
+// ─── Canal WhatsApp via Ultramsg (opcional) ──────────────────────────────────
+// Si WHATSAPP_INSTANCE_ID y WHATSAPP_API_TOKEN están en Railway, las alertas
+// críticas se envían también al móvil. Si no, se usa solo email.
+
+async function sendWhatsAppAlert(message: string): Promise<boolean> {
+  const instanceId = process.env.WHATSAPP_INSTANCE_ID;
+  const token = process.env.WHATSAPP_API_TOKEN;
+  const phone = process.env.WHATSAPP_ADMIN_PHONE || "34611946289"; // +34 611 946 289
+
+  if (!instanceId || !token) return false; // Sin credenciales → usar solo email
+
+  try {
+    const res = await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        token,
+        to: phone,
+        body: message,
+        priority: "10",
+      }).toString(),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) {
+      log.warn({ status: res.status }, "notify: WhatsApp Ultramsg error");
+      return false;
+    }
+    log.info({ phone }, "notify: alerta WhatsApp enviada ✅");
+    return true;
+  } catch (err) {
+    log.warn({ err }, "notify: excepción enviando WhatsApp — usando email como fallback");
+    return false;
+  }
 }
 
 // ─── Envío base via Resend ───────────────────────────────────────────────────
@@ -155,6 +196,81 @@ export async function notifyAdminJobFailed(opts: {
     }),
     text: `🔴 URGENTE: Generación fallida x${retryCount}\n\nCliente: ${userEmail}\nUser ID: ${userId}\nJob ID: ${jobId}\n${appId ? `App ID: ${appId}\n` : ""}Prompt: ${cleanPrompt}\nError: ${errorMessage || "desconocido"}\n\nPanel: ${panelUrl}`,
   });
+}
+
+/**
+ * Hito del orquestador atascado — se llama cuando un hito falla >2 veces
+ * consecutivas durante la generación por hitos (CoreOrchestrator).
+ * Canal 1: WhatsApp al móvil (si están configuradas las credenciales Ultramsg)
+ * Canal 2: Email al admin (siempre, como fallback o canal principal)
+ */
+export async function notifyAdminMilestoneStuck(opts: {
+  projectId: string;       // jobId o appId
+  projectName: string;     // título del proyecto / prompt truncado
+  userEmail: string;       // email del cliente
+  layer: string;           // capa que falló (ej: "frontend-core")
+  milestoneName: string;   // nombre del hito concreto
+  attempts: number;        // número de intentos fallidos
+  lastError: string;       // error de esbuild o descripción del problema
+}): Promise<void> {
+  const { projectId, projectName, userEmail, layer, milestoneName, attempts, lastError } = opts;
+
+  // Solo alertar si hay más de 2 intentos fallidos — 1 o 2 son normales
+  if (attempts <= 2) return;
+
+  const panelUrl = `https://www.marisai.es/admin?jobId=${projectId}`;
+  const horaEspana = new Date().toLocaleString("es-ES", {
+    timeZone: "Europe/Madrid",
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
+
+  const whatsappMsg =
+    `🚨 ALERTA MARIS AI 🚨\n\n` +
+    `Hito atascado en generación\n` +
+    `─────────────────\n` +
+    `📋 Proyecto: ${projectName.slice(0, 60)}\n` +
+    `👤 Cliente: ${userEmail}\n` +
+    `🔧 Hito: ${milestoneName}\n` +
+    `📐 Capa: ${layer}\n` +
+    `🔁 Intentos: ${attempts} fallidos\n` +
+    `🕐 Hora: ${horaEspana}\n` +
+    `─────────────────\n` +
+    `Error:\n${lastError.slice(0, 300)}...\n\n` +
+    `🔗 Panel: ${panelUrl}`;
+
+  // Canal 1 — WhatsApp (si hay credenciales Ultramsg en Railway)
+  const waSent = await sendWhatsAppAlert(whatsappMsg);
+
+  // Canal 2 — Email (siempre, o como fallback si WhatsApp falló)
+  // Si WhatsApp funcionó, el email sigue enviándose para tener registro escrito
+  try {
+    await sendEmail({
+      to: getAdminEmails(),
+      subject: `🚨 Hito atascado x${attempts} — ${userEmail} — ${projectName.slice(0, 40)}`,
+      html: alertHtml({
+        emoji: "🔧",
+        title: `Hito del orquestador atascado tras ${attempts} intentos`,
+        urgency: "🔴 URGENTE",
+        fields: [
+          { label: "📋 Proyecto", value: `<strong>${projectName.slice(0, 80)}</strong>` },
+          { label: "👤 Cliente", value: userEmail },
+          { label: "🔧 Hito", value: `<code>${milestoneName}</code>` },
+          { label: "📐 Capa", value: `<strong>${layer}</strong>` },
+          { label: "🔁 Intentos fallidos", value: `<strong style="color:#ef4444">${attempts}x</strong>` },
+          { label: "❌ Último error", value: `<code style="color:#f87171;font-size:12px">${lastError.slice(0, 400)}</code>` },
+          { label: "🆔 Job ID", value: `<code style="font-size:11px">${projectId}</code>` },
+          { label: "🕐 Hora (España)", value: horaEspana },
+          { label: "📱 WhatsApp", value: waSent ? "✅ Enviado" : "❌ No configurado — solo email" },
+        ],
+        actionUrl: panelUrl,
+        actionLabel: "🔍 Ver en panel admin",
+      }),
+      text: `🚨 HITO ATASCADO x${attempts}\n\nProyecto: ${projectName}\nCliente: ${userEmail}\nHito: ${milestoneName}\nCapa: ${layer}\nError: ${lastError.slice(0, 300)}\n\nPanel: ${panelUrl}`,
+    });
+  } catch (err) {
+    log.error({ err }, "notify: no se pudo enviar alerta de hito atascado por email");
+  }
 }
 
 /**

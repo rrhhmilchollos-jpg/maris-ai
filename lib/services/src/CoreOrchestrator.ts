@@ -247,6 +247,17 @@ export interface CoreOrchestratorOptions {
    */
   maxMilestonesOverride?: number;
   /**
+   * Callback llamado cuando un hito agota todos sus intentos y cae al placeholder.
+   * Se usa para enviar alertas al admin (WhatsApp + email) con los datos del fallo.
+   * Si no se pasa, el fallo se registra solo en consola/logs.
+   */
+  onMilestoneStuck?: (opts: {
+    milestoneName: string;
+    layer: string;
+    attempts: number;
+    lastError: string;
+  }) => void | Promise<void>;
+  /**
    * Función de validación esbuild para comprobar el bundle de frontend al
    * terminar cada capa frontend. Si no se pasa, la validación por capa se
    * omite silenciosamente (comportamiento backward-compatible). Se pasa
@@ -551,6 +562,19 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     // FALLBACK: en vez de lanzar error fatal, generar un placeholder mínimo
     // para que el bundle no quede incompleto.
     console.warn(`⚠️ Hito ${milestone.id} (${milestone.name}) — usando placeholder tras ${MAX_ATTEMPTS} intentos fallidos.`);
+
+    // Disparar alerta al admin (WhatsApp + email) si está configurado
+    if (this.options.onMilestoneStuck) {
+      try {
+        await this.options.onMilestoneStuck({
+          milestoneName: milestone.name,
+          layer: milestone.layer,
+          attempts: MAX_ATTEMPTS,
+          lastError: String(lastError instanceof Error ? lastError.message : lastError).slice(0, 500),
+        });
+      } catch { /* no bloquear la generación por un fallo de alerta */ }
+    }
+
     const isReactComp = /\.(t|j)sx$/.test(milestone.filePath);
     const compName = milestone.filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || "Component";
     const placeholder = isReactComp
