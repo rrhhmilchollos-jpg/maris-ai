@@ -1854,10 +1854,12 @@ function classifyPromptComplexity(prompt: string, context?: { kind?: string; has
   if (["game-3d", "nextjs", "python-api", "django", "fullstack"].includes(context?.kind || "")) add(2, "preset avanzado");
   // Ultra-complex: CRM/ERP/plataformas completas con múltiples módulos, muy completo, super completo, etc.
   if (/(totalmente completa|super completo|muy completo|m[uú]ltiples funcionalidades|m[uú]ltiples m[oó]dulos|completo con|panel completo|plataforma completa|sistema completo|todo incluido|todas las funcionalidades|funcionalidades completas|crm completo|erp completo|plataforma.*fisio|fisioterapeuta|cl[ií]nica|hospital|gesti[oó]n.*pacientes|historial.*m[eé]dico)/.test(text)) add(4, "proyecto ultra-complejo con múltiples módulos");
+  if (/(portal|marketplace|plataforma|bolsa de trabajo|ofertas de trabajo|empleo|candidatos|empresarios|reclutamiento|talento|networking|red social|comunidad|foro|directorio|cat[aá]logo|sistema de reservas|booking|citas m[eé]dicas|inmobiliaria|propiedades|e.?commerce|tienda online)/.test(text)) add(3, "portal/marketplace/plataforma multi-usuario");
+  if (/(dos tipos de usuario|m[uú]ltiples roles|multi.?rol|role.*based|empresa.*cliente|vendedor.*comprador|propietario.*inquilino|profesional.*paciente|profesor.*alumno)/.test(text)) add(3, "sistema multi-rol");
   if (prompt.length > 500) add(1, "prompt muy extenso");
   if (prompt.length > 1200) add(2, "prompt ultra-extenso");
   // Tiers: ultra >= 10, robust >= 7, standard >= 2, basic < 2
-  const tier: ComplexityTier = score >= 10 ? "ultra" : score >= 7 ? "robust" : score >= 2 ? "standard" : "basic";
+  const tier: ComplexityTier = score >= 10 ? "ultra" : score >= 5 ? "robust" : score >= 2 ? "standard" : "basic";
   return { tier, score, reasons };
 }
 
@@ -3405,7 +3407,8 @@ export async function generateApp(
   const hasExplicitBuildIntent = promptStart.includes("crea") || promptStart.includes("app");
   const wantsFullBuild = !previous || hasExplicitBuildIntent;
   const isUltraComplex = agentModelPlan.tier === "ultra";
-  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" || isUltraComplex;
+  const isRobustOrUltra = agentModelPlan.tier === "ultra" || agentModelPlan.tier === "robust";
+  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" || isRobustOrUltra;
 
   // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
   // A petición EXPLÍCITA del usuario: antes de lanzar un proyecto NUEVO
@@ -3496,7 +3499,9 @@ export async function generateApp(
     }
     await log("system", isUltraComplex
       ? "🏗️ Proyecto de alta complejidad detectado — activando construcción por hitos (modela cada módulo por separado en vez de comprimirlo todo en un único intento)..."
-      : "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
+      : isRobustOrUltra
+        ? "🏗️ Proyecto complejo detectado — activando construcción por hitos para garantizar que todos los módulos queden completos y funcionales..."
+        : "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
     const coreOrchestrator = new CoreOrchestrator(process.cwd(), {
       model: "claude-sonnet-4-6",
       // El orquestador decide mongodb/postgresql por hito; le damos AMBOS quality
