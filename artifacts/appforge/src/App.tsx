@@ -43,6 +43,7 @@ const QueEsAgenteIaPage = lazy(() => import("@/pages/que-es-un-agente-de-ia"));
 const DesarrolloNoCodeGuiaPage = lazy(() => import("@/pages/desarrollo-no-code-guia"));
 const ShowcasePage = lazy(() => import("@/pages/showcase"));
 const ShowcaseDetailPage = lazy(() => import("@/pages/showcase-detail"));
+const DemoPage = lazy(() => import("@/pages/demo"));
 const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 
@@ -541,6 +542,11 @@ function ClerkProviderWithRoutes() {
 
                 <Route path="/showcase">
                   <ShowcasePage />
+                </Route>
+
+                {/* Demo pública — sin autenticación, cualquier visitante puede verla */}
+                <Route path="/demo">
+                  <DemoPage />
                 </Route>
 
                 <Route path="/crm/fisioterapeuta">

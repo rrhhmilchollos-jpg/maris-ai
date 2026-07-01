@@ -19,6 +19,7 @@ import { vivaWebhookRouter } from "./routes/vivaWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
 import adminRouter from "./routes/admin";
+import demoRouter from "./routes/demo";
 import { logger } from "./lib/logger";
 import clerkWebhookRouter from "./routes/clerkWebhook";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
@@ -317,6 +318,8 @@ app.use("/api", router);
 app.use("/api", ticketsRouter);
 app.use("/api", newsRouter);
 app.use("/api", adminRouter);
+// Demo pública — sin autenticación, accesible para visitantes no registrados
+app.use("/api/demo", demoRouter);
 app.use("/", rssRouter);
 app.use("/", newsSitemapRouter);
 app.use("/", sitemapRouter);
