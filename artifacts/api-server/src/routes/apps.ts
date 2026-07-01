@@ -1918,45 +1918,56 @@ async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraSc
   }
 }
 
-function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean }) {
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; hasEverPaid?: boolean }) {
   const normalized = normalizeCoderModel(requestedModel);
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
 
-  // ── ESTRATEGIA DE MODELOS (mismo motor para todos los planes) ────────────
-  // La selección de modelo depende SOLO de la complejidad de la tarea, NO del
-  // plan del usuario — igual que Lovable/Base44/Emergent, que usan el mismo
-  // motor para free y paid (la diferencia entre planes es el coste en
-  // créditos, no la calidad del modelo).
-  // - "basic" (landing simple sin backend/datos): Haiku en agentes
-  //   auxiliares/QA por eficiencia — no aporta valor usar Sonnet ahí.
-  // - resto de tiers (standard/robust/ultra): Sonnet en todos los agentes.
-  // - Architect y Backend SIEMPRE Sonnet: el Architect decide backendNeeded
-  //   y el alcance del plan (una mala decisión aquí = app incompleta), y el
-  //   Backend escribe el CRUD/auth/BD real — son los dos puntos donde un
-  //   modelo más débil produce justo el síntoma de "falta backend".
+  // ── ESTRATEGIA DE MODELOS ─────────────────────────────────────────────────
+  //
+  // USUARIOS FREE (hasEverPaid=false, 45 créditos iniciales):
+  //   - Arquitecto y PM: SIEMPRE Sonnet — son el cerebro del proyecto.
+  //     Un plan mal diseñado = app incompleta, exactamente el problema que
+  //     queremos evitar. No escatimamos aquí.
+  //   - Agentes ejecutores (Frontend, Backend, Designer, QA, etc.): Haiku.
+  //     Haiku es 20x más barato que Sonnet y suficiente para generar código
+  //     en contexto ya bien definido por el Arquitecto. El resultado final
+  //     es funcional y visible — la diferencia de calidad es mínima cuando
+  //     el plan es bueno.
+  //
+  // USUARIOS DE PAGO (hasEverPaid=true):
+  //   - Todos los agentes: Sonnet. Máxima calidad en cada módulo.
+  //
+  // El Patcher y Repair SIEMPRE usan Sonnet — reparar código roto requiere
+  // el modelo más capaz; ahorrar aquí produce bucles de reparación infinitos.
+
+  const isFreeUser = context?.hasEverPaid === false;
+
   const frontendModel: AgentModelChoice["model"] = auto
-    ? "claude-sonnet-4-6" // Frontend siempre Sonnet — calidad mínima aceptable
+    ? (isFreeUser ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6")
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
 
-  const isBasic = complexity.tier === "basic";
-  const auxModel: ClaudeCoderModel = "claude-sonnet-4-6"; // siempre sonnet — haiku generaba código incompleto
-  const architectModel: ClaudeCoderModel = "claude-sonnet-4-6";
-  const qualityModel: ClaudeCoderModel = isBasic ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
-  const backendModel: ClaudeCoderModel = "claude-sonnet-4-6";
+  // Modelos por rol según tier de usuario
+  const SONNET: ClaudeCoderModel = "claude-sonnet-4-6";
+  const HAIKU: ClaudeCoderModel = "claude-haiku-4-5-20251001";
+
+  const architectModel: ClaudeCoderModel = SONNET; // SIEMPRE Sonnet — plan = todo
+  const pmModel: ClaudeCoderModel = SONNET;         // SIEMPRE Sonnet — QA = calidad final
+  const patcherModel: ClaudeCoderModel = SONNET;    // SIEMPRE Sonnet — reparación crítica
+  const execModel: ClaudeCoderModel = isFreeUser ? HAIKU : SONNET; // Ejecutores: Haiku en free
 
   const agents: Record<AgentRole, AgentModelChoice> = {
-    researcher: makeAgentChoice("researcher", "Researcher", auxModel, "recopila contexto desde el primer prompt"),
-    architect: makeAgentChoice("architect", "Architect", architectModel, "decide estructura, páginas y alcance"),
-    designer: makeAgentChoice("designer", "Designer", auxModel, "define sistema visual"),
-    frontend: makeAgentChoice("frontend", "Frontend", frontendModel, auto ? `auto por complejidad ${complexity.tier}` : "selección manual del usuario"),
-    backend: makeAgentChoice("backend", "Backend", backendModel, "implementa API cuando el plan la necesita"),
-    database: makeAgentChoice("database", "Database", qualityModel, "modela datos y semillas"),
-    integrator: makeAgentChoice("integrator", "Integrator", auxModel, "detecta auth, pagos y servicios externos"),
-    qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
-    devops: makeAgentChoice("devops", "DevOps", auxModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "testing-agent", "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
-    repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
+    researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre sonnet — define el plan completo"),
+    designer:   makeAgentChoice("designer",   "Designer",   execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:haiku" : "paid:sonnet"})` : "selección manual"),
+    backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? HAIKU : SONNET, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    database:   makeAgentChoice("database",   "Database",   execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    integrator: makeAgentChoice("integrator", "Integrator", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre sonnet — quality gate final"),
+    devops:     makeAgentChoice("devops",     "DevOps",     execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre sonnet — reparación crítica"),
+    repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre sonnet — recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
 }
@@ -3420,8 +3431,14 @@ export async function generateApp(
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
+    hasEverPaid: hasEverPaid, // degradación inteligente: free → Haiku en ejecutores
   });
-  logger.info({ tier: agentModelPlan.tier, score: agentModelPlan.score, frontend: agentModelPlan.agents.frontend.model }, "planner: modelo seleccionado");
+  logger.info({
+    tier: agentModelPlan.tier,
+    score: agentModelPlan.score,
+    frontend: agentModelPlan.agents.frontend.model,
+    isFreeUser: !hasEverPaid,
+  }, "planner: modelo seleccionado");
 
   // El Core Orchestrator por hitos (v2) se activa automáticamente para proyectos
   // tier="ultra" — sistemas empresariales/ERPs/multi-módulo donde el pipeline
@@ -3470,33 +3487,27 @@ export async function generateApp(
     }
   }
 
-  // ── ACTIVACIÓN OBLIGATORIA DE HITOS ──────────────────────────────────────
-  // A partir del 2 de julio de 2026, el orquestador de hitos se activa para
-  // TODOS los proyectos nuevos sin excepción, independientemente del tier.
+  // ── ACTIVACIÓN UNIVERSAL DE HITOS — REGLA DE ORO ────────────────────────
+  // TODOS los proyectos nuevos usan hitos sin excepción.
+  // No hay condiciones de tier, complejidad, tamaño de prompt ni tipo de cuenta.
+  // Un blog de notas, un portfolio, un SaaS complejo — todos van por hitos.
   //
-  // RAZÓN: 22 clientes perdidos por apps incompletas o en pantalla blanca.
-  // El pipeline estándar de una sola pasada tiene límites reales de tamaño
-  // de salida que hacen que proyectos medianos y complejos lleguen incompletos
-  // al cliente. El orquestador de hitos divide CUALQUIER proyecto en módulos
-  // manejables que siempre terminan correctamente, incluso para un blog simple.
+  // RAZÓN: 22 clientes perdidos por pantallas en blanco con el pipeline
+  // estándar. Los hitos dividen cualquier proyecto en módulos manejables
+  // que siempre terminan completos y visibles en preview.
   //
-  // EXCEPCIÓN: ediciones de proyectos ya existentes (previous !== null) siguen
-  // usando el pipeline estándar — los hitos son para construcción desde cero.
-  // También se excluyen landing pages básicas (tier "basic") para no
-  // consumir créditos de más en apps de 1-2 páginas sin backend.
-  const isBasicLanding = agentModelPlan.tier === "basic" && !plan.backendNeeded;
-  const useMilestoneOrchestrator =
-    process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" ||
-    // Hitos para todo proyecto nuevo no trivial — la excepción son ediciones
-    // (previous !== null) y landings básicas sin backend
-    (wantsFullBuild && !isBasicLanding) ||
-    isRobustOrUltra ||
-    plan.requiresMilestones === true ||
-    historicalBoost.extraScore >= 3;
+  // ÚNICA EXCEPCIÓN: ediciones de proyectos ya existentes (previous !== null)
+  // — no tiene sentido planificar hitos para una edición incremental de
+  // código que ya existe y funciona.
+  const useMilestoneOrchestrator = wantsFullBuild; // SIEMPRE true para proyectos nuevos
 
-  if (wantsFullBuild && !isBasicLanding) {
-    logger.info({ tier: agentModelPlan.tier, requiresMilestones: plan.requiresMilestones }, "Milestone: activado para proyecto nuevo (política obligatoria desde jul 2026)");
-  }
+  logger.info({
+    tier: agentModelPlan.tier,
+    isFreeUser: !hasEverPaid,
+    requiresMilestones: plan.requiresMilestones,
+    wantsFullBuild,
+    useMilestoneOrchestrator,
+  }, "Milestone: decisión de orquestador");
 
   // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
   // A petición EXPLÍCITA del usuario: antes de lanzar un proyecto NUEVO
@@ -3580,20 +3591,23 @@ export async function generateApp(
     // router de complejidad — isUltraComplex ya NO es parte de esta
     // condición. Los usuarios que SÍ han pagado alguna vez siguen
     // recibiendo el plan completo sin límite, siempre.
+    // FREE_USER_MAX_MILESTONES: scope-cut para usuarios gratuitos.
+    // NO bloquea la ejecución — simplifica el plan priorizando los 7 módulos
+    // más críticos para que la app sea funcional y visible. El usuario puede
+    // expandirla comprando más créditos.
+    // Usuarios de pago: sin límite, plan completo siempre.
     const FREE_USER_MAX_MILESTONES = 7;
     const isDegradedFreeTier = !hasEverPaid;
     if (isDegradedFreeTier) {
-      await log("system", `✨ Generando el núcleo esencial de tu app (${FREE_USER_MAX_MILESTONES} módulos clave). Después podrás expandirla a la arquitectura completa.`);
+      await log("system", `✨ Construyendo tu app módulo a módulo (${FREE_USER_MAX_MILESTONES} módulos esenciales). Resultado garantizado y funcional — podrás añadir más módulos después.`);
+    } else {
+      await log("system", "🏗️ Construyendo tu app módulo a módulo con el orquestador de hitos — cada módulo se genera de forma independiente para garantizar que todo quede completo y funcional...");
     }
-    await log("system", isUltraComplex
-      ? "🏗️ Proyecto de alta complejidad detectado — activando construcción por hitos (modela cada módulo por separado en vez de comprimirlo todo en un único intento)..."
-      : isRobustOrUltra
-        ? "🏗️ Proyecto complejo detectado — activando construcción por hitos para garantizar que todos los módulos queden completos y funcionales..."
-        : "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
     const coreOrchestrator = new CoreOrchestrator(process.cwd(), {
-      model: "claude-sonnet-4-6",
-      // El orquestador decide mongodb/postgresql por hito; le damos AMBOS quality
-      // bars y dejamos que use el que corresponda según database por hito de backend.
+      // El modelo del orquestador: siempre Sonnet para el planificador de hitos
+      // (decide el orden y contenido de cada módulo). Los agentes ejecutores
+      // dentro de cada hito usan el modelo del plan (Haiku en free, Sonnet en paid).
+      model: isDegradedFreeTier ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
       maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
     });
