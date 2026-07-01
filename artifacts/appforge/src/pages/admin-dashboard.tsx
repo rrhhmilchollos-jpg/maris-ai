@@ -795,7 +795,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                   <EmailTemplateMenu
                     recipientEmail={app.userEmail || email}
                     userName={app.userName}
-                    appTitle={app.title}
+                    appTitle={cleanJobPrompt(app.title) || cleanJobPrompt(app.prompt)}
                     userId={app.userId}
                   />
                 </div>
@@ -1587,7 +1587,7 @@ function LiveMonitorPanel() {
                       <EmailTemplateMenu
                         recipientEmail={job.userEmail || ""}
                         userName={undefined}
-                        appTitle={job.prompt?.slice(0, 40) || "tu proyecto"}
+                        appTitle={cleanJobPrompt(job.prompt)}
                         userId={job.userId}
                       />
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1 pt-1">
@@ -1964,6 +1964,27 @@ interface EmailTemplateDef {
   subject: (ctx: { appTitle: string; userName: string }) => string;
   body: (ctx: { appTitle: string; userName: string }) => string;
   defaultCredits?: number;
+}
+
+// Limpia el prompt técnico interno para mostrar solo lo que el cliente escribió.
+// El prefijo [MARIS AI REQUEST LOCALE] puede ir seguido del texto real del cliente
+// en la misma línea (source=admin-inject. Texto real aquí) o en línea aparte.
+function cleanJobPrompt(raw: string | undefined, maxLen = 60): string {
+  if (!raw) return "tu proyecto";
+  const cleaned = raw
+    // Caso 1: prefijo + "Use this for all..." + texto real en la misma cadena
+    .replace(/\[MARIS AI REQUEST LOCALE\].*?(?:Use this for all user-visible copy[^.]*\.\s*)/is, "")
+    // Caso 2: prefijo hasta el primer punto + espacio (source=admin-inject. Texto real)
+    .replace(/\[MARIS AI REQUEST LOCALE\][^.]*\.\s*/i, "")
+    // Otros prefijos de sistema que ocupan toda su línea
+    .replace(/\[ADMIN REPAIR\][^\n]*/gi, "")
+    .replace(/\[EXTRAS CONFIRMADOS[^\]]*\][^\n]*/gi, "")
+    .replace(/\[DETALLES ADICIONALES[^\]]*\][^\n]*/gi, "")
+    .replace(/\[IMPORTADO\][^\n]*/gi, "")
+    .replace(/\[MARIS_ENGINE[^\]]*\][^\n]*/gi, "")
+    .replace(/^[\s.\-]+/, "")
+    .trim();
+  return cleaned.slice(0, maxLen).trim() || "tu proyecto";
 }
 
 const EMAIL_TEMPLATES: EmailTemplateDef[] = [
