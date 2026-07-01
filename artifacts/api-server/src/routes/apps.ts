@@ -3610,6 +3610,13 @@ export async function generateApp(
       model: isDegradedFreeTier ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
       maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
+      // Pasar el validador esbuild para que el orquestador detecte y regenere
+      // hitos de frontend con errores de compilación al terminar cada capa,
+      // antes de pasar a la siguiente. Reutiliza el mismo validador del pipeline.
+      validateFrontendBundle: async (bundle: string) => {
+        const { validateBundle } = await import("../lib/validate");
+        return validateBundle(bundle);
+      },
     });
     await log("system", "📋 Analizando arquitectura y planificando hitos por capas (datos → backend core → módulos → integraciones → frontend)...");
 

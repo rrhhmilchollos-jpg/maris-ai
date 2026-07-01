@@ -246,6 +246,14 @@ export interface CoreOrchestratorOptions {
    * undefined = sin límite (comportamiento por defecto para usuarios de pago).
    */
   maxMilestonesOverride?: number;
+  /**
+   * Función de validación esbuild para comprobar el bundle de frontend al
+   * terminar cada capa frontend. Si no se pasa, la validación por capa se
+   * omite silenciosamente (comportamiento backward-compatible). Se pasa
+   * desde apps.ts para reutilizar el mismo validador que el resto del pipeline.
+   * Signature: (bundle: string) => Promise<{ ok: boolean; issues: string[] }>
+   */
+  validateFrontendBundle?: (bundle: string) => Promise<{ ok: boolean; issues: string[] }>;
 }
 
 const LAYER_ORDER = ["data", "backend-core", "backend-module", "integration", "frontend-core", "frontend-module", "docs"];
@@ -598,7 +606,89 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
           });
         }
       }
-    }
+
+      // ── VALIDACIÓN ESBUILD POR CAPA FRONTEND ────────────────────────────────
+      // Al terminar cualquier capa de frontend (FRONTEND_CORE o FRONTEND_MODULES),
+      // compilamos el bundle acumulado con esbuild. Si hay errores de sintaxis
+      // o imports rotos en esta capa, los detectamos AHORA (cuando el contexto
+      // está fresco) y regeneramos solo los hitos problemáticos antes de
+      // continuar con la siguiente capa. Esto evita que errores tempranos se
+      // propaguen y contaminen las capas siguientes, que es exactamente lo
+      // que causaba los 0/24 archivos fallidos al final.
+      const isFrontendLayer = layerMilestones.some(
+        (m) => m.targetWorkspace === "apps/web"
+      );
+      if (isFrontendLayer && layerMilestones.length > 0 && this.options.validateFrontendBundle) {
+        const frontendSoFar = Array.from(this.generatedByMilestoneId.values())
+          .filter((item) => item.targetWorkspace === "apps/web")
+          .sort((a, b) => a.id - b.id)
+          .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
+          .join("\n");
+
+        if (frontendSoFar.length > 200) {
+          try {
+            wsNotificationCallback({
+              status: `🔍 Verificando compilación de capa frontend (${layerMilestones.length} hito(s))...`,
+              progress: 8 + Math.round((completed / total) * 90),
+            });
+
+            const validation = await this.options.validateFrontendBundle(frontendSoFar);
+            if (!validation.ok && validation.issues.length > 0) {
+              // Identificar qué archivos tienen errores
+              const failingFiles = validation.issues
+                .map((issue: string) => {
+                  const match = /appforge-vfs:(src\/[^\s:]+)/.exec(issue);
+                  return match?.[1];
+                })
+                .filter(Boolean) as string[];
+
+              const uniqueFailingFiles = [...new Set(failingFiles)];
+              // Solo regenerar si son pocos archivos (<=5) — si hay más, el problema
+              // es estructural y regenerar hito a hito no lo va a resolver
+              if (uniqueFailingFiles.length > 0 && uniqueFailingFiles.length <= 5) {
+                wsNotificationCallback({
+                  status: `⚠️ ${uniqueFailingFiles.length} archivo(s) con errores — regenerando solo los afectados...`,
+                  progress: 8 + Math.round((completed / total) * 90),
+                });
+
+                for (const filePath of uniqueFailingFiles) {
+                  const affectedMilestone = layerMilestones.find(
+                    (m) => m.filePath === filePath || m.filePath.endsWith(`/${filePath}`)
+                  );
+                  if (affectedMilestone) {
+                    const errorContext = validation.issues
+                      .filter((i: string) => i.includes(filePath))
+                      .join("\n")
+                      .slice(0, 500);
+                    const fixedMilestone = await this.generateMilestone(
+                      {
+                        ...affectedMilestone,
+                        description: `${affectedMilestone.description}\n\nFIX REQUERIDO — este archivo falló la compilación con este error: ${errorContext}`,
+                      },
+                      database,
+                      platform
+                    );
+                    this.generatedByMilestoneId.set(fixedMilestone.id, fixedMilestone);
+                    await this.writeCodeToWorkspace(fixedMilestone.targetWorkspace, fixedMilestone.filePath, fixedMilestone.code);
+                    wsNotificationCallback({
+                      status: `✅ ${fixedMilestone.filePath} regenerado y corregido.`,
+                      progress: 8 + Math.round((completed / total) * 90),
+                    });
+                  }
+                }
+              }
+            } else if (validation.ok) {
+              wsNotificationCallback({
+                status: `✅ Capa frontend compilada correctamente.`,
+                progress: 8 + Math.round((completed / total) * 90),
+              });
+            }
+          } catch {
+            // La validación es best-effort — si falla, continuamos sin bloquear
+          }
+        }
+      }
+    } // fin for (const layerMilestones of layers)
 
     wsNotificationCallback({ status: "🚀 ¡Proyecto completo generado e integrado!", progress: 100, step: total });
 
