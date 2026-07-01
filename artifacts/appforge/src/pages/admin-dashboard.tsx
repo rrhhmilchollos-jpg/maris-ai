@@ -1583,6 +1583,13 @@ function LiveMonitorPanel() {
                           : <>💜 Enviar disculpas al cliente</>
                         }
                       </Button>
+                      {/* Plantillas de correo de reactivación/seguimiento desde el panel en vivo */}
+                      <EmailTemplateMenu
+                        recipientEmail={job.userEmail || ""}
+                        userName={undefined}
+                        appTitle={job.prompt?.slice(0, 40) || "tu proyecto"}
+                        userId={job.userId}
+                      />
                       <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider flex items-center gap-1 pt-1">
                         <Zap className="h-3 w-3 text-violet-400" />
                         O inyecta instrucción específica
@@ -2012,6 +2019,112 @@ Todo nuestro soporte es en español 🇪🇸 y completamente personalizado — n
 Gracias por confiar en Maris AI. Estamos aquí para lo que necesites.
 
 Un saludo,
+El equipo de Maris AI`,
+    defaultCredits: 0,
+  },
+  {
+    id: "project_abandoned",
+    label: "Proyecto a medias — vuelve a terminarlo",
+    icon: "🚀",
+    subject: ({ appTitle }) => `🚀 "${appTitle}" te está esperando para finalizarse`,
+    body: ({ appTitle, userName }) => `Hola${userName ? ` ${userName}` : ""},
+
+Hemos notado que tu proyecto "${appTitle}" lleva un tiempo parado y nos da pena que se quede a medias… ¡estabas tan cerca!
+
+Tu app ya tiene la base construida, solo necesita ese empujón final para quedar perfecta. Muchas de las mejores apps que han pasado por Maris AI empezaron exactamente igual — un momento de pausa — y luego se convirtieron en algo increíble.
+
+¿Qué tal si le dedicas 5 minutos hoy? Entra en tu panel, retoma el proyecto y dinos qué quieres mejorar. Estamos aquí para ayudarte a cruzar la línea de meta.
+
+👉 Accede ahora: https://www.marisai.es/dashboard
+
+Si tienes alguna duda o algo no te funcionó como esperabas, responde a este correo o escríbenos por WhatsApp al +34 611 935 616. Te atendemos en español en menos de 2 horas.
+
+¡Ánimo, el resultado final va a merecer la pena!
+
+Un saludo,
+El equipo de Maris AI`,
+    defaultCredits: 0,
+  },
+  {
+    id: "reactivation_urgency",
+    label: "Reactivación — tus créditos te esperan",
+    icon: "⏰",
+    subject: ({ appTitle }) => `⏰ "${appTitle}" sigue ahí esperándote`,
+    body: ({ appTitle, userName }) => `Hola${userName ? ` ${userName}` : ""},
+
+Llevamos un tiempo sin verte por aquí y queríamos asegurarnos de que todo va bien. Tu proyecto "${appTitle}" sigue guardado y listo para cuando quieras retomarlo — no hemos tocado nada.
+
+Tus créditos siguen ahí también. En Maris AI los créditos nunca caducan, así que no pierdas lo que ya tienes.
+
+Si en algún momento el proyecto se complicó más de lo esperado, no te preocupes — es normal. Cuéntanos qué necesitas y lo resolvemos juntos. Tenemos soporte en español 🇪🇸 y respondemos en menos de 2 horas por correo o WhatsApp (+34 611 935 616).
+
+👉 Retoma tu proyecto: https://www.marisai.es/dashboard
+
+¡Te esperamos!
+
+El equipo de Maris AI`,
+    defaultCredits: 0,
+  },
+  {
+    id: "nudge_soft",
+    label: "Empujón suave — ¿necesitas ayuda?",
+    icon: "💡",
+    subject: ({ appTitle }) => `💡 ¿Necesitas ayuda con "${appTitle}"?`,
+    body: ({ appTitle, userName }) => `Hola${userName ? ` ${userName}` : ""},
+
+Hemos visto que "${appTitle}" lleva un rato parado y nos preguntamos si hay algo en lo que podamos echarte una mano.
+
+A veces el proyecto se complica, no sabes cómo pedir exactamente lo que quieres, o simplemente el día a día no deja tiempo. Lo entendemos perfectamente.
+
+Lo que sí sabemos es que tienes una idea que vale la pena construir — si no, no habrías llegado hasta aquí. ¿Qué te está frenando? Cuéntanoslo y lo resolvemos:
+
+📩 Responde este correo con lo que necesitas
+💬 WhatsApp: +34 611 935 616
+🌐 https://www.marisai.es/dashboard
+
+Estamos en español 🇪🇸, somos personas reales y nos encanta ayudar. Sin bots, sin respuestas automáticas.
+
+Un saludo,
+El equipo de Maris AI`,
+    defaultCredits: 0,
+  },
+  {
+    id: "win_back",
+    label: "Recuperar cliente — oferta especial",
+    icon: "🎯",
+    subject: ({ userName }) => `🎯 ${userName ? userName + ", t" : "T"}enemos algo para ti en Maris AI`,
+    body: ({ appTitle, userName }) => `Hola${userName ? ` ${userName}` : ""},
+
+Hace un tiempo empezaste a crear "${appTitle}" con Maris AI y nos encantaría que terminases lo que empezaste.
+
+Para que no haya ninguna excusa, hemos añadido créditos extra a tu cuenta. Úsalos para retomar el proyecto, añadir nuevas funciones o incluso crear una app nueva desde cero.
+
+👉 Entra ahora y úsalos: https://www.marisai.es/dashboard
+
+Si en algún momento necesitas orientación, escríbenos. Respondemos en español en menos de 2 horas, por correo o por WhatsApp al +34 611 935 616.
+
+¡Nos vemos dentro!
+
+El equipo de Maris AI`,
+    defaultCredits: 15,
+  },
+  {
+    id: "technical_clarification_reminder",
+    label: "Recordatorio — confirmación técnica pendiente",
+    icon: "🔔",
+    subject: ({ appTitle }) => `🔔 Tu app "${appTitle}" está esperando tu confirmación`,
+    body: ({ appTitle, userName }) => `Hola${userName ? ` ${userName}` : ""},
+
+Tu proyecto "${appTitle}" está listo para arrancar, pero necesita que confirmes unos detalles técnicos antes de que podamos generarlo correctamente.
+
+Solo son un par de preguntas rápidas para asegurarnos de que el resultado final sea exactamente lo que necesitas — no queremos asumir nada y que luego no quede como imaginabas.
+
+👉 Entra en tu panel y confirma los detalles: https://www.marisai.es/dashboard
+
+Si tienes alguna duda sobre lo que te preguntamos, responde este correo o escríbenos por WhatsApp al +34 611 935 616 y te explicamos en 2 minutos.
+
+¡Ya casi está!
+
 El equipo de Maris AI`,
     defaultCredits: 0,
   },
