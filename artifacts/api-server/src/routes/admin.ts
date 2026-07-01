@@ -393,6 +393,10 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
       status: a.status,
       techStack: a.techStack,
       frontendCode: a.frontendCode,
+      // Estado de visibilidad para el cliente — permite mostrar en el panel de
+      // soporte si la app está oculta (en revisión) y ofrecer el desbloqueo por ID.
+      pendingAdminApproval: !!a.pendingAdminApproval,
+      visibleToClient: !a.pendingAdminApproval,
       createdAt: a.createdAt?.toISOString?.() ?? "",
     }))
   });
@@ -2774,6 +2778,110 @@ router.post("/admin/security/unblock", requireAdmin, async (req, res) => {
   if (!ip) return res.status(400).json({ error: "IP requerida" });
   const removed = unblockIP(ip);
   return res.json({ ok: removed, message: removed ? `IP ${ip} desbloqueada.` : `IP ${ip} no estaba bloqueada.` });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISTA REMOTA DEL DASHBOARD DEL CLIENTE (impersonación de solo lectura)
+// Permite a soporte ver EXACTAMENTE lo que ve el cliente en su panel:
+// stats, créditos, todas sus apps (incluidas las ocultas por revisión),
+// notificaciones activas y estado de bloqueo. Sirve para hacer pruebas
+// completas del dashboard de cada cliente sin salir del panel de admin.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/admin/users/:id/dashboard-view — snapshot completo del panel del cliente
+// Query opcional: ?email=xxx para resolución robusta del usuario (misma lógica que /apps).
+router.get("/admin/users/:id/dashboard-view", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const rawId = req.params.id;
+    const emailHint = (req.query.email as string || "").trim().toLowerCase();
+
+    // Resolver el usuario de forma robusta: por _id directo o por email.
+    let user = await User.findById(rawId).lean() as any;
+    if (!user && emailHint) {
+      user = await User.findOne({ email: emailHint }).lean() as any;
+    }
+    if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+
+    const userId = String(user._id);
+
+    // Conjunto de IDs candidatos (por si el email tiene varios registros históricos).
+    const candidateIds = new Set<string>([userId, rawId]);
+    if (emailHint) {
+      const sameEmail = await User.find({ email: emailHint }).select("_id").lean() as any[];
+      sameEmail.forEach((u: any) => candidateIds.add(String(u._id)));
+    }
+    const idList = [...candidateIds];
+
+    // TODAS las apps del cliente (incluidas las pendientes de aprobación, para que
+    // soporte pueda ver también las que están ocultas al cliente por revisión).
+    const allApps = await GeneratedApp.find(
+      { userId: { $in: idList } },
+      { frontendCode: 0, backendCode: 0 },
+    ).sort({ createdAt: -1 }).limit(50).lean() as any[];
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const appsThisWeek = allApps.filter((a: any) => a.createdAt && new Date(a.createdAt) >= sevenDaysAgo).length;
+
+    // Créditos gastados (suma real de transacciones de uso).
+    const txns = await CreditTransaction.find({ userId: { $in: idList } }, { kind: 1, amount: 1 }).lean();
+    let creditsSpentTotal = 0;
+    for (const t of txns) if (t.kind === "usage") creditsSpentTotal += Math.abs(t.amount);
+
+    // Notificaciones de soporte activas (no leídas) del cliente.
+    const notifications = await UserNotification.find({ userId: { $in: idList } })
+      .sort({ createdAt: -1 }).limit(20).lean() as any[];
+
+    res.json({
+      user: {
+        id: userId,
+        email: user.email,
+        fullName: user.fullName ?? null,
+        imageUrl: user.imageUrl ?? null,
+        marisId: (user as any).marisId ?? null,
+        credits: user.credits ?? 0,
+        isAdmin: isAdminEmail(user.email),
+        isPremium: !!(user as any).isPremium,
+        isSuspended: !!(user as any).isSuspended,
+        isBanned: !!(user as any).isBanned,
+        createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,
+      },
+      stats: {
+        credits: user.credits ?? 0,
+        appsGenerated: allApps.length,
+        appsThisWeek,
+        creditsSpentTotal,
+      },
+      apps: allApps.map((a: any) => ({
+        id: String(a._id),
+        _id: String(a._id),
+        title: a.title,
+        description: a.description ?? "",
+        prompt: a.prompt,
+        status: a.status,
+        kind: a.kind,
+        techStack: a.techStack,
+        // ¿la ve el cliente en su panel? (oculta si está pendiente de aprobación)
+        pendingAdminApproval: !!a.pendingAdminApproval,
+        visibleToClient: !a.pendingAdminApproval,
+        pendingApprovalSince: a.pendingApprovalSince ? new Date(a.pendingApprovalSince).toISOString() : null,
+        createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : "",
+        updatedAt: a.updatedAt ? new Date(a.updatedAt).toISOString() : "",
+      })),
+      notifications: notifications.map((n: any) => ({
+        id: String(n._id),
+        appId: n.appId ? String(n.appId) : null,
+        appTitle: n.appTitle ?? null,
+        type: n.type,
+        message: n.message,
+        read: !!n.read,
+        createdAt: n.createdAt ? new Date(n.createdAt).toISOString() : "",
+      })),
+    });
+  } catch (err: any) {
+    logger.error({ err: err?.message, userId: req.params.id }, "admin/users/:id/dashboard-view error");
+    res.status(500).json({ error: err?.message || "Error interno" });
+  }
 });
 
 export default router;

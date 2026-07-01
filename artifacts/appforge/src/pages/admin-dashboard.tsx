@@ -61,6 +61,10 @@ import {
   Database,
   Shield,
   Trash2,
+  Monitor,
+  Bell,
+  Package,
+  LayoutDashboard,
 } from "lucide-react";
 import { apiFetch, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs, useRetryAdminJob } from "@/lib/api-client";
 import { format, formatDistanceToNow } from "date-fns";
@@ -573,6 +577,37 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     onClick={() => setPreviewAppId(isPreviewOpen ? null : appId)}>
                     {isPreviewOpen ? "Cerrar" : <><Eye className="h-3 w-3 mr-1" />Preview</>}
                   </Button>
+                  {/* Desbloquear ESTA app por su ID — quita pendingAdminApproval SOLO de
+                      esta app (no a nivel global) y notifica al cliente al instante.
+                      Muestra un indicador de si la app está oculta al cliente. */}
+                  <Button size="sm" variant="outline"
+                    className={`h-7 text-[10px] ${app.pendingAdminApproval
+                      ? "border-red-500/40 text-red-400 hover:bg-red-500/10"
+                      : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"}`}
+                    disabled={actionLoading[`unblock_${appId}`]}
+                    title={app.pendingAdminApproval
+                      ? "Esta app está OCULTA al cliente (en revisión). Clícala para desbloquearla y hacerla visible."
+                      : "Esta app ya es visible para el cliente. Puedes forzar el desbloqueo y reenviar la notificación."}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!window.confirm(`¿Desbloquear la app "${app.title}" (ID ${appId}) y mostrarla al cliente ${app.userEmail}?\n\nSe quitará el estado "soporte revisando" SOLO de esta app y el cliente recibirá el aviso al instante.`)) return;
+                      setActionLoading(p => ({ ...p, [`unblock_${appId}`]: true }));
+                      try {
+                        const d = await apiFetch<any>(`/api/admin/apps/${appId}/unblock`, { method: "POST" });
+                        toast({ title: "🔓 App desbloqueada", description: d.message || `"${app.title}" ya es visible para el cliente.` });
+                        await searchApps(app.userEmail);
+                      } catch (err: any) {
+                        toast({ title: "Error al desbloquear", description: err.message, variant: "destructive" });
+                      } finally {
+                        setActionLoading(p => ({ ...p, [`unblock_${appId}`]: false }));
+                      }
+                    }}>
+                    {actionLoading[`unblock_${appId}`]
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : app.pendingAdminApproval
+                        ? <>🔒 Oculta — Desbloquear</>
+                        : <>🔓 Visible</>}
+                  </Button>
                   {/* Editar código — eliminar textos del footer */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
@@ -840,6 +875,280 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
           </Card>
         );
       })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PANEL DE DASHBOARDS REMOTOS — vista de solo lectura del panel de cada cliente
+// Replica lo que ve el cliente (stats, créditos, apps, notificaciones activas)
+// y permite probar cada app en vivo (preview) y desbloquearla por ID.
+// ═══════════════════════════════════════════════════════════════════════════
+function RemoteDashboardPanel({ apiBase }: { apiBase: string }) {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<any>(null);
+  const [previewAppId, setPreviewAppId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [clientList, setClientList] = useState<Array<{ email: string; appsGenerated: number }>>([]);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Cargar la lista de clientes para el selector rápido.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const users = await apiFetch<any[]>("/api/admin/users");
+        if (!cancelled && Array.isArray(users)) {
+          setClientList(
+            users
+              .filter((u) => !!u.email)
+              .map((u) => ({ email: u.email as string, appsGenerated: u.appsGenerated ?? 0 }))
+              .sort((a, b) => b.appsGenerated - a.appsGenerated),
+          );
+        }
+      } catch { /* best-effort */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const loadDashboard = async (searchEmail?: string) => {
+    const target = (searchEmail || email).trim();
+    if (!target) return;
+    setLoading(true);
+    try {
+      const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
+      if (!userData?.id) { toast({ title: "Usuario no encontrado", description: target, variant: "destructive" }); setLoading(false); return; }
+      const view = await apiFetch<any>(`/api/admin/users/${userData.id}/dashboard-view?email=${encodeURIComponent(target)}`);
+      setData(view);
+      if ((view.apps ?? []).length === 0) toast({ title: "Sin apps", description: `${target} no tiene apps generadas.` });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Error de conexión", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-refresco cada 5s para ver cambios en vivo mientras se prueba.
+  useEffect(() => {
+    if (!autoRefresh || !data?.user?.email) return;
+    const iv = setInterval(() => { loadDashboard(data.user.email); }, 5000);
+    return () => clearInterval(iv);
+  }, [autoRefresh, data?.user?.email]);
+
+  const unblockApp = async (appId: string, title: string) => {
+    if (!window.confirm(`¿Desbloquear la app "${title}" (ID ${appId}) y mostrarla al cliente?\n\nSe quitará el estado "soporte revisando" SOLO de esta app y el cliente recibirá el aviso al instante.`)) return;
+    setActionLoading(p => ({ ...p, [`unblock_${appId}`]: true }));
+    try {
+      const d = await apiFetch<any>(`/api/admin/apps/${appId}/unblock`, { method: "POST" });
+      toast({ title: "🔓 App desbloqueada", description: d.message || `"${title}" ya es visible para el cliente.` });
+      await loadDashboard(data?.user?.email);
+    } catch (e: any) {
+      toast({ title: "Error al desbloquear", description: e.message, variant: "destructive" });
+    } finally {
+      setActionLoading(p => ({ ...p, [`unblock_${appId}`]: false }));
+    }
+  };
+
+  const stats = data?.stats;
+  const user = data?.user;
+  const apps: any[] = data?.apps ?? [];
+  const notifications: any[] = data?.notifications ?? [];
+  const unreadNotifs = notifications.filter((n) => !n.read);
+
+  return (
+    <div className="space-y-4">
+      {/* Selector de cliente */}
+      <Card className="bg-card/40 border-white/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Monitor className="h-4 w-4 text-violet-400" />
+            Dashboards remotos — ve y prueba el panel de cada cliente
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <div className="flex-1 flex gap-2">
+              <Input
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="Email del cliente…"
+                className="bg-black/20 border-white/10 text-sm flex-1"
+                onKeyDown={e => e.key === "Enter" && loadDashboard()}
+              />
+              <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline" className="shrink-0 border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0">
+                  <Command>
+                    <CommandInput placeholder="Buscar cliente por email…" />
+                    <CommandList className="max-h-72">
+                      <CommandEmpty>Sin clientes que coincidan.</CommandEmpty>
+                      <CommandGroup heading={`${clientList.length} cliente(s)`}>
+                        {clientList.map((c) => (
+                          <CommandItem key={c.email} value={c.email}
+                            onSelect={() => { setEmail(c.email); setClientPickerOpen(false); loadDashboard(c.email); }}
+                            className="cursor-pointer flex items-center justify-between gap-2">
+                            <span className="truncate">{c.email}</span>
+                            <Badge variant="outline" className="text-[10px] shrink-0">{c.appsGenerated} app{c.appsGenerated === 1 ? "" : "s"}</Badge>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button size="sm" onClick={() => loadDashboard()} disabled={loading} className="shrink-0">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Monitor className="h-3.5 w-3.5" />}
+              {loading ? "Cargando…" : "Ver dashboard"}
+            </Button>
+            {data && (
+              <Button size="sm" variant="outline" className={`shrink-0 text-[10px] ${autoRefresh ? "border-emerald-500/40 text-emerald-400" : "border-white/10 text-white/50"}`}
+                onClick={() => setAutoRefresh(v => !v)} title="Refrescar automáticamente cada 5s">
+                <RefreshCw className={`h-3.5 w-3.5 ${autoRefresh ? "animate-spin" : ""}`} />
+                {autoRefresh ? "En vivo" : "Auto"}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {!data && !loading && (
+        <div className="text-center text-sm text-muted-foreground py-12">
+          Selecciona un cliente para ver su dashboard tal y como lo ve él.
+        </div>
+      )}
+
+      {data && user && (
+        <div className="space-y-4">
+          {/* Cabecera del cliente — simula la vista del panel del cliente */}
+          <Card className="bg-gradient-to-br from-violet-500/10 to-transparent border-violet-500/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                {user.imageUrl
+                  ? <img src={user.imageUrl} alt="" className="h-11 w-11 rounded-full border border-white/10" />
+                  : <div className="h-11 w-11 rounded-full bg-violet-500/20 flex items-center justify-center text-violet-300 font-semibold">{(user.fullName || user.email || "?").charAt(0).toUpperCase()}</div>}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white/90 truncate">{user.fullName || user.email}</p>
+                  <p className="text-[11px] text-white/40 truncate">{user.email} · {user.marisId || "sin ID"}</p>
+                </div>
+                <div className="ml-auto flex gap-1.5 flex-wrap justify-end">
+                  {user.isAdmin && <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">admin</Badge>}
+                  {user.isPremium && <Badge variant="outline" className="text-[9px] border-emerald-500/30 text-emerald-400">premium</Badge>}
+                  {user.isSuspended && <Badge variant="outline" className="text-[9px] border-red-500/30 text-red-400">suspendido</Badge>}
+                  {user.isBanned && <Badge variant="outline" className="text-[9px] border-red-600/40 text-red-500">baneado</Badge>}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tarjetas de stats — mismas métricas que ve el cliente en su panel */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Créditos", value: stats?.credits ?? 0, icon: CreditCard, color: "text-emerald-400" },
+              { label: "Apps generadas", value: stats?.appsGenerated ?? 0, icon: Package, color: "text-sky-400" },
+              { label: "Apps esta semana", value: stats?.appsThisWeek ?? 0, icon: TrendingUp, color: "text-violet-400" },
+              { label: "Créditos gastados", value: stats?.creditsSpentTotal ?? 0, icon: Zap, color: "text-amber-400" },
+            ].map((s) => (
+              <Card key={s.label} className="bg-card/40 border-white/5">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 text-[10px] text-white/40"><s.icon className={`h-3.5 w-3.5 ${s.color}`} />{s.label}</div>
+                  <p className="text-xl font-bold text-white/90 mt-1">{s.value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Notificaciones activas del cliente (banner de soporte) */}
+          {unreadNotifs.length > 0 && (
+            <Card className="bg-violet-500/10 border-violet-500/30">
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-medium text-violet-300">
+                  <Bell className="h-3.5 w-3.5" />
+                  {unreadNotifs.length} notificación(es) de soporte activas que ve el cliente
+                </div>
+                {unreadNotifs.map((n) => (
+                  <div key={n.id} className="text-[11px] text-white/70 bg-black/20 rounded px-2 py-1.5">
+                    <span className="text-violet-400 font-mono mr-1">[{n.type}]</span>{n.message}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Apps generadas del cliente — igual que su sección "Apps generadas" */}
+          <div>
+            <h3 className="text-sm font-semibold text-white/70 mb-2 flex items-center gap-2">
+              <LayoutDashboard className="h-4 w-4 text-sky-400" />
+              Apps generadas ({apps.length})
+            </h3>
+            {apps.length === 0 ? (
+              <div className="text-center text-xs text-muted-foreground py-6">Este cliente no tiene apps.</div>
+            ) : (
+              <div className="space-y-3">
+                {apps.map((app) => {
+                  const appId = app.id || app._id;
+                  const isPreviewOpen = previewAppId === appId;
+                  return (
+                    <Card key={appId} className="bg-card/40 border-white/5 overflow-hidden">
+                      <CardContent className="p-0">
+                        <div className="flex items-center justify-between p-3 gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold text-white/90 truncate">{app.title || "Sin título"}</p>
+                              {app.pendingAdminApproval
+                                ? <Badge variant="outline" className="text-[9px] border-red-500/30 text-red-400">🔒 oculta al cliente</Badge>
+                                : <Badge variant="outline" className="text-[9px] border-emerald-500/30 text-emerald-400">🔓 visible</Badge>}
+                            </div>
+                            <p className="text-[10px] text-white/40 truncate mt-0.5">{app.description || "(sin descripción)"}</p>
+                            <span className="text-[9px] font-mono text-white/25 cursor-pointer hover:text-white/50"
+                              onClick={() => { navigator.clipboard?.writeText(appId); toast({ title: "ID copiado", description: appId }); }}
+                              title="Click para copiar App ID">📦 {appId}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-sky-500/20 text-sky-300 hover:bg-sky-500/10"
+                              onClick={() => setPreviewAppId(isPreviewOpen ? null : appId)}>
+                              {isPreviewOpen ? "Cerrar" : <><Eye className="h-3 w-3 mr-1" />Probar app</>}
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
+                              onClick={() => window.open(`${apiBase}/api/apps/${appId}/preview`, "_blank", "noopener,noreferrer")}>
+                              🔗 Nueva pestaña
+                            </Button>
+                            <Button size="sm" variant="outline"
+                              className={`h-7 text-[10px] ${app.pendingAdminApproval ? "border-red-500/40 text-red-400 hover:bg-red-500/10" : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"}`}
+                              disabled={actionLoading[`unblock_${appId}`]}
+                              onClick={() => unblockApp(appId, app.title)}>
+                              {actionLoading[`unblock_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : app.pendingAdminApproval ? <>🔒 Desbloquear</> : <>🔓 Visible</>}
+                            </Button>
+                          </div>
+                        </div>
+                        {isPreviewOpen && (
+                          <div className="border-t border-white/5 bg-black/30">
+                            <iframe
+                              src={`${apiBase}/api/apps/${appId}/preview`}
+                              className="w-full border-0"
+                              style={{ height: "600px", background: "#0a0a0f" }}
+                              title={`Preview ${appId}`}
+                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                              allow="clipboard-read; clipboard-write"
+                            />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2603,6 +2912,10 @@ export default function AdminDashboardPage() {
                   <Eye className="h-3.5 w-3.5" />
                   Apps clientes
                 </TabsTrigger>
+                <TabsTrigger value="remote" className="gap-2">
+                  <Monitor className="h-3.5 w-3.5 text-violet-400" />
+                  Dashboards remotos
+                </TabsTrigger>
                 <TabsTrigger value="system" className="gap-2">
                   <Cpu className="h-3.5 w-3.5" />
                   Sistema
@@ -3051,6 +3364,11 @@ export default function AdminDashboardPage() {
               {/* APPS CLIENTES TAB */}
               <TabsContent value="apps" className="space-y-4">
                 <AppsClientesPanel apiBase={import.meta.env.VITE_API_URL || ""} />
+              </TabsContent>
+
+              {/* DASHBOARDS REMOTOS TAB */}
+              <TabsContent value="remote" className="space-y-4">
+                <RemoteDashboardPanel apiBase={import.meta.env.VITE_API_URL || ""} />
               </TabsContent>
 
               {/* SYSTEM TAB */}
