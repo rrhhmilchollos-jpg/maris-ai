@@ -30,6 +30,12 @@ async function sendEmail(opts: {
   subject: string;
   html: string;
   text: string;
+  // Si replyTo está presente, el cliente puede responder directamente a soporte.
+  // Sin replyTo, se usa el from por defecto (alertas@marisai.es) — solo para
+  // emails internos/alertas donde no se espera respuesta del cliente.
+  replyTo?: string;
+  // from override: permite usar un remitente diferente según el tipo de email
+  from?: string;
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -38,16 +44,22 @@ async function sendEmail(opts: {
   }
 
   try {
+    const body: Record<string, unknown> = {
+      from: opts.from || process.env.RESEND_FROM_EMAIL || "Maris AI <hola@marisai.es>",
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+    };
+    // reply_to: si el cliente responde, el correo va a soporte, no a una
+    // dirección no-reply que nadie lee ni puede responder.
+    if (opts.replyTo) {
+      body.reply_to = opts.replyTo;
+    }
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || "Maris AI Alertas <alertas@marisai.es>",
-        to: opts.to,
-        subject: opts.subject,
-        html: opts.html,
-        text: opts.text,
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
@@ -434,6 +446,8 @@ export async function sendApologyEmail(opts: {
     subject: `✅ ${appTitle ? '"' + appTitle + '" lista' : "Tu app está lista"} — problema resuelto por soporte`,
     html,
     text: `${greeting}\n\nQueremos pedirte disculpas sinceras por los problemas que experimentaste. ${appDescPlain} ya está lista y disponible en tu panel.${creditsCompensation > 0 ? "\n\nComo compensación hemos añadido " + creditsCompensation + " créditos a tu cuenta." : ""}\n\nAccede aquí: ${dashboardUrl}\n\nGracias por confiar en Maris AI.\n\nEl equipo de Maris AI`,
+    from: "Maris AI <hola@marisai.es>",
+    replyTo: "soporte@marisai.es",
   });
 }
 
@@ -586,6 +600,8 @@ export async function sendWelcomeEmail(opts: {
     subject: "🎉 Bienvenido a Maris AI — tus créditos ya están listos",
     html,
     text: `${greeting}\n\nGracias por unirte a Maris AI. Tienes ${credits} créditos de bienvenida listos para crear tu primera app completa, sin tarjeta de crédito.\n\nEmpieza aquí: https://www.marisai.es/dashboard\n\n¡Bienvenido a bordo!\n\nEl equipo de Maris AI`,
+    from: "Maris AI <hola@marisai.es>",
+    replyTo: "soporte@marisai.es",
   });
 }
 
@@ -675,6 +691,8 @@ export async function sendFirstAppReadyEmail(opts: {
     subject: `🚀 "${appTitle}" ya está lista — tu primera app con Maris AI`,
     html,
     text: `${greeting}\n\nAcabamos de generar "${appTitle}" y ya puedes verla en tu panel.\n\nVerla aquí: ${dashboardUrl}\n\n¡Disfruta de tu app!\n\nEl equipo de Maris AI`,
+    from: "Maris AI <hola@marisai.es>",
+    replyTo: "soporte@marisai.es",
   });
 }
 
@@ -745,5 +763,9 @@ export async function sendCustomAdminEmail(opts: {
     subject,
     html,
     text: `${greeting}\n\n${body}${creditsCompensation > 0 ? `\n\nHemos añadido ${creditsCompensation} créditos a tu cuenta.` : ""}\n\nEl equipo de Maris AI`,
+    // Emails al cliente: remitente visible y amigable, reply-to a soporte
+    // para que el cliente pueda responder directamente y llegue a alguien real.
+    from: "Maris AI <hola@marisai.es>",
+    replyTo: "soporte@marisai.es",
   });
 }

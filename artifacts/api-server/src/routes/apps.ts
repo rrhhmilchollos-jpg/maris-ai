@@ -3470,11 +3470,33 @@ export async function generateApp(
     }
   }
 
+  // ── ACTIVACIÓN OBLIGATORIA DE HITOS ──────────────────────────────────────
+  // A partir del 2 de julio de 2026, el orquestador de hitos se activa para
+  // TODOS los proyectos nuevos sin excepción, independientemente del tier.
+  //
+  // RAZÓN: 22 clientes perdidos por apps incompletas o en pantalla blanca.
+  // El pipeline estándar de una sola pasada tiene límites reales de tamaño
+  // de salida que hacen que proyectos medianos y complejos lleguen incompletos
+  // al cliente. El orquestador de hitos divide CUALQUIER proyecto en módulos
+  // manejables que siempre terminan correctamente, incluso para un blog simple.
+  //
+  // EXCEPCIÓN: ediciones de proyectos ya existentes (previous !== null) siguen
+  // usando el pipeline estándar — los hitos son para construcción desde cero.
+  // También se excluyen landing pages básicas (tier "basic") para no
+  // consumir créditos de más en apps de 1-2 páginas sin backend.
+  const isBasicLanding = agentModelPlan.tier === "basic" && !plan.backendNeeded;
   const useMilestoneOrchestrator =
     process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" ||
+    // Hitos para todo proyecto nuevo no trivial — la excepción son ediciones
+    // (previous !== null) y landings básicas sin backend
+    (wantsFullBuild && !isBasicLanding) ||
     isRobustOrUltra ||
     plan.requiresMilestones === true ||
     historicalBoost.extraScore >= 3;
+
+  if (wantsFullBuild && !isBasicLanding) {
+    logger.info({ tier: agentModelPlan.tier, requiresMilestones: plan.requiresMilestones }, "Milestone: activado para proyecto nuevo (política obligatoria desde jul 2026)");
+  }
 
   // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
   // A petición EXPLÍCITA del usuario: antes de lanzar un proyecto NUEVO
