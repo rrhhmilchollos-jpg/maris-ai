@@ -4606,6 +4606,16 @@ Output STRICT JSON only, no markdown, no explanation.`,
     );
     finalFrontend = repairResult.finalCode;
     const pmValidation = repairResult.pmValidation;
+
+    // Si el PM Agent devuelve score muy bajo con muchos blockers tras el
+    // bucle de reparación, es señal de que la app llegó al QA vacía
+    // (el frontend nunca se generó correctamente). En ese caso registrar
+    // el fallo claramente para que el admin pueda regenerar con hitos.
+    const persistentBlockers = pmValidation.issues.filter(i => i.severity === "blocker");
+    if (pmValidation.score < 40 && persistentBlockers.length > 8) {
+      await log("qa", `⚠️ QA CRÍTICO: score ${pmValidation.score}/100 con ${persistentBlockers.length} blockers persistentes — la app llegó al QA sin el código del frontend generado correctamente. Regenera desde el panel usando el orquestador de hitos para garantizar completitud.`, "warn");
+    }
+
     if (pmValidation.score >= 80) {
       await log("qa", `✅ PM Agent: app aprobada (${pmValidation.score}/100) tras ${repairResult.cycles} ciclo(s). ${pmValidation.summary}`);
     } else if (pmValidation.score >= 60) {

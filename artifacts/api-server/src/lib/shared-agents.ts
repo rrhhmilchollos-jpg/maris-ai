@@ -736,7 +736,10 @@ Output EXCLUSIVELY the raw file content. No JSON wrapper, no markdown fences, no
       return null;
     }
     return content;
-  } catch {
+  } catch (err: any) {
+    // Loguear el error real para diagnóstico — antes era catch silencioso
+    // que hacía imposible saber si era timeout, rate limit, contexto excedido, etc.
+    logger.warn({ filePath, action, errMsg: String(err?.message || err).slice(0, 200) }, "generateSingleFileContent: excepción capturada");
     return null;
   }
 }

@@ -578,6 +578,21 @@ export async function runInvisibleRepairLoop(
       return { finalCode: currentCode, pmValidation, cycles };
     }
 
+    // GUARDIA CRÍTICA: si hay más de 12 blockers en el PRIMER ciclo, la app
+    // llegó al QA prácticamente vacía (solo App.tsx sin las páginas/componentes
+    // que el Arquitecto planificó). En ese caso, intentar crear 20+ archivos
+    // con el Patcher siempre falla — el Patcher está diseñado para REPARAR
+    // código existente, no para GENERAR un proyecto desde cero. La solución
+    // correcta es salir del bucle y dejar que el pipeline principal decida
+    // si regenerar por hitos.
+    const TOO_MANY_BLOCKERS = 12;
+    if (cycles === 1 && blockers.length > TOO_MANY_BLOCKERS) {
+      log(`⚠️ QA: ${blockers.length} blockers detectados en ciclo 1 — la app llegó al QA incompleta. El Patcher no puede crear ${blockers.length} módulos desde cero. Se recomienda regenerar con el orquestador de hitos para garantizar completitud.`);
+      // Devolver la validación actual sin intentar reparar — el pipeline
+      // principal verá el score bajo y podrá tomar la decisión adecuada.
+      return { finalCode: currentCode, pmValidation, cycles };
+    }
+
     log(`🔧 Bucle de reparación invisible: ${blockers.length} blocker(s) — ciclo ${cycles}/${cycleLimit}`);
     onProgress?.({
       phase: "patching",
