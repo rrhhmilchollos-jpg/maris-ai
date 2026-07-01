@@ -977,6 +977,12 @@ FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
 - Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
 
+MILESTONE ORCHESTRATOR RULE — incluye "requiresMilestones": true en tu respuesta JSON cuando el proyecto necesite construcción por hitos para no quedar incompleto:
+- SIEMPRE true si: hay múltiples tipos de usuario (empresario+candidato, vendedor+comprador, admin+cliente, profesor+alumno), o es un portal/marketplace/plataforma multi-módulo, o tiene 3+ dominios de negocio claramente distintos (ej: catálogo + reservas + pagos + notificaciones).
+- SIEMPRE true si: el proyecto es un portal de empleo, red social, plataforma educativa, marketplace, sistema de reservas complejo, inmobiliaria, directorio de profesionales, o cualquier app donde usuarios de distintos tipos interactúan entre sí.
+- false (o ausente) para: apps de un solo módulo, landing pages, herramientas simples, dashboards sin múltiples roles.
+- Esta decisión es MÁS FIABLE que el scoring automático — el orquestador leerá tu "requiresMilestones" directamente.
+
 SCOPE LIMITS — crítico para que el frontend pueda generarse sin timeout:
 - Apps standard (score 1-2): máximo 8 páginas, 12 componentes, 6 hooks. Si el prompt no menciona explícitamente decenas de funcionalidades, mantén el plan ajustado.
 - Apps complejas (score 3+): máximo 12 páginas, 16 componentes, 8 hooks.
@@ -1347,6 +1353,9 @@ interface ProjectPlan {
   platform?: "web" | "mobile-native";
   architecture?: "monolith" | "microservices" | "serverless";
   backendFiles: string[];
+  // El Arquitecto marca true si el proyecto necesita construcción por hitos
+  // para no quedar incompleto — más fiable que el scoring automático de keywords
+  requiresMilestones?: boolean;
 }
 
 interface DesignSystem {
@@ -1865,6 +1874,48 @@ function classifyPromptComplexity(prompt: string, context?: { kind?: string; has
 
 function makeAgentChoice(role: AgentRole, label: string, model: AgentModelChoice["model"], reason: string): AgentModelChoice {
   return { role, label, model, reason };
+}
+
+/**
+ * checkHistoricalFailurePatterns — consulta AppRepairLog para detectar si el
+ * tipo de app que se está generando ha fallado con frecuencia en el pasado.
+ * Si hay >= 2 fallos recientes con características similares (mismas keywords
+ * en el prompt), sube el score para forzar el orquestador de hitos.
+ *
+ * Este es el "feedback loop" que hace que Maris AI aprenda de sus fallos:
+ * si TalentHub falló 2 veces, la próxima app de tipo "portal de empleo"
+ * irá automáticamente a hitos sin necesitar que nadie lo configure.
+ */
+async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraScore: number; reasons: string[] }> {
+  try {
+    const { connectDB } = await import("../lib/db");
+    await connectDB();
+    const AppRepairLog = (await import("../lib/autoRepairAgent")).getAppRepairLogModel?.() ||
+      (require("mongoose").models.AppRepairLog);
+    if (!AppRepairLog) return { extraScore: 0, reasons: [] };
+
+    // Extraer keywords del prompt para buscar patrones similares
+    const keywords = prompt.toLowerCase().match(/\b(portal|marketplace|empleo|oferta|candidato|reservas|citas|inmobiliaria|academia|cursos|e.?commerce|tienda|crm|erp|dashboard|multi|roles|usuarios|comunidad|red social|directorio)\b/g) || [];
+    if (keywords.length === 0) return { extraScore: 0, reasons: [] };
+
+    // Buscar fallos recientes (últimos 30 días) con keywords similares
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentFailures = await AppRepairLog.countDocuments({
+      success: false,
+      createdAt: { $gte: thirtyDaysAgo },
+      $or: keywords.map((kw: string) => ({ errorSummary: { $regex: kw, $options: "i" } })),
+    }).maxTimeMS(3000);
+
+    if (recentFailures >= 2) {
+      return {
+        extraScore: 3,
+        reasons: [`patrón de fallo histórico detectado (${recentFailures} fallos recientes con keywords similares)`],
+      };
+    }
+    return { extraScore: 0, reasons: [] };
+  } catch {
+    return { extraScore: 0, reasons: [] }; // no bloquear si falla
+  }
 }
 
 function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean }) {
@@ -3408,7 +3459,22 @@ export async function generateApp(
   const wantsFullBuild = !previous || hasExplicitBuildIntent;
   const isUltraComplex = agentModelPlan.tier === "ultra";
   const isRobustOrUltra = agentModelPlan.tier === "ultra" || agentModelPlan.tier === "robust";
-  const useMilestoneOrchestrator = process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" || isRobustOrUltra;
+
+  // Feedback loop: si el tipo de app ha fallado 2+ veces recientemente,
+  // forzar hitos aunque el tier no lo requiera.
+  let historicalBoost = { extraScore: 0, reasons: [] as string[] };
+  if (!isRobustOrUltra && wantsFullBuild) {
+    historicalBoost = await checkHistoricalFailurePatterns(prompt);
+    if (historicalBoost.extraScore > 0) {
+      logger.info({ reasons: historicalBoost.reasons }, "Milestone: boost por historial de fallos activado");
+    }
+  }
+
+  const useMilestoneOrchestrator =
+    process.env.MARIS_USE_MILESTONE_ORCHESTRATOR === "true" ||
+    isRobustOrUltra ||
+    plan.requiresMilestones === true ||
+    historicalBoost.extraScore >= 3;
 
   // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
   // A petición EXPLÍCITA del usuario: antes de lanzar un proyecto NUEVO
