@@ -1,168 +1,146 @@
 import { useEffect } from "react";
-import { Check, X, ArrowRight, Zap, Code2, Globe } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Check, X, ArrowRight, Zap, Star, Shield, Clock, Euro, MessageCircle, Globe, Rocket } from "lucide-react";
+import { motion } from "framer-motion";
+import { Layout } from "@/components/layout";
 
-export default function VsCompetidoresPage() {
+const COMPARISON = [
+  { feature: "Idioma de la interfaz", maris: "100% Español", competitor: "Solo inglés", marisWins: true },
+  { feature: "Soporte en español", maris: "WhatsApp + email", competitor: "No disponible", marisWins: true },
+  { feature: "Enfoque multi-agente", maris: "9 agentes especializados", competitor: "Sí, multi-agente", marisWins: false },
+  { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Sí, incluido", marisWins: false },
+  { feature: "Plan de pago desde", maris: "19€/mes", competitor: "20$/mes (~18€)", marisWins: false },
+  { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, mensualmente", marisWins: true },
+  { feature: "Exportación código completo", maris: "Sí, frontend + backend", competitor: "Sí, incluido", marisWins: false },
+  { feature: "Deploy automático", maris: "Sí, a Vercel", competitor: "Sí, incluido", marisWins: false },
+  { feature: "Precio en euros", maris: "Sí, euros reales", competitor: "No, dólares", marisWins: true },
+  { feature: "Comunidad en español", maris: "Sí, activa", competitor: "No", marisWins: true },
+];
+
+const FAQS = [
+  { q: "¿En qué se parecen Maris AI y Emergent.sh?", a: "Ambos usan arquitectura multi-agente para generar apps completas en una sola generación. Los dos incluyen deploy automático y exportación de código. La diferencia principal es que Maris AI está en español y Emergent.sh solo en inglés." },
+  { q: "¿Es Emergent.sh mejor técnicamente que Maris AI?", a: "Emergent.sh es técnicamente muy sólido. Maris AI tiene una arquitectura similar de 9 agentes especializados. Para el mercado hispanohablante, la calidad es comparable pero Maris AI añade la ventaja del idioma y el soporte humano." },
+  { q: "¿Puedo usar Emergent.sh si no sé inglés?", a: "Técnicamente puedes escribir prompts en español, pero toda la interfaz, mensajes de error y soporte son en inglés. Maris AI ofrece todo en español, incluyendo los mensajes del sistema y el soporte." },
+  { q: "¿Los créditos de Emergent.sh caducan?", a: "Sí, los créditos de Emergent.sh se reinician mensualmente. En Maris AI los créditos nunca caducan: los compras y los usas cuando quieras, sin presión de fin de mes." },
+  { q: "¿Por qué Maris AI si Emergent.sh tiene más trayectoria?", a: "Emergent.sh tiene más tiempo en el mercado global, pero Maris AI es la única opción construida específicamente para el mercado hispanohablante. Si tu empresa y clientes están en España o Latinoamérica, la experiencia en tu idioma marca una diferencia real." },
+];
+
+export default function VsEmergentPage() {
   useEffect(() => {
-    document.title = "Maris AI vs Emergent.sh — Mejor Alternativa Española 2026";
-    const desc = document.querySelector('meta[name="description"]');
-    if (desc) desc.setAttribute("content", "Maris AI es la mejor alternativa a Emergent.sh para emprendedores españoles. En español, con 9 agentes IA, precios en euros y soporte directo.");
-    const ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) ogTitle.setAttribute("content", "Maris AI vs Emergent.sh — Mejor Alternativa Española 2026");
-    const ogDesc = document.querySelector('meta[property="og:description"]');
-    if (ogDesc) ogDesc.setAttribute("content", "Maris AI es la mejor alternativa a Emergent.sh para emprendedores españoles. En español, con 9 agentes IA, precios en euros y soporte directo.");
-    const ogUrl = document.querySelector('meta[property="og:url"]');
-    if (ogUrl) ogUrl.setAttribute("content", "https://www.marisai.es/vs-emergent");
-    let canonical = document.getElementById("canonical-tag") as HTMLLinkElement | null;
-    if (!canonical) canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
-    if (canonical) canonical.setAttribute("href", "https://www.marisai.es/vs-emergent");
+    document.title = "Maris AI vs Emergent.sh 2026 — Alternativa en español con soporte real | Maris AI";
+    const setMeta = (sel: string, val: string) => { const el = document.querySelector(sel); if (el) el.setAttribute("content", val); };
+    setMeta('meta[name="description"]', "Comparativa Maris AI vs Emergent.sh: cuál genera mejores apps para emprendedores españoles. Maris AI ofrece soporte en español, precios en euros y 9 agentes especializados.");
+    setMeta('meta[property="og:title"]', "Maris AI vs Emergent.sh 2026 — Alternativa en español con soporte real | Maris AI");
+    setMeta('meta[property="og:url"]', "https://www.marisai.es/vs-emergent");
+    let canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
+    if (!canonical) { canonical = document.createElement("link") as HTMLLinkElement; canonical.rel = "canonical"; document.head.appendChild(canonical); }
+    canonical.href = "https://www.marisai.es/vs-emergent";
+    const jsonLd = { "@context": "https://schema.org", "@graph": [
+      { "@type": "Article", "headline": "Maris AI vs Emergent.sh 2026 — Alternativa en español con soporte real | Maris AI", "author": { "@type": "Organization", "name": "Maris AI" }, "dateModified": "2026-07-01" },
+      { "@type": "FAQPage", "mainEntity": FAQS.map(f => ({ "@type": "Question", "name": f.q, "acceptedAnswer": { "@type": "Answer", "text": f.a } })) }
+    ]};
+    let s = document.getElementById("jsonld-vs") as HTMLScriptElement | null;
+    if (!s) { s = document.createElement("script"); s.id = "jsonld-vs"; s.type = "application/ld+json"; document.head.appendChild(s); }
+    s.textContent = JSON.stringify(jsonLd);
   }, []);
-  // Schema.org ItemList para la comparativa
-  const schemaData = {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    "name": "Comparativa Maris AI vs Emergent.sh",
-    "itemListElement": [
-      {
-        "@type": "ListItem",
-        "position": 1,
-        "name": "Maris AI",
-        "description": "9 agentes IA, soporte en español, desde 29€/mes"
-      },
-      {
-        "@type": "ListItem",
-        "position": 2,
-        "name": "Emergent.sh",
-        "description": "Plataforma anglosajona, sin soporte en español, desde 20$/mes"
-      }
-    ]
-  };
 
   return (
-    <div className="min-h-screen bg-background">
-      <script type="application/ld+json">
-        {JSON.stringify(schemaData)}
-      </script>
-      {/* Hero */}
-      <section className="py-24 border-b border-white/5">
-        <div className="container px-4 mx-auto max-w-4xl text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            Maris AI vs Emergent.sh: Comparativa completa 2026
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-            Alternativa en español a Emergent.sh, Bolt.new y Lovable
-          </p>
-        </div>
-      </section>
-
-      {/* Intro Section */}
-      <section className="py-16 bg-card/30 border-b border-white/5">
-        <div className="container px-4 mx-auto max-w-4xl">
-          <div className="prose prose-invert max-w-none">
-            <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-              Si estás buscando una alternativa a <strong>Emergent.sh</strong>, <strong>Bolt.new</strong> o <strong>Lovable</strong> en español, aquí tienes la comparativa honesta. Emergent.sh es una plataforma de generación de apps con IA popular en el mercado anglosajón, con precios desde 20$/mes. <strong>Maris AI</strong> ofrece el mismo pipeline de agentes especializados, completamente en español, y con soporte nativo para el mercado hispanohablante.
-            </p>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              La diferencia clave: mientras que Emergent.sh utiliza un agente único generalista, Maris AI implementa un pipeline completo de 9 agentes especializados (diseño, backend, QA, etc.), lo que resulta en código de mejor calidad y aplicaciones más robustas.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Comparison Table */}
-      <section className="py-24">
-        <div className="container px-4 mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold text-white text-center mb-16">
-            Comparativa: Maris AI vs Emergent.sh vs Bolt.new
-          </h2>
-          <div className="overflow-x-auto rounded-2xl border border-white/10">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10 bg-card/50">
-                  <th className="p-6 text-left text-sm font-semibold text-muted-foreground">Característica</th>
-                  <th className="p-6 text-sm font-semibold text-primary text-center bg-primary/10">Maris AI</th>
-                  <th className="p-6 text-sm font-semibold text-muted-foreground text-center">Otras plataformas</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {[
-                  { feature: "Agentes Especializados", maris: "9 Agentes (Pipeline Completo)", other: "Agente Único / Generalista" },
-                  { feature: "Modelos de IA", maris: "Claude + Gemini + GPT (Multi-modelo)", other: "Modelo único / Limitado" },
-                  { feature: "Calidad del Código", maris: "Arquitectura Senior (Vite + Tailwind)", other: "Código Estándar" },
-                  { feature: "Backend e Infraestructura", maris: "Express + MongoDB + Railway", other: "Enfoque Principal Frontend" },
-                  { feature: "Soporte en Español", maris: "Completo (Nativo)", other: "Limitado / Inglés" },
-                  { feature: "Exportación a GitHub", maris: "Integración Directa", other: "Sujeto a Plan" },
-                  { feature: "Revisión de QA", maris: "Agente QA dedicado", other: "Manual / No disponible" },
-                ].map((row, i) => (
-                  <tr key={i} className="hover:bg-white/5 transition-colors">
-                    <td className="p-6 text-sm text-white/80 font-medium">{row.feature}</td>
-                    <td className="p-6 text-center bg-primary/5">
-                      <div className="flex flex-col items-center gap-1">
-                        <Check className="h-5 w-5 text-emerald-400" />
-                        <span className="text-xs text-white/60 font-medium">{row.maris}</span>
-                      </div>
-                    </td>
-                    <td className="p-6 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <X className="h-5 w-5 text-red-400/60" />
-                        <span className="text-xs text-muted-foreground">{row.other}</span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* Key Advantages */}
-      <section className="py-24">
-        <div className="container px-4 mx-auto max-w-5xl">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-2xl border border-white/5 bg-card/30 hover:border-primary/30 transition-all group">
-              <Zap className="h-10 w-10 text-primary mb-6 group-hover:scale-110 transition-transform" />
-              <h3 className="text-xl font-bold text-white mb-3">Velocidad Extrema</h3>
-              <p className="text-muted-foreground">Generamos el 100% de tu aplicación en menos de 10 minutos con despliegue automático.</p>
+    <Layout>
+      <div className="min-h-screen bg-background pt-24 pb-20">
+        <section className="container px-4 mx-auto max-w-5xl mb-16 text-center">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-6">⚡ Comparativa actualizada julio 2026</div>
+            <h1 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight leading-tight">
+              Maris AI vs Emergent.sh<br />
+              <span className="bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">¿Cuál genera mejores apps para España?</span>
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">Emergent.sh es uno de los builders más avanzados del mercado. Maris AI es la alternativa en español con soporte humano real. Comparativa honesta para el mercado hispanohablante.</p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
+              <Link href="/sign-up"><Button size="lg" className="gap-2 bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/30"><Rocket className="h-5 w-5" />Probar Maris AI gratis</Button></Link>
+              <Link href="/demo"><Button size="lg" variant="outline" className="gap-2 border-white/20 text-white hover:bg-white/[0.05]"><Zap className="h-5 w-5" />Ver demo en vivo</Button></Link>
             </div>
-            <div className="p-8 rounded-2xl border border-white/5 bg-card/30 hover:border-primary/30 transition-all group">
-              <Code2 className="h-10 w-10 text-primary mb-6 group-hover:scale-110 transition-transform" />
-              <h3 className="text-xl font-bold text-white mb-3">Código Senior</h3>
-              <p className="text-muted-foreground">No más código "spaghetti". Usamos patrones de diseño modernos y TypeScript estricto.</p>
+            <p className="text-sm text-muted-foreground">Sin tarjeta · Sin inglés · 45 créditos gratis al registrarte</p>
+          </motion.div>
+        </section>
+
+        <section className="container px-4 mx-auto max-w-4xl mb-20">
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-8">Comparativa real: Maris AI vs Emergent.sh</h2>
+          <div className="rounded-2xl border border-white/[0.08] overflow-hidden">
+            <div className="grid grid-cols-3 bg-white/[0.04] border-b border-white/[0.08]">
+              <div className="p-4 text-sm font-semibold text-white/60">Característica</div>
+              <div className="p-4 text-sm font-bold text-primary text-center border-x border-white/[0.08]">✨ Maris AI</div>
+              <div className="p-4 text-sm font-semibold text-white/60 text-center">Emergent.sh</div>
             </div>
-            <div className="p-8 rounded-2xl border border-white/5 bg-card/30 hover:border-primary/30 transition-all group">
-              <Globe className="h-10 w-10 text-primary mb-6 group-hover:scale-110 transition-transform" />
-              <h3 className="text-xl font-bold text-white mb-3">Multi-Modelo</h3>
-              <p className="text-muted-foreground">Combinamos lo mejor de Anthropic, Google y OpenAI para cada etapa del proceso.</p>
-            </div>
+            {COMPARISON.map((row, i) => (
+              <div key={i} className={`grid grid-cols-3 border-b border-white/[0.05] ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}>
+                <div className="p-4 text-sm text-white/70 flex items-center">{row.feature}</div>
+                <div className={`p-4 text-sm font-medium text-center border-x border-white/[0.05] flex items-center justify-center gap-2 ${row.marisWins ? "text-green-400" : "text-white/60"}`}>
+                  {row.marisWins && <Check className="h-4 w-4 shrink-0" />}<span>{row.maris}</span>
+                </div>
+                <div className={`p-4 text-sm text-center flex items-center justify-center gap-2 ${row.marisWins ? "text-white/40" : "text-white/60"}`}>
+                  {row.marisWins && <X className="h-4 w-4 text-red-400/60 shrink-0" />}<span>{row.competitor}</span>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA */}
-      <section className="py-24 border-t border-white/5">
-        <div className="container px-4 mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold text-white mb-6">Prueba la diferencia hoy mismo</h2>
-          <p className="text-lg text-muted-foreground mb-10">
-            Únete a los desarrolladores que han elegido un pipeline de agentes real para crear sus productos.
-          </p>
-          <Link href="/sign-up">
-            <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
-              Crear mi App Gratis <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </Link>
-        </div>
-      </section>
+        <section className="container px-4 mx-auto max-w-5xl mb-20">
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-10">Por qué Maris AI gana a Emergent.sh para el mercado hispanohablante</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {[
+              { icon: Globe, title: "100% en español", desc: "Interfaz, soporte, documentación y comunidad en español. Emergent.sh está en inglés — una barrera real para la mayoría de emprendedores.", color: "text-blue-400" },
+              { icon: MessageCircle, title: "Soporte humano por WhatsApp", desc: "Equipo real respondiendo en español en menos de 2 horas. Sin bots, sin tickets en inglés, sin esperas de días.", color: "text-green-400" },
+              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos nunca caducan. Emergent.sh cobra en dólares.", color: "text-yellow-400" },
+              { icon: Zap, title: "9 agentes IA especializados", desc: "Arquitecto, diseñador, frontend, backend, base de datos, integraciones, testing, deploy y autopilot trabajando en paralelo.", color: "text-purple-400" },
+              { icon: Shield, title: "Backend incluido sin extras", desc: "Express + MongoDB incluidos de serie. Sin servicios externos obligatorios, sin costes ocultos adicionales.", color: "text-red-400" },
+              { icon: Clock, title: "Apps completas en 5 minutos", desc: "Frontend + backend + base de datos + deploy automático a Vercel en una sola generación. Sin configuraciones manuales.", color: "text-cyan-400" },
+            ].map((item, i) => (
+              <div key={i} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-3 hover:border-white/20 transition">
+                <item.icon className={`h-6 w-6 ${item.color}`} />
+                <h3 className="font-bold text-white">{item.title}</h3>
+                <p className="text-sm text-white/50 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      {/* Footer simple */}
-      <footer className="py-12 border-t border-white/5 bg-background/50">
-        <div className="container px-4 mx-auto text-center">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Maris AI. Todos los derechos reservados.
-          </p>
-        </div>
-      </footer>
-    </div>
+        <section className="container px-4 mx-auto max-w-3xl mb-20">
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-8 text-center space-y-4">
+            <div className="flex justify-center gap-1">{[1,2,3,4,5].map(s => <Star key={s} className="h-5 w-5 fill-yellow-400 text-yellow-400" />)}</div>
+            <h2 className="text-2xl font-bold text-white">Nuestro veredicto</h2>
+            <p className="text-white/70 leading-relaxed max-w-2xl mx-auto">Emergent.sh es técnicamente muy capaz y tiene un enfoque multi-agente similar al de Maris AI, pero está completamente en inglés y sin soporte en español. Para el mercado hispanohablante, Maris AI es la opción natural: mismo nivel de calidad técnica, en español, con soporte humano por WhatsApp y precios en euros.</p>
+            <Link href="/sign-up"><Button size="lg" className="mt-2 bg-primary hover:bg-primary/90 text-white font-bold gap-2 shadow-lg shadow-primary/30">Empezar con Maris AI gratis <ArrowRight className="h-5 w-5" /></Button></Link>
+          </div>
+        </section>
+
+        <section className="container px-4 mx-auto max-w-3xl mb-20">
+          <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-10">Preguntas frecuentes — Maris AI vs Emergent.sh</h2>
+          <div className="space-y-4">
+            {FAQS.map((faq, i) => (
+              <details key={i} className="rounded-xl border border-white/[0.07] bg-white/[0.02] group">
+                <summary className="p-5 font-semibold text-white cursor-pointer list-none flex justify-between items-center hover:text-primary transition">
+                  <span>{faq.q}</span><ArrowRight className="h-4 w-4 text-white/40 group-open:rotate-90 transition-transform shrink-0 ml-4" />
+                </summary>
+                <div className="px-5 pb-5 text-sm text-white/60 leading-relaxed">{faq.a}</div>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="container px-4 mx-auto max-w-3xl text-center">
+          <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-cyan-500/10 border border-primary/20 p-10 space-y-5">
+            <h2 className="text-3xl font-black text-white">¿Listo para crear tu app?</h2>
+            <p className="text-white/60 max-w-md mx-auto">Únete a más de 2.400 emprendedores que ya eligieron la alternativa en español. Empieza gratis hoy.</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link href="/sign-up"><Button size="lg" className="bg-primary hover:bg-primary/90 text-white font-bold gap-2 h-12 px-8 shadow-lg shadow-primary/30"><Rocket className="h-5 w-5" />Crear cuenta gratis</Button></Link>
+              <Link href="/demo"><Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/[0.05] h-12 px-8 gap-2"><Zap className="h-5 w-5" />Ver demo en vivo</Button></Link>
+            </div>
+            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte en español · WhatsApp +34 611 935 616</p>
+          </div>
+        </section>
+      </div>
+    </Layout>
   );
 }
