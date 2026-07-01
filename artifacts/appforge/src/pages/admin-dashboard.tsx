@@ -1344,6 +1344,63 @@ function LiveMonitorPanel() {
                         <Zap className="h-3 w-3 text-violet-400" />
                         Acciones de recuperación
                       </p>
+
+                      {/* ── Prompt original completo del cliente ── */}
+                      {job.prompt && (() => {
+                        const fullPrompt = cleanJobPrompt(job.prompt, 9999);
+                        return fullPrompt && fullPrompt !== "tu proyecto" ? (
+                          <div className="rounded-lg border border-white/[0.07] bg-black/30 p-2.5 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono text-violet-400 uppercase tracking-wider">📋 Prompt original del cliente</span>
+                              <button
+                                className="text-[10px] text-white/40 hover:text-white transition px-2 py-0.5 rounded border border-white/10 hover:border-white/30"
+                                onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(fullPrompt); }}
+                              >
+                                Copiar
+                              </button>
+                            </div>
+                            <p className="text-[11px] text-white/70 leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                              {fullPrompt}
+                            </p>
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                className="text-[10px] text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 rounded px-2 py-1 transition"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setRepairPrompt(p => ({ ...p, [job.id]: fullPrompt }));
+                                }}
+                              >
+                                ✏️ Editar y regenerar
+                              </button>
+                              <button
+                                className="text-[10px] text-blue-400 border border-blue-500/30 hover:bg-blue-500/10 rounded px-2 py-1 transition"
+                                onClick={async e => {
+                                  e.stopPropagation();
+                                  if (!window.confirm(`¿Regenerar desde 0 con el prompt original de ${job.userEmail}?`)) return;
+                                  setActionLoading(p => ({ ...p, [`regenoriginal_${job.id}`]: true }));
+                                  try {
+                                    await apiFetch<any>(`/api/admin/users/${job.userId}/generate-app`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ prompt: fullPrompt, isRepair: false }),
+                                    });
+                                    toast({ title: "🚀 Regenerando con prompt original", description: `Job lanzado para ${job.userEmail}` });
+                                    await fetchJobs();
+                                  } catch (err: any) {
+                                    toast({ title: "Error", description: err?.message, variant: "destructive" });
+                                  } finally {
+                                    setActionLoading(p => ({ ...p, [`regenoriginal_${job.id}`]: false }));
+                                  }
+                                }}
+                              >
+                                {actionLoading[`regenoriginal_${job.id}`]
+                                  ? <Loader2 className="h-3 w-3 animate-spin inline" />
+                                  : "🔄 Regenerar con este prompt"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
                       {/* Borrar todos los jobs fallidos/reviewing de este usuario */}
                       <Button
                         size="sm"
