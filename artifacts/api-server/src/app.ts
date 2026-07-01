@@ -20,6 +20,7 @@ import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
 import adminRouter from "./routes/admin";
 import demoRouter from "./routes/demo";
+import affiliatesRouter from "./routes/affiliates";
 import { logger } from "./lib/logger";
 import clerkWebhookRouter from "./routes/clerkWebhook";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
@@ -320,6 +321,8 @@ app.use("/api", newsRouter);
 app.use("/api", adminRouter);
 // Demo pública — sin autenticación, accesible para visitantes no registrados
 app.use("/api/demo", demoRouter);
+// Programa de afiliados — rutas públicas y autenticadas
+app.use("/api/affiliates", affiliatesRouter);
 app.use("/", rssRouter);
 app.use("/", newsSitemapRouter);
 app.use("/", sitemapRouter);

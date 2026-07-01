@@ -51,6 +51,19 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     fireMetaPixelRegistration();
+    // Registrar el afiliado si el usuario llegó con un código de referido
+    try {
+      const ref = localStorage.getItem("maris_ref");
+      if (ref) {
+        fetch("/api/affiliates/track-signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referralCode: ref }),
+        }).then(() => {
+          localStorage.removeItem("maris_ref"); // Limpiar tras registrar
+        }).catch(() => {});
+      }
+    } catch {}
   }, []);
 
   const APP_TYPES = [

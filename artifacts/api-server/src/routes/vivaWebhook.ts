@@ -130,6 +130,16 @@ vivaWebhookRouter.post("/webhooks/viva", async (req: Request, res: Response) => 
               $set: { hasEverPaid: true },
               $setOnInsert: { firstPaidAt: new Date() },
             });
+            // Acreditar comisión al afiliado si este usuario fue referido
+            try {
+              const { trackAffiliateCommission } = await import("./affiliates");
+              // Estimar el importe en euros a partir de los créditos
+              // (aprox. 0.10€ por crédito — ajustar si cambian los precios)
+              const estimatedEuros = credits * 0.10;
+              await trackAffiliateCommission(userId, estimatedEuros);
+            } catch (affErr) {
+              logger.warn({ affErr, userId }, "Affiliate commission tracking failed (non-critical)");
+            }
           }
           logger.info({ userId, credits, transactionId, alreadyProcessed: result.alreadyProcessed }, "Top-up confirmado vía webhook de Viva.com");
         }

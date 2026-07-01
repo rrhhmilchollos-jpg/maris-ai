@@ -44,6 +44,7 @@ const DesarrolloNoCodeGuiaPage = lazy(() => import("@/pages/desarrollo-no-code-g
 const ShowcasePage = lazy(() => import("@/pages/showcase"));
 const ShowcaseDetailPage = lazy(() => import("@/pages/showcase-detail"));
 const DemoPage = lazy(() => import("@/pages/demo"));
+const AfiliadosPage = lazy(() => import("@/pages/afiliados"));
 const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 
@@ -549,6 +550,11 @@ function ClerkProviderWithRoutes() {
                   <DemoPage />
                 </Route>
 
+                {/* Programa de afiliados — pública con panel para usuarios logados */}
+                <Route path="/afiliados">
+                  <AfiliadosPage />
+                </Route>
+
                 <Route path="/crm/fisioterapeuta">
                   <FisioterapeutaCRM />
                 </Route>
@@ -580,6 +586,18 @@ function ClerkProviderWithRoutes() {
 }
 
 function App() {
+  // Capturar el código de afiliado de la URL (?ref=XXXX) y guardarlo en
+  // localStorage para usarlo en el onboarding al registrarse
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("ref");
+      if (ref && ref.length >= 6 && ref.length <= 12) {
+        localStorage.setItem("maris_ref", ref.toUpperCase());
+      }
+    } catch {}
+  }, []);
+
   return (
     <TooltipProvider>
       <WouterRouter base={basePath}>

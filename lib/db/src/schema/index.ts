@@ -12,6 +12,12 @@ export interface IUser {
   isAdmin?: boolean;
   freeCreditsUsed?: boolean;
   hasEverPaid?: boolean;       // true en cuanto se confirma el primer pago (Stripe o Viva)
+  // ── Programa de afiliados ─────────────────────────────────────────────
+  referralCode?: string;       // Código único de este usuario para compartir (ref=XXXX)
+  referredBy?: string;         // userId del afiliado que lo trajo
+  affiliateBalance?: number;   // Comisiones pendientes de cobro (en euros)
+  affiliateTotalEarned?: number; // Total ganado como afiliado (histórico)
+  affiliatePayoutRequested?: boolean; // Si ha solicitado cobro
   firstPaidAt?: Date;          // fecha del primer pago confirmado
   registrationIp?: string;
   lastLoginIp?: string;
@@ -84,6 +90,12 @@ const UserSchema = new Schema<IUser>(
     isAdmin: { type: Boolean, default: false },
     freeCreditsUsed: { type: Boolean, default: false },
     hasEverPaid: { type: Boolean, default: false },
+    // Programa de afiliados
+    referralCode: { type: String, sparse: true, index: true },
+    referredBy: { type: String, index: true },
+    affiliateBalance: { type: Number, default: 0 },
+    affiliateTotalEarned: { type: Number, default: 0 },
+    affiliatePayoutRequested: { type: Boolean, default: false },
     firstPaidAt: { type: Date },
     registrationIp: { type: String },
     lastLoginIp: { type: String },
@@ -328,10 +340,13 @@ export const GeneratedApp: Model<IGeneratedApp> =
 export interface ICreditTransaction extends Document {
   userId: string;
   kind: string;
+  type?: string;         // alias de kind para compatibilidad con código de afiliados
   amount: number;
   description: string;
   stripeSessionId?: string;
-  vivaOrderCode?: string; // idempotencia para pagos de Viva.com, equivalente a stripeSessionId
+  vivaOrderCode?: string;
+  affiliateAmount?: number;  // importe en euros de la comisión de afiliado
+  relatedUserId?: string;    // userId del referido que generó la comisión
   createdAt: Date;
   updatedAt: Date;
 }
@@ -339,11 +354,14 @@ export interface ICreditTransaction extends Document {
 const CreditTransactionSchema = new Schema<ICreditTransaction>(
   {
     userId: { type: String, required: true, index: true },
-    kind: { type: String, required: true },
-    amount: { type: Number, required: true },
+    kind: { type: String },
+    type: { type: String },  // alias para comisiones de afiliado
+    amount: { type: Number, default: 0 },
     description: { type: String, required: true },
     stripeSessionId: { type: String },
     vivaOrderCode: { type: String },
+    affiliateAmount: { type: Number },
+    relatedUserId: { type: String },
   },
   { timestamps: true },
 );
