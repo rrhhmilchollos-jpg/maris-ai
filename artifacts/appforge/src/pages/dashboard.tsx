@@ -112,6 +112,7 @@ export default function DashboardPage() {
   // ── Notificaciones de soporte ──
   const [notifications, setNotifications] = useState<any[]>([]);
   const [notifDismissed, setNotifDismissed] = useState<Set<string>>(new Set());
+  const prevNotifIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchNotifs = async () => {
@@ -119,12 +120,27 @@ export default function DashboardPage() {
         const data = await apiFetch<any>("/api/notifications");
         const unread = (data.notifications || []).filter((n: any) => !n.read);
         setNotifications(unread);
+
+        // FIX: si llega una notificación nueva de soporte (support_patch),
+        // invalidar la lista de apps para que el cliente vea la app actualizada
+        // inmediatamente sin necesidad de refrescar la página.
+        const newSupportNotifs = unread.filter(
+          (n: any) => n.type === "support_patch" && !prevNotifIdsRef.current.has(n._id)
+        );
+        if (newSupportNotifs.length > 0) {
+          queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
+        }
+        // Actualizar el set de IDs conocidos
+        prevNotifIdsRef.current = new Set(unread.map((n: any) => n._id));
       } catch { /* silencioso */ }
     };
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 30000);
+    // FIX: reducir de 30s a 5s para que el banner aparezca casi inmediatamente
+    // cuando soporte desbloquea la app.
+    const interval = setInterval(fetchNotifs, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [queryClient]);
 
   const dismissNotif = async (id: string) => {
     setNotifDismissed(p => new Set([...p, id]));

@@ -358,7 +358,9 @@ export function useGetCreditsHistory(opts?: { query?: Partial<UseQueryOptions> }
 }
 
 // ✅ Seguimiento 3: Notificaciones en tiempo real
+// FIX: el endpoint real del backend es /api/notifications, no /api/me/notifications.
+// FIX: reducido el intervalo de 30s a 5s para que el banner aparezca casi inmediatamente.
 export const getGetNotificationsQueryKey = () => ["notifications"];
 export function useGetNotifications(opts?: { query?: Partial<UseQueryOptions> }) {
-  return useQuery<any>({ queryKey: getGetNotificationsQueryKey(), queryFn: () => apiFetch("/api/me/notifications"), refetchInterval: 30_000, ...(opts?.query as any) });
+  return useQuery<any>({ queryKey: getGetNotificationsQueryKey(), queryFn: () => apiFetch("/api/notifications"), refetchInterval: 5_000, ...(opts?.query as any) });
 }

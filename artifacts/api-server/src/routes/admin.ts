@@ -1568,13 +1568,41 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
 // pendingAdminApproval:true que llevan más de 10 min en ese estado.
 // Endpoint de emergencia para limpiar apps que quedaron ocultas para el
 // cliente por el bug de autoRepairAgent que no limpiaba pendingAdminApproval.
+// FIX: ahora también crea UserNotification para cada cliente afectado.
 router.post("/admin/apps/unblock-all", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const cutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutos atrás
+
+  // Obtener las apps afectadas ANTES de actualizar para poder notificar a cada cliente
+  const appsToUnblock = await GeneratedApp.find(
+    { pendingAdminApproval: true, pendingApprovalSince: { $lt: cutoff } },
+    { _id: 1, userId: 1, title: 1 },
+  ).lean() as any[];
+
   const result = await GeneratedApp.updateMany(
     { pendingAdminApproval: true, pendingApprovalSince: { $lt: cutoff } },
     { $set: { pendingAdminApproval: false } },
   );
+
+  // Notificar a cada cliente cuya app fue desbloqueada
+  if (appsToUnblock.length > 0) {
+    const notifications = appsToUnblock
+      .filter((app: any) => app.userId)
+      .map((app: any) => ({
+        userId: app.userId,
+        appId: String(app._id),
+        appTitle: app.title || "Tu app",
+        type: "support_patch",
+        message: `✅ Tu app **${app.title || "Tu app"}** ha sido revisada y actualizada por el equipo de soporte. Ya puedes verla y continuar editándola desde tu panel. 💜`,
+        read: false,
+      }));
+    try {
+      if (notifications.length > 0) await UserNotification.insertMany(notifications);
+    } catch (notifErr) {
+      logger.warn({ notifErr }, "unblock-all: error al crear notificaciones masivas");
+    }
+  }
+
   logger.info({ modified: result.modifiedCount }, "Admin: apps desbloqueadas masivamente");
   res.json({ ok: true, unblocked: result.modifiedCount, message: `${result.modifiedCount} app(s) desbloqueadas y visibles de nuevo para sus clientes.` });
 });
@@ -1588,8 +1616,26 @@ router.post("/admin/apps/:id/unblock", async (req: any, res: any): Promise<void>
     { new: true },
   ).lean() as any;
   if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
-  logger.info({ appId: req.params.id, appTitle: app.title }, "Admin: app desbloqueada manualmente");
-  res.json({ ok: true, appId: req.params.id, appTitle: app.title, message: "App visible para el cliente." });
+
+  // ── Notificar al cliente: su app ya está visible ───────────────────────────────
+  const appTitle = (app as any).title || "Tu app";
+  if ((app as any).userId) {
+    try {
+      await UserNotification.create({
+        userId: (app as any).userId,
+        appId: req.params.id,
+        appTitle,
+        type: "support_patch",
+        message: `✅ Tu app **${appTitle}** ha sido revisada y actualizada por el equipo de soporte. Ya puedes verla y continuar editándola desde tu panel. 💜`,
+        read: false,
+      });
+    } catch (notifErr) {
+      logger.warn({ notifErr, appId: req.params.id }, "unblock: no se pudo crear la notificación al cliente");
+    }
+  }
+
+  logger.info({ appId: req.params.id, appTitle }, "Admin: app desbloqueada manualmente");
+  res.json({ ok: true, appId: req.params.id, appTitle, message: "App visible para el cliente." });
 });
 
 // POST /api/admin/apps/:id/reassign-user — reasignar el userId de una app
@@ -2078,6 +2124,8 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
 // El admin revisa la app reparada (vista previa) y, si está satisfecho,
 // la aprueba explícitamente para que el cliente vuelva a verla. Hasta este
 // punto, GET /api/apps (cliente) la mantiene oculta vía pendingAdminApproval.
+// FIX: ahora también crea una UserNotification para que el cliente vea el
+// banner de actualización inmediatamente en su dashboard (polling 5s).
 router.post("/admin/jobs/:id/approve-for-client", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const job = await GenerationJob.findById(req.params.id).lean() as any;
@@ -2099,8 +2147,27 @@ router.post("/admin/jobs/:id/approve-for-client", async (req: any, res: any): Pr
     return;
   }
   await GenerationJob.findByIdAndUpdate(job._id, { $set: { status: "done", phase: "done" } });
+
+  // ── Notificar al cliente: su app ya está lista y visible ──────────────────
+  // Esto hace que el banner de actualización aparezca inmediatamente en el
+  // dashboard del cliente (el polling de notificaciones es cada 5s tras el fix).
+  const appTitle = (app as any).title || "Tu app";
+  try {
+    await UserNotification.create({
+      userId: job.userId,
+      appId: String(job.appId),
+      appTitle,
+      type: "support_patch",
+      message: `✅ Tu app **${appTitle}** ha sido revisada y actualizada por el equipo de soporte. Ya puedes verla y continuar editándola desde tu panel. 💜`,
+      read: false,
+    });
+    logger.info({ jobId: String(job._id), appId: String(job.appId), userId: job.userId }, "Admin approved app — notification sent to client");
+  } catch (notifErr) {
+    logger.warn({ notifErr, jobId: String(job._id) }, "approve-for-client: no se pudo crear la notificación al cliente");
+  }
+
   logger.info({ jobId: String(job._id), appId: String(job.appId) }, "Admin approved app for client");
-  res.json({ ok: true, appId: String(job.appId), message: "App aprobada — ya es visible para el cliente." });
+  res.json({ ok: true, appId: String(job.appId), appTitle, message: "App aprobada — ya es visible para el cliente." });
 });
 
 // GET /api/admin/apps/:appId/revisions
