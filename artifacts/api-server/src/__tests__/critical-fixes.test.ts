@@ -504,7 +504,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   const jobsSrc = readSrc("routes/jobs.ts");
   check(
     "FIX 19d: POST /jobs/:id/approve acepta y guarda las respuestas reales (answers), no solo el nombre de la faceta",
-    /const \{ facet, answers \} = req\.body/.test(jobsSrc),
+    /const \{ facet, answers[^}]*\} = req\.body/.test(jobsSrc),
     "Sin esto, el sistema sabe QUE el cliente respondió pero no QUÉ respondió — la pausa no tendría ningún efecto real sobre la generación posterior.",
   );
   const appDetailSrc = readAppforgeSrc("pages/app-detail.tsx");

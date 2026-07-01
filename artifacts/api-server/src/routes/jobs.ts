@@ -122,7 +122,7 @@ router.post("/jobs/:id/approve", requireAuth, async (req: any, res: any) => {
     // es opcional para no romper cualquier otro uso futuro de esta misma
     // ruta con una faceta distinta que no necesite respuestas (aprobación
     // simple sin preguntas asociadas).
-    const { facet, answers } = req.body;
+    const { facet, answers, extraNotes } = req.body;
 
     if (!facet) return res.status(400).json({ error: "facet es requerido" });
 
@@ -147,6 +147,11 @@ router.post("/jobs/:id/approve", requireAuth, async (req: any, res: any) => {
     // tener que volver a adivinar lo que el cliente ya confirmó.
     if (answers && typeof answers === "object" && !Array.isArray(answers)) {
       checkpoint.answers = { ...(checkpoint.answers || {}), ...answers };
+    }
+    // Especificaciones adicionales libres del cliente (campo de texto del
+    // formulario de clarificación técnica) — se inyectan en el prompt.
+    if (extraNotes && typeof extraNotes === "string" && extraNotes.trim()) {
+      checkpoint.extraNotes = extraNotes.trim();
     }
 
     await GenerationJob.findByIdAndUpdate(req.params.id, {

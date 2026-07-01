@@ -3450,11 +3450,17 @@ export async function generateApp(
         // base de datos, roles o pasarela de pago usar, en vez de tener
         // que volver a adivinarlo desde el prompt original sin más detalle.
         const answers = jobForGating?.checkpointData?.answers as Record<string, string> | undefined;
+        const extraNotes = jobForGating?.checkpointData?.extraNotes as string | undefined;
         if (answers && Object.keys(answers).length > 0) {
           const answersBlock = Object.entries(answers)
             .map(([topic, answer]) => `- ${topic}: ${answer}`)
             .join("\n");
           prompt = `${prompt}\n\n[DETALLES TÉCNICOS CONFIRMADOS POR EL USUARIO — usa esto con precisión, no asumas nada distinto]\n${answersBlock}`;
+        }
+        // Especificaciones adicionales libres que el cliente escribió
+        // en el campo de texto del formulario de clarificación técnica.
+        if (extraNotes) {
+          prompt = `${prompt}\n\n[ESPECIFICACIONES ADICIONALES DEL CLIENTE — implementa exactamente esto]\n${extraNotes}`;
         }
       }
     } catch (gatingErr) {

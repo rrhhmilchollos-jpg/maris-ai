@@ -262,9 +262,10 @@ function GatingQuestionsForm({
 }: {
   questions: GatingQuestion[];
   isPending: boolean;
-  onSubmit: (answers: Record<string, string>) => void;
+  onSubmit: (answers: Record<string, string>, extraNotes?: string) => void;
 }) {
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const [extraNotes, setExtraNotes] = useState("");
   const allAnswered = questions.every((q) => !!selected[q.id]);
 
   return (
@@ -296,9 +297,25 @@ function GatingQuestionsForm({
           </div>
         </div>
       ))}
+
+      {/* Campo de especificaciones adicionales libres */}
+      <div className="rounded-2xl border border-white/[0.09] bg-[#0d0f1a] p-4 space-y-2">
+        <p className="text-[14px] font-semibold text-white/80 flex items-center gap-2">
+          <span>💬</span>
+          <span>¿Algo más que quieras añadir? <span className="text-white/40 font-normal">(opcional)</span></span>
+        </p>
+        <p className="text-[12px] text-white/40">Funciones extra, diseño específico, integraciones, restricciones… cuéntanoslo aquí antes de que empecemos.</p>
+        <textarea
+          value={extraNotes}
+          onChange={(e) => setExtraNotes(e.target.value)}
+          placeholder="Ej: Quiero que el diseño sea oscuro, con colores morados. También necesito que soporte múltiples idiomas y que tenga notificaciones por email cuando alguien se registra..."
+          className="w-full min-h-[90px] resize-none rounded-lg border border-white/[0.08] bg-white/[0.02] px-3.5 py-2.5 text-[13px] text-white/80 placeholder:text-white/25 focus:outline-none focus:border-[#7c3aed]/50 transition"
+        />
+      </div>
+
       <Button
         size="lg"
-        onClick={() => onSubmit(selected)}
+        onClick={() => onSubmit(selected, extraNotes.trim() || undefined)}
         disabled={!allAnswered || isPending}
         className="h-12 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] font-bold text-white shadow-[0_0_22px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7] disabled:opacity-50"
       >
@@ -651,7 +668,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     });
   };
 
-  const handleSubmitGatingAnswers = (selected: Record<string, string>) => {
+  const handleSubmitGatingAnswers = (selected: Record<string, string>, extraNotes?: string) => {
     const approvalJobId = effectiveJobId;
     if (!approvalJobId) {
       toast({
@@ -663,7 +680,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     }
     approveMutation.mutate({
       id: String(approvalJobId),
-      data: { facet: "technical_architecture", answers: selected },
+      data: {
+        facet: "technical_architecture",
+        answers: selected,
+        // Especificaciones adicionales libres que el cliente puede escribir
+        // junto a las respuestas del formulario de clarificación técnica.
+        // Se inyectan en el prompt final antes de la generación.
+        ...(extraNotes ? { extraNotes } : {}),
+      },
     });
   };
 
