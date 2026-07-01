@@ -3782,9 +3782,21 @@ export async function generateApp(
       };
     }
 
-    await log("system", isUltraComplex
-      ? "El orquestador por hitos no produjo un bundle de frontend completo; continúo con el pipeline robusto de generación (el resultado puede necesitar iteración manual adicional dada la complejidad del proyecto)."
-      : "El orquestador experimental produjo un bundle incompleto; continúo con el pipeline robusto de generación.", "warn");
+    // PUNTO CIEGO CERRADO: antes aquí caía al pipeline de una sola pasada.
+    // Ahora lanzamos un error controlado para que el job se marque como
+    // failed y el admin pueda ver claramente qué pasó en los logs.
+    // El cliente verá "error generando app" en vez de una pantalla en blanco,
+    // que es mejor UX y más honesto que entregar código incompleto silenciosamente.
+    await log("system",
+      "⚠️ El orquestador de hitos no produjo un bundle de frontend completo. " +
+      "El job se marca como fallido para que puedas regenerarlo. " +
+      "Revisa los logs de Railway para ver qué hito falló.",
+      "error"
+    );
+    throw new Error(
+      "Milestone orchestrator produced empty/invalid frontend bundle. " +
+      "Job marked as failed — admin can regenerate with hitos from panel."
+    );
   }
 
 

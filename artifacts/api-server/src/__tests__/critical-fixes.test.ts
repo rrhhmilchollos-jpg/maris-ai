@@ -976,6 +976,30 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ─── FIX: Hitos universales obligatorios + cierre de puntos ciegos ──────────
+// FIX 36a: useMilestoneOrchestrator = wantsFullBuild (SIEMPRE true para nuevos)
+// FIX 36b: degradación inteligente free/paid en selectAgentModelPlan
+// FIX 36c: punto ciego 3 cerrado — ya no hay fallback al pipeline clásico
+// ───────────────────────────────────────────────────────────────────────────
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  check(
+    "FIX 36a: useMilestoneOrchestrator = wantsFullBuild (hitos universales para todos los proyectos nuevos sin excepción)",
+    /const useMilestoneOrchestrator = wantsFullBuild;/.test(appsSrc),
+    "Sin esto, proyectos con prompt corto o tier 'standard' siguen usando el pipeline de una sola pasada que causa pantallas en blanco. La regla de oro es: cualquier proyecto nuevo = hitos, siempre.",
+  );
+  check(
+    "FIX 36b: selectAgentModelPlan acepta hasEverPaid en context para degradación inteligente de modelos free/paid",
+    /hasEverPaid\?: boolean/.test(appsSrc) && /isFreeUser.*hasEverPaid/.test(appsSrc),
+    "Sin esto, los usuarios free consumen tokens de Sonnet en todos los agentes ejecutores — el mismo coste que un usuario de pago — haciendo insostenible el margen de API para cuentas gratuitas.",
+  );
+  check(
+    "FIX 36c: punto ciego 3 cerrado — ya no hay fallback al pipeline clásico cuando los hitos producen bundle vacío",
+    !(/continúo con el pipeline robusto de generación/.test(appsSrc)),
+    "Sin esto, cuando el orquestador de hitos produce un bundle vacío o incompleto, el sistema cae silenciosamente al pipeline estándar de una sola pasada — exactamente lo que causó las 22 pantallas en blanco.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
