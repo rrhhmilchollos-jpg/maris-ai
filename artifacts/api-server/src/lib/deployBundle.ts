@@ -501,6 +501,21 @@ const DEFAULT_VERSIONS: Record<string, string> = {
   "react-hook-form": "7.54.0",
   "@hookform/resolvers": "3.9.1",
   "react-day-picker": "9.4.0",
+  // ── Librerías de juegos ────────────────────────────────────────────────
+  // Añadidas para que los juegos generados hagan preview correctamente
+  // vía esm.sh sin caer a "latest" sin garantía de compatibilidad.
+  // Versiones smoke-tested contra los seedPrompts de templates.ts.
+  "three": "0.169.0",
+  "@react-three/fiber": "8.17.10",
+  "@react-three/drei": "9.114.3",
+  "@react-three/rapier": "1.4.0",
+  "matter-js": "0.19.0",
+  "phaser": "3.87.0",
+  "pixi.js": "8.5.2",
+  "kaplay": "3001.0.0-beta.1",
+  "@babylonjs/core": "7.26.2",
+  "howler": "2.2.4",
+  "gsap": "3.12.5",
 };
 
 /**

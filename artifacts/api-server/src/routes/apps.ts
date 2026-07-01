@@ -213,6 +213,81 @@ LIBRARIES — correct usage for the newly-allowed packages (using them wrong is 
 - recharts: \`import { LineChart, BarChart, PieChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Line, Bar, Pie, Cell } from "recharts"\`. ALWAYS wrap charts in \`<ResponsiveContainer width="100%" height={300}>\` so they resize correctly — a chart with a hardcoded pixel width breaks on mobile. Use for dashboards, analytics pages, any "show me a trend/distribution" requirement.
 - react-hook-form + @hookform/resolvers + zod: \`import { useForm } from "react-hook-form"; import { zodResolver } from "@hookform/resolvers/zod"\`. Define a zod schema per form, pass it via \`useForm({ resolver: zodResolver(schema) })\`. Use \`register("fieldName")\` on inputs and \`formState: { errors }\` to render validation messages in Spanish. Prefer this over manual useState-per-field for any form with 3+ fields or real validation rules (required, email format, min length) — it's the standard React form pattern and produces far more reliable validation than hand-rolled state.
 - react-day-picker: \`import { DayPicker } from "react-day-picker"; import "react-day-picker/dist/style.css"\`. Use for date pickers, booking/reservation calendars, date-range filters. Combine with date-fns (already allowed) for formatting the selected date, never reimplement date math by hand.
+
+GAME LIBRARIES — usa estas cuando el proyecto sea un juego (kind=game-2d o game-3d). NUNCA las uses para apps normales:
+
+CANVAS 2D PURO (sin librerías extra — para Snake, Tetris, Pong, Breakout, Space Invaders, puzzles):
+- Usa un <canvas ref={canvasRef} /> con useEffect para el game loop: requestAnimationFrame, ctx.clearRect, ctx.fillRect, ctx.arc, ctx.drawImage.
+- El estado del juego (posiciones, velocidad, puntuación, vidas) va en useRef (NO useState — evita re-renders innecesarios dentro del loop).
+- Cleanup SIEMPRE: return () => { cancelAnimationFrame(animRef.current); } en el useEffect.
+- Controles con addEventListener('keydown') en useEffect, cleanup con removeEventListener.
+- localStorage para guardar el récord: localStorage.getItem('best_score') / localStorage.setItem('best_score', score).
+- Estructura de archivos: un solo componente GameCanvas.tsx + un hook useGameLoop.ts que exporta { score, lives, gameState, startGame, resetGame }.
+
+MATTER.JS — física 2D realista (bolas que rebotan, torres que caen, vehículos, puzzles con gravedad):
+- \`import Matter from "matter-js"\` — versión 0.19.0 disponible.
+- Inicializar en useEffect: const engine = Matter.Engine.create(); const render = Matter.Render.create({ canvas: canvasRef.current, engine, options: { width, height, wireframes: false } }); Matter.Runner.run(engine); Matter.Render.run(render);
+- Cleanup: Matter.Render.stop(render); Matter.Runner.stop(runner); Matter.Engine.clear(engine); render.canvas.remove();
+- Cuerpos: Matter.Bodies.rectangle(x,y,w,h,{...}), Matter.Bodies.circle(x,y,r,{...}), Matter.Bodies.fromVertices(...).
+- Añadir al mundo: Matter.Composite.add(engine.world, [body1, body2, ...]).
+- Colisiones: Matter.Events.on(engine, 'collisionStart', callback).
+
+PHASER 3 — motor 2D completo (plataformeros, shooters, RPGs 2D, juegos con sprites y física Arcade):
+- \`import Phaser from "phaser"\` — versión 3.87.0 disponible.
+- Montar en React: useEffect(() => { const game = new Phaser.Game({ type: Phaser.AUTO, parent: containerRef.current, width: 800, height: 600, physics: { default: 'arcade', arcade: { gravity: { y: 300 } } }, scene: [MenuScene, GameScene, GameOverScene] }); return () => game.destroy(true); }, []).
+- Escenas como clases: class GameScene extends Phaser.Scene { preload() {} create() {} update() {} }.
+- Sprites generados con gráficos procedurales (this.add.graphics().fillStyle(0xff0000).fillRect(...)): NO uses assets externos que requieran ser cargados desde URLs — el bundle debe ser autocontenido.
+- Colisiones: this.physics.add.collider(player, platforms); this.physics.add.overlap(player, coins, collectCoin, null, this).
+- Comunicar puntuación a React: usa un EventEmitter o window.dispatchEvent(new CustomEvent('score', { detail: score })) + addEventListener en el componente React.
+
+PIXI.JS v8 — renderizado WebGL de alto rendimiento (cientos de sprites, efectos de partículas, juegos de atrapar objetos):
+- \`import * as PIXI from "pixi.js"\` — versión 8.5.2 disponible. USA SIEMPRE API v8, nunca v7 legacy.
+- Init: const app = new PIXI.Application(); await app.init({ resizeTo: window, background: 0x1a0033, antialias: true }); containerRef.current.appendChild(app.canvas); // v8: .canvas, NO .view
+- Game loop: app.ticker.add((ticker) => { /* ticker.deltaTime disponible */ }).
+- Gráficos: const g = new PIXI.Graphics(); g.rect(0,0,50,50).fill(0xff0000); // v8 usa fill() no beginFill()
+- Cleanup: app.destroy(true, { children: true, texture: true }).
+
+KAPLAY — motor arcade declarativo (shooters, runners, plataformeros rápidos con sintaxis simple):
+- \`import kaplay from "kaplay"\` — versión 3001.0.0-beta.1 disponible.
+- Init en useEffect apuntando a un canvas: const k = kaplay({ canvas: canvasRef.current, width: 800, height: 600, background: [0, 0, 0] });
+- Entidades: k.add([k.rect(50, 50), k.pos(100, 100), k.color(255, 0, 0), k.area(), k.body(), "player"]).
+- Escenas: k.scene("game", () => { ... }); k.go("game").
+- Cleanup: k.quit() en el return del useEffect.
+
+THREE.JS + REACT THREE FIBER — juegos y escenas 3D:
+- Para proyectos 3D, SIEMPRE usa React Three Fiber (@react-three/fiber) en vez de Three.js directamente — es el binding React correcto.
+- \`import { Canvas, useFrame, useThree } from "@react-three/fiber"\`
+- \`import { OrbitControls, Environment, Text, Box, Sphere, Plane } from "@react-three/drei"\`
+- Estructura básica: <Canvas camera={{ position: [0, 5, 10], fov: 75 }}><ambientLight /><directionalLight castShadow /><mesh><boxGeometry /><meshStandardMaterial color="red" /></mesh></Canvas>
+- Game loop: useFrame((state, delta) => { meshRef.current.rotation.y += delta }) dentro de componentes hijos del Canvas.
+- Para física 3D: \`import { Physics, RigidBody, CuboidCollider } from "@react-three/rapier"\` — versión 1.4.0 disponible. Envuelve la escena en <Physics>; usa <RigidBody type="dynamic"> para objetos con física y <RigidBody type="fixed"> para suelo/paredes.
+- NUNCA uses useFrame o hooks de R3F fuera de un componente hijo de <Canvas>.
+
+BABYLON.JS — mundos 3D explorables en primera persona (FPS, exploración, simuladores):
+- \`import * as BABYLON from "@babylonjs/core"\` — versión 7.26.2 disponible.
+- Init: const engine = new BABYLON.Engine(canvasRef.current, true); const scene = new BABYLON.Scene(engine); engine.runRenderLoop(() => scene.render());
+- Cámara FPS: const camera = new BABYLON.FreeCamera("cam", new BABYLON.Vector3(0,2,0), scene); camera.attachControl(canvasRef.current, true); camera.keysUp=[87]; camera.keysDown=[83]; camera.keysLeft=[65]; camera.keysRight=[68].
+- Cleanup: engine.dispose().
+
+HOWLER.JS — audio para juegos (efectos de sonido, música de fondo):
+- \`import { Howl, Howler } from "howler"\` — versión 2.2.4 disponible.
+- Uso básico: const sound = new Howl({ src: [url], volume: 0.5 }); sound.play().
+- SOLO usa URLs de sonidos libres de royalties (freesound.org, opengameart.org). Si no tienes URLs reales, NO añadas Howler — es mejor sin sonido que con URLs rotas.
+
+GSAP — animaciones avanzadas (menús de juego, transiciones de pantalla, tutoriales animados):
+- \`import { gsap } from "gsap"\` — versión 3.12.5 disponible.
+- Uso: gsap.to(element, { duration: 0.5, opacity: 0, y: -20, ease: "power2.out" }).
+- Limpieza: const ctx = gsap.context(() => { ... }, containerRef); return () => ctx.revert().
+
+REGLAS GENERALES PARA JUEGOS:
+1. Todo juego DEBE tener: pantalla de menú, pantalla de juego activo, pantalla de game over con puntuación y botón reintentar.
+2. El récord máximo SIEMPRE se guarda en localStorage.
+3. El HUD (puntuación, vidas, tiempo) va como overlay HTML/React ENCIMA del canvas — NO dibujado dentro del canvas salvo que sea imprescindible.
+4. Cleanup imprescindible: cancelAnimationFrame, game.destroy(), engine.dispose(), k.quit() según el motor usado.
+5. Controles explicados en la pantalla de menú (WASD / flechas / ratón / táctil).
+6. El package.json generado DEBE incluir la librería del motor como dependencia explícita con la versión correcta.
+7. Para juegos sin backend (backendNeeded=false), toda la persistencia va en localStorage.
+
 - Accessibility: semantic HTML, labels for every input, aria-hidden on decorative icons, descriptive Spanish alt on every <img>.
 - Mobile: works at 375px, hamburger nav if needed, grids reflow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3.
 
