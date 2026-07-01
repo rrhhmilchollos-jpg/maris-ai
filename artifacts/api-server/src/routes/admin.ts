@@ -1308,6 +1308,32 @@ router.post("/admin/my-projects", async (req: any, res: any): Promise<void> => {
   res.json({ ok: true, app });
 });
 
+// ─── Admin: Test de envío de email al cliente ─────────────────────────────────
+// POST /api/admin/test-customer-email — envía un email de prueba a la dirección
+// del admin para verificar que Resend + plantillas de cliente funcionan
+router.post("/admin/test-customer-email", async (req: any, res: any): Promise<void> => {
+  const targetEmail = req.body?.email || req.dbUser?.email;
+  if (!targetEmail) { res.status(400).json({ error: "Indica un email de destino" }); return; }
+
+  const { sendCustomAdminEmail } = await import("../lib/notify");
+  const sent = await sendCustomAdminEmail({
+    userEmail: targetEmail,
+    userName: "Admin",
+    subject: "✅ Test Maris AI — Correos a clientes funcionando",
+    body: `Este es un email de prueba enviado desde el panel de administración de Maris AI.\n\nSi estás viendo este mensaje, el sistema de envío de correos a clientes está funcionando correctamente con Resend.\n\nLas plantillas de reactivación (proyecto a medias, empujón suave, recuperar cliente, etc.) están disponibles en el desplegable '💌 Enviar correo' de los paneles En vivo y Apps clientes.\n\nTodo ok 🎉`,
+    creditsCompensation: 0,
+  });
+
+  if (!sent) {
+    res.status(500).json({
+      error: "Email NO enviado. Verifica: 1) RESEND_API_KEY en Railway, 2) el dominio marisai.es verificado en resend.com, 3) que el email remitente alertas@marisai.es está autorizado.",
+      targetEmail,
+    });
+    return;
+  }
+  res.json({ ok: true, message: `Email de prueba enviado a ${targetEmail} ✅ — revisa la bandeja de entrada` });
+});
+
 // ─── Admin: Test de notificación por email ────────────────────────────────────
 router.post("/admin/test-email-alert", async (req: any, res: any): Promise<void> => {
   await connectDB();
@@ -1781,7 +1807,18 @@ router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<v
   });
 
   logger.info({ userId: req.params.id, userEmail, sent, subject }, "Admin: sent custom templated email");
-  res.json({ ok: sent, userEmail, message: sent ? `Correo enviado a ${userEmail} ✅` : "Fallo al enviar — revisa RESEND_API_KEY" });
+
+  if (!sent) {
+    // Devolver error HTTP real para que el frontend lo muestre como error
+    // (en vez de ok:false que el frontend podía ignorar mostrando "enviado")
+    res.status(500).json({
+      error: "No se pudo enviar el correo. Comprueba que RESEND_API_KEY está configurada en Railway y que el dominio marisai.es está verificado en Resend.",
+      userEmail,
+    });
+    return;
+  }
+
+  res.json({ ok: true, userEmail, message: `Correo enviado a ${userEmail} ✅` });
 });
 
 router.post("/admin/jobs/fix-false-failed", async (req: any, res: any): Promise<void> => {

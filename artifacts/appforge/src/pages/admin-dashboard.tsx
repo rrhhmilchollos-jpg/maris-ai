@@ -3011,6 +3011,27 @@ export default function AdminDashboardPage() {
                       >
                         📧 Enviar email de soporte
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                        onClick={async () => {
+                          const email = prompt("¿A qué email enviar la prueba?", "rrhh.milchollos@gmail.com");
+                          if (!email) return;
+                          try {
+                            const d = await apiFetch<any>("/api/admin/test-customer-email", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ email }),
+                            });
+                            toast({ title: "✅ Email de cliente enviado", description: d.message });
+                          } catch (e: any) {
+                            toast({ title: "❌ Fallo al enviar", description: e.message, variant: "destructive" });
+                          }
+                        }}
+                      >
+                        💌 Test email a cliente
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
