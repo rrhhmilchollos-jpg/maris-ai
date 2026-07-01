@@ -6724,6 +6724,9 @@ export async function runJobById(jobId: string): Promise<void> {
           plannedPages: finalResult.plannedPages || [],
           requiredEnvVars: finalResult.requiredEnvVars || [],
           status: "ready",
+          // Limpiar pendingAdminApproval: si el admin regeneró esta app,
+          // ahora que está lista debe ser visible para el cliente.
+          pendingAdminApproval: false,
         },
       });
 

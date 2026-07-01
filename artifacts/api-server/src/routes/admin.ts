@@ -1564,6 +1564,34 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
 
 // POST /api/admin/apps/patch-by-slug — parchear app por slug público
 
+// POST /api/admin/apps/unblock-all — desbloquear TODAS las apps con
+// pendingAdminApproval:true que llevan más de 10 min en ese estado.
+// Endpoint de emergencia para limpiar apps que quedaron ocultas para el
+// cliente por el bug de autoRepairAgent que no limpiaba pendingAdminApproval.
+router.post("/admin/apps/unblock-all", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutos atrás
+  const result = await GeneratedApp.updateMany(
+    { pendingAdminApproval: true, pendingApprovalSince: { $lt: cutoff } },
+    { $set: { pendingAdminApproval: false } },
+  );
+  logger.info({ modified: result.modifiedCount }, "Admin: apps desbloqueadas masivamente");
+  res.json({ ok: true, unblocked: result.modifiedCount, message: `${result.modifiedCount} app(s) desbloqueadas y visibles de nuevo para sus clientes.` });
+});
+
+// POST /api/admin/apps/:id/unblock — desbloquear una app específica
+router.post("/admin/apps/:id/unblock", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const app = await GeneratedApp.findByIdAndUpdate(
+    req.params.id,
+    { $set: { pendingAdminApproval: false } },
+    { new: true },
+  ).lean() as any;
+  if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
+  logger.info({ appId: req.params.id, appTitle: app.title }, "Admin: app desbloqueada manualmente");
+  res.json({ ok: true, appId: req.params.id, appTitle: app.title, message: "App visible para el cliente." });
+});
+
 // POST /api/admin/apps/:id/reassign-user — reasignar el userId de una app
 // al usuario correcto cuando hay discrepancia en la BD
 router.post("/admin/apps/:id/reassign-user", async (req: any, res: any): Promise<void> => {

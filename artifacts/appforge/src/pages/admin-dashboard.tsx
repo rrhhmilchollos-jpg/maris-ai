@@ -1089,6 +1089,22 @@ function LiveMonitorPanel() {
           >
             🧹 Eliminar jobs repetidos
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
+            title="Desbloquea apps con pendingAdminApproval:true que llevan más de 10 min ocultas para el cliente — arregla el bug donde las apps reparadas no aparecían en el panel del cliente"
+            onClick={async () => {
+              try {
+                const d = await apiFetch<any>("/api/admin/apps/unblock-all", { method: "POST" });
+                toast({ title: "✅ Apps desbloqueadas", description: d.message });
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            🔓 Desbloquear apps ocultas
+          </Button>
         </div>
       </div>
 

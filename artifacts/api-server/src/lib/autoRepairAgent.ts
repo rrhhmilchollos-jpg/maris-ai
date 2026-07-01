@@ -406,6 +406,12 @@ export async function autoRepairBundle(opts: {
         fixApplied: `Reparación incompleta tras ${cyclesUsed} ciclo(s) — ${finalValidation.issues.length} error(es) de compilación residuales. No se aplicó para no degradar la app.`,
         cyclesUsed, scoreBeforeRepair, success: false,
       });
+      // Aunque no se pudo reparar, devolver la app al cliente para que
+      // no quede oculta indefinidamente — es mejor que vea la versión
+      // anterior que que no vea nada.
+      await GeneratedApp.findByIdAndUpdate(appId, {
+        $set: { pendingAdminApproval: false },
+      });
       return false;
     }
     await jlog(`✅ Validación con esbuild superada — el bundle compila correctamente.`);
@@ -417,17 +423,24 @@ export async function autoRepairBundle(opts: {
     } catch (buildErr: any) {
       log.warn({ buildErr: String(buildErr).slice(0, 200) }, "Repaired bundle doesn't compile (deploy build)");
       await jlog(`❌ El bundle compila con esbuild, pero falla al construir el HTML final de preview — se conserva la app original.`, "error");
+      // Desbloquear igualmente para que el cliente vea la versión anterior
+      await GeneratedApp.findByIdAndUpdate(appId, {
+        $set: { pendingAdminApproval: false },
+      });
       return false;
     }
     await jlog(`✅ Validación de preview superada — guardando el resultado final…`);
 
-    // Guardar el bundle reparado
+    // Guardar el bundle reparado y limpiar pendingAdminApproval para que
+    // el cliente vea la app actualizada en su panel inmediatamente.
     await GeneratedApp.findByIdAndUpdate(appId, {
       $set: {
         frontendCode: currentCode,
         updatedAt: new Date(),
         lastAutoRepairAt: new Date(),
         autoRepairCount: ((app.autoRepairCount || 0) + 1),
+        pendingAdminApproval: false,   // ← CRÍTICO: desbloquear para el cliente
+        approvedByAdminAt: new Date(), // ← Registrar cuándo fue aprobada
       },
     });
 
