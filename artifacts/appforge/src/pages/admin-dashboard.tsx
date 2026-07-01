@@ -894,6 +894,25 @@ function RemoteDashboardPanel({ apiBase }: { apiBase: string }) {
   const [clientList, setClientList] = useState<Array<{ email: string; appsGenerated: number }>>([]);
   const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [jobLogs, setJobLogs] = useState<Record<string, any[]>>({});
+  const [previewJobAppId, setPreviewJobAppId] = useState<string | null>(null);
+
+  // Cargar los logs (consola en vivo) de un job concreto.
+  const fetchJobLogs = async (jobId: string) => {
+    try {
+      const d = await apiFetch<any>(`/api/admin/jobs/${jobId}/logs?limit=150`);
+      setJobLogs(prev => ({ ...prev, [jobId]: d.logs ?? [] }));
+    } catch { /* silent */ }
+  };
+
+  // Refrescar los logs del job expandido cada 3s mientras esté abierto.
+  useEffect(() => {
+    if (!expandedJob) return;
+    fetchJobLogs(expandedJob);
+    const t = setInterval(() => fetchJobLogs(expandedJob), 3000);
+    return () => clearInterval(t);
+  }, [expandedJob]);
 
   // Cargar la lista de clientes para el selector rápido.
   useEffect(() => {
@@ -957,6 +976,24 @@ function RemoteDashboardPanel({ apiBase }: { apiBase: string }) {
   const apps: any[] = data?.apps ?? [];
   const notifications: any[] = data?.notifications ?? [];
   const unreadNotifs = notifications.filter((n) => !n.read);
+  const jobs: any[] = data?.jobs ?? [];
+  // Trabajos "a medias": jobs que NO terminaron correctamente y que no tienen
+  // una app publicada visible (justo los que soporte necesita revisar en vivo).
+  const inProgressJobs = jobs.filter((j) => j.isInProgress || !j.hasPublishedApp);
+
+  const JOB_STATUS_LABEL: Record<string, string> = {
+    queued: "En cola", running: "Generando", reviewing: "En revisi\u00f3n",
+    repairing: "Reparando", "repaired-pending-review": "Reparado \u2014 pendiente de revisi\u00f3n",
+    awaiting_approval: "Esperando aprobaci\u00f3n", awaiting_technical_clarification: "Esperando aclaraci\u00f3n",
+    paused: "Pausado", failed: "Fallido", succeeded: "Completado", done: "Completado", cancelled: "Cancelado",
+  };
+  const jobStatusLabel = (s: string) => JOB_STATUS_LABEL[s] ?? s;
+  const jobStatusColor = (s: string) => {
+    if (s === "failed" || s === "cancelled") return "border-red-500/30 text-red-400";
+    if (s === "succeeded" || s === "done") return "border-emerald-500/30 text-emerald-400";
+    if (s === "running" || s === "queued" || s === "repairing") return "border-sky-500/30 text-sky-400";
+    return "border-amber-500/30 text-amber-400";
+  };
 
   return (
     <div className="space-y-4">
@@ -1080,6 +1117,105 @@ function RemoteDashboardPanel({ apiBase }: { apiBase: string }) {
                 ))}
               </CardContent>
             </Card>
+          )}
+
+          {/* Generaciones / trabajos del cliente — incluye los que están A MEDIAS
+              (en curso, pausados, en revisión o fallidos) que NO aparecen como apps
+              terminadas. Aquí soporte puede ver su consola en vivo y probar el preview. */}
+          {inProgressJobs.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-white/70 mb-2 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 text-amber-400" />
+                Generaciones / trabajos en curso ({inProgressJobs.length})
+                <span className="text-[10px] font-normal text-white/30">— apps a medias que el cliente aún no ve terminadas</span>
+              </h3>
+              <div className="space-y-3">
+                {inProgressJobs.map((job) => {
+                  const jid = job.id;
+                  const isJobOpen = expandedJob === jid;
+                  const linkedAppId = job.linkedAppId;
+                  const isJobPreviewOpen = previewJobAppId === linkedAppId && !!linkedAppId;
+                  const jlogs = jobLogs[jid] ?? [];
+                  return (
+                    <Card key={jid} className="bg-card/40 border-amber-500/10 overflow-hidden">
+                      <CardContent className="p-0">
+                        <div className="flex items-center justify-between p-3 gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className={`text-[9px] ${jobStatusColor(job.status)}`}>{jobStatusLabel(job.status)}</Badge>
+                              {typeof job.progress === "number" && job.progress > 0 && (
+                                <span className="text-[10px] text-white/40">{job.progress}%</span>
+                              )}
+                              {job.retryCount > 0 && <span className="text-[9px] text-white/30">· {job.retryCount} reintento(s)</span>}
+                            </div>
+                            <p className="text-[11px] text-white/60 truncate mt-1" title={job.prompt}>{job.prompt || "(sin prompt)"}</p>
+                            {(job.errorMessage || job.internalErrorMessage) && (
+                              <p className="text-[10px] text-red-400/80 truncate mt-0.5">⚠ {job.errorMessage || job.internalErrorMessage}</p>
+                            )}
+                            <span className="text-[9px] font-mono text-white/25 cursor-pointer hover:text-white/50"
+                              onClick={() => { navigator.clipboard?.writeText(jid); toast({ title: "Job ID copiado", description: jid }); }}
+                              title="Click para copiar Job ID">🧩 job {jid}{linkedAppId ? ` · 📦 app ${linkedAppId}` : ""}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-white/10 text-white/60 hover:bg-white/5"
+                              onClick={() => setExpandedJob(isJobOpen ? null : jid)}>
+                              {isJobOpen ? "Cerrar consola" : <>🖥️ Consola en vivo</>}
+                            </Button>
+                            {linkedAppId && (
+                              <>
+                                <Button size="sm" variant="outline" className="h-7 text-[10px] border-sky-500/20 text-sky-300 hover:bg-sky-500/10"
+                                  onClick={() => setPreviewJobAppId(isJobPreviewOpen ? null : linkedAppId)}>
+                                  {isJobPreviewOpen ? "Cerrar" : <><Eye className="h-3 w-3 mr-1" />Probar</>}
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-7 text-[10px] border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
+                                  onClick={() => window.open(`${apiBase}/api/admin/apps/${linkedAppId}/preview`, "_blank", "noopener,noreferrer")}>
+                                  🔗 Abrir
+                                </Button>
+                                <Button size="sm" variant="outline"
+                                  className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                                  disabled={actionLoading[`unblock_${linkedAppId}`]}
+                                  onClick={() => unblockApp(linkedAppId, job.prompt?.slice(0, 40) || "app")}>
+                                  {actionLoading[`unblock_${linkedAppId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <>🔓 Desbloquear</>}
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {isJobOpen && (
+                          <div className="border-t border-white/5 bg-black/40 p-3">
+                            <div className="text-[10px] text-white/40 mb-1.5 flex items-center gap-1.5">
+                              <RefreshCw className="h-3 w-3 animate-spin" /> Consola en vivo (actualiza cada 3s)
+                            </div>
+                            <div className="font-mono text-[10px] leading-relaxed max-h-64 overflow-auto bg-black/50 rounded p-2 space-y-0.5">
+                              {jlogs.length === 0
+                                ? <span className="text-white/30">Sin logs disponibles para este job todavía…</span>
+                                : jlogs.map((l: any, i: number) => (
+                                  <div key={i} className="text-white/70">
+                                    <span className="text-white/30 mr-2">{l.createdAt ? new Date(l.createdAt).toLocaleTimeString() : ""}</span>
+                                    <span className={l.level === "error" ? "text-red-400" : l.level === "warn" ? "text-amber-400" : "text-white/70"}>{l.message ?? JSON.stringify(l)}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                        {isJobPreviewOpen && linkedAppId && (
+                          <div className="border-t border-white/5 bg-black/30">
+                            <iframe
+                              src={`${apiBase}/api/admin/apps/${linkedAppId}/preview`}
+                              className="w-full border-0"
+                              style={{ height: "600px", background: "#0a0a0f" }}
+                              title={`Preview job ${jid}`}
+                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                              allow="clipboard-read; clipboard-write"
+                            />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* Apps generadas del cliente — igual que su sección "Apps generadas" */}

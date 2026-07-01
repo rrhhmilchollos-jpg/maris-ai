@@ -2832,6 +2832,18 @@ router.get("/admin/users/:id/dashboard-view", async (req: any, res: any): Promis
     const notifications = await UserNotification.find({ userId: { $in: idList } })
       .sort({ createdAt: -1 }).limit(20).lean() as any[];
 
+    // Jobs / generaciones del cliente (incluidas las que están a medias: en curso,
+    // pausadas, en revisión o fallidas y que aún NO se convirtieron en una app publicada).
+    // Esto permite a soporte ver e interactuar en vivo con trabajos que no aparecen
+    // como "apps generadas" porque nunca llegaron a completarse.
+    const now = Date.now();
+    const jobs = await GenerationJob.find({ userId: { $in: idList } })
+      .sort({ createdAt: -1 }).limit(30).lean() as any[];
+
+    // Conjunto de appIds que YA figuran como apps publicadas, para marcar los jobs
+    // "huérfanos" (a medias) que no tienen su app visible en la lista de arriba.
+    const publishedAppIds = new Set(allApps.map((a: any) => String(a._id)));
+
     res.json({
       user: {
         id: userId,
@@ -2877,6 +2889,34 @@ router.get("/admin/users/:id/dashboard-view", async (req: any, res: any): Promis
         read: !!n.read,
         createdAt: n.createdAt ? new Date(n.createdAt).toISOString() : "",
       })),
+      // Generaciones/jobs del cliente. `hasPublishedApp` indica si el job ya produjo
+      // una app visible; si es false y el job no está "succeeded", es un trabajo a medias
+      // que soporte necesita ver para poder repararlo en vivo.
+      jobs: jobs.map((r: any) => {
+        const linkedAppId = r.appId || r.editAppId || null;
+        return {
+          id: String(r._id),
+          appId: r.appId || null,
+          editAppId: r.editAppId || null,
+          linkedAppId: linkedAppId ? String(linkedAppId) : null,
+          prompt: r.prompt,
+          status: r.status,
+          phase: r.phase ?? null,
+          progress: r.progress ?? 0,
+          coderModel: r.coderModel ?? null,
+          language: r.language ?? null,
+          retryCount: r.retryCount ?? 0,
+          errorMessage: r.errorMessage ?? null,
+          internalErrorMessage: r.internalErrorMessage ?? null,
+          // ¿este job ya tiene una app publicada/visible en la lista de apps?
+          hasPublishedApp: linkedAppId ? publishedAppIds.has(String(linkedAppId)) : false,
+          // trabajo a medias = no terminado y sin app publicada visible
+          isInProgress: r.status !== "succeeded" && r.status !== "failed",
+          ageMs: r.updatedAt ? now - new Date(r.updatedAt).getTime() : null,
+          createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
+          updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : "",
+        };
+      }),
     });
   } catch (err: any) {
     logger.error({ err: err?.message, userId: req.params.id }, "admin/users/:id/dashboard-view error");
