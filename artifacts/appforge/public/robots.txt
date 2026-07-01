@@ -39,5 +39,6 @@ Disallow: /admin/
 Disallow: /dashboard/
 
 Sitemap: https://www.marisai.es/sitemap.xml
+Sitemap: https://www.marisai.es/news-sitemap.xml
 Sitemap: https://www.marisai.es/api/sitemap-dynamic.xml
 Sitemap: https://www.marisai.es/api/news-sitemap.xml

@@ -1,88 +1,252 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
 
-  <!-- ════════ PÁGINA PRINCIPAL — máxima prioridad ════════ -->
   <url>
-    <loc>https://www.marisai.es/</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-
-  <!-- ════════ PÁGINAS PRINCIPALES ════════ -->
-  <url>
-    <loc>https://www.marisai.es/pricing</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
+    <loc>https://www.marisai.es/news/lovable-dev-vs-maris-ai</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-19T03:30:41Z</news:publication_date>
+      <news:title>Lovable.dev vs Maris AI: ¿Cuál es la mejor alternativa en español para crear apps?</news:title>
+      <news:keywords>Lovable.dev, Maris AI, alternativa a Lovable, crear MVP con IA, desarrollo de software con IA, no-code España</news:keywords>
+    </news:news>
   </url>
 
   <url>
-    <loc>https://www.marisai.es/showcase</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://www.marisai.es/news/v0-dev-vs-maris-ai</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-19T03:27:56Z</news:publication_date>
+      <news:title>v0.dev vs Maris AI: Cómo crear la interfaz de tu app sin saber React</news:title>
+      <news:keywords>v0.dev, Maris AI, Vercel v0, diseñar app con IA, creador de interfaces, no-code España</news:keywords>
+    </news:news>
   </url>
 
   <url>
-    <loc>https://www.marisai.es/news</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <!-- ════════ PÁGINAS SEO / CONTENIDO ════════ -->
-  <url>
-    <loc>https://www.marisai.es/vs-emergent</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <url>
-    <loc>https://www.marisai.es/que-es-vibe-coding</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://www.marisai.es/news/bolt-new-vs-maris-ai</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-19T03:24:28Z</news:publication_date>
+      <news:title>Bolt.new vs Maris AI: ¿Cuál es la mejor IA para crear apps en español?</news:title>
+      <news:keywords>Maris AI, Bolt.new, Vibe Coding, crear app con IA, desarrollo no-code, IA para emprendedores</news:keywords>
+    </news:news>
   </url>
 
   <url>
-    <loc>https://www.marisai.es/que-es-un-agente-de-ia</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://www.marisai.es/news/como-crear-mvp-sin-programar-startups-espanolas-2025</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-12T01:48:24Z</news:publication_date>
+      <news:title>Cómo crear un MVP sin programar en 2026: guía para startups españolas</news:title>
+      <news:keywords>mvp, startups, crear mvp sin programar, validar idea, emprendedores, españa</news:keywords>
+    </news:news>
   </url>
 
   <url>
-    <loc>https://www.marisai.es/glosario</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://www.marisai.es/news/bolt-vs-lovable-vs-maris-ai-comparativa-crear-apps-ia-espanol</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-12T01:46:30Z</news:publication_date>
+      <news:title>Bolt vs Lovable vs Maris AI: cuál es la mejor herramienta para crear apps con IA en español</news:title>
+      <news:keywords>bolt alternativa, lovable alternativa, comparativa ia, crear apps, vibe coding, españa</news:keywords>
+    </news:news>
   </url>
 
   <url>
-    <loc>https://www.marisai.es/desarrollo-no-code-guia</loc>
-    <lastmod>2026-06-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <!-- ════════ PÁGINAS LEGALES ════════ -->
-  <url>
-    <loc>https://www.marisai.es/legal</loc>
-    <lastmod>2026-06-01</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://www.marisai.es/news/digitalizar-negocio-sin-desarrollador-autonomos-pymes-espana</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-12T01:44:57Z</news:publication_date>
+      <news:title>Cómo digitalizar tu negocio sin contratar un desarrollador: guía para autónomos y PYMEs en España</news:title>
+      <news:keywords>digitalizar negocio, autónomos, pymes, españa, sin desarrollador, app para negocio</news:keywords>
+    </news:news>
   </url>
 
   <url>
-    <loc>https://www.marisai.es/privacy</loc>
-    <lastmod>2026-06-01</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://www.marisai.es/news/que-es-vibe-coding-emprendedores-espana</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-12T01:43:28Z</news:publication_date>
+      <news:title>Qué es el vibe coding y por qué está cambiando cómo los emprendedores crean apps en España</news:title>
+      <news:keywords>vibe coding, inteligencia artificial, crear apps, emprendedores, tendencias ia</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/como-crear-una-app-sin-programar-guia-emprendedores-espana</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-12T01:41:17Z</news:publication_date>
+      <news:title>Cómo crear una app sin programar en 2025: guía paso a paso para emprendedores en España</news:title>
+      <news:keywords>vibe coding, crear app sin programar, emprendedores, españa, inteligencia artificial</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/bolt-new-vs-maris-ai-comparativa-2026</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-06-06T11:16:09Z</news:publication_date>
+      <news:title>Bolt.new vs Maris AI: ¿Cuál es la Mejor Herramienta para Crear Apps con IA en Español? (2026)</news:title>
+      <news:keywords>bolt.new, alternativa bolt, vibe coding, crear apps con ia, comparativa, español</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/como-crear-app-reservas-negocio-sin-programar</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-28T03:31:55Z</news:publication_date>
+      <news:title>Cómo crear una app de reservas para tu negocio sin programar (en 5 minutos con IA)</news:title>
+      <news:keywords>reservas, no-code, app sin programar, negocio, tutorial, inteligencia artificial</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/google-ai-mode-busqueda-ia-cambia-internet-2026</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-21T22:04:06Z</news:publication_date>
+      <news:title>Google AI Mode: La Búsqueda con IA que Amenaza con Cambiar Internet para Siempre</news:title>
+      <news:keywords>Google, búsqueda IA, AI Mode, SEO, internet, Google I/O 2026</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/ue-acuerdo-politico-ley-ia-mayo-2026-desarrolladores</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-21T22:04:06Z</news:publication_date>
+      <news:title>La UE Alcanza Acuerdo Político sobre la Ley de IA: Lo Que Cambia para Desarrolladores y Empresas</news:title>
+      <news:keywords>Unión Europea, regulación IA, AI Act, AI Omnibus, legislación, GDPR</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/anthropic-supera-openai-adopcion-empresarial-mayo-2026</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-21T22:04:06Z</news:publication_date>
+      <news:title>Anthropic Supera a OpenAI en Adopción Empresarial por Primera Vez en la Historia</news:title>
+      <news:keywords>Anthropic, Claude, OpenAI, ChatGPT, adopción empresarial, IA</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/google-io-2026-era-agentes-ia-gemini</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-21T22:04:06Z</news:publication_date>
+      <news:title>Google I/O 2026: La Era de los Agentes de IA con Gemini ha Comenzado</news:title>
+      <news:keywords>Google, Gemini, Google I/O 2026, agentes IA, inteligencia artificial</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/meta-recorta-8000-empleos-apuesta-ia-automatizacion-2026</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-21T22:04:06Z</news:publication_date>
+      <news:title>Meta Recorta 8.000 Empleos en su Gran Apuesta por la IA: El Futuro es Automatización</news:title>
+      <news:keywords>Meta, empleo, IA, automatización, Mark Zuckerberg</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/optimizacion-modelos-llm-produccion-reducir-costes</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-18T16:53:17Z</news:publication_date>
+      <news:title>Optimización de modelos LLM en producción: estrategias para reducir costes hasta un 95%</news:title>
+      <news:keywords>LLM, optimización, costes, producción, Claude, Gemini, ingeniería</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/crear-aplicacion-web-ia-5-minutos-guia-practica</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-18T16:53:15Z</news:publication_date>
+      <news:title>Cómo crear tu primera aplicación web con IA en menos de 5 minutos: guía práctica</news:title>
+      <news:keywords>tutorial, no-code, aplicaciones web, inteligencia artificial, guía</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/futuro-desarrollo-software-agentes-ia-2026</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-18T16:53:12Z</news:publication_date>
+      <news:title>El futuro del desarrollo de software: cómo los agentes de IA están transformando la industria en 2026</news:title>
+      <news:keywords>inteligencia artificial, desarrollo de software, agentes IA, tecnología, 2026</news:keywords>
+    </news:news>
+  </url>
+
+  <url>
+    <loc>https://www.marisai.es/news/maris-ai-plataforma-apps-ia-mejor-precio</loc>
+    <news:news>
+      <news:publication>
+        <news:name>Maris AI</news:name>
+        <news:language>es</news:language>
+      </news:publication>
+      <news:publication_date>2026-05-17T18:19:42Z</news:publication_date>
+      <news:title>Maris AI: La Plataforma que Genera Apps Completas con IA por Mucho Menos</news:title>
+      <news:keywords>Maris AI, App Builder, IA, No-Code, Vibe Coding, Desarrollo, Alternativa Emergent</news:keywords>
+    </news:news>
   </url>
 
 </urlset>
