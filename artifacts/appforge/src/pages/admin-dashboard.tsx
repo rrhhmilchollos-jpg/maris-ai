@@ -1322,7 +1322,59 @@ function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAp
             )}
 
             {apps.length === 0 ? (
-              <div className="text-center text-xs text-muted-foreground py-6">Este cliente no tiene apps.</div>
+              <div className="space-y-3">
+                <div className="text-center text-xs text-muted-foreground py-3">Este cliente no tiene apps.</div>
+                {/* Botones de generación directa cuando no hay apps */}
+                {data?.user?.id && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-white/40 text-center">Genera una app nueva para este cliente:</p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 text-xs bg-emerald-700 hover:bg-emerald-600 text-white"
+                        onClick={async () => {
+                          const prompt = window.prompt("Prompt para generar la app (MVP básico — 7 módulos garantizados):", "");
+                          if (!prompt?.trim()) return;
+                          try {
+                            const d = await apiFetch<any>(`/api/admin/users/${data.user.id}/generate-app`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ prompt, skipGating: true, forceBasicGeneration: true }),
+                            });
+                            toast({ title: "⚡ MVP iniciado", description: d.message });
+                            setTimeout(() => loadDashboard(data.user.email), 2000);
+                          } catch (e: any) {
+                            toast({ title: "Error", description: e.message, variant: "destructive" });
+                          }
+                        }}
+                      >
+                        ⚡ Generar MVP (7 módulos)
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 text-xs bg-violet-700 hover:bg-violet-600 text-white"
+                        onClick={async () => {
+                          const prompt = window.prompt("Prompt para generar app COMPLETA:", "");
+                          if (!prompt?.trim()) return;
+                          try {
+                            const d = await apiFetch<any>(`/api/admin/users/${data.user.id}/generate-app`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ prompt, skipGating: true, forceBasicGeneration: false }),
+                            });
+                            toast({ title: "🏗️ Generación completa iniciada", description: d.message });
+                            setTimeout(() => loadDashboard(data.user.email), 2000);
+                          } catch (e: any) {
+                            toast({ title: "Error", description: e.message, variant: "destructive" });
+                          }
+                        }}
+                      >
+                        🏗️ Generar completa
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="space-y-3">
                 {apps.map((app) => {
