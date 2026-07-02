@@ -1930,8 +1930,6 @@ router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<v
   logger.info({ userId: req.params.id, userEmail, sent, subject }, "Admin: sent custom templated email");
 
   if (!sent) {
-    // Devolver error HTTP real para que el frontend lo muestre como error
-    // (en vez de ok:false que el frontend podía ignorar mostrando "enviado")
     res.status(500).json({
       error: "No se pudo enviar el correo. Comprueba que RESEND_API_KEY está configurada en Railway y que el dominio marisai.es está verificado en Resend.",
       userEmail,
@@ -1940,6 +1938,64 @@ router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<v
   }
 
   res.json({ ok: true, userEmail, message: `Correo enviado a ${userEmail} ✅` });
+});
+
+// ── POST /api/admin/broadcast — campaña masiva a todos los clientes ────────────
+// Envía el mismo email a TODOS los usuarios con al menos 1 job generado.
+// Respeta rate limits de Resend (600ms entre envíos).
+// Excluye: admins, cuentas de demo/test, usuarios sin email.
+router.post("/admin/broadcast", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const dbUser = await User.findById(req.dbUser?._id).lean() as any;
+  const { isAdminEmail } = await import("../lib/auth");
+  if (!isAdminEmail(dbUser?.email)) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const { subject, body, creditsCompensation = 0 } = req.body ?? {};
+  if (!subject?.trim() || !body?.trim()) {
+    res.status(400).json({ error: "subject y body son requeridos" }); return;
+  }
+
+  // Buscar todos los usuarios que han generado al menos 1 job
+  const { GenerationJob } = await import("@workspace/db/schema");
+  const activeUserIds = await GenerationJob.distinct("userId");
+  const users = await User.find({
+    _id: { $in: activeUserIds },
+    email: { $exists: true, $ne: "", $not: /demo|test|noreply|no-reply/i },
+    broadcastUnsubscribed: { $ne: true },
+  }).select("_id email fullName").lean() as any[];
+
+  logger.info({ total: users.length, subject }, "Admin: iniciando campaña masiva");
+
+  // Responder inmediatamente — el envío ocurre en background
+  res.json({ ok: true, total: users.length, message: `Campaña iniciada: ${users.length} destinatarios. Los emails se envían en background (aprox. ${Math.ceil(users.length * 0.6 / 60)} min).` });
+
+  // Enviar en background respetando rate limits
+  void (async () => {
+    const { sendCustomAdminEmail } = await import("../lib/notify");
+    let sent = 0; let failed = 0;
+    for (const user of users) {
+      try {
+        const ok = await sendCustomAdminEmail({
+          userEmail: user.email,
+          userName: user.fullName,
+          subject,
+          body,
+          creditsCompensation,
+        });
+        if (ok) {
+          sent++;
+          if (creditsCompensation > 0) {
+            await User.findByIdAndUpdate(user._id, { $inc: { credits: creditsCompensation } });
+          }
+        } else {
+          failed++;
+        }
+      } catch { failed++; }
+      // Resend permite ~2 emails/seg → 600ms entre envíos para ir seguros
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    logger.info({ sent, failed, total: users.length, subject }, "Admin: campaña masiva completada");
+  })();
 });
 
 router.post("/admin/jobs/fix-false-failed", async (req: any, res: any): Promise<void> => {

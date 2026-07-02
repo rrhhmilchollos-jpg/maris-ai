@@ -2708,7 +2708,139 @@ Si tienes alguna duda sobre lo que te preguntamos, responde este correo o escrí
 El equipo de Maris AI`,
     defaultCredits: 0,
   },
+  // ── CAMPAÑA MASIVA ──────────────────────────────────────────────────────
+  {
+    id: "comeback_campaign",
+    label: "📢 CAMPAÑA MASIVA — Volver a Maris AI",
+    icon: "📢",
+    subject: () => "🚀 Maris AI ha mejorado mucho — te esperamos de vuelta",
+    body: ({ userName }) => `Hola${userName ? ` ${userName}` : ""},\n\nHace un tiempo creaste tu primera app con Maris AI y queremos contarte que la plataforma ha cambiado muchísimo desde entonces.\n\n🏗️ Nuevo orquestador por hitos — tus apps ahora se construyen módulo a módulo, sin pantallas en blanco ni errores a mitad. Proyectos complejos como portales, CRMs y plataformas multi-usuario ahora salen perfectos desde el primer intento.\n\n⚡ Generación hasta 3x más rápida — reducimos los tiempos de espera a la mitad y los resultados son más completos y funcionales.\n\n🔗 Tu dominio personalizado — ahora puedes conectar tu propio dominio a cualquier app que generes. Tu marca, tu URL.\n\n💜 Soporte mejorado — respondemos en menos de 2 horas por WhatsApp y email, en español, sin bots. Somos personas reales que conocen la plataforma a fondo.\n\n🎁 Programa de referidos — comparte tu link personal y gana el 30% de cada compra que haga quien refieras. Sin límite, sin caducidad. Más info en: https://www.marisai.es/afiliados\n\n👉 Vuelve y compruébalo tú mismo: https://www.marisai.es/dashboard\n\nTus créditos siguen ahí esperándote — en Maris AI nunca caducan.\n\nSi tienes alguna duda o quieres que te ayudemos a retomar tu proyecto, responde a este correo o escríbenos por WhatsApp al +34 611 935 616.\n\n¡Hasta pronto!\n\nEl equipo de Maris AI\nsoporte@marisai.es`,
+    defaultCredits: 0,
+  },
 ];
+
+/**
+ * BroadcastButton — botón de campaña masiva a todos los clientes.
+ * Abre un dialog con la plantilla "Volver a Maris AI" editable
+ * y envía el email a todos los usuarios con al menos 1 job generado.
+ */
+function BroadcastButton() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const CAMPAIGN = EMAIL_TEMPLATES.find(t => t.id === "comeback_campaign")!;
+  const [subject, setSubject] = useState(CAMPAIGN.subject({ appTitle: "", userName: "" }));
+  const [body, setBody] = useState(CAMPAIGN.body({ appTitle: "", userName: "" }));
+  const [credits, setCredits] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const handleSend = async () => {
+    if (!confirmed) return;
+    setSending(true);
+    try {
+      const d = await apiFetch<any>("/api/admin/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, body, creditsCompensation: credits }),
+      });
+      toast({
+        title: "📢 Campaña lanzada",
+        description: d.message,
+      });
+      setOpen(false);
+      setConfirmed(false);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        className="h-7 text-xs bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold gap-1.5 shadow-lg shadow-violet-500/20"
+        onClick={() => setOpen(true)}
+      >
+        📢 Campaña masiva
+      </Button>
+
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setConfirmed(false); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              📢 Campaña masiva — Volver a Maris AI
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-400 mb-2">
+            ⚠️ Este email se enviará a <strong>TODOS los clientes</strong> que hayan generado al menos 1 app.
+            El mensaje puede personalizarse antes de enviar. Los envíos se hacen en background con un retraso de 600ms entre cada uno.
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-white/50 block mb-1">Asunto</label>
+              <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-white/50 block mb-1">Mensaje — edítalo si quieres personalizar algo</label>
+              <Textarea
+                rows={14}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                className="text-sm font-mono resize-y"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="text-xs text-white/50 block mb-1">Créditos de regalo (0 = sin créditos)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={credits}
+                  onChange={(e) => setCredits(Number(e.target.value) || 0)}
+                  className="text-sm w-32"
+                />
+              </div>
+              <div className="text-xs text-white/40 text-right">
+                {credits > 0 && <p className="text-yellow-400">⚡ Se añadirán {credits} créditos a cada destinatario</p>}
+              </div>
+            </div>
+
+            {/* Confirmación obligatoria */}
+            <div
+              className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition ${confirmed ? "border-violet-500/40 bg-violet-500/10" : "border-white/10 bg-white/[0.02]"}`}
+              onClick={() => setConfirmed(c => !c)}
+            >
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition ${confirmed ? "border-violet-500 bg-violet-500" : "border-white/30"}`}>
+                {confirmed && <span className="text-white text-xs font-bold">✓</span>}
+              </div>
+              <p className="text-xs text-white/70">
+                Confirmo que quiero enviar este email a <strong className="text-white">todos los clientes de Maris AI</strong>. He revisado el mensaje y estoy seguro.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setOpen(false); setConfirmed(false); }}>Cancelar</Button>
+            <Button
+              onClick={handleSend}
+              disabled={sending || !confirmed || !subject.trim() || !body.trim()}
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white font-bold gap-2"
+            >
+              {sending
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Enviando campaña…</>
+                : <>📢 Lanzar campaña</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function EmailTemplateMenu({
   recipientEmail,
@@ -3474,9 +3606,12 @@ export default function AdminDashboardPage() {
               <TabsContent value="users">
                 <Card className="bg-card/40 border-white/5">
                   <CardHeader>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      Top usuarios por créditos consumidos
+                    <CardTitle className="text-base flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        Top usuarios por créditos consumidos
+                      </div>
+                      <BroadcastButton />
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
