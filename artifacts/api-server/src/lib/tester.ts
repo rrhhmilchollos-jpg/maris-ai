@@ -166,6 +166,10 @@ export async function runTestingAgent(
         continue;
       }
       log("testing", `⚠️ El modo multi-archivo tampoco pudo generar una solución en este ciclo (${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) completados).`, "warn");
+      // FIX 3+5: 0 archivos completados = el parche no converge.
+      // Romper el bucle inmediatamente para no gastar tokens en ciclos
+      // idénticos que producirán el mismo resultado. Sin este break, el
+      // testing agent agota todos los MAX_FIX_CYCLES intentando lo mismo.
       break;
     }
 
@@ -186,6 +190,13 @@ export async function runTestingAgent(
         return patchedMap.has(path) ? patchedMap.get(path) : f;
       }).join("// === FILE: ");
     } else {
+      // FIX 5: si el bundle parchado es idéntico al anterior, el parche
+      // no produjo ningún cambio real — romper el bucle para no desperdiciar
+      // más ciclos y tokens en el mismo intento que ya falló.
+      if (patched === currentBundle) {
+        log("testing", "⚠️ El parche no produjo cambios en el bundle — deteniendo ciclos para no gastar tokens innecesariamente.", "warn");
+        break;
+      }
       currentBundle = patched;
     }
     log("testing", "✓ Reparaciones aplicadas — re-validando en el siguiente ciclo...");

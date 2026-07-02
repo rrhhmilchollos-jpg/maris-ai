@@ -3478,9 +3478,14 @@ export async function generateApp(
   // comportamiento original se mantiene sin cambios (cualquier mención de
   // "crea"/"app" sigue activando una construcción completa, correcto para
   // un proyecto que aún no existe).
-  const promptStart = prompt.toLowerCase().slice(0, 60);
-  const hasExplicitBuildIntent = promptStart.includes("crea") || promptStart.includes("app");
-  const wantsFullBuild = !previous || hasExplicitBuildIntent;
+  // FIX 1: wantsFullBuild incorrecto con ediciones.
+  // Si hay 'previous' (app existente), SIEMPRE es edición — da igual que el
+  // prompt del chat contenga "crea" o "app". Un cliente que escribe
+  // "crea un módulo de pagos" en el chat de su app existente estaba
+  // desencadenando una regeneración completa que borraba toda la app.
+  // Con esta corrección: previous=true → wantsFullBuild=false siempre.
+  // Solo si no hay app previa (generación nueva) se evalúan las keywords.
+  const wantsFullBuild = !previous;
   const isUltraComplex = agentModelPlan.tier === "ultra";
   const isRobustOrUltra = agentModelPlan.tier === "ultra" || agentModelPlan.tier === "robust";
 
@@ -7008,13 +7013,24 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     } else {
       // ── INTEGRIDAD DEL BUNDLE — detectar archivos truncados antes de guardar ──
-      if (finalResult.frontendCode) {
+      // FIX 2: NO ejecutar detectTruncatedFiles si el testing agent ya aprobó
+      // el bundle con score >= 75. Si el testing pasó, el bundle está bien —
+      // detectTruncatedFiles tenía falsos positivos con iconos Lucide-React
+      // que disparaban repairs sobre código perfectamente válido, sobrescribiendo
+      // un bundle sano con código potencialmente peor.
+      const testingApproved = (finalResult as any)._testingScore >= 75;
+      if (finalResult.frontendCode && !testingApproved) {
         const truncatedFiles = detectTruncatedFiles(finalResult.frontendCode);
         if (truncatedFiles.length > 0) {
           await log("coder", `⚠️ ${truncatedFiles.length} archivo(s) truncado(s) detectado(s): ${truncatedFiles.join(", ")} — lanzando repair automático…`, "warn");
           // Marcar para que el repair agent lo arregle después de guardar
           (finalResult as any)._hasTruncatedFiles = true;
           (finalResult as any)._truncatedFiles = truncatedFiles;
+        }
+      } else if (testingApproved && finalResult.frontendCode) {
+        const truncatedFiles = detectTruncatedFiles(finalResult.frontendCode);
+        if (truncatedFiles.length > 0) {
+          await log("coder", `ℹ️ ${truncatedFiles.length} archivo(s) marcado(s) como posiblemente truncados pero bundle aprobado con score alto — conservando código sin repair.`, "info");
         }
       }
 
@@ -7169,6 +7185,9 @@ export async function runJobById(jobId: string): Promise<void> {
       try {
         const { evaluateJobQuality } = await import("../lib/aiAutopilot");
         const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
+        // Propagar el score para que detectTruncatedFiles no sabotee
+        // bundles ya aprobados (FIX 2 en el bloque de integridad del bundle)
+        (finalResult as any)._testingScore = qeval.score;
         if (!qeval.pass) {
           await log("system", `⚠️ Calidad insuficiente (score: ${qeval.score}/100). Lanzando corrección automática…`);
           const patchPrompt = `[ADMIN REPAIR] La app generada tiene problemas de calidad: ${qeval.issues.slice(0, 3).join(", ")}. Corrígelos sin modificar lo que ya funciona. Prompt original: ${(job.prompt || "").slice(0, 200)}`;
