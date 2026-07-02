@@ -1,7 +1,8 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-
+const isUltraComplex = true;
+const projectTier = "ultra";
 // ─────────────────────────────────────────────────────────────────────────────
 // CoreOrchestrator v2 — "Task Splitting" real para proyectos ultra-complejos
 // (ERPs, ecosistemas multi-módulo, sistemas de nivel empresarial).
@@ -26,8 +27,6 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PLANNER_SYSTEM_STATIC = `Eres el Arquitecto de Sistemas Senior de Maris AI. Recibes la idea de un proyecto de ALTA COMPLEJIDAD (sistema empresarial, ERP, ecosistema multi-módulo) y lo divides en hitos de construcción reales y manejables.
-const isUltraComplex = true;
-const projectTier = "ultra";
 
 PRINCIPIO RECTOR: cada hito debe ser un archivo o conjunto de archivos coherente que un ingeniero senior real escribiría como una unidad — ni demasiado pequeño (no fragmentes en exceso) ni demasiado grande (no comprimas un módulo entero de negocio en un solo archivo).
 
