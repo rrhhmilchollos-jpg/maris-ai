@@ -3536,6 +3536,10 @@ export async function generateApp(
   // Se activa si: (a) requestContext.skipGating=true, (b) el job tiene
   // isAdmin:true en la BD (jobs creados por el admin desde su panel),
   // (c) el job tiene skipGating:true en la BD (set explícitamente).
+  // ── GATING DE CLARIFICACIÓN TÉCNICA ─────────────────────────────────────
+  // REGLA: cliente genera → gating activo. Admin/soporte genera → directo.
+  // Cuando soporte desbloquea la app, el cliente puede hacer sus propias
+  // preguntas/ediciones desde el chat y el gating se activará ahí.
   let isSkipGating = (requestContext as any)?.skipGating === true;
   if (!isSkipGating && jobId) {
     try {
@@ -3543,7 +3547,7 @@ export async function generateApp(
         .select("isAdmin skipGating")
         .lean() as any;
       if (jobMeta?.isAdmin || jobMeta?.skipGating) isSkipGating = true;
-    } catch { /* best-effort — si falla, continúa sin skip */ }
+    } catch { /* best-effort */ }
   }
 
   if (!previous && isUltraComplex && jobId && !isSkipGating) {
@@ -3553,46 +3557,26 @@ export async function generateApp(
       if (!alreadyApproved) {
         const questions = await generateGatingQuestions(prompt);
         if (questions.length > 0) {
-          await log("system", "❓ Proyecto de alta complejidad — antes de empezar, necesito confirmar algunos detalles técnicos clave para no asumir nada que no hayas pedido...");
+          await log("system", "❓ Antes de empezar, confirma estos detalles técnicos para que tu app quede exactamente como la imaginas...");
           return {
             phase: "awaiting_technical_clarification",
-            checkpointData: {
-              questions,
-              originalPrompt: prompt,
-            },
+            checkpointData: { questions, originalPrompt: prompt },
           };
         }
-        // Sin preguntas (el prompt ya resolvía las 3 áreas con confianza) —
-        // continúa directo a la generación, sin pausa innecesaria.
       } else {
-        // El cliente ya respondió las preguntas de clarificación — sus
-        // respuestas reales (guardadas por POST /jobs/:id/approve en
-        // checkpointData.answers) se inyectan como CONTEXTO DEL SISTEMA al
-        // prompt, para que el generador de hitos sepa con precisión qué
-        // base de datos, roles o pasarela de pago usar, en vez de tener
-        // que volver a adivinarlo desde el prompt original sin más detalle.
         const answers = jobForGating?.checkpointData?.answers as Record<string, string> | undefined;
         const extraNotes = jobForGating?.checkpointData?.extraNotes as string | undefined;
         if (answers && Object.keys(answers).length > 0) {
-          const answersBlock = Object.entries(answers)
-            .map(([topic, answer]) => `- ${topic}: ${answer}`)
-            .join("\n");
-          prompt = `${prompt}\n\n[DETALLES TÉCNICOS CONFIRMADOS POR EL USUARIO — usa esto con precisión, no asumas nada distinto]\n${answersBlock}`;
+          prompt = `${prompt}\n\n[DETALLES TÉCNICOS CONFIRMADOS POR EL USUARIO]\n${Object.entries(answers).map(([t, a]) => `- ${t}: ${a}`).join("\n")}`;
         }
-        // Especificaciones adicionales libres que el cliente escribió
-        // en el campo de texto del formulario de clarificación técnica.
         if (extraNotes) {
-          prompt = `${prompt}\n\n[ESPECIFICACIONES ADICIONALES DEL CLIENTE — implementa exactamente esto]\n${extraNotes}`;
+          prompt = `${prompt}\n\n[ESPECIFICACIONES ADICIONALES DEL CLIENTE]\n${extraNotes}`;
         }
       }
     } catch (gatingErr) {
-      // Best-effort, igual que el resto de verificaciones "extra" del
-      // pipeline: un fallo aquí (ej. Mongo lento, Claude caído) NUNCA debe
-      // bloquear la generación — simplemente se continúa sin la pausa.
-      logger.warn({ gatingErr, jobId }, "[gating] Falló la comprobación de clarificación — continuando sin pausa");
+      logger.warn({ gatingErr, jobId }, "[gating] Falló — continuando sin pausa");
     }
   }
-
   if (wantsFullBuild && useMilestoneOrchestrator) {
     // DEGRADACIÓN INTELIGENTE PARA USUARIOS GRATUITOS (hasEverPaid=false):
     // FIX DE EMERGENCIA (a petición explícita del usuario, confirmado en

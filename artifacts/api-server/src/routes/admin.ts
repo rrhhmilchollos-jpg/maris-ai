@@ -1654,11 +1654,9 @@ router.post("/admin/apps/:id/unblock", async (req: any, res: any): Promise<void>
   ).lean() as any;
   if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
 
-  // ── Notificar al cliente: su app ya está visible ───────────────────────────────
   const appTitle = (app as any).title || "Tu app";
   if ((app as any).userId) {
     try {
-      // Deduplicar: no crear si ya existe una notificación support_patch para esta app en las últimas 24h
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const alreadyNotified = await UserNotification.exists({
         userId: (app as any).userId,
@@ -1667,22 +1665,34 @@ router.post("/admin/apps/:id/unblock", async (req: any, res: any): Promise<void>
         createdAt: { $gte: since },
       });
       if (!alreadyNotified) {
+        // Notificación principal: la app está lista y visible
         await UserNotification.create({
           userId: (app as any).userId,
           appId: req.params.id,
           appTitle,
           type: "support_patch",
-          message: `✅ Tu app **${appTitle}** ha sido revisada y actualizada por el equipo de soporte. Ya puedes verla y continuar editándala desde tu panel. 💜`,
+          message: `✅ Tu app **${appTitle}** ya está lista y visible en tu panel. Nuestro equipo la ha construido para ti. Ábrela, pruébala y dinos si quieres personalizar algo más. 💜`,
+          read: false,
+        });
+        // Segunda notificación: invitar a personalizar/expandir la app
+        // Esto incentiva al cliente a entrar al chat de edición donde
+        // podrá hacer sus propias preguntas y el agente le ayudará.
+        await UserNotification.create({
+          userId: (app as any).userId,
+          appId: req.params.id,
+          appTitle,
+          type: "app_ready",
+          message: `🚀 ¿Quieres añadir algo a **${appTitle}**? Puedes pedirle al agente que añada nuevas funciones, cambie el diseño, integre pagos o cualquier cosa que necesites. Solo escríbelo en el chat de edición de tu app.`,
           read: false,
         });
       }
     } catch (notifErr) {
-      logger.warn({ notifErr, appId: req.params.id }, "unblock: no se pudo crear la notificación al cliente");
+      logger.warn({ notifErr, appId: req.params.id }, "unblock: error creando notificaciones al cliente");
     }
   }
 
-  logger.info({ appId: req.params.id, appTitle }, "Admin: app desbloqueada manualmente");
-  res.json({ ok: true, appId: req.params.id, appTitle, message: "App visible para el cliente." });
+  logger.info({ appId: req.params.id, appTitle }, "Admin: app desbloqueada — cliente notificado");
+  res.json({ ok: true, appId: req.params.id, appTitle, message: "App visible para el cliente. Se le ha notificado para que la revise y personalice." });
 });
 
 // POST /api/admin/apps/:id/reassign-user — reasignar el userId de una app
