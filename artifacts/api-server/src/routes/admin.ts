@@ -104,9 +104,13 @@ router.get("/admin/overview", async (_req, res) => {
   const txns = await CreditTransaction.find({}, { kind: 1, amount: 1 }).lean();
   let creditsSpentTotal = 0;
   let creditsPurchasedTotal = 0;
+let revenueCentsTotal = 0;
   for (const t of txns) {
     if (t.kind === "usage") creditsSpentTotal += Math.abs(t.amount);
-    if (t.kind === "purchase") creditsPurchasedTotal += t.amount;
+    if (t.kind === "purchase") {
+    creditsPurchasedTotal += t.amount;
+    if ((t as any).priceCents) revenueCentsTotal += (t as any).priceCents;
+  }
   }
 
   res.json({
@@ -116,7 +120,7 @@ router.get("/admin/overview", async (_req, res) => {
     creditsOutstanding,
     creditsSpentTotal,
     creditsPurchasedTotal,
-    revenueCentsTotal: 0,
+    revenueCentsTotal,
   });
 });
 
