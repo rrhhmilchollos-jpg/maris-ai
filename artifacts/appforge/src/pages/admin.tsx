@@ -873,7 +873,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                     size="sm"
                     variant="outline"
                     className="gap-1.5 text-xs"
-                    onClick={() => { setSelectedUser(null); setAdjustUser({ id: selectedUser.id, email: selectedUser.email }); }}
+                    onClick={() => { setAdjustUser({ id: selectedUser.id, email: selectedUser.email }); }}
                   >
                     <CreditCard className="h-3.5 w-3.5" /> Ajustar créditos
                   </Button>
@@ -1308,7 +1308,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                                 const d = await apiFetch<any>(`/api/admin/users/${selectedUser.id}`, { method: "DELETE" });
                                 toast({ title: "Cuenta eliminada", description: `${d.email} eliminado. ${d.appsDeleted} apps y ${d.jobsDeleted} jobs borrados.` });
                                 setSelectedUser(null);
-                                queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+                                queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
                               } catch (e: any) {
                                 toast({ title: "Error al eliminar", description: e.message, variant: "destructive" });
                               }
