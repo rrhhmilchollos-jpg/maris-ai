@@ -3083,4 +3083,28 @@ router.get("/admin/users/:id/dashboard-view", async (req: any, res: any): Promis
   }
 });
 
+// ── FIX CREDITS FLOAT — migración puntual ────────────────────────────────────
+// POST /api/admin/fix-credits-float
+// Redondea a entero TODOS los saldos de créditos con decimales en BD.
+// Ejecutar UNA sola vez desde el panel admin.
+router.post("/admin/fix-credits-float", async (_req, res) => {
+  await connectDB();
+  try {
+    const users = await User.find({}, { _id: 1, credits: 1, email: 1 }).lean() as any[];
+    let fixed = 0;
+    const fixedList: string[] = [];
+    for (const u of users) {
+      const rounded = Math.round(u.credits ?? 0);
+      if (rounded !== u.credits) {
+        await User.findByIdAndUpdate(u._id, { $set: { credits: rounded } });
+        fixed++;
+        fixedList.push(`${u.email}: ${u.credits} → ${rounded}`);
+      }
+    }
+    res.json({ ok: true, usersChecked: users.length, usersFixed: fixed, fixedList });
+  } catch (err: any) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;
