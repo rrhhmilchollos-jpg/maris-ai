@@ -490,6 +490,16 @@ export async function patchBundle(
   model: string = "claude-sonnet-4-6",
 ): Promise<string | null> {
   if (issues.length === 0) return null;
+
+  // MARIS-SHIELD: rechazar reparaciones masivas (>5 archivos distintos).
+  // El pipeline clásico de una sola pasada falla matemáticamente con 15+ archivos
+  // simultáneos saturando la ventana de contexto. Si hay muchos archivos afectados,
+  // el CoreOrchestrator por hitos debe manejar la reparación (1 archivo por llamada).
+  const affectedFiles = new Set(issues.map(i => i.file).filter(Boolean));
+  if (affectedFiles.size > 5) {
+    console.warn(`[MARIS-SHIELD] patchBundle rechazado: ${affectedFiles.size} archivos afectados supera el límite de 5. Delegando al orquestador por hitos.`);
+    return null; // El repair agent detectará null y escalará al CoreOrchestrator
+  }
   const issueList = issues
     .map((i, idx) => `${idx + 1}. [${i.file}] Problem: ${i.problem}\n   Fix: ${i.fix}`)
     .join("\n");
