@@ -1033,6 +1033,10 @@ router.get("/admin/metrics", async (_req, res) => {
     GeneratedApp.countDocuments(),
   ]);
 
+  // Ingresos reales desde CreditTransaction
+  const revenueTxns = await CreditTransaction.find({ kind: "purchase" }, { priceCents: 1 }).lean();
+  const revenueCentsTotal = revenueTxns.reduce((sum: number, t: any) => sum + (t.priceCents ?? 0), 0);
+
   let jobsTotal = 0, jobsSuccess = 0, jobsFailed = 0;
   let avgDurationMsAccum = 0, avgDurationCount = 0;
   for (const row of jobs24h) {
@@ -1101,6 +1105,7 @@ router.get("/admin/metrics", async (_req, res) => {
     server: getMetricsSnapshot(),
     queue: { ready: isQueueReady(), jobs24hByStatus: queueByStatus },
     redis: getRedisStatus(),
+    revenueCentsTotal,
     e2b: {
       configured: isE2BEnabled(),
       validateOnGenerate: getE2BGateEnabled(),
