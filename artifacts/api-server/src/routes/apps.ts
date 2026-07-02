@@ -95,6 +95,10 @@ interface RouteGenerationRequestContext {
   detectedCountry?: string;
   uiLanguage?: string;
   hasEverPaid?: boolean;  // usado para coste en créditos, no para limitar el alcance de la app generada
+  // Si true, el pipeline salta las preguntas de clarificación técnica (gating).
+  // Solo admins pueden enviarlo true — permite generar la app completa sin que
+  // el cliente tenga que responder nada. Útil para entregar apps ya listas al cliente.
+  skipGating?: boolean;
 }
 
 /* ============================================================================
@@ -213,6 +217,81 @@ LIBRARIES — correct usage for the newly-allowed packages (using them wrong is 
 - recharts: \`import { LineChart, BarChart, PieChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Line, Bar, Pie, Cell } from "recharts"\`. ALWAYS wrap charts in \`<ResponsiveContainer width="100%" height={300}>\` so they resize correctly — a chart with a hardcoded pixel width breaks on mobile. Use for dashboards, analytics pages, any "show me a trend/distribution" requirement.
 - react-hook-form + @hookform/resolvers + zod: \`import { useForm } from "react-hook-form"; import { zodResolver } from "@hookform/resolvers/zod"\`. Define a zod schema per form, pass it via \`useForm({ resolver: zodResolver(schema) })\`. Use \`register("fieldName")\` on inputs and \`formState: { errors }\` to render validation messages in Spanish. Prefer this over manual useState-per-field for any form with 3+ fields or real validation rules (required, email format, min length) — it's the standard React form pattern and produces far more reliable validation than hand-rolled state.
 - react-day-picker: \`import { DayPicker } from "react-day-picker"; import "react-day-picker/dist/style.css"\`. Use for date pickers, booking/reservation calendars, date-range filters. Combine with date-fns (already allowed) for formatting the selected date, never reimplement date math by hand.
+
+GAME LIBRARIES — usa estas cuando el proyecto sea un juego (kind=game-2d o game-3d). NUNCA las uses para apps normales:
+
+CANVAS 2D PURO (sin librerías extra — para Snake, Tetris, Pong, Breakout, Space Invaders, puzzles):
+- Usa un <canvas ref={canvasRef} /> con useEffect para el game loop: requestAnimationFrame, ctx.clearRect, ctx.fillRect, ctx.arc, ctx.drawImage.
+- El estado del juego (posiciones, velocidad, puntuación, vidas) va en useRef (NO useState — evita re-renders innecesarios dentro del loop).
+- Cleanup SIEMPRE: return () => { cancelAnimationFrame(animRef.current); } en el useEffect.
+- Controles con addEventListener('keydown') en useEffect, cleanup con removeEventListener.
+- localStorage para guardar el récord: localStorage.getItem('best_score') / localStorage.setItem('best_score', score).
+- Estructura de archivos: un solo componente GameCanvas.tsx + un hook useGameLoop.ts que exporta { score, lives, gameState, startGame, resetGame }.
+
+MATTER.JS — física 2D realista (bolas que rebotan, torres que caen, vehículos, puzzles con gravedad):
+- \`import Matter from "matter-js"\` — versión 0.19.0 disponible.
+- Inicializar en useEffect: const engine = Matter.Engine.create(); const render = Matter.Render.create({ canvas: canvasRef.current, engine, options: { width, height, wireframes: false } }); Matter.Runner.run(engine); Matter.Render.run(render);
+- Cleanup: Matter.Render.stop(render); Matter.Runner.stop(runner); Matter.Engine.clear(engine); render.canvas.remove();
+- Cuerpos: Matter.Bodies.rectangle(x,y,w,h,{...}), Matter.Bodies.circle(x,y,r,{...}), Matter.Bodies.fromVertices(...).
+- Añadir al mundo: Matter.Composite.add(engine.world, [body1, body2, ...]).
+- Colisiones: Matter.Events.on(engine, 'collisionStart', callback).
+
+PHASER 3 — motor 2D completo (plataformeros, shooters, RPGs 2D, juegos con sprites y física Arcade):
+- \`import Phaser from "phaser"\` — versión 3.87.0 disponible.
+- Montar en React: useEffect(() => { const game = new Phaser.Game({ type: Phaser.AUTO, parent: containerRef.current, width: 800, height: 600, physics: { default: 'arcade', arcade: { gravity: { y: 300 } } }, scene: [MenuScene, GameScene, GameOverScene] }); return () => game.destroy(true); }, []).
+- Escenas como clases: class GameScene extends Phaser.Scene { preload() {} create() {} update() {} }.
+- Sprites generados con gráficos procedurales (this.add.graphics().fillStyle(0xff0000).fillRect(...)): NO uses assets externos que requieran ser cargados desde URLs — el bundle debe ser autocontenido.
+- Colisiones: this.physics.add.collider(player, platforms); this.physics.add.overlap(player, coins, collectCoin, null, this).
+- Comunicar puntuación a React: usa un EventEmitter o window.dispatchEvent(new CustomEvent('score', { detail: score })) + addEventListener en el componente React.
+
+PIXI.JS v8 — renderizado WebGL de alto rendimiento (cientos de sprites, efectos de partículas, juegos de atrapar objetos):
+- \`import * as PIXI from "pixi.js"\` — versión 8.5.2 disponible. USA SIEMPRE API v8, nunca v7 legacy.
+- Init: const app = new PIXI.Application(); await app.init({ resizeTo: window, background: 0x1a0033, antialias: true }); containerRef.current.appendChild(app.canvas); // v8: .canvas, NO .view
+- Game loop: app.ticker.add((ticker) => { /* ticker.deltaTime disponible */ }).
+- Gráficos: const g = new PIXI.Graphics(); g.rect(0,0,50,50).fill(0xff0000); // v8 usa fill() no beginFill()
+- Cleanup: app.destroy(true, { children: true, texture: true }).
+
+KAPLAY — motor arcade declarativo (shooters, runners, plataformeros rápidos con sintaxis simple):
+- \`import kaplay from "kaplay"\` — versión 3001.0.0-beta.1 disponible.
+- Init en useEffect apuntando a un canvas: const k = kaplay({ canvas: canvasRef.current, width: 800, height: 600, background: [0, 0, 0] });
+- Entidades: k.add([k.rect(50, 50), k.pos(100, 100), k.color(255, 0, 0), k.area(), k.body(), "player"]).
+- Escenas: k.scene("game", () => { ... }); k.go("game").
+- Cleanup: k.quit() en el return del useEffect.
+
+THREE.JS + REACT THREE FIBER — juegos y escenas 3D:
+- Para proyectos 3D, SIEMPRE usa React Three Fiber (@react-three/fiber) en vez de Three.js directamente — es el binding React correcto.
+- \`import { Canvas, useFrame, useThree } from "@react-three/fiber"\`
+- \`import { OrbitControls, Environment, Text, Box, Sphere, Plane } from "@react-three/drei"\`
+- Estructura básica: <Canvas camera={{ position: [0, 5, 10], fov: 75 }}><ambientLight /><directionalLight castShadow /><mesh><boxGeometry /><meshStandardMaterial color="red" /></mesh></Canvas>
+- Game loop: useFrame((state, delta) => { meshRef.current.rotation.y += delta }) dentro de componentes hijos del Canvas.
+- Para física 3D: \`import { Physics, RigidBody, CuboidCollider } from "@react-three/rapier"\` — versión 1.4.0 disponible. Envuelve la escena en <Physics>; usa <RigidBody type="dynamic"> para objetos con física y <RigidBody type="fixed"> para suelo/paredes.
+- NUNCA uses useFrame o hooks de R3F fuera de un componente hijo de <Canvas>.
+
+BABYLON.JS — mundos 3D explorables en primera persona (FPS, exploración, simuladores):
+- \`import * as BABYLON from "@babylonjs/core"\` — versión 7.26.2 disponible.
+- Init: const engine = new BABYLON.Engine(canvasRef.current, true); const scene = new BABYLON.Scene(engine); engine.runRenderLoop(() => scene.render());
+- Cámara FPS: const camera = new BABYLON.FreeCamera("cam", new BABYLON.Vector3(0,2,0), scene); camera.attachControl(canvasRef.current, true); camera.keysUp=[87]; camera.keysDown=[83]; camera.keysLeft=[65]; camera.keysRight=[68].
+- Cleanup: engine.dispose().
+
+HOWLER.JS — audio para juegos (efectos de sonido, música de fondo):
+- \`import { Howl, Howler } from "howler"\` — versión 2.2.4 disponible.
+- Uso básico: const sound = new Howl({ src: [url], volume: 0.5 }); sound.play().
+- SOLO usa URLs de sonidos libres de royalties (freesound.org, opengameart.org). Si no tienes URLs reales, NO añadas Howler — es mejor sin sonido que con URLs rotas.
+
+GSAP — animaciones avanzadas (menús de juego, transiciones de pantalla, tutoriales animados):
+- \`import { gsap } from "gsap"\` — versión 3.12.5 disponible.
+- Uso: gsap.to(element, { duration: 0.5, opacity: 0, y: -20, ease: "power2.out" }).
+- Limpieza: const ctx = gsap.context(() => { ... }, containerRef); return () => ctx.revert().
+
+REGLAS GENERALES PARA JUEGOS:
+1. Todo juego DEBE tener: pantalla de menú, pantalla de juego activo, pantalla de game over con puntuación y botón reintentar.
+2. El récord máximo SIEMPRE se guarda en localStorage.
+3. El HUD (puntuación, vidas, tiempo) va como overlay HTML/React ENCIMA del canvas — NO dibujado dentro del canvas salvo que sea imprescindible.
+4. Cleanup imprescindible: cancelAnimationFrame, game.destroy(), engine.dispose(), k.quit() según el motor usado.
+5. Controles explicados en la pantalla de menú (WASD / flechas / ratón / táctil).
+6. El package.json generado DEBE incluir la librería del motor como dependencia explícita con la versión correcta.
+7. Para juegos sin backend (backendNeeded=false), toda la persistencia va en localStorage.
+
 - Accessibility: semantic HTML, labels for every input, aria-hidden on decorative icons, descriptive Spanish alt on every <img>.
 - Mobile: works at 375px, hamburger nav if needed, grids reflow grid-cols-1 sm:grid-cols-2 lg:grid-cols-3.
 
@@ -902,6 +981,12 @@ FULL-STACK RULE — be aggressive about backendNeeded=true:
 - Any of these triggers MUST set backendNeeded=true: marketplaces, ecommerce, social networks, SaaS, dashboards, chat apps, anything with user accounts, anything with persistence, anything that lists or stores user-generated content, anything with payments, anything with AI calls, anything called "clon de X".
 - Pure landing pages, single-user calculators, simple games and tools without persistence are the only valid backendNeeded=false cases.
 
+MILESTONE ORCHESTRATOR RULE — incluye "requiresMilestones": true en tu respuesta JSON cuando el proyecto necesite construcción por hitos para no quedar incompleto:
+- SIEMPRE true si: hay múltiples tipos de usuario (empresario+candidato, vendedor+comprador, admin+cliente, profesor+alumno), o es un portal/marketplace/plataforma multi-módulo, o tiene 3+ dominios de negocio claramente distintos (ej: catálogo + reservas + pagos + notificaciones).
+- SIEMPRE true si: el proyecto es un portal de empleo, red social, plataforma educativa, marketplace, sistema de reservas complejo, inmobiliaria, directorio de profesionales, o cualquier app donde usuarios de distintos tipos interactúan entre sí.
+- false (o ausente) para: apps de un solo módulo, landing pages, herramientas simples, dashboards sin múltiples roles.
+- Esta decisión es MÁS FIABLE que el scoring automático — el orquestador leerá tu "requiresMilestones" directamente.
+
 SCOPE LIMITS — crítico para que el frontend pueda generarse sin timeout:
 - Apps standard (score 1-2): máximo 8 páginas, 12 componentes, 6 hooks. Si el prompt no menciona explícitamente decenas de funcionalidades, mantén el plan ajustado.
 - Apps complejas (score 3+): máximo 12 páginas, 16 componentes, 8 hooks.
@@ -1189,6 +1274,30 @@ export interface GeneratedAppPayload {
   architecture?: "monolith" | "microservices" | "serverless";
 }
 
+// ENCONTRADO a petición explícita del usuario (siguiendo el diagnóstico de
+// que la infraestructura de pausa — GenerationJob.awaitingApproval,
+// checkpointData, approvedFacets, y el endpoint POST /jobs/:id/approve —
+// ya existía completa en producción, pero NADA en generateApp la
+// disparaba jamás): este es el objeto que activa esa infraestructura por
+// primera vez. Tipo de unión (en vez de `any`) para que TypeScript
+// proteja el resto del flujo: cualquier caller que reciba esto debe
+// comprobar explícitamente `"phase" in result` antes de tratarlo como un
+// GeneratedAppPayload completo.
+export interface GatingCheckpointPayload {
+  phase: "awaiting_technical_clarification";
+  checkpointData: {
+    questions: GatingQuestion[];
+    originalPrompt: string;
+  };
+}
+
+export interface GatingQuestion {
+  id: string;
+  topic: "database" | "auth_roles" | "integrations";
+  question: string;
+  options: string[];
+}
+
 
 
 export interface AttachmentContext {
@@ -1248,6 +1357,9 @@ interface ProjectPlan {
   platform?: "web" | "mobile-native";
   architecture?: "monolith" | "microservices" | "serverless";
   backendFiles: string[];
+  // El Arquitecto marca true si el proyecto necesita construcción por hitos
+  // para no quedar incompleto — más fiable que el scoring automático de keywords
+  requiresMilestones?: boolean;
 }
 
 interface DesignSystem {
@@ -1755,10 +1867,12 @@ function classifyPromptComplexity(prompt: string, context?: { kind?: string; has
   if (["game-3d", "nextjs", "python-api", "django", "fullstack"].includes(context?.kind || "")) add(2, "preset avanzado");
   // Ultra-complex: CRM/ERP/plataformas completas con múltiples módulos, muy completo, super completo, etc.
   if (/(totalmente completa|super completo|muy completo|m[uú]ltiples funcionalidades|m[uú]ltiples m[oó]dulos|completo con|panel completo|plataforma completa|sistema completo|todo incluido|todas las funcionalidades|funcionalidades completas|crm completo|erp completo|plataforma.*fisio|fisioterapeuta|cl[ií]nica|hospital|gesti[oó]n.*pacientes|historial.*m[eé]dico)/.test(text)) add(4, "proyecto ultra-complejo con múltiples módulos");
+  if (/(portal|marketplace|plataforma|bolsa de trabajo|ofertas de trabajo|empleo|candidatos|empresarios|reclutamiento|talento|networking|red social|comunidad|foro|directorio|cat[aá]logo|sistema de reservas|booking|citas m[eé]dicas|inmobiliaria|propiedades|e.?commerce|tienda online)/.test(text)) add(3, "portal/marketplace/plataforma multi-usuario");
+  if (/(dos tipos de usuario|m[uú]ltiples roles|multi.?rol|role.*based|empresa.*cliente|vendedor.*comprador|propietario.*inquilino|profesional.*paciente|profesor.*alumno)/.test(text)) add(3, "sistema multi-rol");
   if (prompt.length > 500) add(1, "prompt muy extenso");
   if (prompt.length > 1200) add(2, "prompt ultra-extenso");
   // Tiers: ultra >= 10, robust >= 7, standard >= 2, basic < 2
-  const tier: ComplexityTier = score >= 10 ? "ultra" : score >= 7 ? "robust" : score >= 2 ? "standard" : "basic";
+  const tier: ComplexityTier = score >= 10 ? "ultra" : score >= 5 ? "robust" : score >= 2 ? "standard" : "basic";
   return { tier, score, reasons };
 }
 
@@ -1766,45 +1880,98 @@ function makeAgentChoice(role: AgentRole, label: string, model: AgentModelChoice
   return { role, label, model, reason };
 }
 
-function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean }) {
+/**
+ * checkHistoricalFailurePatterns — consulta AppRepairLog para detectar si el
+ * tipo de app que se está generando ha fallado con frecuencia en el pasado.
+ * Si hay >= 2 fallos recientes con características similares (mismas keywords
+ * en el prompt), sube el score para forzar el orquestador de hitos.
+ *
+ * Este es el "feedback loop" que hace que Maris AI aprenda de sus fallos:
+ * si TalentHub falló 2 veces, la próxima app de tipo "portal de empleo"
+ * irá automáticamente a hitos sin necesitar que nadie lo configure.
+ */
+async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraScore: number; reasons: string[] }> {
+  try {
+    const { connectDB } = await import("../lib/db");
+    await connectDB();
+    const AppRepairLog = (await import("../lib/autoRepairAgent")).getAppRepairLogModel?.() ||
+      (require("mongoose").models.AppRepairLog);
+    if (!AppRepairLog) return { extraScore: 0, reasons: [] };
+
+    // Extraer keywords del prompt para buscar patrones similares
+    const keywords = prompt.toLowerCase().match(/\b(portal|marketplace|empleo|oferta|candidato|reservas|citas|inmobiliaria|academia|cursos|e.?commerce|tienda|crm|erp|dashboard|multi|roles|usuarios|comunidad|red social|directorio)\b/g) || [];
+    if (keywords.length === 0) return { extraScore: 0, reasons: [] };
+
+    // Buscar fallos recientes (últimos 30 días) con keywords similares
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentFailures = await AppRepairLog.countDocuments({
+      success: false,
+      createdAt: { $gte: thirtyDaysAgo },
+      $or: keywords.map((kw: string) => ({ errorSummary: { $regex: kw, $options: "i" } })),
+    }).maxTimeMS(3000);
+
+    if (recentFailures >= 2) {
+      return {
+        extraScore: 3,
+        reasons: [`patrón de fallo histórico detectado (${recentFailures} fallos recientes con keywords similares)`],
+      };
+    }
+    return { extraScore: 0, reasons: [] };
+  } catch {
+    return { extraScore: 0, reasons: [] }; // no bloquear si falla
+  }
+}
+
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; hasEverPaid?: boolean }) {
   const normalized = normalizeCoderModel(requestedModel);
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
 
-  // ── ESTRATEGIA DE MODELOS (mismo motor para todos los planes) ────────────
-  // La selección de modelo depende SOLO de la complejidad de la tarea, NO del
-  // plan del usuario — igual que Lovable/Base44/Emergent, que usan el mismo
-  // motor para free y paid (la diferencia entre planes es el coste en
-  // créditos, no la calidad del modelo).
-  // - "basic" (landing simple sin backend/datos): Haiku en agentes
-  //   auxiliares/QA por eficiencia — no aporta valor usar Sonnet ahí.
-  // - resto de tiers (standard/robust/ultra): Sonnet en todos los agentes.
-  // - Architect y Backend SIEMPRE Sonnet: el Architect decide backendNeeded
-  //   y el alcance del plan (una mala decisión aquí = app incompleta), y el
-  //   Backend escribe el CRUD/auth/BD real — son los dos puntos donde un
-  //   modelo más débil produce justo el síntoma de "falta backend".
+  // ── ESTRATEGIA DE MODELOS ─────────────────────────────────────────────────
+  //
+  // USUARIOS FREE (hasEverPaid=false, 45 créditos iniciales):
+  //   - Arquitecto y PM: SIEMPRE Sonnet — son el cerebro del proyecto.
+  //     Un plan mal diseñado = app incompleta, exactamente el problema que
+  //     queremos evitar. No escatimamos aquí.
+  //   - Agentes ejecutores (Frontend, Backend, Designer, QA, etc.): Haiku.
+  //     Haiku es 20x más barato que Sonnet y suficiente para generar código
+  //     en contexto ya bien definido por el Arquitecto. El resultado final
+  //     es funcional y visible — la diferencia de calidad es mínima cuando
+  //     el plan es bueno.
+  //
+  // USUARIOS DE PAGO (hasEverPaid=true):
+  //   - Todos los agentes: Sonnet. Máxima calidad en cada módulo.
+  //
+  // El Patcher y Repair SIEMPRE usan Sonnet — reparar código roto requiere
+  // el modelo más capaz; ahorrar aquí produce bucles de reparación infinitos.
+
+  const isFreeUser = context?.hasEverPaid === false;
+
   const frontendModel: AgentModelChoice["model"] = auto
-    ? "claude-sonnet-4-6" // Frontend siempre Sonnet — calidad mínima aceptable
+    ? (isFreeUser ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6")
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
 
-  const isBasic = complexity.tier === "basic";
-  const auxModel: ClaudeCoderModel = "claude-sonnet-4-6"; // siempre sonnet — haiku generaba código incompleto
-  const architectModel: ClaudeCoderModel = "claude-sonnet-4-6";
-  const qualityModel: ClaudeCoderModel = isBasic ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
-  const backendModel: ClaudeCoderModel = "claude-sonnet-4-6";
+  // Modelos por rol según tier de usuario
+  const SONNET: ClaudeCoderModel = "claude-sonnet-4-6";
+  const HAIKU: ClaudeCoderModel = "claude-haiku-4-5-20251001";
+
+  const architectModel: ClaudeCoderModel = SONNET; // SIEMPRE Sonnet — plan = todo
+  const pmModel: ClaudeCoderModel = SONNET;         // SIEMPRE Sonnet — QA = calidad final
+  const patcherModel: ClaudeCoderModel = SONNET;    // SIEMPRE Sonnet — reparación crítica
+  const execModel: ClaudeCoderModel = isFreeUser ? HAIKU : SONNET; // Ejecutores: Haiku en free
 
   const agents: Record<AgentRole, AgentModelChoice> = {
-    researcher: makeAgentChoice("researcher", "Researcher", auxModel, "recopila contexto desde el primer prompt"),
-    architect: makeAgentChoice("architect", "Architect", architectModel, "decide estructura, páginas y alcance"),
-    designer: makeAgentChoice("designer", "Designer", auxModel, "define sistema visual"),
-    frontend: makeAgentChoice("frontend", "Frontend", frontendModel, auto ? `auto por complejidad ${complexity.tier}` : "selección manual del usuario"),
-    backend: makeAgentChoice("backend", "Backend", backendModel, "implementa API cuando el plan la necesita"),
-    database: makeAgentChoice("database", "Database", qualityModel, "modela datos y semillas"),
-    integrator: makeAgentChoice("integrator", "Integrator", auxModel, "detecta auth, pagos y servicios externos"),
-    qa: makeAgentChoice("qa", "QA Auditor", qualityModel, "revisa errores obvios y tests"),
-    devops: makeAgentChoice("devops", "DevOps", auxModel, "verifica despliegue, scripts y configuración"),
-    patcher: makeAgentChoice("patcher", "testing-agent", "claude-sonnet-4-6", "testing-agent: experto técnico en reparación de errores de build/runtime"),
-    repair: makeAgentChoice("repair", "Repair", "claude-sonnet-4-6", "recupera JSON malformado"),
+    researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre sonnet — define el plan completo"),
+    designer:   makeAgentChoice("designer",   "Designer",   execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:haiku" : "paid:sonnet"})` : "selección manual"),
+    backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? HAIKU : SONNET, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    database:   makeAgentChoice("database",   "Database",   execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    integrator: makeAgentChoice("integrator", "Integrator", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre sonnet — quality gate final"),
+    devops:     makeAgentChoice("devops",     "DevOps",     execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre sonnet — reparación crítica"),
+    repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre sonnet — recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
 }
@@ -3154,6 +3321,46 @@ export type PhaseErrorReporter = (
   extras?: Record<string, unknown>,
 ) => void;
 
+// ENCONTRADO a petición explícita del usuario, siguiendo el diagnóstico de
+// que la infraestructura de pausa (GenerationJob.awaitingApproval,
+// checkpointData, approvedFacets, POST /jobs/:id/approve) existía completa
+// en producción pero NADA en generateApp la activaba jamás — el "Gating
+// Question Block" al estilo Emergent.sh: antes de lanzar un proyecto
+// ULTRA-COMPLEJO nuevo (SaaS completo, roles cruzados, pasarelas de pago)
+// directamente a la fase de generación por hitos, este agente rápido
+// analiza el prompt y extrae hasta 3 preguntas críticas sobre los puntos
+// ciegos que más rompen proyectos reales: tipo de base de datos,
+// autenticación/roles, e integraciones de terceros (pagos, APIs externas).
+// Devuelve [] si el prompt ya es lo bastante específico en estas 3 áreas
+// (ej. el cliente ya dijo "con Stripe y PostgreSQL") — nunca se le
+// pregunta al cliente algo que ya respondió él mismo en su propio prompt.
+async function generateGatingQuestions(clientPrompt: string): Promise<GatingQuestion[]> {
+  try {
+    const response = await anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      system: `Analyze the user's software request (in Spanish). Identify genuine ambiguity in exactly 3 critical areas that most commonly break complex software projects: Database (SQL vs NoSQL and which engine), Authentication/Roles (who can do what), and Third-Party Integrations (payments, external APIs). For each area, generate ONE short, specific, multiple-choice question in Spanish ONLY IF the user's prompt does not already make a clear, confident choice for that area — if the prompt already answers it (e.g. explicitly mentions "Stripe" or "PostgreSQL" or describes the exact roles), DO NOT ask about that area again.
+
+Output STRICT JSON only, no markdown, no explanation:
+{"questions":[{"id":"database","topic":"database","question":"¿Qué tipo de base de datos prefieres para este proyecto?","options":["PostgreSQL (relacional, ideal si hay pagos/facturación)","MongoDB (NoSQL, más flexible para datos variables)","No tengo preferencia, decide tú"]},{"id":"auth_roles","topic":"auth_roles","question":"¿Qué tipos de usuario tendrá la plataforma?","options":["Solo un tipo de usuario (clientes)","Clientes + un panel de administrador","Varios roles distintos con permisos diferentes"]},{"id":"integrations","topic":"integrations","question":"¿Qué pasarela de pago necesitas integrar?","options":["Stripe","PayPal","Ninguna pasarela de pago por ahora"]}]}
+
+If the prompt already resolves all 3 areas with confidence, return {"questions":[]}.
+"id" must be exactly one of: "database", "auth_roles", "integrations" — never invent a different id, and never return more than one question per topic.`,
+      messages: [{ role: "user", content: clientPrompt.slice(0, 4000) }],
+    }).finalMessage();
+    const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const parsed = extractJsonObject<{ questions?: GatingQuestion[] }>(raw);
+    if (!parsed || !Array.isArray(parsed.questions)) return [];
+    const validTopics = new Set(["database", "auth_roles", "integrations"]);
+    return parsed.questions.filter(
+      (q) => q && validTopics.has(q.topic) && typeof q.question === "string" && Array.isArray(q.options) && q.options.length >= 2,
+    );
+  } catch (err) {
+    logger.warn({ err }, "[generateGatingQuestions] Falló — continuando sin preguntas de clarificación");
+    return [];
+  }
+}
+
 export async function generateApp(
   prompt: string,
   onProgress?: (p: GenerateProgress) => void,
@@ -3166,7 +3373,7 @@ export async function generateApp(
   agentMemory?: AgentMemoryContext,
   requestContext?: RouteGenerationRequestContext,
   jobId?: string,
-): Promise<GeneratedAppPayload> {
+): Promise<GeneratedAppPayload | GatingCheckpointPayload> {
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -3215,7 +3422,7 @@ export async function generateApp(
   // (ver POST /api/apps más abajo): la generación inicial gratis consume la
   // mayor parte de los 50 créditos de bienvenida — el usuario obtiene UNA app
   // completa y funcional, y a partir de ahí modifica/añade/elimina con los
-  // créditos que le queden. Al realizar su primera compra Stripe,
+  // créditos que le queden. Al realizar su primera compra (Viva.com),
   // hasEverPaid=true.
   const hasEverPaid = !!(requestContext?.hasEverPaid);
   const isFreeUser = !hasEverPaid && !previous; // ediciones siempre permitidas
@@ -3228,8 +3435,14 @@ export async function generateApp(
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
+    hasEverPaid: hasEverPaid, // degradación inteligente: free → Haiku en ejecutores
   });
-  logger.info({ tier: agentModelPlan.tier, score: agentModelPlan.score, frontend: agentModelPlan.agents.frontend.model }, "planner: modelo seleccionado");
+  logger.info({
+    tier: agentModelPlan.tier,
+    score: agentModelPlan.score,
+    frontend: agentModelPlan.agents.frontend.model,
+    isFreeUser: !hasEverPaid,
+  }, "planner: modelo seleccionado");
 
   // El Core Orchestrator por hitos (v2) se activa automáticamente para proyectos
   // tier="ultra" — sistemas empresariales/ERPs/multi-módulo donde el pipeline
@@ -3265,23 +3478,170 @@ export async function generateApp(
   const promptStart = prompt.toLowerCase().slice(0, 60);
   const hasExplicitBuildIntent = promptStart.includes("crea") || promptStart.includes("app");
   const wantsFullBuild = !previous || hasExplicitBuildIntent;
-  // PIPELINE CLÁSICO ELIMINADO: el 100% de generaciones van por el orquestador
-  // robusto de hitos. No hay excepciones por tier, rol o tipo de usuario.
-  // El pipeline de una sola pasada causaba fallos en cascada con 15+ archivos
-  // simultáneos saturando la ventana de contexto. Con hitos, cada archivo se
-  // genera en su propia llamada con tokens completos — matemáticamente imposible
-  // que fallen 15 archivos a la vez.
-  const useMilestoneOrchestrator = true; // SIEMPRE — no hay pipeline clásico
+  const isUltraComplex = agentModelPlan.tier === "ultra";
+  const isRobustOrUltra = agentModelPlan.tier === "ultra" || agentModelPlan.tier === "robust";
 
+  // Feedback loop: si el tipo de app ha fallado 2+ veces recientemente,
+  // forzar hitos aunque el tier no lo requiera.
+  let historicalBoost = { extraScore: 0, reasons: [] as string[] };
+  if (!isRobustOrUltra && wantsFullBuild) {
+    historicalBoost = await checkHistoricalFailurePatterns(prompt);
+    if (historicalBoost.extraScore > 0) {
+      logger.info({ reasons: historicalBoost.reasons }, "Milestone: boost por historial de fallos activado");
+    }
+  }
+
+  // ── ACTIVACIÓN UNIVERSAL DE HITOS — REGLA DE ORO ────────────────────────
+  // TODOS los proyectos nuevos usan hitos sin excepción.
+  // No hay condiciones de tier, complejidad, tamaño de prompt ni tipo de cuenta.
+  // Un blog de notas, un portfolio, un SaaS complejo — todos van por hitos.
+  //
+  // RAZÓN: 22 clientes perdidos por pantallas en blanco con el pipeline
+  // estándar. Los hitos dividen cualquier proyecto en módulos manejables
+  // que siempre terminan completos y visibles en preview.
+  //
+  // ÚNICA EXCEPCIÓN: ediciones de proyectos ya existentes (previous !== null)
+  // — no tiene sentido planificar hitos para una edición incremental de
+  // código que ya existe y funciona.
+  const useMilestoneOrchestrator = wantsFullBuild; // SIEMPRE true para proyectos nuevos
+
+  logger.info({
+    tier: agentModelPlan.tier,
+    isFreeUser: !hasEverPaid,
+    wantsFullBuild,
+    useMilestoneOrchestrator,
+  }, "Milestone: decisión de orquestador");
+
+  // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
+  // A petición EXPLÍCITA del usuario: antes de lanzar un proyecto NUEVO
+  // (!previous — nunca en ediciones de un proyecto ya existente, donde ya
+  // hay contexto real) y ULTRA-COMPLEJO directamente a la fase de
+  // generación por hitos, se pausa UNA VEZ para preguntar los 3 puntos
+  // ciegos que más rompen proyectos reales (base de datos, roles/auth,
+  // integraciones de pago) — en vez de que el orquestador "vaya con los
+  // ojos cerrados" asumiendo flujos que el cliente nunca especificó.
+  // Reutiliza la infraestructura YA EXISTENTE en producción (GenerationJob
+  // .awaitingApproval / .checkpointData / .approvedFacets y el endpoint
+  // POST /jobs/:id/approve, completamente funcionales pero sin ningún
+  // punto real que los disparara hasta ahora) — no se inventa ningún
+  // mecanismo nuevo de pausa/reanudación, solo se conecta el cable que
+  // faltaba. Solo se pausa una vez por job: si approvedFacets ya incluye
+  // "technical_architecture" (el cliente ya respondió, o el job se
+  // reanudó tras la aprobación), se salta esta sección y se continúa
+  // directo a la generación, igual que antes de este cambio.
+  // skipGating: si el admin generó la app directamente (bypass del gating),
+  // nunca mostrar las preguntas al cliente — ir directo a la generación.
+  // skipGating: el admin nunca ve las preguntas técnicas — genera directo.
+  // Se activa si: (a) requestContext.skipGating=true, (b) el job tiene
+  // isAdmin:true en la BD (jobs creados por el admin desde su panel),
+  // (c) el job tiene skipGating:true en la BD (set explícitamente).
+  // ── GATING DE CLARIFICACIÓN TÉCNICA ─────────────────────────────────────
+  // REGLA: cliente genera → gating activo. Admin/soporte genera → directo.
+  // Cuando soporte desbloquea la app, el cliente puede hacer sus propias
+  // preguntas/ediciones desde el chat y el gating se activará ahí.
+  let isSkipGating = (requestContext as any)?.skipGating === true;
+  if (!isSkipGating && jobId) {
+    try {
+      const jobMeta = await GenerationJob.findById(jobId)
+        .select("isAdmin skipGating")
+        .lean() as any;
+      if (jobMeta?.isAdmin || jobMeta?.skipGating) isSkipGating = true;
+    } catch { /* best-effort */ }
+  }
+
+  if (!previous && isUltraComplex && jobId && !isSkipGating) {
+    try {
+      const jobForGating = await GenerationJob.findById(jobId).select("approvedFacets checkpointData").lean() as any;
+      const alreadyApproved = (jobForGating?.approvedFacets || []).includes("technical_architecture");
+      if (!alreadyApproved) {
+        const questions = await generateGatingQuestions(prompt);
+        if (questions.length > 0) {
+          await log("system", "❓ Antes de empezar, confirma estos detalles técnicos para que tu app quede exactamente como la imaginas...");
+          return {
+            phase: "awaiting_technical_clarification",
+            checkpointData: { questions, originalPrompt: prompt },
+          };
+        }
+      } else {
+        const answers = jobForGating?.checkpointData?.answers as Record<string, string> | undefined;
+        const extraNotes = jobForGating?.checkpointData?.extraNotes as string | undefined;
+        if (answers && Object.keys(answers).length > 0) {
+          prompt = `${prompt}\n\n[DETALLES TÉCNICOS CONFIRMADOS POR EL USUARIO]\n${Object.entries(answers).map(([t, a]) => `- ${t}: ${a}`).join("\n")}`;
+        }
+        if (extraNotes) {
+          prompt = `${prompt}\n\n[ESPECIFICACIONES ADICIONALES DEL CLIENTE]\n${extraNotes}`;
+        }
+      }
+    } catch (gatingErr) {
+      logger.warn({ gatingErr, jobId }, "[gating] Falló — continuando sin pausa");
+    }
+  }
   if (wantsFullBuild && useMilestoneOrchestrator) {
-    await log("system", isUltraComplex
-      ? "🏗️ Proyecto de alta complejidad detectado — activando construcción por hitos (modela cada módulo por separado en vez de comprimirlo todo en un único intento)..."
-      : "🚀 Activando Core Orchestrator (Estrategia de Hitos)...");
+    // DEGRADACIÓN INTELIGENTE PARA USUARIOS GRATUITOS (hasEverPaid=false):
+    // FIX DE EMERGENCIA (a petición explícita del usuario, confirmado en
+    // vivo con el log real del Job 6a43569d): el límite ANTES dependía de
+    // isDegradedFreeTier = !hasEverPaid && isUltraComplex — si el router
+    // clasificaba el prompt como "medium"/"robust" (no "ultra"), el
+    // CoreOrchestrator igualmente se activaba (la condición de arriba usa
+    // useMilestoneOrchestrator = ... || isUltraComplex, con un OR), pero
+    // maxMilestonesOverride NUNCA se aplicaba — dejando que el Arquitecto
+    // diseñara un plan de 23 archivos sin ningún límite para un usuario
+    // que nunca pagó. Resultado real observado: 23 archivos × 2 intentos
+    // = 46 llamadas a Sonnet, la mayoría fallando por saturación de
+    // contexto, entregando una app con "importaciones fantasma" y pantalla
+    // en blanco. FIX: el límite ahora es ABSOLUTO para cualquier usuario
+    // gratuito en construcción nueva, sin importar lo que calcule el
+    // router de complejidad — isUltraComplex ya NO es parte de esta
+    // condición. Los usuarios que SÍ han pagado alguna vez siguen
+    // recibiendo el plan completo sin límite, siempre.
+    // FREE_USER_MAX_MILESTONES: scope-cut para usuarios gratuitos.
+    // NO bloquea la ejecución — simplifica el plan priorizando los 7 módulos
+    // más críticos para que la app sea funcional y visible. El usuario puede
+    // expandirla comprando más créditos.
+    // Usuarios de pago: sin límite, plan completo siempre.
+    const FREE_USER_MAX_MILESTONES = 7;
+    const isDegradedFreeTier = !hasEverPaid;
+    if (isDegradedFreeTier) {
+      await log("system", `✨ Construyendo tu app módulo a módulo (${FREE_USER_MAX_MILESTONES} módulos esenciales). Resultado garantizado y funcional — podrás añadir más módulos después.`);
+    } else {
+      await log("system", "🏗️ Construyendo tu app módulo a módulo con el orquestador de hitos — cada módulo se genera de forma independiente para garantizar que todo quede completo y funcional...");
+    }
     const coreOrchestrator = new CoreOrchestrator(process.cwd(), {
-      model: "claude-sonnet-4-6",
-      // El orquestador decide mongodb/postgresql por hito; le damos AMBOS quality
-      // bars y dejamos que use el que corresponda según database por hito de backend.
+      // El modelo del orquestador: siempre Sonnet para el planificador de hitos
+      // (decide el orden y contenido de cada módulo). Los agentes ejecutores
+      // dentro de cada hito usan el modelo del plan (Haiku en free, Sonnet en paid).
+      model: isDegradedFreeTier ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
+      maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
+      // Pasar el validador esbuild para que el orquestador detecte y regenere
+      // hitos de frontend con errores de compilación al terminar cada capa,
+      // antes de pasar a la siguiente. Reutiliza el mismo validador del pipeline.
+      validateFrontendBundle: async (bundle: string) => {
+        const { validateBundle } = await import("../lib/validate");
+        return validateBundle(bundle);
+      },
+      // Alerta al admin (WhatsApp + email) cuando un hito agota sus 3 intentos
+      // y cae al placeholder. El admin puede intervenir manualmente desde el panel.
+      onMilestoneStuck: async (stuck) => {
+        try {
+          const { notifyAdminMilestoneStuck } = await import("../lib/notify");
+          const jobForNotify = jobId
+            ? await GenerationJob.findById(jobId).select("userId").lean() as any
+            : null;
+          const dbUser = jobForNotify?.userId
+            ? await User.findById(jobForNotify.userId).select("email").lean() as any
+            : null;
+          await notifyAdminMilestoneStuck({
+            projectId: String(jobId || "unknown"),
+            projectName: prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").slice(0, 80),
+            userEmail: dbUser?.email || jobForNotify?.userId || "desconocido",
+            layer: stuck.layer,
+            milestoneName: stuck.milestoneName,
+            attempts: stuck.attempts,
+            lastError: stuck.lastError,
+          });
+        } catch { /* no bloquear la generación por un fallo de alerta */ }
+      },
     });
     await log("system", "📋 Analizando arquitectura y planificando hitos por capas (datos → backend core → módulos → integraciones → frontend)...");
 
@@ -3322,7 +3682,19 @@ export async function generateApp(
     // grande) buscando cualquier "export default function <Nombre>" que
     // contenga indicios de ser la raíz (uso de Router/Navigation/Routes).
     const frontendFiles = milestoneFrontend.split("// === FILE: ").filter((f) => f.trim().length > 0);
-    const exactAppFile = frontendFiles.find((f) => f.includes("App.tsx") || f.includes("App.jsx") || f.includes("App.js"));
+    // Mismo bug y mismo fix que en tester.ts (ver su comentario detallado):
+    // .includes("App.tsx") coincide con CUALQUIER archivo que mencione ese
+    // texto en su contenido (ej. un comentario "se usa dentro de App.tsx"
+    // en otro componente), no necesariamente con el archivo cuya RUTA sea
+    // App.tsx. Esto decide hasRecognizableAppComponent — si apunta al
+    // archivo equivocado, el sistema puede saltarse runTestingAgent sin
+    // necesidad (o peor, dar un falso positivo/negativo sobre el
+    // componente raíz real) sin que el verdadero App.tsx tenga ningún
+    // problema.
+    const exactAppFile = frontendFiles.find((f) => {
+      const declaredPath = f.split("\n")[0].split(" ===")[0].trim();
+      return /(^|\/)App\.(tsx|jsx|js)$/.test(declaredPath);
+    });
     const ROOT_COMPONENT_PATTERN = /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/;
     let hasRecognizableAppComponent = !!exactAppFile && ROOT_COMPONENT_PATTERN.test(exactAppFile);
     if (!hasRecognizableAppComponent && frontendFiles.length > 0) {
@@ -3392,21 +3764,73 @@ export async function generateApp(
       const rootInfraSection = milestoneResult.rootInfraBundle
         ? `// ════════════════════ INFRAESTRUCTURA DEL PROYECTO (raíz) ════════════════════\n// Estos archivos van en la RAÍZ del proyecto, no dentro de ningún servicio.\n${milestoneResult.hasDockerCompose ? "// Ejecuta 'docker compose up' desde la raíz para levantar todos los servicios y sus bases de datos juntos.\n" : ""}${milestoneResult.rootInfraBundle}\n\n`
         : "";
+
+      // ENCONTRADO a petición explícita del usuario (clon de TikTok
+      // mostrando "esta app no necesita ninguna variable de entorno" pese
+      // a usar Cloudinary para los vídeos): el flujo por hitos
+      // (CoreOrchestrator) NUNCA llamaba a specifyIntegrations en
+      // absoluto — el Integration Architect (que SÍ detecta bien
+      // Cloudinary/OpenAI/etc.) solo se invocaba en el flujo estándar de
+      // una sola pasada. Proyectos de alta complejidad como un clon de
+      // TikTok suelen entrar por este camino de hitos, así que ningún
+      // servicio externo se detectaba jamás para ellos. Se reutiliza la
+      // misma función real ya probada, con un ProjectPlan mínimo
+      // construido a partir de los datos ya disponibles en este contexto.
+      let requiredEnvVarsFromMilestones: Array<{ name: string; why: string }> = [];
+      try {
+        const minimalPlanForIntegrations: ProjectPlan = {
+          title: "Proyecto Generado por Hitos",
+          description: prompt.slice(0, 500),
+          techStack: ["React", "Node", "TypeScript"],
+          pages: [],
+          components: [],
+          hooks: [],
+          utils: [],
+          dataModels: [],
+          frontendFiles: [],
+          backendNeeded: !!milestoneResult.backendCode,
+          database: milestoneResult.database,
+          architecture: milestoneResult.architecture,
+          backendFiles: [],
+        };
+        const milestoneIntegrationSpec = await specifyIntegrations(minimalPlanForIntegrations, prompt, agentModelPlan);
+        requiredEnvVarsFromMilestones = milestoneIntegrationSpec.services.flatMap((svc) =>
+          svc.envVars.map((envName) => ({ name: envName, why: `${svc.name}: ${svc.why || "Necesaria para esta integración"}` })),
+        );
+      } catch (integrationErr) {
+        // Best-effort: un fallo aquí nunca debe bloquear la entrega de la
+        // app, que ya se generó con éxito por hitos — simplemente se
+        // entrega sin variables de entorno detectadas.
+        logger.warn({ integrationErr, jobId }, "[milestones] Falló la detección de integraciones — continuando sin requiredEnvVars");
+      }
+
       return {
         title: "Proyecto Generado por Hitos",
         description: `Sistema construido mediante Task Splitting por capas (${milestoneResult.milestones?.length ?? 0} hitos, base de datos: ${milestoneResult.database ?? "mongodb"}, arquitectura: ${archDescription})`,
         techStack: ["React", "Node", "TypeScript", milestoneResult.database === "postgresql" ? "PostgreSQL" : "MongoDB", ...(milestoneResult.architecture === "microservices" ? ["Microservicios"] : [])],
         frontendCode: testedMilestone,
-        backendCode: rootInfraSection + (microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito.")
+        backendCode: rootInfraSection + (microservicesBackend || milestoneResult.backendCode || "// Sin archivos backend generados para este hito."),
+        requiredEnvVars: requiredEnvVarsFromMilestones,
       };
     }
 
-    // PIPELINE CLÁSICO ELIMINADO: si el orquestador de hitos falla,
-    // lanzar error limpio en vez de caer al pipeline clásico de una sola pasada.
-    // El pipeline clásico causaba fallos de 15+ archivos simultáneos.
-    await log("system", "⚠️ El orquestador por hitos no completó el bundle — marcando job como fallido para reintento.", "warn");
-    throw new Error("MILESTONE_INCOMPLETE: El orquestador por hitos no produjo un bundle válido. Reintenta la generación.");
+    // PUNTO CIEGO CERRADO: antes aquí caía al pipeline de una sola pasada.
+    // Ahora lanzamos un error controlado para que el job se marque como
+    // failed y el admin pueda ver claramente qué pasó en los logs.
+    // El cliente verá "error generando app" en vez de una pantalla en blanco,
+    // que es mejor UX y más honesto que entregar código incompleto silenciosamente.
+    await log("system",
+      "⚠️ El orquestador de hitos no produjo un bundle de frontend completo. " +
+      "El job se marca como fallido para que puedas regenerarlo. " +
+      "Revisa los logs de Railway para ver qué hito falló.",
+      "error"
+    );
+    throw new Error(
+      "Milestone orchestrator produced empty/invalid frontend bundle. " +
+      "Job marked as failed — admin can regenerate with hitos from panel."
+    );
   }
+
 
   // Edit mode
   if (previous) {
@@ -3443,7 +3867,7 @@ export async function generateApp(
     // Para cambios simples → intentar edición quirúrgica con tool calling primero
     const cleanedPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
     const complexity = classifyPromptComplexity(cleanedPrompt, { hasExistingApp: true });
-    let result: GeneratedAppPayload;
+    let result!: GeneratedAppPayload;
 
     if (complexity.score <= 2 && previous.frontendCode.length > 1000) {
       // Cambio simple → edición quirúrgica con tools (más precisa, menos tokens)
@@ -4200,7 +4624,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
 
   /* === Phase 6: validate → patch loop (Final Polish) === */
   await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
-  const finalFrontend = await runPhase("validate-patch-loop", () =>
+  let finalFrontend = await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
       testedFrontend,
       report,
@@ -4231,17 +4655,57 @@ Output STRICT JSON only, no markdown, no explanation.`,
     complexity: agentModelPlan.tier === "ultra" ? "enterprise" : agentModelPlan.tier === "robust" ? "advanced" : agentModelPlan.tier === "standard" ? "standard" : "basic",
   };
   try {
-    const pmValidation = await runPMAgent(prompt, emergentBlueprint, finalFrontend, (msg) => void log("qa", msg));
+    // ENCONTRADO a petición del usuario investigando "qué le falta enseñar
+    // al sistema de generación": runPMAgent (la única llamada real de los
+    // 6 agentes documentados en emergentAgentPipeline.ts que de verdad se
+    // usaba) YA detectaba blockers reales, los registraba en el log con
+    // todo detalle ("PM Agent detectó N blocker(s): ...") — pero nunca
+    // hacía NADA con esa información para corregirlos. El sistema sabía
+    // exactamente qué estaba mal y se lo decía al admin en los logs, pero
+    // entregaba la app al cliente con esos blockers intactos igualmente.
+    // runInvisibleRepairLoop (Patcher Agent + re-validación con el mismo
+    // PM Agent, hasta 3 ciclos) YA EXISTÍA completo en el mismo archivo,
+    // documentado en el diseño original de 6 agentes — pero NUNCA se
+    // llamaba desde ningún punto del pipeline real (confirmado con grep
+    // en todo el árbol de rutas). Ahora se usa en su lugar: si hay
+    // blockers reales, se repara automáticamente con el Patcher Agent
+    // antes de entregar el resultado, en vez de solo registrar el
+    // problema y seguir adelante con la app rota.
+    const { runInvisibleRepairLoop } = await import("../lib/emergentAgentPipeline");
+    const repairResult = await runInvisibleRepairLoop(
+      finalFrontend,
+      emergentBlueprint,
+      prompt,
+      (msg) => void log("qa", msg),
+      undefined,
+      // Usuarios gratuitos (hasEverPaid=false): máximo 1 ciclo de reparación.
+      // Clientes de pago o que ya pagaron alguna vez: 3 ciclos completos.
+      // Esto reduce el coste de reparación gratuita en ~66% sin afectar a
+      // quienes generan ingresos reales.
+      hasEverPaid ? undefined : 1,
+    );
+    finalFrontend = repairResult.finalCode;
+    const pmValidation = repairResult.pmValidation;
+
+    // Si el PM Agent devuelve score muy bajo con muchos blockers tras el
+    // bucle de reparación, es señal de que la app llegó al QA vacía
+    // (el frontend nunca se generó correctamente). En ese caso registrar
+    // el fallo claramente para que el admin pueda regenerar con hitos.
+    const persistentBlockers = pmValidation.issues.filter(i => i.severity === "blocker");
+    if (pmValidation.score < 40 && persistentBlockers.length > 8) {
+      await log("qa", `⚠️ QA CRÍTICO: score ${pmValidation.score}/100 con ${persistentBlockers.length} blockers persistentes — la app llegó al QA sin el código del frontend generado correctamente. Regenera desde el panel usando el orquestador de hitos para garantizar completitud.`, "warn");
+    }
+
     if (pmValidation.score >= 80) {
-      await log("qa", `✅ PM Agent: app aprobada (${pmValidation.score}/100). ${pmValidation.summary}`);
+      await log("qa", `✅ PM Agent: app aprobada (${pmValidation.score}/100) tras ${repairResult.cycles} ciclo(s). ${pmValidation.summary}`);
     } else if (pmValidation.score >= 60) {
-      await log("qa", `⚠️ PM Agent: score ${pmValidation.score}/100 — ${pmValidation.summary}`, "warn");
+      await log("qa", `⚠️ PM Agent: score ${pmValidation.score}/100 tras ${repairResult.cycles} ciclo(s) — ${pmValidation.summary}`, "warn");
     } else {
-      await log("qa", `🔧 PM Agent: score ${pmValidation.score}/100 — se recomienda revisar la app antes del deploy.`, "warn");
+      await log("qa", `🔧 PM Agent: score ${pmValidation.score}/100 tras ${repairResult.cycles} ciclo(s) — se recomienda revisar la app antes del deploy.`, "warn");
     }
     const blockers = pmValidation.issues.filter(i => i.severity === "blocker");
     if (blockers.length > 0) {
-      await log("qa", `⚠️ PM Agent detectó ${blockers.length} blocker(s): ${blockers.map(b => b.requirement).join(", ")}`, "warn");
+      await log("qa", `⚠️ PM Agent: ${blockers.length} blocker(s) persisten tras el bucle de reparación: ${blockers.map(b => b.requirement).join(", ")}`, "warn");
     }
   } catch (pmErr) {
     await log("qa", "PM Agent: validación omitida por error interno.", "warn");
@@ -4262,6 +4726,19 @@ Output STRICT JSON only, no markdown, no explanation.`,
   const setupNotes = buildSetupNotes(integrationSpec);
   const testsAppendix = testCode ? `\n\n${testCode}` : "";
 
+  // ENCONTRADO a petición explícita del usuario (clon de TikTok mostrando
+  // "esta app no necesita ninguna variable de entorno" pese a usar
+  // Cloudinary para los vídeos): integrationSpec.services[].envVars ya
+  // tenía la información correcta — el Integration Architect SÍ detecta
+  // bien qué servicios externos necesita la app — pero esa información
+  // nunca se traducía al campo estructurado requiredEnvVars que el
+  // formulario real del cliente (GET/PUT /apps/:id/env) lee. Solo se
+  // usaba para construir setupNotes, texto markdown incrustado como
+  // comentario dentro del propio código — invisible al formulario.
+  const requiredEnvVarsFromIntegrations = integrationSpec.services.flatMap((svc) =>
+    svc.envVars.map((envName) => ({ name: envName, why: `${svc.name}: ${svc.why || "Necesaria para esta integración"}` })),
+  );
+
   return {
     title: plan.title.slice(0, 200),
     description: plan.description.slice(0, 1000),
@@ -4272,6 +4749,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
     architecture: plan.architecture,
+    requiredEnvVars: requiredEnvVarsFromIntegrations,
   };
 }
 
@@ -4298,6 +4776,22 @@ import { buildProjectMap, resolveTargetFromPrompt, type ProjectMap } from "../li
 import mongoose from "mongoose";
 
 const router = Router();
+
+// A petición explícita del usuario: CUALQUIER error técnico en CUALQUIER
+// endpoint que el cliente llame directamente (deploy, dominio, variables
+// de entorno, code-review, rollback, etc.) debe mostrar siempre el mismo
+// mensaje genérico de soporte — nunca el texto crudo del error real (que
+// puede contener mensajes internos de Anthropic, Vercel, MongoDB, u otros
+// proveedores externos, como ya ocurrió en producción con "Your credit
+// balance is too low..."). El mensaje técnico real se registra siempre en
+// el log del servidor (logger.error) para que el equipo lo investigue —
+// solo se oculta de la respuesta HTTP que ve el cliente.
+function safeErrorResponse(res: any, err: unknown, context: string) {
+  logger.error({ err, context }, `[safeErrorResponse] ${context}`);
+  res.status(500).json({
+    error: "Ha ocurrido un problema técnico. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Si tus créditos fueron descontados, se reembolsarán automáticamente.",
+  });
+}
 
 const KIND_COSTS: Record<string, number> = {
   fullstack:    3, // Proyecto complejo full-stack
@@ -4707,7 +5201,10 @@ Tipo: ${kind || "fullstack"}` }],
 
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {} } = req.body;
+    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {}, skipGating = false } = req.body;
+    // skipGating: solo admins pueden pasarlo true — permite generar sin las preguntas de
+    // clarificación técnica para entregar la app completa al cliente sin que este tenga
+    // que responder nada. Después el admin notifica al cliente y este puede editar libremente.
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const safeAttachments = Array.isArray(attachments) ? attachments : [];
     const conversationalReply = getConversationalOnlyReply(prompt, safeAttachments.length > 0);
@@ -4750,29 +5247,31 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     // completa (frontend + backend + BD). El plan free/paid solo cambia el
     // COSTE en créditos, no la completitud:
     //
-    // PAID (verificado por Stripe):
+    // PAID (verificado por Viva.com):
     //   - Coste = KIND_COSTS[kind] × 10
     //   - landing    = 1 × 10 = 10 créditos
     //   - vue/svelte  = 2 × 10 = 20 créditos
     //   - fullstack   = 3 × 10 = 30 créditos
     //   - game-3d     = 5 × 10 = 50 créditos
     //
-    // FREE (78 créditos de bienvenida):
+    // FREE (45 créditos de bienvenida):
     //   - Coste = min(KIND_COSTS[kind] × 13, 50) — consume la MAYOR PARTE del
-    //     saldo en ESA primera app completa (igual que "1 deploy = 50
-    //     créditos" en Emergent con solo 5-10 gratis): el usuario obtiene UNA
-    //     app completa y funcional, y le quedan créditos reales para al
-    //     menos una reparación completa si la primera generación no sale
-    //     perfecta (no hay distinción de coste entre generar y reparar — el
-    //     mismo endpoint cobra lo mismo en ambos casos), antes de necesitar
-    //     plan de pago.
-    //   FREE (78 créditos de bienvenida — generación fullstack + 1 reparación completa):
-    //   - landing    = 1 × 13 = 13 créditos → quedan 65 (generación + reparación + margen de sobra)
-    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 52 (generación + reparación con margen)
-    //   - fullstack   = 3 × 13 = 39 créditos → quedan 39 (justo para una reparación completa si la primera falla)
-    //   Estrategia: 1 app fullstack gratuita completa y funcional, CON margen real para
-    //   una reparación si algo sale mal, luego pagar.
-    //   Más generoso que Emergent.sh para dar una primera experiencia fiable, no solo una demo frágil.
+    //     saldo en ESA primera app completa: el usuario obtiene UNA app
+    //     completa y funcional, y le queda un margen PEQUEÑO de créditos
+    //     reales para probar varias ediciones menores (a 0.2 créditos cada
+    //     una en plan gratuito) antes de necesitar comprar más para seguir.
+    //   FREE (45 créditos de bienvenida — generación fullstack + margen de ediciones,
+    //   NO una reparación completa de 39 créditos, a diferencia del valor anterior de 78):
+    //   - landing    = 1 × 13 = 13 créditos → quedan 32 (generación + margen amplio de ediciones)
+    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 19 (generación + margen de ediciones)
+    //   - fullstack   = 3 × 13 = 39 créditos → quedan 6 (generación + ~30 ediciones menores a 0.2 cada una)
+    //   Estrategia: 1 app fullstack gratuita completa y funcional, CON un margen real (no
+    //   simbólico) para que el cliente pruebe ajustar su app antes de tener que pagar —
+    //   pero sin dejar saldo suficiente para una reparación completa adicional gratis.
+    //   A petición explícita del usuario tras confirmar el caso real de costerahome@gmail.com
+    //   (app "MesaYa", coste real de generación: 39 créditos) — bajado de 78 a 45 para que el
+    //   cliente sienta que el saldo "se agota" tras generar + ajustar, en vez de sobrar
+    //   margen para decenas de ediciones gratuitas sin ninguna fricción de conversión.
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;
@@ -4879,6 +5378,8 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       ultraThinking: !!ultraThinking,
       legacyMode: !!legacyMode,
       mcpConnectors: connectedMCP.map(([id]) => id),
+      // skipGating: solo admins — genera sin preguntas de clarificación al cliente
+      skipGating: isAdmin && !!skipGating,
     });
 
     await enqueueGenerateJob(jobId);
@@ -4886,7 +5387,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -4916,7 +5417,7 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
     res.json(serializedApps);
   } catch (err) {
     logger.error({ err }, "GET /api/apps error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -4991,7 +5492,7 @@ router.post("/apps/:id/github", requireAuth, async (req: any, res: any) => {
     });
   } catch (err) {
     logger.error({ err, appId: req.params.id, userId: req.userId }, "POST /api/apps/:id/github error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "No se pudo subir a GitHub" });
+    safeErrorResponse(res, err, "No se pudo subir a GitHub");
   }
 });
 
@@ -5018,7 +5519,7 @@ router.delete("/apps/:id", requireAuth, async (req: any, res: any) => {
     res.json({ ok: true });
   } catch (err) {
     logger.error({ err, userId: req.userId, appId: req.params.id }, "DELETE /api/apps/:id error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -5239,6 +5740,169 @@ router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/health error");
     res.status(500).json({ error: "Error al ejecutar el Health Check." });
+  }
+});
+
+// ── POST /api/apps/:id/code-review ────────────────────────────────────────
+// ENCONTRADO durante la finalización de DeployModal (componente ya
+// existente): el frontend ya llamaba a este endpoint desde hace tiempo,
+// pero nunca existió en el backend — devolvía 404 silenciosamente. A
+// diferencia de /health (que repara automáticamente), esto es PURAMENTE
+// INFORMATIVO: una revisión de calidad con IA que da una puntuación y
+// sugerencias, sin modificar el código de la app. Coste menor que el
+// Health Check (10 vs 30 créditos) porque es una sola llamada de análisis,
+// sin ciclos de reparación.
+const CODE_REVIEW_COST = 10;
+router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!app.frontendCode) return res.status(400).json({ error: "Esta app no tiene código generado todavía." });
+
+    const dbUser = await User.findById(userId).lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: CODE_REVIEW_COST,
+      description: `Revisión de código — ${app.title || "App"}`,
+    });
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "No tienes suficientes créditos para la revisión de código.",
+        creditsRequired: CODE_REVIEW_COST,
+      });
+    }
+
+    const codeForReview = [
+      "=== FRONTEND ===",
+      String(app.frontendCode).slice(0, 30000),
+      app.backendCode ? "=== BACKEND ===" : "",
+      app.backendCode ? String(app.backendCode).slice(0, 15000) : "",
+    ].filter(Boolean).join("\n\n");
+
+    const response = await anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2000,
+      system: `Eres un revisor de código senior. Analiza el código de una app React/TypeScript (y opcionalmente su backend Express) y da una evaluación honesta de su calidad de producción: buenas prácticas, manejo de errores, accesibilidad básica, estructura. NO repares nada, solo evalúa.
+
+Responde SOLO con JSON estricto, sin markdown:
+{"score": <0-100>, "issues": ["problema concreto 1", "problema concreto 2"], "suggestions": ["sugerencia concreta 1", "sugerencia concreta 2"], "summary": "resumen de 1-2 frases en español"}
+
+"issues" son problemas reales encontrados (máximo 6, vacío si no hay). "suggestions" son mejoras opcionales de calidad (máximo 4). "score" refleja la calidad real del código para producción, no solo si compila.`,
+      messages: [{ role: "user", content: codeForReview }],
+    }).finalMessage();
+
+    const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const parsed = extractJsonObject<{ score?: number; issues?: string[]; suggestions?: string[]; summary?: string }>(raw);
+
+    if (!parsed) {
+      return res.json({ ok: true, score: 75, issues: [], suggestions: [], summary: "Revisión completada — no se detectaron problemas críticos." });
+    }
+
+    const score = typeof parsed.score === "number" ? Math.max(0, Math.min(100, parsed.score)) : 75;
+    res.json({
+      ok: score >= 70,
+      score,
+      issues: Array.isArray(parsed.issues) ? parsed.issues.slice(0, 6) : [],
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 4) : [],
+      summary: parsed.summary || "Revisión completada.",
+      creditsCharged: isAdmin ? 0 : CODE_REVIEW_COST,
+      creditsRemaining: charge.newBalance,
+    });
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/code-review error");
+    res.status(500).json({ error: "Error al ejecutar la revisión de código." });
+  }
+});
+
+// ── Variables de entorno del cliente (API keys, secrets) ──────────────────
+// A petición explícita del usuario: la sección "Variables de entorno" del
+// DeployModal ya existente mostraba un MOCKUP HARDCODEADO falso (3 líneas
+// de texto fijo, sin ningún formulario real) — confirmado durante la
+// investigación. Esto la conecta de verdad: el Arquitecto ya declaraba QUÉ
+// variables necesita la app (requiredEnvVars[].name/why, generado durante
+// la construcción), pero el cliente nunca tenía dónde introducir el VALOR
+// real. Los valores se cifran con AES-256-GCM (secretsCrypto.ts) antes de
+// guardarse — nunca en texto plano en MongoDB, y nunca se devuelven
+// descifrados al frontend tras guardarse (solo enmascarados).
+
+// GET /api/apps/:id/env — lista las variables declaradas por el Arquitecto,
+// con el valor enmascarado si ya se configuró (nunca el valor real).
+router.get("/apps/:id/env", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId })
+      .select("requiredEnvVars")
+      .lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const { maskSecret } = await import("../lib/secretsCrypto");
+    const vars = ((app as any).requiredEnvVars || []).map((v: any) => ({
+      name: v.name,
+      why: v.why || "",
+      isSet: !!(v.encryptedValue || v.value),
+      maskedValue: v.encryptedValue
+        ? "••••••••" // no se descifra solo para mostrar — ni siquiera enmascarado con datos reales
+        : (v.value ? maskSecret(String(v.value)) : null),
+    }));
+    res.json({ envVars: vars });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/env error");
+    safeErrorResponse(res, err, "Error al consultar las variables de entorno");
+  }
+});
+
+// PUT /api/apps/:id/env — el cliente guarda el valor real de una o más
+// variables. Body: { values: { "OPENAI_API_KEY": "sk-...", ... } }.
+// Cada valor se cifra individualmente antes de guardarse; un fallo de
+// cifrado en una variable no bloquea el resto.
+router.put("/apps/:id/env", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { values } = req.body ?? {};
+    if (!values || typeof values !== "object" || Array.isArray(values)) {
+      return res.status(400).json({ error: "values debe ser un objeto { NOMBRE_VARIABLE: valor }" });
+    }
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const { encryptSecret } = await import("../lib/secretsCrypto");
+    const existing: any[] = Array.isArray((app as any).requiredEnvVars) ? (app as any).requiredEnvVars : [];
+    const byName = new Map(existing.map((v: any) => [v.name, v]));
+
+    let updatedCount = 0;
+    const failedNames: string[] = [];
+    for (const [name, rawValue] of Object.entries(values)) {
+      if (typeof rawValue !== "string" || !rawValue.trim()) continue;
+      try {
+        const encryptedValue = encryptSecret(rawValue);
+        const current = byName.get(name);
+        if (current) {
+          current.encryptedValue = encryptedValue;
+          current.value = undefined; // limpiar cualquier valor legacy sin cifrar
+        } else {
+          // Variable que el cliente añade manualmente, no declarada por el
+          // Arquitecto — se permite igualmente (ej. una API key adicional
+          // que el cliente sabe que necesita pero la IA no detectó).
+          const newVar = { name, why: "Añadida manualmente por el usuario", encryptedValue };
+          existing.push(newVar);
+          byName.set(name, newVar);
+        }
+        updatedCount++;
+      } catch (err) {
+        logger.warn({ err, name }, "[env] Fallo cifrando una variable de entorno — se omite");
+        failedNames.push(name);
+      }
+    }
+
+    await GeneratedApp.updateOne({ _id: req.params.id }, { $set: { requiredEnvVars: existing } });
+
+    res.json({ ok: true, updatedCount, failedNames });
+  } catch (err: any) {
+    logger.error({ err }, "PUT /api/apps/:id/env error");
+    safeErrorResponse(res, err, "Error al guardar las variables de entorno");
   }
 });
 
@@ -5601,7 +6265,15 @@ Por ejemplo:
       prompt: generationPrompt,
       editAppId: req.params.id,
       attachmentIds: safeAttachmentIds,
-      coderModel: app.coderModel || "auto",
+      // ORQUESTACIÓN HÍBRIDA DE MODELOS: si el clasificador de intenciones
+      // detectó que el cambio es EXCLUSIVAMENTE cosmético/CSS (isPurelyVisual=true),
+      // usamos claude-haiku-4-5 en vez de Sonnet — Haiku falla en generación
+      // de código complejo (confirmado en producción: "haiku generaba código
+      // incompleto") pero resuelve ediciones de pocas líneas de CSS/Tailwind
+      // perfectamente y a ~¼ del precio de Sonnet. En cualquier otro caso
+      // (cambio funcional, lógica, nuevas páginas, corrección de errores) se
+      // usa el modelo del propio proyecto (app.coderModel) o el default "auto".
+      coderModel: classified.isPurelyVisual ? "claude-haiku-4-5" : (app.coderModel || "auto"),
       language: app.language || "typescript",
       kind: app.kind || "fullstack",
       status: "queued",
@@ -5615,7 +6287,7 @@ Por ejemplo:
     res.status(201).json({ id: jobId, engine: classified.engine, intent: classified.intent, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/messages error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -5677,7 +6349,71 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     res.status(201).json({ id: jobId, creditsCost: cost, creditsRemaining: charge.newBalance });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/retry error");
-    res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
+    safeErrorResponse(res, err, "Error interno");
+  }
+});
+
+// ── POST /api/apps/:id/deep-test ─────────────────────────────────────────
+// A petición explícita del usuario: el Testing Agent (runTestingAgent) ya
+// se ejecuta SIEMPRE gratis dentro del flujo normal de generación/edición
+// (forma parte del coste base, como confirmamos con el caso real de
+// "MesaYa"). Este endpoint es DISTINTO — una "Revisión profunda de
+// errores" bajo demanda, que el cliente dispara voluntariamente desde un
+// botón en su app YA GENERADA, con un coste fijo y explícito de 30
+// créditos (sin multiplicador free/paid: es la misma revisión exhaustiva
+// para cualquier usuario, y el coste ya refleja lo que cuesta en tokens
+// reales recorrer hasta MAX_FIX_CYCLES=5 ciclos de validación+reparación
+// sobre un bundle completo). No pasa por generateApp ni por el pipeline de
+// generación — runJobById bifurca a esta rama vía jobKind="deep_test".
+const DEEP_TEST_COST = 30;
+router.post("/apps/:id/deep-test", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!(app as any).frontendCode) {
+      return res.status(400).json({ error: "Esta app todavía no tiene código generado — no hay nada que revisar." });
+    }
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: DEEP_TEST_COST,
+      description: `Revisión profunda de errores (Testing Agent bajo demanda): ${app.title?.slice(0, 50) ?? ""}`,
+    });
+
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes",
+        required: DEEP_TEST_COST,
+        current: req.dbUser?.credits,
+        hint: `La revisión profunda de errores cuesta ${DEEP_TEST_COST} créditos.`,
+      });
+    }
+
+    const jobId = new mongoose.Types.ObjectId().toString();
+    await GenerationJob.create({
+      _id: jobId,
+      userId,
+      prompt: app.prompt || "Revisión profunda de errores",
+      editAppId: req.params.id,
+      jobKind: "deep_test",
+      coderModel: app.coderModel || "auto",
+      language: app.language || "typescript",
+      kind: app.kind || "fullstack",
+      status: "queued",
+      phase: "queued",
+      progress: 0,
+      isAdmin,
+    });
+
+    await enqueueGenerateJob(jobId);
+    runJobById(jobId).catch(err => logger.error({ err, jobId }, "Immediate job run error (deep-test)"));
+    res.status(201).json({ id: jobId, creditsCost: DEEP_TEST_COST, creditsRemaining: charge.newBalance });
+  } catch (err) {
+    logger.error({ err }, "POST /api/apps/:id/deep-test error");
+    safeErrorResponse(res, err, "Error interno");
   }
 });
 
@@ -5868,6 +6604,75 @@ export async function runJobById(jobId: string): Promise<void> {
     });
   };
 
+  // A petición explícita del usuario: "Revisión profunda de errores" — el
+  // Testing Agent (runTestingAgent, ya existente y usado siempre gratis
+  // dentro del flujo normal de generación) se dispara aquí SOLO bajo
+  // demanda explícita del cliente desde un botón en su app ya generada,
+  // con coste de 30 créditos cobrado ANTES de encolar el job (ver el
+  // endpoint POST /apps/:id/deep-test). No pasa por generateApp ni por el
+  // resto del pipeline de generación — solo re-analiza el código YA
+  // EXISTENTE de la app y aplica los mismos ciclos de reparación.
+  if ((job as any).jobKind === "deep_test") {
+    try {
+      const targetAppId = job.editAppId;
+      const targetApp = targetAppId ? await GeneratedApp.findById(targetAppId) : null;
+      if (!targetApp) {
+        await log("system", "❌ No se encontró la app a revisar.", "error");
+        await GenerationJob.findByIdAndUpdate(jobId, { $set: { status: "failed", errorMessage: "App no encontrada", updatedAt: new Date() } });
+        return;
+      }
+      await log("testing", "🔬 Revisión profunda de errores solicitada por el usuario. Analizando el código completo de la app...");
+      const { runTestingAgent } = await import("../lib/tester");
+      const reviewedFrontend = await runTestingAgent((targetApp as any).frontendCode || "", {
+        jobId,
+        prompt: targetApp.prompt || job.prompt,
+        plan: (targetApp as any).plan || null,
+        language: (targetApp as any).language || "typescript",
+        log,
+        onProgress,
+      });
+      await GeneratedApp.findByIdAndUpdate(targetAppId, {
+        $set: { frontendCode: reviewedFrontend, updatedAt: new Date() },
+      });
+      await log("testing", "✅ Revisión profunda completada. Cualquier problema detectado ha sido reparado automáticamente.");
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
+      });
+    } catch (deepTestErr: any) {
+      logger.error({ deepTestErr, jobId }, "[deep_test] Falló la revisión profunda de errores");
+      await log("testing", "❌ La revisión profunda no pudo completarse. Hemos enviado un ticket automático a soporte.", "error");
+      // A petición explícita del usuario: cualquier error técnico en
+      // CUALQUIER generación (no solo la principal) debe mostrar siempre
+      // el mismo mensaje genérico al cliente — nunca el texto crudo del
+      // error real (mismo patrón ya aplicado en runJobById más abajo).
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: {
+          status: "failed",
+          errorMessage: "Ha ocurrido un problema técnico al revisar tu app. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Tus créditos se reembolsarán automáticamente.",
+          internalErrorMessage: String(deepTestErr?.message || deepTestErr),
+          updatedAt: new Date(),
+        },
+      });
+      // Reembolso automático — el cliente no debe pagar 30 créditos por
+      // una revisión que no pudo completarse por un fallo del sistema.
+      try {
+        const { refundCredits } = await import("../lib/credits");
+        const dbUserForRefund = await User.findById(job.userId).select("isAdmin email").lean() as any;
+        await refundCredits({
+          userId: job.userId,
+          isAdmin: isAdminEmail(dbUserForRefund?.email),
+          amount: DEEP_TEST_COST,
+          description: "Reembolso: revisión profunda de errores falló por un problema técnico",
+        });
+      } catch (refundErr) {
+        logger.warn({ refundErr, jobId }, "[deep_test] Falló el reembolso automático tras un error técnico");
+      }
+    } finally {
+      clearInterval(heartbeatInterval);
+    }
+    return;
+  }
+
   try {
     let previousApp: any = undefined;
     if (job.editAppId) {
@@ -6008,22 +6813,24 @@ export async function runJobById(jobId: string): Promise<void> {
         detectedCountry: extractPromptContext(job.prompt, "country"),
         uiLanguage: extractPromptContext(job.prompt, "uiLanguage"),
         hasEverPaid,
+        // Si el admin generó con skipGating, saltar las preguntas de clarificación
+        skipGating: !!(job as any).skipGating,
       },
       jobId,
     );
 
-    if ((result as any).phase?.startsWith("awaiting_")) {
-      const checkpoint = result as any;
+    if ("phase" in result && result.phase?.startsWith("awaiting_")) {
+      const checkpoint = result as GatingCheckpointPayload;
       await GenerationJob.findByIdAndUpdate(jobId, {
         $set: {
           status: "awaiting_approval",
           phase: checkpoint.phase,
           awaitingApproval: true,
-          checkpointData: checkpoint,
+          checkpointData: checkpoint.checkpointData,
           updatedAt: new Date(),
         },
       });
-      await log("system", "⏸️ Generación pausada: esperando aprobación del usuario.");
+      await log("system", `⏸️ Generación pausada: esperando que confirmes ${checkpoint.checkpointData.questions.length} detalle(s) técnico(s) antes de continuar.`);
       return;
     }
 
@@ -6085,8 +6892,57 @@ export async function runJobById(jobId: string): Promise<void> {
           plannedPages: finalResult.plannedPages || [],
           requiredEnvVars: finalResult.requiredEnvVars || [],
           status: "ready",
+          // Limpiar pendingAdminApproval: si el admin regeneró esta app,
+          // ahora que está lista debe ser visible para el cliente.
+          pendingAdminApproval: false,
         },
       });
+
+      // MEDIDOR DE CÓMPUTO DINÁMICO (estilo Emergent.sh) — a petición
+      // explícita del usuario. El cobro fijo inicial (POST /apps/:id/messages,
+      // 5 créditos paid / 0.2 free) sigue actuando como filtro de entrada
+      // ANTES de saber qué va a generar Claude — eso no puede cambiar,
+      // porque en ese punto el job todavía no se ha ejecutado. Lo que sí es
+      // nuevo: aquí, con el resultado REAL ya guardado, se mide el tamaño
+      // real del cambio (delta de caracteres entre el código anterior y el
+      // nuevo, no el tamaño total — así una edición pequeña en una app
+      // grande no se cobra como si hubiera reescrito toda la app) y se
+      // cobra un extra dinámico proporcional a ese esfuerzo real, igual que
+      // "un retoque CSS cuesta poco, generar lógica de backend compleja
+      // cuesta mucho más" de Emergent.sh. Best-effort: un fallo aquí nunca
+      // debe revertir la edición ya guardada.
+      try {
+        const prevLen = (typeof previousApp?.frontendCode === "string" ? previousApp.frontendCode.length : 0)
+          + (typeof previousApp?.backendCode === "string" ? previousApp.backendCode.length : 0);
+        const newLen = (typeof finalResult.frontendCode === "string" ? finalResult.frontendCode.length : 0)
+          + (typeof finalResult.backendCode === "string" ? finalResult.backendCode.length : 0);
+        const changedChars = Math.abs(newLen - prevLen);
+        // Tarifa: ~1 crédito por cada 4000 caracteres realmente modificados,
+        // con un techo razonable para no disparar el coste en una sola
+        // edición aunque el delta sea enorme. isAdmin nunca paga.
+        const dynamicIsPaid = !!(job as any).hasEverPaid;
+        const dynamicRate = dynamicIsPaid ? 1 : 0.05; // mismo ratio paid/free que la tarifa fija (5 / 0.2)
+        const rawDynamicCost = Math.floor(changedChars / 4000) * dynamicRate;
+        const dynamicCost = Math.min(rawDynamicCost, dynamicIsPaid ? 25 : 1); // techo: 25 créditos paid, 1 crédito free
+        if (dynamicCost > 0 && !(job as any).isAdmin) {
+          const dynCharge = await chargeCredits({
+            userId: job.userId,
+            isAdmin: false,
+            amount: dynamicCost,
+            description: `Medidor de cómputo dinámico (${changedChars} caracteres modificados): ${finalResult.title || previousApp?.title || ""}`,
+          });
+          if (dynCharge.ok) {
+            logger.info({ jobId, changedChars, dynamicCost, newBalance: dynCharge.newBalance }, "[dynamic-credits] Cobro dinámico aplicado tras edición");
+          } else {
+            // Si no hay saldo para el cobro dinámico, NO se revierte la
+            // edición ya entregada (el usuario ya recibió el trabajo) —
+            // solo se registra que el cobro extra no pudo aplicarse.
+            logger.warn({ jobId, changedChars, dynamicCost }, "[dynamic-credits] Saldo insuficiente para el cobro dinámico — edición entregada igualmente, sin cobro extra");
+          }
+        }
+      } catch (dynamicCostErr) {
+        logger.warn({ dynamicCostErr, jobId }, "[dynamic-credits] Falló el cálculo/cobro del medidor dinámico — continuando sin cobro extra");
+      }
       await AppMessage.create({
         appId: job.editAppId,
         role: "assistant",
@@ -6158,6 +7014,55 @@ export async function runJobById(jobId: string): Promise<void> {
         }
       }
 
+      // ── LIMPIEZA AUTOMÁTICA DE REINTENTOS DUPLICADOS ──────────────────────
+      // ENCONTRADO a petición explícita del usuario (caso real: cliente
+      // costerahome@gmail.com, app "MesaYa" — dos GeneratedApp casi
+      // idénticas creadas con segundos de diferencia el mismo día, mismo
+      // prompt con los mismos "EXTRAS CONFIRMADOS POR EL USUARIO"). Causa
+      // real: cuando un job de construcción nueva falla y el cliente (o el
+      // sistema) reintenta, no existía NINGÚN vínculo entre el intento
+      // fallido y el nuevo job — así que un reintento exitoso siempre
+      // generaba una GeneratedApp nueva y desconectada, dejando la app
+      // fallida/incompleta visible para siempre en el panel del cliente.
+      // FIX: antes de crear la app de este job exitoso, buscar si el mismo
+      // usuario tiene otra GeneratedApp creada en los últimos 30 minutos
+      // con un prompt casi idéntico (normalizado, primeros 200 caracteres
+      // — donde vive la parte estable del prompt: título del proyecto y
+      // extras confirmados, que no cambian entre reintentos aunque el
+      // cliente reformule detalles menores). Si la encuentra, es con
+      // altísima probabilidad el intento anterior fallido del MISMO
+      // proyecto — se borra junto con su job asociado antes de crear la
+      // nueva, fusionando efectivamente ambos intentos en uno solo.
+      try {
+        const normalizedPrompt = String(job.prompt || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+        if (normalizedPrompt.length > 20) {
+          const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+          const candidateApps = await GeneratedApp.find({
+            userId: job.userId,
+            createdAt: { $gte: thirtyMinutesAgo },
+          }).select("_id title prompt createdAt").lean();
+          const duplicateApp = candidateApps.find((a: any) => {
+            const otherNormalized = String(a.prompt || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
+            return otherNormalized.length > 20 && otherNormalized === normalizedPrompt;
+          });
+          if (duplicateApp) {
+            await GenerationJob.deleteMany({ appId: String(duplicateApp._id) });
+            await GeneratedApp.deleteOne({ _id: duplicateApp._id });
+            logger.info(
+              { jobId, userId: job.userId, removedAppId: String(duplicateApp._id), removedTitle: duplicateApp.title },
+              "Reintento detectado — app y jobs del intento anterior fallido eliminados automáticamente",
+            );
+            await log("system", `🧹 Detectado reintento del mismo proyecto — se ha eliminado automáticamente el intento anterior incompleto.`);
+          }
+        }
+      } catch (dedupErr) {
+        // Best-effort: si la detección de duplicados falla por cualquier
+        // motivo (Mongo lento, etc.), NUNCA debe bloquear la entrega de la
+        // app recién generada con éxito — simplemente se continúa sin
+        // limpiar, igual que antes de este fix.
+        logger.warn({ dedupErr, jobId }, "[dedup-retry] Falló la detección de reintentos duplicados — continuando sin limpiar");
+      }
+
       // Wrap con retry para evitar E11000 duplicate key en marisId
       // (puede ocurrir si dos jobs del mismo usuario terminan en el mismo segundo)
       let app: any;
@@ -6204,6 +7109,33 @@ export async function runJobById(jobId: string): Promise<void> {
       // para seguir iterando, no sobre funcionalidades que falten.
       if (!(job as any).hasEverPaid && !(job as any).isAdmin) {
         await log("system", "🎉 ¡Tu app completa está lista, con backend y base de datos incluidos! Sigue modificándola con tus créditos restantes — cuando se agoten, activa un plan desde la sección de precios para más créditos y funciones extra.");
+      }
+
+      // A petición explícita del usuario: correo de "primera generación
+      // exitosa" — distinto del correo de bienvenida (que se envía al
+      // registrarse, antes de generar nada). Se comprueba con
+      // countDocuments si esta es realmente la PRIMERA app que el usuario
+      // genera con éxito (no solo "es gratis") para no enviarlo en cada
+      // generación posterior. Best-effort: un fallo aquí nunca debe
+      // bloquear la entrega de la app, que ya se guardó arriba.
+      try {
+        const successfulAppsCount = await GeneratedApp.countDocuments({ userId: job.userId });
+        if (successfulAppsCount === 1 && !(job as any).isAdmin) {
+          const owner = await User.findById(job.userId).select("email fullName credits").lean() as any;
+          if (owner?.email) {
+            const { sendFirstAppReadyEmail } = await import("../lib/notify");
+            sendFirstAppReadyEmail({
+              userEmail: owner.email,
+              userName: owner.fullName,
+              appTitle: app.title || "Tu app",
+              creditsRemaining: typeof owner.credits === "number" ? owner.credits : undefined,
+            }).catch((err) => {
+              logger.warn({ err, jobId }, "[email] Fallo enviando correo de primera app lista");
+            });
+          }
+        }
+      } catch (firstAppEmailErr) {
+        logger.warn({ firstAppEmailErr, jobId }, "[email] Fallo comprobando si es la primera app del usuario");
       }
     }
 
@@ -6301,6 +7233,10 @@ export async function runJobById(jobId: string): Promise<void> {
             jobId: jobId as any,
             baseUrl,
             log: logger,
+            // Usuarios gratuitos: máximo 2 rondas del evaluador visual (1 análisis
+            // + 1 parche). Clientes de pago: 5 rondas completas. Reduce el coste
+            // del evaluador visual gratuito en ~60% sin afectar a quienes pagan.
+            maxRepairRounds: hasEverPaid ? undefined : 2,
           });
         } catch (evalErr) {
           logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready");
@@ -6374,7 +7310,18 @@ export async function runJobById(jobId: string): Promise<void> {
     // REEMBOLSO AUTOMÁTICO: si la generación falla por error del sistema
     // (no por créditos agotados del usuario), devolver los créditos.
     // Sin esto, el usuario pierde créditos por fallos que no son su culpa.
-    const isCreditsError = rawMessage.includes("API_CREDITS_EXHAUSTED");
+    // BUG REAL CONFIRMADO en producción (captura del cliente mostrando el
+    // mensaje crudo de Anthropic: "Your credit balance is too low..."):
+    // esta comprobación buscaba el texto "API_CREDITS_EXHAUSTED", un
+    // marcador que NINGÚN punto del código genera jamás — confirmado
+    // grep'eando todo el backend, aparece solo aquí. isCreditsError SIEMPRE
+    // era false para este caso real, así que el mensaje crudo de Anthropic
+    // se filtraba directo hasta la pantalla del cliente (pésimo para la
+    // reputación), Y ADEMÁS el job se marcaba "failed" en vez de
+    // "reviewing", saltándose el reembolso automático de creditos.
+    // FIX: se usan los MISMOS indicadores reales que ya funcionan en
+    // shared-agents.ts (isOutOfCredits) para detectar este caso de verdad.
+    const isCreditsError = /credit_balance|insufficient_quota/i.test(rawMessage) || /credit/i.test(rawMessage) && /low|balance|exhaust/i.test(rawMessage);
     // Reembolso: usar Math.round para evitar floats (ej. 0.6000000000000014)
     // y verificar que creditsCost sea un entero positivo válido
     const creditsCostToRefund = Math.round(job.creditsCost ?? 0);
@@ -6393,22 +7340,30 @@ export async function runJobById(jobId: string): Promise<void> {
       }
     }
     
-    // Mensaje amigable para el usuario cuando los créditos de API se agotan
+    // Mensaje amigable para el usuario — NUNCA se muestra el error técnico
+    // crudo (statusCode, stack traces, mensajes internos de proveedores de
+    // IA como "Your credit balance is too low...") porque daña la
+    // reputación de la plataforma. El mensaje técnico real SIEMPRE queda
+    // guardado en el log interno (logger.error de arriba) para que el
+    // equipo lo revise — solo se oculta de la vista del cliente.
     const errorMessage = isCreditsError
-      ? "Las generaciones están temporalmente en pausa por mantenimiento del sistema. Tu créditos NO han sido consumidos. Inténtalo de nuevo en unos minutos."
-      : rawMessage;
+      ? "Hemos detectado una incidencia técnica temporal en el sistema. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Tus créditos NO han sido consumidos — no necesitas hacer nada, te avisaremos en cuanto esté listo."
+      : "Ha ocurrido un problema técnico al generar tu app. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Si tus créditos fueron descontados, se reembolsarán automáticamente.";
     
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: {
         status: isCreditsError ? "reviewing" : "failed",
         phase: isCreditsError ? "reviewing" : "failed",
         errorMessage,
+        // El mensaje técnico real se guarda aparte, SOLO visible en el
+        // panel de admin — nunca en la pantalla del cliente.
+        internalErrorMessage: rawMessage,
         updatedAt: new Date(),
       },
     });
     await log("system", isCreditsError 
       ? "⏸️ Generación pausada temporalmente por mantenimiento del sistema. Tus créditos están seguros. Reintentaremos automáticamente." 
-      : `Error: ${errorMessage}`, "error");
+      : "❌ Ha ocurrido un problema técnico. Se ha enviado un ticket automático a soporte — lo resolveremos en menos de 2 horas.", "error");
 
     if ((job as any).isAutoRepair && job.editAppId && !isCreditsError) {
       await AppMessage.create({
@@ -6462,6 +7417,441 @@ export async function runDeployForApp(args: {
     slug: (result.result as any).slug ?? "",
   };
 }
+
+// ── POST /api/apps/:id/deploy ─────────────────────────────────────────────
+// ENCONTRADO durante la implementación de dominios personalizados: este
+// endpoint NO EXISTÍA — el botón "Deploy app" del cliente (useDeployApp,
+// /api/apps/${id}/deploy) llamaba a una ruta que devolvía 404. runDeployForApp
+// ya estaba completa y se usaba internamente desde el auto-evaluador, pero
+// nunca estuvo expuesta para que el cliente la disparara manualmente.
+//
+// COBRO ESCALONADO + VENTANA DE GRACIA. A petición explícita del usuario:
+// el PRIMER deploy cobrado de cada app cuesta solo 5 créditos (accesible
+// con el regalo de bienvenida — cualquier usuario nuevo puede publicar su
+// primera app bajo un subdominio de Maris AI sin tener que comprar
+// créditos antes). A partir del SEGUNDO deploy cobrado de la misma app,
+// el coste sube automáticamente a 50 créditos — el sistema detecta esto
+// solo (vía GeneratedApp.lastPaidDeployAt), sin que el cliente tenga que
+// hacer nada. Efecto conocido y aceptado: a partir de ahí, redesplegar
+// fuera de la ventana de gracia exige comprar créditos.
+// Ventana de gracia de 5 minutos: si el cliente vuelve a pulsar "Deploy"
+// poco después de un deploy ya cobrado (ej. hizo un ajuste rápido), ese
+// re-deploy es gratis — el reloj es interno, nunca se le muestra al cliente.
+const DEPLOY_COST_FIRST = 5;
+const DEPLOY_COST_SUBSEQUENT = 50;
+const DEPLOY_GRACE_WINDOW_MS = 5 * 60 * 1000;
+router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if (!(app as any).frontendCode) {
+      return res.status(400).json({ error: "Esta app todavía no tiene código generado — no hay nada que desplegar." });
+    }
+
+    const lastPaidDeployAt: Date | undefined = (app as any).lastPaidDeployAt;
+    const withinGraceWindow = !!lastPaidDeployAt && (Date.now() - new Date(lastPaidDeployAt).getTime()) < DEPLOY_GRACE_WINDOW_MS;
+    // A petición explícita del usuario: el PRIMER deploy cobrado de cada
+    // app cuesta DEPLOY_COST_FIRST (5 créditos — accesible incluso con el
+    // regalo de bienvenida, para que cualquier usuario nuevo pueda
+    // publicar su primera app bajo el subdominio de Maris AI). A partir
+    // del segundo deploy cobrado de la MISMA app, el coste sube
+    // automáticamente a DEPLOY_COST_SUBSEQUENT (50 créditos). Se usa
+    // lastPaidDeployAt como indicador real de "esta app ya tuvo al menos
+    // un deploy cobrado" — independiente de la ventana de gracia (un
+    // re-deploy gratuito dentro de los 5 minutos no cuenta como el primer
+    // deploy "de pago" a efectos de este precio escalonado).
+    const isFirstPaidDeploy = !lastPaidDeployAt;
+    const effectiveDeployCost = isFirstPaidDeploy ? DEPLOY_COST_FIRST : DEPLOY_COST_SUBSEQUENT;
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    let creditsCharged = 0;
+    if (!withinGraceWindow && !isAdmin) {
+      const charge = await chargeCredits({
+        userId,
+        isAdmin,
+        amount: effectiveDeployCost,
+        description: `Deploy${isFirstPaidDeploy ? " (primero, subdominio Maris AI)" : ""}: ${app.title?.slice(0, 50) ?? ""}`,
+      });
+      if (!charge.ok) {
+        return res.status(402).json({
+          error: "Créditos insuficientes",
+          required: effectiveDeployCost,
+          current: req.dbUser?.credits,
+          hint: `Desplegar tu app cuesta ${effectiveDeployCost} créditos${isFirstPaidDeploy ? " (tu primer deploy)" : ""}.`,
+        });
+      }
+      creditsCharged = effectiveDeployCost;
+      await GeneratedApp.updateOne({ _id: req.params.id }, { $set: { lastPaidDeployAt: new Date() } });
+    }
+
+    // A petición explícita del usuario: stepper de progreso REAL en vivo,
+    // estilo Emergent.sh. El deploy real puede tardar hasta 2 minutos
+    // (waitForVercelDeploymentReady sondea hasta 60 veces cada 2s), así que
+    // en vez de bloquear esta petición HTTP hasta el final, se lanza en
+    // segundo plano y se responde inmediatamente con status "started". El
+    // frontend hace polling de GET /apps/:id/deploy-status, que lee
+    // deployPhase — escrito en vivo dentro de deployAppToVercel en cada
+    // fase real del proceso (no una animación con temporizadores).
+    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch((err) => {
+      logger.error({ err, appId: req.params.id }, "[deploy] Falló el deploy en segundo plano");
+    });
+
+    res.status(202).json({ status: "started", creditsCharged, freeRedeploy: withinGraceWindow, isFirstPaidDeploy });
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/deploy error");
+    safeErrorResponse(res, err, "Error al desplegar");
+  }
+});
+
+// ── GET /api/apps/:id/deploy-status ───────────────────────────────────────
+// Polling real del progreso del deploy en curso — alimenta el stepper
+// visual de 6 fases (estilo Emergent.sh) con el estado REAL del proceso.
+router.get("/apps/:id/deploy-status", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId })
+      .select("deployPhase deployStartedAt deployError vercelDeployUrl")
+      .lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    res.json({
+      phase: (app as any).deployPhase ?? null,
+      startedAt: (app as any).deployStartedAt ?? null,
+      error: (app as any).deployError ?? null,
+      deploymentUrl: (app as any).vercelDeployUrl ?? null,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/deploy-status error");
+    safeErrorResponse(res, err, "Error al consultar el deploy");
+  }
+});
+
+// ── DELETE /api/apps/:id/deploy ────────────────────────────────────────────
+// ENCONTRADO durante la finalización de DeployModal: el botón "Apagar"
+// ya llamaba a este endpoint desde hace tiempo, pero nunca existió en el
+// backend — devolvía 404 silenciosamente, sin apagar nada de verdad.
+// Elimina el proyecto real en Vercel (lo que de verdad detiene la URL
+// pública, no solo limpia un campo en MongoDB).
+router.delete("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const projectId = (app as any).vercelProjectId;
+    if (!projectId) {
+      return res.status(400).json({ error: "Esta app no tiene ningún deployment activo." });
+    }
+    const { shutDownVercelDeployment } = await import("../lib/vercelDeploy");
+    const result = await shutDownVercelDeployment({ appId: req.params.id, projectId, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo apagar el deployment", failure: result.failure });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, "DELETE /api/apps/:id/deploy error");
+    safeErrorResponse(res, err, "Error al apagar el deployment");
+  }
+});
+
+// ── Dominio personalizado (DNS) ───────────────────────────────────────────
+// A petición explícita del usuario (decisión final tras valorar y descartar
+// migrar a infraestructura propia/proxy inverso): se mantienen las DNS
+// REALES de Vercel (addVercelDomainForApp/getVercelDomainStatus/
+// removeVercelDomainForApp en vercelDeploy.ts, ya existentes), conectadas
+// aquí por primera vez a un endpoint HTTP, CON un control de negocio real:
+// solo usuarios que han pagado al menos una vez (hasEverPaid=true) pueden
+// conectar un dominio personalizado. Si la suscripción se cancela después,
+// el dominio sigue activo — el control es sobre hasEverPaid (histórico),
+// no sobre el plan actual, exactamente como se acordó.
+
+// POST /api/apps/:id/domain — conectar un dominio personalizado (solo usuarios que han pagado alguna vez)
+router.post("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { domain } = req.body ?? {};
+    if (!domain || typeof domain !== "string" || !domain.includes(".")) {
+      return res.status(400).json({ error: "Dominio inválido. Ejemplo: midominio.com o app.midominio.com" });
+    }
+    const dbUser = await User.findById(userId).select("hasEverPaid isAdmin email").lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+    if (!dbUser?.hasEverPaid && !isAdmin) {
+      return res.status(402).json({
+        error: "Los dominios personalizados son una función de pago",
+        hint: "Activa tu primer plan de pago para desbloquear el mapeo de dominios personalizados. Una vez hayas pagado, el acceso queda activo de forma permanente aunque canceles la suscripción.",
+      });
+    }
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const projectId = (app as any).vercelProjectId;
+    if (!projectId) {
+      return res.status(400).json({ error: "Esta app todavía no se ha desplegado — despliega la app primero antes de conectar un dominio personalizado." });
+    }
+    const { addVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await addVercelDomainForApp({
+      appId: req.params.id,
+      userId,
+      projectId,
+      domain: domain.trim().toLowerCase(),
+      log: logger,
+    });
+    if (!result.ok) {
+      logger.warn({ failure: result.failure, domain }, "[domain] Falló al añadir el dominio en Vercel");
+      return res.status(422).json({ error: "No se pudo conectar el dominio. Comprueba que no esté ya en uso en otro proyecto.", failure: result.failure });
+    }
+    res.status(201).json(result.status);
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/domain error");
+    safeErrorResponse(res, err, "Error al conectar el dominio");
+  }
+});
+
+// GET /api/apps/:id/domain — consultar el estado de verificación DNS
+// (lectura libre, no requiere hasEverPaid — solo bloqueado el añadir uno nuevo)
+router.get("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.json({ domain: null });
+    }
+    const { getVercelDomainStatus } = await import("../lib/vercelDeploy");
+    const result = await getVercelDomainStatus({ projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo consultar el estado del dominio", failure: result.failure });
+    }
+    res.json(result.status);
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/domain error");
+    safeErrorResponse(res, err, "Error al consultar el dominio");
+  }
+});
+
+// DELETE /api/apps/:id/domain — desconectar el dominio personalizado
+router.delete("/apps/:id/domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.status(400).json({ error: "Esta app no tiene un dominio personalizado conectado." });
+    }
+    const { removeVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await removeVercelDomainForApp({ appId: req.params.id, projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo desconectar el dominio", failure: result.failure });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, "DELETE /api/apps/:id/domain error");
+    safeErrorResponse(res, err, "Error al desconectar el dominio");
+  }
+});
+
+// ── /api/apps/:id/custom-domain ────────────────────────────────────────────
+// ENCONTRADO durante la finalización de DeployModal: el componente ya
+// llamaba a esta ruta (con un campo extra "provider" — GoDaddy, Namecheap,
+// etc., puramente informativo, no afecta la lógica real de DNS) desde
+// hace tiempo, pero nunca existió — 404 silencioso. En vez de duplicar la
+// lógica de negocio, esto es un ALIAS FINO sobre las mismas funciones
+// reales ya conectadas en /apps/:id/domain (mismas DNS reales de Vercel,
+// mismo control de pago hasEverPaid), adaptando solo el formato de
+// respuesta al contrato que el frontend ya espera.
+router.post("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { domain, provider } = req.body ?? {};
+    if (!domain || typeof domain !== "string" || !domain.includes(".")) {
+      return res.status(400).json({ error: "Dominio inválido. Ejemplo: midominio.com" });
+    }
+    const dbUser = await User.findById(userId).select("hasEverPaid isAdmin email").lean() as any;
+    const isAdmin = isAdminEmail(dbUser?.email);
+    if (!dbUser?.hasEverPaid && !isAdmin) {
+      return res.status(402).json({
+        error: "Los dominios personalizados son una función de pago",
+        warning: "Activa tu primer plan de pago para desbloquear el mapeo de dominios personalizados.",
+      });
+    }
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const projectId = (app as any).vercelProjectId;
+    if (!projectId) {
+      return res.status(400).json({ error: "Despliega la app primero antes de conectar un dominio personalizado." });
+    }
+    const { addVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await addVercelDomainForApp({
+      appId: req.params.id,
+      userId,
+      projectId,
+      domain: domain.trim().toLowerCase(),
+      log: logger,
+    });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo conectar el dominio. Comprueba que no esté ya en uso en otro proyecto." });
+    }
+    logger.info({ domain, provider }, "[custom-domain] Dominio conectado");
+    res.status(201).json({
+      verified: result.status.verified,
+      provider: provider || null,
+      dnsRecords: result.status.recommendedDns,
+      recommendedDns: result.status.recommendedDns,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/custom-domain error");
+    safeErrorResponse(res, err, "Error al conectar el dominio");
+  }
+});
+
+router.get("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.json({ verified: false, dnsRecords: [] });
+    }
+    const { getVercelDomainStatus } = await import("../lib/vercelDeploy");
+    const result = await getVercelDomainStatus({ projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo consultar el estado del dominio" });
+    }
+    res.json({
+      verified: result.status.verified,
+      dnsRecords: result.status.recommendedDns,
+      recommendedDns: result.status.recommendedDns,
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/custom-domain error");
+    safeErrorResponse(res, err, "Error al consultar el dominio");
+  }
+});
+
+router.delete("/apps/:id/custom-domain", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    const domain = (app as any).vercelCustomDomain;
+    const projectId = (app as any).vercelProjectId;
+    if (!domain || !projectId) {
+      return res.json({ ok: true });
+    }
+    const { removeVercelDomainForApp } = await import("../lib/vercelDeploy");
+    const result = await removeVercelDomainForApp({ appId: req.params.id, projectId, domain, log: logger });
+    if (!result.ok) {
+      return res.status(422).json({ error: "No se pudo desconectar el dominio" });
+    }
+    res.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, "DELETE /api/apps/:id/custom-domain error");
+    safeErrorResponse(res, err, "Error al desconectar el dominio");
+  }
+});
+
+// ── Time Machine (historial de revisiones + rollback) ─────────────────────
+// A petición explícita del usuario: el backend real (AppRevision,
+// snapshotCurrentApp, restoreAppRevision en lib/appRevisions.ts) ya
+// existía COMPLETO — incluyendo proteciones que la propuesta original NO
+// contemplaba (restoreAppRevision ya bloquea el rollback si hay un job de
+// generación en curso, y ya crea automáticamente una copia de la versión
+// actual ANTES de sobrescribir, por si el cliente se equivoca al
+// restaurar). Solo faltaban los endpoints HTTP. Se usan los campos REALES
+// del schema (summary, no "description"; no existe "versionName") y la
+// firma REAL de restoreAppRevision (objeto tipado con reason específico,
+// no un booleano simple).
+
+// GET /api/apps/:id/revisions — historial ordenado de más reciente a más antigua
+router.get("/apps/:id/revisions", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId }).select("_id").lean();
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+    const { revisionSourceLabel } = await import("../lib/appRevisions");
+    const revisions = await AppRevision.find({ appId: req.params.id })
+      .sort({ createdAt: -1 })
+      .select("_id source summary createdAt")
+      .limit(50)
+      .lean();
+
+    res.json({
+      revisions: revisions.map((rev: any) => ({
+        id: String(rev._id),
+        sourceLabel: revisionSourceLabel(rev.source),
+        summary: rev.summary || "",
+        createdAt: rev.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /api/apps/:id/revisions error");
+    safeErrorResponse(res, err, "Error al consultar el historial de versiones");
+  }
+});
+
+// POST /api/apps/:id/rollback — restaura una revisión anterior y dispara
+// el deploy asíncrono real (mismo flujo de 6 fases del stepper) en
+// segundo plano. Coste fijo de 1 crédito.
+const ROLLBACK_COST = 1;
+router.post("/apps/:id/rollback", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    const { revisionId } = req.body ?? {};
+    if (!revisionId || typeof revisionId !== "string") {
+      return res.status(400).json({ error: "revisionId es requerido" });
+    }
+
+    const isAdmin = isAdminEmail(req.dbUser?.email);
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: ROLLBACK_COST,
+      description: "Rollback (restaurar versión anterior)",
+    });
+    if (!charge.ok) {
+      return res.status(402).json({
+        error: "Créditos insuficientes",
+        required: ROLLBACK_COST,
+        hint: `Restaurar una versión anterior cuesta ${ROLLBACK_COST} crédito.`,
+      });
+    }
+
+    const { restoreAppRevision } = await import("../lib/appRevisions");
+    const result = await restoreAppRevision({ appId: req.params.id, revisionId, userId });
+
+    if (!result.ok) {
+      // Best-effort: si la restauración falla, el crédito ya cobrado se
+      // devuelve con refundCredits (la función real para esto, no
+      // chargeCredits con un valor negativo) — el cliente no debe pagar
+      // por un rollback que no ocurrió.
+      const { refundCredits } = await import("../lib/credits");
+      await refundCredits({ userId, isAdmin, amount: ROLLBACK_COST, description: "Reembolso: rollback fallido" }).catch(() => {});
+      const messages: Record<string, string> = {
+        not_found: "La versión que intentas restaurar ya no existe.",
+        forbidden: "App no encontrada.",
+        job_in_flight: "Hay una generación en curso para esta app — espera a que termine antes de restaurar una versión anterior.",
+      };
+      return res.status(422).json({ error: messages[result.reason] || "No se pudo restaurar la versión." });
+    }
+
+    // Disparar el deploy asíncrono real (mismo flujo de 6 fases ya
+    // instrumentado) en segundo plano, sin cobrar de nuevo — el coste del
+    // rollback ya incluye la republicación automática.
+    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch((err) => {
+      logger.error({ err, appId: req.params.id }, "[rollback] El redeploy automático tras el rollback falló");
+    });
+
+    res.json({ ok: true, creditsCharged: ROLLBACK_COST, creditsRemaining: charge.newBalance, redeployStarted: true });
+  } catch (err: any) {
+    logger.error({ err }, "POST /api/apps/:id/rollback error");
+    safeErrorResponse(res, err, "Error al restaurar la versión");
+  }
+});
 
 
 // ── NOTIFICACIONES DE SOPORTE — el cliente lee sus avisos de corrección ──────
@@ -6850,6 +8240,39 @@ try {
   } catch (err) {
     logger.error({ err }, "Preview error");
     res.status(500).send("<h1>Error cargando preview</h1>");
+  }
+});
+
+// POST /api/panel-error — reporte real de errores del propio panel de
+// Maris AI (no de las apps generadas por los clientes, ver AppRuntimeError
+// para eso). Capturado por error-boundary.tsx en el frontend. NO requiere
+// requireAuth a propósito: si el fallo es justo de autenticación (Clerk no
+// cargó), exigir un token válido para reportarlo sería contradictorio —
+// perderíamos justo los casos que más necesitamos ver. userId es opcional
+// y best-effort (si el frontend logra obtenerlo de window.Clerk antes de
+// que falle del todo).
+router.post("/panel-error", async (req: Request, res: Response) => {
+  try {
+    const { message, stack, componentStack, pathname, userId } = req.body || {};
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "message requerido" });
+    }
+    const { PanelRuntimeError } = await import("@workspace/db/schema");
+    await (PanelRuntimeError as any).create({
+      userId: typeof userId === "string" ? userId : undefined,
+      message: message.slice(0, 500),
+      stack: typeof stack === "string" ? stack.slice(0, 3000) : undefined,
+      componentStack: typeof componentStack === "string" ? componentStack.slice(0, 2000) : undefined,
+      pathname: typeof pathname === "string" ? pathname.slice(0, 300) : undefined,
+      userAgent: (req.headers["user-agent"] as string)?.slice(0, 300),
+    });
+    logger.warn({ message, pathname, userId }, "[panel-error] Error real del panel capturado");
+    return res.status(204).end();
+  } catch (err) {
+    // Reportar un error nunca debe en sí mismo producir un error visible
+    // para el usuario — best-effort silencioso desde la perspectiva del cliente.
+    logger.warn({ err }, "[panel-error] Failed to record panel error");
+    return res.status(204).end();
   }
 });
 
