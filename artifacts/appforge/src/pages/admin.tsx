@@ -153,11 +153,17 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
   const adjustMutation = useAdjustUserCredits({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data: any) => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
-        if (selectedUser) queryClient.invalidateQueries({ queryKey: getAdminUserTransactionsQueryKey(selectedUser.id) });
-        toast({ title: "Créditos actualizados" });
+        if (selectedUser) {
+          queryClient.invalidateQueries({ queryKey: getAdminUserTransactionsQueryKey(selectedUser.id) });
+          // Actualizar el usuario seleccionado inmediatamente con el nuevo balance
+          if (data?.credits !== undefined) {
+            setSelectedUser(prev => prev ? { ...prev, credits: data.credits } : prev);
+          }
+        }
+        toast({ title: "✅ Créditos actualizados", description: data?.credits !== undefined ? `Nuevo balance: ${data.credits} créditos` : undefined });
         setAdjustUser(null);
         setReason("");
         setDelta("10");
@@ -210,11 +216,17 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
   const refundMutation = useAdminRefundCredits({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data: any) => {
         queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
-        if (selectedUser) queryClient.invalidateQueries({ queryKey: getAdminUserTransactionsQueryKey(selectedUser.id) });
-        toast({ title: "Reembolso procesado", description: "Los créditos han sido reembolsados." });
+        if (selectedUser) {
+          queryClient.invalidateQueries({ queryKey: getAdminUserTransactionsQueryKey(selectedUser.id) });
+          // Actualizar el balance del panel inmediatamente
+          if (data?.newBalance !== undefined) {
+            setSelectedUser(prev => prev ? { ...prev, credits: data.newBalance } : prev);
+          }
+        }
+        toast({ title: "✅ Reembolso procesado", description: data?.newBalance !== undefined ? `Nuevo balance: ${data.newBalance} créditos` : "Los créditos han sido reembolsados." });
         setRefundDialog(null);
       },
       onError: (err: unknown) => {
@@ -1401,7 +1413,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                   if (!refundDialog) return;
                   refundMutation.mutate({
                     id: refundDialog.user.id,
-                    data: { credits: refundDialog.amount, reason: refundDialog.reason || undefined }
+                    data: { amount: refundDialog.amount, reason: refundDialog.reason || undefined }
                   });
                 }}
               >
