@@ -2229,6 +2229,44 @@ router.post("/admin/jobs/:id/recover", async (req: any, res: any): Promise<void>
 // punto, GET /api/apps (cliente) la mantiene oculta vía pendingAdminApproval.
 // FIX: ahora también crea una UserNotification para que el cliente vea el
 // banner de actualización inmediatamente en su dashboard (polling 5s).
+// POST /api/admin/jobs/:id/skip-gating — fuerza la reanudación de un job
+// pausado en awaiting_technical_clarification, saltando las preguntas.
+// Útil cuando el admin generó la app pero el job quedó atascado en gating
+// porque fue creado antes de que existiera el campo skipGating.
+router.post("/admin/jobs/:id/skip-gating", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const job = await GenerationJob.findById(req.params.id).lean() as any;
+  if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
+  if (job.status !== "awaiting_approval" && job.phase !== "awaiting_technical_clarification") {
+    res.status(400).json({ error: `El job no está en awaiting_technical_clarification (estado: ${job.status}/${job.phase})` });
+    return;
+  }
+
+  // Marcar el gating como ya aprobado + skipGating para que no vuelva a pausar
+  await GenerationJob.findByIdAndUpdate(req.params.id, {
+    $set: {
+      status: "queued",
+      phase: "queued",
+      awaitingApproval: false,
+      skipGating: true,
+      isAdmin: true,
+      updatedAt: new Date(),
+    },
+    $addToSet: { approvedFacets: "technical_architecture" },
+  });
+
+  // Re-encolar el job para que continue desde donde estaba
+  const { enqueueGenerateJob } = await import("../lib/jobQueue");
+  const { runJobById } = await import("./apps");
+  await enqueueGenerateJob(req.params.id);
+  runJobById(req.params.id).catch((err: any) =>
+    logger.error({ err, jobId: req.params.id }, "skip-gating: error al re-ejecutar job"),
+  );
+
+  logger.info({ jobId: req.params.id }, "Admin: skip-gating aplicado — job reanudado");
+  res.json({ ok: true, message: "Gating saltado — el job continuará la generación sin preguntas al cliente." });
+});
+
 router.post("/admin/jobs/:id/approve-for-client", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const job = await GenerationJob.findById(req.params.id).lean() as any;

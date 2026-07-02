@@ -1987,6 +1987,35 @@ function LiveMonitorPanel() {
                           }
                         </Button>
                       </div>
+                      {/* Botón para saltar las preguntas técnicas cuando el admin generó
+                          la app y el job quedó pausado en awaiting_technical_clarification.
+                          El cliente nunca verá las preguntas — la generación continúa directo. */}
+                      {(job.status === "awaiting_approval" || job.phase === "awaiting_technical_clarification") && (
+                        <Button
+                          size="sm"
+                          className="w-full h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                          onClick={async () => {
+                            setActionLoading(p => ({ ...p, [`skipgating_${job.id}`]: true }));
+                            try {
+                              const d = await apiFetch<any>(`/api/admin/jobs/${job.id}/skip-gating`, { method: "POST" });
+                              toast({ title: "⏩ Generación reanudada", description: d.message });
+                              await fetchJobs();
+                            } catch (e: any) {
+                              toast({ title: "Error", description: e.message, variant: "destructive" });
+                            } finally {
+                              setActionLoading(p => ({ ...p, [`skipgating_${job.id}`]: false }));
+                            }
+                          }}
+                          disabled={actionLoading[`skipgating_${job.id}`]}
+                          title="Salta las preguntas técnicas y reanuda la generación directamente. El cliente verá el preview cuando esté listo."
+                        >
+                          {actionLoading[`skipgating_${job.id}`]
+                            ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Reanudando…</>
+                            : <>⏩ Saltar preguntas y generar para el cliente</>
+                          }
+                        </Button>
+                      )}
+
                       {job.status === "repaired-pending-review" && (
                         <Button
                           size="sm"

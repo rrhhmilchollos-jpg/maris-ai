@@ -3532,7 +3532,20 @@ export async function generateApp(
   // directo a la generación, igual que antes de este cambio.
   // skipGating: si el admin generó la app directamente (bypass del gating),
   // nunca mostrar las preguntas al cliente — ir directo a la generación.
-  const isSkipGating = (requestContext as any)?.skipGating === true;
+  // skipGating: el admin nunca ve las preguntas técnicas — genera directo.
+  // Se activa si: (a) requestContext.skipGating=true, (b) el job tiene
+  // isAdmin:true en la BD (jobs creados por el admin desde su panel),
+  // (c) el job tiene skipGating:true en la BD (set explícitamente).
+  let isSkipGating = (requestContext as any)?.skipGating === true;
+  if (!isSkipGating && jobId) {
+    try {
+      const jobMeta = await GenerationJob.findById(jobId)
+        .select("isAdmin skipGating")
+        .lean() as any;
+      if (jobMeta?.isAdmin || jobMeta?.skipGating) isSkipGating = true;
+    } catch { /* best-effort — si falla, continúa sin skip */ }
+  }
+
   if (!previous && isUltraComplex && jobId && !isSkipGating) {
     try {
       const jobForGating = await GenerationJob.findById(jobId).select("approvedFacets checkpointData").lean() as any;
