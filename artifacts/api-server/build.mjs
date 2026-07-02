@@ -20,6 +20,7 @@ const SHARED_CONFIG = {
     "@workspace/integrations-gemini-ai": path.resolve(repoRoot, "lib/integrations-gemini-ai/src/index.ts"),
     "@workspace/integrations-anthropic-ai": path.resolve(repoRoot, "lib/integrations-anthropic-ai/src/index.ts"),
     "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
+    "@workspace/services": path.resolve(repoRoot, "lib/services/src/index.ts"),
   },
   external: [
     "esbuild", "pg", "*.node", "sharp", "better-sqlite3", "sqlite3", "canvas",
