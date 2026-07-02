@@ -240,7 +240,16 @@ export default function OnboardingPage() {
 
             <Button
               size="lg"
-              onClick={() => setLocation("/dashboard")}
+              onClick={async () => {
+            try {
+              await apiFetch("/api/me/preferences", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ onboardingCompleted: true, preferredAppType: selectedType }),
+              });
+            } catch {}
+            setLocation("/dashboard");
+          }}
               className="h-14 w-full bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-base font-bold shadow-[0_0_30px_rgba(124,58,237,0.4)] hover:from-[#8b5cf6] hover:to-[#a855f7]"
             >
               <Sparkles className="mr-2 h-5 w-5" />
