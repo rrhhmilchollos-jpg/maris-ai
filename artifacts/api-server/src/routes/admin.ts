@@ -1421,15 +1421,6 @@ router.delete("/admin/users/:id/jobs", async (req: any, res: any): Promise<void>
 });
 
 // ─── Admin: Borrar jobs concretos por IDs ────────────────────────────────────
-// DELETE /api/admin/jobs/:id — eliminar un job individual
-router.delete("/admin/jobs/:id", async (req: any, res: any): Promise<void> => {
-  await connectDB();
-  const job = await GenerationJob.findByIdAndDelete(req.params.id).lean();
-  if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
-  logger.info({ jobId: req.params.id }, "Admin: job eliminado individualmente");
-  res.json({ ok: true, message: "Job eliminado" });
-});
-
 router.delete("/admin/jobs/bulk", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { jobIds } = req.body ?? {};
@@ -1443,6 +1434,15 @@ router.delete("/admin/jobs/bulk", async (req: any, res: any): Promise<void> => {
   });
   logger.info({ deleted: result.deletedCount }, "Admin: bulk deleted jobs by ids");
   res.json({ ok: true, deleted: result.deletedCount });
+});
+
+// DELETE /api/admin/jobs/:id — eliminar un job individual
+router.delete("/admin/jobs/:id", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const job = await GenerationJob.findByIdAndDelete(req.params.id).lean();
+  if (!job) { res.status(404).json({ error: "Job no encontrado" }); return; }
+  logger.info({ jobId: req.params.id }, "Admin: job eliminado individualmente");
+  res.json({ ok: true, message: "Job eliminado" });
 });
 
 // A petición explícita del usuario: vaciar la pantalla "Jobs & Errores"
