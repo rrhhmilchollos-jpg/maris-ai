@@ -12,6 +12,11 @@ export interface IUser {
   isAdmin?: boolean;
   freeCreditsUsed?: boolean;
   hasEverPaid?: boolean;       // true en cuanto se confirma el primer pago (Stripe o Viva)
+  // Emails de reactivación automática
+  reactivationEmailsSent?: string[];
+  lastReactivationEmailAt?: Date;
+  reactivationUnsubscribed?: boolean;
+
   // ── Programa de afiliados ─────────────────────────────────────────────
   referralCode?: string;       // Código único de este usuario para compartir (ref=XXXX)
   referredBy?: string;         // userId del afiliado que lo trajo
@@ -90,6 +95,11 @@ const UserSchema = new Schema<IUser>(
     isAdmin: { type: Boolean, default: false },
     freeCreditsUsed: { type: Boolean, default: false },
     hasEverPaid: { type: Boolean, default: false },
+    // Emails de reactivación automática
+    reactivationEmailsSent: { type: [String], default: [] },
+    lastReactivationEmailAt: { type: Date },
+    reactivationUnsubscribed: { type: Boolean, default: false },
+
     // Programa de afiliados
     referralCode: { type: String, sparse: true, index: true },
     referredBy: { type: String, index: true },

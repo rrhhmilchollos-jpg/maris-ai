@@ -197,6 +197,28 @@ httpServer.listen(finalPort, async (err?: Error) => {
     logger.error({ err: recurringErr }, "Failed to start Recurring Billing");
   }
 
+  // 6c) Emails de reactivación automática — una vez al día a las 10:00h España.
+  // Envía emails personalizados a clientes inactivos (3, 7, 14 y 30 días).
+  // Activa con: REACTIVATION_EMAILS_ENABLED=true en Railway.
+  try {
+    const { runReactivationTick } = await import("./lib/reactivationEmails");
+    const now = new Date();
+    const nextRun = new Date(now);
+    nextRun.setUTCHours(9, 0, 0, 0); // 10:00 Madrid (UTC+1 en invierno, UTC+2 en verano)
+    if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1);
+    const msUntilFirst = nextRun.getTime() - now.getTime();
+    setTimeout(() => {
+      runReactivationTick().catch((err) => logger.error({ err }, "Reactivation tick failed"));
+      setInterval(
+        () => runReactivationTick().catch((err) => logger.error({ err }, "Reactivation tick failed")),
+        24 * 60 * 60 * 1000,
+      ).unref();
+    }, msUntilFirst).unref();
+    logger.info({ nextRunAt: nextRun.toISOString(), enabled: process.env.REACTIVATION_EMAILS_ENABLED === "true" }, "Reactivation emails scheduler ready");
+  } catch (reactivationErr) {
+    logger.error({ err: reactivationErr }, "Failed to start Reactivation Emails");
+  }
+
   // IndexNow — notificar a Bing/DuckDuckGo/Yandex/Ecosia de todas las URLs
   // Se ejecuta al arrancar el servidor en producción
   if (process.env.NODE_ENV === "production") {
