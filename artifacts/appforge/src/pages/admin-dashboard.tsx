@@ -778,34 +778,63 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                       </Button>
                     </PopoverContent>
                   </Popover>
-                  {/* Regenerar desde 0 — salta las preguntas de clarificación al cliente
-                      (skipGating:true) para que el admin entregue la app directamente funcional.
-                      El cliente no verá el formulario de preguntas — irá directo al preview. */}
-                  <Button size="sm" variant="outline"
-                    className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                    disabled={actionLoading[`regenapp_${appId}`]}
-                    title="Genera la app sin preguntar al cliente — tú controlas el proceso, el cliente ve directamente el preview final"
-                    onClick={async () => {
-                      const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
-                      const promptToUse = window.prompt("Prompt para regenerar DESDE CERO (puedes editarlo):", cleanPrompt);
-                      if (!promptToUse) return;
-                      if (!window.confirm(`¿Regenerar la app "${app.title}" para ${app.userEmail} DESDE CERO?\n\n✅ Saltará las preguntas de verificación — tú entregas la app directamente al cliente.\n\n⚠️ Esto reemplaza la app entera. Si solo necesitas arreglar algo puntual, usa "Reparar y continuar" en su lugar.`)) return;
-                      setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: true }));
-                      try {
-                        const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6", skipGating: true }),
-                        });
-                        toast({ title: "🔄 Regenerando app desde 0", description: d.message || "Job en cola — el cliente verá el progreso en su panel" });
-                      } catch (e: any) {
-                        toast({ title: "Error al regenerar", description: e.message, variant: "destructive" });
-                      } finally {
-                        setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: false }));
-                      }
-                    }}>
-                    {actionLoading[`regenapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🔄 Regenerar desde 0"}
-                  </Button>
+                  {/* Regenerar desde 0 con selector de tipo:
+                      - Básico (MVP): scope-cut a 7 hitos — siempre funciona, ideal para recuperar clientes free
+                      - Completo: plan ilimitado para clientes de pago que necesitan la app entera */}
+                  <div className="flex gap-1 w-full">
+                    <Button size="sm" variant="outline"
+                      className="h-7 text-[10px] flex-1 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                      disabled={actionLoading[`regenapp_${appId}`]}
+                      title="Genera un MVP funcional de 7 módulos máximo — siempre funciona, ideal para recuperar clientes con apps fallidas"
+                      onClick={async () => {
+                        const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
+                        const promptToUse = window.prompt("Prompt para regenerar (puedes editarlo):", cleanPrompt);
+                        if (!promptToUse) return;
+                        if (!window.confirm(`¿Regenerar "${app.title}" en modo BÁSICO (7 módulos)?\n\n✅ Garantiza preview funcional al instante\n⚡ Ideal para clientes free con apps fallidas`)) return;
+                        setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: true }));
+                        try {
+                          const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6", skipGating: true, forceBasicGeneration: true }),
+                          });
+                          toast({ title: "⚡ Regeneración básica iniciada", description: d.message });
+                        } catch (e: any) {
+                          toast({ title: "Error", description: e.message, variant: "destructive" });
+                        } finally {
+                          setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: false }));
+                        }
+                      }}
+                    >
+                      {actionLoading[`regenapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "⚡ MVP (7 módulos)"}
+                    </Button>
+                    <Button size="sm" variant="outline"
+                      className="h-7 text-[10px] flex-1 border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                      disabled={actionLoading[`regenapp_${appId}`]}
+                      title="Genera la app completa sin límite de módulos — para clientes de pago que necesitan todo"
+                      onClick={async () => {
+                        const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
+                        const promptToUse = window.prompt("Prompt para regenerar COMPLETO (puedes editarlo):", cleanPrompt);
+                        if (!promptToUse) return;
+                        if (!window.confirm(`¿Regenerar "${app.title}" en modo COMPLETO (sin límite de módulos)?\n\n⚠️ Solo para clientes premium — puede tardar más`)) return;
+                        setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: true }));
+                        try {
+                          const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6", skipGating: true, forceBasicGeneration: false }),
+                          });
+                          toast({ title: "🏗️ Regeneración completa iniciada", description: d.message });
+                        } catch (e: any) {
+                          toast({ title: "Error", description: e.message, variant: "destructive" });
+                        } finally {
+                          setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: false }));
+                        }
+                      }}
+                    >
+                      {actionLoading[`regenapp_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : "🏗️ Completo"}
+                    </Button>
+                  </div>
                   {/* Disculpas */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-violet-500/30 text-violet-400 hover:bg-violet-500/10"

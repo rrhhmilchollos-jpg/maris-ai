@@ -3608,7 +3608,11 @@ export async function generateApp(
     // expandirla comprando más créditos.
     // Usuarios de pago: sin límite, plan completo siempre.
     const FREE_USER_MAX_MILESTONES = 7;
-    const isDegradedFreeTier = !hasEverPaid;
+    // isDegradedFreeTier: true si el usuario no ha pagado nunca O si el admin
+    // forzó generación básica (forceBasicGeneration) para garantizar un MVP
+    // funcional aunque el job tenga hasEverPaid:true. Esto resuelve el caso
+    // de admin regenerando app de cliente free con 20 hitos → saturación.
+    const isDegradedFreeTier = !hasEverPaid || !!(job as any).forceBasicGeneration;
     if (isDegradedFreeTier) {
       await log("system", `✨ Construyendo tu app módulo a módulo (${FREE_USER_MAX_MILESTONES} módulos esenciales). Resultado garantizado y funcional — podrás añadir más módulos después.`);
     } else {

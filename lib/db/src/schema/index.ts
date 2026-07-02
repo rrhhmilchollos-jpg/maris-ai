@@ -422,6 +422,9 @@ export interface IGenerationJob extends Document {
   // Si true, el admin generó esta app saltando las preguntas de clarificación
   // técnica (gating). El cliente verá la app directamente sin responder nada.
   skipGating?: boolean;
+  // forceBasicGeneration: el admin puede forzar scope-cut de 7 hitos
+  // aunque el job tenga hasEverPaid:true. Para recuperar clientes free.
+  forceBasicGeneration?: boolean;
   // A petición explícita del usuario: jobs de "Revisión profunda de errores"
   // (Testing Agent bajo demanda, 30 créditos, disparado por el cliente desde
   // un botón en su app ya generada) usan jobKind="deep_test" en vez del flujo
@@ -461,6 +464,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     autoDiagnosisNote: { type: String },
     isDemo: { type: Boolean, default: false, index: true },
     skipGating: { type: Boolean, default: false },
+    forceBasicGeneration: { type: Boolean, default: false },
     checkpointData: { type: Schema.Types.Mixed },
     editAppId: { type: String },
     isAutoRepair: { type: Boolean, default: false },

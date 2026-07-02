@@ -2752,6 +2752,10 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
     const jobId = new mongoose.Types.ObjectId().toString();
     const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=admin-inject. ${prompt}`;
 
+    // forceBasicGeneration: fuerza scope-cut de 7 hitos aunque hasEverPaid=true.
+    // Útil para recuperar clientes free con apps fallidas.
+    const forceBasicGeneration = req.body?.forceBasicGeneration === true;
+
     await GenerationJob.create({
       _id: jobId,
       userId: targetId,
@@ -2763,10 +2767,9 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
       phase: "queued",
       progress: 0,
       isAdmin: true,
-      hasEverPaid: true,
-      // skipGating: true — el admin genera sin preguntas al cliente.
-      // El cliente verá directamente el preview cuando esté listo.
+      hasEverPaid: !forceBasicGeneration, // si forceBasic → free tier scope-cut
       skipGating: true,
+      forceBasicGeneration,
     });
 
     await enqueueGenerateJob(jobId);
