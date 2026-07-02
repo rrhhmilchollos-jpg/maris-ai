@@ -21,7 +21,9 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
 import { patchBundle, patchBundleMultiFile, type QAIssue } from "./shared-agents";
-import { CoreOrchestrator } from "@workspace/services";
+// CoreOrchestrator se importa dinámicamente para evitar crashear el módulo
+// en el arranque si @workspace/services tiene algún problema de compilación.
+// La importación dinámica solo falla si se LLAMA la función, no al importar.
 import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
 import { GeneratedApp, User, AppMessage, JobLog, GenerationJob, AppRuntimeError } from "@workspace/db/schema";
@@ -330,6 +332,7 @@ export async function autoRepairBundle(opts: {
       if (isStructuralDamage && cycle === 1) {
         await jlog("🏗️ Daño estructural → CoreOrchestrator reparando archivo por archivo…");
         try {
+          const { CoreOrchestrator } = await import("@workspace/services");
           const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
           const orchPrompt =
             "[REPARACIÓN AUTOMÁTICA — REPAIR AGENT]\n" +
