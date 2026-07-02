@@ -7212,21 +7212,31 @@ export async function runJobById(jobId: string): Promise<void> {
         const { runAutoEvaluator } = await import("../lib/evaluator");
         const dbUser = await User.findById(job.userId).lean() as any;
         await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
-        // ENCONTRADO (causa raíz crítica): userIntent se truncaba a 300 chars
-        // antes de pasarlo al evaluador — completamente insuficiente para
-        // describir una app compleja (clínica dental, CRM, ERP...) con todas
-        // sus funcionalidades. El evaluador y el autofix recibían solo las
-        // primeras 300 letras del prompt, por lo que el CoreOrchestrator no
-        // sabía qué módulos construir cuando detectaba blank_page o
-        // missing_content. Subido a 4000 chars (suficiente para el 99% de
-        // los prompts reales de usuarios de Maris AI) — el evaluador ya
-        // trunca internamente a 2000-3000 en el judgeWithVision y en el
-        // structuralPrompt, así que pasar más aquí no desperdicia tokens,
-        // solo da más contexto disponible para los casos que lo necesiten.
         const cleanUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
-        // FIX 4: await bloqueante — el job NO se marca succeeded hasta que la
-        // verificación visual termine. Sin await, el cliente ve "completado"
-        // con la app todavía rota mientras la reparación ocurre en background.
+
+        // Construir plannedPages a partir de:
+        // 1. Las páginas del plan del Arquitecto (plan.pages) — las más fiables
+        // 2. Los hitos de frontend del milestoneResult — como respaldo
+        // Esto permite que el evaluador sepa EXACTAMENTE qué páginas existen
+        // y repare el enrutador con precisión en lugar de adivinar.
+        const architectPages = (plan?.pages || []).map((p: any) => ({
+          name: p.name || p.route,
+          route: p.route,
+          purpose: p.purpose,
+        }));
+        // Si el resultado viene de hitos, añadir también los archivos de frontend generados
+        const milestonePages = milestoneResult
+          ? (milestoneResult.frontendCode || "")
+              .split("// === FILE: ")
+              .filter((f: string) => f.includes("Page.tsx") || f.includes("page.tsx") || f.includes("View.tsx"))
+              .map((f: string) => {
+                const filePath = f.split("\n")[0].split(" ===")[0].trim();
+                const name = filePath.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || filePath;
+                return { name, route: `/${name.toLowerCase().replace("page", "").replace("view", "")}` };
+              })
+          : [];
+        const plannedPages = architectPages.length > 0 ? architectPages : milestonePages;
+
         let visualEvalResult: any = null;
         try {
           visualEvalResult = await runAutoEvaluator({
@@ -7236,9 +7246,11 @@ export async function runJobById(jobId: string): Promise<void> {
             jobId: jobId as any,
             baseUrl,
             log: logger,
-            // Usuarios gratuitos: máximo 2 rondas del evaluador visual (1 análisis
-            // + 1 parche). Clientes de pago: 5 rondas completas. Reduce el coste
-            // del evaluador visual gratuito en ~60% sin afectar a quienes pagan.
+            // Páginas reales del proyecto — el evaluador las usa para reparar
+            // el enrutador con precisión (sin inventar rutas que no existen)
+            plannedPages: plannedPages.length > 0 ? plannedPages : undefined,
+            // Usuarios gratuitos: máximo 2 rondas (1 análisis + 1 parche).
+            // Clientes de pago: 5 rondas completas.
             maxRepairRounds: hasEverPaid ? undefined : 2,
           });
         } catch (evalErr) {

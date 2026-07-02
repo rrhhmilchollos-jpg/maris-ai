@@ -672,6 +672,16 @@ export async function runAutoEvaluator(opts: {
           "[REPARACIÓN AUTOMÁTICA — EVALUADOR VISUAL]\n" +
           "App: " + JSON.stringify((row as any).title) + "\n\n" +
           "PROMPT ORIGINAL DEL USUARIO:\n" + userIntent.slice(0, 3000) + (routerBlock ? "\n\n" + routerBlock : "") + "\n\n" +
+          // MEJORA CRÍTICA: inyectar las páginas reales del plan para que el
+          // evaluador NO invente rutas. Solo puede mapear rutas que realmente
+          // existen en el proyecto — esto elimina el 404 sin romper nada.
+          (opts.plannedPages && opts.plannedPages.length > 0
+            ? "PÁGINAS REALES DEL PROYECTO (SOLO ESTAS EXISTEN — NO INVENTES OTRAS):\n" +
+              opts.plannedPages.map((p) => `- ${p.name}${p.route ? ` → ${p.route}` : ""}${p.purpose ? ` (${p.purpose})` : ""}`).join("\n") +
+              "\n\nREGLA CRÍTICA: El enrutador (src/App.tsx) debe mapear ÚNICAMENTE estas páginas. " +
+              "Si detectas un 404 en la ruta raíz (/), añade una redirección hacia la primera página de la lista anterior. " +
+              "PROHIBIDO inventar rutas o componentes que no estén en esta lista.\n\n"
+            : "") +
           "ISSUES DETECTADOS POR CLAUDE VISION:\n" + issuesBlock + "\n\n" +
           "INSTRUCCIONES:\n" +
           "1. ROUTER: mover catch-all <Route path='*'> al ÚLTIMO lugar en src/App.tsx.\n" +
