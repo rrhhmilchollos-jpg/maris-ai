@@ -1304,6 +1304,8 @@ function LiveMonitorPanel() {
   const [repairPrompt, setRepairPrompt] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [previewAppId, setPreviewAppId] = useState<string | null>(null);
+  // Apps del cliente activo en el dashboard remoto — para el desplegable del candado
+  const [remoteDashboardApps, setRemoteDashboardApps] = useState<any[]>([]);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchJobs = async () => {
@@ -1546,6 +1548,19 @@ function LiveMonitorPanel() {
                 variant="outline"
                 className="h-6 px-2 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
                 title="Desbloquear apps ocultas — todas o una específica de un cliente"
+                onClick={async () => {
+                  // Al abrir el desplegable, intentar cargar apps del cliente activo
+                  // buscando en los jobs activos el userId más reciente con email
+                  if (remoteDashboardApps.length === 0 && jobs.length > 0) {
+                    const firstJob = jobs.find(j => j.userEmail);
+                    if (firstJob?.userEmail) {
+                      try {
+                        const d = await apiFetch<any>(`/api/admin/users/${firstJob.userId}/apps?limit=10`);
+                        if (d?.apps?.length) setRemoteDashboardApps(d.apps);
+                      } catch { /* best-effort */ }
+                    }
+                  }
+                }}
               >
                 🔓 Desbloquear apps <ChevronDown className="h-3 w-3 ml-1" />
               </Button>
@@ -3552,7 +3567,7 @@ export default function AdminDashboardPage() {
 
               {/* DASHBOARDS REMOTOS TAB */}
               <TabsContent value="remote" className="space-y-4">
-                <RemoteDashboardPanel apiBase={import.meta.env.VITE_API_URL || ""} onAppsChange={setRemoteDashboardApps} />
+                <RemoteDashboardPanel apiBase={import.meta.env.VITE_API_URL || ""} />
               </TabsContent>
 
               {/* SYSTEM TAB */}
