@@ -1217,6 +1217,29 @@ function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAp
                                 </Button>
                               </>
                             )}
+                            {/* Papelera individual por job — borra solo este job */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 w-7 p-0 border-red-500/20 text-red-400/50 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10"
+                              disabled={actionLoading[`deljob1_${jid}`]}
+                              title="Eliminar este job"
+                              onClick={async () => {
+                                if (!window.confirm(`¿Eliminar este job?\n${job.prompt?.slice(0, 80) || jid}`)) return;
+                                setActionLoading(p => ({ ...p, [`deljob1_${jid}`]: true }));
+                                try {
+                                  await apiFetch<any>(`/api/admin/jobs/${jid}`, { method: "DELETE" });
+                                  toast({ title: "🗑️ Job eliminado" });
+                                  if (data?.user?.email) await loadDashboard(data.user.email);
+                                } catch (e: any) {
+                                  toast({ title: "Error", description: e.message, variant: "destructive" });
+                                } finally {
+                                  setActionLoading(p => ({ ...p, [`deljob1_${jid}`]: false }));
+                                }
+                              }}
+                            >
+                              {actionLoading[`deljob1_${jid}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                            </Button>
                           </div>
                         </div>
                         {isJobOpen && (
