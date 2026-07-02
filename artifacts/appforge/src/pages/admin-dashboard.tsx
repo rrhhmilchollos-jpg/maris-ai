@@ -1307,6 +1307,33 @@ function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAp
                               onClick={() => unblockApp(appId, app.title)}>
                               {actionLoading[`unblock_${appId}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : app.pendingAdminApproval ? <>🔒 Desbloquear</> : <>🔓 Visible</>}
                             </Button>
+                            {/* Botón de eliminar app — solo visible para admin */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 w-7 p-0 border-red-500/20 text-red-400/60 hover:border-red-500/50 hover:text-red-400 hover:bg-red-500/10"
+                              disabled={actionLoading[`delapp_${appId}`]}
+                              title={`Eliminar app "${app.title || appId}" permanentemente`}
+                              onClick={async () => {
+                                if (!window.confirm(`¿Eliminar la app "${app.title || appId}" del cliente?\n\nEsta acción es permanente y no se puede deshacer.`)) return;
+                                setActionLoading(p => ({ ...p, [`delapp_${appId}`]: true }));
+                                try {
+                                  await apiFetch(`/api/admin/apps/${appId}`, { method: "DELETE" });
+                                  toast({ title: "🗑️ App eliminada", description: `"${app.title || appId}" eliminada correctamente` });
+                                  // Recargar el dashboard del cliente
+                                  if (data?.user?.email) await loadDashboard(data.user.email);
+                                } catch (e: any) {
+                                  toast({ title: "Error al eliminar", description: e.message, variant: "destructive" });
+                                } finally {
+                                  setActionLoading(p => ({ ...p, [`delapp_${appId}`]: false }));
+                                }
+                              }}
+                            >
+                              {actionLoading[`delapp_${appId}`]
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <Trash2 className="h-3 w-3" />
+                              }
+                            </Button>
                           </div>
                         </div>
                         {isPreviewOpen && (
