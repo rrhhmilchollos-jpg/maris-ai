@@ -1229,6 +1229,42 @@ function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAp
               <LayoutDashboard className="h-4 w-4 text-sky-400" />
               Apps generadas ({apps.length})
             </h3>
+
+            {/* Banner de alerta cuando hay apps bloqueadas */}
+            {apps.filter((a: any) => a.pendingAdminApproval).length > 0 && (
+              <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-red-400 text-sm">🔒</span>
+                  <div>
+                    <p className="text-xs font-semibold text-red-400">
+                      {apps.filter((a: any) => a.pendingAdminApproval).length} app(s) bloqueada(s) — el cliente no las ve
+                    </p>
+                    <p className="text-[10px] text-red-400/60">Pulsa el botón "Desbloquear" en cada app para que el cliente pueda verla</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-7 text-[10px] bg-red-600 hover:bg-red-700 text-white shrink-0"
+                  onClick={async () => {
+                    try {
+                      const blockedApps = apps.filter((a: any) => a.pendingAdminApproval);
+                      for (const a of blockedApps) {
+                        const id = a.id || a._id;
+                        await apiFetch<any>(`/api/admin/apps/${id}/unblock`, { method: "POST" });
+                      }
+                      toast({ title: `✅ ${blockedApps.length} app(s) desbloqueadas`, description: "El cliente ya puede verlas en su panel." });
+                      // Recargar datos del dashboard remoto
+                      if (data?.user?.email) await loadDashboard(data.user.email);
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    }
+                  }}
+                >
+                  🔓 Desbloquear todas las de este cliente
+                </Button>
+              </div>
+            )}
+
             {apps.length === 0 ? (
               <div className="text-center text-xs text-muted-foreground py-6">Este cliente no tiene apps.</div>
             ) : (
@@ -1304,8 +1340,6 @@ function LiveMonitorPanel() {
   const [repairPrompt, setRepairPrompt] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [previewAppId, setPreviewAppId] = useState<string | null>(null);
-  // Apps del cliente activo en el dashboard remoto — para el desplegable del candado
-  const [remoteDashboardApps, setRemoteDashboardApps] = useState<any[]>([]);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchJobs = async () => {
@@ -1541,78 +1575,22 @@ function LiveMonitorPanel() {
           >
             🧹 Eliminar jobs repetidos
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 px-2 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
-                title="Desbloquear apps ocultas — todas o una específica de un cliente"
-                onClick={async () => {
-                  // Al abrir el desplegable, intentar cargar apps del cliente activo
-                  // buscando en los jobs activos el userId más reciente con email
-                  if (remoteDashboardApps.length === 0 && jobs.length > 0) {
-                    const firstJob = jobs.find(j => j.userEmail);
-                    if (firstJob?.userEmail) {
-                      try {
-                        const d = await apiFetch<any>(`/api/admin/users/${firstJob.userId}/apps?limit=10`);
-                        if (d?.apps?.length) setRemoteDashboardApps(d.apps);
-                      } catch { /* best-effort */ }
-                    }
-                  }
-                }}
-              >
-                🔓 Desbloquear apps <ChevronDown className="h-3 w-3 ml-1" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-xs text-white/50">Desbloquear apps ocultas</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-xs cursor-pointer"
-                onClick={async () => {
-                  try {
-                    const d = await apiFetch<any>("/api/admin/apps/unblock-all", { method: "POST" });
-                    toast({ title: "✅ Apps desbloqueadas", description: d.message });
-                  } catch (e: any) {
-                    toast({ title: "Error", description: e.message, variant: "destructive" });
-                  }
-                }}
-              >
-                🔓 Desbloquear todas las ocultas (&gt;10 min)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs text-white/40">Por cliente (usa el dashboard remoto primero)</DropdownMenuLabel>
-              {/* Apps del cliente activo en el dashboard remoto */}
-              {remoteDashboardApps.length > 0 ? (
-                remoteDashboardApps.map((app: any) => {
-                  const appId = app.id || app._id;
-                  return (
-                    <DropdownMenuItem
-                      key={appId}
-                      className={`text-xs cursor-pointer ${app.pendingAdminApproval ? "text-red-400" : "text-white/50"}`}
-                      disabled={!app.pendingAdminApproval}
-                      onClick={async () => {
-                        try {
-                          const d = await apiFetch<any>(`/api/admin/apps/${appId}/unblock`, { method: "POST" });
-                          toast({ title: "✅ App desbloqueada", description: d.message });
-                        } catch (e: any) {
-                          toast({ title: "Error", description: e.message, variant: "destructive" });
-                        }
-                      }}
-                    >
-                      {app.pendingAdminApproval ? "🔒" : "🔓"} {(app.title || "Sin título").slice(0, 35)}
-                      {app.pendingAdminApproval && <span className="ml-auto text-red-400 text-[10px]">bloqueada</span>}
-                    </DropdownMenuItem>
-                  );
-                })
-              ) : (
-                <DropdownMenuItem disabled className="text-xs text-white/30 cursor-default">
-                  Carga un cliente en el dashboard remoto
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
+            title="Desbloquea todas las apps con pendingAdminApproval que llevan más de 10 min ocultas. Para desbloquear la app de un cliente específico, ve a la pestaña Dashboards Remotos."
+            onClick={async () => {
+              try {
+                const d = await apiFetch<any>("/api/admin/apps/unblock-all", { method: "POST" });
+                toast({ title: "✅ Apps desbloqueadas", description: d.message });
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+              }
+            }}
+          >
+            🔓 Desbloquear ocultas
+          </Button>
         </div>
       </div>
 
