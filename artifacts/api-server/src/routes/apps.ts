@@ -6375,13 +6375,16 @@ export async function runJobById(jobId: string): Promise<void> {
     // (no por créditos agotados del usuario), devolver los créditos.
     // Sin esto, el usuario pierde créditos por fallos que no son su culpa.
     const isCreditsError = rawMessage.includes("API_CREDITS_EXHAUSTED");
-    if (!isCreditsError && job.creditsCost && job.creditsCost > 0) {
+    // Reembolso: usar Math.round para evitar floats (ej. 0.6000000000000014)
+    // y verificar que creditsCost sea un entero positivo válido
+    const creditsCostToRefund = Math.round(job.creditsCost ?? 0);
+    if (!isCreditsError && creditsCostToRefund > 0) {
       try {
         const { chargeCredits } = await import("../lib/credits");
         await chargeCredits({
           userId: job.userId,
           isAdmin: false,
-          amount: -(job.creditsCost), // negativo = reembolso
+          amount: -creditsCostToRefund, // negativo = reembolso, siempre entero
           description: `Reembolso automático por fallo del sistema en generación de app`,
         });
         logger.info({ jobId, refunded: job.creditsCost }, "Credits refunded after generation failure");
