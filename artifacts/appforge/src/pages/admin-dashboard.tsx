@@ -35,6 +35,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Activity,
   AlertTriangle,
+  DollarSign,
+  TrendingUp,
   CheckCircle2,
   CreditCard,
   Globe,
@@ -103,6 +105,8 @@ interface MetricsResponse {
   redis?: { connected: boolean; latencyMs: number };
   queue?: { ready: boolean };
   overview?: { totalUsers: number; totalApps: number; newUsers7d: number };
+  revenueCentsTotal?: number;
+  revenueCentsTotal?: number;
   e2b?: {
     configured: boolean;
     validateOnGenerate: boolean;
@@ -3213,6 +3217,44 @@ export default function AdminDashboardPage() {
               />
             </section>
 
+            {/* KPI Row 3 — Overview & Revenue */}
+            {data.overview && (
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <MetricCard
+                  icon={<Users className="h-4 w-4 text-cyan-400" />}
+                  title="Usuarios totales"
+                  value={(data.overview.totalUsers ?? 0).toLocaleString("es-ES")}
+                  hint={`+${data.overview.newUsers7d ?? 0} nuevos esta semana`}
+                  trend={(data.overview.newUsers7d ?? 0) > 0 ? "up" : "neutral"}
+                  color="cyan"
+                />
+                <MetricCard
+                  icon={<Code2 className="h-4 w-4 text-indigo-400" />}
+                  title="Apps generadas (total)"
+                  value={(data.overview.totalApps ?? 0).toLocaleString("es-ES")}
+                  hint="Desde el inicio de Maris AI"
+                  trend="up"
+                  color="indigo"
+                />
+                <MetricCard
+                  icon={<TrendingUp className="h-4 w-4 text-emerald-400" />}
+                  title="Nuevos usuarios (7d)"
+                  value={(data.overview.newUsers7d ?? 0).toLocaleString("es-ES")}
+                  hint="Registros en los últimos 7 días"
+                  trend={(data.overview.newUsers7d ?? 0) > 0 ? "up" : "neutral"}
+                  color="emerald"
+                />
+                <MetricCard
+                  icon={<DollarSign className="h-4 w-4 text-yellow-400" />}
+                  title="Ingresos totales"
+                  value={`€${(((data as any).revenueCentsTotal ?? 0) / 100).toFixed(2)}`}
+                  hint="Acumulado desde Viva.com"
+                  trend={((data as any).revenueCentsTotal ?? 0) > 0 ? "up" : "neutral"}
+                  color="yellow"
+                />
+              </section>
+            )}
+
             {/* Main content tabs */}
             <Tabs defaultValue="live" className="space-y-4">
               <TabsList className="bg-black/20 border border-white/10">
@@ -3402,8 +3444,10 @@ export default function AdminDashboardPage() {
                         { label: "Tasa de éxito 24h", value: `${successRate}%`, ok: successRate >= 80, bar: successRate },
                         { label: "Jobs completados", value: String(data.jobs24h.succeeded), ok: true, bar: 100 },
                         { label: "Jobs fallidos", value: String(data.jobs24h.failed), ok: data.jobs24h.failed === 0, bar: data.jobs24h.total > 0 ? (100 - successRate) : 0 },
-                        { label: "Base de datos", value: "Operativa", ok: true, bar: 100 },
-                        { label: "E2B Sandbox", value: data.e2b?.effective ? "Activo" : "Inactivo", ok: data.e2b?.effective ?? false, bar: data.e2b?.effective ? 100 : 0 },
+                        { label: "Base de datos", value: data.server ? "Operativa" : "Sin datos", ok: !!data.server, bar: 100 },
+                        { label: "Redis", value: data.redis?.connected ? `${data.redis.latencyMs}ms` : "Desconectado", ok: data.redis?.connected ?? false, bar: data.redis?.connected ? 100 : 0 },
+                        { label: "Redis/Cola", value: data.redis?.connected ? `${data.redis.latencyMs ?? 0}ms` : "Sin conexión", ok: data.redis?.connected ?? false, bar: data.redis?.connected ? 100 : 0 },
+          { label: "E2B Sandbox", value: data.e2b?.effective ? "Activo" : "Inactivo", ok: data.e2b?.effective ?? false, bar: data.e2b?.effective ? 100 : 0 },
                       ].map((item, i) => (
                         <div key={i} className="flex items-center justify-between text-xs">
                           <span className="text-white/60">{item.label}</span>
