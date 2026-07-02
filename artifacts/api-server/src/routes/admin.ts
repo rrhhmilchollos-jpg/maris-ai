@@ -1575,7 +1575,26 @@ router.get("/admin/users/:id/apps-debug", async (req: any, res: any): Promise<vo
 // FIX: ahora también crea UserNotification para cada cliente afectado.
 router.post("/admin/apps/unblock-all", async (req: any, res: any): Promise<void> => {
   await connectDB();
-  const cutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutos atrás
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000);
+
+  // Limpiar notificaciones support_patch duplicadas (mismo userId+appId en <24h)
+  // antes de crear las nuevas — esto arregla las que ya están duplicadas
+  try {
+    const allDups = await UserNotification.aggregate([
+      { $match: { type: "support_patch", createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } } },
+      { $sort: { createdAt: 1 } },
+      { $group: { _id: { userId: "$userId", appId: "$appId" }, ids: { $push: "$_id" }, count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+    for (const dup of allDups) {
+      // Mantener solo la primera (la más antigua), borrar el resto
+      const [, ...toDelete] = dup.ids;
+      if (toDelete.length > 0) await UserNotification.deleteMany({ _id: { $in: toDelete } });
+    }
+    if (allDups.length > 0) logger.info({ cleaned: allDups.length }, "Admin: notificaciones duplicadas limpiadas");
+  } catch (dupErr) {
+    logger.warn({ dupErr }, "unblock-all: error limpiando duplicados");
+  } // 10 minutos atrás
 
   // Obtener las apps afectadas ANTES de actualizar para poder notificar a cada cliente
   const appsToUnblock = await GeneratedApp.find(
@@ -1601,7 +1620,21 @@ router.post("/admin/apps/unblock-all", async (req: any, res: any): Promise<void>
         read: false,
       }));
     try {
-      if (notifications.length > 0) await UserNotification.insertMany(notifications);
+      if (notifications.length > 0) {
+        // Deduplicar: no crear notificación si ya existe una igual en las últimas 24h
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const filtered = [];
+        for (const n of notifications) {
+          const exists = await UserNotification.exists({
+            userId: n.userId,
+            appId: n.appId,
+            type: "support_patch",
+            createdAt: { $gte: since },
+          });
+          if (!exists) filtered.push(n);
+        }
+        if (filtered.length > 0) await UserNotification.insertMany(filtered);
+      }
     } catch (notifErr) {
       logger.warn({ notifErr }, "unblock-all: error al crear notificaciones masivas");
     }
@@ -1625,14 +1658,24 @@ router.post("/admin/apps/:id/unblock", async (req: any, res: any): Promise<void>
   const appTitle = (app as any).title || "Tu app";
   if ((app as any).userId) {
     try {
-      await UserNotification.create({
+      // Deduplicar: no crear si ya existe una notificación support_patch para esta app en las últimas 24h
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const alreadyNotified = await UserNotification.exists({
         userId: (app as any).userId,
         appId: req.params.id,
-        appTitle,
         type: "support_patch",
-        message: `✅ Tu app **${appTitle}** ha sido revisada y actualizada por el equipo de soporte. Ya puedes verla y continuar editándola desde tu panel. 💜`,
-        read: false,
+        createdAt: { $gte: since },
       });
+      if (!alreadyNotified) {
+        await UserNotification.create({
+          userId: (app as any).userId,
+          appId: req.params.id,
+          appTitle,
+          type: "support_patch",
+          message: `✅ Tu app **${appTitle}** ha sido revisada y actualizada por el equipo de soporte. Ya puedes verla y continuar editándala desde tu panel. 💜`,
+          read: false,
+        });
+      }
     } catch (notifErr) {
       logger.warn({ notifErr, appId: req.params.id }, "unblock: no se pudo crear la notificación al cliente");
     }
