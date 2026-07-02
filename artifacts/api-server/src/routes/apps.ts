@@ -102,6 +102,7 @@ interface RouteGenerationRequestContext {
   // Solo admins pueden enviarlo true — permite generar la app completa sin que
   // el cliente tenga que responder nada. Útil para entregar apps ya listas al cliente.
   skipGating?: boolean;
+  forceBasicGeneration?: boolean;
 }
 
 /* ============================================================================
@@ -3612,7 +3613,7 @@ export async function generateApp(
     // forzó generación básica (forceBasicGeneration) para garantizar un MVP
     // funcional aunque el job tenga hasEverPaid:true. Esto resuelve el caso
     // de admin regenerando app de cliente free con 20 hitos → saturación.
-    const isDegradedFreeTier = !hasEverPaid || !!(job as any).forceBasicGeneration;
+    const isDegradedFreeTier = !hasEverPaid || !!requestContext?.forceBasicGeneration;
     if (isDegradedFreeTier) {
       await log("system", `✨ Construyendo tu app módulo a módulo (${FREE_USER_MAX_MILESTONES} módulos esenciales). Resultado garantizado y funcional — podrás añadir más módulos después.`);
     } else {
@@ -6828,6 +6829,7 @@ export async function runJobById(jobId: string): Promise<void> {
         hasEverPaid,
         // Si el admin generó con skipGating, saltar las preguntas de clarificación
         skipGating: !!(job as any).skipGating,
+        forceBasicGeneration: !!(job as any).forceBasicGeneration,
       },
       jobId,
     );
