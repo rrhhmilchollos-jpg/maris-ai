@@ -366,7 +366,17 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
 
     const enrichedPrompt = FREE_TIER_ARCHITECT_DIRECTIVE + userPrompt;
 
-    const response = await anthropic.messages.stream({
+    // Timeout de 120s para la planificación inicial — es una llamada más larga
+    // que las de generación de código (hasta 24K tokens de salida) pero igualmente
+    // vulnerable a congelarse si Anthropic tiene un pico de carga.
+    const planAbortController = new AbortController();
+    const planTimeoutId = setTimeout(() => {
+      planAbortController.abort();
+      console.warn("⏰ Timeout 120s en planMonorepoProject — abortando planificación");
+    }, 120_000);
+    let planResponse: any;
+    try {
+    planResponse = await anthropic.messages.stream({
       model: this.options.model!,
       // ENCONTRADO en producción: 4000 tokens (luego subido a 8000) seguían
       // resultando insuficientes para planificar proyectos verdaderamente
@@ -386,7 +396,11 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       max_tokens: 24000,
       system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: enrichedPrompt }],
-    }).finalMessage();
+    }, { signal: planAbortController.signal as any }).finalMessage();
+    } finally {
+      clearTimeout(planTimeoutId);
+    }
+    const response = planResponse;
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}';
     const cleanedJson = this.cleanJsonResponse(rawText);
@@ -527,22 +541,34 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        // Mismo motivo que en planMonorepoProject (ver el comentario
-        // detallado de arriba): .stream().finalMessage() en vez de
-        // .create() evita el rechazo "Streaming is required..." del SDK
-        // para llamadas largas, sin cambiar el objeto Message devuelto.
-        const response = await anthropic.messages.stream({
-          model: this.options.model!,
-          max_tokens: 16000,
-          system: [
-            { type: "text", text: CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
-            { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}${platformBlock}` },
-          ] as any,
-          messages: [{
-            role: "user",
-            content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
-          }],
-        }).finalMessage();
+        // AbortController con timeout de 90s por hito.
+        // Sin este timeout, si Anthropic se congela o Railway pierde
+        // la conexión, el proceso espera indefinidamente — el watchdog
+        // lo detecta como job muerto y lo reinicia desde cero (perdiendo
+        // el progreso). Con el timeout, el intento falla limpiamente,
+        // el bucle espera 2s y reintenta con una conexión nueva.
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+          abortController.abort();
+          console.warn(`⏰ Timeout 90s en hito ${milestone.id} (${milestone.name}) — abortando y reintentando`);
+        }, 90_000);
+        let response: any;
+        try {
+          response = await anthropic.messages.stream({
+            model: this.options.model!,
+            max_tokens: 16000,
+            system: [
+              { type: "text", text: CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
+              { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}${platformBlock}` },
+            ] as any,
+            messages: [{
+              role: "user",
+              content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
+            }],
+          }, { signal: abortController.signal as any }).finalMessage();
+        } finally {
+          clearTimeout(timeoutId);
+        }
         let code = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
         // Limpiar fences de markdown que el modelo a veces añade
         code = code.replace(/^```(?:tsx?|jsx?|typescript|javascript)?\n?/, "").replace(/\n?```$/, "").trim();
