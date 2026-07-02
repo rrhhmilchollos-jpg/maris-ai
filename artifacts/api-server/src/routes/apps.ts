@@ -25,6 +25,7 @@ import * as esbuild from "esbuild";
 // o si termina en mitad de una expresión (sin punto y coma, sin })
 function detectTruncatedFiles(bundle: string): string[] {
   const truncated: string[] = [];
+  if (!bundle || !bundle.trim()) return truncated;
   const parts = bundle.split(/\/\/ === FILE: /);
   for (const part of parts) {
     if (!part.trim()) continue;
@@ -33,21 +34,23 @@ function detectTruncatedFiles(bundle: string): string[] {
     const filename = part.slice(0, nl).trim().replace(/ ===$/, "");
     const code = part.slice(nl + 1).trimEnd();
     if (!filename.match(/\.(tsx?|jsx?)$/)) continue;
-    // Detectar truncación: el archivo no termina con }, ), ; o un string
+    // Archivo completamente vacío — claramente truncado
+    if (code.length === 0) { truncated.push(filename); continue; }
     const lastChar = code[code.length - 1];
     const lastLine = code.split("\n").pop() || "";
     const isTruncated = (
       (!["}", ")", ";", '"', "'", "`", ">"].includes(lastChar)) ||
       (lastLine.trim().endsWith("...") || lastLine.trim() === "") && code.length < 500
     );
-    // También detectar JSX abierto: contar < y > de forma simple
-    const openJSX = (code.match(/<[A-Z]/g) || []).length;
-    const closeJSX = (code.match(/<\/[A-Z]/g) || []).length;
-    if (Math.abs(openJSX - closeJSX) > 5) {
-      truncated.push(filename);
-    } else if (isTruncated && code.length > 100) {
-      truncated.push(filename);
-    }
+    // CORRECCIÓN CRÍTICA: eliminar tags autocerrados (<UserIcon />, <Component />, etc.)
+    // ANTES de contar aperturas/cierres JSX. Sin esto, 5 iconos Lucide-React hacen
+    // que un archivo perfectamente válido se marque como truncado — falso positivo
+    // que dispara reparaciones masivas innecesarias y rompe la app.
+    const cleanedCode = code.replace(/<[A-Z][A-Za-z0-9]*[^>]*\/>/g, "");
+    const openJSX = (cleanedCode.match(/<[A-Z]/g) || []).length;
+    const closeJSX = (cleanedCode.match(/<\/[A-Z]/g) || []).length;
+    if (Math.abs(openJSX - closeJSX) > 5) { truncated.push(filename); }
+    else if (isTruncated && code.length > 100) { truncated.push(filename); }
   }
   return truncated;
 }

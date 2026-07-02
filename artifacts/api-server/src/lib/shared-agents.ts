@@ -795,12 +795,26 @@ export async function patchBundleMultiFile(
   }
   emit(`📋 Plan: ${plan.length} archivo(s) — ${plan.map((p) => `${p.action}:${p.path}`).join(", ")}`);
 
+  // LÍMITE DE SEGURIDAD: si el plan tiene más de 3 archivos, ejecutamos solo
+  // los 3 primeros (los más críticos según planMultiFileRepair) y dejamos el
+  // resto para el siguiente ciclo. Razón: intentar reescribir 6+ archivos de
+  // golpe satura el contexto de Claude y produce 0/N archivos completados —
+  // exactamente el bug que causaba la destrucción del bundle de TalentHub.
+  // Con máximo 3 por ciclo, cada archivo tiene contexto limpio y termina bien.
+  const MAX_FILES_PER_REPAIR_CYCLE = 3;
+  const planToExecute = plan.length > MAX_FILES_PER_REPAIR_CYCLE
+    ? plan.slice(0, MAX_FILES_PER_REPAIR_CYCLE)
+    : plan;
+  if (plan.length > MAX_FILES_PER_REPAIR_CYCLE) {
+    emit(`⚙️ Plan reducido a ${MAX_FILES_PER_REPAIR_CYCLE} archivo(s) por ciclo (de ${plan.length} totales) para garantizar calidad de reparación.`);
+  }
+
   let currentBundle = bundle;
   const changedFiles: Record<string, string> = {};
   const deletedFiles: string[] = [];
   let filesSucceeded = 0;
 
-  for (const item of plan) {
+  for (const item of planToExecute) {
     if (item.action === "delete") {
       deletedFiles.push(item.path);
       filesSucceeded++;

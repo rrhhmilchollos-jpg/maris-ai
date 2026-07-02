@@ -1000,6 +1000,24 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
 }
 
+// ─── FIX: detectTruncatedFiles corregida + testing agent limitado ─────────────
+// FIX 37a: detectTruncatedFiles elimina tags autocerrados antes de contar JSX
+// FIX 37b: patchBundleMultiFile limitado a 3 archivos por ciclo máximo
+{
+  const appsSrc = readSrc("routes/apps.ts");
+  const sharedSrc = readSrc("lib/shared-agents.ts");
+  check(
+    "FIX 37a: detectTruncatedFiles elimina tags autocerrados (<Icon />) antes de contar JSX para evitar falsos positivos con iconos Lucide-React",
+    /cleanedCode.*replace.*\[A-Z\]\[A-Za-z0-9\].*\/>/. test(appsSrc) || /code\.replace\(<\[A-Z\]/.test(appsSrc) || /cleanedCode = code\.replace/.test(appsSrc),
+    "Sin esto, cualquier archivo con 5+ iconos Lucide-React se marca como truncado falsamente, dispara reparaciones masivas de 6 archivos y destruye el bundle.",
+  );
+  check(
+    "FIX 37b: patchBundleMultiFile limitado a MAX_FILES_PER_REPAIR_CYCLE=3 archivos por ciclo",
+    /MAX_FILES_PER_REPAIR_CYCLE\s*=\s*3/.test(sharedSrc),
+    "Sin esto, el testing agent intenta reparar 6+ archivos de golpe, satura el contexto de Claude y produce 0/N archivos completados — el bug que destruía TalentHub en la fase de testing.",
+  );
+}
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) fallaron — uno o más fixes críticos del 29 jun 2026 parecen haberse revertido.`);
   console.error("Revisa el historial de commits de hoy (be7e130 en adelante) antes de continuar.");
