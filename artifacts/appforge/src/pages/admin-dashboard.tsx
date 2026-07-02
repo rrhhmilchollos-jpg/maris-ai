@@ -774,21 +774,24 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                       </Button>
                     </PopoverContent>
                   </Popover>
-                  {/* Regenerar desde 0 — crea un job de generación COMPLETA nueva, a propósito */}
+                  {/* Regenerar desde 0 — salta las preguntas de clarificación al cliente
+                      (skipGating:true) para que el admin entregue la app directamente funcional.
+                      El cliente no verá el formulario de preguntas — irá directo al preview. */}
                   <Button size="sm" variant="outline"
                     className="h-7 text-[10px] border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
                     disabled={actionLoading[`regenapp_${appId}`]}
+                    title="Genera la app sin preguntar al cliente — tú controlas el proceso, el cliente ve directamente el preview final"
                     onClick={async () => {
                       const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").trim();
                       const promptToUse = window.prompt("Prompt para regenerar DESDE CERO (puedes editarlo):", cleanPrompt);
                       if (!promptToUse) return;
-                      if (!window.confirm(`¿Regenerar la app "${app.title}" para ${app.userEmail} DESDE CERO?\n\nSe creará un nuevo job de generación completa — esto reemplaza la app entera. Si solo necesitas arreglar algo puntual, usa "Reparar y continuar" en su lugar.`)) return;
+                      if (!window.confirm(`¿Regenerar la app "${app.title}" para ${app.userEmail} DESDE CERO?\n\n✅ Saltará las preguntas de verificación — tú entregas la app directamente al cliente.\n\n⚠️ Esto reemplaza la app entera. Si solo necesitas arreglar algo puntual, usa "Reparar y continuar" en su lugar.`)) return;
                       setActionLoading(p => ({ ...p, [`regenapp_${appId}`]: true }));
                       try {
                         const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6" }),
+                          body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6", skipGating: true }),
                         });
                         toast({ title: "🔄 Regenerando app desde 0", description: d.message || "Job en cola — el cliente verá el progreso en su panel" });
                       } catch (e: any) {
@@ -884,7 +887,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
 // Replica lo que ve el cliente (stats, créditos, apps, notificaciones activas)
 // y permite probar cada app en vivo (preview) y desbloquearla por ID.
 // ═══════════════════════════════════════════════════════════════════════════
-function RemoteDashboardPanel({ apiBase }: { apiBase: string }) {
+function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAppsChange?: (apps: any[]) => void }) {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -974,6 +977,8 @@ function RemoteDashboardPanel({ apiBase }: { apiBase: string }) {
   const stats = data?.stats;
   const user = data?.user;
   const apps: any[] = data?.apps ?? [];
+  // Notificar al padre cuando cambien las apps (para el desplegable del candado)
+  useEffect(() => { onAppsChange?.(apps); }, [apps.length]);
   const notifications: any[] = data?.notifications ?? [];
   const unreadNotifs = notifications.filter((n) => !n.read);
   const jobs: any[] = data?.jobs ?? [];
@@ -1534,22 +1539,65 @@ function LiveMonitorPanel() {
           >
             🧹 Eliminar jobs repetidos
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
-            title="Desbloquea apps con pendingAdminApproval:true que llevan más de 10 min ocultas para el cliente — arregla el bug donde las apps reparadas no aparecían en el panel del cliente"
-            onClick={async () => {
-              try {
-                const d = await apiFetch<any>("/api/admin/apps/unblock-all", { method: "POST" });
-                toast({ title: "✅ Apps desbloqueadas", description: d.message });
-              } catch (e: any) {
-                toast({ title: "Error", description: e.message, variant: "destructive" });
-              }
-            }}
-          >
-            🔓 Desbloquear apps ocultas
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
+                title="Desbloquear apps ocultas — todas o una específica de un cliente"
+              >
+                🔓 Desbloquear apps <ChevronDown className="h-3 w-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel className="text-xs text-white/50">Desbloquear apps ocultas</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-xs cursor-pointer"
+                onClick={async () => {
+                  try {
+                    const d = await apiFetch<any>("/api/admin/apps/unblock-all", { method: "POST" });
+                    toast({ title: "✅ Apps desbloqueadas", description: d.message });
+                  } catch (e: any) {
+                    toast({ title: "Error", description: e.message, variant: "destructive" });
+                  }
+                }}
+              >
+                🔓 Desbloquear todas las ocultas (&gt;10 min)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs text-white/40">Por cliente (usa el dashboard remoto primero)</DropdownMenuLabel>
+              {/* Apps del cliente activo en el dashboard remoto */}
+              {remoteDashboardApps.length > 0 ? (
+                remoteDashboardApps.map((app: any) => {
+                  const appId = app.id || app._id;
+                  return (
+                    <DropdownMenuItem
+                      key={appId}
+                      className={`text-xs cursor-pointer ${app.pendingAdminApproval ? "text-red-400" : "text-white/50"}`}
+                      disabled={!app.pendingAdminApproval}
+                      onClick={async () => {
+                        try {
+                          const d = await apiFetch<any>(`/api/admin/apps/${appId}/unblock`, { method: "POST" });
+                          toast({ title: "✅ App desbloqueada", description: d.message });
+                        } catch (e: any) {
+                          toast({ title: "Error", description: e.message, variant: "destructive" });
+                        }
+                      }}
+                    >
+                      {app.pendingAdminApproval ? "🔒" : "🔓"} {(app.title || "Sin título").slice(0, 35)}
+                      {app.pendingAdminApproval && <span className="ml-auto text-red-400 text-[10px]">bloqueada</span>}
+                    </DropdownMenuItem>
+                  );
+                })
+              ) : (
+                <DropdownMenuItem disabled className="text-xs text-white/30 cursor-default">
+                  Carga un cliente en el dashboard remoto
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -3504,7 +3552,7 @@ export default function AdminDashboardPage() {
 
               {/* DASHBOARDS REMOTOS TAB */}
               <TabsContent value="remote" className="space-y-4">
-                <RemoteDashboardPanel apiBase={import.meta.env.VITE_API_URL || ""} />
+                <RemoteDashboardPanel apiBase={import.meta.env.VITE_API_URL || ""} onAppsChange={setRemoteDashboardApps} />
               </TabsContent>
 
               {/* SYSTEM TAB */}

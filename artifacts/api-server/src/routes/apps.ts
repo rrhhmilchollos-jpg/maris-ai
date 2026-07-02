@@ -95,6 +95,10 @@ interface RouteGenerationRequestContext {
   detectedCountry?: string;
   uiLanguage?: string;
   hasEverPaid?: boolean;  // usado para coste en créditos, no para limitar el alcance de la app generada
+  // Si true, el pipeline salta las preguntas de clarificación técnica (gating).
+  // Solo admins pueden enviarlo true — permite generar la app completa sin que
+  // el cliente tenga que responder nada. Útil para entregar apps ya listas al cliente.
+  skipGating?: boolean;
 }
 
 /* ============================================================================
@@ -3526,7 +3530,10 @@ export async function generateApp(
   // "technical_architecture" (el cliente ya respondió, o el job se
   // reanudó tras la aprobación), se salta esta sección y se continúa
   // directo a la generación, igual que antes de este cambio.
-  if (!previous && isUltraComplex && jobId) {
+  // skipGating: si el admin generó la app directamente (bypass del gating),
+  // nunca mostrar las preguntas al cliente — ir directo a la generación.
+  const isSkipGating = (requestContext as any)?.skipGating === true;
+  if (!previous && isUltraComplex && jobId && !isSkipGating) {
     try {
       const jobForGating = await GenerationJob.findById(jobId).select("approvedFacets checkpointData").lean() as any;
       const alreadyApproved = (jobForGating?.approvedFacets || []).includes("technical_architecture");
@@ -5195,7 +5202,10 @@ Tipo: ${kind || "fullstack"}` }],
 
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {} } = req.body;
+    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {}, skipGating = false } = req.body;
+    // skipGating: solo admins pueden pasarlo true — permite generar sin las preguntas de
+    // clarificación técnica para entregar la app completa al cliente sin que este tenga
+    // que responder nada. Después el admin notifica al cliente y este puede editar libremente.
     if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
     const safeAttachments = Array.isArray(attachments) ? attachments : [];
     const conversationalReply = getConversationalOnlyReply(prompt, safeAttachments.length > 0);
@@ -5369,6 +5379,8 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       ultraThinking: !!ultraThinking,
       legacyMode: !!legacyMode,
       mcpConnectors: connectedMCP.map(([id]) => id),
+      // skipGating: solo admins — genera sin preguntas de clarificación al cliente
+      skipGating: isAdmin && !!skipGating,
     });
 
     await enqueueGenerateJob(jobId);
@@ -6802,6 +6814,8 @@ export async function runJobById(jobId: string): Promise<void> {
         detectedCountry: extractPromptContext(job.prompt, "country"),
         uiLanguage: extractPromptContext(job.prompt, "uiLanguage"),
         hasEverPaid,
+        // Si el admin generó con skipGating, saltar las preguntas de clarificación
+        skipGating: !!(job as any).skipGating,
       },
       jobId,
     );

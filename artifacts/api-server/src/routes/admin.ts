@@ -2651,6 +2651,9 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
       progress: 0,
       isAdmin: true,
       hasEverPaid: true,
+      // skipGating: true — el admin genera sin preguntas al cliente.
+      // El cliente verá directamente el preview cuando esté listo.
+      skipGating: true,
     });
 
     await enqueueGenerateJob(jobId);

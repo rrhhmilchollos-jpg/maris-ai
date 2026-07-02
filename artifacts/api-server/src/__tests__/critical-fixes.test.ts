@@ -494,7 +494,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
   check(
     "FIX 19b: generateApp dispara la pausa real (phase: \"awaiting_technical_clarification\") para proyectos nuevos ultra-complejos",
-    /if \(!previous && isUltraComplex && jobId\)/.test(appsSrc) && /phase: "awaiting_technical_clarification"/.test(appsSrc),
+    /if \(!previous && isUltraComplex && jobId/.test(appsSrc) && /phase: "awaiting_technical_clarification"/.test(appsSrc),
     "Sin esto, la infraestructura de pausa (awaitingApproval/checkpointData/approvedFacets) sigue completa en la base de datos pero sin ningún punto real que la dispare — exactamente como estaba antes de este fix.",
   );
   check(
