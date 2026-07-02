@@ -160,11 +160,11 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
   ]);
 }
 
-// Orden de fallback optimizado para coste: Haiku primero para tareas simples, Sonnet para complejas
-const CLAUDE_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"];
+// Solo usamos modelos de Anthropic (Claude 4.6 y 4.7) según preferencia del usuario.
+const CLAUDE_MODELS = ["claude-sonnet-4-6", "claude-opus-4-7"];
 
 function fallbackClaudeModels(model: string): string[] {
-  const primary = model === "gpt-5.4" ? "claude-sonnet-4-6" : model;
+  const primary = model.includes("opus") ? "claude-opus-4-7" : "claude-sonnet-4-6";
   return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
 }
 
@@ -191,22 +191,7 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
   let lastError: unknown;
   const MAX_RETRIES = 3;
 
-  // PROMPT CACHING AUTOMÁTICO — esta función es el punto central por el que
-  // pasan prácticamente todos los agentes (Backend Engineer, Designer,
-  // Patcher, etc.), muchos con system prompts grandes y FIJOS (el texto
-  // nunca cambia entre llamadas: DESIGNER_SYSTEM_PROMPT ~3350 tokens,
-  // BACKEND_SYSTEM_PROMPT_POSTGRES ~2650 tokens) — el caso de uso ideal
-  // para prompt caching de Anthropic (90% de descuento en tokens leídos de
-  // caché). Confirmado en el panel de uso real: 0% de tasa de aciertos de
-  // caché en toda la plataforma, a pesar de que estos prompts se repiten en
-  // miles de llamadas al día sin cambiar una letra.
-  // Conversión automática y transparente: si params.system es un string
-  // (el caso normal en todo el código existente) y supera el mínimo
-  // cacheable de Sonnet (1024 tokens ≈ 4000 caracteres, usamos un margen
-  // conservador), lo convertimos al formato de bloques con cache_control.
-  // Si ya viene en formato array (algún caller ya lo gestiona explícitamente
-  // como en otros puntos de apps.ts), no lo tocamos — evita doble conversión.
-  const MIN_CACHEABLE_CHARS = 3500; // ≈ 1024 tokens con margen conservador
+  const MIN_CACHEABLE_CHARS = 3500; 
   if (typeof params.system === "string" && params.system.length >= MIN_CACHEABLE_CHARS) {
     params = {
       ...params,
@@ -214,142 +199,67 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
     };
   }
 
-  // OPTIMIZACIÓN DE CONTEXTO: Si el historial de mensajes es muy largo, comprimimos el pasado
   if (params.messages && params.messages.length > 10) {
-    logger.info({ role, originalLength: params.messages.length }, "CONTE TEXT OPTIMIZER: Comprimiendo historial de mensajes...");
+    logger.info({ role, originalLength: params.messages.length }, "CONTEXT OPTIMIZER: Comprimiendo historial...");
     const systemInstruction = params.messages[0].role === "system" ? params.messages.shift() : null;
     const lastUserMessage = params.messages.pop();
-    
-    // Mantener solo los últimos 4 mensajes + el primero (contexto inicial) + el sistema
     const middleMessages = params.messages.slice(-4);
     const firstMessage = params.messages[0];
     
     params.messages = [
       ...(systemInstruction ? [systemInstruction] : []),
       firstMessage,
-      { role: "user", content: "... [Contexto antiguo comprimido para ahorrar tokens] ..." },
+      { role: "user", content: "... [Contexto antiguo comprimido] ..." },
       ...middleMessages,
       lastUserMessage
     ].filter(Boolean);
-    logger.info({ newLength: params.messages.length }, "CONTEXT OPTIMIZER: Historial comprimido.");
   }
 
-  // Try Anthropic first with exponential backoff
   for (const candidate of fallbackClaudeModels(model)) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
-        // Pequeño desfase aleatorio para evitar colisiones de agentes
         await new Promise(r => setTimeout(r, Math.random() * 500));
-        return await raceWithTimeout(
-          anthropic.messages.create({ ...params, model: candidate }),
-          AI_CALL_TIMEOUT_MS,
-          `anthropic.messages.create(${candidate})`,
-        );
+        
+        // FIX CRÍTICO: Usamos streaming para evitar timeouts en archivos grandes
+        // anthropic.messages.stream es más robusto para peticiones largas.
+        logger.info({ role, model: candidate }, "Iniciando stream con Anthropic...");
+        
+        let fullText = "";
+        const stream = await anthropic.messages.create({ 
+          ...params, 
+          model: candidate,
+          stream: true 
+        });
+
+        for await (const event of stream) {
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            fullText += event.delta.text;
+          }
+        }
+
+        if (!fullText) throw new Error("Stream vacío");
+        
+        return { content: [{ type: "text", text: fullText }] };
+
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
-        // Límite de créditos de la organización — no tiene sentido reintentar
-        const isOutOfCredits = err?.status === 529 || 
-          String(err).includes("credit_balance") || 
-          String(err).includes("insufficient_quota") ||
-          String(err?.message || "").includes("credit") ||
-          String(err?.error?.message || "").includes("credit");
-        
-        if (isOutOfCredits) {
-          logger.warn({ role, err: err?.message }, "Anthropic API: créditos agotados — activando fallback automático a Gemini");
-          // No lanzar excepción — salir del bucle de reintentos de Anthropic
-          // y dejar que el sistema pruebe Gemini automáticamente
-          break;
-        }
         
         if (isRateLimit && attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-          logger.warn({ role, model: candidate, attempt, delay }, "Rate limit hit; retrying with backoff");
+          logger.warn({ role, model: candidate, attempt, delay }, "Rate limit hit; retrying...");
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
         
-        logger.warn({ role, model: candidate, err }, "Anthropic model failed; trying next candidate or fallback");
-        break; // Probar el siguiente modelo candidato
+        logger.warn({ role, model: candidate, err }, "Anthropic model failed; trying next candidate");
+        break; 
       }
     }
   }
 
-  // ── FALLBACK 1: Gemini (gratuito) ────────────────────────────────────────
-  // Se activa automáticamente cuando Anthropic no tiene créditos o falla.
-  // Cuando Anthropic vuelve a tener créditos, el siguiente request lo usará de nuevo.
-  const geminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  if (geminiKey) {
-    try {
-      logger.info({ role }, "Fallback automático → Gemini (API gratuita)");
-      
-      // Mapear modelos Claude a equivalentes Gemini
-      const geminiModel = (() => {
-        if (String(params.model || "").includes("opus")) return "gemini-2.0-flash";
-        if (String(params.model || "").includes("sonnet")) return "gemini-2.0-flash";
-        return "gemini-2.0-flash"; // Haiku → Flash (más rápido y gratuito)
-      })();
-
-      const { GoogleGenAI } = await import("@google/genai");
-      const gemini = new GoogleGenAI({ apiKey: geminiKey });
-      
-      // Construir el prompt combinando system + messages
-      const systemText = params.system || "";
-      const userMessages = (params.messages || []);
-      const lastUser = userMessages.filter((m: any) => m.role === "user").slice(-1)[0];
-      const userText = typeof lastUser?.content === "string" 
-        ? lastUser.content 
-        : JSON.stringify(lastUser?.content || "");
-      
-      const fullPrompt = systemText 
-        ? `${systemText}
-
----
-
-${userText}`
-        : userText;
-
-      const result = await raceWithTimeout(
-        gemini.models.generateContent({
-          model: geminiModel,
-          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-          config: { maxOutputTokens: Math.min(params.max_tokens || 4096, 8192) },
-        }),
-        AI_CALL_TIMEOUT_MS,
-        `gemini.generateContent(${geminiModel})`,
-      );
-
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      logger.info({ role, geminiModel, chars: text.length }, "Gemini fallback exitoso");
-      
-      return { content: [{ type: "text", text }] };
-    } catch (geminiErr: any) {
-      logger.warn({ role, err: geminiErr?.message }, "Gemini fallback falló — intentando OpenAI");
-    }
-  }
-
-  // ── FALLBACK 2: OpenAI ────────────────────────────────────────────────────
-  try {
-    logger.info({ role }, "Falling back to OpenAI (GPT-4o/5) for agent task");
-    const response = await raceWithTimeout(
-      getOpenAI().chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          { role: "system", content: params.system },
-          ...params.messages
-        ],
-        max_tokens: Math.min(params.max_tokens || 4096, 16000),
-      }),
-      AI_CALL_TIMEOUT_MS,
-      "openai.chat.completions.create(gpt-4o)",
-    );
-    
-    const text = response.choices?.[0]?.message?.content || "";
-    return { content: [{ type: "text", text }] };
-  } catch (err) {
-    logger.error({ role, err }, "Anthropic, Gemini y OpenAI fallaron para este agente");
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
-  }
+  logger.error({ role }, "Todos los modelos de Anthropic fallaron");
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 
