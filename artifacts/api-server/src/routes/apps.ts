@@ -2659,6 +2659,23 @@ function e2bResultToIssue(stderr: string, reason: string): BuildIssue {
   };
 }
 
+function e2bEsmFailureToIssue(
+  check: { checked: number; failures: Array<{ specifier: string; url: string; status?: number; error?: string }> } | undefined,
+): BuildIssue {
+  const failures = check?.failures ?? [];
+  const lines = failures.map((f) => {
+    const detail = f.status ? `HTTP ${f.status}` : (f.error ?? "unknown error");
+    return `  - "${f.specifier}" → ${f.url || "(no URL)"} — ${detail}`;
+  });
+  return {
+    file: "package.json",
+    message:
+      `npm install/build succeeded, but ${failures.length} of ${check?.checked ?? "?"} package(s) ` +
+      `in the live preview's import map failed to resolve on esm.sh (the CDN the deployed browser preview ` +
+      `actually loads at runtime — this is a different resolution path than npm):\n${lines.join("\n")}`,
+  };
+}
+
 /* ------------------------ validate → patch loop --------------------------- */
 
 async function runValidatePatchLoop(
@@ -2828,25 +2845,39 @@ async function runValidatePatchLoop(
           note: `✅ E2B build OK (${Math.round(e2b.durationMs / 1000)}s).`,
         });
         emit("validator", `✓ E2B build OK · ${Math.round(e2b.durationMs / 1000)}s`);
-      } else if (e2b.reason === "install_failed" || e2b.reason === "build_failed") {
+      } else if (
+        e2b.reason === "install_failed" ||
+        e2b.reason === "build_failed" ||
+        e2b.reason === "esm_import_unresolved"
+      ) {
         emit("validator", `△ E2B ${e2b.reason} · ${Math.round(e2b.durationMs / 1000)}s — intentando reparar`, "warn");
         onProgress?.({ phase: "fixing", progress: 94, note: `🔧 E2B detectó ${e2b.reason}. Auto-reparando con error real…` });
         const stderr = e2b.reason === "install_failed" ? e2b.installStderr : e2b.buildStderr;
-        const issue = e2bResultToIssue(stderr, e2b.reason);
+        const issue =
+          e2b.reason === "esm_import_unresolved"
+            ? e2bEsmFailureToIssue(e2b.esmImportCheck)
+            : e2bResultToIssue(stderr, e2b.reason);
         try {
-          const repaired = await patchBundle(
+          const patched = await patchBundle(
             finalFrontend,
-            [{ file: "package.json", problem: issue.message, fix: "Fix the package name(s), version(s), build config or imports so `npm install && npm run build` succeeds in a clean Linux microVM." }],
+            [{
+              file: "package.json",
+              problem: issue.message,
+              fix:
+                e2b.reason === "esm_import_unresolved"
+                  ? "These packages installed fine via npm but their exact URL failed to resolve on the esm.sh CDN, which is what the live preview actually uses in the browser. Either pin a different, verified-working version in package.json for the affected package(s), or replace the package with one from the approved list if it keeps failing."
+                  : "Fix the package name(s), version(s), build config or imports so `npm install && npm run build` succeeds in a clean Linux microVM.",
+            }],
             language,
             "",
             patcherModel,
           );
-          if (repaired && repaired !== finalFrontend) {
+          if (patched && patched !== finalFrontend) {
             try {
-              const reReport = await validateBundle(repaired);
+              const reReport = await validateBundle(patched);
               if (reReport.ok) {
                 emit("patcher", "✓ patch tras E2B aplicado y revalidado");
-                finalFrontend = repaired;
+                finalFrontend = patched;
               } else {
                 emit("patcher", `△ patch tras E2B introdujo ${reReport.issues.length} issue(s) — descartando`, "warn");
               }

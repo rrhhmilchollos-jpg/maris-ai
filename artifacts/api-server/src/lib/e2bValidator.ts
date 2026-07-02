@@ -1,11 +1,76 @@
 import { Sandbox } from "e2b";
 import { bundleToFiles } from "./exportZip";
+import { buildDeployHtml } from "./deployBundle";
 import { logger } from "./logger";
 
 const SANDBOX_TIMEOUT_MS = 5 * 60_000;
 const INSTALL_TIMEOUT_MS = 3 * 60_000;
 const BUILD_TIMEOUT_MS = 2 * 60_000;
 const APP_DIR = "/home/user/app";
+const ESM_CHECK_TIMEOUT_MS = 4_000;
+
+export interface EsmImportFailure {
+  specifier: string;
+  url: string;
+  status?: number;
+  error?: string;
+}
+
+/**
+ * Verifica que cada URL del import map realmente resuelve en esm.sh.
+ *
+ * ENCONTRADO: la validación de E2B (npm install + npm run build) usa el
+ * registro npm normal, que casi siempre resuelve. Pero el preview en vivo
+ * real usa esm.sh en el navegador del cliente con un import map distinto
+ * (deployBundle.ts) — un paquete puede instalar y compilar bien por npm y
+ * aun así no resolver en esm.sh (versión no publicada en su CDN, paquete
+ * CJS-only sin build ESM válido, timeout del CDN, etc). Esa discrepancia es
+ * la causa confirmada de reparaciones marcadas "✅ superada" que después
+ * muestran la app en blanco al cliente real. Esta función cierra esa brecha
+ * comprobando exactamente las mismas URLs que el navegador del cliente va a
+ * pedir, no una aproximación.
+ */
+export async function verifyEsmImportMap(
+  html: string,
+  timeoutMs = ESM_CHECK_TIMEOUT_MS,
+): Promise<{ ok: boolean; checked: number; failures: EsmImportFailure[] }> {
+  const match = /<script type="importmap">(.*?)<\/script>/s.exec(html);
+  if (!match) {
+    // No hay import map (app sin dependencias externas) — nada que verificar.
+    return { ok: true, checked: 0, failures: [] };
+  }
+
+  let imports: Record<string, string> = {};
+  try {
+    const parsed = JSON.parse(match[1]);
+    imports = parsed?.imports ?? {};
+  } catch {
+    return { ok: true, checked: 0, failures: [] };
+  }
+
+  const entries = Object.entries(imports);
+  const results = await Promise.all(
+    entries.map(async ([specifier, url]): Promise<EsmImportFailure | null> => {
+      try {
+        const res = await fetch(url, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (res.ok) return null;
+        return { specifier, url, status: res.status };
+      } catch (err) {
+        return {
+          specifier,
+          url,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }),
+  );
+
+  const failures = results.filter((r): r is EsmImportFailure => r !== null);
+  return { ok: failures.length === 0, checked: entries.length, failures };
+}
 
 export interface E2BBuildResult {
   ok: boolean;
@@ -18,6 +83,8 @@ export interface E2BBuildResult {
   buildStderr: string;
   reason?: string;
   sandboxId?: string;
+  /** Resultado de comprobar que el import map de esm.sh resuelve de verdad. */
+  esmImportCheck?: { ok: boolean; checked: number; failures: EsmImportFailure[] };
 }
 
 export function isE2BEnabled(): boolean {
@@ -122,8 +189,46 @@ export async function validateBundleInE2B(opts: {
       { timeoutMs: BUILD_TIMEOUT_MS },
     );
 
+    if (build.exitCode !== 0) {
+      return {
+        ok: false,
+        ranInstall: true,
+        ranBuild: true,
+        durationMs: Date.now() - start,
+        installStdout: install.stdout,
+        installStderr: install.stderr,
+        buildStdout: build.stdout,
+        buildStderr: build.stderr,
+        reason: "build_failed",
+        sandboxId: sandbox.sandboxId,
+      };
+    }
+
+    // El build de npm pasó — eso NO garantiza que el preview real (esm.sh en
+    // el navegador del cliente) vaya a cargar. Comprobamos las URLs reales
+    // que se van a servir antes de dar la reparación por buena.
+    let esmImportCheck: E2BBuildResult["esmImportCheck"];
+    try {
+      const html = await buildDeployHtml({ bundle: opts.bundle, title: "validation" });
+      esmImportCheck = await verifyEsmImportMap(html);
+    } catch (err) {
+      esmImportCheck = {
+        ok: false,
+        checked: 0,
+        failures: [
+          {
+            specifier: "*",
+            url: "",
+            error: `buildDeployHtml lanzó una excepción durante la validación: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          },
+        ],
+      };
+    }
+
     return {
-      ok: build.exitCode === 0,
+      ok: build.exitCode === 0 && esmImportCheck.ok,
       ranInstall: true,
       ranBuild: true,
       durationMs: Date.now() - start,
@@ -131,8 +236,9 @@ export async function validateBundleInE2B(opts: {
       installStderr: install.stderr,
       buildStdout: build.stdout,
       buildStderr: build.stderr,
-      reason: build.exitCode === 0 ? undefined : "build_failed",
+      reason: esmImportCheck.ok ? undefined : "esm_import_unresolved",
       sandboxId: sandbox.sandboxId,
+      esmImportCheck,
     };
   } catch (err) {
     return {
