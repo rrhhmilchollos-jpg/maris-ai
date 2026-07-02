@@ -28,7 +28,7 @@ import {
   useGetCreditsHistory,
 } from "@/lib/api-client";
 import { useQuery } from "@tanstack/react-query";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DeployModal } from "@/components/deploy-modal";
 import { WorkflowListPanel } from "@/components/workflow-list-panel";
 import { StressTestModal } from "@/components/stress-test-modal";
@@ -327,6 +327,47 @@ function GatingQuestionsForm({
 }
 
 
+
+
+// ── RuntimeErrorsPanel ───────────────────────────────────────────────────────
+// Muestra los últimos errores JavaScript capturados en la app en producción.
+// Los errores llegan desde el error reporter inyectado en el bundle (deployBundle.ts).
+function RuntimeErrorsPanel({ appId }: { appId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["runtime-errors", appId],
+    queryFn: () => apiFetch<any>(`/api/apps/${appId}/runtime-errors`),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+
+  const errors = data?.errors ?? [];
+  if (isLoading) return null;
+  if (errors.length === 0) return (
+    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+      <p className="text-xs text-emerald-400 font-medium flex items-center gap-2">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Sin errores en producción
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="text-xs uppercase tracking-[0.18em] text-white/35 flex items-center gap-2">
+        <Terminal className="h-3.5 w-3.5 text-red-400" />
+        Errores en producción ({errors.length})
+      </p>
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {errors.slice(0, 5).map((e: any, i: number) => (
+          <div key={i} className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+            <p className="text-xs font-mono text-red-300 break-words">{e.message}</p>
+            {e.pathname && <p className="text-[10px] text-white/30 mt-1">{e.pathname}</p>}
+            <p className="text-[10px] text-white/25 mt-1">{new Date(e.createdAt).toLocaleString("es-ES")}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 export default function AppDetailPage({ params }: { params: { id: string } }) {
   const id = params.id;
   const [, setLocation] = useLocation();
@@ -1038,6 +1079,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             <Button onClick={handleRefreshPreview} disabled={!hasRenderableCode} variant="outline" className="mt-5 w-full border-white/10 bg-white/[0.04] text-white hover:bg-white/[0.08]">
               <RefreshCcw className="mr-2 h-4 w-4" /> Recargar datos y preview
             </Button>
+        {/* Runtime errors capturados en producción */}
+        <RuntimeErrorsPanel appId={id} />
           </div>
         </>
       );
