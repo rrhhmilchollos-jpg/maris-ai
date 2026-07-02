@@ -2776,7 +2776,7 @@ router.post("/admin/users/:id/generate-app", async (req: any, res: any): Promise
       phase: "queued",
       progress: 0,
       isAdmin: true,
-      hasEverPaid: !forceBasicGeneration, // si forceBasic → free tier scope-cut
+      hasEverPaid: true, // admin siempre true — forceBasicGeneration controla el scope-cut por separado
       skipGating: true,
       forceBasicGeneration,
     });
