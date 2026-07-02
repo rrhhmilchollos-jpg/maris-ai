@@ -7343,7 +7343,15 @@ export async function runJobById(jobId: string): Promise<void> {
     clearInterval(heartbeatInterval);
   } catch (err) {
     clearInterval(heartbeatInterval);
-    logger.error({ err, jobId }, "runJobById: Generation failed");
+    // Log completo del error real para diagnóstico — incluyendo stack trace
+    // y tipo de error para identificar fallos de infraestructura vs código
+    logger.error({
+      err,
+      jobId,
+      errMessage: err instanceof Error ? err.message : String(err),
+      errName: err instanceof Error ? err.name : typeof err,
+      errStack: err instanceof Error ? err.stack?.slice(0, 500) : undefined,
+    }, "runJobById: Generation failed");
     const rawMessage = err instanceof Error ? err.message : "Error desconocido";
 
     // REEMBOLSO AUTOMÁTICO: si la generación falla por error del sistema
