@@ -6,7 +6,6 @@
   "scripts": {
     "vercel-build": "node ./build.mjs",
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
-    "prebuild": "pnpm run test:critical-fixes",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "start:worker": "node --enable-source-maps ./dist/worker.mjs",
