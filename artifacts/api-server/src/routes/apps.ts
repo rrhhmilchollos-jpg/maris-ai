@@ -6337,6 +6337,27 @@ export async function runJobById(jobId: string): Promise<void> {
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
+
+    // EMAIL: notificar al usuario que su primera app está lista
+    // Solo en la primera generación (no en ediciones ni auto-repairs)
+    if (!isAutoRepairJob && !job.editAppId) {
+      try {
+        const prevAppsCount = await GeneratedApp.countDocuments({ userId: job.userId });
+        if (prevAppsCount <= 1) {
+          // Es la primera o segunda app — mandar email de "primera app lista"
+          const { sendFirstAppReadyEmail } = await import("../lib/notify");
+          const dbUser = await User.findById(job.userId).lean() as any;
+          await sendFirstAppReadyEmail({
+            userEmail: dbUser?.email || "",
+            userName: dbUser?.fullName,
+            appTitle: finalResult?.title || "tu app",
+            dashboardUrl: `${process.env.APP_URL || "https://www.marisai.es"}/app/${savedAppId}`,
+            creditsRemaining: (await import("@workspace/db/schema")).User
+              .findById(job.userId).then((u: any) => u?.credits).catch(() => undefined),
+          }).catch((e: any) => logger.warn({ e }, "sendFirstAppReadyEmail failed"));
+        }
+      } catch { /* nunca crashear el pipeline */ }
+    }
     if ((job as any).isAutoRepair && job.editAppId && !editResultInvalid) {
       await AppMessage.create({
         appId: job.editAppId,
