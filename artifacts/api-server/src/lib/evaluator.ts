@@ -635,8 +635,53 @@ export async function runAutoEvaluator(opts: {
     // con el regex STRUCTURAL_DAMAGE_KEYWORDS — el regex perdía casos reales
     // como "La pantalla muestra 404" o "missing_content" con variaciones de texto).
     const structuralDamage = report.issues.some((i) => i.severity === "critical");
+    const only404 = report.issues.every((i) =>
+      /404|page not found|p[aá]gina no encontrada|ruta.*no.*configurada|router.*mal/i.test(i.description)
+    );
 
-    if (structuralDamage) {
+    // FIX QUIRÚRGICO para 404 puro: solo tocar App.tsx con patchBundle
+    // en vez de lanzar el CoreOrchestrator completo (que genera un plan
+    // de edición masivo). Un 404 puro casi siempre es el catch-all de
+    // wouter mal colocado o una ruta raíz / sin redirección — se arregla
+    // cambiando 5-10 líneas de App.tsx, no regenerando 20 archivos.
+    if (structuralDamage && only404 && round <= 2) {
+      log.info({ appId, jobId, round }, "🔁 404 puro detectado → fix quirúrgico en App.tsx");
+      try {
+        function extractFileFromBundle404(bundle: string, fileName: string): string {
+          const esc = fileName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const m = bundle.match(new RegExp("// === FILE: " + esc + " ===\\n([\\s\\S]*?)(?=\\n// === FILE:|$)"));
+          return m ? m[1].trim() : "";
+        }
+        const appTsx = extractFileFromBundle404(currentBundle, "src/App.tsx")
+          || extractFileFromBundle404(currentBundle, "src/app.tsx")
+          || extractFileFromBundle404(currentBundle, "src/main.tsx");
+
+        const pagesBlock = opts.plannedPages && opts.plannedPages.length > 0
+          ? "\n\nPÁGINAS REALES DEL PROYECTO:\n" +
+            opts.plannedPages.map(p => `- ${p.name}${p.route ? ` → ${p.route}` : ""}`).join("\n")
+          : "";
+
+        const fix404Prompt =
+          `[FIX 404 QUIRÚRGICO] La app muestra 404 en la ruta raíz.${pagesBlock}\n\n` +
+          `REGLAS ESTRICTAS:\n` +
+          `1. Mueve el catch-all <Route path="*"> al ÚLTIMO lugar.\n` +
+          `2. Añade <Route path="/"> que redirija a la primera ruta real del proyecto.\n` +
+          `3. SOLO modifica src/App.tsx. No toques ningún otro archivo.\n` +
+          `4. Conserva todas las rutas existentes exactamente como están.\n\n` +
+          `CÓDIGO ACTUAL DE src/App.tsx:\n${appTsx.slice(0, 3000)}`;
+
+        const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;
+        const quickFix = await patchBundle(currentBundle, fix404Prompt, language, "claude-sonnet-4-6");
+        if (quickFix && quickFix.length > 100 && quickFix.includes("// === FILE:")) {
+          patched = quickFix;
+          log.info({ appId, jobId, round }, "✅ Fix quirúrgico 404 aplicado en App.tsx");
+        }
+      } catch (fix404Err) {
+        log.warn({ fix404Err, appId, jobId, round }, "Fix quirúrgico 404 falló — usando CoreOrchestrator");
+      }
+    }
+
+    if (patched === null && structuralDamage) {
       log.info(
         { appId, jobId, round, types: report.issues.filter(i=>i.severity==="critical").map(i=>i.severity+":"+i.description.slice(0,60)) },
         "🔁 Issues críticos → CoreOrchestrator por hitos",
@@ -708,7 +753,7 @@ export async function runAutoEvaluator(opts: {
       } catch (err) {
         log.warn({ err, appId, jobId, round }, "🔁 editProjectIncremental falló — fallback single-pass");
       }
-    }
+    } // fin if (patched === null && structuralDamage)
     if (patched === null) {
       try {
         const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;

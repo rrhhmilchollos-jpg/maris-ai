@@ -6698,11 +6698,12 @@ export async function runJobById(jobId: string): Promise<void> {
         if (!hasEverPaid && dbUser?.email && isAdminEmail(dbUser.email)) {
           hasEverPaid = true;
         }
-        // Si tiene apps previas, no tratarlo como cuenta nueva
-        if (!hasEverPaid) {
-          const appCount = await GeneratedApp.countDocuments({ userId: job.userId });
-          if (appCount > 1) hasEverPaid = true; // >1 porque esta misma generación puede contar
-        }
+        // ELIMINADO: la comprobación "si tiene >1 app → hasEverPaid=true" era
+        // incorrecta. Un usuario free puede tener múltiples apps fallidas (cada
+        // "Regenerar desde 0" crea una nueva) sin haber pagado nunca. Esta lógica
+        // hacía que Luis (torpedocp2@gmail.com) tuviera hasEverPaid=true tras su
+        // primera app fallida, desactivando el scope-cut de 7 hitos y generando
+        // planes de 20 hitos con Haiku → saturación de contexto → 404 permanente.
       } catch { /* si falla la consulta, usar el valor del job */ }
     }
 
