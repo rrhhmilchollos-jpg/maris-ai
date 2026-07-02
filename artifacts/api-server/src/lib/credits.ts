@@ -94,7 +94,7 @@ export async function creditPurchase(opts: {
  
   const updated = await User.findByIdAndUpdate(
     userId,
-    { $inc: { credits: amount } },
+    { $inc: { credits: Math.round(amount) } },
     { new: true, projection: { credits: 1 } },
   ).lean();
  
@@ -148,9 +148,10 @@ export async function chargeCredits(opts: {
  
   // Use findOneAndUpdate with $inc only when credits >= amount.
   // MongoDB doesn't support SELECT FOR UPDATE, so we use a conditional update.
+  const safeAmount = Math.round(amount); // siempre entero — evita 0.6000000000000014
   const updated = await User.findOneAndUpdate(
-    { _id: userId, credits: { $gte: amount } },
-    { $inc: { credits: -amount } },
+    { _id: userId, credits: { $gte: safeAmount } },
+    { $inc: { credits: -safeAmount } },
     { new: true, projection: { credits: 1 } },
   ).lean();
  
@@ -218,7 +219,7 @@ export async function grantPlanCredits(opts: {
   //    - Resetear los créditos del plan anterior (que habrán caducado)
   //    - Mantener los créditos top-up (no caducan)
   const topUpCredits = Math.max(0, (user.credits ?? 0) - (user.planCredits ?? 0));
-  const newTotalCredits = topUpCredits + creditsPerMonth;
+  const newTotalCredits = Math.round(topUpCredits + creditsPerMonth);
 
   // 3. Actualizar usuario con el nuevo plan y créditos (con reintentos)
   retries = 3;
