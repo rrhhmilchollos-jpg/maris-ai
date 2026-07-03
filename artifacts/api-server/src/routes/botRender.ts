@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { connectDB } from "../lib/db";
-import { NewsArticle } from "@workspace/db/schema";
+import { NewsArticle, type INewsArticle } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -212,7 +212,7 @@ router.get("/bot-render/news", async (_req: Request, res: Response) => {
   await connectDB();
   try {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(20).lean();
-    const links = articles.map(a =>
+    const links = articles.map((a: INewsArticle) =>
       `<li style="margin-bottom: 15px;"><a href="${BASE}/news/${a.slug}" style="font-size: 1.2rem; font-weight: bold; color: #7c3aed;">${a.title}</a><br/><time>${new Date(a.publishedAt).toLocaleDateString("es-ES")}</time></li>`
     ).join("\n");
     const body = `<main style="max-width: 800px; margin: 0 auto; padding: 40px 20px;">

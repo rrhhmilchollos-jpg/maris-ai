@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
-import { NewsArticle } from "@workspace/db/schema";
+import { NewsArticle, type INewsArticle } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -11,7 +11,7 @@ router.get("/rss", async (_req, res) => {
   try {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(20).lean();
 
-    const feedItems = articles.map((article) => `
+    const feedItems = articles.map((article: INewsArticle) => `
       <item>
         <title><![CDATA[${article.title}]]></title>
         <link>${BASE_URL}/news/${article.slug}</link>

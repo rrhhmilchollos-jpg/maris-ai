@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
 import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
-import { Ticket, User } from "@workspace/db/schema";
+import { Ticket, User, type ITicket, type IUser } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import { sendSupportTicketCreatedEmail } from "../lib/notify";
 import { refundCredits } from "../lib/credits";
@@ -157,12 +157,12 @@ router.get("/admin/tickets", async (_req, res) => {
   await connectDB();
   try {
     const tickets = await Ticket.find({}).sort({ createdAt: -1 }).lean();
-    const userIds = [...new Set(tickets.map((t) => t.userId))];
+    const userIds = [...new Set(tickets.map((t: ITicket) => t.userId))];
     const users = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
-    const emailMap = new Map(users.map((u) => [String(u._id), u.email]));
+    const emailMap = new Map(users.map((u: IUser) => [String(u._id), u.email]));
 
     res.json(
-      tickets.map((t) => ({
+      tickets.map((t: ITicket) => ({
         ...t,
         userEmail: emailMap.get(t.userId) ?? "(usuario eliminado)",
       })),
