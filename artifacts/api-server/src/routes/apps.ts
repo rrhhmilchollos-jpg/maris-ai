@@ -5417,6 +5417,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       progress: 0,
       isAdmin,
       hasEverPaid,
+      creditsCost: cost,
       ultraThinking: !!ultraThinking,
       legacyMode: !!legacyMode,
       mcpConnectors: connectedMCP.map(([id]) => id),
@@ -6409,6 +6410,7 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
       phase: "queued",
       progress: 0,
       isAdmin,
+      creditsCost: cost,
     });
 
     await enqueueGenerateJob(jobId);
@@ -7285,6 +7287,22 @@ export async function runJobById(jobId: string): Promise<void> {
     // para decidir si analiza — así que activarlo siempre no cambia el
     // comportamiento de deploy para nadie, solo añade la verificación visual
     // que faltaba para todos.
+    // ── GARANTÍA DE PRIMERA GENERACIÓN (usuarios free) ──────────────────────
+    // A petición explícita del usuario, tras confirmar la pérdida real de
+    // ~20 clientes por este motivo: la primera app de un usuario gratuito es
+    // el momento de MÁS riesgo de churn y, hasta ahora, el que MENOS
+    // presupuesto de reparación recibía (2 rondas vs 5 de un cliente de
+    // pago) — justo al revés de lo que conviene al negocio. isFirstFreeApp
+    // trata la primera app de cualquier usuario free con el mismo nivel de
+    // esfuerzo de reparación que un cliente de pago, y más abajo también
+    // espera (en vez de lanzar en background) a que termine la reparación
+    // de compilación antes de marcar el job como "succeeded".
+    let isFirstFreeApp = false;
+    if (!hasEverPaid) {
+      const priorAppsCount = await GeneratedApp.countDocuments({ userId: job.userId });
+      isFirstFreeApp = priorAppsCount <= 1; // esta generación ya se guardó como savedAppId, por eso <=1 y no ===0
+    }
+
     if (savedAppId) {
       try {
         const freshApp = await GeneratedApp.findById(savedAppId).select("publicSlug userId").lean() as any;
@@ -7329,9 +7347,10 @@ export async function runJobById(jobId: string): Promise<void> {
             // Páginas reales del proyecto — el evaluador las usa para reparar
             // el enrutador con precisión (sin inventar rutas que no existen)
             plannedPages: plannedPages.length > 0 ? plannedPages : undefined,
-            // Usuarios gratuitos: máximo 2 rondas (1 análisis + 1 parche).
-            // Clientes de pago: 5 rondas completas.
-            maxRepairRounds: hasEverPaid ? undefined : 2,
+            // Usuarios gratuitos (excepto su primera app, ver isFirstFreeApp
+            // arriba): máximo 2 rondas (1 análisis + 1 parche). Clientes de
+            // pago y primera app free: 5 rondas completas.
+            maxRepairRounds: (hasEverPaid || isFirstFreeApp) ? undefined : 2,
           });
         } catch (evalErr) {
           logger.warn({ evalErr, jobId }, "Auto evaluator failed — app still ready");
@@ -7342,19 +7361,94 @@ export async function runJobById(jobId: string): Promise<void> {
     }
 
     // ── AUTO-REPAIR POST-GENERACIÓN — analizar y reparar si hay errores ─────────
+    // Para la primera app de un usuario free (isFirstFreeApp, calculado más
+    // arriba): se ESPERA la reparación (no se lanza en background) y se hace
+    // una verificación de compilación final real. Si tras todo el esfuerzo de
+    // reparación la app sigue sin compilar, NO se marca como "succeeded" sin
+    // más — se oculta al cliente (pendingAdminApproval, mismo mecanismo que
+    // ya usa el flujo de soporte), se reembolsan los créditos gastados, se
+    // avisa al admin YA (no cuando el cliente se queje) y se le avisa al
+    // cliente con un mensaje honesto en vez de dejarle ver una app rota.
+    let firstAppGuaranteeEscalated = false;
     if (savedAppId && finalResult?.frontendCode && !isAutoRepairJob && !editResultInvalid) {
-      try {
-        const { runPostGenerationRepair } = await import("../lib/autoRepairAgent");
-        // Lanzar en background — no bloquear el succeeded
-        const _truncatedFiles = (finalResult as any)._truncatedFiles as string[] | undefined;
-        runPostGenerationRepair({
-          appId: String(savedAppId),
-          userId: String(job.userId),
-          userIntent: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 4000),
-          jobId: String(jobId),
-          truncatedFiles: _truncatedFiles,
-        }).catch(repairErr => logger.warn({ repairErr, jobId }, "Post-generation repair failed"));
-      } catch { /* nunca bloquear el succeeded */ }
+      const _truncatedFiles = (finalResult as any)._truncatedFiles as string[] | undefined;
+      const repairUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 4000);
+
+      if (isFirstFreeApp) {
+        try {
+          const { runPostGenerationRepair } = await import("../lib/autoRepairAgent");
+          await runPostGenerationRepair({
+            appId: String(savedAppId),
+            userId: String(job.userId),
+            userIntent: repairUserIntent,
+            jobId: String(jobId),
+            truncatedFiles: _truncatedFiles,
+          });
+        } catch (repairErr) {
+          logger.warn({ repairErr, jobId }, "Post-generation repair failed (first free app)");
+        }
+
+        // Verificación final real: ¿compila de verdad tras toda la reparación?
+        try {
+          const { buildDeployHtml } = await import("../lib/deployBundle");
+          const verifyApp = await GeneratedApp.findById(savedAppId).select("frontendCode title kind").lean() as any;
+          await buildDeployHtml({ bundle: verifyApp?.frontendCode || "", title: verifyApp?.title || "App", kind: verifyApp?.kind });
+          // Compila — garantía cumplida, el cliente verá una app funcional.
+        } catch (finalCompileErr: any) {
+          // Sigue sin compilar tras el máximo esfuerzo de reparación —
+          // escalar en vez de dejar que el cliente vea la app rota.
+          logger.error({ finalCompileErr, jobId, appId: savedAppId }, "GARANTÍA DE PRIMERA APP FALLIDA — escalando a revisión manual");
+          firstAppGuaranteeEscalated = true;
+          try {
+            await GeneratedApp.updateOne(
+              { _id: savedAppId },
+              { $set: { pendingAdminApproval: true, pendingApprovalSince: new Date() } },
+            );
+            const failedCost = Math.round((job as any).creditsCost ?? 0);
+            if (failedCost > 0) {
+              const { chargeCredits } = await import("../lib/credits");
+              await chargeCredits({
+                userId: job.userId,
+                isAdmin: false,
+                amount: -failedCost,
+                description: "Reembolso automático — garantía de primera app (no se logró app funcional tras reparación completa)",
+              });
+            }
+            const dbUserForEscalation = await User.findById(job.userId).lean() as any;
+            const { notifyAdminJobFailed, sendNeedsReviewEmail } = await import("../lib/notify");
+            await notifyAdminJobFailed({
+              userEmail: dbUserForEscalation?.email || job.userId,
+              userId: String(job.userId),
+              jobId: String(jobId),
+              appId: String(savedAppId),
+              prompt: repairUserIntent,
+              errorMessage: `[GARANTÍA PRIMERA APP] Compilación seguía fallando tras reparación completa: ${String(finalCompileErr?.message || finalCompileErr).slice(0, 300)}`,
+              retryCount: 1,
+            }).catch(() => {});
+            await sendNeedsReviewEmail({
+              to: dbUserForEscalation?.email || null,
+              recipientName: dbUserForEscalation?.fullName || null,
+              appTitle: finalResult?.title || "tu app",
+              summary: "Nuestro sistema detectó un problema técnico al preparar tu app y la está revisando un especialista en persona. Te avisaremos en cuanto esté lista — no se te han cobrado créditos por este intento.",
+              log: logger as any,
+            }).catch(() => {});
+          } catch (escalationErr) {
+            logger.error({ escalationErr, jobId }, "Fallo al escalar la garantía de primera app — revisar manualmente");
+          }
+        }
+      } else {
+        try {
+          const { runPostGenerationRepair } = await import("../lib/autoRepairAgent");
+          // Lanzar en background — no bloquear el succeeded
+          runPostGenerationRepair({
+            appId: String(savedAppId),
+            userId: String(job.userId),
+            userIntent: repairUserIntent,
+            jobId: String(jobId),
+            truncatedFiles: _truncatedFiles,
+          }).catch(repairErr => logger.warn({ repairErr, jobId }, "Post-generation repair failed"));
+        } catch { /* nunca bloquear el succeeded */ }
+      }
     }
 
     // ── A/B TESTING — registrar resultado para mejorar futuros prompts ────────
@@ -7366,12 +7460,17 @@ export async function runJobById(jobId: string): Promise<void> {
     } catch { /* nunca bloquear */ }
 
     await GenerationJob.findByIdAndUpdate(jobId, {
-      $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
+      $set: firstAppGuaranteeEscalated
+        ? { status: "reviewing", phase: "reviewing", progress: 100, updatedAt: new Date(), errorMessage: "Tu app está siendo revisada por un especialista — te avisaremos en cuanto esté lista." }
+        : { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
     });
 
     // EMAIL: notificar al usuario que su primera app está lista
-    // Solo en la primera generación (no en ediciones ni auto-repairs)
-    if (!isAutoRepairJob && !job.editAppId) {
+    // Solo en la primera generación (no en ediciones ni auto-repairs), y
+    // solo si la garantía de primera app NO escaló (si escaló, ya se envió
+    // sendNeedsReviewEmail arriba — no tiene sentido decirle "está lista"
+    // justo después de decirle "la estamos revisando").
+    if (!isAutoRepairJob && !job.editAppId && !firstAppGuaranteeEscalated) {
       try {
         const prevAppsCount = await GeneratedApp.countDocuments({ userId: job.userId });
         if (prevAppsCount <= 1) {

@@ -447,6 +447,14 @@ export interface IGenerationJob extends Document {
   isAdmin: boolean;
   hasEverPaid?: boolean;
   retryCount: number;
+  // ENCONTRADO: el bloque de reembolso automático (catch de runJobById, más
+  // abajo en apps.ts) llevaba tiempo leyendo `job.creditsCost` para saber
+  // cuánto devolver si la generación fallaba por error del sistema — pero
+  // este campo nunca se guardaba al crear el job, así que el reembolso
+  // automático NUNCA se ejecutaba de verdad (siempre caía al `?? 0`). El
+  // cliente perdía créditos por fallos que no eran su culpa, sin ningún
+  // reembolso real pese a que el código "parecía" tenerlo cubierto.
+  creditsCost?: number;
   workerId?: string | null;
   partialFrontendCode?: string | null;
   createdAt: Date;
@@ -484,6 +492,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     isAdmin: { type: Boolean, default: false },
     hasEverPaid: { type: Boolean, default: false },
     retryCount: { type: Number, default: 0 },
+    creditsCost: { type: Number, default: 0 },
     workerId: { type: String },
     partialFrontendCode: { type: String },
   },
