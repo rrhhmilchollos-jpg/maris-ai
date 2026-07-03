@@ -12,6 +12,65 @@ const DIST = join(__dirname, "dist");
 
 const ROUTES = [
   {
+    path: "/",
+    file: "index.html",
+    title: "Maris AI — Crear App con IA sin Programar",
+    description: "Crea tu app web con IA en menos de 5 minutos. 9 agentes generan código React, backend y base de datos. Gratis para emprendedores en España.",
+    canonical: "https://www.marisai.es/",
+    body: `<h1>Maris AI — Crear App con IA sin Programar en Español</h1>
+<p>Maris AI es la primera plataforma de vibe coding completamente en español. 9 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin saber programar. Gratis para emprendedores en España.</p>
+<h2>¿Qué es Maris AI?</h2>
+<p>Maris AI es la mejor alternativa a Bolt.new, Lovable y Emergent para el mercado hispanohablante. A diferencia de estas plataformas que operan solo en inglés, Maris AI está diseñada desde cero para emprendedores españoles y latinoamericanos.</p>
+<ul>
+<li>Completamente en español — interfaz, soporte y generación de código</li>
+<li>9 agentes IA especializados trabajando en paralelo</li>
+<li>Backend Express + MongoDB incluido automáticamente</li>
+<li>65 créditos gratis sin tarjeta de crédito</li>
+<li>Créditos que nunca caducan</li>
+<li>Código 100% exportable a GitHub sin vendor lock-in</li>
+<li>Precios en euros, cumplimiento RGPD</li>
+</ul>
+<h2>Cómo funciona el pipeline de IA de Maris AI</h2>
+<p>Un pipeline de agentes de inteligencia artificial especializados trabaja de forma coordinada para cubrir todo el ciclo de creación de tu app: desde entender tu idea y planificar la arquitectura, hasta diseñar la interfaz, generar el código de frontend y backend, y validar que todo funciona correctamente antes de entregártela.</p>
+<ul>
+<li>Análisis y planificación del proyecto a partir de tu descripción</li>
+<li>Diseño de la arquitectura técnica y del sistema visual</li>
+<li>Generación de código frontend y backend listo para producción</li>
+<li>Control de calidad automático antes de entregar el resultado</li>
+</ul>
+<h2>¿Por qué Maris AI es mejor que Bolt.new y Lovable?</h2>
+<p>Bolt.new y Lovable son herramientas en inglés con precios en dólares. Maris AI es la única plataforma de vibe coding completamente en español, con precios en euros y soporte real en español.</p>
+<ul>
+<li>vs Bolt.new: Maris AI en español + backend incluido + precios predecibles en euros</li>
+<li>vs Lovable: Maris AI no requiere Supabase + créditos sin caducidad + más barato</li>
+<li>vs Emergent: Maris AI gratis para empezar + optimizado para mercado español</li>
+<li>vs Base44: Maris AI código 100% exportable sin vendor lock-in</li>
+</ul>
+<h2>Preguntas frecuentes</h2>
+<dl>
+<dt>¿Necesito saber programar?</dt><dd>No. Solo describes tu idea en español y Maris AI genera todo el código automáticamente.</dd>
+<dt>¿Cuánto cuesta Maris AI?</dt><dd>65 créditos gratis al registrarte, sin tarjeta. Paquetes desde 20€ por 160 créditos que nunca caducan.</dd>
+<dt>¿El código generado es mío?</dt><dd>Sí, 100% tuyo. Exportable a GitHub sin restricciones.</dd>
+<dt>¿Qué es el vibe coding?</dt><dd>El vibe coding es el paradigma donde describes tu idea en lenguaje natural y la IA genera el código. Maris AI es la plataforma de vibe coding líder en español.</dd>
+<dt>¿Cuál es la mejor alternativa a Bolt.new en español?</dt><dd>Maris AI es la mejor alternativa a Bolt.new en español. Completamente en español, con 9 agentes IA, backend incluido y precios en euros.</dd>
+</dl>
+<h2>Tipos de apps que puedes crear</h2>
+<ul>
+<li>CRM y gestión de clientes</li>
+<li>Tiendas online con Stripe</li>
+<li>Plataformas educativas</li>
+<li>Apps para restaurantes</li>
+<li>Gestión de clínicas</li>
+<li>Dashboards de analítica</li>
+<li>Marketplaces y directorios</li>
+<li>Landing pages</li>
+<li>Portfolios profesionales</li>
+<li>Apps de reservas y citas</li>
+<li>SaaS con suscripciones</li>
+<li>APIs y backends</li>
+</ul>`
+  },
+  {
     path: "/pricing",
     file: "pricing/index.html",
     title: "Precios Maris AI — 65 Créditos Gratis de Bienvenida sin Tarjeta",
@@ -584,24 +643,12 @@ for (const route of ROUTES) {
       }
     }
 
-    // Eliminar el bloque oculto <div id="seo-main">...</div> (contenido genérico
-    // de la home: "¿Qué es Maris AI?", los 9 agentes, listas, etc.) en cualquier
-    // ruta que no sea la home. Este div se sirve visualmente oculto
-    // (position:absolute; left:-9999px) pero SIEMPRE presente en el HTML crudo
-    // que lee Googlebot, porque viene del index.html base que comparten todas
-    // las rutas. Antes de este fix, cada página no-home mostraba a Google este
-    // bloque de ~6KB idéntico + su contenido único encima, lo que produce
-    // contenido casi duplicado entre páginas — la causa más probable de que
-    // Search Console marque estas URLs como "Detectada: actualmente no indexada".
-    // Mismo criterio que ya aplicamos arriba para el schema exclusivo de home.
-    if (route.path !== "/") {
-      const seoMainRegex = /<div id="seo-main"[\s\S]*?<\/div>\s*/;
-      const beforeSeoMain = html;
-      html = html.replace(seoMainRegex, "");
-      if (html === beforeSeoMain) {
-        console.warn(`⚠️  ${route.path}: no se pudo eliminar #seo-main (patrón no encontrado)`);
-      }
-    }
+    // NOTA: el bloque #seo-main (que antes vivía oculto fuera de pantalla en
+    // index.html) se eliminó del código fuente. Su función — dar contenido
+    // real a la home cuando no hay JS — la cubre ahora la propia entrada "/"
+    // de este array ROUTES, con el mismo patrón visible-y-luego-oculto que
+    // usa el resto de páginas (más abajo). Ya no hace falta ningún paso de
+    // limpieza aquí.
 
     // Add visible SEO content + hide script
     // Usamos una regex que captura la etiqueta <div id="root" ...></div> completa,
