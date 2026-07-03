@@ -5,7 +5,7 @@
  * Así el panel admin siempre muestra el recuento real aunque no hayan generado nada.
  *
  * Eventos manejados:
- * - user.created  → crear usuario en MongoDB con 45 créditos gratuitos
+ * - user.created  → crear usuario en MongoDB con 65 créditos gratuitos
  * - user.updated  → actualizar email/nombre si cambian
  * - user.deleted  → marcar como inactivo (no borrar datos)
  *
@@ -111,8 +111,8 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
           fullName,
           imageUrl,
           phoneNumber,
-          credits: isAdmin ? 999999999 : 45,
-          planCredits: isAdmin ? 0 : 45,
+          credits: isAdmin ? 999999999 : 65,
+          planCredits: isAdmin ? 0 : 65,
           freeCreditsUsed: !isAdmin,
           plan: "free",
           createdAt: new Date(data.created_at ?? Date.now()),
@@ -130,7 +130,7 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
         // configurada), NUNCA debe bloquear ni revertir la creación del
         // usuario, que ya ocurrió arriba.
         if (!isAdmin) {
-          sendWelcomeEmail({ userEmail: email, userName: fullName, credits: 45 }).catch((err) => {
+          sendWelcomeEmail({ userEmail: email, userName: fullName, credits: 65 }).catch((err) => {
             logger.warn({ err, clerkId, email }, "clerkWebhook: fallo enviando correo de bienvenida — usuario creado igualmente");
           });
         }

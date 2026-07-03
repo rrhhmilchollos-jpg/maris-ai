@@ -675,7 +675,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   check(
     "FIX 25a: existen las dos constantes de coste escalonado (5 el primer deploy, 50 a partir del segundo)",
     /const DEPLOY_COST_FIRST = 5;/.test(appsSrc) && /const DEPLOY_COST_SUBSEQUENT = 50;/.test(appsSrc),
-    "Sin el escalonado, o se cobran 50 créditos desde el primer deploy (un usuario nuevo con el pack de bienvenida de 45 créditos no podría publicar su primera app nunca), o se cobran solo 5 créditos siempre (el negocio pierde el incentivo de conversión en deploys posteriores).",
+    "Sin el escalonado, o se cobran 50 créditos desde el primer deploy (un usuario nuevo con el pack de bienvenida de 65 créditos no podría publicar su primera app nunca), o se cobran solo 5 créditos siempre (el negocio pierde el incentivo de conversión en deploys posteriores).",
   );
   check(
     "FIX 25a-bis: el endpoint detecta el primer deploy de cada app vía lastPaidDeployAt, no un contador global del usuario",

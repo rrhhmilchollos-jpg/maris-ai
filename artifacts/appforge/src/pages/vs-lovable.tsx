@@ -9,7 +9,7 @@ const COMPARISON = [
   { feature: "Idioma de la interfaz", maris: "100% Español", competitor: "Solo inglés", marisWins: true },
   { feature: "Soporte en español", maris: "WhatsApp + email", competitor: "No disponible", marisWins: true },
   { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Requiere Supabase (+25$/mes)", marisWins: true },
-  { feature: "Precio de entrada", maris: "Gratis (45 créditos)", competitor: "Gratis (5 créditos/día)", marisWins: true },
+  { feature: "Precio de entrada", maris: "Gratis (65 créditos)", competitor: "Gratis (5 créditos/día)", marisWins: true },
   { feature: "Plan de pago desde", maris: "19€/mes", competitor: "25$/mes (~23€)", marisWins: true },
   { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, a los 2 meses", marisWins: true },
   { feature: "Agentes IA especializados", maris: "9 agentes en paralelo", competitor: "1 agente general", marisWins: true },
@@ -61,7 +61,7 @@ export default function VsLovablePage() {
               <Link href="/sign-up"><Button size="lg" className="gap-2 bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/30"><Rocket className="h-5 w-5" />Probar Maris AI gratis</Button></Link>
               <Link href="/demo"><Button size="lg" variant="outline" className="gap-2 border-white/20 text-white hover:bg-white/[0.05]"><Zap className="h-5 w-5" />Ver demo en vivo</Button></Link>
             </div>
-            <p className="text-sm text-muted-foreground">Sin tarjeta · Sin inglés · 45 créditos gratis al registrarte</p>
+            <p className="text-sm text-muted-foreground">Sin tarjeta · Sin inglés · 65 créditos gratis al registrarte</p>
           </motion.div>
         </section>
 

@@ -94,7 +94,7 @@ const ROUTE_CONTENT: Record<string, {
         <dt>¿Necesito saber programar para usar Maris AI?</dt>
         <dd>No. Solo describe tu idea en español y Maris AI genera el código completo.</dd>
         <dt>¿Cuánto cuesta Maris AI?</dt>
-        <dd>15 créditos gratis al registrarte. Paquetes desde 20€ que nunca caducan.</dd>
+        <dd>65 créditos gratis al registrarte. Paquetes desde 20€ que nunca caducan.</dd>
         <dt>¿El código generado es mío?</dt>
         <dd>Sí, el código es 100% tuyo, exportable a GitHub sin restricciones.</dd>
         <dt>¿Qué es el vibe coding?</dt>
@@ -201,7 +201,7 @@ const ROUTE_CONTENT: Record<string, {
   },
   "/pricing": {
     title: "Precios Maris AI — Créditos desde 20€, nunca caducan",
-    description: "Precios transparentes de Maris AI. Créditos desde 20€ que nunca caducan. Cuanto más compras, más barato el crédito. 15 créditos gratis sin tarjeta.",
+    description: "Precios transparentes de Maris AI. Créditos desde 20€ que nunca caducan. Cuanto más compras, más barato el crédito. 65 créditos gratis sin tarjeta.",
     h1: "Precios de Maris AI — Créditos flexibles para crear apps con IA",
     canonical: "https://www.marisai.es/pricing",
     content: `
@@ -209,14 +209,14 @@ const ROUTE_CONTENT: Record<string, {
       <p>Maris AI usa un sistema de créditos flexible. Los créditos nunca caducan y cuanto más compras, más barato el precio por crédito.</p>
       <h2>Packs de créditos disponibles</h2>
       <ul>
-        <li><strong>Starter</strong>: 100 créditos por 20€ (0,20€/crédito)</li>
-        <li><strong>Builder</strong>: 250 créditos por 45€ (0,18€/crédito)</li>
-        <li><strong>Popular</strong>: 500 créditos por 85€ (0,17€/crédito)</li>
-        <li><strong>Pro</strong>: 1.250 créditos por 200€ (0,16€/crédito)</li>
-        <li><strong>Scale</strong>: 3.000 créditos por 450€ (0,15€/crédito)</li>
-        <li><strong>Enterprise</strong>: 6.000 créditos por 850€ (0,14€/crédito)</li>
+        <li><strong>Starter</strong>: 160 créditos por 20€ (0,125€/crédito)</li>
+        <li><strong>Builder</strong>: 250 créditos por 37€ (0,148€/crédito)</li>
+        <li><strong>Más Popular</strong>: 500 créditos por 70€ (0,140€/crédito)</li>
+        <li><strong>Pro</strong>: 1.250 créditos por 162€ (0,130€/crédito)</li>
+        <li><strong>Mejor Ahorro</strong>: 3.000 créditos por 360€ (0,120€/crédito)</li>
+        <li><strong>Mejor Ahorro</strong>: 6.000 créditos por 660€ (0,110€/crédito)</li>
       </ul>
-      <p>Regístrate gratis y recibe 15 créditos de bienvenida sin tarjeta de crédito.</p>
+      <p>Regístrate gratis y recibe 65 créditos de bienvenida sin tarjeta de crédito.</p>
     `,
   },
   "/que-es-vibe-coding": {

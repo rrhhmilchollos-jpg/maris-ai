@@ -207,7 +207,7 @@ export default function AfiliadosPage() {
             {[
               { icon: "🇪🇸", title: "La única en español", desc: "Tu audiencia hispanohablante no tiene otra opción igual. Lovable, Bolt y Base44 están en inglés. Maris AI es la referencia para España y Latinoamérica." },
               { icon: "⚡", title: "Demo en vivo que convierte", desc: "Puedes mostrar marisai.es/demo en directo en tu vídeo o directa. Tu audiencia ve cómo se crea una app real en minutos. Eso vende solo." },
-              { icon: "💸", title: "Precio accesible = más ventas", desc: "Con el plan gratuito de 45 créditos y planes desde 19€/mes, la barrera de entrada es muy baja. Más registros = más comisiones para ti." },
+              { icon: "💸", title: "Precio accesible = más ventas", desc: "Con el plan gratuito de 65 créditos y planes desde 19€/mes, la barrera de entrada es muy baja. Más registros = más comisiones para ti." },
               { icon: "🔄", title: "30% recurrente, no puntual", desc: "No cobras solo cuando alguien se registra. Cobras el 30% de CADA compra de créditos que haga tu referido. Para siempre." },
               { icon: "📊", title: "Panel en tiempo real", desc: "Ves exactamente cuántos referidos tienes, cuántos han pagado y cuánto has ganado. Sin misterios, todo transparente." },
               { icon: "🚀", title: "Producto que retiene", desc: "Una vez que alguien crea su app con Maris AI, vuelve a comprar créditos para mejorarla. Tus comisiones crecen sin que hagas nada más." },

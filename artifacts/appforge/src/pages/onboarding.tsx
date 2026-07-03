@@ -79,7 +79,7 @@ export default function OnboardingPage() {
     { icon: Zap, title: "9 agentes de IA especializados", description: "Frontend, Backend, Testing, Planner, Researcher y más trabajando en paralelo." },
     { icon: Code, title: "Código real y funcional", description: "React, TypeScript, TailwindCSS, Node.js — código que puedes descargar y modificar." },
     { icon: Globe, title: "Deploy en un clic", description: "Publica tu app en marisai.es con subdominio gratuito. Dominio personalizado con plan de pago." },
-    { icon: Rocket, title: "45 créditos de bienvenida", description: "Suficientes para crear una app completa con backend, y con margen real para probar varios ajustes y ediciones. Sin tarjeta de crédito." },
+    { icon: Rocket, title: "65 créditos de bienvenida", description: "Suficientes para crear una app completa con backend, y con margen real para probar varios ajustes y ediciones. Sin tarjeta de crédito." },
   ];
 
   return (
@@ -121,7 +121,7 @@ export default function OnboardingPage() {
               ¡Bienvenido, <span className="bg-gradient-to-r from-[#a78bfa] via-[#c084fc] to-[#22d3ee] bg-clip-text text-transparent">{firstName}</span>!
             </h1>
             <p className="mb-10 text-lg text-white/55">
-              Maris AI te regala <strong className="text-yellow-400">45 créditos</strong> para empezar a crear apps increíbles con inteligencia artificial.
+              Maris AI te regala <strong className="text-yellow-400">65 créditos</strong> para empezar a crear apps increíbles con inteligencia artificial.
             </p>
 
             {/* Credits badge */}
@@ -130,7 +130,7 @@ export default function OnboardingPage() {
                 <Cpu className="h-6 w-6 text-yellow-400" />
               </div>
               <div className="text-left">
-                <p className="text-2xl font-extrabold text-yellow-400">45 créditos</p>
+                <p className="text-2xl font-extrabold text-yellow-400">65 créditos</p>
                 <p className="text-sm text-white/45">gratis al registrarte · sin tarjeta</p>
               </div>
             </div>
@@ -220,14 +220,14 @@ export default function OnboardingPage() {
 
             <h2 className="mb-3 text-3xl font-extrabold">¡Todo listo, {firstName}!</h2>
             <p className="mb-8 text-white/45">
-              Tienes <strong className="text-yellow-400">45 créditos</strong> listos para usar. Describe tu idea y Maris AI la construirá en minutos.
+              Tienes <strong className="text-yellow-400">65 créditos</strong> listos para usar. Describe tu idea y Maris AI la construirá en minutos.
             </p>
 
             {/* Checklist */}
             <div className="mb-8 space-y-3 text-left">
               {[
                 "Cuenta creada y verificada",
-                "45 créditos de bienvenida asignados",
+                "65 créditos de bienvenida asignados",
                 "9 agentes de IA listos para trabajar",
                 `Tipo de proyecto seleccionado: ${APP_TYPES.find(t => t.id === selectedType)?.label ?? "App Web"}`,
               ].map((item) => (

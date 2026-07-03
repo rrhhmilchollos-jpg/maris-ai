@@ -1933,7 +1933,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
 
   // ── ESTRATEGIA DE MODELOS ─────────────────────────────────────────────────
   //
-  // USUARIOS FREE (hasEverPaid=false, 45 créditos iniciales):
+  // USUARIOS FREE (hasEverPaid=false, 65 créditos iniciales):
   //   - Arquitecto y PM: SIEMPRE Sonnet — son el cerebro del proyecto.
   //     Un plan mal diseñado = app incompleta, exactamente el problema que
   //     queremos evitar. No escatimamos aquí.
@@ -5025,8 +5025,8 @@ router.post("/clerk-sync-users", requireAuth, async (req: any, res: any) => {
             _id: cu.id, email,
             fullName: [cu.firstName, cu.lastName].filter(Boolean).join(" ") || undefined,
             imageUrl: cu.imageUrl ?? undefined,
-            credits: isAdminEmail(email) ? 999999999 : 45,
-            planCredits: isAdminEmail(email) ? 0 : 45,
+            credits: isAdminEmail(email) ? 999999999 : 65,
+            planCredits: isAdminEmail(email) ? 0 : 65,
             freeCreditsUsed: !isAdminEmail(email),
             plan: "free",
             createdAt: new Date(cu.createdAt),
@@ -5298,24 +5298,22 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     //   - fullstack   = 3 × 10 = 30 créditos
     //   - game-3d     = 5 × 10 = 50 créditos
     //
-    // FREE (45 créditos de bienvenida):
+    // FREE (65 créditos de bienvenida — subido desde 45 tras confirmar que
+    //   45 no dejaba margen para pagar el primer deploy (5cr) si hacía
+    //   falta un reintento (6cr) por un fallo de generación; ver también la
+    //   red de seguridad de reintento gratis en POST /apps/:id/retry):
     //   - Coste = min(KIND_COSTS[kind] × 13, 50) — consume la MAYOR PARTE del
     //     saldo en ESA primera app completa: el usuario obtiene UNA app
-    //     completa y funcional, y le queda un margen PEQUEÑO de créditos
-    //     reales para probar varias ediciones menores (a 0.2 créditos cada
-    //     una en plan gratuito) antes de necesitar comprar más para seguir.
-    //   FREE (45 créditos de bienvenida — generación fullstack + margen de ediciones,
-    //   NO una reparación completa de 39 créditos, a diferencia del valor anterior de 78):
-    //   - landing    = 1 × 13 = 13 créditos → quedan 32 (generación + margen amplio de ediciones)
-    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 19 (generación + margen de ediciones)
-    //   - fullstack   = 3 × 13 = 39 créditos → quedan 6 (generación + ~30 ediciones menores a 0.2 cada una)
-    //   Estrategia: 1 app fullstack gratuita completa y funcional, CON un margen real (no
-    //   simbólico) para que el cliente pruebe ajustar su app antes de tener que pagar —
-    //   pero sin dejar saldo suficiente para una reparación completa adicional gratis.
-    //   A petición explícita del usuario tras confirmar el caso real de costerahome@gmail.com
-    //   (app "MesaYa", coste real de generación: 39 créditos) — bajado de 78 a 45 para que el
-    //   cliente sienta que el saldo "se agota" tras generar + ajustar, en vez de sobrar
-    //   margen para decenas de ediciones gratuitas sin ninguna fricción de conversión.
+    //     completa y funcional, y le queda margen real para el deploy (5cr)
+    //     y varias ediciones menores (a 0.2 créditos cada una) antes de
+    //     necesitar comprar más para seguir.
+    //   - landing    = 1 × 13 = 13 créditos → quedan 52 (generación + deploy + margen amplio)
+    //   - vue/svelte  = 2 × 13 = 26 créditos → quedan 39 (generación + deploy + margen de ediciones)
+    //   - fullstack   = 3 × 13 = 39 créditos → quedan 26 (generación + deploy(5) + ~105 ediciones a 0.2 cada una)
+    //   Historial: coste real de generación verificado contra un caso real de
+    //   producción (costerahome@gmail.com, app "MesaYa": 39 créditos exactos
+    //   para fullstack). El regalo de bienvenida pasó de 78 → 45 → 65: 45 no
+    //   dejaba margen para el deploy tras un reintento; 65 sí.
     // ─────────────────────────────────────────────────────────────────────────
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const kindKey = (kind || "fullstack") as keyof typeof KIND_COSTS;
@@ -6349,13 +6347,33 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
     const isPaid = !!req.dbUser?.isPremium || (req.dbUser?.plan && req.dbUser?.plan !== "free");
     const appKindKey = (app.kind || "fullstack") as keyof typeof KIND_COSTS;
     const baseCostRetry = KIND_COSTS[appKindKey] ?? 3;
-    const cost = isPaid ? (baseCostRetry * 10) : 6;
+
+    // ── RED DE SEGURIDAD: primer reintento gratis en la primera app ────────
+    // A petición explícita del usuario tras confirmar que con 65 créditos de
+    // bienvenida (generación 39cr + deploy 5cr) no queda margen para pagar
+    // un reintento de 6cr si la generación inicial deja la app rota/incompleta
+    // — el cliente se queda sin poder desplegar por un fallo que no es suyo.
+    // Condiciones (las 3, todas necesarias):
+    //   1. Plan free (los de pago no necesitan esta red de seguridad)
+    //   2. Es la ÚNICA app que tiene el usuario (su primera app real)
+    //   3. Esa app nunca tuvo un deploy de pago (si ya desplegó bien, no hay
+    //      "fallo del sistema" que compensar) NI ya ha gastado su reintento
+    //      gratis antes (freeSafetyNetRetryUsed) — evita abuso.
+    let isFreeSafetyNetRetry = false;
+    if (!isPaid && !isAdmin && !app.freeSafetyNetRetryUsed && !app.lastPaidDeployAt) {
+      const appCount = await GeneratedApp.countDocuments({ userId });
+      isFreeSafetyNetRetry = appCount <= 1;
+    }
+
+    const cost = isFreeSafetyNetRetry ? 0 : (isPaid ? (baseCostRetry * 10) : 6);
 
     const charge = await chargeCredits({
       userId,
       isAdmin,
       amount: cost,
-      description: `Reintento de ingeniería Maris AI (${app.kind || "fullstack"}): ${app.title?.slice(0, 50) ?? ""}`,
+      description: isFreeSafetyNetRetry
+        ? `Reintento gratuito (red de seguridad, primera app): ${app.title?.slice(0, 50) ?? ""}`
+        : `Reintento de ingeniería Maris AI (${app.kind || "fullstack"}): ${app.title?.slice(0, 50) ?? ""}`,
     });
 
     if (!charge.ok) {
@@ -6368,6 +6386,11 @@ router.post("/apps/:id/retry", requireAuth, async (req: any, res: any) => {
           ? `Reintentar esta app (${app.kind || "fullstack"}) cuesta ${cost} créditos en plan de pago.`
           : "Necesitas créditos para reintentar la generación.",
       });
+    }
+
+    if (isFreeSafetyNetRetry) {
+      app.freeSafetyNetRetryUsed = true;
+      await app.save();
     }
 
     const requestLocale = detectRequestLocale(req);

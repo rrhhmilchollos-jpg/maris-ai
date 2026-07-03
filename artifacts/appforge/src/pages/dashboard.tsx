@@ -798,7 +798,7 @@ export default function DashboardPage() {
             {!me?.isPremium && !isAdmin && (
               <div className="mx-6 mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-400/90 flex items-center gap-2">
                 <Sparkles className="h-3 w-3 flex-shrink-0" />
-                <span>Plan gratuito — genera una <strong>app completa</strong> con tus 45 créditos. <button onClick={() => setLocation("/billing")} className="underline hover:text-amber-300 transition-colors">Activa un plan</button> para apps completas con backend y sin límites.</span>
+                <span>Plan gratuito — genera una <strong>app completa</strong> con tus 65 créditos. <button onClick={() => setLocation("/billing")} className="underline hover:text-amber-300 transition-colors">Activa un plan</button> para apps completas con backend y sin límites.</span>
               </div>
             )}
 

@@ -251,6 +251,13 @@ export interface IGeneratedApp {
   pendingAdminApproval?: boolean;
   pendingApprovalSince?: Date;
   approvedByAdminAt?: Date;
+  // "Red de seguridad" de créditos gratis: si la primera app de un usuario
+  // free sale con algo roto/incompleto, tiene derecho a UN reintento sin
+  // coste (en vez de los 6 créditos normales) porque el fallo es del
+  // sistema, no del usuario, y con solo 45-65 créditos de bienvenida no
+  // hay margen para pagar el error de Maris AI. Se marca true la primera
+  // vez que se usa para que no se pueda reclamar más de una vez por app.
+  freeSafetyNetRetryUsed?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -333,6 +340,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     pendingAdminApproval: { type: Boolean, default: false, index: true },
     pendingApprovalSince: { type: Date },
     approvedByAdminAt: { type: Date },
+    freeSafetyNetRetryUsed: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

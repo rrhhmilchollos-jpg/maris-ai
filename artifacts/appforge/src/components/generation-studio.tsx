@@ -629,8 +629,19 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
 
   const handleDeploy = () => {
     if (!appId || deployAppMutation.isPending) return;
-    if (!me?.isAdmin && (me?.credits ?? 0) < 50) {
-      toast({ title: "Créditos insuficientes", description: "El Deploy cuesta 15 créditos.", variant: "destructive" });
+    // ENCONTRADO: este check bloqueaba el deploy si el usuario tenía menos de
+    // 50 créditos, pero el coste REAL del primer deploy de una app es 5
+    // créditos (DEPLOY_COST_FIRST en apps.ts) — solo sube a 50 a partir del
+    // segundo deploy pagado de la MISMA app. Con el regalo de bienvenida
+    // (65cr) y una generación fullstack (39cr), a un usuario nuevo le
+    // quedan 26cr: de sobra para el primer deploy (5cr), pero este check
+    // los bloqueaba igualmente diciéndoles "créditos insuficientes" sin
+    // necesidad. El servidor sigue siendo la fuente de verdad real (si de
+    // verdad no alcanza, el endpoint de deploy devuelve 402 con el coste
+    // exacto) — este check de aquí es solo para evitar una llamada perdida
+    // en el caso más común y obvio de saldo insuficiente.
+    if (!me?.isAdmin && (me?.credits ?? 0) < 5) {
+      toast({ title: "Créditos insuficientes", description: "No tienes suficientes créditos para desplegar esta app.", variant: "destructive" });
       setLocation("/billing");
       return;
     }
