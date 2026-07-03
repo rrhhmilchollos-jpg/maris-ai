@@ -579,20 +579,23 @@ for (const route of ROUTES) {
     let html = baseHtml;
 
     // Update title
-    const titleBefore = html;
-    html = html.replace(/<title>[^<]*<\/title>/, `<title>${route.title}</title>`);
-    if (html === titleBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <title> (patrón no encontrado)`);
+    const titlePattern = /<title>[^<]*<\/title>/;
+    if (!titlePattern.test(html)) console.warn(`⚠️  ${route.path}: no se pudo actualizar <title> (patrón no encontrado)`);
+    html = html.replace(titlePattern, `<title>${route.title}</title>`);
 
     // Update description
-    const descBefore = html;
-    html = html.replace(/(<meta name="description" content=")[^"]*(" \/>)/, `$1${route.description}$2`);
-    html = html.replace(/(<meta name="description" content=")[^"]*("\s*\/>)/, `$1${route.description}$2`);
-    if (html === descBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <meta name="description"> (patrón no encontrado)`);
+    const descPatternA = /(<meta name="description" content=")[^"]*(" \/>)/;
+    const descPatternB = /(<meta name="description" content=")[^"]*("\s*\/>)/;
+    if (!descPatternA.test(html) && !descPatternB.test(html)) {
+      console.warn(`⚠️  ${route.path}: no se pudo actualizar <meta name="description"> (patrón no encontrado)`);
+    }
+    html = html.replace(descPatternA, `$1${route.description}$2`);
+    html = html.replace(descPatternB, `$1${route.description}$2`);
 
     // Update canonical
-    const canonicalBefore = html;
-    html = html.replace(/(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/, `$1${route.canonical}$2`);
-    if (html === canonicalBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
+    const canonicalPattern = /(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/;
+    if (!canonicalPattern.test(html)) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
+    html = html.replace(canonicalPattern, `$1${route.canonical}$2`);
 
     // hreflang — SOLO entre páginas que tienen una contraparte real traducida.
     // No se añade hreflang especulativo a páginas sin traducción real: eso
