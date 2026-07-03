@@ -653,7 +653,16 @@ const HIDE_SCRIPT = `<script>
   })();
 <\/script>`;
 
-const baseHtml = readFileSync(join(DIST, "index.html"), "utf-8");
+const baseHtml = (() => {
+  let raw = readFileSync(join(DIST, "index.html"), "utf-8");
+  // Si un deploy anterior ya dejó un bloque seo-prerender (de la ruta /)
+  // incrustado en dist/index.html, hay que quitarlo del template base.
+  // Sin esto, TODAS las páginas heredan el contenido visible de la home
+  // (h1, párrafos, FAQs) además de su propio contenido — y Google las
+  // clasifica como duplicados de la home → "soft 404".
+  raw = raw.replace(/<div id="seo-prerender"[\s\S]*?<\/div>\s*<script>[\s\S]*?<\/script>\s*/g, "");
+  return raw;
+})();
 
 // ─── Artículos de noticias (dinámicos, desde la API) ───────────────────────
 // ENCONTRADO: sitemap.ts incluye /news/<slug> para cada artículo de la base
@@ -830,13 +839,17 @@ for (const route of ROUTES) {
     // el sitio en general, no un contenido específico) y se mantienen en
     // todas las páginas.
     if (route.path !== "/") {
-      const SCHEMA_TYPES_HOME_ONLY = ["Person", "SoftwareApplication", "FAQPage", "HowTo", "Product"];
-      for (const schemaType of SCHEMA_TYPES_HOME_ONLY) {
-        const schemaRegex = new RegExp(
-          `<script type="application/ld\\+json">\\{"@context":"https://schema\\.org","@type":"${schemaType}".*?<\\/script>`,
-        );
-        html = html.replace(schemaRegex, "");
-      }
+      // El index.html base incluye un único <script type="application/ld+json">
+      // con un @graph que contiene Person, SoftwareApplication, FAQPage, HowTo,
+      // Organization, WebSite — todo sobre la HOME. La limpieza anterior intentaba
+      // eliminar cada @type individualmente con regex, pero no funcionaba porque
+      // todos están agrupados en un solo @graph dentro del mismo <script>.
+      // Para las páginas no-home, eliminamos el bloque entero. Cada página tiene
+      // su propio schema (BreadcrumbList) añadido por el inline script de index.html.
+      html = html.replace(
+        /<script type="application\/ld\+json">\{"@context":"https:\/\/schema\.org","@graph":\[[\s\S]*?\]}<\/script>/,
+        "",
+      );
     }
 
     // NOTA: el bloque #seo-main (que antes vivía oculto fuera de pantalla en
