@@ -111,6 +111,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/:path*"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/sitemap.xml"
     },

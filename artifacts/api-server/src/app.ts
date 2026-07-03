@@ -337,45 +337,20 @@ app.use("/api", railwayRouter);
 app.use("/api", vivaWebhookRouter);
 
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
-// ENCONTRADO: botRenderRouter define páginas HTML estáticas completas en
-// rutas /bot-render/... (con meta tags, JSON-LD, contenido sin depender de
-// JS) — pero nunca existía ninguna detección de User-Agent que conectara
-// esas rutas con las URLs REALES que Googlebot visita (/news, /pricing...).
-// Confirmado en Search Console: "/news" rechazada en la prueba de versión
-// publicada — el HTML real servido en esa URL depende de JS para mostrar
-// el contenido ("Cargando Maris AI..." visible en el HTML estático), justo
-// el síntoma que este sistema fue construido para evitar, sin llegar a
-// conectarse nunca. Mapeo explícito y de mantenimiento bajo: solo las
-// rutas que realmente tienen una versión /bot-render/... equivalente.
-const BOT_USER_AGENT_PATTERN = /googlebot|bingbot|yandex|baiduspider|duckduckbot|slurp|facebookexternalhit|twitterbot|linkedinbot|discordbot|whatsapp/i;
-const BOT_RENDER_ROUTE_MAP: Record<string, string> = {
-  "/": "/bot-render/",
-  "/pricing": "/bot-render/pricing",
-  "/vs-emergent": "/bot-render/vs-emergent",
-  "/vs-base44": "/bot-render/vs-base44",
-  "/vs-lovable": "/bot-render/vs-lovable",
-  "/vs-bolt": "/bot-render/vs-bolt",
-  "/que-es-vibe-coding": "/bot-render/que-es-vibe-coding",
-  "/que-es-un-agente-de-ia": "/bot-render/que-es-un-agente-de-ia",
-  "/glosario": "/bot-render/glosario",
-  "/desarrollo-no-code-guia": "/bot-render/desarrollo-no-code-guia",
-  "/news": "/bot-render/news",
-};
-app.use((req, res, next) => {
-  const ua = req.headers["user-agent"] || "";
-  if (!BOT_USER_AGENT_PATTERN.test(ua)) return next();
-
-  const newsArticleMatch = req.path.match(/^\/news\/([^/]+)$/);
-  if (newsArticleMatch) {
-    req.url = `/bot-render/news/${newsArticleMatch[1]}`;
-    return next();
-  }
-  const mapped = BOT_RENDER_ROUTE_MAP[req.path];
-  if (mapped) {
-    req.url = mapped;
-  }
-  next();
-});
+// NOTA — este sistema (mapeo de User-Agent → /bot-render/...) se ha retirado
+// del flujo de peticiones. Aunque ahora /api/* SÍ está correctamente
+// proxeado desde www.marisai.es hacia este servidor, las páginas que este
+// middleware intentaba cubrir (/, /pricing, /news, /vs-emergent...) NUNCA
+// llegan aquí: Vercel las sirve como archivos HTML estáticos generados en
+// build time por artifacts/appforge/prerender.mjs, directamente desde su
+// CDN, antes de que la petición pueda alcanzar Railway. Ese sistema es
+// además la mejor solución de las dos — no depende de mantener una lista
+// de User-Agents de bots, funciona igual para cualquier crawler (incluidos
+// los que no están en esa lista) y no añade latencia de red.
+//
+// Las rutas /bot-render/... del router siguen existiendo (botRenderRouter,
+// más abajo) por si se necesitan en el futuro, pero no se enruta tráfico
+// real hacia ellas.
 app.use(botRenderRouter);
  
 // Public unauthenticated route for deployed Maris AI apps (/p/<slug>).
