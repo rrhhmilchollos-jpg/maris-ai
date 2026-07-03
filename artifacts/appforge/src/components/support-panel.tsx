@@ -162,6 +162,7 @@ export function SupportPanel() {
   const isTicketClosed = selectedTicket?.status === 'closed';
 
   return (
+    <>
     <div className="space-y-4">
       <Card className="border-primary/20 bg-card/60 backdrop-blur shadow-lg overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
@@ -426,5 +427,6 @@ export function SupportPanel() {
         </div>
       </div>
     </div>
+    </>
   );
 }

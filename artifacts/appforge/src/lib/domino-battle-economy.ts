@@ -19,7 +19,7 @@ export interface BattleEconomyConfig {
   bettingCommissionPercentage: number; // % de comisión en apuestas
   
   // Multiplicadores
-  underdog Multiplier: number; // Multiplicador si apuestas por el perdedor
+  underdogMultiplier: number; // Multiplicador si apuestas por el perdedor
   correctPredictionBonus: number; // Bonus si predices correctamente
   
   // Distribución de premios
