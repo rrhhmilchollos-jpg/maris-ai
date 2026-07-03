@@ -157,12 +157,12 @@ router.get("/admin/tickets", async (_req, res) => {
   await connectDB();
   try {
     const tickets = await Ticket.find({}).sort({ createdAt: -1 }).lean();
-    const userIds = [...new Set(tickets.map((t: ITicket) => t.userId))];
+    const userIds = [...new Set(tickets.map((t) => t.userId))];
     const users = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
-    const emailMap = new Map(users.map((u: IUser) => [String(u._id), u.email]));
+    const emailMap = new Map(users.map((u) => [String(u._id), u.email]));
 
     res.json(
-      tickets.map((t: ITicket) => ({
+      tickets.map((t) => ({
         ...t,
         userEmail: emailMap.get(t.userId) ?? "(usuario eliminado)",
       })),

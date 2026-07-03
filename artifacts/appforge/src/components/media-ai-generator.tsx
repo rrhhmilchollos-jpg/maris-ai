@@ -57,7 +57,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
   const [polling, setPolling] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const pollRef = useRef<NodeJS.Timeout>();
+  const pollRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const isVideo = mode === "video-ai";
 

@@ -67,6 +67,16 @@ const AppRepairLog: Model<IAppRepairLog> =
   mongoose.models.AppRepairLog ||
   mongoose.model<IAppRepairLog>("AppRepairLog", AppRepairLogSchema);
 
+// Accessor exportado — checkHistoricalFailurePatterns (routes/apps.ts) lo
+// necesita para consultar patrones de fallos pasados. Antes llamaba a una
+// función de este nombre que no existía (nunca se exportó nada así), así
+// que siempre caía en un fallback vía require("mongoose").models.AppRepairLog
+// que solo funciona si este módulo ya se cargó antes en el proceso — frágil
+// e implícito. Con este export, la dependencia queda explícita.
+export function getAppRepairLogModel(): Model<IAppRepairLog> {
+  return AppRepairLog;
+}
+
 // AppRuntimeError unificado en el schema central (@workspace/db/schema) —
 // ver el comentario en lib/db/src/schema/index.ts para el contexto completo
 // de por qué existían dos definiciones separadas del mismo modelo.

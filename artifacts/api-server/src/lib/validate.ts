@@ -387,7 +387,7 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     "apps/web/src/App.tsx", "apps/web/src/App.ts",
     "apps/web/src/index.tsx", "apps/web/src/index.ts",
   ];
-  const entry = ENTRY_CANDIDATES.find((p) => vfs[p]);
+  let entry = ENTRY_CANDIDATES.find((p) => vfs[p]);
   if (!entry) {
     // Para monorepos con rutas no estándar, usar el primer archivo .tsx/.ts
     // que contenga "export default function" como fallback en vez de rechazar
@@ -406,8 +406,12 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
         durationMs: Date.now() - started,
       };
     }
-    // Use the fallback entry (monorepo or non-standard path)
-    (entry as any) || (vfs[fallbackEntry] && ((vfs["src/App.tsx"] = vfs[fallbackEntry])));
+    // Usar el archivo de fallback (monorepo o ruta no estándar) — copiar su
+    // contenido a src/App.tsx Y apuntar 'entry' ahí. Antes solo se hacía lo
+    // primero: 'entry' (const) nunca se reasignaba, así que esbuild recibía
+    // entryPoints: [undefined] y fallaba de todas formas.
+    vfs["src/App.tsx"] = vfs[fallbackEntry];
+    entry = "src/App.tsx";
   }
 
   const NAMESPACE = "appforge-vfs";

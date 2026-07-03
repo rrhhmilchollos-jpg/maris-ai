@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { connectDB } from "../lib/db";
 import { requireAuth } from "../lib/auth";
-import { User, CreditTransaction } from "@workspace/db/schema";
+import { User, CreditTransaction, type ICreditTransaction } from "@workspace/db/schema";
 import {
   CREDIT_PACKAGES,
   SUBSCRIPTION_PLANS,

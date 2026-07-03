@@ -175,6 +175,14 @@ export async function recallSimilar(
     await connectDB();
     const queryVec = await embedText(embedInputText(errorMessage, options.errorContext));
 
+    // NOTA MIGRACIÓN: los documentos guardados ANTES de este fix no tienen
+    // el campo successCount en absoluto (se descartaba silenciosamente al
+    // guardar). $gte no hace match contra un campo inexistente, así que
+    // esas entradas antiguas no aparecerán en el recall hasta que
+    // rememberPatch() las toque una vez (su búsqueda de duplicados sí
+    // recorre todo AgentMemory sin este filtro). Si se quiere que las
+    // entradas antiguas cuenten desde ya, hace falta un backfill puntual:
+    // AgentMemory.updateMany({ successCount: { $exists: false } }, { $set: { successCount: 1 } })
     const query: Record<string, unknown> = { successCount: { $gte: minSuccessCount } };
     if (options.language) query.language = options.language;
 
@@ -187,7 +195,7 @@ export async function recallSimilar(
         errorMessage: e.errorMessage,
         errorContext: e.errorContext ?? "",
         patch: e.patch,
-        successCount: 1,
+        successCount: typeof e.successCount === "number" ? e.successCount : 1,
         similarity: cosineSimilarity(queryVec, e.embedding as number[]),
       }))
       .filter((r) => r.similarity >= threshold)

@@ -11,7 +11,7 @@ router.get("/rss", async (_req, res) => {
   try {
     const articles = await NewsArticle.find({}).sort({ publishedAt: -1 }).limit(20).lean();
 
-    const feedItems = articles.map((article: INewsArticle) => `
+    const feedItems = articles.map((article) => `
       <item>
         <title><![CDATA[${article.title}]]></title>
         <link>${BASE_URL}/news/${article.slug}</link>

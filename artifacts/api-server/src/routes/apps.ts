@@ -1902,8 +1902,7 @@ async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraSc
   try {
     const { connectDB } = await import("../lib/db");
     await connectDB();
-    const AppRepairLog = (await import("../lib/autoRepairAgent")).getAppRepairLogModel?.() ||
-      (require("mongoose").models.AppRepairLog);
+    const AppRepairLog = (await import("../lib/autoRepairAgent")).getAppRepairLogModel();
     if (!AppRepairLog) return { extraScore: 0, reasons: [] };
 
     // Extraer keywords del prompt para buscar patrones similares
@@ -7374,28 +7373,15 @@ export async function runJobById(jobId: string): Promise<void> {
         await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
         const cleanUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
 
-        // Construir plannedPages a partir de:
-        // 1. Las páginas del plan del Arquitecto (plan.pages) — las más fiables
-        // 2. Los hitos de frontend del milestoneResult — como respaldo
-        // Esto permite que el evaluador sepa EXACTAMENTE qué páginas existen
-        // y repare el enrutador con precisión en lugar de adivinar.
-        const architectPages = (plan?.pages || []).map((p: any) => ({
-          name: p.name || p.route,
-          route: p.route,
-          purpose: p.purpose,
-        }));
-        // Si el resultado viene de hitos, añadir también los archivos de frontend generados
-        const milestonePages = milestoneResult
-          ? (milestoneResult.frontendCode || "")
-              .split("// === FILE: ")
-              .filter((f: string) => f.includes("Page.tsx") || f.includes("page.tsx") || f.includes("View.tsx"))
-              .map((f: string) => {
-                const filePath = f.split("\n")[0].split(" ===")[0].trim();
-                const name = filePath.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || filePath;
-                return { name, route: `/${name.toLowerCase().replace("page", "").replace("view", "")}` };
-              })
-          : [];
-        const plannedPages = architectPages.length > 0 ? architectPages : milestonePages;
+        // plannedPages ya se calculó y persistió más arriba en esta misma
+        // función (finalResult.plannedPages) al guardar la app — se reutiliza
+        // aquí en vez de reconstruirlo. ANTES este bloque intentaba
+        // reconstruirlo desde variables 'plan' y 'milestoneResult' que no
+        // existen en el scope de runJobById (pertenecen a generateApp(),
+        // una función distinta) — referenciarlas aquí lanzaba
+        // "ReferenceError: plan is not defined" en cuanto se ejecutaba esta
+        // ruta, es decir, siempre que savedAppId existía tras un job exitoso.
+        const plannedPages = finalResult.plannedPages || [];
 
         let visualEvalResult: any = null;
         try {
@@ -7544,7 +7530,7 @@ export async function runJobById(jobId: string): Promise<void> {
             userName: dbUser?.fullName,
             appTitle: finalResult?.title || "tu app",
             dashboardUrl: `${process.env.APP_URL || "https://www.marisai.es"}/app/${savedAppId}`,
-            creditsRemaining: (await import("@workspace/db/schema")).User
+            creditsRemaining: await (await import("@workspace/db/schema")).User
               .findById(job.userId).then((u: any) => u?.credits).catch(() => undefined),
           }).catch((e: any) => logger.warn({ e }, "sendFirstAppReadyEmail failed"));
         }
@@ -8515,7 +8501,7 @@ try {
 // perderíamos justo los casos que más necesitamos ver. userId es opcional
 // y best-effort (si el frontend logra obtenerlo de window.Clerk antes de
 // que falle del todo).
-router.post("/panel-error", async (req: Request, res: Response) => {
+router.post("/panel-error", async (req, res) => {
   try {
     const { message, stack, componentStack, pathname, userId } = req.body || {};
     if (!message || typeof message !== "string") {

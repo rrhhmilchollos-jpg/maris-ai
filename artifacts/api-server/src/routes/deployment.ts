@@ -347,6 +347,7 @@ router.post("/apps/:appId/health", requireAuth, async (req: Request, res: Respon
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId });
     if (!appData) return res.status(404).json({ error: "App not found" });
 
@@ -358,9 +359,9 @@ router.post("/apps/:appId/health", requireAuth, async (req: Request, res: Respon
     const hasClerk = appData.frontendCode.includes("Clerk");
     const hasStripe = appData.frontendCode.includes("Stripe");
     
-    const missingEnvs = (appData.requiredEnvVars || []).filter(ev => !ev.value);
+    const missingEnvs = (appData.requiredEnvVars || []).filter((ev: { name: string; value?: string }) => !ev.value);
     if (missingEnvs.length > 0) {
-      issues.push(`Faltan variables de entorno: ${missingEnvs.map(e => e.name).join(", ")}`);
+      issues.push(`Faltan variables de entorno: ${missingEnvs.map((e: { name: string }) => e.name).join(", ")}`);
     }
 
     return res.json({ 
@@ -381,6 +382,7 @@ router.post("/apps/:appId/code-review", requireAuth, async (req: Request, res: R
   try {
     const { appId } = req.params;
     const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const appData = await GeneratedApp.findOne({ _id: appId, userId });
     if (!appData) return res.status(404).json({ error: "App not found" });
     const issues: string[] = [];
@@ -447,6 +449,7 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
   try {
     const appId = String(req.params.appId);
     const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "No autenticado" });
     const { autoFix = false } = req.body || {};
 
     const { GeneratedApp, VisualTestJob } = await import("@workspace/db/schema");
@@ -485,6 +488,7 @@ router.get("/apps/:appId/visual-test/:jobId", requireAuth, async (req: Request, 
   try {
     const { appId, jobId } = req.params;
     const userId = getAuthenticatedUserId(req);
+    if (!userId) return res.status(401).json({ error: "Not authenticated" });
     const { VisualTestJob } = await import("@workspace/db/schema");
     const job = await (VisualTestJob as any).findOne({ _id: jobId, appId: String(appId), userId }).lean();
     if (!job) return res.status(404).json({ error: "Job no encontrado" });

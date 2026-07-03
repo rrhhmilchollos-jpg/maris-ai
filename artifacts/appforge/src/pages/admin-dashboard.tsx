@@ -106,7 +106,6 @@ interface MetricsResponse {
   queue?: { ready: boolean };
   overview?: { totalUsers: number; totalApps: number; newUsers7d: number };
   revenueCentsTotal?: number;
-  revenueCentsTotal?: number;
   e2b?: {
     configured: boolean;
     validateOnGenerate: boolean;

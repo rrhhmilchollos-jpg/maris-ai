@@ -691,7 +691,15 @@ export interface IAgentMemory extends Document {
   errorContext?: string;
   patch: string;
   language: string;
+  framework?: string;
   embedding?: number[];
+  // Cuántas veces se ha reutilizado este parche ante un error casi idéntico
+  // (ver rememberPatch() en artifacts/api-server/src/lib/agentMemory.ts).
+  // Antes no estaba declarado aquí: Mongoose en modo estricto (por defecto)
+  // descartaba el campo silenciosamente en cada $inc, así que
+  // recallSimilar() — que filtra por successCount >= minSuccessCount — no
+  // encontraba NUNCA ningún resultado en producción.
+  successCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -702,7 +710,9 @@ const AgentMemorySchema = new Schema<IAgentMemory>(
     errorContext: { type: String },
     patch: { type: String, required: true },
     language: { type: String, default: "typescript" },
+    framework: { type: String },
     embedding: { type: [Number] },
+    successCount: { type: Number, default: 1 },
   },
   { timestamps: true },
 );

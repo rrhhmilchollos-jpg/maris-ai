@@ -73,7 +73,8 @@ router.delete("/railway/disconnect", requireAuth, async (req: Request, res: Resp
 router.post("/apps/:appId/deploy-backend", requireAuth, async (req: Request, res: Response) => {
   try {
     await connectDB();
-    const { appId } = req.params;
+    const { appId: appIdParam } = req.params;
+    const appId = Array.isArray(appIdParam) ? (appIdParam[0] ?? "") : appIdParam;
     const userId = (req as any).userId as string;
 
     const user = await User.findById(userId).select("railwayApiToken githubLogin").lean();

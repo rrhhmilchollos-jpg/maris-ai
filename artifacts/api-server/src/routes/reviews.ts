@@ -57,7 +57,7 @@ router.post("/reviews", requireAuth, async (req: any, res: any): Promise<void> =
       message: "¡Gracias por tu reseña! Se publicará tras una breve revisión.",
     });
   } catch (err) {
-    logger.error("Error creando reseña", { err });
+    logger.error({ err }, "Error creando reseña");
     res.status(500).json({ error: "Error al guardar la reseña" });
   }
 });
@@ -86,7 +86,7 @@ router.get("/reviews/public", async (_req: any, res: any): Promise<void> => {
       },
     });
   } catch (err) {
-    logger.error("Error listando reseñas públicas", { err });
+    logger.error({ err }, "Error listando reseñas públicas");
     res.status(500).json({ error: "Error al obtener reseñas" });
   }
 });
@@ -99,7 +99,7 @@ router.get("/admin/reviews", requireAuth, requireAdmin, async (req: any, res: an
     const reviews = await Review.find({ status }).sort({ createdAt: -1 }).limit(200).lean();
     res.json({ reviews });
   } catch (err) {
-    logger.error("Error listando reseñas admin", { err });
+    logger.error({ err }, "Error listando reseñas admin");
     res.status(500).json({ error: "Error al obtener reseñas" });
   }
 });
@@ -123,7 +123,7 @@ router.post("/admin/reviews/:id/moderate", requireAuth, requireAdmin, async (req
     await review.save();
     res.json({ success: true, review: { id: review._id, status: review.status } });
   } catch (err) {
-    logger.error("Error moderando reseña", { err });
+    logger.error({ err }, "Error moderando reseña");
     res.status(500).json({ error: "Error al moderar la reseña" });
   }
 });
