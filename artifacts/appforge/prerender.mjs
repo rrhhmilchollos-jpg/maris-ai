@@ -14,13 +14,13 @@ const ROUTES = [
   {
     path: "/pricing",
     file: "pricing/index.html",
-    title: "Precios Maris AI — Créditos Gratis de Bienvenida sin Tarjeta",
-    description: "Empieza gratis sin tarjeta. Paquetes desde 20€ por 160 créditos, con descuento progresivo cuanto más compras — hasta 0,110€/crédito.",
+    title: "Precios Maris AI — 45 Créditos Gratis de Bienvenida sin Tarjeta",
+    description: "Empieza gratis con 45 créditos sin tarjeta. Paquetes desde 20€ por 160 créditos, con descuento progresivo cuanto más compras — hasta 0,110€/crédito.",
     canonical: "https://www.marisai.es/pricing",
     body: `<h1>Precios de Maris AI — Crea apps con IA</h1>
 <p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan y cuanto más compras, más barato sale cada crédito.</p>
 <h2>Plan Gratuito</h2>
-<ul><li>Créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
+<ul><li>45 créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
 <h2>Pack Starter — 20€</h2>
 <ul><li>160 créditos</li><li>0,125€ por crédito</li><li>Creditos que nunca caducan</li></ul>
 <h2>Pack 250 — 37€</h2>
@@ -407,13 +407,13 @@ const ROUTES = [
   {
     path: "/en/pricing",
     file: "en/pricing/index.html",
-    title: "Maris AI Pricing — Free Welcome Credits, No Credit Card",
-    description: "Start free, no credit card. Packages from €20 for 160 credits, with progressive discounts the more you buy — down to €0.110/credit.",
+    title: "Maris AI Pricing — 45 Free Welcome Credits, No Credit Card",
+    description: "Start free with 45 credits, no credit card. Packages from €20 for 160 credits, with progressive discounts the more you buy — down to €0.110/credit.",
     canonical: "https://www.marisai.es/en/pricing",
     body: `<h1>Maris AI Pricing — Build apps with AI</h1>
 <p>Start free, no credit card required. Credits never expire, and the more you buy, the cheaper each credit gets.</p>
 <h2>Free Plan</h2>
-<ul><li>Free welcome credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
+<ul><li>45 free welcome credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
 <h2>Starter Pack — €20</h2>
 <ul><li>160 credits</li><li>€0.125 per credit</li><li>Credits that never expire</li></ul>
 <h2>Pack 250 — €37</h2>

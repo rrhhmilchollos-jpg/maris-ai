@@ -111,7 +111,9 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
   // - Email: 1 cuenta por email, sin excepciones. Si el mismo email ya tiene créditos usados → 0 créditos.
   // - IP: NO bloqueamos por IP en el registro. Una familia puede tener N cuentas desde la misma IP.
   //   El bloqueo por IP solo se aplica manualmente por el admin (en casos de reembolso o abuso evidente).
-  // - Una vez gastados los 50 créditos gratuitos, el usuario DEBE pagar para seguir generando.
+  // - Una vez gastados los 45 créditos gratuitos (mismo valor que otorga el
+  //   webhook de Clerk en el alta normal — ver clerkWebhook.ts), el usuario
+  //   DEBE pagar para seguir generando.
   const emailAlreadyUsed = await User.findOne({ email, freeCreditsUsed: true }).lean();
   const alreadyUsed = !!emailAlreadyUsed;
 
@@ -127,8 +129,8 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
         fullName,
         imageUrl: clerkUser.imageUrl ?? undefined,
         phoneNumber: phoneNumber ?? undefined,
-        credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 15 : 0),
-        planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 50 : 0),
+        credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 45 : 0),
+        planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 45 : 0),
         freeCreditsUsed: shouldGiveFreeCredits,
         registrationIp: ip,
         // ID Universal Maris AI — generado automáticamente al crear el usuario

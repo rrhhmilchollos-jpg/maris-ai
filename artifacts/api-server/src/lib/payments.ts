@@ -34,7 +34,7 @@ export const KIND_COSTS = {
   "game-3d":    5, // Proyecto muy complejo
 } as const;
 
-export const FREE_PLAN_CREDITS = 10;
+export const FREE_PLAN_CREDITS = 45; // mismo valor que credits.ts/auth.ts/clerkWebhook.ts al registrarse
 export const MONTHLY_SUBSCRIPTION_CREDITS = 100;
 
 export const SUBSCRIPTION_PLANS = [
@@ -43,7 +43,7 @@ export const SUBSCRIPTION_PLANS = [
     name: "Gratis",
     price: 0,
     creditsPerMonth: FREE_PLAN_CREDITS,
-    features: ["10 créditos iniciales", "Subdominio Maris AI", "Soporte comunitario"],
+    features: ["45 créditos iniciales", "Subdominio Maris AI", "Soporte comunitario"],
   },
   {
     id: "pro",

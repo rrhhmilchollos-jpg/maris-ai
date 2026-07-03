@@ -60,6 +60,9 @@ export default function PricingPage() {
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 9 agentes IA de Maris AI.
             </p>
+            <p className="mt-4 text-sm text-primary font-medium">
+              🎁 Regístrate gratis y recibe 45 créditos de bienvenida — sin tarjeta de crédito
+            </p>
             <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-400">
               <Zap className="h-4 w-4" />
               Cuanto más compras, más barato el crédito
@@ -177,6 +180,10 @@ export default function PricingPage() {
                 a: "Los créditos son la moneda de Maris AI. Cada vez que generas una app, modificas código o usas los agentes IA, se consumen créditos según la complejidad de la tarea. Una landing page básica consume 1 crédito; una app completa con backend puede consumir 3-15 créditos.",
               },
               {
+                q: "¿Cuántos créditos recibo al registrarme gratis?",
+                a: "Al crear tu cuenta gratuita recibes 45 créditos de bienvenida, sin necesidad de tarjeta de crédito. Esto te permite generar tu primera app completa (frontend + backend) y todavía te queda saldo real para probar varios ajustes y ediciones — no solo lo justo para una demo.",
+              },
+              {
                 q: "¿Por qué es más barato comprar packs grandes?",
                 a: "Cuanto mayor es el pack, menor es el precio por crédito (con la única excepción del pack de entrada, pensado para que tu primera compra sea lo más accesible posible). Es nuestra forma de premiar a los usuarios que más confían en Maris AI.",
               },
@@ -219,7 +226,7 @@ export default function PricingPage() {
               ¿Preparado para transformar tus ideas en realidad?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Empieza hoy mismo con Maris AI, sin necesidad de tarjeta de crédito y sin compromiso.
+              Empieza hoy mismo con Maris AI. Recibe 45 créditos de bienvenida al registrarte, sin necesidad de tarjeta de crédito y sin compromiso.
             </p>
             <Link href="/sign-up">
               <Button size="lg" className="h-14 px-8 text-lg bg-primary text-white hover:bg-primary/90">
