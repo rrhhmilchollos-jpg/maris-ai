@@ -741,6 +741,26 @@ for (const route of ROUTES) {
     if (!canonicalPattern.test(html)) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
     html = html.replace(canonicalPattern, `$1${route.canonical}$2`);
 
+    // Update Open Graph and Twitter meta tags — CRÍTICO para indexación.
+    // Sin esto, og:url/og:title/twitter:url siguen apuntando a la home en
+    // todas las páginas prerenderizadas, lo que hace que Google interprete
+    // cada página como duplicado de la home → "soft 404" en Search Console.
+    const ogReplacements = [
+      [/(<meta property="og:title" content=")[^"]*(")/,     `$1${route.title}$2`],
+      [/(<meta property="og:description" content=")[^"]*(")/,`$1${route.description}$2`],
+      [/(<meta property="og:url" content=")[^"]*(")/,       `$1${route.canonical}$2`],
+      [/(<meta name="twitter:title" content=")[^"]*(")/,    `$1${route.title}$2`],
+      [/(<meta name="twitter:description" content=")[^"]*(")/,`$1${route.description}$2`],
+      [/(<meta name="twitter:url" content=")[^"]*(")/,      `$1${route.canonical}$2`],
+      // twitter:title/description pueden estar con property= en vez de name=
+      [/(<meta property="twitter:title" content=")[^"]*(")/,    `$1${route.title}$2`],
+      [/(<meta property="twitter:description" content=")[^"]*(")/,`$1${route.description}$2`],
+      [/(<meta property="twitter:url" content=")[^"]*(")/,      `$1${route.canonical}$2`],
+    ];
+    for (const [pattern, replacement] of ogReplacements) {
+      html = html.replace(pattern, replacement);
+    }
+
     // hreflang — SOLO entre páginas que tienen una contraparte real traducida.
     // No se añade hreflang especulativo a páginas sin traducción real: eso
     // le diría a Google que existe una versión que no existe, justo el tipo
