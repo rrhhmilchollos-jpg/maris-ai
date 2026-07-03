@@ -713,6 +713,35 @@ if (articleRoutes.length > 0) {
 }
 ROUTES.push(...articleRoutes);
 
+// Actualizar el body de /news con el listado real de artículos.
+// Sin esto, la página prerenderizada tiene contenido genérico que Google
+// clasifica como "soft 404" (página sin contenido real).
+const newsRoute = ROUTES.find((r) => r.path === "/news");
+if (newsRoute && articleRoutes.length > 0) {
+  const articleListHtml = articleRoutes
+    .map((a) => {
+      const title = a.title.replace(/ — Maris AI$/, "");
+      return `<li><a href="${a.canonical}">${escapeHtml(title)}</a> — ${escapeHtml(a.description.slice(0, 120))}</li>`;
+    })
+    .join("\n");
+  newsRoute.body = `<h1>Blog de inteligencia artificial para emprendedores</h1>
+<p>Las últimas noticias, tutoriales y guías sobre inteligencia artificial, vibe coding y creación de apps sin programar. Contenido en español para emprendedores en España y Latinoamérica.</p>
+<h2>Últimos artículos</h2>
+<ul>
+${articleListHtml}
+</ul>
+<h2>Temas del blog</h2>
+<ul>
+<li><a href="/que-es-vibe-coding">Vibe coding y programación con IA</a></li>
+<li><a href="/desarrollo-no-code-guia">Guías para crear apps sin saber programar</a></li>
+<li><a href="/vs-emergent">Comparativas de herramientas IA para emprendedores</a></li>
+<li><a href="/que-es-un-agente-de-ia">Agentes de inteligencia artificial</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+</ul>`;
+  console.log(`📝 /news actualizado con ${articleRoutes.length} artículos en el listado`);
+}
+
 let success = 0;
 
 for (const route of ROUTES) {
