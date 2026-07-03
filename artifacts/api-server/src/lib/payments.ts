@@ -54,56 +54,71 @@ export const SUBSCRIPTION_PLANS = [
   },
 ];
 
+// Curva de precio por crédito DESCENDENTE según tamaño de paquete (a más
+// créditos, más barato el crédito individual) — pensada para incentivar la
+// compra de paquetes grandes. El paquete de entrada (160) es una excepción
+// deliberada de "gancho": tiene el precio por crédito más bajo de toda la
+// tabla para reducir la fricción de la primera compra, y a partir de ahí
+// (250 en adelante) el descuento es estrictamente progresivo con el tamaño.
 export const CREDIT_PACKAGES = [
   {
     id: "pack-100",
     name: "160 créditos",
     credits: 160,
-    priceCents: 2000,   // 20€
+    priceCents: 2000,   // 20€ — 0,125€/crédito (gancho de entrada)
     currency: "eur",
     popular: false,
+    pricePerCredit: "0,125€",
   },
   {
     id: "pack-250",
     name: "250 créditos",
     credits: 250,
-    priceCents: 5000,   // 50€
+    priceCents: 3700,   // 37€ — 0,148€/crédito
     currency: "eur",
     popular: false,
+    pricePerCredit: "0,148€",
   },
   {
     id: "pack-500",
     name: "500 créditos",
     credits: 500,
-    priceCents: 10000,  // 100€
+    priceCents: 7000,   // 70€ — 0,140€/crédito
     currency: "eur",
-    popular: false,
+    popular: true,
+    badge: "MÁS POPULAR",
+    pricePerCredit: "0,140€",
   },
   {
     id: "pack-1250",
     name: "1250 créditos",
     credits: 1250,
-    priceCents: 25000,  // 250€
+    priceCents: 16200,  // 162€ — 0,130€/crédito
     currency: "eur",
     popular: false,
+    pricePerCredit: "0,130€",
   },
   {
     id: "pack-3000",
     name: "3000 créditos",
     credits: 3000,
-    priceCents: 50000,  // 500€
+    priceCents: 36000,  // 360€ — 0,120€/crédito
     currency: "eur",
     description: "20% More",
+    badge: "MEJOR AHORRO",
     popular: true,
+    pricePerCredit: "0,120€",
   },
   {
     id: "pack-6000",
     name: "6000 créditos",
     credits: 6000,
-    priceCents: 100000, // 1000€
+    priceCents: 66000,  // 660€ — 0,110€/crédito
     currency: "eur",
     description: "20% More",
+    badge: "MEJOR AHORRO",
     popular: true,
+    pricePerCredit: "0,110€",
   },
 ];
 

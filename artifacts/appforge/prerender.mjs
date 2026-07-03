@@ -14,23 +14,29 @@ const ROUTES = [
   {
     path: "/pricing",
     file: "pricing/index.html",
-    title: "Precios Maris AI — 50 Créditos Gratis sin Tarjeta",
-    description: "Empieza gratis con 50 créditos sin tarjeta. Paquetes desde 20€ por 160 créditos que nunca caducan.",
+    title: "Precios Maris AI — Créditos Gratis de Bienvenida sin Tarjeta",
+    description: "Empieza gratis sin tarjeta. Paquetes desde 20€ por 160 créditos, con descuento progresivo cuanto más compras — hasta 0,110€/crédito.",
     canonical: "https://www.marisai.es/pricing",
     body: `<h1>Precios de Maris AI — Crea apps con IA</h1>
-<p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan.</p>
+<p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan y cuanto más compras, más barato sale cada crédito.</p>
 <h2>Plan Gratuito</h2>
-<ul><li>78 créditos gratis al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
+<ul><li>Créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
 <h2>Pack Starter — 20€</h2>
-<ul><li>160 créditos</li><li>Aproximadamente 16 apps completas</li><li>Créditos que nunca caducan</li></ul>
-<h2>Pack Pro — 45€</h2>
-<ul><li>400 créditos</li><li>Aproximadamente 40 apps completas</li><li>Soporte prioritario</li></ul>
-<h2>Pack Business — 80€</h2>
-<ul><li>800 créditos</li><li>Aproximadamente 80 apps completas</li><li>Soporte dedicado</li></ul>
+<ul><li>160 créditos</li><li>0,125€ por crédito</li><li>Creditos que nunca caducan</li></ul>
+<h2>Pack 250 — 37€</h2>
+<ul><li>250 créditos</li><li>0,148€ por crédito</li></ul>
+<h2>Pack Más Popular — 70€</h2>
+<ul><li>500 créditos</li><li>0,140€ por crédito</li></ul>
+<h2>Pack 1250 — 162€</h2>
+<ul><li>1250 créditos</li><li>0,130€ por crédito</li></ul>
+<h2>Pack Mejor Ahorro — 360€</h2>
+<ul><li>3000 créditos</li><li>0,120€ por crédito</li></ul>
+<h2>Pack Mejor Ahorro — 660€</h2>
+<ul><li>6000 créditos</li><li>0,110€ por crédito — el precio por crédito más bajo</li></ul>
 <h2>Preguntas frecuentes sobre precios</h2>
 <dl>
 <dt>¿Los créditos caducan?</dt><dd>No. Los créditos de Maris AI nunca caducan. Puedes usarlos cuando quieras.</dd>
-<dt>¿Necesito tarjeta para empezar?</dt><dd>No. Los 78 créditos gratuitos se activan al registrarte sin tarjeta.</dd>
+<dt>¿Por qué es más barato comprar packs grandes?</dt><dd>El precio por crédito baja cuanto mayor es el pack, para premiar a los usuarios que compran más de una vez.</dd>
 <dt>¿Qué puedo crear con los créditos?</dt><dd>Apps completas, landings, dashboards, e-commerce, CRMs y cualquier tipo de aplicación web.</dd>
 </dl>`
   },
@@ -401,23 +407,29 @@ const ROUTES = [
   {
     path: "/en/pricing",
     file: "en/pricing/index.html",
-    title: "Maris AI Pricing — 78 Free Credits, No Credit Card",
-    description: "Start free with 78 credits, no credit card. Packages from €20 for 160 credits that never expire. Build apps with AI at the best price.",
+    title: "Maris AI Pricing — Free Welcome Credits, No Credit Card",
+    description: "Start free, no credit card. Packages from €20 for 160 credits, with progressive discounts the more you buy — down to €0.110/credit.",
     canonical: "https://www.marisai.es/en/pricing",
     body: `<h1>Maris AI Pricing — Build apps with AI</h1>
-<p>Start free, no credit card required. Credits never expire.</p>
+<p>Start free, no credit card required. Credits never expire, and the more you buy, the cheaper each credit gets.</p>
 <h2>Free Plan</h2>
-<ul><li>78 free credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
+<ul><li>Free welcome credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
 <h2>Starter Pack — €20</h2>
-<ul><li>160 credits</li><li>About 16 complete apps</li><li>Credits that never expire</li></ul>
-<h2>Pro Pack — €45</h2>
-<ul><li>400 credits</li><li>About 40 complete apps</li><li>Priority support</li></ul>
-<h2>Business Pack — €80</h2>
-<ul><li>800 credits</li><li>About 80 complete apps</li><li>Dedicated support</li></ul>
+<ul><li>160 credits</li><li>€0.125 per credit</li><li>Credits that never expire</li></ul>
+<h2>Pack 250 — €37</h2>
+<ul><li>250 credits</li><li>€0.148 per credit</li></ul>
+<h2>Most Popular — €70</h2>
+<ul><li>500 credits</li><li>€0.140 per credit</li></ul>
+<h2>Pack 1250 — €162</h2>
+<ul><li>1250 credits</li><li>€0.130 per credit</li></ul>
+<h2>Best Value — €360</h2>
+<ul><li>3000 credits</li><li>€0.120 per credit</li></ul>
+<h2>Best Value — €660</h2>
+<ul><li>6000 credits</li><li>€0.110 per credit — the lowest price per credit</li></ul>
 <h2>Pricing FAQ</h2>
 <dl>
 <dt>Do credits expire?</dt><dd>No. Maris AI credits never expire. Use them whenever you want.</dd>
-<dt>Do I need a card to start?</dt><dd>No. The 78 free credits activate when you sign up, no card required.</dd>
+<dt>Why are bigger packs cheaper?</dt><dd>The price per credit drops as pack size grows, to reward users who buy more.</dd>
 <dt>What can I build with credits?</dt><dd>Complete apps, landing pages, dashboards, e-commerce, CRMs, and any type of web application.</dd>
 </dl>`
   },
