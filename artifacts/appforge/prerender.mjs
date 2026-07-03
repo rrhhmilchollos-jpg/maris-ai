@@ -514,6 +514,25 @@ for (const route of ROUTES) {
       }
     }
 
+    // Eliminar el bloque oculto <div id="seo-main">...</div> (contenido genérico
+    // de la home: "¿Qué es Maris AI?", los 9 agentes, listas, etc.) en cualquier
+    // ruta que no sea la home. Este div se sirve visualmente oculto
+    // (position:absolute; left:-9999px) pero SIEMPRE presente en el HTML crudo
+    // que lee Googlebot, porque viene del index.html base que comparten todas
+    // las rutas. Antes de este fix, cada página no-home mostraba a Google este
+    // bloque de ~6KB idéntico + su contenido único encima, lo que produce
+    // contenido casi duplicado entre páginas — la causa más probable de que
+    // Search Console marque estas URLs como "Detectada: actualmente no indexada".
+    // Mismo criterio que ya aplicamos arriba para el schema exclusivo de home.
+    if (route.path !== "/") {
+      const seoMainRegex = /<div id="seo-main"[\s\S]*?<\/div>\s*/;
+      const beforeSeoMain = html;
+      html = html.replace(seoMainRegex, "");
+      if (html === beforeSeoMain) {
+        console.warn(`⚠️  ${route.path}: no se pudo eliminar #seo-main (patrón no encontrado)`);
+      }
+    }
+
     // Add visible SEO content + hide script
     // Usamos una regex que captura la etiqueta <div id="root" ...></div> completa,
     // sea cual sea el resto de atributos (role="main", clases, etc.), en vez de
