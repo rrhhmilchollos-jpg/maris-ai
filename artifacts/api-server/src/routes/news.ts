@@ -28,6 +28,20 @@ router.post("/admin/news", requireAuth, requireAdmin, async (req: any, res: any)
       metaDescription,
       relatedAppId,
     });
+
+    // Dispara un redeploy del frontend en Vercel para que prerender.mjs
+    // genere el HTML estático real de este artículo nuevo (si no, el
+    // artículo solo tendría URL en el sitemap pero sin página prerenderizada
+    // hasta el siguiente `git push` a main -> 404 para Googlebot mientras
+    // tanto). Requiere la variable de entorno VERCEL_DEPLOY_HOOK_URL
+    // (Vercel > Project Settings > Git > Deploy Hooks). Si no está
+    // configurada, se omite sin romper la creación del artículo.
+    if (process.env.VERCEL_DEPLOY_HOOK_URL) {
+      fetch(process.env.VERCEL_DEPLOY_HOOK_URL, { method: "POST" }).catch((err) => {
+        logger.warn({ err }, "No se pudo disparar el deploy hook de Vercel tras crear noticia");
+      });
+    }
+
     res.status(201).json(newArticle);
   } catch (error) {
     logger.error({ error }, "Error al crear noticia");

@@ -440,6 +440,64 @@ const HIDE_SCRIPT = `<script>
 
 const baseHtml = readFileSync(join(DIST, "index.html"), "utf-8");
 
+// ─── Artículos de noticias (dinámicos, desde la API) ───────────────────────
+// ENCONTRADO: sitemap.ts incluye /news/<slug> para cada artículo de la base
+// de datos, pero el rewrite de vercel.json excluye explícitamente el prefijo
+// "news" del fallback SPA (para que /news use el HTML prerenderizado real).
+// Como aquí nunca se generaba ese HTML para los artículos individuales,
+// cada URL /news/<slug> no tenía ni archivo estático ni rewrite que la
+// sirviera -> 404 real para Googlebot. Resultado observado en Search
+// Console: cada artículo enlazado en el sitemap quedaba sin indexar. Fix:
+// generar aquí, en build time, el mismo tipo de HTML estático real que ya
+// se genera para /pricing, /showcase, etc., uno por artículo publicado.
+const API_BASE = process.env.VITE_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app";
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function fetchArticleRoutes() {
+  try {
+    const res = await fetch(`${API_BASE}/api/news`);
+    if (!res.ok) throw new Error(`API respondió ${res.status}`);
+    const articles = await res.json();
+    if (!Array.isArray(articles)) return [];
+
+    return articles.map((a) => {
+      const bodyHtml = String(a.body || "")
+        .split("\n\n")
+        .filter((p) => p.trim().length > 0)
+        .map((p) => `<p>${escapeHtml(p)}</p>`)
+        .join("\n");
+
+      return {
+        path: `/news/${a.slug}`,
+        file: `news/${a.slug}/index.html`,
+        title: `${a.title} — Maris AI`,
+        description: a.metaDescription || String(a.body || "").slice(0, 160),
+        canonical: `https://www.marisai.es/news/${a.slug}`,
+        body: `<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}`,
+      };
+    });
+  } catch (err) {
+    // Un fallo aquí (API caída durante el build, artículo mal formado, etc.)
+    // NUNCA debe tirar abajo todo el build del frontend — se omiten los
+    // artículos de esta ejecución y se generan en el siguiente deploy.
+    console.warn(`⚠️  No se pudieron obtener artículos para prerender: ${err.message}`);
+    return [];
+  }
+}
+
+const articleRoutes = await fetchArticleRoutes();
+if (articleRoutes.length > 0) {
+  console.log(`📰 ${articleRoutes.length} artículos de noticias encontrados para prerender`);
+}
+ROUTES.push(...articleRoutes);
+
 let success = 0;
 
 for (const route of ROUTES) {
