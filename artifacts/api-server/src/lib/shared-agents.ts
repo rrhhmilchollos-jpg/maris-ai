@@ -42,7 +42,7 @@ export interface ValidationReport {
   filesAnalyzed: number;
 }
 
-export type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair" | "system" | "memory" | "validator" | "testing" | "fixing" | "patching" | "coder" | "visual-evaluator";
+export type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair" | "system" | "memory" | "validator" | "testing" | "fixing" | "patching" | "coder" | "visual-evaluator" | "chat" | "classifier" | "crew" | "rag" | "tools" | "planner" | "data-ops" | "error-analysis" | "image-analysis" | "code-review" | "gating";
 
 export type ComplexityTier = "basic" | "standard" | "robust" | "ultra";
 
@@ -291,6 +291,52 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
   }
 
   logger.error({ role }, "Todos los modelos de Anthropic fallaron");
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+/**
+ * Variante de createClaudeMessageWithFallback para llamadas con tool-calling
+ * (tools/tool_choice — bucles agenticos como marisCrewAI.ts y agentTools.ts).
+ * createClaudeMessageWithFallback NO sirve aquí: solo agrega los eventos de
+ * texto del stream y descarta cualquier tool_use block, así que un agente
+ * con herramientas perdería sus llamadas a herramientas. Esta variante NO
+ * usa streaming (las llamadas con tools de este proyecto son siempre
+ * non-streaming) y devuelve la respuesta completa de Anthropic tal cual,
+ * pero con el mismo timeout duro + reintento en fallos transitorios +
+ * fallback de modelo que ya tiene el resto del pipeline.
+ */
+export async function createClaudeToolCallWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
+  let lastError: unknown;
+  const MAX_RETRIES = 3;
+
+  for (const candidate of fallbackClaudeModels(model)) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await raceWithTimeout(
+          anthropic.messages.create({ ...params, model: candidate } as any),
+          AI_CALL_TIMEOUT_MS,
+          `${role} tool call (modelo ${candidate})`,
+        );
+      } catch (err: any) {
+        lastError = err;
+        const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
+        const isTransient = isRateLimit
+          || err?.status >= 500
+          || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed/i.test(String(err?.message || err));
+
+        if (isTransient && attempt < MAX_RETRIES - 1) {
+          const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
+          logger.warn({ role, model: candidate, attempt, delay, isRateLimit }, "Tool call: fallo transitorio; reintentando...");
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        logger.warn({ role, model: candidate, err }, "Tool call model failed; trying next candidate");
+        break;
+      }
+    }
+  }
+
+  logger.error({ role }, "Todos los modelos de Anthropic fallaron (tool call)");
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 

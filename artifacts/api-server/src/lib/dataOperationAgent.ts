@@ -15,7 +15,7 @@
  * Responde con confirmación clara de lo que hizo o por qué no pudo hacerlo.
  */
 
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeMessageWithFallback } from "./shared-agents";
 import { analyzeSpanishIntent, hasSpanishAction, hasSpanishDomain } from "./spanishIntentLexicon";
 import { connectDB } from "./db";
 import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
@@ -272,8 +272,7 @@ async function interpretDataRequest(
     `Devuelve SOLO el JSON de la operación. Usa el mapa del proyecto para identificar la colección/entidad exacta donde operar.`,
   ].filter(Boolean).join("\n");
 
-  const result = await anthropic.messages.create({
-    model: "claude-haiku-4-5",
+  const result = await createClaudeMessageWithFallback("data-ops", "claude-haiku-4-5", {
     max_tokens: 600,
     system: DATA_AGENT_SYSTEM,
     messages: [{ role: "user", content: userContent }],

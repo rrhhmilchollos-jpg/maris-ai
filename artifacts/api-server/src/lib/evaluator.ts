@@ -26,9 +26,8 @@
  */
 import type { Logger } from "pino";
 import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { CoreOrchestrator } from "@workspace/services";
-import { patchBundle, type GenLanguage } from "./shared-agents";
+import { patchBundle, createClaudeMessageWithFallback, type GenLanguage } from "./shared-agents";
 import { validateBundle } from "./validate";
 import {
   takeScreenshots,
@@ -257,8 +256,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   // del loop de reparación. El coste adicional (una llamada de análisis más
   // cara) está justificado: es la diferencia entre un autofix que sabe qué
   // hacer y uno que genera un fix genérico que no resuelve el problema real.
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+  const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
     max_tokens: 4000,
     messages: [{ role: "user", content }],
   });

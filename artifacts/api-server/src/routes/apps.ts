@@ -15,7 +15,7 @@ function getOpenAIApps(): OpenAI {
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
-import { raceWithTimeout, AI_CALL_TIMEOUT_MS } from "../lib/shared-agents";
+import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createClaudeToolCallWithFallback } from "../lib/shared-agents";
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp } from "../lib/appRevisions";
 import * as esbuild from "esbuild";
@@ -1664,16 +1664,19 @@ async function architectPlan(prompt: string, research: string, templateContext =
     ? `${scopeHint}\n\nDesign the file structure for this app:\n\n${cleanPrompt}${templateNote}\n\n---\nResearch context (treat as ground truth for branding & sections):\n${research}`
     : `${scopeHint}\n\nDesign the file structure for this app:\n\n${cleanPrompt}${templateNote}`;
 
-  const response = await withTimeoutOrThrow<any>(
-    anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 12000,
-      system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
-      messages: [{ role: "user", content: userContent }],
-    }),
-    90_000, // Increased from 60s to 90s to match outer timeout
-    "architect",
-  );
+  // ENCONTRADO: esta llamada (el Architect — diseña la estructura de
+  // archivos de la app, uno de los pasos más tempranos y determinantes de
+  // todo el pipeline) solo tenía un timeout de 90s vía withTimeoutOrThrow,
+  // pero CERO reintentos y CERO fallback de modelo. Un solo 429 o parpadeo
+  // de red mataba el Architect y con él la generación entera desde el
+  // principio. Sustituido por createClaudeMessageWithFallback, que además
+  // del timeout ya trae reintento en fallos transitorios y fallback
+  // Sonnet↔Opus, igual que el resto de agentes del pipeline.
+  const response = await createClaudeMessageWithFallback("architect", "claude-sonnet-4-6", {
+    max_tokens: 12000,
+    system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
+    messages: [{ role: "user", content: userContent }],
+  });
 
   const raw = (response.content[0] as any).text ?? "";
   const plan = extractJsonObject<ProjectPlan>(raw);
@@ -3405,8 +3408,13 @@ export type PhaseErrorReporter = (
 // pregunta al cliente algo que ya respondió él mismo en su propio prompt.
 async function generateGatingQuestions(clientPrompt: string): Promise<GatingQuestion[]> {
   try {
-    const response = await anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
+    // ENCONTRADO: usaba anthropic.messages.stream(...).finalMessage() sin
+    // NINGÚN timeout — el catch de abajo da un fallback correcto (seguir
+    // sin preguntas de clarificación), pero solo si la promesa llega a
+    // rechazarse; un stream colgado a medias se habría quedado esperando
+    // indefinidamente en vez de caer al fallback. createClaudeMessageWithFallback
+    // ya trae el timeout de inactividad + reintentos.
+    const response = await createClaudeMessageWithFallback("gating", "claude-sonnet-4-6", {
       max_tokens: 1500,
       system: `Analyze the user's software request (in Spanish). Identify genuine ambiguity in exactly 3 critical areas that most commonly break complex software projects: Database (SQL vs NoSQL and which engine), Authentication/Roles (who can do what), and Third-Party Integrations (payments, external APIs). For each area, generate ONE short, specific, multiple-choice question in Spanish ONLY IF the user's prompt does not already make a clear, confident choice for that area — if the prompt already answers it (e.g. explicitly mentions "Stripe" or "PostgreSQL" or describes the exact roles), DO NOT ask about that area again.
 
@@ -3416,7 +3424,7 @@ Output STRICT JSON only, no markdown, no explanation:
 If the prompt already resolves all 3 areas with confidence, return {"questions":[]}.
 "id" must be exactly one of: "database", "auth_roles", "integrations" — never invent a different id, and never return more than one question per topic.`,
       messages: [{ role: "user", content: clientPrompt.slice(0, 4000) }],
-    }).finalMessage();
+    });
     const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
     const parsed = extractJsonObject<{ questions?: GatingQuestion[] }>(raw);
     if (!parsed || !Array.isArray(parsed.questions)) return [];
@@ -5143,8 +5151,7 @@ TONO: Cercano, directo, máximo 2-3 frases. Sin "¿en qué más puedo ayudarte?"
       { role: "user", content: message.slice(0, 500) },
     ];
 
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+    const response = await createClaudeMessageWithFallback("chat", "claude-haiku-4-5-20251001", {
       max_tokens: 350,
       system: systemPrompt,
       messages,
@@ -5236,8 +5243,7 @@ REGLAS:
 - "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
 - Devuelve ÚNICAMENTE el JSON. Nada más.`;
 
-    const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+    const response = await createClaudeMessageWithFallback("planner", "claude-haiku-4-5-20251001", {
       max_tokens: 1000,
       system: [
         {
@@ -5831,6 +5837,7 @@ router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
 // sin ciclos de reparación.
 const CODE_REVIEW_COST = 10;
 router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => {
+  let codeReviewChargeApplied = false;
   try {
     const userId = req.userId as string;
     const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
@@ -5852,6 +5859,7 @@ router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => 
         creditsRequired: CODE_REVIEW_COST,
       });
     }
+    codeReviewChargeApplied = !isAdmin;
 
     const codeForReview = [
       "=== FRONTEND ===",
@@ -5860,8 +5868,7 @@ router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => 
       app.backendCode ? String(app.backendCode).slice(0, 15000) : "",
     ].filter(Boolean).join("\n\n");
 
-    const response = await anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
+    const response = await createClaudeMessageWithFallback("code-review", "claude-sonnet-4-6", {
       max_tokens: 2000,
       system: `Eres un revisor de código senior. Analiza el código de una app React/TypeScript (y opcionalmente su backend Express) y da una evaluación honesta de su calidad de producción: buenas prácticas, manejo de errores, accesibilidad básica, estructura. NO repares nada, solo evalúa.
 
@@ -5870,7 +5877,7 @@ Responde SOLO con JSON estricto, sin markdown:
 
 "issues" son problemas reales encontrados (máximo 6, vacío si no hay). "suggestions" son mejoras opcionales de calidad (máximo 4). "score" refleja la calidad real del código para producción, no solo si compila.`,
       messages: [{ role: "user", content: codeForReview }],
-    }).finalMessage();
+    });
 
     const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
     const parsed = extractJsonObject<{ score?: number; issues?: string[]; suggestions?: string[]; summary?: string }>(raw);
@@ -5891,7 +5898,28 @@ Responde SOLO con JSON estricto, sin markdown:
     });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/code-review error");
-    res.status(500).json({ error: "Error al ejecutar la revisión de código." });
+    // ENCONTRADO: si la llamada a Claude fallaba DESPUÉS de cobrar los
+    // CODE_REVIEW_COST créditos (arriba), el cliente se quedaba sin
+    // créditos y sin revisión — pagaba por un error del sistema. Mismo
+    // patrón que ya se arregló en el flujo principal de generación
+    // (creditsCost + reembolso automático). Solo se reembolsa si
+    // codeReviewChargeApplied es true (el cobro llegó a completarse de
+    // verdad) — si el fallo ocurrió ANTES del cobro, no hay nada que
+    // reembolsar y hacerlo daría créditos gratis no ganados.
+    if (codeReviewChargeApplied) {
+      try {
+        const userId = req.userId as string;
+        await chargeCredits({
+          userId,
+          isAdmin: false,
+          amount: -CODE_REVIEW_COST,
+          description: "Reembolso automático — fallo en revisión de código",
+        });
+      } catch (refundErr) {
+        logger.warn({ refundErr }, "No se pudo reembolsar tras fallo en revisión de código");
+      }
+    }
+    res.status(500).json({ error: codeReviewChargeApplied ? "Error al ejecutar la revisión de código. Se han reembolsado los créditos." : "Error al ejecutar la revisión de código." });
   }
 });
 

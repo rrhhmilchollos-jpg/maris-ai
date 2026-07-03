@@ -20,7 +20,7 @@
  * - QA: run_quality_check + validate_typescript
  */
 
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeToolCallWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { performWebResearch, formatWebResearchForLLM } from "./webResearcher";
 
@@ -297,14 +297,13 @@ export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<Agent
   while (iterations < maxIterations) {
     iterations++;
 
-    const response = await anthropic.messages.create({
-      model,
+    const response = await createClaudeToolCallWithFallback("tools", model, {
       max_tokens: 2048,
       system: systemPrompt,
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? { type: "auto" } : undefined,
       messages,
-    } as any);
+    });
 
     // Añadir respuesta del asistente al historial
     messages.push({ role: "assistant", content: response.content });

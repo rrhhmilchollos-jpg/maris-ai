@@ -35,7 +35,7 @@
  * └─────────────────────────────────────────────────┘
  */
 
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeToolCallWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { getToolsForRole, executeTool, type ToolContext } from "./agentTools";
 
@@ -261,14 +261,13 @@ OUTPUT ESPERADO: ${task.expectedOutput}${contextBlocks ? `\n\nCONTEXTO DE TAREAS
   while (iterations < agent.maxIterations) {
     iterations++;
 
-    const response = await anthropic.messages.create({
-      model: agent.model,
+    const response = await createClaudeToolCallWithFallback("crew", agent.model, {
       max_tokens: 2048,
       system: systemBlocks, // ← Ahora usa los bloques cacheados
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? { type: "auto" } : undefined,
       messages,
-    } as any);
+    });
 
     messages.push({ role: "assistant", content: response.content });
 

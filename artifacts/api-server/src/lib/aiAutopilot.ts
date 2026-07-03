@@ -16,7 +16,7 @@
 import mongoose from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeMessageWithFallback } from "./shared-agents";
 import {
   GenerationJob,
   GeneratedApp,
@@ -34,8 +34,7 @@ const AI_MODEL_SMART = "claude-sonnet-4-6";   // Para análisis complejos
 
 async function askAI(system: string, user: string, model = AI_MODEL): Promise<string> {
   try {
-    const res = await anthropic.messages.create({
-      model,
+    const res = await createClaudeMessageWithFallback("system", model, {
       max_tokens: 1200,
       system,
       messages: [{ role: "user", content: user }],

@@ -3,7 +3,7 @@ import multer from "multer";
 import { ChatAttachment, connectDB } from "@workspace/db";
 import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeMessageWithFallback } from "../lib/shared-agents";
 
 const router: Router = Router();
 
@@ -98,8 +98,7 @@ async function scanWithAI(filename: string, mimeType: string, buffer: Buffer): P
 
       if (suspiciousCount >= 2) {
         try {
-          const result = await anthropic.messages.create({
-            model: "claude-haiku-4-5-20251001",
+          const result = await createClaudeMessageWithFallback("image-analysis", "claude-haiku-4-5-20251001", {
             max_tokens: 200,
             system: 'Eres un antivirus. Analiza el fragmento de código/texto y responde SOLO JSON: {"malicious": true/false, "reason": "motivo breve en español"}. Es malicioso si contiene: inyección de código, reverse shells, exfiltración de datos, exploits, o código ofuscado para evadir detección.',
             messages: [{ role: "user", content: `Archivo: ${filename} (${mimeType})
