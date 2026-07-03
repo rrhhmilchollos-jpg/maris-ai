@@ -163,7 +163,25 @@ const ROUTES = [
 <tr><td>Precio inicial</td><td>Gratis</td><td>Gratis limitado</td><td>De pago</td><td>De pago</td></tr>
 <tr><td>Soporte en español</td><td>Sí</td><td>No</td><td>No</td><td>No</td></tr>
 <tr><td>Precios en euros</td><td>Sí</td><td>No (USD)</td><td>No (USD)</td><td>No (USD)</td></tr>
-</table>`
+</table>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/vs-lovable",
@@ -182,7 +200,25 @@ const ROUTES = [
 <li>Maris AI tiene precios en euros. Lovable cobra en dólares.</li>
 </ul>
 <h2>¿Cuándo elegir Maris AI sobre Lovable?</h2>
-<p>Si eres un emprendedor en España o Latinoamérica y quieres crear apps con IA en tu idioma, con soporte real y precios en euros, Maris AI es la opción correcta.</p>`
+<p>Si eres un emprendedor en España o Latinoamérica y quieres crear apps con IA en tu idioma, con soporte real y precios en euros, Maris AI es la opción correcta.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/vs-bolt",
@@ -201,7 +237,25 @@ const ROUTES = [
 <li>Maris AI tiene soporte en español. Bolt.new solo en inglés.</li>
 </ul>
 <h2>Maris AI: la alternativa española a Bolt.new</h2>
-<p>Si buscas una herramienta de vibe coding completamente en español, con backend incluido y precios justos en euros, Maris AI es la mejor opción del mercado en 2026.</p>`
+<p>Si buscas una herramienta de vibe coding completamente en español, con backend incluido y precios justos en euros, Maris AI es la mejor opción del mercado en 2026.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/vs-base44",
@@ -218,7 +272,25 @@ const ROUTES = [
 <li>Gratis para empezar sin tarjeta</li>
 <li>Soporte en español incluido</li>
 <li>Precios en euros, optimizado para el mercado español</li>
-</ul>`
+</ul>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/que-es-vibe-coding",
@@ -248,7 +320,25 @@ const ROUTES = [
 <li>Lovable — En inglés, orientado a startups anglosajonas</li>
 <li>Emergent — En inglés, para proyectos más complejos</li>
 <li>Cursor — IDE con IA, requiere conocimientos de programación</li>
-</ul>`
+</ul>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/que-es-un-agente-de-ia",
@@ -279,7 +369,25 @@ const ROUTES = [
 <li><strong>Visual Evaluator</strong> — Analiza screenshots de la app y detecta problemas visuales</li>
 </ul>
 <h2>¿Por qué 9 agentes y no uno solo?</h2>
-<p>Cada agente está optimizado para su tarea específica. Un agente de diseño tiene diferente "forma de pensar" que un agente de código backend. Al trabajar en pipeline, los 9 agentes producen un resultado mucho más completo y profesional que un único agente generalista.</p>`
+<p>Cada agente está optimizado para su tarea específica. Un agente de diseño tiene diferente "forma de pensar" que un agente de código backend. Al trabajar en pipeline, los 9 agentes producen un resultado mucho más completo y profesional que un único agente generalista.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/glosario",
@@ -309,7 +417,25 @@ const ROUTES = [
 <dt>Prompt</dt><dd>Instrucción en lenguaje natural que se le da a una IA. En Maris AI, el prompt es la descripción de tu app.</dd>
 <dt>Token</dt><dd>Unidad de medida del texto procesado por un LLM. Equivale aproximadamente a 3/4 de una palabra en español.</dd>
 <dt>RGPD</dt><dd>Reglamento General de Protección de Datos. Normativa europea que regula el tratamiento de datos personales. Maris AI cumple con el RGPD.</dd>
-</dl>`
+</dl>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/desarrollo-no-code-guia",
@@ -349,7 +475,25 @@ const ROUTES = [
 <li>Portfolios y webs corporativas</li>
 </ul>
 <h2>Maris AI vs otras herramientas no-code</h2>
-<p>A diferencia de Webflow, Bubble o WordPress, Maris AI genera código React real que puedes exportar, modificar y alojar donde quieras. No quedas atrapado en la plataforma. El código es 100% tuyo.</p>`
+<p>A diferencia de Webflow, Bubble o WordPress, Maris AI genera código React real que puedes exportar, modificar y alojar donde quieras. No quedas atrapado en la plataforma. El código es 100% tuyo.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/legal/privacidad",
@@ -551,7 +695,7 @@ async function fetchArticleRoutes() {
         title: `${a.title} — Maris AI`,
         description: a.metaDescription || String(a.body || "").slice(0, 160),
         canonical: `https://www.marisai.es/news/${a.slug}`,
-        body: `<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}`,
+        body: `<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}\n<nav>\n<h3>Explora más</h3>\n<ul>\n<li><a href="/news">Volver al blog</a></li>\n<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>\n<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>\n<li><a href="/glosario">Glosario de IA</a></li>\n<li><a href="/vs-emergent">Maris AI vs competidores</a></li>\n<li><a href="/showcase">Apps creadas con Maris AI</a></li>\n<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>\n</ul>\n</nav>`,
       };
     });
   } catch (err) {

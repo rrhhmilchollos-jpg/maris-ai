@@ -130,6 +130,40 @@ export default function VsLovablePage() {
           </div>
         </section>
 
+
+
+        {/* Otras comparativas */}
+        <section className="container px-4 mx-auto max-w-3xl">
+          <h3 className="text-base font-semibold mb-3 text-center">Otras comparativas</h3>
+          <div className="flex flex-wrap justify-center gap-4">
+            <a href="/vs-emergent" className="text-sm text-primary hover:underline">Maris AI vs Emergent</a>
+            <a href="/vs-bolt" className="text-sm text-primary hover:underline">Maris AI vs Bolt.new</a>
+            <a href="/vs-base44" className="text-sm text-primary hover:underline">Maris AI vs Base44</a>
+          </div>
+        </section>
+
+        {/* Enlaces cruzados — mejora enlazado interno entre páginas de contenido */}
+        <section className="container px-4 mx-auto max-w-3xl">
+          <div className="grid gap-3 sm:grid-cols-2 text-sm">
+            <a href="/news" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">Blog de IA</span>
+              <span className="block text-xs text-muted-foreground mt-1">Noticias y tutoriales sobre inteligencia artificial</span>
+            </a>
+            <a href="/que-es-vibe-coding" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">¿Qué es el vibe coding?</span>
+              <span className="block text-xs text-muted-foreground mt-1">El paradigma de programación con IA</span>
+            </a>
+            <a href="/glosario" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">Glosario de IA</span>
+              <span className="block text-xs text-muted-foreground mt-1">Todos los términos que necesitas</span>
+            </a>
+            <a href="/showcase" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">Apps creadas con Maris AI</span>
+              <span className="block text-xs text-muted-foreground mt-1">Ejemplos reales de lo que puedes crear</span>
+            </a>
+          </div>
+        </section>
+
         <section className="container px-4 mx-auto max-w-3xl text-center">
           <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-cyan-500/10 border border-primary/20 p-10 space-y-5">
             <h2 className="text-3xl font-black text-white">¿Listo para crear tu app?</h2>
