@@ -825,3 +825,44 @@ ${match}`
 }
 
 console.log(`\n📊 Prerender: ${success}/${ROUTES.length} páginas generadas`);
+
+// ── Generar sitemap.xml estático ─────────────────────────────────────────────
+// Antes se proxeaba a Railway en runtime, pero Clerk (auth middleware del
+// backend) interceptaba la petición y devolvía un error JSON. Al generarlo
+// aquí en build time: se sirve directamente desde la CDN de Vercel, sin
+// dependencia de Railway ni de Clerk, y se actualiza en cada deploy.
+const today = new Date().toISOString().split("T")[0];
+const sitemapPages = [
+  { url: "https://www.marisai.es/", priority: "1.0", changefreq: "daily" },
+  { url: "https://www.marisai.es/news", priority: "0.9", changefreq: "daily" },
+  { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly" },
+  { url: "https://www.marisai.es/showcase", priority: "0.8", changefreq: "daily" },
+  { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/vs-lovable", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/vs-bolt", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/vs-base44", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/que-es-vibe-coding", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/que-es-un-agente-de-ia", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/glosario", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/desarrollo-no-code-guia", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly" },
+  { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly" },
+  { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly" },
+];
+
+let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+sitemap += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+for (const page of sitemapPages) {
+  sitemap += `  <url>\n    <loc>${page.url}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${page.changefreq}</changefreq>\n    <priority>${page.priority}</priority>\n  </url>\n`;
+}
+
+// Añadir artículos (ya cargados arriba por fetchArticleRoutes)
+for (const route of articleRoutes) {
+  sitemap += `  <url>\n    <loc>${route.canonical}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>never</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+}
+
+sitemap += `</urlset>`;
+
+writeFileSync(join(DIST, "sitemap.xml"), sitemap, "utf-8");
+console.log(`🗺️  sitemap.xml generado con ${sitemapPages.length + articleRoutes.length} URLs`);
