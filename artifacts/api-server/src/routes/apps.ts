@@ -15,6 +15,7 @@ function getOpenAIApps(): OpenAI {
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
+import { raceWithTimeout, AI_CALL_TIMEOUT_MS } from "../lib/shared-agents";
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp } from "../lib/appRevisions";
 import * as esbuild from "esbuild";
@@ -2001,25 +2002,58 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
     };
   }
   for (const candidate of fallbackClaudeModels(model)) {
-    try {
-      let accumulated = "";
-      let lastReport = 0;
-      let finishReason: string | undefined;
-      const stream = anthropic.messages.stream({ ...params, model: candidate });
-      for await (const chunk of stream) {
-        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-          accumulated += chunk.delta.text;
-          if (accumulated.length - lastReport >= 1500) {
-            lastReport = accumulated.length;
-            onChars(accumulated.length);
+    const MAX_ATTEMPTS_PER_MODEL = 2;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_MODEL; attempt++) {
+      try {
+        let accumulated = "";
+        let lastReport = 0;
+        let finishReason: string | undefined;
+        const stream = anthropic.messages.stream({ ...params, model: candidate });
+        // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createClaudeMessageWithFallback
+        // en shared-agents.ts (ver el comentario extenso ahí): esta función es la
+        // que usan de verdad el Frontend Engineer y el Backend Engineer para
+        // generar el código completo de la app — la llamada más larga y más
+        // crítica de todo el pipeline. Antes de este fix, si el stream se
+        // quedaba colgado a medias (conectado pero sin más chunks), no había
+        // NADA aquí que lo detectara — el job entero se quedaba parado hasta
+        // el watchdog global (12 min), perdiendo todo el trabajo ya generado.
+        const iterator = stream[Symbol.asyncIterator]();
+        while (true) {
+          const { value: chunk, done } = await raceWithTimeout(
+            iterator.next(),
+            AI_CALL_TIMEOUT_MS,
+            `${role} code stream chunk (modelo ${candidate})`,
+          );
+          if (done) break;
+          if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+            accumulated += chunk.delta.text;
+            if (accumulated.length - lastReport >= 1500) {
+              lastReport = accumulated.length;
+              onChars(accumulated.length);
+            }
           }
+          if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
         }
-        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+        return { text: accumulated, truncated: finishReason === "MAX_TOKENS", model: candidate };
+      } catch (err: any) {
+        lastError = err;
+        // ENCONTRADO: cualquier fallo (incluido un simple parpadeo de red o
+        // un 503 momentáneo de Anthropic) saltaba directo al siguiente
+        // modelo sin ni un solo reintento en el mismo — con solo 2 modelos
+        // de fallback, esto agotaba las opciones casi al instante ante
+        // cualquier fallo transitorio. Un reintento rápido antes de
+        // cambiar de modelo resuelve la mayoría de estos casos solo.
+        const isTransient = err?.status === 429 || err?.status >= 500
+          || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed/i.test(String(err?.message || err));
+        if (isTransient && attempt < MAX_ATTEMPTS_PER_MODEL - 1) {
+          const delay = 1500 + Math.random() * 1000;
+          logger.warn({ role, model: candidate, attempt, delay }, "Streaming agent: fallo transitorio, reintentando mismo modelo");
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        logger.warn({ role, model: candidate, err }, "Streaming agent model failed; trying fallback");
+        break;
       }
-      return { text: accumulated, truncated: finishReason === "MAX_TOKENS", model: candidate };
-    } catch (err) {
-      lastError = err;
-      logger.warn({ role, model: candidate, err }, "Streaming agent model failed; trying fallback");
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));

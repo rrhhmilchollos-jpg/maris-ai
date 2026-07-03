@@ -42,7 +42,7 @@ export interface ValidationReport {
   filesAnalyzed: number;
 }
 
-export type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair" | "system" | "memory" | "validator" | "testing" | "fixing" | "patching" | "coder";
+export type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair" | "system" | "memory" | "validator" | "testing" | "fixing" | "patching" | "coder" | "visual-evaluator";
 
 export type ComplexityTier = "basic" | "standard" | "robust" | "ultra";
 
@@ -174,7 +174,7 @@ function fallbackClaudeModels(model: string): string[] {
 // ningún chunk que activar un timeout de inactividad (eso solo aplica a
 // streams) — el job entero queda en silencio hasta que el watchdog global
 // (12 min) lo reinicia desde cero, perdiendo todo el trabajo ya hecho.
-async function raceWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+export async function raceWithTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout;
   const timeoutPromise = new Promise<T>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
@@ -185,7 +185,7 @@ async function raceWithTimeout<T>(p: Promise<T>, ms: number, label: string): Pro
     clearTimeout(timer!);
   }
 }
-const AI_CALL_TIMEOUT_MS = 90_000;
+export const AI_CALL_TIMEOUT_MS = 90_000;
 
 export async function createClaudeMessageWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
   let lastError: unknown;
@@ -231,7 +231,26 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
           stream: true 
         });
 
-        for await (const event of stream) {
+        // TIMEOUT DE INACTIVIDAD REAL: antes este bucle no tenía ningún
+        // límite de tiempo propio — si el stream se quedaba a medias
+        // (conectado pero sin más eventos, sin cerrar la conexión), no
+        // había nada que lo detectara aquí dentro; el job entero se
+        // quedaba colgado hasta el watchdog global (12 min), perdiendo
+        // TODO el trabajo ya hecho en vez de solo reintentar esta llamada.
+        // raceWithTimeout/AI_CALL_TIMEOUT_MS ya existían en este archivo
+        // mismo pero nunca se conectaban a ningún sitio — código muerto.
+        // Aquí se aplica por CHUNK (no al stream entero, que puede tardar
+        // legítimamente varios minutos en archivos grandes): si pasan
+        // AI_CALL_TIMEOUT_MS sin recibir ni un solo evento nuevo, se
+        // considera colgado y se pasa al siguiente intento/modelo.
+        const iterator = stream[Symbol.asyncIterator]();
+        while (true) {
+          const { value: event, done } = await raceWithTimeout(
+            iterator.next(),
+            AI_CALL_TIMEOUT_MS,
+            `${role} stream chunk (modelo ${candidate})`,
+          );
+          if (done) break;
           if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
             fullText += event.delta.text;
           }
@@ -244,10 +263,23 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
-        
-        if (isRateLimit && attempt < MAX_RETRIES - 1) {
+        // ENCONTRADO: cualquier error que NO fuera 429 saltaba directo al
+        // siguiente modelo sin reintentar ni una sola vez en el mismo —
+        // con solo 2 modelos en la lista de fallback (Sonnet/Opus), un
+        // simple parpadeo de red o un 503 momentáneo de Anthropic agotaba
+        // los 2 candidatos casi al instante y el job entero fallaba por
+        // algo que un segundo intento habría resuelto solo. Se amplía el
+        // reintento con backoff a errores de red/servidor transitorios
+        // (5xx, timeout, conexión) — los errores permanentes (400, 401,
+        // 403, prompt inválido, etc.) siguen saltando de inmediato al
+        // siguiente modelo, reintentarlos no serviría de nada.
+        const isTransient = isRateLimit
+          || err?.status >= 500
+          || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed|Stream vacío/i.test(String(err?.message || err));
+
+        if (isTransient && attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-          logger.warn({ role, model: candidate, attempt, delay }, "Rate limit hit; retrying...");
+          logger.warn({ role, model: candidate, attempt, delay, isRateLimit }, "Fallo transitorio; reintentando...");
           await new Promise(r => setTimeout(r, delay));
           continue;
         }

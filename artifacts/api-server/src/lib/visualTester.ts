@@ -3,10 +3,9 @@ import { execSync } from "node:child_process";
 type Browser = any; type Page = any;
 import type { Logger } from "pino";
 import { GeneratedApp } from "@workspace/db/schema";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { CoreOrchestrator } from "@workspace/services";
 import { validateBundle } from "./validate";
-import { compactBundleForPrompt, estimatePromptTokens, extractJsonObject, mergePatchIntoBundle } from "./shared-agents";
+import { compactBundleForPrompt, estimatePromptTokens, extractJsonObject, mergePatchIntoBundle, createClaudeMessageWithFallback } from "./shared-agents";
 import { logger as rootLogger } from "./logger";
 
 /**
@@ -425,13 +424,20 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
 }`,
   });
 
-  // Visual analysis uses Sonnet — tiene vision multimodal excelente
-  // Para proyectos con muchos issues usamos max_tokens mayor
-  // Intentar con Claude Vision primero, fallback a Gemini Vision si no hay créditos
+  // Visual analysis uses Sonnet — tiene vision multimodal excelente.
+  // ENCONTRADO: esta llamada era la única de los 9 agentes que NO pasaba
+  // por createClaudeMessageWithFallback — sin el timeout de inactividad,
+  // sin reintentos en errores transitorios (red, 5xx) y sin fallback de
+  // modelo (Sonnet→Opus) que sí tienen el resto de agentes. Un simple
+  // parpadeo de red aquí tiraba abajo la única verificación visual real
+  // de toda la generación. También tenía un fallback a Gemini Vision que
+  // ya no puede funcionar (Gemini se quitó por completo del proyecto en
+  // junio de 2026, sin API key configurada) — sustituido por el mismo
+  // mecanismo de reintento/fallback de Anthropic que usa el resto del
+  // pipeline, consistente con el resto de agentes.
   let text = "";
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+    const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
       max_tokens: 4000,
       messages: [{ role: "user", content }],
     });
@@ -439,49 +445,54 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
       .map((b: any) => (b.type === "text" ? b.text : ""))
       .filter(Boolean)
       .join("\n");
-  } catch (anthropicErr: any) {
-    const isCredits = String(anthropicErr?.message || "").includes("credit") || anthropicErr?.status === 400;
-    if (isCredits) {
-      rootLogger.warn("Visual Evaluator: Anthropic sin créditos — fallback a Gemini Vision");
-      // Fallback a Gemini Vision (gratuito)
-      const geminiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-      if (!geminiKey) throw anthropicErr;
-      const { GoogleGenAI, createPartFromBase64 } = await import("@google/genai");
-      const gemini = new GoogleGenAI({ apiKey: geminiKey });
-      // Construir partes para Gemini Vision
-      const parts: any[] = [];
-      // Texto del sistema/instrucciones
-      const textContent = content.find((b: any) => b.type === "text" && b.text?.includes("VISUAL EVALUATOR"));
-      if (textContent) parts.push({ text: (textContent as any).text });
-      // Imágenes
-      for (const block of content) {
-        if ((block as any).type === "image" && (block as any).source?.data) {
-          const img = (block as any).source;
-          parts.push(createPartFromBase64(img.data, img.media_type || "image/png"));
-        } else if ((block as any).type === "text" && block !== textContent) {
-          parts.push({ text: (block as any).text });
-        }
-      }
-      const result = await gemini.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: [{ role: "user", parts }],
-        config: { maxOutputTokens: 3000 },
-      });
-      text = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      rootLogger.info({ chars: text.length }, "Gemini Vision fallback exitoso");
-    } else {
-      throw anthropicErr;
-    }
+  } catch (visionErr: any) {
+    rootLogger.error({ visionErr }, "Visual Evaluator: fallaron todos los reintentos/modelos");
+    // Fail-closed, no fail-open: si no se pudo verificar visualmente de
+    // verdad, NO se asume que la app está bien (ver más abajo el mismo
+    // criterio para JSON no parseable) — se marca como necesita revisión
+    // para que el bucle de reparación lo intente de nuevo o escale,
+    // en vez de dejar pasar una app sin verificación real.
+    return {
+      visuallyCorrect: false,
+      overallScore: 0,
+      issues: [
+        {
+          severity: "critical",
+          type: "console_errors",
+          viewport: "all",
+          description: "No se pudo completar la verificación visual (fallo de conexión con el modelo de IA tras varios reintentos).",
+          cssfix: "Reintentar la evaluación visual.",
+        },
+      ],
+      positives: [],
+      summary: "Verificación visual incompleta — tratar como pendiente de revisión, no como aprobada.",
+    };
   }
 
   const parsed = safeJsonParse<VisualAnalysis>(text);
   if (!parsed) {
+    // ENCONTRADO: si la respuesta de Claude Vision no se podía parsear como
+    // JSON (truncada, formato inesperado, etc.), el sistema ASUMÍA que la
+    // app estaba bien (visuallyCorrect:true, score 70, sin issues) y la
+    // dejaba pasar sin ninguna verificación real — justo lo contrario de
+    // lo que se le pide a un "quality gate". Mismo criterio fail-closed que
+    // el bloque catch de arriba: si no se pudo verificar de verdad, se
+    // marca como necesita revisión, nunca como aprobada por defecto.
+    rootLogger.warn({ textPreview: text.slice(0, 200) }, "Visual Evaluator: respuesta no parseable — tratando como necesita revisión, no como OK");
     return {
-      visuallyCorrect: true,
-      overallScore: 70,
-      issues: [],
+      visuallyCorrect: false,
+      overallScore: 0,
+      issues: [
+        {
+          severity: "critical",
+          type: "console_errors",
+          viewport: "all",
+          description: "La verificación visual no devolvió un resultado interpretable.",
+          cssfix: "Reintentar la evaluación visual.",
+        },
+      ],
       positives: [],
-      summary: "Análisis no parseable; asumiendo OK.",
+      summary: "Verificación visual incompleta (respuesta no parseable) — tratar como pendiente de revisión, no como aprobada.",
     };
   }
 
@@ -639,8 +650,12 @@ async function applyVisualFixes(opts: {
     "[applyVisualFixes] single-pass patcher",
   );
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+  // Mismo motivo que en analyzeWithVision más arriba: sin
+  // createClaudeMessageWithFallback, este agente (el que aplica los
+  // parches reales tras detectar issues visuales) no tenía timeout de
+  // inactividad ni reintento en fallos transitorios — un simple parpadeo
+  // de red aquí dejaba la app sin reparar en ese ciclo.
+  const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
     max_tokens: 20000,
     messages: [{
       role: "user",
