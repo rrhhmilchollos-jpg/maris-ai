@@ -16,6 +16,9 @@ interface Ticket {
   subject: string;
   message: string;
   status: 'open' | 'in_progress' | 'closed';
+  category?: 'general' | 'account_deletion' | 'refund';
+  refundRequest?: { amountText?: string };
+  resolution?: { action: 'approved' | 'denied'; note?: string; at?: string };
   responses: Array<{
     senderId: string;
     message: string;
@@ -32,6 +35,8 @@ export function SupportPanel() {
   const [showForm, setShowForm] = useState(false);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [category, setCategory] = useState<'general' | 'account_deletion' | 'refund'>('general');
+  const [refundAmountText, setRefundAmountText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
@@ -83,7 +88,14 @@ export function SupportPanel() {
       await apiFetch<Ticket>("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, message }),
+        body: JSON.stringify({
+          subject,
+          message,
+          category,
+          ...(category === "refund" && refundAmountText.trim()
+            ? { refundRequest: { amountText: refundAmountText.trim() } }
+            : {}),
+        }),
       });
       
       toast({
@@ -93,6 +105,8 @@ export function SupportPanel() {
       
       setSubject("");
       setMessage("");
+      setCategory("general");
+      setRefundAmountText("");
       setShowForm(false);
       await loadTickets();
     } catch (error) {
@@ -228,6 +242,23 @@ export function SupportPanel() {
                       disabled={isSubmitting}
                     />
                   </div>
+                  {category === "refund" && (
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                        Importe y motivo del reembolso
+                      </label>
+                      <Input
+                        value={refundAmountText}
+                        onChange={(e) => setRefundAmountText(e.target.value)}
+                        placeholder="ej. 20€ del paquete de 160 créditos, comprado el 01/07/2026"
+                        className="bg-background/50 border-border/50"
+                        disabled={isSubmitting}
+                      />
+                      <p className="text-xs text-white/40 mt-1">
+                        Un reembolso no se procesa automáticamente: nuestro equipo revisará tu solicitud y te confirmará por aquí.
+                      </p>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       type="submit"
@@ -244,7 +275,7 @@ export function SupportPanel() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setShowForm(false)}
+                      onClick={() => { setShowForm(false); setCategory("general"); setRefundAmountText(""); }}
                       disabled={isSubmitting}
                     >
                       Cancelar
@@ -265,10 +296,27 @@ export function SupportPanel() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{ticket.subject}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-medium text-sm truncate">{ticket.subject}</p>
+                              {ticket.category === "account_deletion" && (
+                                <Badge className="flex-shrink-0 border bg-red-500/20 text-red-400 border-red-500/30 text-[10px]">
+                                  Baja de cuenta
+                                </Badge>
+                              )}
+                              {ticket.category === "refund" && (
+                                <Badge className="flex-shrink-0 border bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">
+                                  Reembolso
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground mt-1">
                               {formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true, locale: es })}
                             </p>
+                            {ticket.resolution && (
+                              <p className={`text-xs mt-1 ${ticket.resolution.action === "approved" ? "text-green-400" : "text-red-400"}`}>
+                                {ticket.resolution.action === "approved" ? "✓ Aprobado" : "✕ Denegado"}
+                              </p>
+                            )}
                             {ticket.responses.length > 0 && (
                               <p className="text-xs text-primary/70 mt-1">
                                 {ticket.responses.length} {ticket.responses.length === 1 ? 'respuesta' : 'respuestas'}
@@ -416,6 +464,7 @@ export function SupportPanel() {
           <button
             onClick={() => {
               setShowForm(true);
+              setCategory("account_deletion");
               setSubject("Solicitud de baja de cuenta");
               setMessage("Hola, solicito la eliminación de mi cuenta y todos mis datos de Maris AI conforme al RGPD.");
               window.scrollTo({ top: 0, behavior: "smooth" });
@@ -423,6 +472,34 @@ export function SupportPanel() {
             className="text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/50 px-3 py-1.5 rounded-lg transition"
           >
             Solicitar baja de cuenta
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {/* ── Sección solicitar reembolso ─────────────────────────────── */}
+    <div className="mt-4 border border-amber-500/20 rounded-xl p-5 bg-amber-500/5">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+          <AlertCircle className="h-4 w-4 text-amber-400" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-white mb-1">¿Necesitas un reembolso?</h3>
+          <p className="text-xs text-white/50 mb-3 leading-relaxed">
+            Indica el importe y el motivo. Un miembro del equipo revisará tu solicitud manualmente
+            antes de procesar cualquier devolución — no se realiza ningún cargo ni devolución de forma automática.
+          </p>
+          <button
+            onClick={() => {
+              setShowForm(true);
+              setCategory("refund");
+              setSubject("Solicitud de reembolso");
+              setMessage("Hola, solicito un reembolso. Explico el motivo a continuación:");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="text-xs font-medium text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-500/50 px-3 py-1.5 rounded-lg transition"
+          >
+            Solicitar reembolso
           </button>
         </div>
       </div>

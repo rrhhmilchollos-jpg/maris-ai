@@ -841,6 +841,17 @@ export interface ITicket extends Document {
   subject: string;
   message: string;
   status: 'open' | 'in_progress' | 'closed';
+  category: 'general' | 'account_deletion' | 'refund';
+  refundRequest?: {
+    amountText?: string; // lo que el cliente indica (importe/motivo en texto libre)
+    stripeChargeId?: string; // opcional, si el admin lo añade al aprobar
+  };
+  resolution?: {
+    action: 'approved' | 'denied';
+    byAdminId: string;
+    at: Date;
+    note?: string;
+  };
   responses: Array<{
     senderId: string;
     message: string;
@@ -856,6 +867,17 @@ const TicketSchema = new Schema<ITicket>(
     subject: { type: String, required: true },
     message: { type: String, required: true },
     status: { type: String, enum: ['open', 'in_progress', 'closed'], default: 'open' },
+    category: { type: String, enum: ['general', 'account_deletion', 'refund'], default: 'general', index: true },
+    refundRequest: {
+      amountText: { type: String },
+      stripeChargeId: { type: String },
+    },
+    resolution: {
+      action: { type: String, enum: ['approved', 'denied'] },
+      byAdminId: { type: String },
+      at: { type: Date },
+      note: { type: String },
+    },
     responses: [
       {
         senderId: { type: String, required: true },

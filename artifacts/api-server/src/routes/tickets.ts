@@ -1,16 +1,17 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
-import { requireAuth, requireAdmin } from "../lib/auth";
+import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
 import { Ticket, User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import { sendSupportTicketCreatedEmail } from "../lib/notify";
+import { refundCredits } from "../lib/credits";
 
 const router: IRouter = Router();
 
 // Endpoint para que los usuarios creen un nuevo ticket
 router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> => {
   await connectDB();
-  const { subject, message } = req.body;
+  const { subject, message, category, refundRequest } = req.body;
   const userId = req.userId;
 
   if (!userId) {
@@ -19,6 +20,8 @@ router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> =
   if (!subject || !message) {
     return res.status(400).json({ error: "Asunto y mensaje son obligatorios" });
   }
+  const allowedCategories = ["general", "account_deletion", "refund"];
+  const safeCategory = allowedCategories.includes(category) ? category : "general";
 
   try {
     const newTicket = await Ticket.create({
@@ -26,13 +29,21 @@ router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> =
       subject,
       message,
       status: "open",
+      category: safeCategory,
+      ...(safeCategory === "refund" && refundRequest?.amountText
+        ? { refundRequest: { amountText: String(refundRequest.amountText).slice(0, 500) } }
+        : {}),
       responses: [],
     });
     const ticketId = String(newTicket._id);
     const user = await User.findById(userId, { email: 1, credits: 1 }).lean().catch(() => null) as any;
 
     // ── MarisCrewAI + Autopilot: resuelve el ticket automáticamente ──
+    // IMPORTANTE: los tickets de baja de cuenta y reembolso NUNCA se
+    // auto-resuelven por IA. Siempre requieren aprobación manual de un
+    // administrador humano desde el panel de soporte.
     let aiResolved = false;
+    if (safeCategory === "general") {
     try {
       const { MarisSuportCrew } = await import("../lib/marisCrewAI");
       const crew = new MarisSuportCrew();
@@ -58,6 +69,7 @@ router.post("/tickets", requireAuth, async (req: any, res: any): Promise<void> =
           aiResolved = true;
         }
       } catch { /* no bloquear */ }
+    }
     }
 
     // Solo notificar a Ivan si la IA no pudo resolverlo
@@ -220,6 +232,145 @@ router.post("/admin/tickets/:id/status", async (req: any, res: any): Promise<voi
     res.json(ticket);
   } catch (error) {
     logger.error({ error }, "Error al cambiar el estado del ticket");
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// ── Aprobar baja de cuenta (suspende el acceso; requiere acción manual del admin) ──
+// No borra datos de forma permanente. Reutiliza el mismo mecanismo de
+// suspensión ya usado en /admin/users/:id/suspend, para que sea reversible
+// si el cliente cambia de opinión antes de un borrado definitivo.
+router.post("/admin/tickets/:id/approve-deletion", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const ticketId = req.params.id;
+  const { note } = req.body;
+  const adminId = req.userId;
+
+  try {
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) { res.status(404).json({ error: "Ticket no encontrado" }); return; }
+    if (ticket.category !== "account_deletion") {
+      res.status(400).json({ error: "Este ticket no es una solicitud de baja de cuenta" });
+      return;
+    }
+
+    await User.findByIdAndUpdate(ticket.userId, {
+      isSuspended: true,
+      suspendedAt: new Date(),
+      suspendReason: `Baja de cuenta aprobada por soporte (ticket ${ticketId})`,
+    });
+
+    ticket.status = "closed";
+    ticket.resolution = { action: "approved", byAdminId: adminId, at: new Date(), note };
+    ticket.responses.push({
+      senderId: adminId,
+      message: note || "Tu solicitud de baja ha sido aprobada. Tu cuenta ha sido desactivada.",
+      createdAt: new Date(),
+    });
+    await ticket.save();
+
+    res.json({ ok: true, ticket });
+  } catch (err) {
+    logger.error({ err, ticketId }, "Error al aprobar baja de cuenta");
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// ── Aprobar reembolso ──
+// Por defecto reembolsa en créditos internos (reversible, funciona con
+// cualquier proveedor de pago). Si se indica stripeChargeId Y el pago fue
+// hecho con Stripe (legado, previo a la migración a Viva), también intenta
+// el reembolso real a la tarjeta vía Stripe.
+router.post("/admin/tickets/:id/approve-refund", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const ticketId = req.params.id;
+  const { creditsAmount, note, stripeSessionId, stripeAmountCents } = req.body;
+  const adminId = req.userId;
+
+  try {
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) { res.status(404).json({ error: "Ticket no encontrado" }); return; }
+    if (ticket.category !== "refund") {
+      res.status(400).json({ error: "Este ticket no es una solicitud de reembolso" });
+      return;
+    }
+
+    let creditsResult: { newBalance?: number } = {};
+    if (creditsAmount && Number(creditsAmount) > 0) {
+      const targetUser = await User.findById(ticket.userId).lean();
+      if (!targetUser) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+      await refundCredits({
+        userId: ticket.userId,
+        isAdmin: isAdminEmail(targetUser.email),
+        amount: Number(creditsAmount),
+        description: note || `Reembolso aprobado desde ticket ${ticketId}`,
+      });
+      const updated = await User.findById(ticket.userId).select("credits").lean();
+      creditsResult = { newBalance: (updated as any)?.credits ?? null };
+    }
+
+    let stripeResult: any = null;
+    if (stripeSessionId) {
+      try {
+        const { getStripe } = await import("../lib/payments");
+        const stripe = await getStripe();
+        if (stripe) {
+          const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+          const paymentIntentId = typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id;
+          if (paymentIntentId) {
+            const refundParams: any = { payment_intent: paymentIntentId, reason: "requested_by_customer" };
+            if (stripeAmountCents && stripeAmountCents > 0) refundParams.amount = stripeAmountCents;
+            stripeResult = await stripe.refunds.create(refundParams);
+          }
+        }
+      } catch (stripeErr) {
+        logger.error({ stripeErr, ticketId }, "Error al reembolsar vía Stripe (legado) desde ticket");
+        // No bloquear el resto del flujo si esto falla; el admin lo verá en la respuesta.
+      }
+    }
+
+    ticket.status = "closed";
+    ticket.resolution = { action: "approved", byAdminId: adminId, at: new Date(), note };
+    ticket.responses.push({
+      senderId: adminId,
+      message: note || "Tu solicitud de reembolso ha sido aprobada.",
+      createdAt: new Date(),
+    });
+    await ticket.save();
+
+    res.json({ ok: true, ticket, creditsResult, stripeResult });
+  } catch (err) {
+    logger.error({ err, ticketId }, "Error al aprobar reembolso");
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+});
+
+// ── Denegar solicitud (baja o reembolso) ──
+router.post("/admin/tickets/:id/deny", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const ticketId = req.params.id;
+  const { note } = req.body;
+  const adminId = req.userId;
+
+  if (!note || !String(note).trim()) {
+    res.status(400).json({ error: "Debes indicar el motivo de la denegación" });
+    return;
+  }
+
+  try {
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) { res.status(404).json({ error: "Ticket no encontrado" }); return; }
+
+    ticket.status = "closed";
+    ticket.resolution = { action: "denied", byAdminId: adminId, at: new Date(), note };
+    ticket.responses.push({ senderId: adminId, message: note, createdAt: new Date() });
+    await ticket.save();
+
+    res.json({ ok: true, ticket });
+  } catch (err) {
+    logger.error({ err, ticketId }, "Error al denegar solicitud");
     res.status(500).json({ error: "Error interno del servidor" });
   }
 });
