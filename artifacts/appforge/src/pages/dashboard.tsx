@@ -158,20 +158,46 @@ export default function DashboardPage() {
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django" | "video-ai" | "imagen-ai";
   const [kind, setKind] = useState<Kind>("fullstack");
+  // Movido aquí arriba (antes vivía más abajo en el componente) porque
+  // KIND_META, justo debajo, necesita stats.isPremium para calcular el
+  // coste real en créditos — ver comentario en BASE_KIND_COSTS.
+  const { data: stats, isLoading: statsLoading } = useGetMyStats();
+  // ENCONTRADO: esta tabla mostraba números inventados/obsoletos (1-3
+  // créditos) completamente desconectados del coste real que cobra el
+  // backend (apps.ts): ese coste real es baseCost×13 en plan free (tope 50)
+  // o baseCost×10 en plan de pago — para "fullstack" son 39cr (free) o 30cr
+  // (paid), no los "2cr" que se mostraban aquí. El usuario veía un precio
+  // y se le cobraba otro muy distinto. baseCost es EXACTAMENTE la misma
+  // tabla que KIND_COSTS en apps.ts — cualquier cambio ahí debe reflejarse
+  // aquí también.
+  const BASE_KIND_COSTS: Record<string, number> = {
+    fullstack: 3, landing: 1, vue: 2, svelte: 2, mobile: 2, nextjs: 3,
+    "python-api": 3, django: 3, "hybrid-pwa": 3, "game-2d": 3, "game-3d": 5,
+    // video-ai / imagen-ai no están en KIND_COSTS del backend (caen al
+    // default `?? 3` de apps.ts) — se refleja aquí igual, explícito, para
+    // que no haya sorpresas si el backend cambia su default.
+    "video-ai": 3, "imagen-ai": 3,
+  };
+  const isPaidPlan = !!(stats as any)?.isPremium;
+  const computeRealCost = (kindKey: string) => {
+    const base = BASE_KIND_COSTS[kindKey] ?? 3;
+    return isPaidPlan ? base * 10 : Math.min(base * 13, 50);
+  };
+
   const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
-    fullstack: { label: "App completa", icon: Layers, placeholder: "ej. Un marketplace estilo Wallapop con publicaciones, búsqueda, mensajes y perfil de usuario...", cost: 2 },
-    mobile: { label: "App móvil", icon: Smartphone, placeholder: "ej. Un diario de hábitos para móvil con racha diaria, notificaciones de recordatorio y vista de calendario...", cost: 2 },
-    landing: { label: "Landing page", icon: Rocket, placeholder: "ej. Una landing page para una herramienta SaaS de productividad con hero, features, testimonios, pricing y CTA final...", cost: 1 },
-    "game-2d": { label: "Juego 2D", icon: Gamepad2, placeholder: "ej. Un juego arcade tipo Snake con controles WASD, niveles de dificultad creciente y tabla de records local...", cost: 2 },
-    "game-3d": { label: "Juego 3D", icon: Box, placeholder: "ej. Un juego 3D first-person de coleccionar monedas en un laberinto con física básica y temporizador...", cost: 3 },
-    "hybrid-pwa": { label: "App híbrida (PWA)", icon: Globe, placeholder: "ej. Una app instalable de notas con sincronización offline, búsqueda y categorías por colores...", cost: 2 },
-    vue: { label: "Vue 3", icon: Component, placeholder: "ej. Una app de tareas con Vue 3 Composition API, vue-router y Pinia, persistida en localStorage...", cost: 2 },
-    svelte: { label: "SvelteKit", icon: Flame, placeholder: "ej. Un dashboard del tiempo con SvelteKit, Svelte 5 runes y datos desde Open-Meteo...", cost: 2 },
-    nextjs: { label: "Next.js", icon: Server, placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...", cost: 2 },
-    "python-api": { label: "Python (FastAPI)", icon: Webhook, placeholder: "ej. Una API REST de tareas con FastAPI, validación pydantic, SQLAlchemy + SQLite y endpoints CRUD completos...", cost: 2 },
-    django: { label: "Django", icon: Library, placeholder: "ej. Un blog en Django 5 con modelos, vistas, plantillas, admin y SQLite...", cost: 2 },
-    "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: 5 },
-    "imagen-ai": { label: "🖼️ Imagen con IA", icon: ImagePlay, placeholder: "ej. Una imagen realista de un coche deportivo rojo en una montaña al atardecer con luz dorada...", cost: 1 },
+    fullstack: { label: "App completa", icon: Layers, placeholder: "ej. Un marketplace estilo Wallapop con publicaciones, búsqueda, mensajes y perfil de usuario...", cost: computeRealCost("fullstack") },
+    mobile: { label: "App móvil", icon: Smartphone, placeholder: "ej. Un diario de hábitos para móvil con racha diaria, notificaciones de recordatorio y vista de calendario...", cost: computeRealCost("mobile") },
+    landing: { label: "Landing page", icon: Rocket, placeholder: "ej. Una landing page para una herramienta SaaS de productividad con hero, features, testimonios, pricing y CTA final...", cost: computeRealCost("landing") },
+    "game-2d": { label: "Juego 2D", icon: Gamepad2, placeholder: "ej. Un juego arcade tipo Snake con controles WASD, niveles de dificultad creciente y tabla de records local...", cost: computeRealCost("game-2d") },
+    "game-3d": { label: "Juego 3D", icon: Box, placeholder: "ej. Un juego 3D first-person de coleccionar monedas en un laberinto con física básica y temporizador...", cost: computeRealCost("game-3d") },
+    "hybrid-pwa": { label: "App híbrida (PWA)", icon: Globe, placeholder: "ej. Una app instalable de notas con sincronización offline, búsqueda y categorías por colores...", cost: computeRealCost("hybrid-pwa") },
+    vue: { label: "Vue 3", icon: Component, placeholder: "ej. Una app de tareas con Vue 3 Composition API, vue-router y Pinia, persistida en localStorage...", cost: computeRealCost("vue") },
+    svelte: { label: "SvelteKit", icon: Flame, placeholder: "ej. Un dashboard del tiempo con SvelteKit, Svelte 5 runes y datos desde Open-Meteo...", cost: computeRealCost("svelte") },
+    nextjs: { label: "Next.js", icon: Server, placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...", cost: computeRealCost("nextjs") },
+    "python-api": { label: "Python (FastAPI)", icon: Webhook, placeholder: "ej. Una API REST de tareas con FastAPI, validación pydantic, SQLAlchemy + SQLite y endpoints CRUD completos...", cost: computeRealCost("python-api") },
+    django: { label: "Django", icon: Library, placeholder: "ej. Un blog en Django 5 con modelos, vistas, plantillas, admin y SQLite...", cost: computeRealCost("django") },
+    "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: computeRealCost("video-ai") },
+    "imagen-ai": { label: "🖼️ Imagen con IA", icon: ImagePlay, placeholder: "ej. Una imagen realista de un coche deportivo rojo en una montaña al atardecer con luz dorada...", cost: computeRealCost("imagen-ai") },
   };
   const kindMeta = KIND_META[kind] ?? KIND_META.fullstack;
   const kindCost = kindMeta.cost;
@@ -336,7 +362,6 @@ export default function DashboardPage() {
     if (me?.isPremium && coderModel === "auto") setCoderModel("auto");
   }, [me?.isPremium, coderModel]);
 
-  const { data: stats, isLoading: statsLoading } = useGetMyStats();
   const { data: apps, isLoading: appsLoading } = useListApps();
   const isAdmin = !!me?.isAdmin;
 

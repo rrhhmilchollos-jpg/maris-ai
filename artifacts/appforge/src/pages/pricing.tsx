@@ -177,7 +177,7 @@ export default function PricingPage() {
             {[
               {
                 q: "¿Qué son los créditos y cómo se usan?",
-                a: "Los créditos son la moneda de Maris AI. Cada vez que generas una app, modificas código o usas los agentes IA, se consumen créditos según la complejidad de la tarea. Una landing page básica consume 1 crédito; una app completa con backend puede consumir 3-15 créditos.",
+                a: "Los créditos son la moneda de Maris AI. Cada vez que generas una app se consumen créditos según la complejidad: una landing page consume 13 créditos en plan gratuito (10 en plan de pago), y una app completa con backend consume 39 créditos en plan gratuito (30 en plan de pago). Las ediciones menores por chat cuestan solo 0,2 créditos.",
               },
               {
                 q: "¿Cuántos créditos recibo al registrarme gratis?",
