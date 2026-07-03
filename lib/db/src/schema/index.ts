@@ -892,6 +892,49 @@ const TicketSchema = new Schema<ITicket>(
 export const Ticket: Model<ITicket> =
   mongoose.models.Ticket || mongoose.model<ITicket>('Ticket', TicketSchema);
 
+// ─── Reviews (reseñas públicas, alimentan aggregateRating en schema.org) ────
+// Flujo: usuario deja reseña -> pasa por filtro de palabras prohibidas
+// (containsBannedWords en lib/reviewModeration.ts) -> si no salta el filtro
+// queda "pending" para aprobación manual del admin -> al aprobarse pasa a
+// "published" y solo entonces cuenta en el aggregateRating expuesto en el
+// JSON-LD de marisai.es. Si salta el filtro queda "flagged" y no se muestra
+// nunca automáticamente, requiere revisión manual explícita.
+export type ReviewStatus = "pending" | "published" | "flagged" | "rejected";
+
+export interface IReview extends Document {
+  userId?: string;          // opcional: reseña puede venir de invitación por email sin cuenta logueada
+  authorName: string;
+  authorEmail?: string;
+  rating: number;           // 1-5
+  title?: string;
+  body: string;
+  status: ReviewStatus;
+  flaggedWords?: string[];  // qué términos del filtro dispararon el flag, para revisión rápida del admin
+  source?: string;          // "email_invite" | "dashboard" | "post_generation" etc.
+  relatedAppId?: string;    // referencia a la app que generó, si aplica
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ReviewSchema = new Schema<IReview>(
+  {
+    userId: { type: String, index: true },
+    authorName: { type: String, required: true },
+    authorEmail: { type: String },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    title: { type: String },
+    body: { type: String, required: true },
+    status: { type: String, enum: ["pending", "published", "flagged", "rejected"], default: "pending", index: true },
+    flaggedWords: { type: [String], default: [] },
+    source: { type: String, default: "dashboard" },
+    relatedAppId: { type: String, ref: "GeneratedApp" },
+  },
+  { timestamps: true },
+);
+
+export const Review: Model<IReview> =
+  mongoose.models.Review || mongoose.model<IReview>("Review", ReviewSchema);
+
 // ─── News Articles ───────────────────────────────────────────────────────────
 export interface INewsArticle extends Document {
   title: string;

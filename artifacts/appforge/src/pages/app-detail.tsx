@@ -30,6 +30,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DeployModal } from "@/components/deploy-modal";
+import { ReviewInviteModal } from "@/components/review-invite-modal";
 import { WorkflowListPanel } from "@/components/workflow-list-panel";
 import { StressTestModal } from "@/components/stress-test-modal";
 import { GitHubButton } from "@/components/github-button";
@@ -395,6 +396,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
+  const [showReviewInvite, setShowReviewInvite] = useState(false);
   const [showWorkflows, setShowWorkflows] = useState(false);
   const [showStressTest, setShowStressTest] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
@@ -2357,7 +2359,25 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) });
           setShowDeployModal(false);
           toast({ title: "🚀 App desplegada", description: `Tu app está en ${url}` });
+
+          // Invitación a reseña tras un despliegue con éxito — solo una vez
+          // por usuario (no queremos ser pesados en cada deploy).
+          const reviewInviteShown = localStorage.getItem("maris_review_invite_shown");
+          if (!reviewInviteShown) {
+            localStorage.setItem("maris_review_invite_shown", "1");
+            setTimeout(() => setShowReviewInvite(true), 1500);
+          }
         }}
+      />
+    )}
+
+    {/* Invitación a dejar reseña, tras primer despliegue exitoso */}
+    {showReviewInvite && (
+      <ReviewInviteModal
+        open={showReviewInvite}
+        onClose={() => setShowReviewInvite(false)}
+        relatedAppId={id}
+        source="post_generation"
       />
     )}
 

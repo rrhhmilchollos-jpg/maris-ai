@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes";
 import ticketsRouter from "./routes/tickets";
+import reviewsRouter from "./routes/reviews";
 import newsRouter from "./routes/news";
 import rssRouter from "./routes/rss";
 import newsSitemapRouter from "./routes/news-sitemap";
@@ -317,6 +318,7 @@ app.use("/api", metricsMiddleware);
 app.use("/api", clerkWebhookRouter);
 app.use("/api", router);
 app.use("/api", ticketsRouter);
+app.use("/api", reviewsRouter);
 app.use("/api", newsRouter);
 app.use("/api", adminRouter);
 // Demo pública — sin autenticación, accesible para visitantes no registrados
