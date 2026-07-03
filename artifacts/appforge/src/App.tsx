@@ -156,16 +156,30 @@ function ClerkLoadingFallback() {
         <Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" />
         <p className="text-sm text-[#a1a1aa]">Cargando autenticación...</p>
         {showRetry && (
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <p className="text-xs text-[#a1a1aa] text-center max-w-xs">
-              La carga está tardando más de lo esperado.
+          <div className="mt-4 flex flex-col items-center gap-3 max-w-sm text-center">
+            <p className="text-sm font-medium text-white">
+              Estamos resolviendo una incidencia técnica temporal
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="rounded-md bg-[#a855f7] px-4 py-2 text-sm font-medium text-white hover:bg-[#9333ea] transition-colors"
-            >
-              Recargar página
-            </button>
+            <p className="text-xs text-[#a1a1aa]">
+              El inicio de sesión está tardando más de lo normal por un problema puntual
+              de nuestro proveedor de autenticación. Ya estamos trabajando en ello y
+              debería quedar resuelto en breve — no es necesario que hagas nada, tus
+              datos y tu cuenta están a salvo.
+            </p>
+            <div className="mt-1 flex flex-col items-center gap-2 sm:flex-row">
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-md bg-[#a855f7] px-4 py-2 text-sm font-medium text-white hover:bg-[#9333ea] transition-colors"
+              >
+                Reintentar
+              </button>
+              <a
+                href="mailto:soporte@marisai.es?subject=Incidencia%20de%20acceso%20a%20Maris%20AI"
+                className="rounded-md border border-[#27272a] px-4 py-2 text-sm font-medium text-[#e4e4e7] hover:bg-[#18181b] transition-colors"
+              >
+                Contactar con soporte
+              </a>
+            </div>
           </div>
         )}
       </div>
