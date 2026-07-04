@@ -1132,6 +1132,48 @@ export const PinnedPackage: Model<IPinnedPackage> =
   mongoose.models.PinnedPackage ||
   mongoose.model<IPinnedPackage>("PinnedPackage", PinnedPackageSchema);
 
+// ─── Connector Credentials (ecosistema de integraciones estilo Emergent) ─────
+// Credenciales de conectores externos (Slack, Notion, Airtable, Resend…)
+// guardadas POR USUARIO y SIEMPRE cifradas (AES-256-GCM, ver
+// api-server/src/lib/connectorCrypto.ts). El frontend generado por la IA
+// NUNCA ve estos secretos: las acciones se ejecutan server-side vía el
+// gateway de conectores (api-server/src/lib/connectorActions.ts).
+export interface IConnectorCredential extends Document {
+  userId: string;         // _id del usuario propietario
+  connectorId: string;    // id del conector ("slack", "notion", "airtable"…)
+  label?: string;         // etiqueta opcional ("Slack del equipo de ventas")
+  // Blob cifrado del JSON de credenciales + parámetros AES-256-GCM.
+  ciphertext: string;     // base64
+  iv: string;             // base64 (12 bytes)
+  authTag: string;        // base64 (16 bytes)
+  verified: boolean;      // pasó la verificación real de /api/mcp/test al guardarse
+  verifiedAt?: Date;
+  lastUsedAt?: Date;      // última ejecución de una acción con estas credenciales
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const ConnectorCredentialSchema = new Schema<IConnectorCredential>(
+  {
+    userId: { type: String, required: true, index: true },
+    connectorId: { type: String, required: true },
+    label: { type: String },
+    ciphertext: { type: String, required: true },
+    iv: { type: String, required: true },
+    authTag: { type: String, required: true },
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
+    lastUsedAt: { type: Date },
+  },
+  { timestamps: true, collection: "connector_credentials" },
+);
+// Un usuario tiene como mucho UNA credencial por conector (upsert al guardar).
+ConnectorCredentialSchema.index({ userId: 1, connectorId: 1 }, { unique: true });
+
+export const ConnectorCredential: Model<IConnectorCredential> =
+  mongoose.models.ConnectorCredential ||
+  mongoose.model<IConnectorCredential>("ConnectorCredential", ConnectorCredentialSchema);
+
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 
