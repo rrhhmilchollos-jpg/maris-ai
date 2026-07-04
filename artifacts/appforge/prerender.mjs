@@ -6,6 +6,12 @@
 import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import {
+  ENGLISH_ROUTES,
+  USE_CASE_ROUTES_EN,
+  USE_CASE_ROUTES_ES,
+  HREFLANG_MAP,
+} from "./international-routes.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = join(__dirname, "dist");
@@ -603,101 +609,16 @@ const ROUTES = [
 <a href="/sign-up">Crear cuenta gratis</a>
 </nav>`
   },
-  {
-    file: "en/index.html",
-    title: "Maris AI — Build Apps with AI, No Coding Required",
-    description: "Describe your idea and 9 specialized AI agents generate your complete app in under 5 minutes. No coding needed. Free for entrepreneurs worldwide.",
-    canonical: "https://www.marisai.es/en",
-    body: `<h1>Maris AI — Build Apps with AI, No Coding Required</h1>
-<p>Maris AI is a vibe coding platform born in Spain, now open to entrepreneurs worldwide. 9 specialized AI agents generate your complete app in under 5 minutes — no coding skills needed.</p>
-<h2>What is Maris AI?</h2>
-<p>Maris AI is a strong alternative to Bolt.new, Lovable and Emergent. Support and the core interface are in Spanish, but anyone — Spanish or English speaking — can sign up and build with Maris AI today.</p>
-<ul>
-<li>9 specialized AI agents working in parallel</li>
-<li>Express + MongoDB backend included automatically</li>
-<li>78 free credits, no credit card required</li>
-<li>Credits that never expire</li>
-<li>100% exportable code to GitHub, no vendor lock-in</li>
-<li>Euro pricing, GDPR compliant</li>
-</ul>
-<h2>The 9 Maris AI agents</h2>
-<ol>
-<li><strong>Researcher</strong> — Researches the market and defines project requirements</li>
-<li><strong>Architect</strong> — Designs the complete technical architecture</li>
-<li><strong>Designer</strong> — Creates the visual system, color palette and typography</li>
-<li><strong>Frontend Engineer</strong> — Generates React + TypeScript + Tailwind CSS code</li>
-<li><strong>Backend Engineer</strong> — Builds the REST API with Express + MongoDB</li>
-<li><strong>QA Auditor</strong> — Reviews errors, accessibility and security</li>
-<li><strong>PM Agent</strong> — Validates the result matches the original request</li>
-<li><strong>Image Agent</strong> — Generates real AI images</li>
-<li><strong>Visual Evaluator</strong> — Analyzes real screenshots with Claude Vision</li>
-</ol>
-<h2>Frequently asked questions</h2>
-<dl>
-<dt>Do I need coding skills?</dt><dd>No. You describe your idea and Maris AI generates all the code automatically.</dd>
-<dt>How much does Maris AI cost?</dt><dd>78 free credits when you sign up, no credit card. Packages start at €20 for 160 credits that never expire.</dd>
-<dt>Is the generated code mine?</dt><dd>Yes, 100% yours. Exportable to GitHub with no restrictions.</dd>
-<dt>Is support available in English?</dt><dd>Support is primarily in Spanish, focused on the Spanish-speaking market — but anyone can sign up and use the platform regardless of language.</dd>
-</dl>
-<h2>Types of apps you can build</h2>
-<ul>
-<li>CRM and customer management</li>
-<li>Online stores with Stripe</li>
-<li>Educational platforms</li>
-<li>Restaurant apps</li>
-<li>Clinic management</li>
-<li>Analytics dashboards</li>
-<li>Marketplaces and directories</li>
-<li>Landing pages</li>
-<li>Professional portfolios</li>
-<li>Booking and appointment apps</li>
-<li>SaaS with subscriptions</li>
-<li>APIs and backends</li>
-</ul>`
-  },
-  {
-    path: "/en/pricing",
-    file: "en/pricing/index.html",
-    title: "Maris AI Pricing — 65 Free Welcome Credits, No Credit Card",
-    description: "Start free with 65 credits, no credit card. Packages from €20 for 160 credits, with progressive discounts the more you buy — down to €0.110/credit.",
-    canonical: "https://www.marisai.es/en/pricing",
-    body: `<h1>Maris AI Pricing — Build apps with AI</h1>
-<p>Start free, no credit card required. Credits never expire, and the more you buy, the cheaper each credit gets.</p>
-<h2>Free Plan</h2>
-<ul><li>65 free welcome credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
-<h2>Starter Pack — €20</h2>
-<ul><li>160 credits</li><li>€0.125 per credit</li><li>Credits that never expire</li></ul>
-<h2>Pack 250 — €37</h2>
-<ul><li>250 credits</li><li>€0.148 per credit</li></ul>
-<h2>Most Popular — €70</h2>
-<ul><li>500 credits</li><li>€0.140 per credit</li></ul>
-<h2>Pack 1250 — €162</h2>
-<ul><li>1250 credits</li><li>€0.130 per credit</li></ul>
-<h2>Best Value — €360</h2>
-<ul><li>3000 credits</li><li>€0.120 per credit</li></ul>
-<h2>Best Value — €660</h2>
-<ul><li>6000 credits</li><li>€0.110 per credit — the lowest price per credit</li></ul>
-<h2>Pricing FAQ</h2>
-<dl>
-<dt>Do credits expire?</dt><dd>No. Maris AI credits never expire. Use them whenever you want.</dd>
-<dt>Why are bigger packs cheaper?</dt><dd>The price per credit drops as pack size grows, to reward users who buy more.</dd>
-<dt>What can I build with credits?</dt><dd>Complete apps, landing pages, dashboards, e-commerce, CRMs, and any type of web application.</dd>
-</dl>`
-  },
 ];
 
 const HIDE_SCRIPT = `<script>
-  (function() {
-    var checkHide = function() {
-      var seo = document.getElementById('seo-prerender');
-      var root = document.getElementById('root');
-      if (seo && root && root.children.length > 0) {
-        seo.style.display = 'none';
-      } else {
-        setTimeout(checkHide, 150);
-      }
-    };
-    setTimeout(checkHide, 100);
+  (function checkHide() {
+    var seo = document.getElementById('seo-prerender');
+    if (seo && document.getElementById('root') && document.getElementById('root').children.length > 0) {
+      seo.style.display = 'none';
+    } else {
+      setTimeout(checkHide, 100);
+    }
   })();
 <\/script>`;
 
@@ -769,6 +690,12 @@ if (articleRoutes.length > 0) {
   console.log(`📰 ${articleRoutes.length} artículos de noticias encontrados para prerender`);
 }
 ROUTES.push(...articleRoutes);
+
+// Añadir rutas internacionales (inglés completo) y páginas programáticas
+ROUTES.push(...ENGLISH_ROUTES);
+ROUTES.push(...USE_CASE_ROUTES_EN);
+ROUTES.push(...USE_CASE_ROUTES_ES);
+console.log(`🌍 ${ENGLISH_ROUTES.length} páginas en inglés + ${USE_CASE_ROUTES_EN.length + USE_CASE_ROUTES_ES.length} páginas programáticas añadidas`);
 
 // Actualizar el body de /news con el listado real de artículos.
 // Sin esto, la página prerenderizada tiene contenido genérico que Google
@@ -856,13 +783,7 @@ for (const route of ROUTES) {
     // (ej. el de la home, fijo en ese archivo) — cada ruta define el suyo
     // desde cero para evitar duplicados o pares incorrectos.
     html = html.replace(/<link rel="alternate" hreflang="[^"]*" href="[^"]*"\s*\/>\n?\s*/g, "");
-    const HREFLANG_PAIRS = {
-      "/": { en: "https://www.marisai.es/en", "x-default": "https://www.marisai.es/" },
-      "/pricing": { en: "https://www.marisai.es/en/pricing", "x-default": "https://www.marisai.es/pricing" },
-      "/en": { es: "https://www.marisai.es/", "x-default": "https://www.marisai.es/" },
-      "/en/pricing": { es: "https://www.marisai.es/pricing", "x-default": "https://www.marisai.es/pricing" },
-    };
-    const hreflangEntry = HREFLANG_PAIRS[route.path];
+    const hreflangEntry = HREFLANG_MAP[route.path];
     if (hreflangEntry) {
       const hreflangTags = Object.entries(hreflangEntry)
         .map(([lang, href]) => `<link rel="alternate" hreflang="${lang}" href="${href}" />`)
@@ -956,6 +877,30 @@ const sitemapPages = [
   { url: "https://www.marisai.es/glosario", priority: "0.7", changefreq: "monthly" },
   { url: "https://www.marisai.es/desarrollo-no-code-guia", priority: "0.7", changefreq: "monthly" },
   { url: "https://www.marisai.es/sign-up", priority: "0.9", changefreq: "monthly" },
+  // English versions
+  { url: "https://www.marisai.es/en", priority: "0.9", changefreq: "daily" },
+  { url: "https://www.marisai.es/en/pricing", priority: "0.8", changefreq: "weekly" },
+  { url: "https://www.marisai.es/en/showcase", priority: "0.8", changefreq: "daily" },
+  { url: "https://www.marisai.es/en/vs-bolt", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/vs-lovable", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/vs-emergent", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/sign-up", priority: "0.8", changefreq: "monthly" },
+  // English use-case pages
+  { url: "https://www.marisai.es/en/build/crm", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/online-store", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/booking-app", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/saas", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/dashboard", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/portfolio", priority: "0.7", changefreq: "monthly" },
+  // Spanish use-case pages
+  { url: "https://www.marisai.es/crear/crm", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/tienda-online", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/app-reservas", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/saas", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/dashboard", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/portfolio", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/landing-page", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/app-restaurante", priority: "0.7", changefreq: "monthly" },
   { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly" },
   { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly" },
   { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly" },
