@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Zap, Code2, Globe, ArrowRight, CheckCircle2, LayoutDashboard,
   Database, Smartphone, Newspaper, ChevronRight, GitBranch, Star,
-  Users, TrendingUp, Clock, Activity
+  Users, TrendingUp, Clock, Activity, Play
 } from "lucide-react";
 
 // Líneas de código que se van escribiendo
@@ -121,7 +121,11 @@ export default function LandingPage() {
     }
 
     localStorage.setItem("appforge_pending_prompt", prompt);
-    setLocation(isSignedIn ? "/dashboard" : "/sign-up");
+    // Los usuarios anónimos ven la demo en vivo primero (su propia idea,
+    // la IA trabajando de verdad, resultado real) antes de pedirles cuenta
+    // -- mandarlos directo a /sign-up sin haber visto nada funcionar
+    // pierde la mayoría del tráfico que llega hasta aquí.
+    setLocation(isSignedIn ? "/dashboard" : "/demo");
   };
 
   const fadeIn = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
@@ -223,6 +227,20 @@ export default function LandingPage() {
                   {ex}
                 </button>
               ))}
+            </motion.div>
+
+            <motion.div variants={fadeIn} className="mt-6">
+              <Link href="/demo">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-2 border-primary/40 bg-primary/5 hover:bg-primary/15 text-white font-bold px-8 h-14 text-base rounded-xl shadow-lg shadow-primary/10"
+                >
+                  <Play className="mr-2 h-5 w-5 fill-current" />
+                  Ver demo en vivo, sin registro
+                </Button>
+              </Link>
+              <p className="text-xs text-muted-foreground mt-2">Mira a la IA crear una app real en minutos. Sin tarjeta, sin cuenta.</p>
             </motion.div>
           </motion.div>
         </motion.div>

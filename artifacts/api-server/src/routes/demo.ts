@@ -78,9 +78,23 @@ router.post("/start", async (req: any, res: any): Promise<void> => {
     const cutoff = new Date(now - DEMO_JOB_TTL_MS);
     await GenerationJob.deleteMany({ isDemo: true, createdAt: { $lt: cutoff } });
 
-    // Seleccionar prompt
-    const promptId = req.body?.promptId || DEMO_PROMPTS[Math.floor(Math.random() * DEMO_PROMPTS.length)]!.id;
-    const selected = DEMO_PROMPTS.find((p) => p.id === promptId) ?? DEMO_PROMPTS[0]!;
+    // Seleccionar prompt: o bien uno propio escrito por el visitante (desde
+    // el hero de la home), o uno de los ejemplos preestablecidos.
+    const rawCustomPrompt = typeof req.body?.customPrompt === "string" ? req.body.customPrompt.trim() : "";
+    let selected: { id: string; label: string; prompt: string; emoji: string };
+    let promptId: string;
+
+    if (rawCustomPrompt.length > 0) {
+      if (rawCustomPrompt.length > 500) {
+        res.status(400).json({ error: "Tu idea es demasiado larga para la demo (máx. 500 caracteres). Regístrate gratis para generar apps sin límite de longitud." });
+        return;
+      }
+      promptId = "custom";
+      selected = { id: "custom", label: "Tu idea", prompt: rawCustomPrompt, emoji: "💡" };
+    } else {
+      promptId = req.body?.promptId || DEMO_PROMPTS[Math.floor(Math.random() * DEMO_PROMPTS.length)]!.id;
+      selected = DEMO_PROMPTS.find((p) => p.id === promptId) ?? DEMO_PROMPTS[0]!;
+    }
 
     // Crear la app y el job de demo
     const demoUserId = process.env.DEMO_USER_ID || "demo_system";

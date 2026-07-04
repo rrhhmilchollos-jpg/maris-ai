@@ -44,6 +44,7 @@ const TESTIMONIALS = [
 export default function DemoPage() {
   const [prompts, setPrompts] = useState<DemoPrompt[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<DemoPrompt | null>(null);
+  const [customPrompt, setCustomPrompt] = useState("");
   const [stage, setStage] = useState<"select" | "generating" | "done" | "error">("select");
   const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<DemoStatus | null>(null);
@@ -57,6 +58,19 @@ export default function DemoPage() {
     document.title = "Demo en vivo — Ve Maris AI crear una app en tiempo real | Maris AI";
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute("content", "Ve cómo Maris AI crea una aplicación web completa en menos de 5 minutos, en directo, sin registrarte. La plataforma de vibe-coding en español.");
+  }, []);
+
+  // Recoger la idea que el visitante escribió en el buscador de la home
+  // (guardada en localStorage antes de traerlo aquí, en vez de mandarlo
+  // directo a /sign-up sin haber visto nada funcionar todavía).
+  useEffect(() => {
+    try {
+      const pending = localStorage.getItem("appforge_pending_prompt");
+      if (pending && pending.trim().length > 0) {
+        setCustomPrompt(pending.trim().slice(0, 500));
+        localStorage.removeItem("appforge_pending_prompt");
+      }
+    } catch {}
   }, []);
 
   // Cargar prompts
@@ -97,7 +111,8 @@ export default function DemoPage() {
   useEffect(() => () => stopPoll(), [stopPoll]);
 
   const startDemo = async () => {
-    if (!selectedPrompt) return;
+    const trimmedCustom = customPrompt.trim();
+    if (!trimmedCustom && !selectedPrompt) return;
     setStage("generating");
     setStatus(null);
     setError(null);
@@ -105,7 +120,9 @@ export default function DemoPage() {
       const r = await fetch(`${API}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ promptId: selectedPrompt.id }),
+        body: JSON.stringify(
+          trimmedCustom ? { customPrompt: trimmedCustom } : { promptId: selectedPrompt!.id }
+        ),
       });
       const data = await r.json();
       if (!r.ok) {
@@ -128,6 +145,7 @@ export default function DemoPage() {
     setStage("select");
     setJobId(null);
     setStatus(null);
+    setCustomPrompt("");
     setError(null);
   };
 
@@ -189,15 +207,26 @@ export default function DemoPage() {
           {/* Selector de ejemplo */}
           {(stage === "select" || stage === "generating" || stage === "done") && (
             <div className="border-b border-white/[0.07] p-5 space-y-4">
-              <p className="text-sm font-semibold text-white/70">Elige qué tipo de app quieres ver:</p>
+              <p className="text-sm font-semibold text-white/70">Escribe tu propia idea (o elige un ejemplo abajo):</p>
+              <textarea
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value.slice(0, 500))}
+                disabled={stage !== "select"}
+                placeholder="ej. Crea una app de gestión de citas para una peluquería, con calendario y recordatorios por WhatsApp..."
+                className={`w-full min-h-[70px] resize-y rounded-lg border bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder:text-white/25 outline-none transition ${
+                  stage !== "select" ? "opacity-40 cursor-not-allowed border-white/[0.08]" : "border-white/[0.12] focus:border-violet-500"
+                }`}
+                maxLength={500}
+              />
+              <p className="text-sm font-semibold text-white/70">O elige un ejemplo:</p>
               <div className="flex flex-wrap gap-2">
                 {prompts.map((p) => (
                   <button
                     key={p.id}
                     disabled={stage !== "select"}
-                    onClick={() => setSelectedPrompt(p)}
+                    onClick={() => { setSelectedPrompt(p); setCustomPrompt(""); }}
                     className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm transition ${
-                      selectedPrompt?.id === p.id
+                      selectedPrompt?.id === p.id && !customPrompt.trim()
                         ? "border-violet-500 bg-violet-500/15 text-white font-medium"
                         : "border-white/[0.08] text-white/50 hover:text-white hover:border-white/20"
                     } ${stage !== "select" ? "opacity-40 cursor-not-allowed" : ""}`}
@@ -217,7 +246,7 @@ export default function DemoPage() {
                   </p>
                   <Button
                     onClick={startDemo}
-                    disabled={!selectedPrompt || remainingDemos === 0}
+                    disabled={(!customPrompt.trim() && !selectedPrompt) || remainingDemos === 0}
                     className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-bold shadow-lg shadow-violet-500/25"
                   >
                     <Play className="h-4 w-4 mr-2 fill-current" />
