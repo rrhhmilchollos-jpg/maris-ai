@@ -627,7 +627,12 @@ const HIDE_SCRIPT = `<script>
     var isPrivateAppRoute = /^\\/(admin|dashboard|billing|app|onboarding|sign-in|sign-up)(\\/|$)/.test(window.location.pathname);
     if (isPrivateAppRoute) {
       if (root.children.length > 0) {
-        seo.style.display = 'none';
+        // .remove() en vez de display:none — así el texto SEO desaparece
+        // por completo del DOM (no solo visualmente). Un display:none deja
+        // el texto accesible a cualquier lector de textContent (incluidas
+        // herramientas de IA que no respetan CSS), duplicando el contenido
+        // frente al panel real. Al eliminar el nodo, no queda nada que leer.
+        seo.remove();
       } else {
         setTimeout(checkHide, 300);
       }
@@ -646,7 +651,12 @@ const HIDE_SCRIPT = `<script>
                    (main && main.textContent && main.textContent.indexOf('No hay noticias disponibles') !== -1) ||
                    (main && main.textContent && main.textContent.indexOf('No news available') !== -1);
     if (hasRealContent && !hasError) {
-      seo.style.display = 'none';
+      // .remove() en vez de display:none — ver comentario equivalente más
+      // arriba, en la rama de rutas privadas: elimina el nodo del DOM por
+      // completo para que ningún lector de texto (crawlers de IA que no
+      // respetan CSS, herramientas de auditoría, etc.) vea el bloque SEO
+      // duplicado junto al contenido real ya renderizado por React.
+      seo.remove();
     } else {
       setTimeout(checkHide, 500);
     }
