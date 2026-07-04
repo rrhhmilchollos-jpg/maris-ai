@@ -457,6 +457,11 @@ export interface IGenerationJob extends Document {
   creditsCost?: number;
   workerId?: string | null;
   partialFrontendCode?: string | null;
+  // Demo pública simulada — ver artifacts/api-server/src/routes/demo.ts
+  isSimulated?: boolean;
+  simulatedStartAt?: Date;
+  simulatedSampleAppId?: string;
+  simulatedLabel?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -483,6 +488,11 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     forceBasicGeneration: { type: Boolean, default: false },
     checkpointData: { type: Schema.Types.Mixed },
     editAppId: { type: String },
+    // Campos de la demo pública simulada (ver artifacts/api-server/src/routes/demo.ts)
+    isSimulated: { type: Boolean },
+    simulatedStartAt: { type: Date },
+    simulatedSampleAppId: { type: String },
+    simulatedLabel: { type: String },
     isAutoRepair: { type: Boolean, default: false },
     jobKind: { type: String, default: "generation" },
     coderModel: { type: String, default: "auto" },
