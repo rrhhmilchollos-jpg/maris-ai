@@ -42,6 +42,10 @@ verificarlo en producción una vez:
   con `{ "params": { "text": "hola desde Maris" } }` y ver el mensaje en Slack.
 - [ ] **Recompilar `lib/db` antes del api-server** en el pipeline de build
   (los modelos nuevos `PinnedPackage` y `ConnectorCredential` viven ahí).
+- [ ] **Modo construcción**: entrar como admin, pulsar "Activar construcción"
+  en la pastilla flotante (abajo-izquierda), abrir el sitio en una ventana
+  de incógnito y comprobar que se ve la página violeta de espera. Volver a
+  la sesión de admin y pulsar "Abrir al público".
 
 ---
 

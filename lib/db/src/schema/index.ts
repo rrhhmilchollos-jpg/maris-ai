@@ -1174,6 +1174,32 @@ export const ConnectorCredential: Model<IConnectorCredential> =
   mongoose.models.ConnectorCredential ||
   mongoose.model<IConnectorCredential>("ConnectorCredential", ConnectorCredentialSchema);
 
+// ─── Site Settings (ajustes globales del sitio) ──────────────────────────────
+// Clave/valor genérico para ajustes que el admin cambia en caliente sin
+// redesplegar: modo construcción, banners, feature flags… La clave
+// "maintenance_mode" ("on"/"off") controla la página "En construcción"
+// que ven los visitantes (los admins pasan siempre).
+export interface ISiteSetting extends Document {
+  key: string;
+  value: string;
+  updatedBy?: string; // userId del admin que lo cambió
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const SiteSettingSchema = new Schema<ISiteSetting>(
+  {
+    key: { type: String, required: true, unique: true, index: true },
+    value: { type: String, required: true },
+    updatedBy: { type: String },
+  },
+  { timestamps: true, collection: "site_settings" },
+);
+
+export const SiteSetting: Model<ISiteSetting> =
+  mongoose.models.SiteSetting ||
+  mongoose.model<ISiteSetting>("SiteSetting", SiteSettingSchema);
+
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 
