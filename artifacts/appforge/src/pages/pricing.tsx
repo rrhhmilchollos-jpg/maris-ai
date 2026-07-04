@@ -117,11 +117,11 @@ export default function PricingPage() {
                       </div>
 
                       <div className="mb-2">
-                        <span className="text-4xl font-bold text-white">{priceEur.toLocaleString("es-ES")}€</span>
+                        <span className="text-4xl font-bold text-white">{priceEur.toLocaleString("es-ES", { minimumFractionDigits: 0 })} €</span>
                       </div>
 
                       <p className="text-sm text-emerald-400 font-medium mb-6">
-                        {pack.pricePerCredit || `${perCreditNum.toFixed(3)}€`} por crédito
+                        {pack.pricePerCredit || `${perCreditNum.toFixed(3).replace(".", ",")} €`} por crédito
                       </p>
 
                       <Link href="/sign-up">

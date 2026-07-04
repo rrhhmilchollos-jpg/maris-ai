@@ -70,7 +70,7 @@ export default function BillingPage() {
   const handleCustomBuy = async () => {
     const amount = parseFloat(customAmount);
     if (!customAmount || amount < 20) {
-      setCheckoutError("El monto mínimo es 20€.");
+      setCheckoutError("El monto mínimo es 20 €.");
       return;
     }
 
@@ -92,7 +92,7 @@ export default function BillingPage() {
   };
 
   const formatPrice = (amountCents: number) => {
-    return `€${(amountCents / 100).toFixed(2)}`;
+    return `${(amountCents / 100).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
   };
 
   return (
@@ -202,19 +202,19 @@ export default function BillingPage() {
                     <div className="flex gap-3">
                       {/* ✅ Input con texto negro visible y mínimo 20€ */}
                       <div className="flex-1 relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg z-10">€</span>
                         <input
                           type="number"
-                          placeholder="Mínimo 20€"
+                          placeholder="Mínimo 20 €"
                           value={customAmount}
                           onChange={(e) => {
                             setCustomAmount(e.target.value);
                             setCheckoutError(null);
                           }}
-                          className="w-full pl-10 pr-4 py-3 border-2 border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold text-slate-100 bg-slate-800 placeholder-slate-500"
+                          className="w-full pl-4 pr-10 py-3 border-2 border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold text-slate-100 bg-slate-800 placeholder-slate-500"
                           min="20"
                           step="1"
                         />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg z-10">€</span>
                       </div>
                       {/* ✅ Botón solo dice "Comprar ahora" */}
                       <Button

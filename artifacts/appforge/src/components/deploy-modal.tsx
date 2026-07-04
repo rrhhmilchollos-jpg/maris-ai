@@ -759,7 +759,7 @@ export function DeployModal({
                         <p className="text-xs text-white/35">{plan.specs}</p>
                       </div>
                       {plan.monthlyPrice > 0 && (
-                        <span className="text-xs font-bold text-[#c084fc]">{plan.monthlyPrice}€/mes</span>
+                        <span className="text-xs font-bold text-[#c084fc]">{plan.monthlyPrice} €/mes</span>
                       )}
                     </button>
                   ))}
@@ -961,7 +961,7 @@ export function DeployModal({
                     disabled={watermarkLoading || watermarkHasMark === null}
                     className="rounded-lg bg-[#7c3aed] px-3 py-2 text-xs font-semibold text-white hover:bg-[#8b5cf6] transition disabled:opacity-50"
                   >
-                    {watermarkLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Eliminar por ${watermarkPrice.toFixed(2)}€`}
+                    {watermarkLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Eliminar por ${watermarkPrice.toFixed(2).replace(".", ",")} €`}
                   </button>
                 )}
               </div>
