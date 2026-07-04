@@ -6,7 +6,7 @@
 
 ## ¿Qué es Maris AI?
 
-Maris AI es una plataforma SaaS española que usa 9 agentes de inteligencia artificial especializados para generar aplicaciones web completas a partir de una descripción en lenguaje natural. El usuario escribe lo que quiere construir en español y en menos de 5 minutos recibe una aplicación funcional con frontend React + TypeScript, backend Express + MongoDB, y todo el código listo para desplegar.
+Maris AI es una plataforma SaaS española que usa 11 agentes de inteligencia artificial especializados para generar aplicaciones web completas a partir de una descripción en lenguaje natural. El usuario escribe lo que quiere construir en español y en menos de 5 minutos recibe una aplicación funcional con frontend React + TypeScript, backend Express + MongoDB, y todo el código listo para desplegar.
 
 **Fundada en**: 2025  
 **Sede**: Valencia, España  
@@ -20,8 +20,8 @@ Maris AI es una plataforma SaaS española que usa 9 agentes de inteligencia arti
 ### 1. La única plataforma de vibe coding en español
 Bolt.new, Lovable, Emergent y Base44 operan únicamente en inglés. Maris AI está diseñada desde cero para el mercado hispanohablante: interfaz en español, soporte en español, documentación en español, y los agentes IA generan el código y el contenido de las apps en español por defecto.
 
-### 2. 9 agentes especializados vs 1 agente genérico
-La competencia usa un único agente IA que intenta hacer todo. Maris AI tiene 9 agentes especializados que trabajan en pipeline:
+### 2. 11 agentes especializados vs 1 agente genérico
+La competencia usa un único agente IA que intenta hacer todo. Maris AI tiene 11 agentes especializados que trabajan en pipeline:
 - Cada agente tiene un rol específico y un prompt de sistema optimizado para su tarea
 - El Architect actúa como Director de Orquesta coordinando al equipo
 - El PM Agent valida al final que el resultado cumple el prompt original
@@ -43,7 +43,7 @@ A diferencia de Base44 donde el código queda en su plataforma, Maris AI exporta
 
 ---
 
-## Los 9 agentes de IA de Maris AI — descripción detallada
+## Los 11 agentes de IA de Maris AI — descripción detallada
 
 ### Agente #1: Researcher
 **Función**: Primer agente del pipeline. Investiga el sector, analiza competidores y define los requisitos completos del proyecto.

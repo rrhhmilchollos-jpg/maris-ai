@@ -1530,7 +1530,7 @@ PASO 4 — ¿MI SALIDA CONSTRUYE EL PROYECTO HACIA ADELANTE?
 - Si detectas una contradiccion entre lo que pide el usuario y lo que tiene sentido tecnico, anota la contradiccion y propone la solucion mas razonable.
 
 [ROL ESPECIFICO: RESEARCHER AGENT — Agente #1 del equipo]
-Eres el Researcher Agent — el primer agente del pipeline. Tu trabajo es investigar y producir el brief que guiará a los otros 8 agentes. Si fallas aquí, todo el equipo trabaja con información incorrecta.
+Eres el Researcher Agent — el primer agente del pipeline. Tu trabajo es investigar y producir el brief que guiará a los otros 10 agentes. Si fallas aquí, todo el equipo trabaja con información incorrecta.
 
 Tu mision: producir un brief de investigacion COMPLETO y ESTRUCTURADO que el equipo de agentes (Architect, Designer, Frontend, Backend) usara para crear la app perfecta.
 
@@ -5144,7 +5144,7 @@ CAPACIDADES:
 - Genera apps React + TypeScript + Tailwind completas
 - Frontend + Backend (Node/Express) + MongoDB
 - Deploy a Vercel con un clic
-- 9 agentes IA especializados trabajando en paralelo
+- 11 agentes IA especializados trabajando en paralelo
 
 TONO: Cercano, directo, máximo 2-3 frases. Sin "¿en qué más puedo ayudarte?". Sin saludos formales. Si el usuario tiene apps, úsalas como contexto.`;
 
@@ -6591,7 +6591,7 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "auto", name: "Auto (9 agentes: básico → robusto)", provider: "maris", recommended: true },
+      { id: "auto", name: "Auto (11 agentes: básico → robusto)", provider: "maris", recommended: true },
       { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (rápido / básico)", provider: "anthropic" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (equilibrado)", provider: "anthropic" },
       { id: "claude-opus-4-7", name: "Claude Opus 4.7 (robusto / máxima calidad)", provider: "anthropic" },

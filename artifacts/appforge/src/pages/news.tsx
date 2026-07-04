@@ -215,7 +215,7 @@ export default function NewsPage() {
                 </a>
                 <a href="/que-es-un-agente-de-ia" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
                   <h3 className="font-medium text-sm mb-1">¿Qué es un agente de IA?</h3>
-                  <p className="text-xs text-muted-foreground">Cómo funcionan los 9 agentes de Maris AI</p>
+                  <p className="text-xs text-muted-foreground">Cómo funcionan los 11 agentes de Maris AI</p>
                 </a>
                 <a href="/glosario" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
                   <h3 className="font-medium text-sm mb-1">Glosario de inteligencia artificial</h3>

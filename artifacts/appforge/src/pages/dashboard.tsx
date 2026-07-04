@@ -87,7 +87,7 @@ const AGENTS = [
 
 const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
-  starting:     { label: "Iniciando equipo de 9 agentes…",                    icon: Loader2 },
+  starting:     { label: "Iniciando equipo de 11 agentes…",                    icon: Loader2 },
   researching:  { label: "🔎 Researcher investigando referencias…",            icon: Search },
   architecting: { label: "🧠 Architect diseñando la arquitectura…",            icon: Compass },
   designing:    { label: "🎨 Designer definiendo el sistema visual…",          icon: Palette },
@@ -693,7 +693,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-base font-black text-white tracking-tight">¿Qué vas a construir hoy?</h2>
-                <p className="text-[11px] text-white/30">9 agentes de IA especializados trabajarán para ti</p>
+                <p className="text-[11px] text-white/30">11 agentes de IA especializados trabajarán para ti</p>
               </div>
             </div>
           </div>

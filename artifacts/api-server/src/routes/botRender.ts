@@ -137,11 +137,11 @@ ${ldJson}
 router.get("/bot-render/", (_req: Request, res: Response) => {
   const body = `<main style="max-width: 800px; margin: 0 auto; padding: 40px 20px;">
 <h1>Maris AI — Generador de Apps con IA en Español</h1>
-<p>Describe tu idea en español y 9 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.</p>
+<p>Describe tu idea en español y 11 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin programar, sin contratar un desarrollador.</p>
 <h2>¿Cómo funciona?</h2>
 <ol>
 <li><strong>Describe tu app</strong> — escribe en español lo que quieres construir.</li>
-<li><strong>9 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend, Backend, Database, QA, DevOps y Optimizer.</li>
+<li><strong>11 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend, Backend, Database, QA, DevOps y Optimizer.</li>
 <li><strong>App lista en menos de 5 minutos</strong> — React + TypeScript + Tailwind + Express + MongoDB. Código 100% tuyo, exportable a GitHub.</li>
 </ol>
 <h2>Alternativa en español a Bolt, Lovable y v0</h2>
@@ -154,7 +154,7 @@ router.get("/bot-render/", (_req: Request, res: Response) => {
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.send(html(
     "Maris AI | Generador de Apps con IA — 9 Agentes Especializados",
-    "Describe tu idea y 9 agentes IA generan tu app completa en menos de 5 minutos. Sin programar. Alternativa en español a Bolt y Lovable.",
+    "Describe tu idea y 11 agentes IA generan tu app completa en menos de 5 minutos. Sin programar. Alternativa en español a Bolt y Lovable.",
     `${BASE}/`,
     body
   ));
@@ -168,7 +168,7 @@ router.get("/bot-render/pricing", (_req: Request, res: Response) => {
   <div style="border: 1px solid #eee; padding: 20px; border-radius: 12px;">
     <h2>Plan Gratuito</h2>
     <p>0€/mes</p>
-    <ul><li>Acceso a los 9 agentes IA</li><li>Genera tu primera app sin tarjeta</li><li>Exportación de código incluida</li></ul>
+    <ul><li>Acceso a los 11 agentes IA</li><li>Genera tu primera app sin tarjeta</li><li>Exportación de código incluida</li></ul>
   </div>
   <div style="border: 1px solid #7c3aed; padding: 20px; border-radius: 12px;">
     <h2>Plan Pro</h2>
@@ -250,7 +250,7 @@ ${article.imageUrl ? `<img src="${article.imageUrl}" alt="${article.imageAlt || 
 <div style="line-height: 1.6; font-size: 1.1rem;">${article.body || ""}</div>
 <div style="margin-top: 40px; padding: 20px; background: #f0ebff; border-radius: 12px;">
   <h3>¿Quieres crear tu propia app con IA?</h3>
-  <p>Describe tu idea en Maris AI y deja que nuestros 9 agentes la construyan por ti.</p>
+  <p>Describe tu idea en Maris AI y deja que nuestros 11 agentes la construyan por ti.</p>
   <a href="${BASE}/sign-up" style="background: #7c3aed; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">Empezar gratis</a>
 </div>
 </article>
@@ -349,7 +349,7 @@ router.get("/bot-render/vs-bolt", (_req: Request, res: Response) => {
 <li><strong>Completamente en español</strong>: Bolt.new opera en inglés. Maris AI está diseñada para el mercado hispanohablante desde cero.</li>
 <li><strong>Backend real incluido</strong>: Maris AI genera automáticamente un servidor Express + MongoDB completo. Bolt.new genera principalmente frontend.</li>
 <li><strong>Precios en euros</strong>: Sin conversión de divisas ni sorpresas en la factura. Maris AI cobra en euros con IVA incluido.</li>
-<li><strong>9 agentes especializados</strong>: Maris AI usa un pipeline multi-agente (Arquitecto, QA, DevOps, PM Agent) para garantizar calidad. Bolt.new usa un único modelo generativo.</li>
+<li><strong>11 agentes especializados</strong>: Maris AI usa un pipeline multi-agente (Arquitecto, QA, DevOps, PM Agent) para garantizar calidad. Bolt.new usa un único modelo generativo.</li>
 <li><strong>Créditos sin caducidad</strong>: Los créditos de Maris AI no tienen fecha de vencimiento.</li>
 </ul>
 <h2>Conclusión</h2>
@@ -360,7 +360,7 @@ router.get("/bot-render/vs-bolt", (_req: Request, res: Response) => {
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.send(html(
     "Maris AI vs Bolt.new — La mejor alternativa en español 2026",
-    "Compara Maris AI con Bolt.new. En español, con backend Express + MongoDB incluido, precios en euros y 9 agentes especializados. La mejor alternativa para España.",
+    "Compara Maris AI con Bolt.new. En español, con backend Express + MongoDB incluido, precios en euros y 11 agentes especializados. La mejor alternativa para España.",
     `${BASE}/vs-bolt`,
     body
   ));
@@ -406,7 +406,7 @@ router.get("/bot-render/que-es-un-agente-de-ia", (_req: Request, res: Response) 
 <p>Un agente de inteligencia artificial es un sistema autónomo que percibe su entorno, toma decisiones y ejecuta acciones para conseguir un objetivo concreto. A diferencia de un chatbot simple, un agente de IA puede planificar, usar herramientas externas y trabajar durante varios pasos sin intervención humana.</p>
 <h2>¿Cómo funcionan los agentes de IA?</h2>
 <p>Los agentes de IA utilizan modelos de lenguaje avanzados (como Claude de Anthropic o GPT de OpenAI) combinados con herramientas externas (acceso a internet, bases de datos, APIs) para completar tareas complejas de forma autónoma.</p>
-<h2>Los 9 agentes de IA de Maris AI</h2>
+<h2>Los 11 agentes de IA de Maris AI</h2>
 <ol>
 <li><strong>Researcher</strong>: Investiga el mercado y define requisitos</li>
 <li><strong>Architect</strong>: Diseña la arquitectura técnica completa</li>
@@ -426,7 +426,7 @@ router.get("/bot-render/que-es-un-agente-de-ia", (_req: Request, res: Response) 
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.send(html(
     "Qué es un Agente de IA — Guía para Emprendedores | Maris AI",
-    "Un agente de IA es un sistema autónomo que planifica, razona y ejecuta tareas. Maris AI usa 9 agentes especializados para crear tu app completa en minutos.",
+    "Un agente de IA es un sistema autónomo que planifica, razona y ejecuta tareas. Maris AI usa 11 agentes especializados para crear tu app completa en minutos.",
     `${BASE}/que-es-un-agente-de-ia`,
     body
   ));
@@ -481,7 +481,7 @@ router.get("/bot-render/desarrollo-no-code-guia", (_req: Request, res: Response)
 <li><strong>Define tu idea</strong>: ¿Qué problema resuelve tu app? ¿Quién es tu usuario? Escríbelo en una o dos frases en español.</li>
 <li><strong>Elige una plataforma</strong>: Para el mercado español, Maris AI es la opción más completa: en español, con backend incluido y código exportable.</li>
 <li><strong>Describe tu app</strong>: Usa el chat de Maris AI para describir las funcionalidades que necesitas. Sé específico: "Una app de reservas para mi restaurante con sistema de turnos y notificaciones por email".</li>
-<li><strong>Recibe tu app</strong>: En menos de 5 minutos, los 9 agentes de Maris AI generarán tu aplicación completa.</li>
+<li><strong>Recibe tu app</strong>: En menos de 5 minutos, los 11 agentes de Maris AI generarán tu aplicación completa.</li>
 <li><strong>Personaliza y despliega</strong>: Ajusta el diseño desde el chat, exporta el código a GitHub y despliega en Vercel con un clic.</li>
 </ol>
 <h2>¿Qué tipos de apps puedes crear sin programar?</h2>

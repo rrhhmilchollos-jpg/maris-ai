@@ -325,7 +325,7 @@ function ChatLogStream({ jobId, isActive }: { jobId: string | null; isActive: bo
             <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-emerald-500 rounded-full border-2 border-[#0d0d12] animate-bounce" />
           </div>
           <p className="text-sm font-bold text-white/60 mb-1">Iniciando agentes...</p>
-          <p className="text-xs text-white/25">Los 9 agentes se están preparando</p>
+          <p className="text-xs text-white/25">Los 11 agentes se están preparando</p>
           <div className="flex items-center gap-1.5 mt-4">
             {[0, 150, 300, 450, 600].map(d => (
               <div key={d} className="h-1.5 w-1.5 rounded-full bg-violet-500/60 animate-bounce" style={{ animationDelay: `${d}ms` }} />

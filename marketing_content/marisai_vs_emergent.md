@@ -2,7 +2,7 @@
 
 ## ¿Qué hace única a Maris AI?
 
-Maris AI es la primera plataforma de generación de aplicaciones full-stack diseñada nativamente para el mercado hispanohablante. Con un pipeline de 9 agentes de IA especializados, transforma ideas en código React + TypeScript + Tailwind + Express + MongoDB listo para producción en minutos.
+Maris AI es la primera plataforma de generación de aplicaciones full-stack diseñada nativamente para el mercado hispanohablante. Con un pipeline de 11 agentes de IA especializados, transforma ideas en código React + TypeScript + Tailwind + Express + MongoDB listo para producción en minutos.
 
 ## Características principales
 

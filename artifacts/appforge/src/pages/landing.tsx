@@ -192,7 +192,7 @@ export default function LandingPage() {
             </motion.h1>
 
             <motion.p variants={fadeIn} className="text-base md:text-xl text-muted-foreground mb-6 md:mb-10 max-w-2xl mx-auto font-light leading-relaxed px-2 md:px-0">
-              Transforma tus ideas más ambiciosas en aplicaciones funcionales y listas para el mercado, impulsadas por un equipo de 9 agentes IA de élite.
+              Transforma tus ideas más ambiciosas en aplicaciones funcionales y listas para el mercado, impulsadas por un equipo de 11 agentes IA de élite.
             </motion.p>
 
             <motion.div variants={fadeIn} className="max-w-3xl mx-auto relative mb-6">

@@ -27,7 +27,7 @@ export default function PricingPage() {
   const creditPacks = (data as CreditPackage[] | undefined) || [];
 
   const features = [
-    "Acceso completo a 9 agentes IA especializados",
+    "Acceso completo a 11 agentes IA especializados",
     "Generación de apps React + TypeScript + Tailwind",
     "Backend Express + MongoDB incluido",
     "Exportación de código a GitHub",
@@ -58,7 +58,7 @@ export default function PricingPage() {
               Créditos flexibles para tu éxito.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 9 agentes IA de Maris AI.
+              Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 11 agentes IA de Maris AI.
             </p>
             <p className="mt-4 text-sm text-primary font-medium">
               🎁 Regístrate gratis y recibe 65 créditos de bienvenida — sin tarjeta de crédito
