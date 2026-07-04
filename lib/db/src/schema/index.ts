@@ -1093,6 +1093,45 @@ const WorkflowRunSchema = new Schema<IWorkflowRun>(
 export const WorkflowRun: Model<IWorkflowRun> =
   mongoose.models.WorkflowRun || mongoose.model<IWorkflowRun>("WorkflowRun", WorkflowRunSchema);
 
+// ─── Pinned Packages (auto-pinning dinámico del Preview/Deploy) ──────────────
+// Caché persistente de versiones exactas de paquetes npm que NO están en el
+// mapa estático DEFAULT_VERSIONS de deployBundle.ts. Cuando un bundle generado
+// por la IA importa un paquete fuera del catálogo, el sistema lo resuelve
+// contra registry.npmjs.org, lo smoke-testea contra esm.sh y guarda aquí el
+// resultado — así la siguiente app que use ese paquete resuelve al instante
+// y SIEMPRE a una versión verificada, nunca a un "latest" sin garantía.
+export type PinStatus = "verified" | "failed";
+
+export interface IPinnedPackage extends Document {
+  name: string;          // nombre del paquete npm (p.ej. "@tanstack/react-table")
+  version: string;       // versión exacta pineada (p.ej. "8.20.5") — vacía si failed
+  status: PinStatus;
+  // Detalle del smoke test contra esm.sh (código HTTP o mensaje de error).
+  smokeTestDetail?: string;
+  verifiedAt?: Date;     // cuándo pasó el smoke test
+  failedAt?: Date;       // cuándo falló (los failed se reintentan pasado el TTL)
+  hitCount: number;      // nº de bundles que han resuelto contra esta entrada
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const PinnedPackageSchema = new Schema<IPinnedPackage>(
+  {
+    name: { type: String, required: true, unique: true, index: true },
+    version: { type: String, default: "" },
+    status: { type: String, enum: ["verified", "failed"], required: true },
+    smokeTestDetail: { type: String },
+    verifiedAt: { type: Date },
+    failedAt: { type: Date },
+    hitCount: { type: Number, default: 0 },
+  },
+  { timestamps: true, collection: "pinned_packages" },
+);
+
+export const PinnedPackage: Model<IPinnedPackage> =
+  mongoose.models.PinnedPackage ||
+  mongoose.model<IPinnedPackage>("PinnedPackage", PinnedPackageSchema);
+
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 

@@ -2,6 +2,7 @@ import * as esbuild from "esbuild";
 import { randomInt } from "node:crypto";
 import { bundleToFiles } from "./exportZip";
 import { injectWatermarkToHTML } from "./watermark";
+import { resolveDynamicPins } from "./dynamicPinning";
 
 /**
  * Bundles the generated frontend into a single self-contained HTML page that
@@ -139,6 +140,23 @@ export async function buildDeployHtml(opts: {
     "react-dom/": `https://esm.sh/react-dom@${reactDomVersion}/`,
     "react-dom/client": `https://esm.sh/react-dom@${reactDomVersion}/client`,
   };
+  // Auto-pinning dinámico: para los externals que NO resuelven ni por el
+  // package.json del bundle ni por DEFAULT_VERSIONS, en vez de dejar que
+  // esm.sh resuelva "latest" sin garantía (causa histórica de previews
+  // colgados), se resuelven contra registry.npmjs.org + smoke test contra
+  // esm.sh, y el pin verificado se persiste en MongoDB (pinned_packages)
+  // para que la próxima app que use ese paquete resuelva al instante.
+  // Fail-soft: si la resolución dinámica no garantiza nada, se mantiene el
+  // comportamiento clásico (import sin versión) — nunca se rompe un deploy
+  // que antes funcionaba.
+  const unpinnedNames = [...externals]
+    .filter((pkg) => !pkg.startsWith("react/") && pkg !== "react")
+    .filter((pkg) => !pkg.startsWith("react-dom/") && pkg !== "react-dom")
+    .map((pkg) => packageName(pkg))
+    .filter((name) => !resolveVersion(name, userVersions) && !DEFAULT_VERSIONS[name]);
+  const dynamicPins =
+    unpinnedNames.length > 0 ? await resolveDynamicPins(unpinnedNames) : {};
+
   for (const pkg of externals) {
     if (pkg === "react" || pkg.startsWith("react/")) continue;
     if (pkg === "react-dom" || pkg.startsWith("react-dom/")) continue;
@@ -147,7 +165,10 @@ export async function buildDeployHtml(opts: {
     // not the full specifier which may include a subpath (`lucide-react/icons`).
     const name = packageName(pkg);
     const subpath = pkg.slice(name.length); // "" or "/sub/path"
-    const version = resolveVersion(name, userVersions) ?? DEFAULT_VERSIONS[name];
+    const version =
+      resolveVersion(name, userVersions) ??
+      DEFAULT_VERSIONS[name] ??
+      dynamicPins[name];
     // The version goes between the package name and the subpath, never after
     // the subpath: esm.sh URLs are `name@version/subpath`, not
     // `name/subpath@version` (which 404s).

@@ -322,7 +322,9 @@ ${tsRules}
 - NO non-ASCII characters inside identifiers, keywords or punctuation. Non-ASCII is allowed ONLY inside string literals and JSX text. Examples of FORBIDDEN garbage tokens: \`née\`, \`café\` as a property name, smart quotes \`"…"\` instead of plain \`"\`, em-dashes inside code.
 - Every string must be properly terminated with the SAME quote it started with. Long URLs and descriptions are common offenders — re-check them.
 - Every \`{\`, \`(\`, \`[\` must have a matching \`}\`, \`)\`, \`]\`. Every JSX tag must close.
-- All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. Stick to: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod, framer-motion, recharts, react-hook-form, @hookform/resolvers, react-day-picker. Do not invent package names.
+- All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. DEFAULT to the approved catalog: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod, framer-motion, recharts, react-hook-form, @hookform/resolvers, react-day-picker. Do not invent package names.
+- Styling is Tailwind utility classes ONLY. NEVER import CSS/component frameworks: no @mui/*, antd, @chakra-ui/*, bootstrap, react-bootstrap, semantic-ui, @mantine/*, styled-components, @emotion/*. Everything they offer you build with Tailwind + the approved catalog. These libraries are heavy, conflict with the preview runtime, and WILL break the app.
+- If (and only if) a requirement genuinely cannot be met with the approved catalog, you MAY import one extra well-known npm package — but then you MUST also add it to the bundle's package.json "dependencies" with an EXACT version (no ^, no ~, no "latest"). A bare import that is neither in the catalog nor declared with an exact version in package.json is a bug.
 - Every \`.map(item => …)\` over an array MUST give the rendered element a stable \`key={item.id ?? \`\${prefix}-\${index}\`}\`.
 - Hooks (useState/useEffect/useMemo) at the top of the component body, never inside conditionals/loops.
 
