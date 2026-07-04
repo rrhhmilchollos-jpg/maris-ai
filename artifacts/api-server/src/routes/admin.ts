@@ -93,6 +93,40 @@ router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> 
 
 router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 
+// ─── Modo construcción ────────────────────────────────────────────────────────
+// GET /api/site-status es PÚBLICO (está antes del prefijo /admin, el
+// middleware de arriba no le aplica): el frontend lo consulta al arrancar
+// para decidir si muestra la página "En construcción" a los visitantes.
+// El interruptor POST /api/admin/maintenance sí exige admin.
+router.get("/site-status", async (_req, res) => {
+  try {
+    await connectDB();
+    const { SiteSetting } = await import("@workspace/db/schema");
+    const doc = await SiteSetting.findOne({ key: "maintenance_mode" }).lean();
+    res.json({ maintenance: doc?.value === "on" });
+  } catch {
+    // Fail-open: si la BD no responde, el sitio se muestra con normalidad —
+    // un fallo de infraestructura nunca debe dejar fuera a los clientes.
+    res.json({ maintenance: false });
+  }
+});
+
+router.post("/admin/maintenance", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { enabled } = req.body as { enabled?: boolean };
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ ok: false, message: "Falta enabled (boolean)." });
+    return;
+  }
+  const { SiteSetting } = await import("@workspace/db/schema");
+  await SiteSetting.updateOne(
+    { key: "maintenance_mode" },
+    { $set: { value: enabled ? "on" : "off", updatedBy: String(req.userId ?? "") } },
+    { upsert: true },
+  );
+  res.json({ ok: true, maintenance: enabled });
+});
+
 router.get("/admin/overview", async (_req, res) => {
   await connectDB();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
