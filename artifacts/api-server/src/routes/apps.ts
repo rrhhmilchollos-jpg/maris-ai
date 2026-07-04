@@ -2021,11 +2021,11 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
         // el watchdog global (12 min), perdiendo todo el trabajo ya generado.
         const iterator = stream[Symbol.asyncIterator]();
         while (true) {
-          const { value: chunk, done } = await raceWithTimeout(
+          const { value: chunk, done } = (await raceWithTimeout(
             iterator.next(),
             AI_CALL_TIMEOUT_MS,
             `${role} code stream chunk (modelo ${candidate})`,
-          );
+          )) as { value: any; done: boolean };
           if (done) break;
           if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
             accumulated += chunk.delta.text;
