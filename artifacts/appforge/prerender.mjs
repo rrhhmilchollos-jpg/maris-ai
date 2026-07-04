@@ -615,7 +615,15 @@ const HIDE_SCRIPT = `<script>
   (function checkHide() {
     var seo = document.getElementById('seo-prerender');
     var root = document.getElementById('root');
-    if (!seo || !root) return;
+    // BUG DE CARRERA CONFIRMADO: este <script> aparece en el HTML ANTES que
+    // <div id="root">, así que en la primera ejecución (cuando el parser
+    // del navegador llega a este script) #root todavía no existe. Antes,
+    // "if (!seo || !root) return;" se rendía aquí para siempre porque no
+    // había ningún reintento — el bloque SEO se quedaba visible en TODAS
+    // las páginas sin importar caché ni despliegues. Ahora, si falta
+    // cualquiera de los dos, reintentamos hasta que ambos existan.
+    if (!seo) return;
+    if (!root) { setTimeout(checkHide, 30); return; }
     // BUG CONFIRMADO: /admin/dashboard (y el resto de rutas privadas de la
     // app) no envuelven su contenido en un <main>, así que la comprobación
     // de "contenido real" de más abajo nunca se cumplía y el overlay de
