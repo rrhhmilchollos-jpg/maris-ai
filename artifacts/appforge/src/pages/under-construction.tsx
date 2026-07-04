@@ -22,17 +22,36 @@ const FRASES = [
   "Construyendo algo que va a merecer la pena.",
 ];
 
+// Lo que el equipo está haciendo "ahora mismo" — rota junto al punto verde
+// de actividad en vivo para transmitir que detrás hay gente trabajando.
+const ACTIVIDAD_EQUIPO = [
+  "Los ingenieros de Maris AI están diseñando nuevas funciones",
+  "El equipo está mejorando la velocidad de la plataforma",
+  "Maris AI está entrenando a sus agentes para crear apps aún mejores",
+  "El equipo está puliendo la experiencia hasta el último píxel",
+  "Los ingenieros están reforzando la seguridad y la estabilidad",
+];
+
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function UnderConstructionPage() {
   const [fraseIndex, setFraseIndex] = useState(0);
+  const [actividadIndex, setActividadIndex] = useState(0);
 
   useEffect(() => {
     document.title = "Maris AI — Muy pronto";
     const timer = setInterval(() => {
       setFraseIndex((i) => (i + 1) % FRASES.length);
     }, 6000);
-    return () => clearInterval(timer);
+    // La actividad del equipo rota a otro ritmo (4.5s) para que la pantalla
+    // se sienta viva y no sincronizada de forma mecánica.
+    const timerActividad = setInterval(() => {
+      setActividadIndex((i) => (i + 1) % ACTIVIDAD_EQUIPO.length);
+    }, 4500);
+    return () => {
+      clearInterval(timer);
+      clearInterval(timerActividad);
+    };
   }, []);
 
   return (
@@ -100,6 +119,28 @@ export default function UnderConstructionPage() {
             animate={{ x: ["-120%", "320%"] }}
             transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           />
+        </div>
+
+        {/* Actividad en vivo del equipo — punto verde latiendo + mensaje rotatorio */}
+        <div className="mb-8 flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-5 py-2.5 backdrop-blur-sm">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+          </span>
+          <div className="h-5 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={actividadIndex}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.45 }}
+                className="block text-sm text-[#d4d4d8]"
+              >
+                {ACTIVIDAD_EQUIPO[actividadIndex]}
+              </motion.span>
+            </AnimatePresence>
+          </div>
         </div>
 
         <p className="text-sm text-[#71717a]">
