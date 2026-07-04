@@ -614,10 +614,24 @@ const ROUTES = [
 const HIDE_SCRIPT = `<script>
   (function checkHide() {
     var seo = document.getElementById('seo-prerender');
-    if (seo && document.getElementById('root') && document.getElementById('root').children.length > 0) {
+    var root = document.getElementById('root');
+    if (!seo || !root) return;
+    // Solo ocultar el prerender cuando React haya cargado contenido REAL.
+    // Si la app muestra un error ("No hay noticias", toast de error, etc.),
+    // el prerender debe seguir visible — es lo que evita que Google clasifique
+    // la página como "soft 404" (página sin contenido).
+    // Comprobamos: ¿hay un <main> con contenido sustantivo dentro de #root?
+    // Si no (ej. solo hay un loader, un error, o un skeleton), no ocultamos.
+    var main = root.querySelector('main');
+    var hasRealContent = main && main.textContent && main.textContent.trim().length > 200;
+    // También comprobamos que no haya un toast/banner de error visible
+    var hasError = root.querySelector('[data-state="open"].destructive') ||
+                   (main && main.textContent && main.textContent.indexOf('No hay noticias disponibles') !== -1) ||
+                   (main && main.textContent && main.textContent.indexOf('No news available') !== -1);
+    if (hasRealContent && !hasError) {
       seo.style.display = 'none';
     } else {
-      setTimeout(checkHide, 100);
+      setTimeout(checkHide, 500);
     }
   })();
 <\/script>`;
