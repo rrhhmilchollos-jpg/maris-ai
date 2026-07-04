@@ -667,13 +667,35 @@ async function fetchArticleRoutes() {
         .map((p) => `<p>${escapeHtml(p)}</p>`)
         .join("\n");
 
+      const publishedDate = a.publishedAt ? new Date(a.publishedAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+      const wordCount = String(a.body || "").split(/\s+/).length;
+
       return {
         path: `/news/${a.slug}`,
         file: `news/${a.slug}/index.html`,
         title: `${a.title} — Maris AI`,
         description: a.metaDescription || String(a.body || "").slice(0, 160),
         canonical: `https://www.marisai.es/news/${a.slug}`,
-        body: `<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}\n<nav>\n<h3>Explora más</h3>\n<ul>\n<li><a href="/news">Volver al blog</a></li>\n<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>\n<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>\n<li><a href="/glosario">Glosario de IA</a></li>\n<li><a href="/vs-emergent">Maris AI vs competidores</a></li>\n<li><a href="/showcase">Apps creadas con Maris AI</a></li>\n<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>\n</ul>\n</nav>`,
+        // Schema BlogPosting inyectado directamente en el body — se añade
+        // como <script type="application/ld+json"> dentro del contenido
+        // prerenderizado. Esto es válido y lo recomiendan tanto Google como
+        // schema.org: el script puede estar en <body>, no solo en <head>.
+        body: `<script type="application/ld+json">${JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BlogPosting",
+          "headline": a.title,
+          "description": a.metaDescription || String(a.body || "").slice(0, 160),
+          "image": a.imageUrl || "https://www.marisai.es/opengraph.jpg",
+          "author": { "@type": "Organization", "name": a.author || "Maris AI", "url": "https://www.marisai.es" },
+          "publisher": { "@type": "Organization", "name": "Maris AI", "url": "https://www.marisai.es", "logo": { "@type": "ImageObject", "url": "https://www.marisai.es/logo.svg" } },
+          "datePublished": publishedDate,
+          "dateModified": publishedDate,
+          "mainEntityOfPage": { "@type": "WebPage", "@id": `https://www.marisai.es/news/${a.slug}` },
+          "wordCount": wordCount,
+          "inLanguage": "es",
+          "keywords": Array.isArray(a.tags) ? a.tags.join(", ") : "inteligencia artificial, vibe coding, crear apps"
+        })}</script>
+<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}\n<nav>\n<h3>Explora más</h3>\n<ul>\n<li><a href="/news">Volver al blog</a></li>\n<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>\n<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>\n<li><a href="/glosario">Glosario de IA</a></li>\n<li><a href="/vs-emergent">Maris AI vs competidores</a></li>\n<li><a href="/showcase">Apps creadas con Maris AI</a></li>\n<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>\n</ul>\n</nav>`,
       };
     });
   } catch (err) {
@@ -922,4 +944,33 @@ sitemap += `</urlset>`;
 
 writeFileSync(join(DIST, "sitemap.xml"), sitemap, "utf-8");
 console.log(`🗺️  sitemap.xml generado con ${sitemapPages.length + articleRoutes.length} URLs`);
+
+// ── Generar feed RSS para Google News Publisher Center ────────────────
+// Google News requiere un feed RSS o Atom para indexar artículos en la
+// pestaña de Noticias. Se genera estáticamente con los artículos que ya
+// están cargados de la API.
+let rss = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+rss += `<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n`;
+rss += `<channel>\n`;
+rss += `  <title>Maris AI — Blog de Inteligencia Artificial</title>\n`;
+rss += `  <link>https://www.marisai.es/news</link>\n`;
+rss += `  <description>Noticias, tutoriales y guías sobre inteligencia artificial, vibe coding y creación de apps sin programar.</description>\n`;
+rss += `  <language>es</language>\n`;
+rss += `  <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>\n`;
+rss += `  <atom:link href="https://www.marisai.es/rss.xml" rel="self" type="application/rss+xml" />\n`;
+
+for (const route of articleRoutes) {
+  const title = route.title.replace(/ — Maris AI$/, "");
+  rss += `  <item>\n`;
+  rss += `    <title>${escapeHtml(title)}</title>\n`;
+  rss += `    <link>${route.canonical}</link>\n`;
+  rss += `    <guid isPermaLink="true">${route.canonical}</guid>\n`;
+  rss += `    <description>${escapeHtml(route.description)}</description>\n`;
+  rss += `    <pubDate>${new Date().toUTCString()}</pubDate>\n`;
+  rss += `  </item>\n`;
+}
+
+rss += `</channel>\n</rss>`;
+writeFileSync(join(DIST, "rss.xml"), rss, "utf-8");
+console.log(`📡 rss.xml generado con ${articleRoutes.length} artículos`);
 // Force rebuild 1783104716
