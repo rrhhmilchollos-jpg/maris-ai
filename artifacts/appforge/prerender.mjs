@@ -616,6 +616,23 @@ const HIDE_SCRIPT = `<script>
     var seo = document.getElementById('seo-prerender');
     var root = document.getElementById('root');
     if (!seo || !root) return;
+    // BUG CONFIRMADO: /admin/dashboard (y el resto de rutas privadas de la
+    // app) no envuelven su contenido en un <main>, así que la comprobación
+    // de "contenido real" de más abajo nunca se cumplía y el overlay de
+    // marketing se quedaba mezclado con el panel real para siempre — el
+    // usuario veía el texto SEO de la home encima de sus propias métricas.
+    // Estas rutas están protegidas por Clerk: Google nunca ve su contenido
+    // real de todos modos, así que no necesitan la comprobación estricta de
+    // <main> — basta con que #root tenga cualquier hijo para ocultar ya.
+    var isPrivateAppRoute = /^\\/(admin|dashboard|billing|app|onboarding|sign-in|sign-up)(\\/|$)/.test(window.location.pathname);
+    if (isPrivateAppRoute) {
+      if (root.children.length > 0) {
+        seo.style.display = 'none';
+      } else {
+        setTimeout(checkHide, 300);
+      }
+      return;
+    }
     // Solo ocultar el prerender cuando React haya cargado contenido REAL.
     // Si la app muestra un error ("No hay noticias", toast de error, etc.),
     // el prerender debe seguir visible — es lo que evita que Google clasifique
