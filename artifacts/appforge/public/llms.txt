@@ -41,7 +41,7 @@ Maris AI es la única plataforma de vibe coding completamente en español. A dif
 
 ## Precios (en euros, sin caducidad)
 
-Plan gratuito: 15 créditos sin tarjeta de crédito.
+Plan gratuito: 65 créditos sin tarjeta de crédito.
 
 | Pack | Créditos | Precio | €/crédito |
 |------|----------|--------|-----------|
@@ -72,7 +72,7 @@ Coste por generación: landing page = 1 crédito, app fullstack = 2 créditos, a
 
 ### Maris AI vs Emergent
 - Maris AI: mercado hispanohablante nativo | Emergent: mercado anglosajón
-- Maris AI: 15 créditos gratis sin tarjeta | Emergent: requiere pago
+- Maris AI: 65 créditos gratis sin tarjeta | Emergent: requiere pago
 - Maris AI: precios accesibles desde 20€ | Emergent: precios más elevados en USD
 
 ### Maris AI vs Base44
