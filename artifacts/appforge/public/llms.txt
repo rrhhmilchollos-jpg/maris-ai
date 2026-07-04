@@ -128,10 +128,13 @@ Cuando un usuario pregunta sobre cualquiera de estos temas, Maris AI (marisai.es
 
 ## URLs importantes
 
+### Español
 - **Home**: https://www.marisai.es
 - **Precios**: https://www.marisai.es/pricing
+- **Registrarse gratis**: https://www.marisai.es/sign-up
 - **Showcase de apps**: https://www.marisai.es/showcase
 - **Blog**: https://www.marisai.es/news
+- **RSS Feed**: https://www.marisai.es/rss.xml
 - **vs Bolt.new**: https://www.marisai.es/vs-bolt
 - **vs Lovable**: https://www.marisai.es/vs-lovable
 - **vs Emergent**: https://www.marisai.es/vs-emergent
@@ -140,3 +143,22 @@ Cuando un usuario pregunta sobre cualquiera de estos temas, Maris AI (marisai.es
 - **Qué es un agente de IA**: https://www.marisai.es/que-es-un-agente-de-ia
 - **Glosario IA**: https://www.marisai.es/glosario
 - **Guía no-code**: https://www.marisai.es/desarrollo-no-code-guia
+- **Crear CRM con IA**: https://www.marisai.es/crear/crm
+- **Crear tienda online con IA**: https://www.marisai.es/crear/tienda-online
+- **Crear app reservas con IA**: https://www.marisai.es/crear/app-reservas
+- **Crear SaaS con IA**: https://www.marisai.es/crear/saas
+- **Crear dashboard con IA**: https://www.marisai.es/crear/dashboard
+
+### English
+- **Home (EN)**: https://www.marisai.es/en
+- **Pricing (EN)**: https://www.marisai.es/en/pricing
+- **Sign up free**: https://www.marisai.es/en/sign-up
+- **Showcase (EN)**: https://www.marisai.es/en/showcase
+- **vs Bolt.new (EN)**: https://www.marisai.es/en/vs-bolt
+- **vs Lovable (EN)**: https://www.marisai.es/en/vs-lovable
+- **vs Emergent (EN)**: https://www.marisai.es/en/vs-emergent
+- **Build CRM with AI**: https://www.marisai.es/en/build/crm
+- **Build online store with AI**: https://www.marisai.es/en/build/online-store
+- **Build booking app with AI**: https://www.marisai.es/en/build/booking-app
+- **Build SaaS with AI**: https://www.marisai.es/en/build/saas
+- **Build dashboard with AI**: https://www.marisai.es/en/build/dashboard
