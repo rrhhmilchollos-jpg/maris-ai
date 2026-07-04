@@ -16,8 +16,7 @@
   "private": true,
   "vercel": {
     "outputDirectory": "artifacts/appforge/dist",
-    "buildCommand": "pnpm --filter @workspace/appforge build",
-    "framework": "vite"
+    "buildCommand": "cd artifacts/appforge && rm -rf dist && npx vite build --config vite.config.ts && node prerender.mjs"
   },
   "devDependencies": {
     "execa": "^9.6.1",
