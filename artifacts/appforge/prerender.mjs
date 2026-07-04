@@ -555,7 +555,55 @@ const ROUTES = [
 <p>Maris AI Inc. — Email: privacy@marisai.es — Sitio web: www.marisai.es</p>`
   },
   {
-    path: "/en",
+    path: "/sign-up",
+    file: "sign-up/index.html",
+    title: "Regístrate Gratis — Maris AI",
+    description: "Crea tu cuenta en Maris AI y empieza a crear apps con IA sin programar. 65 créditos gratis, sin tarjeta de crédito. Registro en 30 segundos.",
+    canonical: "https://www.marisai.es/sign-up",
+    body: `<h1>Regístrate gratis en Maris AI</h1>
+<p>Crea tu cuenta y empieza a construir aplicaciones con inteligencia artificial hoy mismo. Sin necesidad de saber programar.</p>
+<h2>¿Qué recibes al registrarte?</h2>
+<ul>
+<li><strong>65 créditos gratis</strong> — suficientes para crear tu primera app completa</li>
+<li><strong>Sin tarjeta de crédito</strong> — regístrate solo con tu email o cuenta de Google</li>
+<li><strong>Acceso completo a los 9 agentes de IA</strong> — frontend, backend, base de datos, QA y más</li>
+<li><strong>Código 100% tuyo</strong> — exporta a GitHub cuando quieras, sin restricciones</li>
+<li><strong>Créditos que nunca caducan</strong> — usa tus créditos cuando lo necesites</li>
+</ul>
+<h2>¿Cómo funciona el registro?</h2>
+<ol>
+<li>Introduce tu email o haz clic en "Continuar con Google"</li>
+<li>Confirma tu email (si eliges registro por email)</li>
+<li>Empieza a crear tu primera app inmediatamente</li>
+</ol>
+<h2>¿Por qué elegir Maris AI?</h2>
+<ul>
+<li>Plataforma 100% en español para emprendedores en España y Latinoamérica</li>
+<li>Precios en euros, cumplimiento RGPD</li>
+<li>La mejor alternativa a Bolt.new y Lovable en español</li>
+</ul>
+<nav>
+<a href="/">Volver a la home</a> |
+<a href="/pricing">Ver precios</a> |
+<a href="/showcase">Apps creadas con Maris AI</a> |
+<a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a>
+</nav>`
+  },
+  {
+    path: "/sign-in",
+    file: "sign-in/index.html",
+    title: "Iniciar Sesión — Maris AI",
+    description: "Inicia sesión en tu cuenta de Maris AI para seguir creando apps con inteligencia artificial.",
+    canonical: "https://www.marisai.es/sign-in",
+    body: `<h1>Iniciar sesión en Maris AI</h1>
+<p>Accede a tu cuenta para seguir creando aplicaciones con inteligencia artificial.</p>
+<p>¿No tienes cuenta? <a href="/sign-up">Regístrate gratis</a> — 65 créditos de bienvenida sin tarjeta.</p>
+<nav>
+<a href="/">Volver a la home</a> |
+<a href="/sign-up">Crear cuenta gratis</a>
+</nav>`
+  },
+  {
     file: "en/index.html",
     title: "Maris AI — Build Apps with AI, No Coding Required",
     description: "Describe your idea and 9 specialized AI agents generate your complete app in under 5 minutes. No coding needed. Free for entrepreneurs worldwide.",
@@ -907,6 +955,7 @@ const sitemapPages = [
   { url: "https://www.marisai.es/que-es-un-agente-de-ia", priority: "0.7", changefreq: "monthly" },
   { url: "https://www.marisai.es/glosario", priority: "0.7", changefreq: "monthly" },
   { url: "https://www.marisai.es/desarrollo-no-code-guia", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/sign-up", priority: "0.9", changefreq: "monthly" },
   { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly" },
   { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly" },
   { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly" },
