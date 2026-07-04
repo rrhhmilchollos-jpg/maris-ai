@@ -28,7 +28,8 @@ type ConnectorId =
   | "supabase" | "notion" | "airtable" | "github" | "slack"
   | "google-sheets" | "openai" | "resend" | "cloudinary" | "stripe"
   | "google-calendar" | "shopify"
-  | "salesforce" | "hubspot" | "zoho-crm" | "dynamics365" | "sap-business-one";
+  | "salesforce" | "hubspot" | "zoho-crm" | "dynamics365" | "sap-business-one"
+  | "webhook";
 
 async function verifySupabase(values: Record<string, string>): Promise<{ ok: boolean; message: string }> {
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = values;
@@ -199,7 +200,17 @@ async function verifySapBusinessOne(values: Record<string, string>): Promise<{ o
   };
 }
 
-const VERIFIERS: Record<ConnectorId, (values: Record<string, string>) => Promise<{ ok: boolean; message: string }>> = {
+export const VERIFIERS: Record<ConnectorId, (values: Record<string, string>) => Promise<{ ok: boolean; message: string }>> = {
+  // Webhook genérico: la única verificación posible sin efectos secundarios
+  // es el formato de la URL — hacer un POST real de prueba podría disparar
+  // una automatización del usuario (Zapier, Make…), así que no se hace.
+  webhook: async (v) => {
+    const url = v.WEBHOOK_URL ?? "";
+    if (!/^https:\/\/.+/.test(url)) {
+      return { ok: false, message: "WEBHOOK_URL debe ser una URL https:// válida." };
+    }
+    return { ok: true, message: "URL de webhook guardada. Se validará con el primer envío real." };
+  },
   supabase: verifySupabase,
   notion: verifyNotion,
   airtable: verifyAirtable,
