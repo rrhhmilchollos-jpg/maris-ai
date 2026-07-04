@@ -52,11 +52,11 @@
     },
     {
       "source": "/news-sitemap.xml",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/news-sitemap.xml"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/news-sitemap.xml"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/sitemap.xml"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/sitemap.xml"
     },
     {
       "source": "/rss",
