@@ -310,7 +310,7 @@ export default function DemoPage() {
                 <div className="flex items-center justify-between px-5 py-3 bg-green-500/10 border-b border-green-500/20">
                   <div className="flex items-center gap-2 text-green-400 font-semibold text-sm">
                     <CheckCircle2 className="h-4 w-4" />
-                    ¡App generada en tiempo real! — {status?.appTitle}
+                    ✅ Ejemplo real hecho con Maris AI — {status?.appTitle}
                   </div>
                   <button onClick={reset} className="text-xs text-white/40 hover:text-white flex items-center gap-1 transition">
                     <RefreshCw className="h-3 w-3" /> Probar otra
