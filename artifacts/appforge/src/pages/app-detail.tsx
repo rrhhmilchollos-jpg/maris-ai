@@ -129,7 +129,7 @@ const DEPLOY_GRACE_WINDOW_MS = 5 * 60 * 1000;
 
 const PHASE_LABELS: Record<string, { label: string; icon: any }> = {
   queued:       { label: "En cola…",                                          icon: Loader2 },
-  starting:     { label: "Iniciando equipo de 9 agentes…",                    icon: Loader2 },
+  starting:     { label: "Iniciando equipo de 11 agentes…",                    icon: Loader2 },
   researching:  { label: "🔎 Researcher investigando referencias…",            icon: Sparkles },
   architecting: { label: "🧠 Architect planificando la arquitectura…",          icon: Sparkles },
   designing:    { label: "🎨 Designer definiendo el sistema visual…",          icon: Sparkles },

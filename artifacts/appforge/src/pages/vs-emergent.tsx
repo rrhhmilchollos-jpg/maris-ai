@@ -8,7 +8,7 @@ import { Layout } from "@/components/layout";
 const COMPARISON = [
   { feature: "Idioma de la interfaz", maris: "100% Español", competitor: "Solo inglés", marisWins: true },
   { feature: "Soporte en español", maris: "WhatsApp + email", competitor: "No disponible", marisWins: true },
-  { feature: "Enfoque multi-agente", maris: "9 agentes especializados", competitor: "Sí, multi-agente", marisWins: false },
+  { feature: "Enfoque multi-agente", maris: "11 agentes especializados", competitor: "Sí, multi-agente", marisWins: false },
   { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Sí, incluido", marisWins: false },
   { feature: "Plan de pago desde", maris: "19€/mes", competitor: "20$/mes (~18€)", marisWins: false },
   { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, mensualmente", marisWins: true },
@@ -20,7 +20,7 @@ const COMPARISON = [
 
 const FAQS = [
   { q: "¿En qué se parecen Maris AI y Emergent.sh?", a: "Ambos usan arquitectura multi-agente para generar apps completas en una sola generación. Los dos incluyen deploy automático y exportación de código. La diferencia principal es que Maris AI está en español y Emergent.sh solo en inglés." },
-  { q: "¿Es Emergent.sh mejor técnicamente que Maris AI?", a: "Emergent.sh es técnicamente muy sólido. Maris AI tiene una arquitectura similar de 9 agentes especializados. Para el mercado hispanohablante, la calidad es comparable pero Maris AI añade la ventaja del idioma y el soporte humano." },
+  { q: "¿Es Emergent.sh mejor técnicamente que Maris AI?", a: "Emergent.sh es técnicamente muy sólido. Maris AI tiene una arquitectura similar de 11 agentes especializados. Para el mercado hispanohablante, la calidad es comparable pero Maris AI añade la ventaja del idioma y el soporte humano." },
   { q: "¿Puedo usar Emergent.sh si no sé inglés?", a: "Técnicamente puedes escribir prompts en español, pero toda la interfaz, mensajes de error y soporte son en inglés. Maris AI ofrece todo en español, incluyendo los mensajes del sistema y el soporte." },
   { q: "¿Los créditos de Emergent.sh caducan?", a: "Sí, los créditos de Emergent.sh se reinician mensualmente. En Maris AI los créditos nunca caducan: los compras y los usas cuando quieras, sin presión de fin de mes." },
   { q: "¿Por qué Maris AI si Emergent.sh tiene más trayectoria?", a: "Emergent.sh tiene más tiempo en el mercado global, pero Maris AI es la única opción construida específicamente para el mercado hispanohablante. Si tu empresa y clientes están en España o Latinoamérica, la experiencia en tu idioma marca una diferencia real." },
@@ -30,7 +30,7 @@ export default function VsEmergentPage() {
   useEffect(() => {
     document.title = "Maris AI vs Emergent.sh 2026 — Alternativa en español con soporte real | Maris AI";
     const setMeta = (sel: string, val: string) => { const el = document.querySelector(sel); if (el) el.setAttribute("content", val); };
-    setMeta('meta[name="description"]', "Comparativa Maris AI vs Emergent.sh: cuál genera mejores apps para emprendedores españoles. Maris AI ofrece soporte en español, precios en euros y 9 agentes especializados.");
+    setMeta('meta[name="description"]', "Comparativa Maris AI vs Emergent.sh: cuál genera mejores apps para emprendedores españoles. Maris AI ofrece soporte en español, precios en euros y 11 agentes especializados.");
     setMeta('meta[property="og:title"]', "Maris AI vs Emergent.sh 2026 — Alternativa en español con soporte real | Maris AI");
     setMeta('meta[property="og:url"]', "https://www.marisai.es/vs-emergent");
     let canonical = document.querySelector("link[rel='canonical']") as HTMLLinkElement | null;
@@ -93,7 +93,7 @@ export default function VsEmergentPage() {
               { icon: Globe, title: "100% en español", desc: "Interfaz, soporte, documentación y comunidad en español. Emergent.sh está en inglés — una barrera real para la mayoría de emprendedores.", color: "text-blue-400" },
               { icon: MessageCircle, title: "Soporte humano por WhatsApp", desc: "Equipo real respondiendo en español en menos de 2 horas. Sin bots, sin tickets en inglés, sin esperas de días.", color: "text-green-400" },
               { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos nunca caducan. Emergent.sh cobra en dólares.", color: "text-yellow-400" },
-              { icon: Zap, title: "9 agentes IA especializados", desc: "Arquitecto, diseñador, frontend, backend, base de datos, integraciones, testing, deploy y autopilot trabajando en paralelo.", color: "text-purple-400" },
+              { icon: Zap, title: "11 agentes IA especializados", desc: "Researcher, arquitecto, diseñador, frontend, backend, base de datos, integraciones, QA, DevOps, testing y reparación trabajando en paralelo.", color: "text-purple-400" },
               { icon: Shield, title: "Backend incluido sin extras", desc: "Express + MongoDB incluidos de serie. Sin servicios externos obligatorios, sin costes ocultos adicionales.", color: "text-red-400" },
               { icon: Clock, title: "Apps completas en 5 minutos", desc: "Frontend + backend + base de datos + deploy automático a Vercel en una sola generación. Sin configuraciones manuales.", color: "text-cyan-400" },
             ].map((item, i) => (

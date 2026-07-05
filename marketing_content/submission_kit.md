@@ -5,9 +5,9 @@ Aquí tienes el kit de información necesario para enviar Maris AI a diversos di
 ## Información General
 
 *   **URL del Producto:** `https://www.marisai.es`
-*   **Descripción Corta (aprox. 150 caracteres):** Maris AI genera apps web y móviles completas con un pipeline de 9 agentes IA especializados. De la idea al código en minutos.
+*   **Descripción Corta (aprox. 150 caracteres):** Maris AI genera apps web y móviles completas con un pipeline de 11 agentes IA especializados. De la idea al código en minutos.
 *   **Descripción Larga (300-500 palabras):**
-    Maris AI es una plataforma innovadora que revoluciona la creación de aplicaciones web y móviles. Utilizando un avanzado pipeline de 9 agentes de IA especializados, Maris AI transforma ideas en código desplegado en cuestión de minutos. Estos agentes incluyen: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator. Esta orquestación de IA permite generar código React full-stack de alta calidad desde lenguaje natural, ofreciendo una Plataforma líder de generación de apps con IA para el mercado hispanohablante. Maris AI está diseñada para democratizar el desarrollo de software, permitiendo a emprendedores, desarrolladores y empresas lanzar sus proyectos con una velocidad y eficiencia sin precedentes.
+    Maris AI es una plataforma innovadora que revoluciona la creación de aplicaciones web y móviles. Utilizando un avanzado pipeline de 11 agentes de IA especializados, Maris AI transforma ideas en código desplegado en cuestión de minutos. Estos agentes incluyen: Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, Image Agent, QA Reviewer, Patcher y Visual Evaluator. Esta orquestación de IA permite generar código React full-stack de alta calidad desde lenguaje natural, ofreciendo una Plataforma líder de generación de apps con IA para el mercado hispanohablante. Maris AI está diseñada para democratizar el desarrollo de software, permitiendo a emprendedores, desarrolladores y empresas lanzar sus proyectos con una velocidad y eficiencia sin precedentes.
 *   **Categorías Sugeridas:** AI App Builder, No-Code/Low-Code, Vibe Coding, Developer Tools.
 
 ## Activos Visuales (Necesarios del Usuario)

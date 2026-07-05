@@ -425,7 +425,7 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
   });
 
   // Visual analysis uses Sonnet — tiene vision multimodal excelente.
-  // ENCONTRADO: esta llamada era la única de los 9 agentes que NO pasaba
+  // ENCONTRADO: esta llamada era la única de los 11 agentes que NO pasaba
   // por createClaudeMessageWithFallback — sin el timeout de inactividad,
   // sin reintentos en errores transitorios (red, 5xx) y sin fallback de
   // modelo (Sonnet→Opus) que sí tienen el resto de agentes. Un simple

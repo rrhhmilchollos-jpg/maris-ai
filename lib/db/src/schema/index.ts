@@ -89,7 +89,9 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true },
     fullName: { type: String },
     imageUrl: { type: String },
-    credits: { type: Number, default: 10, required: true },
+    // 65 = créditos de bienvenida. Debe coincidir SIEMPRE con el regalo del
+    // clerkWebhook y con el marketing público ("65 créditos gratis").
+    credits: { type: Number, default: 65, required: true },
     stripeCustomerId: { type: String },
     isPremium: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
