@@ -26,13 +26,22 @@ export default function BillingSuccessPage() {
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
-        // Trackear conversión de compra en GA4 y Google Ads
-        import("@/lib/analytics").then(({ trackPurchase }) => {
-          const amount = data?.amountEur || data?.amount || 0;
-          const credits = data?.credits || data?.creditsAdded || 0;
-          const plan = data?.plan || "credits";
-          trackPurchase(amount, credits, plan);
-        });
+        // ENCONTRADO A PETICION DEL USUARIO (revisando por que la conversion
+        // "Compra" de Google Ads no registraba datos): esto leia
+        // data?.amountEur / data?.amount, campos que el backend NUNCA
+        // devolvia -- caia siempre a 0€. Corregido para leer priceCents
+        // (el campo real que sí devuelve /billing/confirm) y convertirlo a
+        // euros. Ademas, no se comprobaba data.alreadyProcessed antes de
+        // trackear -- si el cliente refrescaba esta pantalla, se disparaba
+        // la MISMA conversion otra vez, inflando el recuento en Ads/GA4.
+        if (!data?.alreadyProcessed) {
+          import("@/lib/analytics").then(({ trackPurchase }) => {
+            const amount = typeof data?.priceCents === "number" ? data.priceCents / 100 : 0;
+            const credits = data?.creditsAdded || 0;
+            const plan = data?.plan || "credits";
+            trackPurchase(amount, credits, plan);
+          });
+        }
       }
     }
   });

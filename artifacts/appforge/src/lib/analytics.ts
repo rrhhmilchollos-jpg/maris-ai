@@ -82,7 +82,16 @@ export function trackGenerateApp(appKind: string, isFirstApp: boolean) {
   });
 
   if (isFirstApp) {
-    // Primera generación = conversión valiosa para Ads
+    // ⚠️ ENCONTRADO A PETICION DEL USUARIO: esta conversion NO EXISTE en la
+    // cuenta real de Google Ads (confirmado revisando Herramientas >
+    // Conversiones -- solo existen "Compra", "Registro", "Interaccion" y
+    // "Visualizaciones sucesivas en YouTube"). Google Ads recibe este
+    // evento y lo descarta en silencio porque "AW-18218229959/first_generate"
+    // no es una etiqueta real de ninguna conversion configurada.
+    // PENDIENTE DE DECISION DEL USUARIO: o se crea "Primera generacion"
+    // como conversion nueva en Google Ads y se sustituye este texto por la
+    // etiqueta real que te den, o se elimina este bloque si no interesa
+    // trackear esto por separado del registro.
     gtag("event", "conversion", {
       send_to: "AW-18218229959/first_generate",
       event_category: "engagement",
@@ -112,12 +121,15 @@ export function trackPurchase(amountEur: number, credits: number, plan: string) 
       quantity: 1,
     }],
   });
-  // Google Ads purchase conversion
-  gtag("event", "conversion", {
-    send_to: "AW-18218229959/purchase",
-    value: amountEur,
-    currency: "EUR",
-  });
+  // ENCONTRADO A PETICION DEL USUARIO: la conversion "Compra" en la cuenta
+  // real de Google Ads esta configurada como IMPORTADA desde GA4 (Fuente:
+  // Google Analytics, Evento de GA4: "purchase") -- NO necesita ni usa una
+  // etiqueta directa "AW-XXX/YYYY" de Google Ads. El bloque que habia aqui
+  // antes (gtag('event','conversion',{send_to:'AW-18218229959/purchase'}))
+  // era redundante Y tenia una etiqueta inventada que Google Ads ignoraba
+  // en silencio -- eliminado. El evento GA4 "purchase" de arriba (ya
+  // corregido para llevar el importe real, antes siempre era 0€) es ahora
+  // la unica fuente, tal y como espera la conversion real configurada.
 }
 
 /** Vista de página (SPA — wouter no la trackea automáticamente) */

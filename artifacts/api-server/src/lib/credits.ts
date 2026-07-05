@@ -68,7 +68,7 @@ export async function creditPurchase(opts: {
   vivaTransactionId?: string;
   cardLast4?: string;
   cardBrand?: string;
-}): Promise<{ creditsAdded: number; alreadyProcessed: boolean; newBalance: number }> {
+}): Promise<{ creditsAdded: number; alreadyProcessed: boolean; newBalance: number; priceCents?: number }> {
   await connectDB();
   const { userId, amount, stripeSessionId, vivaOrderCode, description, priceCents, gateway, vivaTransactionId, cardLast4, cardBrand } = opts;
 
@@ -85,10 +85,12 @@ export async function creditPurchase(opts: {
  
   if (existing) {
     const user = await User.findById(userId, { credits: 1 }).lean();
+    const existingTx = await CreditTransaction.findOne(idempotencyQuery, { priceCents: 1 }).lean();
     return {
       creditsAdded: 0,
       alreadyProcessed: true,
       newBalance: user?.credits ?? 0,
+      priceCents: (existingTx as any)?.priceCents,
     };
   }
  
@@ -118,6 +120,15 @@ export async function creditPurchase(opts: {
     creditsAdded: amount,
     alreadyProcessed: false,
     newBalance: updated?.credits ?? 0,
+    // ENCONTRADO A PETICION DEL USUARIO (revisando por que Google Ads
+    // mostraba la conversion "Compra" con 0 datos): esta funcion nunca
+    // devolvia el importe real cobrado -- billing-success.tsx (frontend)
+    // leia data?.amountEur que NUNCA existio en esta respuesta, caia
+    // siempre a 0, y asi se ha estado reportando CADA compra real a
+    // Google Ads/GA4 con valor 0€ desde siempre. Se devuelve priceCents
+    // (ya calculado antes de esta funcion, de forma determinista, ver
+    // billing.ts) para que el tracking pueda usar el importe real.
+    priceCents,
   };
 }
  
