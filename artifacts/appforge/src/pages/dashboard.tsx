@@ -764,10 +764,23 @@ export default function DashboardPage() {
                       </SelectTrigger>
                       <SelectContent className="bg-[#16161e] border-white/10">
                         <SelectItem value="auto" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (11 Agentes)</div></SelectItem>
-                        <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div></SelectItem>
+                        {/* Haiku 4.5 y GPT-5.4: restringidos a admin durante la
+                            fase de prueba (a petición explícita del usuario).
+                            El sistema de hitos ya obliga a TODOS los modelos a
+                            trabajar módulo a módulo (ver generateApp en
+                            apps.ts), lo que en teoría hace mucho más seguro
+                            usarlos que antes -- pero esto no se ha validado
+                            aún con generaciones reales, así que de momento
+                            solo el admin puede seleccionarlos para probarlos
+                            con calma antes de abrirlos a clientes reales. */}
+                        {isAdmin && (
+                          <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido) — solo admin, en pruebas</div></SelectItem>
+                        )}
                         <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
                         <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
-                        <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4</div></SelectItem>
+                        {isAdmin && (
+                          <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4 — solo admin, en pruebas</div></SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     <button type="button" onClick={() => setUltraThinking(v => !v)} disabled={isWorking}
