@@ -3596,6 +3596,25 @@ export async function generateApp(
   // código que ya existe y funciona.
   const useMilestoneOrchestrator = wantsFullBuild; // SIEMPRE true para proyectos nuevos
 
+  // GUARDIA EXPLÍCITA (a petición EXPLÍCITA del usuario: "prohibido saltarse
+  // esta regla bajo ningún concepto"): esta comprobación es hoy tautológica
+  // (useMilestoneOrchestrator = wantsFullBuild, por construcción, ver arriba)
+  // pero se deja como invariante EN TIEMPO DE EJECUCIÓN para que si algún
+  // cambio futuro llegara a desacoplar ambas variables por accidente, el
+  // sistema falle de forma RUIDOSA e inmediata (log crítico + aborta la
+  // generación) en vez de degradar silenciosamente a generación de una sola
+  // vez para un proyecto nuevo. Ningún prompt nuevo — corto, medio o
+  // ultra-complejo — puede saltarse los hitos bajo ningún concepto.
+  if (wantsFullBuild && !useMilestoneOrchestrator) {
+    logger.error(
+      { prompt: prompt.slice(0, 200), tier: agentModelPlan.tier },
+      "🚨 INVARIANTE ROTA: proyecto nuevo sin orquestador de hitos activado — esto no debería poder pasar nunca. Abortando para no generar una app sin garantía de hitos.",
+    );
+    throw new Error(
+      "Error interno: la generación por hitos es obligatoria para todo proyecto nuevo y no se activó. Por favor, reintenta — se ha registrado el incidente.",
+    );
+  }
+
   logger.info({
     tier: agentModelPlan.tier,
     isFreeUser: !hasEverPaid,
