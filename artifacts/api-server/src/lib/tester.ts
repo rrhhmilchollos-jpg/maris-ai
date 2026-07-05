@@ -32,18 +32,25 @@ export async function runTestingAgent(
   let currentBundle = bundle;
   let allPassing = false;
   let cycle = 0;
-
-  log("testing", "🧪 Testing Agent activado. Iniciando suite de pruebas completa...");
+  // A petición EXPLÍCITA del usuario: el Testing Agent debe ser invisible
+  // para el cliente cuando no hay nada que corregir -- antes se anunciaba
+  // ("activado", "ciclo 1/5 escaneando...", "¡todas las pruebas pasaron!")
+  // en TODA generación, incluso cuando no había ningún problema real, lo
+  // que hacía parecer que "trabajaba" sin necesidad. Ahora solo aparece en
+  // el log visible del cliente la PRIMERA VEZ que encuentra algo real que
+  // corregir, y desaparece (sin mensaje de despedida) en cuanto termina —
+  // dando paso a que el resto del pipeline continúe con normalidad. Si
+  // nunca encuentra nada que corregir, no deja ningún rastro visible.
+  let hasAnnouncedToClient = false;
+  const announceIfNeeded = () => {
+    if (!hasAnnouncedToClient) {
+      hasAnnouncedToClient = true;
+      log("testing", "🧪 Testing Agent: encontró algo que corregir, aplicando arreglos automáticos...");
+    }
+  };
 
   while (!allPassing && cycle < MAX_FIX_CYCLES) {
     cycle++;
-    log("testing", `🔍 Ciclo de prueba ${cycle}/${MAX_FIX_CYCLES} — escaneando problemas...`);
-    
-    onProgress?.({
-      phase: "testing",
-      progress: 80 + cycle * 2,
-      note: `🧪 Testing Agent: ciclo ${cycle}/${MAX_FIX_CYCLES}...`,
-    });
 
     // 1. RUN VALIDATION
     const report: ValidationReport = await validateBundle(currentBundle);
@@ -93,10 +100,21 @@ export async function runTestingAgent(
 
     if (report.ok && brokenLinks.length === 0) {
       allPassing = true;
-      log("testing", `✅ ¡Todas las pruebas pasaron tras ${cycle} ciclo(s)! La app está lista.`);
+      // Silencioso si nunca hizo falta anunciarse (nada que corregir en
+      // ningún ciclo). Si SÍ hubo que corregir algo antes, un cierre breve.
+      if (hasAnnouncedToClient) {
+        log("testing", `✅ Corregido. Continuando...`);
+      }
       break;
     }
     
+    announceIfNeeded();
+    onProgress?.({
+      phase: "testing",
+      progress: 80 + cycle * 2,
+      note: `🧪 Testing Agent: corrigiendo (ciclo ${cycle}/${MAX_FIX_CYCLES})...`,
+    });
+
     if (brokenLinks.length > 0) {
       log("testing", `🔗 Se detectaron ${brokenLinks.length} enlaces rotos. Forzando reparación de navegación...`);
       report.issues.push(...brokenLinks);
