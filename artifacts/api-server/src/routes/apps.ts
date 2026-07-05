@@ -1072,6 +1072,13 @@ PROCESO OBLIGATORIO:
 5. Define tokens de diseño como CSS variables reutilizables
 6. Diseña variantes de componentes clave con clases Tailwind reales
 
+PALETAS PRESET RÁPIDAS (cuando el sector no encaja claramente en los específicos de abajo, o el usuario describe un tipo genérico, usa estos 5 presets como base):
+- TECH/SAAS (sofisticado): fondo Slate #0f172a, primario Indigo #4f46e5, acento Violet #7c3aed, texto #f1f5f9. Ideal para plataformas de IA, CRMs, analítica, dashboards B2B.
+- CORPORATIVO/FINTECH (confianza): fondo claro #f8fafc, primario Azul Marino #1e3a8a, acento Emerald #10b981 para zonas de cobros y dinero, texto #0f172a. Ideal para banca, finanzas, consultoras.
+- CREATIVO/AGENCIA (moderno): fondo oscuro #0a0a0f, texto Zinc #f4f4f5, acento Lime/Neón #84cc16. Ideal para portfolios, agencias, estudios de diseño, freelancers.
+- WELLNESS/HOSTELERÍA (cálido): fondo crema #fafaf9, texto Coffee #451a03, acento Amber #f59e0b. Ideal para restaurantes, yoga, spas, cafeterías, clínicas holísticas.
+- MINIMALISTA/E-COMMERCE (prémium): fondo #fafafa, bordes Gray-200 #e5e7eb, botones negro #0a0a0f, texto #18181b. Ideal para tiendas online, moda, joyería, catálogos.
+
 PALETAS RECOMENDADAS POR SECTOR (punto de partida — MODULAR según el tono detectado en el paso 2, no aplicar siempre la misma variante):
 - Fintech/Banca: azul marino #1e3a5f + verde confianza #22c55e, tipografía serif para credibilidad, Inter/Playfair
 - Salud/Clínica: verdes suaves #10b981 + blancos #f8fafc, nunca negro puro, mucho espacio, Plus Jakarta Sans
