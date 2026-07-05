@@ -2,11 +2,13 @@
   "name": "Maris AI — Crea Apps con IA",
   "short_name": "Maris AI",
   "description": "Plataforma de creación de apps con inteligencia artificial en español. 11 agentes IA construyen tu app en 5 minutos.",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0f",
   "theme_color": "#7c3aed",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192-any.png",
