@@ -3,7 +3,7 @@
  * Ejecuta después del build de Vite. Crea /ruta/index.html con contenido real visible.
  */
 
-import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
@@ -987,6 +987,23 @@ for (const page of sitemapPages) {
 // Añadir artículos (ya cargados arriba por fetchArticleRoutes)
 for (const route of articleRoutes) {
   sitemap += `  <url>\n    <loc>${route.canonical}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>never</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+}
+
+// ── Landings y blogs: AUTODESCUBIERTOS desde el disco ────────────────────────
+// Antes eran listas manuales y 15 landings + 8 blogs se quedaron fuera del
+// sitemap (Google no los indexaba). Ahora se leen las carpetas en build time:
+// cualquier .html nuevo en public/landings o public/blog entra al sitemap
+// automáticamente, sin tocar este archivo nunca más.
+for (const dir of ["landings", "blog"]) {
+  try {
+    const files = readdirSync(join("public", dir)).filter((f) => f.endsWith(".html"));
+    for (const f of files) {
+      sitemap += `  <url>\n    <loc>https://www.marisai.es/${dir}/${f}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+    }
+    console.log(`  sitemap: +${files.length} páginas de /${dir}`);
+  } catch {
+    /* carpeta ausente: se omite sin romper el build */
+  }
 }
 
 sitemap += `</urlset>`;
