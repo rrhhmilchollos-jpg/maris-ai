@@ -97,7 +97,7 @@ interface MetricsResponse {
   };
   topFailingPhases: Array<{ phase: string; count: number }>;
   credits: { today: number; month: number };
-  topUsers: Array<{ userId: string; email: string; creditsUsed: number }>;
+  topUsers: Array<{ userId: string; email: string; totalSpentCents: number }>;
   publishedApps: { today: number; total: number };
   jobs7dChart?: Array<{ date: string; succeeded: number; failed: number; total: number }>;
   credits7dChart?: Array<{ date: string; credits: number }>;
@@ -3812,16 +3812,30 @@ export default function AdminDashboardPage() {
                     <CardTitle className="text-base flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
-                        Top usuarios por créditos consumidos
+                        Todos los clientes — de más a menos gastado
                       </div>
-                      <BroadcastButton />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7 px-2"
+                          onClick={() => {
+                            const emails = data.topUsers.map((u) => u.email).filter((e) => e && e !== "(usuario eliminado)").join(", ");
+                            navigator.clipboard.writeText(emails);
+                            toast({ title: "✅ Copiado", description: `${data.topUsers.length} emails copiados al portapapeles` });
+                          }}
+                        >
+                          Copiar todos los emails
+                        </Button>
+                        <BroadcastButton />
+                      </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     {data.topUsers.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Sin datos de uso.</p>
+                      <p className="text-sm text-muted-foreground">Sin clientes todavía.</p>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-3 max-h-[70vh] overflow-y-auto">
                         {data.topUsers.map((u, i) => (
                           <div key={u.userId} className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/5 hover:border-white/10 transition-colors">
                             <span className={`text-lg font-bold w-6 text-center ${i === 0 ? "text-yellow-400" : i === 1 ? "text-white/60" : i === 2 ? "text-orange-400" : "text-white/30"}`}>
@@ -3833,8 +3847,10 @@ export default function AdminDashboardPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="text-right">
-                                <p className="text-lg font-bold text-primary">{u.creditsUsed}</p>
-                                <p className="text-xs text-muted-foreground">créditos</p>
+                                <p className="text-lg font-bold text-primary">
+                                  {(u.totalSpentCents / 100).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                                </p>
+                                <p className="text-xs text-muted-foreground">gastado</p>
                               </div>
                               <Button
                                 size="sm"

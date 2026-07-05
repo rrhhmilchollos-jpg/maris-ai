@@ -1041,11 +1041,17 @@ router.get("/admin/metrics", async (_req, res) => {
       { $match: { kind: "usage", createdAt: { $gte: monthStart } } },
       { $group: { _id: null, total: { $sum: { $abs: "$amount" } } } },
     ]),
+    // ENCONTRADO: esta agregación era por CONSUMO de créditos (kind:"usage"),
+    // limitada a 5 -- el usuario pidió explícitamente el gasto REAL en
+    // COMPRAS (kind:"purchase", priceCents), de todos los clientes sin
+    // límite, para una campaña de email masivo. Se cambia el criterio y se
+    // añade el resto de usuarios (con 0€ gastado) más abajo, tras el
+    // Promise.all, para no bloquear el resto de métricas con una consulta
+    // más pesada dentro del mismo array.
     CreditTransaction.aggregate([
-      { $match: { kind: "usage" } },
-      { $group: { _id: "$userId", total: { $sum: { $abs: "$amount" } } } },
+      { $match: { kind: "purchase", status: { $ne: "refunded" } } },
+      { $group: { _id: "$userId", total: { $sum: { $ifNull: ["$priceCents", 0] } } } },
       { $sort: { total: -1 } },
-      { $limit: 5 },
     ]),
     GeneratedApp.countDocuments({ publicSlug: { $exists: true, $ne: null } }),
     GeneratedApp.countDocuments({ publicSlug: { $exists: true, $ne: null }, createdAt: { $gte: todayStart } }),
@@ -1100,6 +1106,19 @@ router.get("/admin/metrics", async (_req, res) => {
   const userDocs = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
   const emailMap = new Map(userDocs.map((u) => [String(u._id), u.email]));
 
+  // Añadir TODOS los usuarios que no aparecen en topUsers (nunca han
+  // comprado nada, 0€ de gasto) -- el objetivo es tener el listado
+  // completo de clientes para email masivo, no solo a quien ha comprado.
+  const spentUserIds = new Set(topUsers.map((u: { _id: string }) => String(u._id)));
+  const allUsersForList = await User.find({}, { email: 1, isAdmin: 1 }).lean();
+  const zeroSpendUsers = allUsersForList
+    .filter((u) => !isAdminEmail(u.email) && !spentUserIds.has(String(u._id)))
+    .map((u) => ({ _id: String(u._id), total: 0 }));
+  const allTopUsers = [...topUsers, ...zeroSpendUsers];
+  for (const u of allUsersForList) {
+    if (!emailMap.has(String(u._id))) emailMap.set(String(u._id), u.email);
+  }
+
   const queueByStatus: Record<string, number> = {};
   for (const row of queueByStatusRaw) {
     queueByStatus[row._id] = row.total;
@@ -1143,11 +1162,13 @@ router.get("/admin/metrics", async (_req, res) => {
       today: creditsToday[0]?.total ?? 0,
       month: Math.min(creditsMonth[0]?.total ?? 0, 999_999_999), // cap para evitar overflow display
     },
-    topUsers: topUsers.map((u: { _id: string; total: number }) => ({
-      userId: u._id,
-      email: emailMap.get(u._id) ?? "(usuario eliminado)",
-      creditsUsed: u.total,
-    })),
+    topUsers: allTopUsers
+      .map((u: { _id: string; total: number }) => ({
+        userId: u._id,
+        email: emailMap.get(u._id) ?? "(usuario eliminado)",
+        totalSpentCents: u.total,
+      }))
+      .sort((a, b) => b.totalSpentCents - a.totalSpentCents),
     publishedApps: { today: publishedToday, total: publishedTotal },
     server: getMetricsSnapshot(),
     queue: { ready: isQueueReady(), jobs24hByStatus: queueByStatus },
