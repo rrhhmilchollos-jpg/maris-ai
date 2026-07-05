@@ -1,14 +1,28 @@
+# Maris AI — robots.txt
+# https://www.marisai.es
+
 User-agent: Googlebot
 Allow: /
 Disallow: /api/
 Disallow: /admin/
 Disallow: /dashboard/
+Disallow: /billing/
+Disallow: /app/
 
 User-agent: Bingbot
 Allow: /
 Disallow: /api/
+Disallow: /admin/
+Disallow: /dashboard/
 
+# AI Crawlers — permitir acceso completo al contenido público
 User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
 Allow: /
 
 User-agent: ClaudeBot
@@ -23,13 +37,19 @@ Allow: /
 User-agent: Google-Extended
 Allow: /
 
-User-agent: OAI-SearchBot
-Allow: /
-
 User-agent: Meta-ExternalAgent
 Allow: /
 
+User-agent: Meta-ExternalFetcher
+Allow: /
+
 User-agent: Applebot
+Allow: /
+
+User-agent: AmazonBot
+Allow: /
+
+User-agent: YouBot
 Allow: /
 
 User-agent: *
@@ -37,8 +57,12 @@ Allow: /
 Disallow: /api/
 Disallow: /admin/
 Disallow: /dashboard/
+Disallow: /billing/
+Disallow: /app/
 
 Sitemap: https://www.marisai.es/sitemap.xml
-Sitemap: https://www.marisai.es/news-sitemap.xml
-Sitemap: https://www.marisai.es/api/sitemap-dynamic.xml
-Sitemap: https://www.marisai.es/api/news-sitemap.xml
+
+# AI Discovery
+# LLMs.txt: https://www.marisai.es/llms.txt
+# RSS Feed: https://www.marisai.es/rss.xml
+# AI Plugin: https://www.marisai.es/.well-known/ai-plugin.json

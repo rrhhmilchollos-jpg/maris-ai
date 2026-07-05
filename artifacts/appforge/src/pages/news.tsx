@@ -204,6 +204,37 @@ export default function NewsPage() {
                 ))}
               </div>
             </section>
+
+            {/* Enlaces cruzados a otras secciones — mejora enlazado interno */}
+            <section className="border-t border-white/10 pt-8 mt-8">
+              <h2 className="text-lg font-semibold mb-4">Más recursos de Maris AI</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <a href="/que-es-vibe-coding" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+                  <h3 className="font-medium text-sm mb-1">¿Qué es el vibe coding?</h3>
+                  <p className="text-xs text-muted-foreground">El nuevo paradigma de programación con IA en español</p>
+                </a>
+                <a href="/que-es-un-agente-de-ia" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+                  <h3 className="font-medium text-sm mb-1">¿Qué es un agente de IA?</h3>
+                  <p className="text-xs text-muted-foreground">Cómo funcionan los 11 agentes de Maris AI</p>
+                </a>
+                <a href="/glosario" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+                  <h3 className="font-medium text-sm mb-1">Glosario de inteligencia artificial</h3>
+                  <p className="text-xs text-muted-foreground">Todos los términos de IA que necesitas saber</p>
+                </a>
+                <a href="/vs-emergent" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+                  <h3 className="font-medium text-sm mb-1">Maris AI vs Emergent</h3>
+                  <p className="text-xs text-muted-foreground">Comparativa detallada para el mercado español</p>
+                </a>
+                <a href="/vs-lovable" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+                  <h3 className="font-medium text-sm mb-1">Maris AI vs Lovable</h3>
+                  <p className="text-xs text-muted-foreground">Sin dependencia de Supabase, créditos sin caducidad</p>
+                </a>
+                <a href="/desarrollo-no-code-guia" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+                  <h3 className="font-medium text-sm mb-1">Guía de desarrollo no-code</h3>
+                  <p className="text-xs text-muted-foreground">Cómo crear apps completas sin programar</p>
+                </a>
+              </div>
+            </section>
           </>
         )}
       </div>

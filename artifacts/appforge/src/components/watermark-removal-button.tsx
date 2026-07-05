@@ -103,7 +103,7 @@ export function WatermarkRemovalButton({
         )}
       </Button>
       <p className="text-xs text-gray-500 text-center">
-        Pago único: 9,99€
+        Pago único: 9,99 €
       </p>
     </div>
   );

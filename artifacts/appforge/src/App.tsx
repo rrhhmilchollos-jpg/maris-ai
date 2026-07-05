@@ -9,6 +9,7 @@ import { esES } from "@clerk/localizations";
 import { Toaster } from "@/components/ui/toaster";
 import { CookieBanner } from "@/components/cookie-banner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { MaintenanceGate } from "@/components/maintenance-gate";
 
 import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
 import { useUser } from "@clerk/react";
@@ -464,6 +465,7 @@ function ClerkProviderWithRoutes() {
           <QueryClientProvider client={queryClient}>
             <ClerkQueryClientCacheInvalidator />
             <SafePresenceTracker />
+            <MaintenanceGate>
             <Suspense fallback={<PageLoader />}>
               <Switch>
                 <Route path="/" component={HomeRedirect} />
@@ -592,6 +594,7 @@ function ClerkProviderWithRoutes() {
                 <Route component={NotFound} />
               </Switch>
             </Suspense>
+            </MaintenanceGate>
           </QueryClientProvider>
         </ClerkLoaded>
       </ClerkRecoveryGuard>

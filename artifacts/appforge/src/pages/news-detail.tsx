@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useParams } from "wouter";
 import { Layout } from "@/components/layout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -49,6 +49,24 @@ export default function NewsDetailPage() {
       if (!response.ok) throw new Error("Noticia no encontrada");
       const data = await response.json();
       setArticle(data);
+
+      // Cargar artículos relacionados (por tags compartidos, o más recientes)
+      try {
+        const allResp = await fetch("/api/news", { headers: { "Content-Type": "application/json" } });
+        if (allResp.ok) {
+          const allArticles: NewsArticle[] = await allResp.json();
+          const others = allArticles.filter((a) => a.slug !== data.slug);
+          const currentTags = new Set((data.tags || []).map((t: string) => t.toLowerCase()));
+          // Puntuar por tags compartidos
+          const scored = others.map((a) => {
+            const shared = (a.tags || []).filter((t) => currentTags.has(t.toLowerCase())).length;
+            return { article: a, score: shared };
+          });
+          scored.sort((a, b) => b.score - a.score || new Date(b.article.publishedAt).getTime() - new Date(a.article.publishedAt).getTime());
+          setRelatedArticles(scored.slice(0, 3).map((s) => s.article));
+        }
+      } catch { /* no bloquear la página si falla */ }
+
       // Actualizar metadatos de SEO
       document.title = `${data.title} - Maris AI Noticias`;
       const metaDescription = document.querySelector('meta[name="description"]');
@@ -251,11 +269,14 @@ export default function NewsDetailPage() {
   return (
     <Layout>
       <div className="container max-w-4xl mx-auto px-4 py-10 space-y-8">
-        {/* Botón de regreso */}
-        <Button variant="ghost" onClick={() => setLocation("/news")} className="gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          Volver a Noticias
-        </Button>
+        {/* Breadcrumb — mejora enlazado interno y navegación */}
+        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link href="/" className="hover:text-foreground transition-colors">Inicio</Link>
+          <span aria-hidden="true">/</span>
+          <Link href="/news" className="hover:text-foreground transition-colors">Blog</Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-foreground truncate max-w-[300px]">{article.title}</span>
+        </nav>
 
         {/* Imagen destacada */}
         <div className="relative overflow-hidden rounded-lg h-96 border border-white/10">
@@ -349,6 +370,51 @@ export default function NewsDetailPage() {
 
         {/* Divider */}
         <div className="border-t border-white/10 my-8"></div>
+
+        {/* Artículos relacionados — cada link interno es una señal para Google */}
+        {relatedArticles.length > 0 && (
+          <section>
+            <h2 className="text-2xl font-bold mb-6">Artículos relacionados</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {relatedArticles.map((related) => (
+                <Link key={related.slug} href={`/news/${related.slug}`}>
+                  <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer bg-card/50">
+                    <div className="aspect-video overflow-hidden rounded-t-lg">
+                      <img
+                        src={related.imageUrl}
+                        alt={related.imageAlt || related.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                    <CardContent className="pt-4 space-y-2">
+                      <h3 className="font-semibold text-sm leading-snug line-clamp-2">{related.title}</h3>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {related.metaDescription || related.body.substring(0, 100)}
+                      </p>
+                      <div className="flex items-center gap-1 text-xs text-primary">
+                        Leer más <ArrowRight className="h-3 w-3" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Enlaces a secciones clave del sitio */}
+        <div className="border-t border-white/10 pt-6">
+          <p className="text-sm text-muted-foreground mb-3">Explora más sobre Maris AI:</p>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/que-es-vibe-coding" className="text-sm text-primary hover:underline">¿Qué es el vibe coding?</Link>
+            <Link href="/glosario" className="text-sm text-primary hover:underline">Glosario de IA</Link>
+            <Link href="/que-es-un-agente-de-ia" className="text-sm text-primary hover:underline">¿Qué es un agente de IA?</Link>
+            <Link href="/vs-emergent" className="text-sm text-primary hover:underline">Maris AI vs competidores</Link>
+            <Link href="/showcase" className="text-sm text-primary hover:underline">Apps creadas con IA</Link>
+            <Link href="/desarrollo-no-code-guia" className="text-sm text-primary hover:underline">Guía de desarrollo no-code</Link>
+          </div>
+        </div>
 
         {/* Call to action */}
         <Card className="bg-primary/10 border-primary/30">

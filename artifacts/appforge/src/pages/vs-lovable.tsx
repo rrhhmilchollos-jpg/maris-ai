@@ -12,7 +12,7 @@ const COMPARISON = [
   { feature: "Precio de entrada", maris: "Gratis (65 créditos)", competitor: "Gratis (5 créditos/día)", marisWins: true },
   { feature: "Plan de pago desde", maris: "19€/mes", competitor: "25$/mes (~23€)", marisWins: true },
   { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, a los 2 meses", marisWins: true },
-  { feature: "Agentes IA especializados", maris: "9 agentes en paralelo", competitor: "1 agente general", marisWins: true },
+  { feature: "Agentes IA especializados", maris: "11 agentes en paralelo", competitor: "1 agente general", marisWins: true },
   { feature: "Deploy automático a Vercel", maris: "Sí, incluido", competitor: "Sí, incluido", marisWins: false },
   { feature: "Exportación a GitHub", maris: "Sí, incluido", competitor: "Sí, incluido", marisWins: false },
   { feature: "Coste real para SaaS", maris: "Solo Maris AI", competitor: "$25 Lovable + $25 Supabase = $50/mes", marisWins: true },
@@ -94,7 +94,7 @@ export default function VsLovablePage() {
               { icon: Globe, title: "100% en español", desc: "Interfaz, soporte, documentación y comunidad en español. Lovable está en inglés — una barrera real para la mayoría de emprendedores.", color: "text-blue-400" },
               { icon: MessageCircle, title: "Soporte humano por WhatsApp", desc: "Equipo real respondiendo en español en menos de 2 horas. Sin bots, sin tickets en inglés, sin esperas de días.", color: "text-green-400" },
               { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos nunca caducan. Lovable cobra en dólares y los créditos expiran.", color: "text-yellow-400" },
-              { icon: Zap, title: "9 agentes IA especializados", desc: "Arquitecto, diseñador, frontend, backend, base de datos, integraciones, testing, deploy y autopilot en paralelo.", color: "text-purple-400" },
+              { icon: Zap, title: "11 agentes IA especializados", desc: "Researcher, arquitecto, diseñador, frontend, backend, base de datos, integraciones, QA, DevOps, testing y reparación en paralelo.", color: "text-purple-400" },
               { icon: Shield, title: "Backend incluido sin extras", desc: "Express + MongoDB incluidos de serie. Lovable requiere Supabase (25$/mes extra) para tener backend real.", color: "text-red-400" },
               { icon: Clock, title: "Apps completas en 5 minutos", desc: "Frontend + backend + base de datos + deploy a Vercel en una sola generación. Sin configuraciones manuales.", color: "text-cyan-400" },
             ].map((item, i) => (
@@ -127,6 +127,40 @@ export default function VsLovablePage() {
                 <div className="px-5 pb-5 text-sm text-white/60 leading-relaxed">{faq.a}</div>
               </details>
             ))}
+          </div>
+        </section>
+
+
+
+        {/* Otras comparativas */}
+        <section className="container px-4 mx-auto max-w-3xl">
+          <h3 className="text-base font-semibold mb-3 text-center">Otras comparativas</h3>
+          <div className="flex flex-wrap justify-center gap-4">
+            <a href="/vs-emergent" className="text-sm text-primary hover:underline">Maris AI vs Emergent</a>
+            <a href="/vs-bolt" className="text-sm text-primary hover:underline">Maris AI vs Bolt.new</a>
+            <a href="/vs-base44" className="text-sm text-primary hover:underline">Maris AI vs Base44</a>
+          </div>
+        </section>
+
+        {/* Enlaces cruzados — mejora enlazado interno entre páginas de contenido */}
+        <section className="container px-4 mx-auto max-w-3xl">
+          <div className="grid gap-3 sm:grid-cols-2 text-sm">
+            <a href="/news" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">Blog de IA</span>
+              <span className="block text-xs text-muted-foreground mt-1">Noticias y tutoriales sobre inteligencia artificial</span>
+            </a>
+            <a href="/que-es-vibe-coding" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">¿Qué es el vibe coding?</span>
+              <span className="block text-xs text-muted-foreground mt-1">El paradigma de programación con IA</span>
+            </a>
+            <a href="/glosario" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">Glosario de IA</span>
+              <span className="block text-xs text-muted-foreground mt-1">Todos los términos que necesitas</span>
+            </a>
+            <a href="/showcase" className="p-4 rounded-lg border border-white/10 hover:border-primary/40 transition-colors block">
+              <span className="font-medium">Apps creadas con Maris AI</span>
+              <span className="block text-xs text-muted-foreground mt-1">Ejemplos reales de lo que puedes crear</span>
+            </a>
           </div>
         </section>
 

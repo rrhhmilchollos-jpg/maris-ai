@@ -12,6 +12,12 @@ import {
   UserNotification,
   AppMessage,
   AppRevision,
+  type IUser,
+  type IGeneratedApp,
+  type ICreditTransaction,
+  type IGenerationJob,
+  type ITicket,
+  type IAgentMemory,
 } from "@workspace/db/schema";
 import { restoreAppRevision } from "../lib/appRevisions";
 import { diagnoseFromLogs } from "../lib/jobDiagnosis";
@@ -87,6 +93,40 @@ router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> 
 
 router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 
+// ─── Modo construcción ────────────────────────────────────────────────────────
+// GET /api/site-status es PÚBLICO (está antes del prefijo /admin, el
+// middleware de arriba no le aplica): el frontend lo consulta al arrancar
+// para decidir si muestra la página "En construcción" a los visitantes.
+// El interruptor POST /api/admin/maintenance sí exige admin.
+router.get("/site-status", async (_req, res) => {
+  try {
+    await connectDB();
+    const { SiteSetting } = await import("@workspace/db/schema");
+    const doc = await SiteSetting.findOne({ key: "maintenance_mode" }).lean();
+    res.json({ maintenance: doc?.value === "on" });
+  } catch {
+    // Fail-open: si la BD no responde, el sitio se muestra con normalidad —
+    // un fallo de infraestructura nunca debe dejar fuera a los clientes.
+    res.json({ maintenance: false });
+  }
+});
+
+router.post("/admin/maintenance", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  const { enabled } = req.body as { enabled?: boolean };
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ ok: false, message: "Falta enabled (boolean)." });
+    return;
+  }
+  const { SiteSetting } = await import("@workspace/db/schema");
+  await SiteSetting.updateOne(
+    { key: "maintenance_mode" },
+    { $set: { value: enabled ? "on" : "off", updatedBy: String(req.userId ?? "") } },
+    { upsert: true },
+  );
+  res.json({ ok: true, maintenance: enabled });
+});
+
 router.get("/admin/overview", async (_req, res) => {
   await connectDB();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -98,8 +138,8 @@ router.get("/admin/overview", async (_req, res) => {
     User.find({}, { credits: 1, email: 1 }).lean(),
   ]);
 
-  const nonAdminUsers = allUsers.filter(u => !isAdminEmail(u.email));
-  const creditsOutstanding = nonAdminUsers.reduce((sum, u) => sum + (u.credits ?? 0), 0);
+  const nonAdminUsers = allUsers.filter((u) => !isAdminEmail(u.email));
+  const creditsOutstanding = nonAdminUsers.reduce((sum: number, u: Pick<IUser, "email" | "credits">) => sum + (u.credits ?? 0), 0);
 
   const txns = await CreditTransaction.find({}, { kind: 1, amount: 1 }).lean();
   let creditsSpentTotal = 0;
@@ -130,7 +170,7 @@ router.get("/admin/users", async (_req, res) => {
   const appCounts = await GeneratedApp.aggregate([
     { $group: { _id: "$userId", count: { $sum: 1 } } },
   ]);
-  const countMap = new Map(appCounts.map((a) => [a._id, a.count]));
+  const countMap = new Map(appCounts.map((a: { _id: string; count: number }) => [a._id, a.count]));
 
   res.json(
     users.map((u) => ({
@@ -322,7 +362,7 @@ router.delete("/admin/users/:id/block-ip/:ip", async (req: any, res: any): Promi
 router.get("/admin/users/:id/transactions", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const txns = await CreditTransaction.find({ userId: req.params.id }).sort({ createdAt: -1 }).limit(50).lean();
-  res.json(txns.map(t => ({
+  res.json(txns.map((t) => ({
     id: String(t._id),
     kind: t.kind,
     amount: t.amount,
@@ -826,7 +866,13 @@ router.get("/admin/memory", async (req: any, res: any): Promise<void> => {
     entries: rows.map((r) => ({
       id: String(r._id),
       errorMessage: r.errorMessage,
-      internalErrorMessage: r.internalErrorMessage,
+      // OJO: 'internalErrorMessage' no existe en el schema real de
+      // AgentMemory (ver lib/db/src/schema/index.ts) — este campo nunca se
+      // ha guardado, así que siempre sale undefined en el panel admin. No
+      // es un error de tipos que arreglar con un cast silencioso: hay que
+      // decidir si se añade el campo al schema (si se pensaba guardar este
+      // dato) o se quita de aquí (si ya no hace falta).
+      internalErrorMessage: (r as { internalErrorMessage?: string }).internalErrorMessage,
       errorContext: r.errorContext,
       patchPreview: r.patch.slice(0, 600),
       patchLength: r.patch.length,

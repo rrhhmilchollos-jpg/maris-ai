@@ -21,13 +21,21 @@ import { executeWorkflow } from "../lib/workflowEngine";
 
 const router = Router();
 
+// req.params puede tipar valores como string | string[] (Express permite
+// segmentos de ruta repetidos). Estos endpoints solo esperan un valor único
+// por param nombrado, así que se normaliza aquí una sola vez en vez de
+// dejar la ambigüedad de tipo viajando hasta cada función que lo consume.
+function paramStr(v: string | string[] | undefined): string {
+  return Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
+}
+
 async function getOwnedApp(appId: string, userId: string) {
   return GeneratedApp.findOne({ _id: appId, userId }).lean();
 }
 
 router.get("/apps/:appId/workflows", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId } = req.params;
+    const appId = paramStr(req.params.appId);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
@@ -43,7 +51,7 @@ router.get("/apps/:appId/workflows", requireAuth, async (req: Request, res: Resp
 
 router.post("/apps/:appId/workflows", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId } = req.params;
+    const appId = paramStr(req.params.appId);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
@@ -76,7 +84,8 @@ router.post("/apps/:appId/workflows", requireAuth, async (req: Request, res: Res
 
 router.get("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId, id } = req.params;
+    const appId = paramStr(req.params.appId);
+    const id = paramStr(req.params.id);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
@@ -93,7 +102,8 @@ router.get("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: 
 
 router.patch("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId, id } = req.params;
+    const appId = paramStr(req.params.appId);
+    const id = paramStr(req.params.id);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
@@ -119,7 +129,8 @@ router.patch("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res
 
 router.delete("/apps/:appId/workflows/:id", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId, id } = req.params;
+    const appId = paramStr(req.params.appId);
+    const id = paramStr(req.params.id);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
@@ -136,7 +147,8 @@ router.delete("/apps/:appId/workflows/:id", requireAuth, async (req: Request, re
 
 router.post("/apps/:appId/workflows/:id/run", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId, id } = req.params;
+    const appId = paramStr(req.params.appId);
+    const id = paramStr(req.params.id);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);
@@ -172,7 +184,8 @@ router.post("/apps/:appId/workflows/:id/run", requireAuth, async (req: Request, 
 
 router.get("/apps/:appId/workflows/:id/runs", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { appId, id } = req.params;
+    const appId = paramStr(req.params.appId);
+    const id = paramStr(req.params.id);
     const userId = req.userId;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const appData = await getOwnedApp(appId, userId);

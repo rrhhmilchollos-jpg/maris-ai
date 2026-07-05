@@ -106,7 +106,6 @@ interface MetricsResponse {
   queue?: { ready: boolean };
   overview?: { totalUsers: number; totalApps: number; newUsers7d: number };
   revenueCentsTotal?: number;
-  revenueCentsTotal?: number;
   e2b?: {
     configured: boolean;
     validateOnGenerate: boolean;
@@ -3378,7 +3377,7 @@ export default function AdminDashboardPage() {
                 <MetricCard
                   icon={<DollarSign className="h-4 w-4 text-yellow-400" />}
                   title="Ingresos totales"
-                  value={`€${(((data as any).revenueCentsTotal ?? 0) / 100).toFixed(2)}`}
+                  value={`${(((data as any).revenueCentsTotal ?? 0) / 100).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
                   hint="Acumulado desde Viva.com"
                   trend={((data as any).revenueCentsTotal ?? 0) > 0 ? "up" : "neutral"}
                   color="yellow"

@@ -3,127 +3,95 @@
     {
       "source": "/llms:suffix(.*)",
       "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/plain; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=3600"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        }
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
       ]
     },
     {
       "source": "/robots.txt",
       "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/plain; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=86400"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex"
-        }
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=86400" },
+        { "key": "X-Robots-Tag", "value": "noindex" }
       ]
     },
     {
       "source": "/sitemap:path*",
       "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/xml; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=3600"
-        }
+        { "key": "Content-Type", "value": "application/xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/rss.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/rss+xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/.well-known/:path*",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=86400" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
       ]
     },
     {
       "source": "/assets/:path*",
       "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     },
     {
-      "source": "/dashboard:path*",
+      "source": "/(dashboard|admin|billing|app):path*",
       "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     },
     {
       "source": "/(.*)",
       "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live"
-        }
+        { "key": "Content-Security-Policy", "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(self), geolocation=()" }
       ]
     },
     {
       "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "(?<host>.*\\.vercel\\.app)"
-        }
-      ],
+      "has": [{ "type": "host", "value": "(?<host>.*\\.vercel\\.app)" }],
       "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex"
-        }
+        { "key": "X-Robots-Tag", "value": "noindex" }
       ]
     },
     {
       "source": "/(.*)",
-      "missing": [
-        {
-          "type": "host",
-          "value": "(?<host>.*\\.vercel\\.app)"
-        }
-      ],
+      "missing": [{ "type": "host", "value": "(?<host>.*\\.vercel\\.app)" }],
       "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "index, follow"
-        }
+        { "key": "X-Robots-Tag", "value": "index, follow" }
       ]
     }
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|llms|BingSiteAuth|08180adobbmib94doF1973Fa84390db7ad1|opengraph|logo|apple-touch|.well-known|pricing|showcase|news|vs-emergent|vs-lovable|vs-bolt|vs-base44|llms-full|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia|landings|blog|en|legal|demo|afiliados).*)",
+      "source": "/api/:path*",
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|rss|llms|BingSiteAuth|08180adobbmib94doF1973Fa84390db7ad1|opengraph|logo|apple-touch|.well-known|pricing|showcase|news|vs-emergent|vs-lovable|vs-bolt|vs-base44|llms-full|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia|landings|blog|en|legal|demo|afiliados|sign-up|sign-in|crear).*)",
       "destination": "/index.html"
     }
   ],
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "marisai.es"
-        }
-      ],
+      "has": [{ "type": "host", "value": "marisai.es" }],
       "destination": "https://www.marisai.es/$1",
       "permanent": true
     }

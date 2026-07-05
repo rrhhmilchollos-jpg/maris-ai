@@ -27,7 +27,7 @@
 import type { Logger } from "pino";
 import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
 import { CoreOrchestrator } from "@workspace/services";
-import { patchBundle, createClaudeMessageWithFallback, type GenLanguage } from "./shared-agents";
+import { patchBundle, createClaudeMessageWithFallback, type GenLanguage, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
 import {
   takeScreenshots,
@@ -669,7 +669,10 @@ export async function runAutoEvaluator(opts: {
           `CÓDIGO ACTUAL DE src/App.tsx:\n${appTsx.slice(0, 3000)}`;
 
         const language = (row.language === "javascript" ? "javascript" : "typescript") as GenLanguage;
-        const quickFix = await patchBundle(currentBundle, fix404Prompt, language, "claude-sonnet-4-6");
+        const fix404Issues: QAIssue[] = [
+          { file: "src/App.tsx", problem: "La app muestra 404 en la ruta raíz.", fix: fix404Prompt },
+        ];
+        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "claude-sonnet-4-6");
         if (quickFix && quickFix.length > 100 && quickFix.includes("// === FILE:")) {
           patched = quickFix;
           log.info({ appId, jobId, round }, "✅ Fix quirúrgico 404 aplicado en App.tsx");

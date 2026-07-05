@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { connectDB } from "../lib/db";
 import { requireAuth } from "../lib/auth";
-import { GenerationJob, JobLog } from "@workspace/db/schema";
+import { GenerationJob, JobLog, type IJobLog } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -35,6 +35,7 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
         status: "queued",
         createdAt: { $lt: (job as any).createdAt },
       });
+      const currentQueuePosition = queuePosition;
       // Estimación conservadora: tiempo medio real de las últimas
       // generaciones completadas, dividido entre la concurrencia activa —
       // se recalcula en cada consulta en vez de usar un número fijo, así
@@ -44,10 +45,10 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
         updatedAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) },
       }).select("createdAt updatedAt").limit(20).lean();
       const avgDurationMs = recentCompleted.length > 0
-        ? recentCompleted.reduce((sum, j) => sum + (new Date((j as any).updatedAt).getTime() - new Date((j as any).createdAt).getTime()), 0) / recentCompleted.length
+        ? recentCompleted.reduce((sum: number, j: { createdAt?: Date; updatedAt?: Date }) => sum + (new Date((j as any).updatedAt).getTime() - new Date((j as any).createdAt).getTime()), 0) / recentCompleted.length
         : 90_000; // 90s de fallback razonable si todavía no hay datos recientes (arranque en frío)
       const concurrency = Math.min(Number.parseInt(process.env.JOB_CONCURRENCY || "3", 10) || 3, 25);
-      estimatedWaitSeconds = Math.round(((queuePosition + 1) / concurrency) * (avgDurationMs / 1000));
+      estimatedWaitSeconds = Math.round(((currentQueuePosition + 1) / concurrency) * (avgDurationMs / 1000));
     }
 
     res.json({
@@ -92,7 +93,7 @@ router.get("/jobs/:id/logs", requireAuth, async (req: any, res: any) => {
 
     const logs = await JobLog.find(query).sort({ _id: 1 }).lean();
 
-    res.json({ logs: logs.map(l => ({
+    res.json({ logs: logs.map((l) => ({
       id: l._id,
       jobId: l.jobId,
       agent: l.agent,

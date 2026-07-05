@@ -225,11 +225,11 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
         logger.info({ role, model: candidate }, "Iniciando stream con Anthropic...");
         
         let fullText = "";
-        const stream = await anthropic.messages.create({ 
+        const stream = (await anthropic.messages.create({ 
           ...params, 
           model: candidate,
-          stream: true 
-        });
+          stream: true as const
+        })) as unknown as AsyncIterable<any>;
 
         // TIMEOUT DE INACTIVIDAD REAL: antes este bucle no tenía ningún
         // límite de tiempo propio — si el stream se quedaba a medias

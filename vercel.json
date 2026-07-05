@@ -52,11 +52,11 @@
     },
     {
       "source": "/news-sitemap.xml",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/news-sitemap.xml"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/news-sitemap.xml"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/sitemap.xml"
+      "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/api/sitemap.xml"
     },
     {
       "source": "/rss",
@@ -93,7 +93,7 @@
       "destination": "https://maris-ai-api-server-production-fbad.up.railway.app/bot-render/news"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets|api|favicon|manifest|robots|sitemap|rss|llms|opengraph|logo|apple-touch|.well-known|pricing|showcase(?!/)|news|vs-emergent|vs-lovable|vs-bolt|vs-base44|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia|landings|blog|en|legal|demo|afiliados|sign-up(?!/)|sign-in(?!/)|crear).*)",
       "destination": "/index.html"
     }
   ],

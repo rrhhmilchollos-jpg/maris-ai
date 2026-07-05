@@ -3,14 +3,79 @@
  * Ejecuta después del build de Vite. Crea /ruta/index.html con contenido real visible.
  */
 
-import { existsSync, writeFileSync, mkdirSync, readFileSync } from "fs";
+import { existsSync, writeFileSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import {
+  ENGLISH_ROUTES,
+  USE_CASE_ROUTES_EN,
+  USE_CASE_ROUTES_ES,
+  HREFLANG_MAP,
+} from "./international-routes.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = join(__dirname, "dist");
 
 const ROUTES = [
+  {
+    path: "/",
+    file: "index.html",
+    title: "Maris AI — Crear App con IA sin Programar",
+    description: "Crea tu app web con IA en menos de 5 minutos. 11 agentes generan código React, backend y base de datos. Gratis para emprendedores en España.",
+    canonical: "https://www.marisai.es/",
+    body: `<h1>Maris AI — Crear App con IA sin Programar en Español</h1>
+<p>Maris AI es la primera plataforma de vibe coding completamente en español. 11 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin saber programar. Gratis para emprendedores en España.</p>
+<h2>¿Qué es Maris AI?</h2>
+<p>Maris AI es la mejor alternativa a Bolt.new, Lovable y Emergent para el mercado hispanohablante. A diferencia de estas plataformas que operan solo en inglés, Maris AI está diseñada desde cero para emprendedores españoles y latinoamericanos.</p>
+<ul>
+<li>Completamente en español — interfaz, soporte y generación de código</li>
+<li>11 agentes IA especializados trabajando en paralelo</li>
+<li>Backend Express + MongoDB incluido automáticamente</li>
+<li>65 créditos gratis sin tarjeta de crédito</li>
+<li>Créditos que nunca caducan</li>
+<li>Código 100% exportable a GitHub sin vendor lock-in</li>
+<li>Precios en euros, cumplimiento RGPD</li>
+</ul>
+<h2>Cómo funciona el pipeline de IA de Maris AI</h2>
+<p>Un pipeline de agentes de inteligencia artificial especializados trabaja de forma coordinada para cubrir todo el ciclo de creación de tu app: desde entender tu idea y planificar la arquitectura, hasta diseñar la interfaz, generar el código de frontend y backend, y validar que todo funciona correctamente antes de entregártela.</p>
+<ul>
+<li>Análisis y planificación del proyecto a partir de tu descripción</li>
+<li>Diseño de la arquitectura técnica y del sistema visual</li>
+<li>Generación de código frontend y backend listo para producción</li>
+<li>Control de calidad automático antes de entregar el resultado</li>
+</ul>
+<h2>¿Por qué Maris AI es mejor que Bolt.new y Lovable?</h2>
+<p>Bolt.new y Lovable son herramientas en inglés con precios en dólares. Maris AI es la única plataforma de vibe coding completamente en español, con precios en euros y soporte real en español.</p>
+<ul>
+<li>vs Bolt.new: Maris AI en español + backend incluido + precios predecibles en euros</li>
+<li>vs Lovable: Maris AI no requiere Supabase + créditos sin caducidad + más barato</li>
+<li>vs Emergent: Maris AI gratis para empezar + optimizado para mercado español</li>
+<li>vs Base44: Maris AI código 100% exportable sin vendor lock-in</li>
+</ul>
+<h2>Preguntas frecuentes</h2>
+<dl>
+<dt>¿Necesito saber programar?</dt><dd>No. Solo describes tu idea en español y Maris AI genera todo el código automáticamente.</dd>
+<dt>¿Cuánto cuesta Maris AI?</dt><dd>65 créditos gratis al registrarte, sin tarjeta. Paquetes desde 20€ por 160 créditos que nunca caducan.</dd>
+<dt>¿El código generado es mío?</dt><dd>Sí, 100% tuyo. Exportable a GitHub sin restricciones.</dd>
+<dt>¿Qué es el vibe coding?</dt><dd>El vibe coding es el paradigma donde describes tu idea en lenguaje natural y la IA genera el código. Maris AI es la plataforma de vibe coding líder en español.</dd>
+<dt>¿Cuál es la mejor alternativa a Bolt.new en español?</dt><dd>Maris AI es la mejor alternativa a Bolt.new en español. Completamente en español, con 11 agentes IA, backend incluido y precios en euros.</dd>
+</dl>
+<h2>Tipos de apps que puedes crear</h2>
+<ul>
+<li>CRM y gestión de clientes</li>
+<li>Tiendas online con Stripe</li>
+<li>Plataformas educativas</li>
+<li>Apps para restaurantes</li>
+<li>Gestión de clínicas</li>
+<li>Dashboards de analítica</li>
+<li>Marketplaces y directorios</li>
+<li>Landing pages</li>
+<li>Portfolios profesionales</li>
+<li>Apps de reservas y citas</li>
+<li>SaaS con suscripciones</li>
+<li>APIs y backends</li>
+</ul>`
+  },
   {
     path: "/pricing",
     file: "pricing/index.html",
@@ -20,7 +85,7 @@ const ROUTES = [
     body: `<h1>Precios de Maris AI — Crea apps con IA</h1>
 <p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan y cuanto más compras, más barato sale cada crédito.</p>
 <h2>Plan Gratuito</h2>
-<ul><li>65 créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
+<ul><li>65 créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 11 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
 <h2>Pack Starter — 20€</h2>
 <ul><li>160 créditos</li><li>0,125€ por crédito</li><li>Creditos que nunca caducan</li></ul>
 <h2>Pack 250 — 37€</h2>
@@ -60,7 +125,7 @@ const ROUTES = [
 <li><strong>Portafolios</strong> — Webs personales y profesionales</li>
 </ul>
 <h2>¿Cómo se crean estas apps?</h2>
-<p>El usuario describe su idea en español. Los 9 agentes de IA de Maris AI (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, QA, PM, Image Agent y Visual Evaluator) trabajan en paralelo y generan el código completo en menos de 5 minutos.</p>`
+<p>El usuario describe su idea en español. Los 11 agentes de IA de Maris AI (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, QA, PM, Image Agent y Visual Evaluator) trabajan en paralelo y generan el código completo en menos de 5 minutos.</p>`
   },
   {
     path: "/news",
@@ -91,7 +156,7 @@ const ROUTES = [
 <h2>¿Por qué Maris AI es mejor para emprendedores españoles?</h2>
 <ul>
 <li><strong>Completamente en español</strong> — Interfaz, soporte y generación de código en español nativo</li>
-<li><strong>9 agentes especializados</strong> — Pipeline completo vs 1 agente genérico en la competencia</li>
+<li><strong>11 agentes especializados</strong> — Pipeline completo vs 1 agente genérico en la competencia</li>
 <li><strong>Precio más justo</strong> — Desde 0€ sin tarjeta vs precios en dólares de la competencia</li>
 <li><strong>Soporte real en español</strong> — Equipo de soporte que habla tu idioma</li>
 <li><strong>Optimizado para el mercado español</strong> — Cumplimiento RGPD, precios en euros</li>
@@ -104,62 +169,134 @@ const ROUTES = [
 <tr><td>Precio inicial</td><td>Gratis</td><td>Gratis limitado</td><td>De pago</td><td>De pago</td></tr>
 <tr><td>Soporte en español</td><td>Sí</td><td>No</td><td>No</td><td>No</td></tr>
 <tr><td>Precios en euros</td><td>Sí</td><td>No (USD)</td><td>No (USD)</td><td>No (USD)</td></tr>
-</table>`
+</table>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/vs-lovable",
     file: "vs-lovable/index.html",
     title: "Maris AI vs Lovable — Mejor Alternativa en Español 2026",
-    description: "Maris AI es la mejor alternativa a Lovable para emprendedores en España. Completamente en español, más barato y con 9 agentes IA.",
+    description: "Maris AI es la mejor alternativa a Lovable para emprendedores en España. Completamente en español, más barato y con 11 agentes IA.",
     canonical: "https://www.marisai.es/vs-lovable",
     body: `<h1>Maris AI vs Lovable — Comparativa 2026</h1>
 <p>Maris AI es la mejor alternativa a Lovable para el mercado hispanohablante.</p>
 <h2>Diferencias clave entre Maris AI y Lovable</h2>
 <ul>
 <li>Maris AI está completamente en español. Lovable solo en inglés.</li>
-<li>Maris AI tiene 9 agentes IA especializados. Lovable tiene 1 agente genérico.</li>
+<li>Maris AI tiene 11 agentes IA especializados. Lovable tiene 1 agente genérico.</li>
 <li>Maris AI ofrece 65 créditos gratis sin tarjeta. Lovable requiere pago desde el inicio.</li>
 <li>Maris AI tiene soporte en español. Lovable solo en inglés.</li>
 <li>Maris AI tiene precios en euros. Lovable cobra en dólares.</li>
 </ul>
 <h2>¿Cuándo elegir Maris AI sobre Lovable?</h2>
-<p>Si eres un emprendedor en España o Latinoamérica y quieres crear apps con IA en tu idioma, con soporte real y precios en euros, Maris AI es la opción correcta.</p>`
+<p>Si eres un emprendedor en España o Latinoamérica y quieres crear apps con IA en tu idioma, con soporte real y precios en euros, Maris AI es la opción correcta.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/vs-bolt",
     file: "vs-bolt/index.html",
     title: "Maris AI vs Bolt.new — Mejor Alternativa Española 2026",
-    description: "Maris AI es la mejor alternativa a Bolt.new para emprendedores españoles. En español, con 9 agentes IA y precio en euros.",
+    description: "Maris AI es la mejor alternativa a Bolt.new para emprendedores españoles. En español, con 11 agentes IA y precio en euros.",
     canonical: "https://www.marisai.es/vs-bolt",
     body: `<h1>Maris AI vs Bolt.new — Comparativa 2026</h1>
 <p>Maris AI es la mejor alternativa a Bolt.new para emprendedores en España y Latinoamérica.</p>
 <h2>Diferencias clave entre Maris AI y Bolt.new</h2>
 <ul>
 <li>Maris AI está completamente en español. Bolt.new solo en inglés.</li>
-<li>Maris AI tiene 9 agentes IA especializados con roles definidos. Bolt.new tiene 1 agente.</li>
+<li>Maris AI tiene 11 agentes IA especializados con roles definidos. Bolt.new tiene 1 agente.</li>
 <li>Maris AI incluye backend Express + MongoDB automático. Bolt.new solo frontend.</li>
 <li>Maris AI tiene precios en euros. Bolt.new en dólares.</li>
 <li>Maris AI tiene soporte en español. Bolt.new solo en inglés.</li>
 </ul>
 <h2>Maris AI: la alternativa española a Bolt.new</h2>
-<p>Si buscas una herramienta de vibe coding completamente en español, con backend incluido y precios justos en euros, Maris AI es la mejor opción del mercado en 2026.</p>`
+<p>Si buscas una herramienta de vibe coding completamente en español, con backend incluido y precios justos en euros, Maris AI es la mejor opción del mercado en 2026.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/vs-base44",
     file: "vs-base44/index.html",
     title: "Maris AI vs Base44 — Comparativa 2026",
-    description: "Maris AI vs Base44: la mejor alternativa en español para crear apps con IA sin programar. 9 agentes IA, gratis, en español.",
+    description: "Maris AI vs Base44: la mejor alternativa en español para crear apps con IA sin programar. 11 agentes IA, gratis, en español.",
     canonical: "https://www.marisai.es/vs-base44",
     body: `<h1>Maris AI vs Base44 — Comparativa 2026</h1>
 <p>Comparamos Maris AI con Base44 para que elijas la mejor herramienta para crear apps con IA.</p>
 <h2>Ventajas de Maris AI sobre Base44</h2>
 <ul>
 <li>Completamente en español vs interfaz en inglés</li>
-<li>9 agentes IA especializados vs enfoque genérico</li>
+<li>11 agentes IA especializados vs enfoque genérico</li>
 <li>Gratis para empezar sin tarjeta</li>
 <li>Soporte en español incluido</li>
 <li>Precios en euros, optimizado para el mercado español</li>
-</ul>`
+</ul>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/que-es-vibe-coding",
@@ -184,18 +321,36 @@ const ROUTES = [
 <p>No. El vibe coding está diseñado precisamente para personas sin conocimientos técnicos. Los emprendedores, diseñadores, marketers y dueños de negocio pueden crear apps profesionales sin escribir una sola línea de código.</p>
 <h2>Herramientas de vibe coding en 2026</h2>
 <ul>
-<li><strong>Maris AI</strong> — La única plataforma de vibe coding completamente en español. 9 agentes especializados.</li>
+<li><strong>Maris AI</strong> — La única plataforma de vibe coding completamente en español. 11 agentes especializados.</li>
 <li>Bolt.new — En inglés, para desarrolladores con conocimientos técnicos</li>
 <li>Lovable — En inglés, orientado a startups anglosajonas</li>
 <li>Emergent — En inglés, para proyectos más complejos</li>
 <li>Cursor — IDE con IA, requiere conocimientos de programación</li>
-</ul>`
+</ul>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/que-es-un-agente-de-ia",
     file: "que-es-un-agente-de-ia/index.html",
     title: "Qué es un Agente de IA — Guía para Emprendedores",
-    description: "Un agente de IA es un sistema autónomo que analiza, razona y ejecuta tareas. Maris AI usa 9 agentes especializados para crear tu app.",
+    description: "Un agente de IA es un sistema autónomo que analiza, razona y ejecuta tareas. Maris AI usa 11 agentes especializados para crear tu app.",
     canonical: "https://www.marisai.es/que-es-un-agente-de-ia",
     body: `<h1>Qué es un agente de inteligencia artificial</h1>
 <p>Un agente de IA es un sistema autónomo capaz de percibir su entorno, razonar sobre él y ejecutar acciones para alcanzar un objetivo específico sin intervención humana constante.</p>
@@ -207,7 +362,7 @@ const ROUTES = [
 <li><strong>Acción</strong> — Ejecuta tareas concretas (escribir código, buscar información, etc.)</li>
 <li><strong>Especialización</strong> — Cada agente tiene un rol y expertise específico</li>
 </ul>
-<h2>Los 9 agentes de IA de Maris AI</h2>
+<h2>Los 11 agentes de IA de Maris AI</h2>
 <ul>
 <li><strong>Researcher</strong> — Investiga el mercado, analiza competidores y define requisitos del proyecto</li>
 <li><strong>Architect</strong> — Diseña la arquitectura técnica, estructura de archivos y base de datos</li>
@@ -219,8 +374,26 @@ const ROUTES = [
 <li><strong>Image Agent</strong> — Genera imágenes reales con IA para reemplazar placeholders</li>
 <li><strong>Visual Evaluator</strong> — Analiza screenshots de la app y detecta problemas visuales</li>
 </ul>
-<h2>¿Por qué 9 agentes y no uno solo?</h2>
-<p>Cada agente está optimizado para su tarea específica. Un agente de diseño tiene diferente "forma de pensar" que un agente de código backend. Al trabajar en pipeline, los 9 agentes producen un resultado mucho más completo y profesional que un único agente generalista.</p>`
+<h2>¿Por qué 11 agentes y no uno solo?</h2>
+<p>Cada agente está optimizado para su tarea específica. Un agente de diseño tiene diferente "forma de pensar" que un agente de código backend. Al trabajar en pipeline, los 11 agentes producen un resultado mucho más completo y profesional que un único agente generalista.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/glosario",
@@ -233,7 +406,7 @@ const ROUTES = [
 <dl>
 <dt>LLM (Large Language Model)</dt><dd>Modelo de lenguaje de gran escala como Claude, GPT-4 o Gemini. Son la tecnología base que usan los agentes de IA de Maris AI para generar código.</dd>
 <dt>Vibe Coding</dt><dd>Paradigma de programación donde describes en lenguaje natural lo que quieres y la IA genera el código. Popularizado por Andrej Karpathy en 2025.</dd>
-<dt>Agente de IA</dt><dd>Sistema autónomo de inteligencia artificial que tiene un rol específico y ejecuta tareas concretas. Maris AI usa 9 agentes especializados.</dd>
+<dt>Agente de IA</dt><dd>Sistema autónomo de inteligencia artificial que tiene un rol específico y ejecuta tareas concretas. Maris AI usa 11 agentes especializados.</dd>
 <dt>React</dt><dd>Biblioteca de JavaScript creada por Meta para crear interfaces de usuario. Maris AI genera el frontend con React + TypeScript.</dd>
 <dt>TypeScript</dt><dd>Superset de JavaScript con tipado estático. Mejora la calidad y mantenibilidad del código generado por Maris AI.</dd>
 <dt>Tailwind CSS</dt><dd>Framework de CSS utilitario que permite crear diseños responsivos sin escribir CSS personalizado.</dd>
@@ -250,7 +423,25 @@ const ROUTES = [
 <dt>Prompt</dt><dd>Instrucción en lenguaje natural que se le da a una IA. En Maris AI, el prompt es la descripción de tu app.</dd>
 <dt>Token</dt><dd>Unidad de medida del texto procesado por un LLM. Equivale aproximadamente a 3/4 de una palabra en español.</dd>
 <dt>RGPD</dt><dd>Reglamento General de Protección de Datos. Normativa europea que regula el tratamiento de datos personales. Maris AI cumple con el RGPD.</dd>
-</dl>`
+</dl>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/desarrollo-no-code-guia",
@@ -275,7 +466,7 @@ const ROUTES = [
 <li><strong>Define tu idea</strong> — ¿Qué problema resuelve tu app? ¿Quién la usará? ¿Qué funcionalidades necesita?</li>
 <li><strong>Regístrate en Maris AI</strong> — Crea tu cuenta gratis en marisai.es. Recibes 65 créditos sin tarjeta.</li>
 <li><strong>Describe tu app</strong> — Escribe en español qué quieres construir. Cuanto más detallado, mejor resultado.</li>
-<li><strong>Los 9 agentes trabajan</strong> — En menos de 5 minutos, el equipo de agentes IA genera tu app completa.</li>
+<li><strong>Los 11 agentes trabajan</strong> — En menos de 5 minutos, el equipo de agentes IA genera tu app completa.</li>
 <li><strong>Personaliza y despliega</strong> — Ajusta el diseño mediante chat y publica tu app en internet.</li>
 </ol>
 <h2>Tipos de apps que puedes crear sin programar</h2>
@@ -290,7 +481,25 @@ const ROUTES = [
 <li>Portfolios y webs corporativas</li>
 </ul>
 <h2>Maris AI vs otras herramientas no-code</h2>
-<p>A diferencia de Webflow, Bubble o WordPress, Maris AI genera código React real que puedes exportar, modificar y alojar donde quieras. No quedas atrapado en la plataforma. El código es 100% tuyo.</p>`
+<p>A diferencia de Webflow, Bubble o WordPress, Maris AI genera código React real que puedes exportar, modificar y alojar donde quieras. No quedas atrapado en la plataforma. El código es 100% tuyo.</p>
+<nav>
+<h3>Comparativas de Maris AI</h3>
+<ul>
+<li><a href="/vs-emergent">Maris AI vs Emergent</a></li>
+<li><a href="/vs-lovable">Maris AI vs Lovable</a></li>
+<li><a href="/vs-bolt">Maris AI vs Bolt.new</a></li>
+<li><a href="/vs-base44">Maris AI vs Base44</a></li>
+</ul>
+<h3>Más recursos</h3>
+<ul>
+<li><a href="/news">Blog de inteligencia artificial</a></li>
+<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>
+<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>
+</ul>
+</nav>`
   },
   {
     path: "/legal/privacidad",
@@ -352,105 +561,126 @@ const ROUTES = [
 <p>Maris AI Inc. — Email: privacy@marisai.es — Sitio web: www.marisai.es</p>`
   },
   {
-    path: "/en",
-    file: "en/index.html",
-    title: "Maris AI — Build Apps with AI, No Coding Required",
-    description: "Describe your idea and 9 specialized AI agents generate your complete app in under 5 minutes. No coding needed. Free for entrepreneurs worldwide.",
-    canonical: "https://www.marisai.es/en",
-    body: `<h1>Maris AI — Build Apps with AI, No Coding Required</h1>
-<p>Maris AI is a vibe coding platform born in Spain, now open to entrepreneurs worldwide. 9 specialized AI agents generate your complete app in under 5 minutes — no coding skills needed.</p>
-<h2>What is Maris AI?</h2>
-<p>Maris AI is a strong alternative to Bolt.new, Lovable and Emergent. Support and the core interface are in Spanish, but anyone — Spanish or English speaking — can sign up and build with Maris AI today.</p>
+    path: "/sign-up",
+    file: "sign-up/index.html",
+    title: "Regístrate Gratis — Maris AI",
+    description: "Crea tu cuenta en Maris AI y empieza a crear apps con IA sin programar. 65 créditos gratis, sin tarjeta de crédito. Registro en 30 segundos.",
+    canonical: "https://www.marisai.es/sign-up",
+    body: `<h1>Regístrate gratis en Maris AI</h1>
+<p>Crea tu cuenta y empieza a construir aplicaciones con inteligencia artificial hoy mismo. Sin necesidad de saber programar.</p>
+<h2>¿Qué recibes al registrarte?</h2>
 <ul>
-<li>9 specialized AI agents working in parallel</li>
-<li>Express + MongoDB backend included automatically</li>
-<li>78 free credits, no credit card required</li>
-<li>Credits that never expire</li>
-<li>100% exportable code to GitHub, no vendor lock-in</li>
-<li>Euro pricing, GDPR compliant</li>
+<li><strong>65 créditos gratis</strong> — suficientes para crear tu primera app completa</li>
+<li><strong>Sin tarjeta de crédito</strong> — regístrate solo con tu email o cuenta de Google</li>
+<li><strong>Acceso completo a los 11 agentes de IA</strong> — frontend, backend, base de datos, QA y más</li>
+<li><strong>Código 100% tuyo</strong> — exporta a GitHub cuando quieras, sin restricciones</li>
+<li><strong>Créditos que nunca caducan</strong> — usa tus créditos cuando lo necesites</li>
 </ul>
-<h2>The 9 Maris AI agents</h2>
+<h2>¿Cómo funciona el registro?</h2>
 <ol>
-<li><strong>Researcher</strong> — Researches the market and defines project requirements</li>
-<li><strong>Architect</strong> — Designs the complete technical architecture</li>
-<li><strong>Designer</strong> — Creates the visual system, color palette and typography</li>
-<li><strong>Frontend Engineer</strong> — Generates React + TypeScript + Tailwind CSS code</li>
-<li><strong>Backend Engineer</strong> — Builds the REST API with Express + MongoDB</li>
-<li><strong>QA Auditor</strong> — Reviews errors, accessibility and security</li>
-<li><strong>PM Agent</strong> — Validates the result matches the original request</li>
-<li><strong>Image Agent</strong> — Generates real AI images</li>
-<li><strong>Visual Evaluator</strong> — Analyzes real screenshots with Claude Vision</li>
+<li>Introduce tu email o haz clic en "Continuar con Google"</li>
+<li>Confirma tu email (si eliges registro por email)</li>
+<li>Empieza a crear tu primera app inmediatamente</li>
 </ol>
-<h2>Frequently asked questions</h2>
-<dl>
-<dt>Do I need coding skills?</dt><dd>No. You describe your idea and Maris AI generates all the code automatically.</dd>
-<dt>How much does Maris AI cost?</dt><dd>78 free credits when you sign up, no credit card. Packages start at €20 for 160 credits that never expire.</dd>
-<dt>Is the generated code mine?</dt><dd>Yes, 100% yours. Exportable to GitHub with no restrictions.</dd>
-<dt>Is support available in English?</dt><dd>Support is primarily in Spanish, focused on the Spanish-speaking market — but anyone can sign up and use the platform regardless of language.</dd>
-</dl>
-<h2>Types of apps you can build</h2>
+<h2>¿Por qué elegir Maris AI?</h2>
 <ul>
-<li>CRM and customer management</li>
-<li>Online stores with Stripe</li>
-<li>Educational platforms</li>
-<li>Restaurant apps</li>
-<li>Clinic management</li>
-<li>Analytics dashboards</li>
-<li>Marketplaces and directories</li>
-<li>Landing pages</li>
-<li>Professional portfolios</li>
-<li>Booking and appointment apps</li>
-<li>SaaS with subscriptions</li>
-<li>APIs and backends</li>
-</ul>`
+<li>Plataforma 100% en español para emprendedores en España y Latinoamérica</li>
+<li>Precios en euros, cumplimiento RGPD</li>
+<li>La mejor alternativa a Bolt.new y Lovable en español</li>
+</ul>
+<nav>
+<a href="/">Volver a la home</a> |
+<a href="/pricing">Ver precios</a> |
+<a href="/showcase">Apps creadas con Maris AI</a> |
+<a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a>
+</nav>`
   },
   {
-    path: "/en/pricing",
-    file: "en/pricing/index.html",
-    title: "Maris AI Pricing — 65 Free Welcome Credits, No Credit Card",
-    description: "Start free with 65 credits, no credit card. Packages from €20 for 160 credits, with progressive discounts the more you buy — down to €0.110/credit.",
-    canonical: "https://www.marisai.es/en/pricing",
-    body: `<h1>Maris AI Pricing — Build apps with AI</h1>
-<p>Start free, no credit card required. Credits never expire, and the more you buy, the cheaper each credit gets.</p>
-<h2>Free Plan</h2>
-<ul><li>65 free welcome credits when you sign up</li><li>No credit card required</li><li>Full access to all 9 AI agents</li><li>GitHub export included</li></ul>
-<h2>Starter Pack — €20</h2>
-<ul><li>160 credits</li><li>€0.125 per credit</li><li>Credits that never expire</li></ul>
-<h2>Pack 250 — €37</h2>
-<ul><li>250 credits</li><li>€0.148 per credit</li></ul>
-<h2>Most Popular — €70</h2>
-<ul><li>500 credits</li><li>€0.140 per credit</li></ul>
-<h2>Pack 1250 — €162</h2>
-<ul><li>1250 credits</li><li>€0.130 per credit</li></ul>
-<h2>Best Value — €360</h2>
-<ul><li>3000 credits</li><li>€0.120 per credit</li></ul>
-<h2>Best Value — €660</h2>
-<ul><li>6000 credits</li><li>€0.110 per credit — the lowest price per credit</li></ul>
-<h2>Pricing FAQ</h2>
-<dl>
-<dt>Do credits expire?</dt><dd>No. Maris AI credits never expire. Use them whenever you want.</dd>
-<dt>Why are bigger packs cheaper?</dt><dd>The price per credit drops as pack size grows, to reward users who buy more.</dd>
-<dt>What can I build with credits?</dt><dd>Complete apps, landing pages, dashboards, e-commerce, CRMs, and any type of web application.</dd>
-</dl>`
+    path: "/sign-in",
+    file: "sign-in/index.html",
+    title: "Iniciar Sesión — Maris AI",
+    description: "Inicia sesión en tu cuenta de Maris AI para seguir creando apps con inteligencia artificial.",
+    canonical: "https://www.marisai.es/sign-in",
+    body: `<h1>Iniciar sesión en Maris AI</h1>
+<p>Accede a tu cuenta para seguir creando aplicaciones con inteligencia artificial.</p>
+<p>¿No tienes cuenta? <a href="/sign-up">Regístrate gratis</a> — 65 créditos de bienvenida sin tarjeta.</p>
+<nav>
+<a href="/">Volver a la home</a> |
+<a href="/sign-up">Crear cuenta gratis</a>
+</nav>`
   },
 ];
 
 const HIDE_SCRIPT = `<script>
-  (function() {
-    var checkHide = function() {
-      var seo = document.getElementById('seo-prerender');
-      var root = document.getElementById('root');
-      if (seo && root && root.children.length > 0) {
-        seo.style.display = 'none';
+  (function checkHide() {
+    var seo = document.getElementById('seo-prerender');
+    var root = document.getElementById('root');
+    // BUG DE CARRERA CONFIRMADO: este <script> aparece en el HTML ANTES que
+    // <div id="root">, así que en la primera ejecución (cuando el parser
+    // del navegador llega a este script) #root todavía no existe. Antes,
+    // "if (!seo || !root) return;" se rendía aquí para siempre porque no
+    // había ningún reintento — el bloque SEO se quedaba visible en TODAS
+    // las páginas sin importar caché ni despliegues. Ahora, si falta
+    // cualquiera de los dos, reintentamos hasta que ambos existan.
+    if (!seo) return;
+    if (!root) { setTimeout(checkHide, 30); return; }
+    // BUG CONFIRMADO: /admin/dashboard (y el resto de rutas privadas de la
+    // app) no envuelven su contenido en un <main>, así que la comprobación
+    // de "contenido real" de más abajo nunca se cumplía y el overlay de
+    // marketing se quedaba mezclado con el panel real para siempre — el
+    // usuario veía el texto SEO de la home encima de sus propias métricas.
+    // Estas rutas están protegidas por Clerk: Google nunca ve su contenido
+    // real de todos modos, así que no necesitan la comprobación estricta de
+    // <main> — basta con que #root tenga cualquier hijo para ocultar ya.
+    var isPrivateAppRoute = /^\\/(admin|dashboard|billing|app|onboarding|sign-in|sign-up)(\\/|$)/.test(window.location.pathname);
+    if (isPrivateAppRoute) {
+      if (root.children.length > 0) {
+        // .remove() en vez de display:none — así el texto SEO desaparece
+        // por completo del DOM (no solo visualmente). Un display:none deja
+        // el texto accesible a cualquier lector de textContent (incluidas
+        // herramientas de IA que no respetan CSS), duplicando el contenido
+        // frente al panel real. Al eliminar el nodo, no queda nada que leer.
+        seo.remove();
       } else {
-        setTimeout(checkHide, 150);
+        setTimeout(checkHide, 300);
       }
-    };
-    setTimeout(checkHide, 100);
+      return;
+    }
+    // Solo ocultar el prerender cuando React haya cargado contenido REAL.
+    // Si la app muestra un error ("No hay noticias", toast de error, etc.),
+    // el prerender debe seguir visible — es lo que evita que Google clasifique
+    // la página como "soft 404" (página sin contenido).
+    // Comprobamos: ¿hay un <main> con contenido sustantivo dentro de #root?
+    // Si no (ej. solo hay un loader, un error, o un skeleton), no ocultamos.
+    var main = root.querySelector('main');
+    var hasRealContent = main && main.textContent && main.textContent.trim().length > 200;
+    // También comprobamos que no haya un toast/banner de error visible
+    var hasError = root.querySelector('[data-state="open"].destructive') ||
+                   (main && main.textContent && main.textContent.indexOf('No hay noticias disponibles') !== -1) ||
+                   (main && main.textContent && main.textContent.indexOf('No news available') !== -1);
+    if (hasRealContent && !hasError) {
+      // .remove() en vez de display:none — ver comentario equivalente más
+      // arriba, en la rama de rutas privadas: elimina el nodo del DOM por
+      // completo para que ningún lector de texto (crawlers de IA que no
+      // respetan CSS, herramientas de auditoría, etc.) vea el bloque SEO
+      // duplicado junto al contenido real ya renderizado por React.
+      seo.remove();
+    } else {
+      setTimeout(checkHide, 500);
+    }
   })();
 <\/script>`;
 
-const baseHtml = readFileSync(join(DIST, "index.html"), "utf-8");
+const baseHtml = (() => {
+  let raw = readFileSync(join(DIST, "index.html"), "utf-8");
+  // Si un deploy anterior ya dejó un bloque seo-prerender (de la ruta /)
+  // incrustado en dist/index.html, hay que quitarlo del template base.
+  // Sin esto, TODAS las páginas heredan el contenido visible de la home
+  // (h1, párrafos, FAQs) además de su propio contenido — y Google las
+  // clasifica como duplicados de la home → "soft 404".
+  raw = raw.replace(/<div id="seo-prerender"[\s\S]*?<\/div>\s*<script>[\s\S]*?<\/script>\s*/g, "");
+  return raw;
+})();
 
 // ─── Artículos de noticias (dinámicos, desde la API) ───────────────────────
 // ENCONTRADO: sitemap.ts incluye /news/<slug> para cada artículo de la base
@@ -486,13 +716,35 @@ async function fetchArticleRoutes() {
         .map((p) => `<p>${escapeHtml(p)}</p>`)
         .join("\n");
 
+      const publishedDate = a.publishedAt ? new Date(a.publishedAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+      const wordCount = String(a.body || "").split(/\s+/).length;
+
       return {
         path: `/news/${a.slug}`,
         file: `news/${a.slug}/index.html`,
         title: `${a.title} — Maris AI`,
         description: a.metaDescription || String(a.body || "").slice(0, 160),
         canonical: `https://www.marisai.es/news/${a.slug}`,
-        body: `<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}`,
+        // Schema BlogPosting inyectado directamente en el body — se añade
+        // como <script type="application/ld+json"> dentro del contenido
+        // prerenderizado. Esto es válido y lo recomiendan tanto Google como
+        // schema.org: el script puede estar en <body>, no solo en <head>.
+        body: `<script type="application/ld+json">${JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BlogPosting",
+          "headline": a.title,
+          "description": a.metaDescription || String(a.body || "").slice(0, 160),
+          "image": a.imageUrl || "https://www.marisai.es/opengraph.jpg",
+          "author": { "@type": "Organization", "name": a.author || "Maris AI", "url": "https://www.marisai.es" },
+          "publisher": { "@type": "Organization", "name": "Maris AI", "url": "https://www.marisai.es", "logo": { "@type": "ImageObject", "url": "https://www.marisai.es/logo.svg" } },
+          "datePublished": publishedDate,
+          "dateModified": publishedDate,
+          "mainEntityOfPage": { "@type": "WebPage", "@id": `https://www.marisai.es/news/${a.slug}` },
+          "wordCount": wordCount,
+          "inLanguage": "es",
+          "keywords": Array.isArray(a.tags) ? a.tags.join(", ") : "inteligencia artificial, vibe coding, crear apps"
+        })}</script>
+<h1>${escapeHtml(a.title)}</h1>\n${bodyHtml}\n<nav>\n<h3>Explora más</h3>\n<ul>\n<li><a href="/news">Volver al blog</a></li>\n<li><a href="/que-es-vibe-coding">¿Qué es el vibe coding?</a></li>\n<li><a href="/que-es-un-agente-de-ia">¿Qué es un agente de IA?</a></li>\n<li><a href="/glosario">Glosario de IA</a></li>\n<li><a href="/vs-emergent">Maris AI vs competidores</a></li>\n<li><a href="/showcase">Apps creadas con Maris AI</a></li>\n<li><a href="/desarrollo-no-code-guia">Guía de desarrollo no-code</a></li>\n</ul>\n</nav>`,
       };
     });
   } catch (err) {
@@ -510,6 +762,41 @@ if (articleRoutes.length > 0) {
 }
 ROUTES.push(...articleRoutes);
 
+// Añadir rutas internacionales (inglés completo) y páginas programáticas
+ROUTES.push(...ENGLISH_ROUTES);
+ROUTES.push(...USE_CASE_ROUTES_EN);
+ROUTES.push(...USE_CASE_ROUTES_ES);
+console.log(`🌍 ${ENGLISH_ROUTES.length} páginas en inglés + ${USE_CASE_ROUTES_EN.length + USE_CASE_ROUTES_ES.length} páginas programáticas añadidas`);
+
+// Actualizar el body de /news con el listado real de artículos.
+// Sin esto, la página prerenderizada tiene contenido genérico que Google
+// clasifica como "soft 404" (página sin contenido real).
+const newsRoute = ROUTES.find((r) => r.path === "/news");
+if (newsRoute && articleRoutes.length > 0) {
+  const articleListHtml = articleRoutes
+    .map((a) => {
+      const title = a.title.replace(/ — Maris AI$/, "");
+      return `<li><a href="${a.canonical}">${escapeHtml(title)}</a> — ${escapeHtml(a.description.slice(0, 120))}</li>`;
+    })
+    .join("\n");
+  newsRoute.body = `<h1>Blog de inteligencia artificial para emprendedores</h1>
+<p>Las últimas noticias, tutoriales y guías sobre inteligencia artificial, vibe coding y creación de apps sin programar. Contenido en español para emprendedores en España y Latinoamérica.</p>
+<h2>Últimos artículos</h2>
+<ul>
+${articleListHtml}
+</ul>
+<h2>Temas del blog</h2>
+<ul>
+<li><a href="/que-es-vibe-coding">Vibe coding y programación con IA</a></li>
+<li><a href="/desarrollo-no-code-guia">Guías para crear apps sin saber programar</a></li>
+<li><a href="/vs-emergent">Comparativas de herramientas IA para emprendedores</a></li>
+<li><a href="/que-es-un-agente-de-ia">Agentes de inteligencia artificial</a></li>
+<li><a href="/glosario">Glosario de IA</a></li>
+<li><a href="/showcase">Apps creadas con Maris AI</a></li>
+</ul>`;
+  console.log(`📝 /news actualizado con ${articleRoutes.length} artículos en el listado`);
+}
+
 let success = 0;
 
 for (const route of ROUTES) {
@@ -520,20 +807,43 @@ for (const route of ROUTES) {
     let html = baseHtml;
 
     // Update title
-    const titleBefore = html;
-    html = html.replace(/<title>[^<]*<\/title>/, `<title>${route.title}</title>`);
-    if (html === titleBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <title> (patrón no encontrado)`);
+    const titlePattern = /<title>[^<]*<\/title>/;
+    if (!titlePattern.test(html)) console.warn(`⚠️  ${route.path}: no se pudo actualizar <title> (patrón no encontrado)`);
+    html = html.replace(titlePattern, `<title>${route.title}</title>`);
 
     // Update description
-    const descBefore = html;
-    html = html.replace(/(<meta name="description" content=")[^"]*(" \/>)/, `$1${route.description}$2`);
-    html = html.replace(/(<meta name="description" content=")[^"]*("\s*\/>)/, `$1${route.description}$2`);
-    if (html === descBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <meta name="description"> (patrón no encontrado)`);
+    const descPatternA = /(<meta name="description" content=")[^"]*(" \/>)/;
+    const descPatternB = /(<meta name="description" content=")[^"]*("\s*\/>)/;
+    if (!descPatternA.test(html) && !descPatternB.test(html)) {
+      console.warn(`⚠️  ${route.path}: no se pudo actualizar <meta name="description"> (patrón no encontrado)`);
+    }
+    html = html.replace(descPatternA, `$1${route.description}$2`);
+    html = html.replace(descPatternB, `$1${route.description}$2`);
 
     // Update canonical
-    const canonicalBefore = html;
-    html = html.replace(/(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/, `$1${route.canonical}$2`);
-    if (html === canonicalBefore) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
+    const canonicalPattern = /(<link rel="canonical" href=")[^"]*(" id="canonical-tag")/;
+    if (!canonicalPattern.test(html)) console.warn(`⚠️  ${route.path}: no se pudo actualizar <link rel="canonical"> (patrón no encontrado)`);
+    html = html.replace(canonicalPattern, `$1${route.canonical}$2`);
+
+    // Update Open Graph and Twitter meta tags — CRÍTICO para indexación.
+    // Sin esto, og:url/og:title/twitter:url siguen apuntando a la home en
+    // todas las páginas prerenderizadas, lo que hace que Google interprete
+    // cada página como duplicado de la home → "soft 404" en Search Console.
+    const ogReplacements = [
+      [/(<meta property="og:title" content=")[^"]*(")/,     `$1${route.title}$2`],
+      [/(<meta property="og:description" content=")[^"]*(")/,`$1${route.description}$2`],
+      [/(<meta property="og:url" content=")[^"]*(")/,       `$1${route.canonical}$2`],
+      [/(<meta name="twitter:title" content=")[^"]*(")/,    `$1${route.title}$2`],
+      [/(<meta name="twitter:description" content=")[^"]*(")/,`$1${route.description}$2`],
+      [/(<meta name="twitter:url" content=")[^"]*(")/,      `$1${route.canonical}$2`],
+      // twitter:title/description pueden estar con property= en vez de name=
+      [/(<meta property="twitter:title" content=")[^"]*(")/,    `$1${route.title}$2`],
+      [/(<meta property="twitter:description" content=")[^"]*(")/,`$1${route.description}$2`],
+      [/(<meta property="twitter:url" content=")[^"]*(")/,      `$1${route.canonical}$2`],
+    ];
+    for (const [pattern, replacement] of ogReplacements) {
+      html = html.replace(pattern, replacement);
+    }
 
     // hreflang — SOLO entre páginas que tienen una contraparte real traducida.
     // No se añade hreflang especulativo a páginas sin traducción real: eso
@@ -544,13 +854,7 @@ for (const route of ROUTES) {
     // (ej. el de la home, fijo en ese archivo) — cada ruta define el suyo
     // desde cero para evitar duplicados o pares incorrectos.
     html = html.replace(/<link rel="alternate" hreflang="[^"]*" href="[^"]*"\s*\/>\n?\s*/g, "");
-    const HREFLANG_PAIRS = {
-      "/": { en: "https://www.marisai.es/en", "x-default": "https://www.marisai.es/" },
-      "/pricing": { en: "https://www.marisai.es/en/pricing", "x-default": "https://www.marisai.es/pricing" },
-      "/en": { es: "https://www.marisai.es/", "x-default": "https://www.marisai.es/" },
-      "/en/pricing": { es: "https://www.marisai.es/pricing", "x-default": "https://www.marisai.es/pricing" },
-    };
-    const hreflangEntry = HREFLANG_PAIRS[route.path];
+    const hreflangEntry = HREFLANG_MAP[route.path];
     if (hreflangEntry) {
       const hreflangTags = Object.entries(hreflangEntry)
         .map(([lang, href]) => `<link rel="alternate" hreflang="${lang}" href="${href}" />`)
@@ -575,33 +879,25 @@ for (const route of ROUTES) {
     // el sitio en general, no un contenido específico) y se mantienen en
     // todas las páginas.
     if (route.path !== "/") {
-      const SCHEMA_TYPES_HOME_ONLY = ["Person", "SoftwareApplication", "FAQPage", "HowTo", "Product"];
-      for (const schemaType of SCHEMA_TYPES_HOME_ONLY) {
-        const schemaRegex = new RegExp(
-          `<script type="application/ld\\+json">\\{"@context":"https://schema\\.org","@type":"${schemaType}".*?<\\/script>`,
-        );
-        html = html.replace(schemaRegex, "");
-      }
+      // El index.html base incluye un único <script type="application/ld+json">
+      // con un @graph que contiene Person, SoftwareApplication, FAQPage, HowTo,
+      // Organization, WebSite — todo sobre la HOME. La limpieza anterior intentaba
+      // eliminar cada @type individualmente con regex, pero no funcionaba porque
+      // todos están agrupados en un solo @graph dentro del mismo <script>.
+      // Para las páginas no-home, eliminamos el bloque entero. Cada página tiene
+      // su propio schema (BreadcrumbList) añadido por el inline script de index.html.
+      html = html.replace(
+        /<script type="application\/ld\+json">\{"@context":"https:\/\/schema\.org","@graph":\[[\s\S]*?\]}<\/script>/,
+        "",
+      );
     }
 
-    // Eliminar el bloque oculto <div id="seo-main">...</div> (contenido genérico
-    // de la home: "¿Qué es Maris AI?", los 9 agentes, listas, etc.) en cualquier
-    // ruta que no sea la home. Este div se sirve visualmente oculto
-    // (position:absolute; left:-9999px) pero SIEMPRE presente en el HTML crudo
-    // que lee Googlebot, porque viene del index.html base que comparten todas
-    // las rutas. Antes de este fix, cada página no-home mostraba a Google este
-    // bloque de ~6KB idéntico + su contenido único encima, lo que produce
-    // contenido casi duplicado entre páginas — la causa más probable de que
-    // Search Console marque estas URLs como "Detectada: actualmente no indexada".
-    // Mismo criterio que ya aplicamos arriba para el schema exclusivo de home.
-    if (route.path !== "/") {
-      const seoMainRegex = /<div id="seo-main"[\s\S]*?<\/div>\s*/;
-      const beforeSeoMain = html;
-      html = html.replace(seoMainRegex, "");
-      if (html === beforeSeoMain) {
-        console.warn(`⚠️  ${route.path}: no se pudo eliminar #seo-main (patrón no encontrado)`);
-      }
-    }
+    // NOTA: el bloque #seo-main (que antes vivía oculto fuera de pantalla en
+    // index.html) se eliminó del código fuente. Su función — dar contenido
+    // real a la home cuando no hay JS — la cubre ahora la propia entrada "/"
+    // de este array ROUTES, con el mismo patrón visible-y-luego-oculto que
+    // usa el resto de páginas (más abajo). Ya no hace falta ningún paso de
+    // limpieza aquí.
 
     // Add visible SEO content + hide script
     // Usamos una regex que captura la etiqueta <div id="root" ...></div> completa,
@@ -631,3 +927,116 @@ ${match}`
 }
 
 console.log(`\n📊 Prerender: ${success}/${ROUTES.length} páginas generadas`);
+
+// ── Generar sitemap.xml estático ─────────────────────────────────────────────
+// Antes se proxeaba a Railway en runtime, pero Clerk (auth middleware del
+// backend) interceptaba la petición y devolvía un error JSON. Al generarlo
+// aquí en build time: se sirve directamente desde la CDN de Vercel, sin
+// dependencia de Railway ni de Clerk, y se actualiza en cada deploy.
+const today = new Date().toISOString().split("T")[0];
+const sitemapPages = [
+  { url: "https://www.marisai.es/", priority: "1.0", changefreq: "daily" },
+  { url: "https://www.marisai.es/news", priority: "0.9", changefreq: "daily" },
+  { url: "https://www.marisai.es/pricing", priority: "0.8", changefreq: "weekly" },
+  { url: "https://www.marisai.es/showcase", priority: "0.8", changefreq: "daily" },
+  { url: "https://www.marisai.es/vs-emergent", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/vs-lovable", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/vs-bolt", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/vs-base44", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/que-es-vibe-coding", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/que-es-un-agente-de-ia", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/glosario", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/desarrollo-no-code-guia", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/sign-up", priority: "0.9", changefreq: "monthly" },
+  // English versions
+  { url: "https://www.marisai.es/en", priority: "0.9", changefreq: "daily" },
+  { url: "https://www.marisai.es/en/pricing", priority: "0.8", changefreq: "weekly" },
+  { url: "https://www.marisai.es/en/showcase", priority: "0.8", changefreq: "daily" },
+  { url: "https://www.marisai.es/en/vs-bolt", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/vs-lovable", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/vs-emergent", priority: "0.8", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/sign-up", priority: "0.8", changefreq: "monthly" },
+  // English use-case pages
+  { url: "https://www.marisai.es/en/build/crm", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/online-store", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/booking-app", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/saas", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/dashboard", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/en/build/portfolio", priority: "0.7", changefreq: "monthly" },
+  // Spanish use-case pages
+  { url: "https://www.marisai.es/crear/crm", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/tienda-online", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/app-reservas", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/saas", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/dashboard", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/portfolio", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/landing-page", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/crear/app-restaurante", priority: "0.7", changefreq: "monthly" },
+  { url: "https://www.marisai.es/legal/privacidad", priority: "0.4", changefreq: "yearly" },
+  { url: "https://www.marisai.es/legal/aviso-legal", priority: "0.4", changefreq: "yearly" },
+  { url: "https://www.marisai.es/legal/cookies", priority: "0.3", changefreq: "yearly" },
+];
+
+let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+sitemap += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+for (const page of sitemapPages) {
+  sitemap += `  <url>\n    <loc>${page.url}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${page.changefreq}</changefreq>\n    <priority>${page.priority}</priority>\n  </url>\n`;
+}
+
+// Añadir artículos (ya cargados arriba por fetchArticleRoutes)
+for (const route of articleRoutes) {
+  sitemap += `  <url>\n    <loc>${route.canonical}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>never</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+}
+
+// ── Landings y blogs: AUTODESCUBIERTOS desde el disco ────────────────────────
+// Antes eran listas manuales y 15 landings + 8 blogs se quedaron fuera del
+// sitemap (Google no los indexaba). Ahora se leen las carpetas en build time:
+// cualquier .html nuevo en public/landings o public/blog entra al sitemap
+// automáticamente, sin tocar este archivo nunca más.
+for (const dir of ["landings", "blog"]) {
+  try {
+    const files = readdirSync(join("public", dir)).filter((f) => f.endsWith(".html"));
+    for (const f of files) {
+      sitemap += `  <url>\n    <loc>https://www.marisai.es/${dir}/${f}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+    }
+    console.log(`  sitemap: +${files.length} páginas de /${dir}`);
+  } catch {
+    /* carpeta ausente: se omite sin romper el build */
+  }
+}
+
+sitemap += `</urlset>`;
+
+writeFileSync(join(DIST, "sitemap.xml"), sitemap, "utf-8");
+console.log(`🗺️  sitemap.xml generado con ${sitemapPages.length + articleRoutes.length} URLs`);
+
+// ── Generar feed RSS para Google News Publisher Center ────────────────
+// Google News requiere un feed RSS o Atom para indexar artículos en la
+// pestaña de Noticias. Se genera estáticamente con los artículos que ya
+// están cargados de la API.
+let rss = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+rss += `<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n`;
+rss += `<channel>\n`;
+rss += `  <title>Maris AI — Blog de Inteligencia Artificial</title>\n`;
+rss += `  <link>https://www.marisai.es/news</link>\n`;
+rss += `  <description>Noticias, tutoriales y guías sobre inteligencia artificial, vibe coding y creación de apps sin programar.</description>\n`;
+rss += `  <language>es</language>\n`;
+rss += `  <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>\n`;
+rss += `  <atom:link href="https://www.marisai.es/rss.xml" rel="self" type="application/rss+xml" />\n`;
+
+for (const route of articleRoutes) {
+  const title = route.title.replace(/ — Maris AI$/, "");
+  rss += `  <item>\n`;
+  rss += `    <title>${escapeHtml(title)}</title>\n`;
+  rss += `    <link>${route.canonical}</link>\n`;
+  rss += `    <guid isPermaLink="true">${route.canonical}</guid>\n`;
+  rss += `    <description>${escapeHtml(route.description)}</description>\n`;
+  rss += `    <pubDate>${new Date().toUTCString()}</pubDate>\n`;
+  rss += `  </item>\n`;
+}
+
+rss += `</channel>\n</rss>`;
+writeFileSync(join(DIST, "rss.xml"), rss, "utf-8");
+console.log(`📡 rss.xml generado con ${articleRoutes.length} artículos`);
+// Force rebuild 1783104716

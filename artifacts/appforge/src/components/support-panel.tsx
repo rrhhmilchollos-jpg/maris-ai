@@ -250,7 +250,7 @@ export function SupportPanel() {
                       <Input
                         value={refundAmountText}
                         onChange={(e) => setRefundAmountText(e.target.value)}
-                        placeholder="ej. 20€ del paquete de 160 créditos, comprado el 01/07/2026"
+                        placeholder="ej. 20 € del paquete de 160 créditos, comprado el 01/07/2026"
                         className="bg-background/50 border-border/50"
                         disabled={isSubmitting}
                       />

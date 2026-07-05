@@ -89,7 +89,9 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true },
     fullName: { type: String },
     imageUrl: { type: String },
-    credits: { type: Number, default: 10, required: true },
+    // 65 = créditos de bienvenida. Debe coincidir SIEMPRE con el regalo del
+    // clerkWebhook y con el marketing público ("65 créditos gratis").
+    credits: { type: Number, default: 65, required: true },
     stripeCustomerId: { type: String },
     isPremium: { type: Boolean, default: false },
     isAdmin: { type: Boolean, default: false },
@@ -691,7 +693,15 @@ export interface IAgentMemory extends Document {
   errorContext?: string;
   patch: string;
   language: string;
+  framework?: string;
   embedding?: number[];
+  // Cuántas veces se ha reutilizado este parche ante un error casi idéntico
+  // (ver rememberPatch() en artifacts/api-server/src/lib/agentMemory.ts).
+  // Antes no estaba declarado aquí: Mongoose en modo estricto (por defecto)
+  // descartaba el campo silenciosamente en cada $inc, así que
+  // recallSimilar() — que filtra por successCount >= minSuccessCount — no
+  // encontraba NUNCA ningún resultado en producción.
+  successCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -702,7 +712,9 @@ const AgentMemorySchema = new Schema<IAgentMemory>(
     errorContext: { type: String },
     patch: { type: String, required: true },
     language: { type: String, default: "typescript" },
+    framework: { type: String },
     embedding: { type: [Number] },
+    successCount: { type: Number, default: 1 },
   },
   { timestamps: true },
 );
@@ -1082,6 +1094,113 @@ const WorkflowRunSchema = new Schema<IWorkflowRun>(
 
 export const WorkflowRun: Model<IWorkflowRun> =
   mongoose.models.WorkflowRun || mongoose.model<IWorkflowRun>("WorkflowRun", WorkflowRunSchema);
+
+// ─── Pinned Packages (auto-pinning dinámico del Preview/Deploy) ──────────────
+// Caché persistente de versiones exactas de paquetes npm que NO están en el
+// mapa estático DEFAULT_VERSIONS de deployBundle.ts. Cuando un bundle generado
+// por la IA importa un paquete fuera del catálogo, el sistema lo resuelve
+// contra registry.npmjs.org, lo smoke-testea contra esm.sh y guarda aquí el
+// resultado — así la siguiente app que use ese paquete resuelve al instante
+// y SIEMPRE a una versión verificada, nunca a un "latest" sin garantía.
+export type PinStatus = "verified" | "failed";
+
+export interface IPinnedPackage extends Document {
+  name: string;          // nombre del paquete npm (p.ej. "@tanstack/react-table")
+  version: string;       // versión exacta pineada (p.ej. "8.20.5") — vacía si failed
+  status: PinStatus;
+  // Detalle del smoke test contra esm.sh (código HTTP o mensaje de error).
+  smokeTestDetail?: string;
+  verifiedAt?: Date;     // cuándo pasó el smoke test
+  failedAt?: Date;       // cuándo falló (los failed se reintentan pasado el TTL)
+  hitCount: number;      // nº de bundles que han resuelto contra esta entrada
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const PinnedPackageSchema = new Schema<IPinnedPackage>(
+  {
+    name: { type: String, required: true, unique: true, index: true },
+    version: { type: String, default: "" },
+    status: { type: String, enum: ["verified", "failed"], required: true },
+    smokeTestDetail: { type: String },
+    verifiedAt: { type: Date },
+    failedAt: { type: Date },
+    hitCount: { type: Number, default: 0 },
+  },
+  { timestamps: true, collection: "pinned_packages" },
+);
+
+export const PinnedPackage: Model<IPinnedPackage> =
+  mongoose.models.PinnedPackage ||
+  mongoose.model<IPinnedPackage>("PinnedPackage", PinnedPackageSchema);
+
+// ─── Connector Credentials (ecosistema de integraciones estilo Emergent) ─────
+// Credenciales de conectores externos (Slack, Notion, Airtable, Resend…)
+// guardadas POR USUARIO y SIEMPRE cifradas (AES-256-GCM, ver
+// api-server/src/lib/connectorCrypto.ts). El frontend generado por la IA
+// NUNCA ve estos secretos: las acciones se ejecutan server-side vía el
+// gateway de conectores (api-server/src/lib/connectorActions.ts).
+export interface IConnectorCredential extends Document {
+  userId: string;         // _id del usuario propietario
+  connectorId: string;    // id del conector ("slack", "notion", "airtable"…)
+  label?: string;         // etiqueta opcional ("Slack del equipo de ventas")
+  // Blob cifrado del JSON de credenciales + parámetros AES-256-GCM.
+  ciphertext: string;     // base64
+  iv: string;             // base64 (12 bytes)
+  authTag: string;        // base64 (16 bytes)
+  verified: boolean;      // pasó la verificación real de /api/mcp/test al guardarse
+  verifiedAt?: Date;
+  lastUsedAt?: Date;      // última ejecución de una acción con estas credenciales
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const ConnectorCredentialSchema = new Schema<IConnectorCredential>(
+  {
+    userId: { type: String, required: true, index: true },
+    connectorId: { type: String, required: true },
+    label: { type: String },
+    ciphertext: { type: String, required: true },
+    iv: { type: String, required: true },
+    authTag: { type: String, required: true },
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
+    lastUsedAt: { type: Date },
+  },
+  { timestamps: true, collection: "connector_credentials" },
+);
+// Un usuario tiene como mucho UNA credencial por conector (upsert al guardar).
+ConnectorCredentialSchema.index({ userId: 1, connectorId: 1 }, { unique: true });
+
+export const ConnectorCredential: Model<IConnectorCredential> =
+  mongoose.models.ConnectorCredential ||
+  mongoose.model<IConnectorCredential>("ConnectorCredential", ConnectorCredentialSchema);
+
+// ─── Site Settings (ajustes globales del sitio) ──────────────────────────────
+// Clave/valor genérico para ajustes que el admin cambia en caliente sin
+// redesplegar: modo construcción, banners, feature flags… La clave
+// "maintenance_mode" ("on"/"off") controla la página "En construcción"
+// que ven los visitantes (los admins pasan siempre).
+export interface ISiteSetting extends Document {
+  key: string;
+  value: string;
+  updatedBy?: string; // userId del admin que lo cambió
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const SiteSettingSchema = new Schema<ISiteSetting>(
+  {
+    key: { type: String, required: true, unique: true, index: true },
+    value: { type: String, required: true },
+    updatedBy: { type: String },
+  },
+  { timestamps: true, collection: "site_settings" },
+);
+
+export const SiteSetting: Model<ISiteSetting> =
+  mongoose.models.SiteSetting ||
+  mongoose.model<ISiteSetting>("SiteSetting", SiteSettingSchema);
 
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";

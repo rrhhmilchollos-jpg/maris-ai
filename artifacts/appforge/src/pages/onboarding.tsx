@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useUser } from "@clerk/react";
+import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles,
@@ -76,7 +77,7 @@ export default function OnboardingPage() {
   ];
 
   const FEATURES = [
-    { icon: Zap, title: "9 agentes de IA especializados", description: "Frontend, Backend, Testing, Planner, Researcher y más trabajando en paralelo." },
+    { icon: Zap, title: "11 agentes de IA especializados", description: "Frontend, Backend, Testing, Planner, Researcher y más trabajando en paralelo." },
     { icon: Code, title: "Código real y funcional", description: "React, TypeScript, TailwindCSS, Node.js — código que puedes descargar y modificar." },
     { icon: Globe, title: "Deploy en un clic", description: "Publica tu app en marisai.es con subdominio gratuito. Dominio personalizado con plan de pago." },
     { icon: Rocket, title: "65 créditos de bienvenida", description: "Suficientes para crear una app completa con backend, y con margen real para probar varios ajustes y ediciones. Sin tarjeta de crédito." },
@@ -228,7 +229,7 @@ export default function OnboardingPage() {
               {[
                 "Cuenta creada y verificada",
                 "65 créditos de bienvenida asignados",
-                "9 agentes de IA listos para trabajar",
+                "11 agentes de IA listos para trabajar",
                 `Tipo de proyecto seleccionado: ${APP_TYPES.find(t => t.id === selectedType)?.label ?? "App Web"}`,
               ].map((item) => (
                 <div key={item} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/[0.035] px-4 py-3">

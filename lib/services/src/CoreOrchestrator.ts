@@ -263,9 +263,12 @@ export interface CoreOrchestratorOptions {
    * terminar cada capa frontend. Si no se pasa, la validación por capa se
    * omite silenciosamente (comportamiento backward-compatible). Se pasa
    * desde apps.ts para reutilizar el mismo validador que el resto del pipeline.
-   * Signature: (bundle: string) => Promise<{ ok: boolean; issues: string[] }>
+   * 'issues' trae el archivo como campo estructurado (issue.file, formato
+   * "appforge-vfs:src/...", tal cual lo reporta esbuild) en vez de un string
+   * libre — evita tener que extraerlo con una regex frágil sobre un mensaje
+   * con formato no garantizado.
    */
-  validateFrontendBundle?: (bundle: string) => Promise<{ ok: boolean; issues: string[] }>;
+  validateFrontendBundle?: (bundle: string) => Promise<{ ok: boolean; issues: Array<{ file: string; message: string }> }>;
 }
 
 const LAYER_ORDER = ["data", "backend-core", "backend-module", "integration", "frontend-core", "frontend-module", "docs"];
@@ -687,8 +690,8 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
             if (!validation.ok && validation.issues.length > 0) {
               // Identificar qué archivos tienen errores
               const failingFiles = validation.issues
-                .map((issue: string) => {
-                  const match = /appforge-vfs:(src\/[^\s:]+)/.exec(issue);
+                .map((issue) => {
+                  const match = /appforge-vfs:(src\/[^\s:]+)/.exec(issue.file);
                   return match?.[1];
                 })
                 .filter(Boolean) as string[];
@@ -708,7 +711,8 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
                   );
                   if (affectedMilestone) {
                     const errorContext = validation.issues
-                      .filter((i: string) => i.includes(filePath))
+                      .filter((i) => i.file.includes(filePath))
+                      .map((i) => i.message)
                       .join("\n")
                       .slice(0, 500);
                     const fixedMilestone = await this.generateMilestone(

@@ -522,8 +522,8 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
                       {/* Score badge */}
                       <div className={cn(
                         "absolute bottom-2 left-2 text-[16px] font-bold px-2.5 py-1 rounded-full",
-                        result && result.overallScore >= 80 ? "bg-emerald-500/80 text-white" :
-                        result && result.overallScore >= 60 ? "bg-amber-500/80 text-white" : "bg-red-500/80 text-white"
+                        result && result.overallScore != null && result.overallScore >= 80 ? "bg-emerald-500/80 text-white" :
+                        result && result.overallScore != null && result.overallScore >= 60 ? "bg-amber-500/80 text-white" : "bg-red-500/80 text-white"
                       )}>
                         {result?.overallScore}/100
                       </div>

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
 import { requireAuth, requireAdmin, isAdminEmail } from "../lib/auth";
-import { Ticket, User } from "@workspace/db/schema";
+import { Ticket, User, type ITicket, type IUser } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import { sendSupportTicketCreatedEmail } from "../lib/notify";
 import { refundCredits } from "../lib/credits";

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { connectDB } from "../lib/db";
-import { NewsArticle } from "@workspace/db/schema";
+import { NewsArticle, type INewsArticle } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();

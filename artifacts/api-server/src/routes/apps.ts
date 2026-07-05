@@ -322,7 +322,10 @@ ${tsRules}
 - NO non-ASCII characters inside identifiers, keywords or punctuation. Non-ASCII is allowed ONLY inside string literals and JSX text. Examples of FORBIDDEN garbage tokens: \`née\`, \`café\` as a property name, smart quotes \`"…"\` instead of plain \`"\`, em-dashes inside code.
 - Every string must be properly terminated with the SAME quote it started with. Long URLs and descriptions are common offenders — re-check them.
 - Every \`{\`, \`(\`, \`[\` must have a matching \`}\`, \`)\`, \`]\`. Every JSX tag must close.
-- All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. Stick to: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod, framer-motion, recharts, react-hook-form, @hookform/resolvers, react-day-picker. Do not invent package names.
+- All bare imports (e.g. \`import { Route } from 'wouter'\`) must come from packages that actually exist on npm. DEFAULT to the approved catalog: react, react-dom, wouter, lucide-react, clsx, tailwind-merge, date-fns, zod, framer-motion, recharts, react-hook-form, @hookform/resolvers, react-day-picker. Do not invent package names.
+- Styling is Tailwind utility classes ONLY. NEVER import CSS/component frameworks: no @mui/*, antd, @chakra-ui/*, bootstrap, react-bootstrap, semantic-ui, @mantine/*, styled-components, @emotion/*. Everything they offer you build with Tailwind + the approved catalog. These libraries are heavy, conflict with the preview runtime, and WILL break the app.
+- EXTERNAL SERVICES (Slack, Notion, Airtable, Google Sheets, Jira, Trello, Stripe, email, webhooks…): NEVER import their npm SDKs in the frontend (no @slack/*, googleapis, @notionhq/*, airtable, jira-client, stripe browser SDK, @supabase/supabase-js with secret keys, resend, @octokit/*). Secrets must never reach the browser. Integrations run server-side through the Maris connector gateway — in the generated UI, model the integration as a fetch to a backend endpoint (e.g. \`fetch('/api/integrations/slack/send', …)\`) or as clearly-labeled mock behavior the user can wire up later from the Integrations panel.
+- If (and only if) a requirement genuinely cannot be met with the approved catalog, you MAY import one extra well-known npm package — but then you MUST also add it to the bundle's package.json "dependencies" with an EXACT version (no ^, no ~, no "latest"). A bare import that is neither in the catalog nor declared with an exact version in package.json is a bug.
 - Every \`.map(item => …)\` over an array MUST give the rendered element a stable \`key={item.id ?? \`\${prefix}-\${index}\`}\`.
 - Hooks (useState/useEffect/useMemo) at the top of the component body, never inside conditionals/loops.
 
@@ -1069,6 +1072,13 @@ PROCESO OBLIGATORIO:
 5. Define tokens de diseño como CSS variables reutilizables
 6. Diseña variantes de componentes clave con clases Tailwind reales
 
+PALETAS PRESET RÁPIDAS (cuando el sector no encaja claramente en los específicos de abajo, o el usuario describe un tipo genérico, usa estos 5 presets como base):
+- TECH/SAAS (sofisticado): fondo Slate #0f172a, primario Indigo #4f46e5, acento Violet #7c3aed, texto #f1f5f9. Ideal para plataformas de IA, CRMs, analítica, dashboards B2B.
+- CORPORATIVO/FINTECH (confianza): fondo claro #f8fafc, primario Azul Marino #1e3a8a, acento Emerald #10b981 para zonas de cobros y dinero, texto #0f172a. Ideal para banca, finanzas, consultoras.
+- CREATIVO/AGENCIA (moderno): fondo oscuro #0a0a0f, texto Zinc #f4f4f5, acento Lime/Neón #84cc16. Ideal para portfolios, agencias, estudios de diseño, freelancers.
+- WELLNESS/HOSTELERÍA (cálido): fondo crema #fafaf9, texto Coffee #451a03, acento Amber #f59e0b. Ideal para restaurantes, yoga, spas, cafeterías, clínicas holísticas.
+- MINIMALISTA/E-COMMERCE (prémium): fondo #fafafa, bordes Gray-200 #e5e7eb, botones negro #0a0a0f, texto #18181b. Ideal para tiendas online, moda, joyería, catálogos.
+
 PALETAS RECOMENDADAS POR SECTOR (punto de partida — MODULAR según el tono detectado en el paso 2, no aplicar siempre la misma variante):
 - Fintech/Banca: azul marino #1e3a5f + verde confianza #22c55e, tipografía serif para credibilidad, Inter/Playfair
 - Salud/Clínica: verdes suaves #10b981 + blancos #f8fafc, nunca negro puro, mucho espacio, Plus Jakarta Sans
@@ -1527,7 +1537,7 @@ PASO 4 — ¿MI SALIDA CONSTRUYE EL PROYECTO HACIA ADELANTE?
 - Si detectas una contradiccion entre lo que pide el usuario y lo que tiene sentido tecnico, anota la contradiccion y propone la solucion mas razonable.
 
 [ROL ESPECIFICO: RESEARCHER AGENT — Agente #1 del equipo]
-Eres el Researcher Agent — el primer agente del pipeline. Tu trabajo es investigar y producir el brief que guiará a los otros 8 agentes. Si fallas aquí, todo el equipo trabaja con información incorrecta.
+Eres el Researcher Agent — el primer agente del pipeline. Tu trabajo es investigar y producir el brief que guiará a los otros 10 agentes. Si fallas aquí, todo el equipo trabaja con información incorrecta.
 
 Tu mision: producir un brief de investigacion COMPLETO y ESTRUCTURADO que el equipo de agentes (Architect, Designer, Frontend, Backend) usara para crear la app perfecta.
 
@@ -1902,8 +1912,7 @@ async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraSc
   try {
     const { connectDB } = await import("../lib/db");
     await connectDB();
-    const AppRepairLog = (await import("../lib/autoRepairAgent")).getAppRepairLogModel?.() ||
-      (require("mongoose").models.AppRepairLog);
+    const AppRepairLog = (await import("../lib/autoRepairAgent")).getAppRepairLogModel();
     if (!AppRepairLog) return { extraScore: 0, reasons: [] };
 
     // Extraer keywords del prompt para buscar patrones similares
@@ -2022,11 +2031,11 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
         // el watchdog global (12 min), perdiendo todo el trabajo ya generado.
         const iterator = stream[Symbol.asyncIterator]();
         while (true) {
-          const { value: chunk, done } = await raceWithTimeout(
+          const { value: chunk, done } = (await raceWithTimeout(
             iterator.next(),
             AI_CALL_TIMEOUT_MS,
             `${role} code stream chunk (modelo ${candidate})`,
-          );
+          )) as { value: any; done: boolean };
           if (done) break;
           if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
             accumulated += chunk.delta.text;
@@ -5142,7 +5151,7 @@ CAPACIDADES:
 - Genera apps React + TypeScript + Tailwind completas
 - Frontend + Backend (Node/Express) + MongoDB
 - Deploy a Vercel con un clic
-- 9 agentes IA especializados trabajando en paralelo
+- 11 agentes IA especializados trabajando en paralelo
 
 TONO: Cercano, directo, máximo 2-3 frases. Sin "¿en qué más puedo ayudarte?". Sin saludos formales. Si el usuario tiene apps, úsalas como contexto.`;
 
@@ -6589,7 +6598,7 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "auto", name: "Auto (9 agentes: básico → robusto)", provider: "maris", recommended: true },
+      { id: "auto", name: "Auto (11 agentes: básico → robusto)", provider: "maris", recommended: true },
       { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (rápido / básico)", provider: "anthropic" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (equilibrado)", provider: "anthropic" },
       { id: "claude-opus-4-7", name: "Claude Opus 4.7 (robusto / máxima calidad)", provider: "anthropic" },
@@ -7374,28 +7383,15 @@ export async function runJobById(jobId: string): Promise<void> {
         await log("system", "🔍 Evaluador visual analizando tu app con Puppeteer + IA…");
         const cleanUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
 
-        // Construir plannedPages a partir de:
-        // 1. Las páginas del plan del Arquitecto (plan.pages) — las más fiables
-        // 2. Los hitos de frontend del milestoneResult — como respaldo
-        // Esto permite que el evaluador sepa EXACTAMENTE qué páginas existen
-        // y repare el enrutador con precisión en lugar de adivinar.
-        const architectPages = (plan?.pages || []).map((p: any) => ({
-          name: p.name || p.route,
-          route: p.route,
-          purpose: p.purpose,
-        }));
-        // Si el resultado viene de hitos, añadir también los archivos de frontend generados
-        const milestonePages = milestoneResult
-          ? (milestoneResult.frontendCode || "")
-              .split("// === FILE: ")
-              .filter((f: string) => f.includes("Page.tsx") || f.includes("page.tsx") || f.includes("View.tsx"))
-              .map((f: string) => {
-                const filePath = f.split("\n")[0].split(" ===")[0].trim();
-                const name = filePath.split("/").pop()?.replace(/\.(tsx|jsx)$/, "") || filePath;
-                return { name, route: `/${name.toLowerCase().replace("page", "").replace("view", "")}` };
-              })
-          : [];
-        const plannedPages = architectPages.length > 0 ? architectPages : milestonePages;
+        // plannedPages ya se calculó y persistió más arriba en esta misma
+        // función (finalResult.plannedPages) al guardar la app — se reutiliza
+        // aquí en vez de reconstruirlo. ANTES este bloque intentaba
+        // reconstruirlo desde variables 'plan' y 'milestoneResult' que no
+        // existen en el scope de runJobById (pertenecen a generateApp(),
+        // una función distinta) — referenciarlas aquí lanzaba
+        // "ReferenceError: plan is not defined" en cuanto se ejecutaba esta
+        // ruta, es decir, siempre que savedAppId existía tras un job exitoso.
+        const plannedPages = finalResult.plannedPages || [];
 
         let visualEvalResult: any = null;
         try {
@@ -7544,7 +7540,7 @@ export async function runJobById(jobId: string): Promise<void> {
             userName: dbUser?.fullName,
             appTitle: finalResult?.title || "tu app",
             dashboardUrl: `${process.env.APP_URL || "https://www.marisai.es"}/app/${savedAppId}`,
-            creditsRemaining: (await import("@workspace/db/schema")).User
+            creditsRemaining: await (await import("@workspace/db/schema")).User
               .findById(job.userId).then((u: any) => u?.credits).catch(() => undefined),
           }).catch((e: any) => logger.warn({ e }, "sendFirstAppReadyEmail failed"));
         }
@@ -8515,7 +8511,7 @@ try {
 // perderíamos justo los casos que más necesitamos ver. userId es opcional
 // y best-effort (si el frontend logra obtenerlo de window.Clerk antes de
 // que falle del todo).
-router.post("/panel-error", async (req: Request, res: Response) => {
+router.post("/panel-error", async (req, res) => {
   try {
     const { message, stack, componentStack, pathname, userId } = req.body || {};
     if (!message || typeof message !== "string") {
