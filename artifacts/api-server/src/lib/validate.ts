@@ -99,7 +99,33 @@ const KNOWN_BAD_PACKAGE_IMPORTS: Array<{ pattern: RegExp; message: string }> = [
   // <BrowserRouter> de react-router-dom, y viceversa).
   {
     pattern: /import\s*\{[^}]*\}\s*from\s*["']react-router-dom["']/,
-    message: "This project uses \"wouter\" for routing, not react-router-dom — importing directly from \"react-router-dom\" creates two incompatible routing systems in the same app (navigation will silently break even though the code compiles). Replace BrowserRouter/Routes/Route/Navigate/Switch with wouter's <Router>/<Switch>/<Route>/<Redirect>, useNavigate with useLocation()[1], useParams with useRoute(\"/path/:id\")[1], and remove the react-router-dom import entirely.",
+    message: "This project uses \"wouter\" for routing, not react-router-dom — importing directly from \"react-router-dom\" creates two incompatible routing systems in the same app (navigation will silently break even though the code compiles). Convert EVERY react-router-dom API in this file to its wouter equivalent, following this exact mapping:\n" +
+      "  import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation as useLocationRRD } from 'react-router-dom';\n" +
+      "  →\n" +
+      "  import { Router, Switch, Route, Redirect, useLocation, useRoute } from 'wouter';\n" +
+      "  <BrowserRouter> → <Router> (or remove entirely if there's no hash/base config — wouter works without a wrapper)\n" +
+      "  <Routes> → <Switch>\n" +
+      "  <Route path=\"/x\" element={<Y/>} /> → <Route path=\"/x\" component={Y} /> (extract the component reference from inside element={}, do NOT keep the element prop)\n" +
+      "  <Navigate to=\"/x\" replace /> → <Redirect to=\"/x\" />\n" +
+      "  const navigate = useNavigate(); ...; navigate(\"/x\") → const [, setLocation] = useLocation(); ...; setLocation(\"/x\")\n" +
+      "  const { id } = useParams(); (inside a component rendered at e.g. path=\"/item/:id\") → const [match, params] = useRoute(\"/item/:id\"); const id = params?.id; — IMPORTANT: you must find the actual :param route this component is rendered under (check the parent <Route path=...>) and use that exact same path string in useRoute, otherwise params will always be undefined.\n" +
+      "  After converting, remove the react-router-dom import completely — there must be zero references to \"react-router-dom\" left in this file.",
+  },
+  // Mismo problema de fondo, otras 3 formas de escribir el import que la
+  // regla de arriba (con llaves) no cazaba: namespace, por defecto, y
+  // dinámico. A petición explícita del usuario tras confirmar que la
+  // primera regla dejaba estos huecos.
+  {
+    pattern: /import\s*\*\s*as\s+\w+\s*from\s*["']react-router-dom["']/,
+    message: "This project uses \"wouter\" for routing, not react-router-dom (namespace import detected: import * as X from \"react-router-dom\"). Remove it and use wouter's equivalents instead.",
+  },
+  {
+    pattern: /import\s+\w+\s*from\s*["']react-router-dom["']/,
+    message: "This project uses \"wouter\" for routing, not react-router-dom (default import detected). Remove it and use wouter's equivalents instead.",
+  },
+  {
+    pattern: /import\(\s*["']react-router-dom["']\s*\)/,
+    message: "This project uses \"wouter\" for routing, not react-router-dom (dynamic import detected). Remove it and use wouter's equivalents instead.",
   },
 ];
 
