@@ -773,7 +773,7 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-1">
                     <AttachmentPicker attachments={attachments} onChange={setAttachments} disabled={isWorking} />
                     <Select value={coderModel} onValueChange={setCoderModel} disabled={isWorking}>
-                      <SelectTrigger className="h-7 w-auto min-w-[140px] bg-transparent border-0 text-[10px] font-semibold text-white/30 hover:text-white/60 focus:ring-0 px-2 gap-1">
+                      <SelectTrigger className="h-7 w-auto min-w-[90px] sm:min-w-[140px] bg-transparent border-0 text-[10px] font-semibold text-white/30 hover:text-white/60 focus:ring-0 px-2 gap-1">
                         <SelectValue placeholder="Modelo" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#16161e] border-white/10">
