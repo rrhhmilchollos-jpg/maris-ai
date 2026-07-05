@@ -82,18 +82,13 @@ export function trackGenerateApp(appKind: string, isFirstApp: boolean) {
   });
 
   if (isFirstApp) {
-    // ⚠️ ENCONTRADO A PETICION DEL USUARIO: esta conversion NO EXISTE en la
-    // cuenta real de Google Ads (confirmado revisando Herramientas >
-    // Conversiones -- solo existen "Compra", "Registro", "Interaccion" y
-    // "Visualizaciones sucesivas en YouTube"). Google Ads recibe este
-    // evento y lo descarta en silencio porque "AW-18218229959/first_generate"
-    // no es una etiqueta real de ninguna conversion configurada.
-    // PENDIENTE DE DECISION DEL USUARIO: o se crea "Primera generacion"
-    // como conversion nueva en Google Ads y se sustituye este texto por la
-    // etiqueta real que te den, o se elimina este bloque si no interesa
-    // trackear esto por separado del registro.
+    // Conversión "Primera generación" (categoría: Inclusión en el carrito,
+    // valor fijo, recuento: Una) — creada en Google Ads y etiqueta real
+    // confirmada por el usuario el 5/7/2026. Sustituye a la etiqueta
+    // inventada que había antes ("first_generate"), que no correspondía a
+    // ninguna conversión real y Google Ads ignoraba en silencio.
     gtag("event", "conversion", {
-      send_to: "AW-18218229959/first_generate",
+      send_to: "AW-18218229959/BVvICKPkr8scEMfBkO9D",
       event_category: "engagement",
     });
   }
