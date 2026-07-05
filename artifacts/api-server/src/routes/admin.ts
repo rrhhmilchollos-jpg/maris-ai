@@ -3360,4 +3360,36 @@ router.get("/admin/diagnostics/error-frequency", async (req: any, res: any): Pro
   }
 });
 
+// ─── Project Playbooks — visibilidad de lo que el sistema ha aprendido ─────
+router.get("/admin/playbooks", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  try {
+    const { ProjectPlaybook } = await import("@workspace/db/schema");
+    const playbooks = await ProjectPlaybook.find({})
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    res.json({
+      total: playbooks.length,
+      byVertical: playbooks.reduce((acc: Record<string, number>, p: any) => {
+        acc[p.businessVertical] = (acc[p.businessVertical] || 0) + 1;
+        return acc;
+      }, {}),
+      playbooks: playbooks.map((p: any) => ({
+        id: p._id,
+        businessVertical: p.businessVertical,
+        kind: p.kind,
+        summary: p.summary,
+        qualityScore: p.qualityScore,
+        timesReused: p.timesReused,
+        sourceAppId: p.sourceAppId,
+        createdAt: p.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /admin/playbooks failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;

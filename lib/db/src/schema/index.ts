@@ -766,6 +766,44 @@ export const AgentMemory: Model<IAgentMemory> =
   mongoose.models.AgentMemory ||
   mongoose.model<IAgentMemory>("AgentMemory", AgentMemorySchema);
 
+// ─── Project Playbooks — memoria de PATRONES DE PROYECTO, no de errores ─────
+// A petición explícita del usuario ("aprender como Emergent.sh... cueste lo
+// que cueste"): AgentMemory aprende "error → parche", pero nunca aprende qué
+// ESTRUCTURA y qué patrones funcionan bien para un tipo de negocio concreto
+// de un proyecto a otro. Esta colección es la pieza nueva: cuando un
+// proyecto termina con calidad alta confirmada (PM Agent / evaluador
+// visual), se destila (con un modelo barato) qué funcionó a nivel
+// estructural -- páginas, funcionalidades, patrones de panel de gestión --
+// NUNCA el código en sí (no es reutilizable entre negocios distintos, y
+// guardarlo infla la colección sin aportar nada extra sobre el resumen).
+// Ver lib/projectPlaybooks.ts.
+export interface IProjectPlaybook extends Document {
+  businessVertical: string;
+  kind: string;
+  summary: string;
+  sourceAppId: string;
+  qualityScore: number;
+  timesReused: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ProjectPlaybookSchema = new Schema<IProjectPlaybook>(
+  {
+    businessVertical: { type: String, required: true, index: true },
+    kind: { type: String, required: true },
+    summary: { type: String, required: true },
+    sourceAppId: { type: String, required: true },
+    qualityScore: { type: Number, required: true },
+    timesReused: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+
+export const ProjectPlaybook: Model<IProjectPlaybook> =
+  mongoose.models.ProjectPlaybook ||
+  mongoose.model<IProjectPlaybook>("ProjectPlaybook", ProjectPlaybookSchema);
+
 // ─── App Runtime Errors ──────────────────────────────────────────────────────
 export interface IAppRuntimeError extends Document {
   appId: string;

@@ -211,6 +211,9 @@ export function useErrorFrequencyDiagnostic() {
     mutationFn: ({ query }) => apiFetch(`/api/admin/diagnostics/error-frequency?query=${encodeURIComponent(query)}`),
   });
 }
+export function useListProjectPlaybooks(opts?: { query?: Partial<UseQueryOptions> }) {
+  return useQuery<any>({ queryKey: ["admin-playbooks"], queryFn: () => apiFetch("/api/admin/playbooks"), ...(opts?.query as any) });
+}
 export function useListAdminUsers(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAdminUsersQueryKey(), queryFn: () => apiFetch("/api/admin/users"), ...(opts?.query as any) });
 }

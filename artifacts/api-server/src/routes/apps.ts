@@ -3506,13 +3506,24 @@ export async function generateApp(
   const attachmentBlock = buildAttachmentBlock(attachments);
   if (attachmentBlock) prompt = `${attachmentBlock}\n${prompt}`;
 
-  const templateContextBlock = buildAgentTemplateContextBlock({
+  let templateContextBlock = buildAgentTemplateContextBlock({
     prompt,
     kind: requestContext?.kind,
     detectedLocale: requestContext?.detectedLocale ?? extractPromptContext(prompt, "locale"),
     detectedCountry: requestContext?.detectedCountry ?? extractPromptContext(prompt, "country"),
     uiLanguage: requestContext?.uiLanguage ?? extractPromptContext(prompt, "uiLanguage"),
   });
+  // Sistema de aprendizaje de patrones de proyecto (a petición explícita del
+  // usuario: "aprender como Emergent.sh, cueste lo que cueste"). Se añade AL
+  // FINAL del bloque estático de templates.ts, nunca en su lugar -- si algo
+  // falla aquí (ver try/catch dentro de recallPlaybooks), la generación
+  // sigue exactamente igual que antes de que existiera este sistema.
+  try {
+    const { recallPlaybooks } = await import("../lib/projectPlaybooks");
+    templateContextBlock += await recallPlaybooks(prompt, requestContext?.kind);
+  } catch (err) {
+    logger.warn({ err }, "recallPlaybooks falló al importar/ejecutar — continuando sin patrones aprendidos");
+  }
 
   const log: AgentLog = async (agent, message, level = "info") => {
     try { await onAgentLog?.(agent, message, level); } catch { /* swallow */ }
@@ -7381,6 +7392,19 @@ export async function runJobById(jobId: string): Promise<void> {
           await enqueueGenerateJob(patchJobId);
         } else {
           await log("system", `✅ Calidad aprobada (score: ${qeval.score}/100)`);
+          // Sistema de aprendizaje de patrones de proyecto (a peticion
+          // explicita del usuario). Fire-and-forget deliberado: nunca debe
+          // retrasar ni arriesgar la entrega de la app al cliente -- ver
+          // el try/catch interno en learnFromSuccessfulProject, que ya
+          // protege contra cualquier fallo por su cuenta.
+          import("../lib/projectPlaybooks").then(({ learnFromSuccessfulProject }) =>
+            learnFromSuccessfulProject({
+              appId: String(savedAppId),
+              prompt: job.prompt || "",
+              kind: (job as any).kind || "fullstack",
+              qualityScore: qeval.score,
+            })
+          ).catch(() => {});
         }
       } catch { /* nunca bloquear el succeeded */ }
     }
