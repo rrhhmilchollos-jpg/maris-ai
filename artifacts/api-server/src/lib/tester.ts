@@ -2,6 +2,7 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { validateBundle } from "./validate";
 import { patchBundle, patchBundleMultiFile, type GenLanguage, type BuildIssue, type ValidationReport } from "./shared-agents";
 import { logger } from "./logger";
+import { rememberPatch, extractFixHint, redactSecrets } from "./agentMemory";
 
 export interface TestResult {
   test: string;
@@ -42,6 +43,14 @@ export async function runTestingAgent(
   // dando paso a que el resto del pipeline continúe con normalidad. Si
   // nunca encuentra nada que corregir, no deja ningún rastro visible.
   let hasAnnouncedToClient = false;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (mostró "Memoria del agente" con solo
+  // 2 entradas en más de un mes de uso real): este Testing Agent -- el que
+  // de verdad ejecuta el 99% de las reparaciones hoy en día, tras la
+  // migración a hitos obligatorios -- nunca llamaba a rememberPatch(). Solo
+  // lo hacía un camino antiguo y secundario (runValidatePatchLoop en
+  // apps.ts), así que casi ninguna reparación real quedaba aprendida.
+  let lastErrorMessage: string | null = null;
+  let lastPatchedBundle: string | null = null;
   const announceIfNeeded = () => {
     if (!hasAnnouncedToClient) {
       hasAnnouncedToClient = true;
@@ -105,6 +114,19 @@ export async function runTestingAgent(
       if (hasAnnouncedToClient) {
         log("testing", `✅ Corregido. Continuando...`);
       }
+      // Guardar en memoria SOLO cuando se confirma que el parche del ciclo
+      // anterior de verdad resolvió el problema (esta validación, la del
+      // ciclo SIGUIENTE, ha salido limpia) -- nunca antes de confirmarlo,
+      // para no aprender de "parches" que en realidad no funcionaron.
+      if (lastErrorMessage && lastPatchedBundle) {
+        const fixHint = extractFixHint(lastPatchedBundle, lastErrorMessage);
+        rememberPatch({
+          errorMessage: redactSecrets(lastErrorMessage).slice(0, 1000),
+          errorContext: `testing-agent cycle=${cycle} bundleLen=${lastPatchedBundle.length}`,
+          patch: fixHint,
+          language,
+        }).catch((err) => logger.warn({ err }, "rememberPatch falló (no crítico, no bloquea la generación)"));
+      }
       break;
     }
     
@@ -141,6 +163,12 @@ export async function runTestingAgent(
       codeToPatch = filteredFiles.map(f => f.startsWith("// === FILE: ") ? f : "// === FILE: " + f).join("");
       isContextReduced = true;
     }
+
+    // Capturado ANTES del intento de parche para poder guardarlo en memoria
+    // si en el SIGUIENTE ciclo se confirma que de verdad funcionó — cubre
+    // las 3 rutas de éxito posteriores (multi-archivo, contexto reducido,
+    // parche simple).
+    lastErrorMessage = report.issues.map((issue) => `[${issue.file}] ${issue.message}`).join("\n");
 
     const patched = await patchBundle(
       codeToPatch,
@@ -179,6 +207,7 @@ export async function runTestingAgent(
       );
       if (multiFileResult.result) {
         currentBundle = multiFileResult.result;
+        lastPatchedBundle = currentBundle;
         log("testing", `✅ Modo multi-archivo completado: ${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) generados correctamente. Re-validando en el siguiente ciclo...`);
         await new Promise(r => setTimeout(r, 1000));
         continue;
@@ -207,6 +236,7 @@ export async function runTestingAgent(
         const path = f.split(" ===")[0];
         return patchedMap.has(path) ? patchedMap.get(path) : f;
       }).join("// === FILE: ");
+      lastPatchedBundle = currentBundle;
     } else {
       // FIX 5: si el bundle parchado es idéntico al anterior, el parche
       // no produjo ningún cambio real — romper el bucle para no desperdiciar
@@ -216,6 +246,7 @@ export async function runTestingAgent(
         break;
       }
       currentBundle = patched;
+      lastPatchedBundle = currentBundle;
     }
     log("testing", "✓ Reparaciones aplicadas — re-validando en el siguiente ciclo...");
     

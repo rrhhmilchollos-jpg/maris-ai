@@ -276,6 +276,66 @@ export const TEMPLATES: AppTemplate[] = [
     seedPrompt:
       "Una app instalable (PWA) de notas personales con funcionamiento offline. Lista de notas en una columna, editor de markdown a la derecha (en móvil se conmutan). Crear, editar y eliminar notas. Sistema de etiquetas (cada nota puede tener varias etiquetas de colores). Búsqueda por texto y filtro por etiqueta. Persistencia en IndexedDB para offline. Manifest + service worker para instalación. Bottom navigation en móvil con 3 secciones: Notas, Etiquetas, Ajustes. Modo oscuro por defecto, paleta amarillo papel sobre gris oscuro.",
   },
+  {
+    id: "restaurante-reservas",
+    name: "Restaurante con reservas",
+    description:
+      "Web de restaurante con menú, reserva de mesa online y panel de gestión para el dueño.",
+    kind: "fullstack",
+    icon: "UtensilsCrossed",
+    seedPrompt:
+      "Una web para un restaurante de cocina mediterránea llamado 'Casa Mar'. Página de inicio con hero a pantalla completa (foto de ambiente + horario + botón 'Reservar mesa'), sección de menú organizada por categorías (entrantes, principales, postres, bebidas) con precio y descripción de cada plato, sección 'Nuestra historia' con foto del chef, galería de fotos del local y los platos, mapa de ubicación y datos de contacto. Página de reserva con formulario (fecha, hora, número de comensales, nombre, teléfono, comentarios) que valida disponibilidad contra las mesas ya reservadas ese turno y muestra confirmación. Panel de administración protegido con login para el dueño: listado de reservas del día/semana ordenadas por hora con estado (pendiente/confirmada/cancelada), gestión de mesas (número de mesas y capacidad de cada una), edición del menú (añadir/editar/quitar platos y precios), y estadísticas básicas (reservas por día, ocupación media). Diseño cálido y elegante, tipografía serif para títulos, paleta burdeos y dorado sobre fondo crema, fotos grandes.",
+  },
+  {
+    id: "restaurante-delivery",
+    name: "Restaurante con pedidos a domicilio",
+    description:
+      "Comida rápida/delivery con carta, carrito, checkout y panel de cocina para gestionar pedidos.",
+    kind: "fullstack",
+    icon: "Utensils",
+    seedPrompt:
+      "Una web de pedidos a domicilio para una hamburguesería llamada 'Rush Burger'. Página principal con carta organizada por categorías (hamburguesas, acompañamientos, bebidas, postres), cada producto con foto, descripción, precio y opciones personalizables (punto de la carne, extras, sin ingrediente X) mediante un modal al hacer clic. Carrito lateral persistente que muestra los productos añadidos, cantidad editable, y total en tiempo real. Checkout con datos de entrega (dirección, teléfono, notas), selección de método de pago (efectivo o tarjeta simulada), y pantalla de confirmación con número de pedido y tiempo estimado. Panel de cocina protegido con login: cola de pedidos entrantes en tiempo real organizados por estado (nuevo → en preparación → listo → entregado), con botones para cambiar de estado, y un histórico de pedidos del día con el total facturado. Diseño desenfadado y directo, colores vivos (rojo/amarillo/negro), tipografía bold, mobile-first porque la mayoría pedirá desde el móvil.",
+  },
+  {
+    id: "clinica-citas",
+    name: "Clínica con citas online",
+    description:
+      "Web de clínica/consulta con especialidades, reserva de cita y panel de agenda para el profesional.",
+    kind: "fullstack",
+    icon: "Stethoscope",
+    seedPrompt:
+      "Una web para una clínica dental llamada 'Sonrisa Clara'. Página de inicio con hero (foto de la clínica + CTA 'Pedir cita'), sección de especialidades/servicios (ortodoncia, implantes, blanqueamiento, revisión general) cada una con icono, descripción breve y precio orientativo, sección de profesionales del equipo con foto, nombre y especialidad, sección de opiniones de pacientes, y mapa de ubicación con horario de apertura. Página de reserva de cita con formulario (servicio deseado, profesional preferido, fecha, franja horaria disponible calculada según la agenda real, nombre, teléfono, email, si es primera visita) que confirma por pantalla y (simulado) por email. Panel de gestión protegido con login para el profesional: agenda semanal en formato calendario con las citas del día, ficha básica de cada paciente (nombre, teléfono, historial de citas pasadas), posibilidad de confirmar/cancelar/reprogramar citas, y bloqueo de horas no disponibles (vacaciones, comida). Diseño limpio y confiable, tonos azul/blanco/verde menta, mucho espacio en blanco, tipografía sans-serif clara.",
+  },
+  {
+    id: "clinica-suscripcion",
+    name: "Centro de fisioterapia con bonos",
+    description:
+      "Centro de salud/bienestar con venta de bonos de sesiones, reserva y seguimiento del cliente.",
+    kind: "fullstack",
+    icon: "HeartPulse",
+    seedPrompt:
+      "Una web para un centro de fisioterapia y bienestar llamado 'ReCore Fisio'. Página de inicio con servicios (fisioterapia deportiva, masaje terapéutico, rehabilitación, pilates), sección de bonos disponibles (sesión suelta, bono 5 sesiones con descuento, bono 10 sesiones con más descuento) con precio de cada uno, equipo de fisioterapeutas con especialidad, y testimonios de clientes. Página de compra de bono con selección del tipo de bono y checkout simulado. Área de cliente con login: bonos activos y sesiones restantes de cada uno, historial de sesiones pasadas, y calendario para reservar la próxima sesión eligiendo fisioterapeuta y franja horaria disponible. Panel de administración para el centro: listado de clientes con sus bonos activos y sesiones consumidas/restantes, agenda del día con todas las citas de todos los fisioterapeutas, y registro rápido de 'sesión completada' que descuenta automáticamente del bono del cliente. Diseño relajado y profesional, verdes y blancos, fotografía de bienestar, tipografía redondeada.",
+  },
+  {
+    id: "inmobiliaria-catalogo",
+    name: "Inmobiliaria con catálogo de propiedades",
+    description:
+      "Portal inmobiliario con búsqueda de propiedades, fichas detalladas y panel para gestionar el catálogo.",
+    kind: "fullstack",
+    icon: "Building2",
+    seedPrompt:
+      "Un portal inmobiliario llamado 'Vivenda Home' para una agencia local. Página de inicio con buscador destacado (tipo de operación: comprar/alquilar, zona, número de habitaciones, precio máximo) y listado de propiedades destacadas en tarjetas con foto principal, precio, m², habitaciones y zona. Página de resultados de búsqueda con filtros laterales (precio, m², habitaciones, tipo de inmueble, zona) y listado paginado de resultados. Ficha de propiedad individual con galería de fotos, descripción completa, características (m², habitaciones, baños, planta, ascensor, garaje, año de construcción), mapa de ubicación aproximada, precio, y formulario de contacto 'Solicitar visita' con nombre, teléfono y mensaje. Panel de gestión protegido con login para el agente: listado de todas las propiedades con estado (disponible/reservada/vendida), formulario de alta/edición de propiedad con subida de fotos y todos los campos, y listado de solicitudes de contacto recibidas con los datos del interesado y la propiedad de interés. Diseño sobrio y confiable, azul marino y blanco, tipografía elegante, fotos grandes de las propiedades.",
+  },
+  {
+    id: "inmobiliaria-alquiler-vacacional",
+    name: "Alquiler vacacional con reservas",
+    description:
+      "Web de alquiler vacacional/apartamentos turísticos con calendario de disponibilidad y reservas online.",
+    kind: "fullstack",
+    icon: "Palmtree",
+    seedPrompt:
+      "Una web de alquiler vacacional para varios apartamentos turísticos gestionados por un mismo propietario, marca 'Coastal Stays'. Página de inicio con listado de apartamentos disponibles en tarjetas (foto, nombre, capacidad, precio por noche, ubicación) y buscador por fechas y número de huéspedes. Ficha de cada apartamento con galería de fotos, descripción, servicios incluidos (wifi, aire acondicionado, cocina equipada, vistas al mar, etc.), calendario visual mostrando qué fechas están disponibles u ocupadas, selector de fechas de entrada/salida con cálculo automático del precio total según noches, y formulario de reserva (datos del huésped, número de personas) con confirmación. Panel de gestión protegido con login para el propietario: calendario global de todas las propiedades con las reservas marcadas, listado de reservas con datos de contacto del huésped y fechas, alta/edición de apartamentos (fotos, precio por noche, capacidad, servicios), y bloqueo manual de fechas (para mantenimiento o uso propio). Diseño luminoso y veraniego, azules y blancos, fotografía a pantalla completa, sensación de vacaciones.",
+  },
 ];
 
 /**
