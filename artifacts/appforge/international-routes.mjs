@@ -52,13 +52,13 @@ export const ENGLISH_ROUTES = [
     path: "/en",
     file: "en/index.html",
     title: "Maris AI — Build Apps with AI, No Coding Required",
-    description: "Describe your idea and 9 specialized AI agents generate your complete app in under 5 minutes. No coding needed. Free credits, no credit card.",
+    description: "Describe your idea and 11 specialized AI agents generate your complete app in under 5 minutes. No coding needed. Free credits, no credit card.",
     canonical: "https://www.marisai.es/en",
     body: `<h1>Maris AI — Build Apps with AI, No Coding Required</h1>
-<p>Maris AI is a vibe coding platform that lets anyone build complete web apps using AI. 9 specialized agents generate your frontend, backend, and database in under 5 minutes. No coding skills needed.</p>
+<p>Maris AI is a vibe coding platform that lets anyone build complete web apps using AI. 11 specialized agents generate your frontend, backend, and database in under 5 minutes. No coding skills needed.</p>
 <h2>Why choose Maris AI?</h2>
 <ul>
-<li><strong>9 specialized AI agents</strong> — Researcher, Architect, Designer, Frontend, Backend, QA, PM, Image, Visual Evaluator</li>
+<li><strong>11 specialized AI agents</strong> — Researcher, Architect, Designer, Frontend, Backend, QA, PM, Image, Visual Evaluator</li>
 <li><strong>Complete stack generated</strong> — React + TypeScript + Tailwind + Express + MongoDB</li>
 <li><strong>65 free credits</strong> to start, no credit card required</li>
 <li><strong>Credits never expire</strong> — use them whenever you need</li>
@@ -158,7 +158,7 @@ ${CROSS_LINKS_EN}`
 <dt>Pricing model</dt><dd>Maris AI uses credits that never expire. Bolt.new charges a monthly subscription — unused credits are lost.</dd>
 <dt>Cost per app</dt><dd>Maris AI: €0.11-0.13 per credit, apps cost 3-10 credits. Bolt.new: $20/month subscription regardless of usage.</dd>
 <dt>Code ownership</dt><dd>Both let you export code. Maris AI exports to GitHub with one click.</dd>
-<dt>AI agents</dt><dd>Maris AI uses 9 specialized agents (Researcher, Architect, Designer, Frontend, Backend, QA, PM, Image, Visual). Bolt.new uses a single AI model.</dd>
+<dt>AI agents</dt><dd>Maris AI uses 11 specialized agents (Researcher, Architect, Designer, Frontend, Backend, QA, PM, Image, Visual). Bolt.new uses a single AI model.</dd>
 </dl>
 <h2>When to choose Maris AI</h2>
 <ul>
@@ -183,7 +183,7 @@ ${CROSS_LINKS_EN}`
 <dt>Backend dependency</dt><dd>Lovable requires Supabase for any backend functionality. Maris AI includes Express + MongoDB — no third-party dependency.</dd>
 <dt>Pricing</dt><dd>Lovable: $20/month subscription. Maris AI: pay-per-use credits that never expire, starting at €20 for 160 credits.</dd>
 <dt>Credit expiration</dt><dd>Lovable credits reset monthly. Maris AI credits never expire.</dd>
-<dt>AI architecture</dt><dd>Lovable uses a single model. Maris AI uses 9 specialized agents for different aspects of app development.</dd>
+<dt>AI architecture</dt><dd>Lovable uses a single model. Maris AI uses 11 specialized agents for different aspects of app development.</dd>
 </dl>
 <nav><a href="/en/vs-bolt">Maris AI vs Bolt.new</a> | <a href="/en/vs-emergent">Maris AI vs Emergent</a> | <a href="/en/pricing">See pricing</a></nav>
 ${CROSS_LINKS_EN}`
@@ -226,7 +226,7 @@ ${CROSS_LINKS_EN}`
 <ul>
 <li><strong>65 free credits</strong> — enough to build your first complete app</li>
 <li><strong>No credit card required</strong></li>
-<li><strong>9 specialized AI agents</strong> — frontend, backend, database, QA, and more</li>
+<li><strong>11 specialized AI agents</strong> — frontend, backend, database, QA, and more</li>
 <li><strong>Code is 100% yours</strong> — export to GitHub anytime</li>
 <li><strong>Credits never expire</strong></li>
 </ul>
@@ -468,18 +468,20 @@ ${CROSS_LINKS_ES_BUILD}`
 // ── Hreflang mappings ────────────────────────────────────────────────
 
 export const HREFLANG_MAP = {
-  "/": { en: "https://www.marisai.es/en", "x-default": "https://www.marisai.es/" },
-  "/pricing": { en: "https://www.marisai.es/en/pricing", "x-default": "https://www.marisai.es/pricing" },
-  "/showcase": { en: "https://www.marisai.es/en/showcase", "x-default": "https://www.marisai.es/showcase" },
-  "/vs-emergent": { en: "https://www.marisai.es/en/vs-emergent", "x-default": "https://www.marisai.es/vs-emergent" },
-  "/vs-lovable": { en: "https://www.marisai.es/en/vs-lovable", "x-default": "https://www.marisai.es/vs-lovable" },
-  "/vs-bolt": { en: "https://www.marisai.es/en/vs-bolt", "x-default": "https://www.marisai.es/vs-bolt" },
-  "/sign-up": { en: "https://www.marisai.es/en/sign-up", "x-default": "https://www.marisai.es/sign-up" },
-  "/en": { es: "https://www.marisai.es/", "x-default": "https://www.marisai.es/" },
-  "/en/pricing": { es: "https://www.marisai.es/pricing", "x-default": "https://www.marisai.es/pricing" },
-  "/en/showcase": { es: "https://www.marisai.es/showcase", "x-default": "https://www.marisai.es/showcase" },
-  "/en/vs-emergent": { es: "https://www.marisai.es/vs-emergent", "x-default": "https://www.marisai.es/vs-emergent" },
-  "/en/vs-lovable": { es: "https://www.marisai.es/vs-lovable", "x-default": "https://www.marisai.es/vs-lovable" },
-  "/en/vs-bolt": { es: "https://www.marisai.es/vs-bolt", "x-default": "https://www.marisai.es/vs-bolt" },
-  "/en/sign-up": { es: "https://www.marisai.es/sign-up", "x-default": "https://www.marisai.es/sign-up" },
+  // ── Páginas en español: deben listar es (a sí misma), en (contraparte) y x-default ──
+  "/": { es: "https://www.marisai.es/", en: "https://www.marisai.es/en", "x-default": "https://www.marisai.es/" },
+  "/pricing": { es: "https://www.marisai.es/pricing", en: "https://www.marisai.es/en/pricing", "x-default": "https://www.marisai.es/pricing" },
+  "/showcase": { es: "https://www.marisai.es/showcase", en: "https://www.marisai.es/en/showcase", "x-default": "https://www.marisai.es/showcase" },
+  "/vs-emergent": { es: "https://www.marisai.es/vs-emergent", en: "https://www.marisai.es/en/vs-emergent", "x-default": "https://www.marisai.es/vs-emergent" },
+  "/vs-lovable": { es: "https://www.marisai.es/vs-lovable", en: "https://www.marisai.es/en/vs-lovable", "x-default": "https://www.marisai.es/vs-lovable" },
+  "/vs-bolt": { es: "https://www.marisai.es/vs-bolt", en: "https://www.marisai.es/en/vs-bolt", "x-default": "https://www.marisai.es/vs-bolt" },
+  "/sign-up": { es: "https://www.marisai.es/sign-up", en: "https://www.marisai.es/en/sign-up", "x-default": "https://www.marisai.es/sign-up" },
+  // ── Páginas en inglés: deben listar en (a sí misma), es (contraparte) y x-default ──
+  "/en": { en: "https://www.marisai.es/en", es: "https://www.marisai.es/", "x-default": "https://www.marisai.es/" },
+  "/en/pricing": { en: "https://www.marisai.es/en/pricing", es: "https://www.marisai.es/pricing", "x-default": "https://www.marisai.es/pricing" },
+  "/en/showcase": { en: "https://www.marisai.es/en/showcase", es: "https://www.marisai.es/showcase", "x-default": "https://www.marisai.es/showcase" },
+  "/en/vs-emergent": { en: "https://www.marisai.es/en/vs-emergent", es: "https://www.marisai.es/vs-emergent", "x-default": "https://www.marisai.es/vs-emergent" },
+  "/en/vs-lovable": { en: "https://www.marisai.es/en/vs-lovable", es: "https://www.marisai.es/vs-lovable", "x-default": "https://www.marisai.es/vs-lovable" },
+  "/en/vs-bolt": { en: "https://www.marisai.es/en/vs-bolt", es: "https://www.marisai.es/vs-bolt", "x-default": "https://www.marisai.es/vs-bolt" },
+  "/en/sign-up": { en: "https://www.marisai.es/en/sign-up", es: "https://www.marisai.es/sign-up", "x-default": "https://www.marisai.es/sign-up" },
 };
