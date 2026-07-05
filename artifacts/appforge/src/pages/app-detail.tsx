@@ -36,6 +36,7 @@ import { WorkflowListPanel } from "@/components/workflow-list-panel";
 import { StressTestModal } from "@/components/stress-test-modal";
 import { GitHubButton } from "@/components/github-button";
 import { RailwayDeployButton } from "@/components/railway-deploy-button";
+import { AdminCodeEditor } from "@/components/admin-code-editor";
 import { LivePreview } from "@/components/live-preview";
 import { parseBundle } from "@/lib/parseBundle";
 import { Layout } from "@/components/layout";
@@ -2096,6 +2097,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                 />
               </div>
             ) : rightPanelTab === "code" ? (
+              isAdmin && hasRenderableCode ? (
+                <AdminCodeEditor
+                  appId={id}
+                  frontendCode={frontendCode}
+                  onSaved={() => queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(id) })}
+                />
+              ) : (
               <div className="h-full overflow-auto bg-[#060810] p-4 md:p-6 relative"
                 onCopy={(e) => {
                   // A petición explícita del usuario: este bloqueo de copia
@@ -2154,6 +2162,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   </div>
                 )}
               </div>
+              )
             ) : (
               <>
                 <button

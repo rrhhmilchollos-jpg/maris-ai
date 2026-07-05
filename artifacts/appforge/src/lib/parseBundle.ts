@@ -26,6 +26,21 @@ export function parseBundle(bundle: string): Record<string, string> {
   return out;
 }
 
+/**
+ * Inversa exacta de parseBundle. Usada por el editor de código manual
+ * (solo cuentas admin/propietario) para reconstruir el string plano que
+ * espera guardarse en GeneratedApp.frontendCode a partir del mapa de
+ * archivos editados en Sandpack. Mantiene el mismo formato de separador
+ * ('// === FILE: <path> ===') que produce el propio modelo al generar,
+ * de modo que parseBundle, el validador E2B, el export a GitHub y el
+ * ZIP de descarga sigan leyendo el resultado sin errores.
+ */
+export function serializeBundle(files: Record<string, string>): string {
+  return Object.entries(files)
+    .map(([path, content]) => `// === FILE: ${path} ===\n${content.trimEnd()}`)
+    .join("\n\n");
+}
+
 // IMPORTANT: Sandpack's `vite-react-ts` template reads /index.html from the
 // project root. The script tag must point at /index.tsx as a module so the
 // React entry runs. Without injecting Tailwind via CDN here, every utility

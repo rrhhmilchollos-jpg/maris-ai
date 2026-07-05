@@ -8158,6 +8158,57 @@ router.post("/apps/:id/rollback", requireAuth, async (req: any, res: any) => {
   }
 });
 
+// PUT /api/apps/:id/code — editor de código completo, SOLO admin/propietario.
+// A petición explícita: esta capacidad no debe existir para cuentas cliente
+// bajo ningún concepto, ni siquiera vía llamada directa a la API — por eso
+// el 403 se decide aquí en el backend con isAdminEmail(), no solo ocultando
+// el botón en el frontend (que un cliente podría saltarse llamando a la API
+// a mano). Guarda un snapshot de la versión anterior (para poder deshacer
+// con el rollback ya existente), sobrescribe frontendCode con el bundle
+// serializado desde el editor, y dispara el mismo redeploy asíncrono de
+// 6 fases que usan el resto de flujos — así el preview y el deploy en vivo
+// reflejan la edición manual sin que el admin tenga que volver a pulsar nada.
+router.put("/apps/:id/code", requireAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.userId as string;
+    if (!isAdminEmail(req.dbUser?.email)) {
+      return res.status(403).json({ error: "Solo la cuenta propietaria puede editar el código directamente." });
+    }
+
+    const { frontendCode } = req.body ?? {};
+    if (typeof frontendCode !== "string" || frontendCode.trim().length < 20) {
+      return res.status(400).json({ error: "frontendCode inválido o vacío." });
+    }
+
+    // Admin: sin filtro de userId — puede editar cualquier proyecto, incluidos
+    // los de clientes, igual que ya puede hacer desde el panel de admin.
+    const app = await GeneratedApp.findById(req.params.id);
+    if (!app) return res.status(404).json({ error: "App no encontrada." });
+
+    await snapshotCurrentApp({
+      appId: req.params.id,
+      source: "edit",
+      summary: "Snapshot automático antes de edición manual de código (editor admin)",
+    });
+
+    app.frontendCode = frontendCode;
+    await app.save();
+
+    logger.info({ userId, appId: req.params.id, chars: frontendCode.length }, "[admin-code-editor] Código sobrescrito manualmente");
+
+    // Redeploy asíncrono en segundo plano, mismo flujo que rollback —
+    // el admin no paga créditos por esto ni tiene que redisparar nada.
+    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch((err) => {
+      logger.error({ err, appId: req.params.id }, "[admin-code-editor] El redeploy tras la edición manual falló");
+    });
+
+    res.json({ ok: true, redeployStarted: true });
+  } catch (err: any) {
+    logger.error({ err }, "PUT /api/apps/:id/code error");
+    safeErrorResponse(res, err, "Error al guardar el código editado.");
+  }
+});
+
 
 // ── NOTIFICACIONES DE SOPORTE — el cliente lee sus avisos de corrección ──────
 // GET /api/notifications — devuelve notificaciones no leídas del usuario autenticado
