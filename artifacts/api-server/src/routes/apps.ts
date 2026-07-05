@@ -268,6 +268,19 @@ THREE.JS + REACT THREE FIBER — juegos y escenas 3D:
 - \`import { Canvas, useFrame, useThree } from "@react-three/fiber"\`
 - \`import { OrbitControls, Environment, Text, Box, Sphere, Plane } from "@react-three/drei"\`
 - Estructura básica: <Canvas camera={{ position: [0, 5, 10], fov: 75 }}><ambientLight /><directionalLight castShadow /><mesh><boxGeometry /><meshStandardMaterial color="red" /></mesh></Canvas>
+
+SOCKET.IO — funciones en tiempo real / multijugador (chat en vivo, notificaciones instantáneas, estado compartido entre varios usuarios conectados a la vez, tipo "ataques" o "salas" de un juego):
+- \`import { io } from "socket.io-client"\` en el frontend, \`import { Server } from "socket.io"\` en el backend — ambos disponibles.
+- Backend: const io = new Server(httpServer, { cors: { origin: "*" } }); io.on("connection", (socket) => { socket.on("evento", (data) => { io.emit("otroEvento", data); }); });
+- Frontend: const socket = io(); useEffect(() => { socket.on("otroEvento", handler); return () => socket.off("otroEvento", handler); }, []);
+- IMPORTANTE — limitación real que hay que explicarle al usuario si el proyecto lo necesita: esto solo funciona de verdad una vez la app está DESPLEGADA de verdad (Railway, un proceso Node.js real y siempre encendido) — el preview rápido dentro del editor de Maris AI no mantiene conexiones persistentes de la misma forma. Avisa en el chat si el usuario pide algo en tiempo real que solo se podrá probar del todo tras desplegar.
+
+TONE.JS — sonido y efectos de sonido SIN archivos de audio externos (coherente con la regla de "bundle autocontenido, sin URLs externas" — no hay forma de cargar .mp3/.wav reales sin romper esa regla, así que el sonido se GENERA por síntesis):
+- \`import * as Tone from "tone"\` disponible.
+- Los sonidos de Web Audio requieren interacción del usuario primero: await Tone.start() dentro de un handler de click, nunca automático al cargar.
+- Efecto simple: const synth = new Tone.Synth().toDestination(); synth.triggerAttackRelease("C4", "8n"); — útil para "ding" de moneda, "pop" de acierto, etc.
+- Para efectos más ricos (explosión, victoria): usar Tone.NoiseSynth o Tone.PolySynth con varias notas encadenadas.
+- (Howler.js también está disponible — \`import { Howl } from "howler"\` — pero solo tiene sentido si el proyecto ya trae audio real embebido en base64 dentro del propio bundle; para generar sonido desde cero, usa Tone.js.)
 - Game loop: useFrame((state, delta) => { meshRef.current.rotation.y += delta }) dentro de componentes hijos del Canvas.
 - Para física 3D: \`import { Physics, RigidBody, CuboidCollider } from "@react-three/rapier"\` — versión 1.4.0 disponible. Envuelve la escena en <Physics>; usa <RigidBody type="dynamic"> para objetos con física y <RigidBody type="fixed"> para suelo/paredes.
 - NUNCA uses useFrame o hooks de R3F fuera de un componente hijo de <Canvas>.

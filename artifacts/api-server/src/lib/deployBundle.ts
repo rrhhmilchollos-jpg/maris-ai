@@ -537,6 +537,12 @@ const DEFAULT_VERSIONS: Record<string, string> = {
   "@babylonjs/core": "7.26.2",
   "howler": "2.2.4",
   "gsap": "3.12.5",
+  // Añadidos junto con las instrucciones nuevas de tiempo real/sonido en
+  // apps.ts — sin esto en el mapa, el código generado que las use fallaría
+  // al resolver el import en el preview real, aunque el agente supiera
+  // "en teoría" que existen.
+  "socket.io-client": "4.8.3",
+  "tone": "15.1.22",
 };
 
 /**
