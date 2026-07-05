@@ -41,6 +41,12 @@ router.get(
         kind: r.kind,
         description: r.description,
         createdAt: r.createdAt.toISOString(),
+        priceCents: (r as any).priceCents ?? null,
+        status: (r as any).status ?? "succeeded",
+        gateway: (r as any).gateway ?? null,
+        cardLast4: (r as any).cardLast4 ?? null,
+        cardBrand: (r as any).cardBrand ?? null,
+        refundedAt: (r as any).refundedAt ? (r as any).refundedAt.toISOString() : null,
       })),
     );
   },
@@ -248,9 +254,11 @@ router.post(
     // — confirmar que el campo existe antes de depender de él en producción).
     const merchantTrns = tx.merchantTrns ?? "";
 
-    const topupMatch = merchantTrns.match(/^topup(?:-custom)?:([^:]+):(?:[^:]+:)?(\d+)$/);
+    // Captura opcional del packageId (grupo 2) para paquetes normales —
+    // en compras personalizadas (topup-custom) este grupo no existe.
+    const topupMatch = merchantTrns.match(/^topup(-custom)?:([^:]+):(?:([^:]+):)?(\d+)$/);
     if (topupMatch) {
-      const [, ownerUserId, creditsStr] = topupMatch;
+      const [, isCustom, ownerUserId, packageId, creditsStr] = topupMatch;
       if (ownerUserId !== req.userId) {
         res.status(403).json({ error: "Esta orden de pago no corresponde a tu usuario." });
         return;
@@ -261,11 +269,32 @@ router.post(
         return;
       }
 
+      // ENCONTRADO (a petición del usuario, tras no poder rastrear un
+      // cargo real de 20€ -- creditPurchase() nunca guardaba el importe
+      // en euros de NINGUNA compra, de ahí que "Ingresos totales" en el
+      // panel admin mostrara 0€ siempre): calculamos priceCents de forma
+      // determinista a partir de datos que YA CONOCEMOS con certeza --
+      // nunca a partir del campo `amount` que devuelve la verificación de
+      // Viva, cuya unidad (céntimos vs euros con decimales) no está
+      // confirmada para este endpoint concreto (checkout/v2/transactions).
+      let priceCents: number | undefined;
+      if (isCustom) {
+        // topup-custom: 1€ = 5 créditos (ver /billing/custom-checkout más
+        // arriba) → céntimos = créditos × 20, exacto, sin redondeos.
+        priceCents = credits * 20;
+      } else if (packageId) {
+        priceCents = findPackageById(packageId)?.priceCents;
+      }
+
       const result = await creditPurchase({
         userId: req.userId!,
         amount: credits,
         vivaOrderCode: String(tx.orderCode ?? orderCode ?? transactionId),
         description: `Top-up de ${credits} créditos (Viva.com)`,
+        priceCents,
+        gateway: "viva",
+        vivaTransactionId: tx.transactionId,
+        cardLast4: tx.cardNumber ? tx.cardNumber.slice(-4) : undefined,
       });
 
       if (!result.alreadyProcessed) {

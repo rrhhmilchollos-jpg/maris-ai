@@ -112,18 +112,28 @@ vivaWebhookRouter.post("/webhooks/viva", async (req: Request, res: Response) => 
       // creditPurchase ya es idempotente por (userId, vivaOrderCode), así
       // que si el cliente SÍ vuelve a la web y /confirm ya lo procesó, este
       // webhook simplemente no duplica nada (alreadyProcessed:true).
-      const topupMatch = merchantTrns.match(/^topup(?:-custom)?:([^:]+):(?:[^:]+:)?(\d+)$/);
+      const topupMatch = merchantTrns.match(/^topup(-custom)?:([^:]+):(?:([^:]+):)?(\d+)$/);
       if (topupMatch) {
-        const [, userId, creditsStr] = topupMatch;
+        const [, isCustom, userId, packageId, creditsStr] = topupMatch;
         const credits = Number(creditsStr);
         if (userId && Number.isFinite(credits) && credits > 0) {
           const { creditPurchase } = await import("../lib/credits");
+          const { CREDIT_PACKAGES } = await import("../lib/payments");
           const { User } = await import("@workspace/db/schema");
+          // Mismo cálculo determinista que en /billing/confirm — ver el
+          // comentario extenso ahí. Nunca se usa el `amount` que devuelve
+          // Viva para esto, por la ambigüedad de unidades sin confirmar.
+          const priceCents = isCustom
+            ? credits * 20
+            : CREDIT_PACKAGES.find((p) => p.id === packageId)?.priceCents;
           const result = await creditPurchase({
             userId,
             amount: credits,
             vivaOrderCode: String(orderCode ?? transactionId ?? merchantTrns),
             description: `Top-up de ${credits} créditos (Viva.com, vía webhook)`,
+            priceCents,
+            gateway: "viva",
+            vivaTransactionId: transactionId,
           });
           if (!result.alreadyProcessed) {
             await User.findByIdAndUpdate(userId, {

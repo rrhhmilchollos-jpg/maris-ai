@@ -28,6 +28,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
+import { AdminPaymentsPanel } from "@/components/admin-payments-panel";
 import { AdminNewsEditor } from "@/components/admin-news-editor";
 import { AdminPresencePanel } from "@/components/admin-presence-panel";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,7 @@ import {
   Zap, TrendingUp, TrendingDown, Star, Wifi, Paperclip,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news" | "presence";
+type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news" | "presence" | "payments";
 
 interface MemoryEntry {
   id: string;
@@ -432,6 +433,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
               )}
             </TabsTrigger>
             <TabsTrigger value="tickets"><MessageSquare className="h-4 w-4 mr-2" /> Tickets</TabsTrigger>
+            <TabsTrigger value="payments"><CreditCard className="h-4 w-4 mr-2" /> Pagos</TabsTrigger>
             <TabsTrigger value="news"><Sparkles className="h-4 w-4 mr-2" /> Noticias</TabsTrigger>
           </TabsList>
 
@@ -785,6 +787,10 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
 
           <TabsContent value="tickets" className="mt-4">
             <AdminTicketsPanel />
+          </TabsContent>
+
+          <TabsContent value="payments" className="mt-4">
+            <AdminPaymentsPanel />
           </TabsContent>
 
           <TabsContent value="news" className="mt-4">

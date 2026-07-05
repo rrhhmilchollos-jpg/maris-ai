@@ -365,6 +365,21 @@ export interface ICreditTransaction extends Document {
   description: string;
   stripeSessionId?: string;
   vivaOrderCode?: string;
+  // ENCONTRADO (a petición del usuario, tras no poder rastrear un cargo
+  // real de 20€): creditPurchase() nunca guardaba el importe en euros del
+  // pago, solo los créditos añadidos -- por eso "Ingresos totales" en el
+  // panel admin mostraba 0€ SIEMPRE, para todas las compras, no solo la
+  // de este caso. Campos nuevos para que cada transacción sea auditable
+  // y reembolsable de verdad:
+  priceCents?: number;         // importe real cobrado, en céntimos de euro
+  status?: string;             // "succeeded" | "refunded" | "failed"
+  gateway?: string;            // "viva" | "stripe" | "legacy"
+  vivaTransactionId?: string;  // TransactionId real de Viva (distinto de vivaOrderCode) -- necesario para reembolsar vía su API
+  cardLast4?: string;
+  cardBrand?: string;
+  refundedAt?: Date;
+  refundedBy?: string;         // userId del admin que ejecutó el reembolso
+  refundReason?: string;
   affiliateAmount?: number;  // importe en euros de la comisión de afiliado
   relatedUserId?: string;    // userId del referido que generó la comisión
   createdAt: Date;
@@ -380,6 +395,15 @@ const CreditTransactionSchema = new Schema<ICreditTransaction>(
     description: { type: String, required: true },
     stripeSessionId: { type: String },
     vivaOrderCode: { type: String },
+    priceCents: { type: Number },
+    status: { type: String, enum: ["succeeded", "refunded", "failed"], default: "succeeded" },
+    gateway: { type: String, enum: ["viva", "stripe", "legacy"] },
+    vivaTransactionId: { type: String, index: true },
+    cardLast4: { type: String },
+    cardBrand: { type: String },
+    refundedAt: { type: Date },
+    refundedBy: { type: String },
+    refundReason: { type: String },
     affiliateAmount: { type: Number },
     relatedUserId: { type: String },
   },

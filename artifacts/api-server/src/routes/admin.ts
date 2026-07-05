@@ -141,7 +141,7 @@ router.get("/admin/overview", async (_req, res) => {
   const nonAdminUsers = allUsers.filter((u) => !isAdminEmail(u.email));
   const creditsOutstanding = nonAdminUsers.reduce((sum: number, u: Pick<IUser, "email" | "credits">) => sum + (u.credits ?? 0), 0);
 
-  const txns = await CreditTransaction.find({}, { kind: 1, amount: 1 }).lean();
+  const txns = await CreditTransaction.find({}, { kind: 1, amount: 1, priceCents: 1, status: 1 }).lean();
   let creditsSpentTotal = 0;
   let creditsPurchasedTotal = 0;
 let revenueCentsTotal = 0;
@@ -149,7 +149,8 @@ let revenueCentsTotal = 0;
     if (t.kind === "usage") creditsSpentTotal += Math.abs(t.amount);
     if (t.kind === "purchase") {
     creditsPurchasedTotal += t.amount;
-    if ((t as any).priceCents) revenueCentsTotal += (t as any).priceCents;
+    // No contar como ingreso lo que ya se ha reembolsado.
+    if ((t as any).priceCents && (t as any).status !== "refunded") revenueCentsTotal += (t as any).priceCents;
   }
   }
 
@@ -1080,7 +1081,7 @@ router.get("/admin/metrics", async (_req, res) => {
   ]);
 
   // Ingresos reales desde CreditTransaction
-  const revenueTxns = await CreditTransaction.find({ kind: "purchase" }, { priceCents: 1 }).lean();
+  const revenueTxns = await CreditTransaction.find({ kind: "purchase", status: { $ne: "refunded" } }, { priceCents: 1 }).lean();
   const revenueCentsTotal = revenueTxns.reduce((sum: number, t: any) => sum + (t.priceCents ?? 0), 0);
 
   let jobsTotal = 0, jobsSuccess = 0, jobsFailed = 0;
@@ -3161,6 +3162,130 @@ router.post("/admin/fix-credits-float", async (_req, res) => {
     }
     res.json({ ok: true, usersChecked: users.length, usersFixed: fixed, fixedList });
   } catch (err: any) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// ─── Auditoría financiera — historial global de pagos y reembolsos ────────
+// A petición explícita del usuario, tras no poder rastrear un cargo real
+// de 20€ que nunca quedó registrado correctamente (ver hallazgos: 1.
+// creditPurchase() nunca guardaba el importe en euros de ninguna compra,
+// solo los créditos -- "Ingresos totales" mostraba 0€ siempre; 2. no
+// existía forma de auditar ni reembolsar pagos desde el panel).
+router.get("/admin/payments/all", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const search = (req.query.search as string || "").trim();
+
+    const query: any = { kind: "purchase" };
+    if (search) {
+      const users = await User.find(
+        { $or: [{ email: new RegExp(search, "i") }, { fullName: new RegExp(search, "i") }] },
+        { _id: 1 },
+      ).lean();
+      const userIds = users.map((u) => String(u._id));
+      query.userId = { $in: userIds.length > 0 ? userIds : ["__no_match__"] };
+    }
+
+    const [rows, total] = await Promise.all([
+      CreditTransaction.find(query).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      CreditTransaction.countDocuments(query),
+    ]);
+
+    const userIds = [...new Set(rows.map((r) => r.userId))];
+    const users = await User.find({ _id: { $in: userIds } }, { email: 1, fullName: 1 }).lean();
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    res.json({
+      payments: rows.map((r: any) => ({
+        id: r._id,
+        userId: r.userId,
+        userEmail: userMap.get(r.userId)?.email ?? null,
+        userName: userMap.get(r.userId)?.fullName ?? null,
+        credits: r.amount,
+        priceCents: r.priceCents ?? null,
+        gateway: r.gateway ?? "legacy",
+        status: r.status ?? "succeeded",
+        cardLast4: r.cardLast4 ?? null,
+        cardBrand: r.cardBrand ?? null,
+        vivaTransactionId: r.vivaTransactionId ?? null,
+        stripeSessionId: r.stripeSessionId ?? null,
+        description: r.description,
+        createdAt: r.createdAt.toISOString(),
+        refundedAt: r.refundedAt ? r.refundedAt.toISOString() : null,
+        refundReason: r.refundReason ?? null,
+      })),
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /admin/payments/all failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+router.post("/admin/payments/refund", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  try {
+    const { transactionId, reason } = req.body;
+    if (!transactionId) {
+      res.status(400).json({ error: "transactionId es obligatorio" });
+      return;
+    }
+
+    const tx = await CreditTransaction.findById(transactionId);
+    if (!tx) {
+      res.status(404).json({ error: "Transacción no encontrada" });
+      return;
+    }
+    if (tx.status === "refunded") {
+      res.status(409).json({ error: "Esta transacción ya fue reembolsada anteriormente." });
+      return;
+    }
+    if (tx.gateway !== "viva" || !tx.vivaTransactionId) {
+      res.status(400).json({
+        error: tx.gateway === "stripe"
+          ? "Esta es una transacción legada de Stripe — usa POST /admin/users/:id/stripe-refund en su lugar."
+          : "Esta transacción no tiene un vivaTransactionId real asociado (probablemente una compra antigua registrada antes de este sistema) — no se puede reembolsar automáticamente. Hazlo manualmente desde el panel de Viva.com y, si corresponde, resta los créditos a mano.",
+      });
+      return;
+    }
+    if (!tx.priceCents) {
+      res.status(400).json({ error: "No se conoce el importe real cobrado (priceCents vacío) — no se puede reembolsar de forma segura sin esa cifra. Revisa el importe manualmente en el panel de Viva.com." });
+      return;
+    }
+
+    const { refundTransaction } = await import("../lib/vivaPayments");
+    const result = await refundTransaction({
+      transactionId: tx.vivaTransactionId,
+      amountCents: tx.priceCents,
+    });
+
+    if (!result.ok) {
+      res.status(502).json({ error: `Viva.com rechazó el reembolso: ${result.error}` });
+      return;
+    }
+
+    // Reembolso confirmado por Viva — actualizar nuestro registro y restar
+    // los créditos correspondientes (si el usuario ya se los gastó, el
+    // saldo puede quedar negativo -- es una señal legítima para soporte,
+    // no se oculta ni se trunca a 0).
+    tx.status = "refunded";
+    tx.refundedAt = new Date();
+    tx.refundedBy = req.userId;
+    tx.refundReason = reason || "Reembolso manual desde el panel de administración";
+    await tx.save();
+
+    await User.findByIdAndUpdate(tx.userId, { $inc: { credits: -Math.abs(tx.amount) } });
+
+    logger.info({ transactionId, adminId: req.userId, amountCents: tx.priceCents }, "Reembolso procesado desde el panel admin");
+    res.json({ ok: true, refundedCredits: tx.amount, refundedCents: tx.priceCents });
+  } catch (err: any) {
+    logger.error({ err }, "POST /admin/payments/refund failed");
     res.status(500).json({ error: String(err) });
   }
 });

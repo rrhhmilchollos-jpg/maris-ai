@@ -180,6 +180,22 @@ export function useListTransactions(opts?: { query?: Partial<UseQueryOptions> })
 export function useGetAdminOverview(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getGetAdminOverviewQueryKey(), queryFn: () => apiFetch("/api/admin/overview"), ...(opts?.query as any) });
 }
+export function useListAdminPayments(params?: { page?: number; limit?: number; search?: string }, opts?: { query?: Partial<UseQueryOptions> }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.search) qs.set("search", params.search);
+  return useQuery<any>({
+    queryKey: ["admin-payments", params],
+    queryFn: () => apiFetch(`/api/admin/payments/all?${qs.toString()}`),
+    ...(opts?.query as any),
+  });
+}
+export function useRefundPayment() {
+  return useMutation<any, any, { transactionId: string; reason?: string }>({
+    mutationFn: (body) => apiFetch("/api/admin/payments/refund", { method: "POST", body: JSON.stringify(body) }),
+  });
+}
 export function useListAdminUsers(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAdminUsersQueryKey(), queryFn: () => apiFetch("/api/admin/users"), ...(opts?.query as any) });
 }

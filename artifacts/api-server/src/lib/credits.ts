@@ -58,9 +58,19 @@ export async function creditPurchase(opts: {
   stripeSessionId?: string;
   vivaOrderCode?: string;
   description: string;
+  // ENCONTRADO: estos campos nunca se guardaban -- "Ingresos totales" en
+  // el panel admin llevaba mostrando 0€ desde siempre para TODAS las
+  // compras, no solo por un caso puntual. vivaTransactionId es
+  // imprescindible para poder reembolsar de verdad vía la API de Viva
+  // (vivaOrderCode identifica el PEDIDO, no la transacción de cobro).
+  priceCents?: number;
+  gateway?: "viva" | "stripe" | "legacy";
+  vivaTransactionId?: string;
+  cardLast4?: string;
+  cardBrand?: string;
 }): Promise<{ creditsAdded: number; alreadyProcessed: boolean; newBalance: number }> {
   await connectDB();
-  const { userId, amount, stripeSessionId, vivaOrderCode, description } = opts;
+  const { userId, amount, stripeSessionId, vivaOrderCode, description, priceCents, gateway, vivaTransactionId, cardLast4, cardBrand } = opts;
 
   if (!stripeSessionId && !vivaOrderCode) {
     throw new Error("creditPurchase requiere stripeSessionId o vivaOrderCode para garantizar idempotencia");
@@ -90,6 +100,12 @@ export async function creditPurchase(opts: {
     description,
     stripeSessionId,
     vivaOrderCode,
+    priceCents,
+    gateway,
+    vivaTransactionId,
+    cardLast4,
+    cardBrand,
+    status: "succeeded",
   });
  
   const updated = await User.findByIdAndUpdate(

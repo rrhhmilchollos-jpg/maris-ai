@@ -254,3 +254,44 @@ export async function chargeRecurringPayment(opts: {
   }
   return { transactionId: data.TransactionId, statusId: data.StatusId ?? "" };
 }
+
+/**
+ * Reembolsa (total o parcialmente) una transacción real vía la API de
+ * Viva.com — "Cancel transaction" (DELETE /api/transactions/:id), la misma
+ * que se usa para reembolsos manuales desde el panel de Viva, confirmada
+ * contra la documentación oficial: developer.viva.com/tutorials/payments/issue-a-refund
+ *
+ * IMPORTANTE — requisito de la propia Viva: hay que tener "Allow refunds"
+ * activado en Ajustes > API Access de la cuenta de Viva para que esto
+ * funcione (si no, Viva devuelve un error explícito, no falla en silencio).
+ */
+export async function refundTransaction(opts: {
+  transactionId: string;
+  amountCents: number; // importe a reembolsar, en céntimos (puede ser parcial)
+  sourceCode?: string;
+}): Promise<{ ok: true; refundTransactionId: string } | { ok: false; error: string }> {
+  const merchantId = process.env.VIVA_MERCHANT_ID;
+  const apiKey = process.env.VIVA_API_KEY;
+  if (!merchantId || !apiKey) {
+    return { ok: false, error: "VIVA_MERCHANT_ID / VIVA_API_KEY no configuradas — no se puede reembolsar." };
+  }
+  const basicAuth = Buffer.from(`${merchantId}:${apiKey}`).toString("base64");
+
+  const params = new URLSearchParams({ amount: String(Math.round(opts.amountCents)) });
+  if (opts.sourceCode) params.set("sourceCode", opts.sourceCode);
+
+  const res = await fetch(`${VIVA_API_URL}/api/transactions/${opts.transactionId}?${params.toString()}`, {
+    method: "DELETE",
+    headers: { Authorization: `Basic ${basicAuth}` },
+  });
+
+  const data = (await res.json().catch(() => ({}))) as { TransactionId?: string; ErrorCode?: number; ErrorText?: string };
+
+  if (!res.ok || data.ErrorCode) {
+    logger.error({ status: res.status, data, transactionId: opts.transactionId }, "Viva refundTransaction failed");
+    return { ok: false, error: data.ErrorText || `Viva respondió ${res.status}` };
+  }
+
+  logger.info({ transactionId: opts.transactionId, refundTransactionId: data.TransactionId }, "Reembolso ejecutado correctamente vía Viva.com");
+  return { ok: true, refundTransactionId: data.TransactionId || opts.transactionId };
+}
