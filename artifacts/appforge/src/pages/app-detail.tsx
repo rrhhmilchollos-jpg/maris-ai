@@ -2038,6 +2038,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             ) : rightPanelTab === "code" ? (
               <div className="h-full overflow-auto bg-[#060810] p-4 md:p-6 relative"
                 onCopy={(e) => {
+                  // A petición explícita del usuario: este bloqueo de copia
+                  // masiva no debe aplicar a cuentas admin/propietario —
+                  // solo tiene sentido para clientes, como medida contra
+                  // copiar el código sin pasar por el export oficial
+                  // (GitHub/Descargar), que además marca el proyecto como
+                  // exportado correctamente.
+                  if (isAdmin) return;
                   const selected = window.getSelection()?.toString() || "";
                   if (selected.length > 500) {
                     // Bloquear copia masiva — registrar intento
