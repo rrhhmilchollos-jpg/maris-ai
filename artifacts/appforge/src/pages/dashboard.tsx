@@ -778,6 +778,18 @@ export default function DashboardPage() {
                         )}
                         <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
                         <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
+                        {/* Sonnet 4.7 y Opus 4.8: solo clientes de pago Y con
+                            Ultra activado (a petición explícita del usuario).
+                            Igual que GPT-5.4/Haiku manual, sin probar aún con
+                            generaciones reales dentro del sistema de hitos —
+                            por eso el doble requisito (pago + Ultra), no solo
+                            uno de los dos. */}
+                        {isPaidPlan && ultraThinking && (
+                          <>
+                            <SelectItem value="claude-sonnet-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-fuchsia-400" />Sonnet 4.7 — Ultra</div></SelectItem>
+                            <SelectItem value="claude-opus-4-8" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Opus 4.8 — Ultra</div></SelectItem>
+                          </>
+                        )}
                         {isAdmin && (
                           <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4 — solo admin, en pruebas</div></SelectItem>
                         )}

@@ -1831,7 +1831,7 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-opus-4-7";
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-sonnet-4-7" | "claude-opus-4-7" | "claude-opus-4-8";
 
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
@@ -1844,7 +1844,7 @@ interface AgentModelChoice {
 
 
 
-const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5"];
+const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-7", "claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-haiku-4-5"];
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   const normalized = normalizeCoderModel(coderModel);
@@ -1857,6 +1857,11 @@ function normalizeCoderModel(coderModel?: string): string {
   if (!value || value === "auto" || value === "automatic") return "auto";
   if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
   if (["claude-haiku", "claude-haiku-4-5", "haiku", "fast", "basic"].includes(value)) return "claude-haiku-4-5";
+  // Sonnet 4.7 y Opus 4.8 (Ultra, solo pago): se reconocen explícitamente
+  // ANTES de las reglas genéricas de opus/sonnet, para que no caigan por
+  // error en la rama de la versión anterior (4.6/4.7).
+  if (["claude-sonnet-4-7", "sonnet-4-7", "sonnet-ultra"].includes(value)) return "claude-sonnet-4-7";
+  if (["claude-opus-4-8", "opus-4-8", "opus-ultra"].includes(value)) return "claude-opus-4-8";
   if (["claude-opus", "claude-opus-4-7", "opus", "robust", "max"].includes(value)) return "claude-opus-4-7";
   if (["claude-sonnet", "claude-sonnet-4-6", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "claude-sonnet-4-6";
   return value;
@@ -1865,6 +1870,8 @@ function normalizeCoderModel(coderModel?: string): string {
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   const normalized = normalizeCoderModel(coderModel);
   if (normalized === "claude-haiku-4-5") return "claude-haiku-4-5";
+  if (normalized === "claude-sonnet-4-7") return "claude-sonnet-4-7";
+  if (normalized === "claude-opus-4-8") return "claude-opus-4-8";
   if (normalized === "claude-opus-4-7") return "claude-opus-4-7";
   return "claude-sonnet-4-6";
 }
