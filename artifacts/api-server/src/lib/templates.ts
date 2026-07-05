@@ -336,6 +336,106 @@ export const TEMPLATES: AppTemplate[] = [
     seedPrompt:
       "Una web de alquiler vacacional para varios apartamentos turísticos gestionados por un mismo propietario, marca 'Coastal Stays'. Página de inicio con listado de apartamentos disponibles en tarjetas (foto, nombre, capacidad, precio por noche, ubicación) y buscador por fechas y número de huéspedes. Ficha de cada apartamento con galería de fotos, descripción, servicios incluidos (wifi, aire acondicionado, cocina equipada, vistas al mar, etc.), calendario visual mostrando qué fechas están disponibles u ocupadas, selector de fechas de entrada/salida con cálculo automático del precio total según noches, y formulario de reserva (datos del huésped, número de personas) con confirmación. Panel de gestión protegido con login para el propietario: calendario global de todas las propiedades con las reservas marcadas, listado de reservas con datos de contacto del huésped y fechas, alta/edición de apartamentos (fotos, precio por noche, capacidad, servicios), y bloqueo manual de fechas (para mantenimiento o uso propio). Diseño luminoso y veraniego, azules y blancos, fotografía a pantalla completa, sensación de vacaciones.",
   },
+  {
+    id: "gimnasio-membresias",
+    name: "Gimnasio con membresías",
+    description:
+      "Web de gimnasio con planes de suscripción, horario de clases y panel de gestión de socios.",
+    kind: "fullstack",
+    icon: "Dumbbell",
+    seedPrompt:
+      "Una web para un gimnasio llamado 'PowerZone Fitness'. Página de inicio con hero (foto del gimnasio + CTA 'Hazte socio'), sección de planes de membresía (básico, premium, familiar) con precio mensual y beneficios de cada uno, horario semanal de clases dirigidas (spinning, yoga, crossfit, zumba) con hora, instructor y aforo disponible, sección de instalaciones con fotos, y testimonios de socios. Página de alta de socio con selección de plan y checkout simulado. Área de socio con login: plan activo, historial de pagos, reserva de plaza en clases dirigidas (con aforo limitado), y código QR de acceso al gimnasio. Panel de administración: listado de socios con estado de la cuota (al día/pendiente), altas y bajas, gestión del horario de clases, y estadísticas de ocupación por clase. Diseño enérgico, negro y naranja/verde flúor, tipografía bold e impactante.",
+  },
+  {
+    id: "peluqueria-barberia",
+    name: "Peluquería / Barbería con citas",
+    description:
+      "Salón de belleza o barbería con catálogo de servicios, reserva de cita por profesional y panel de agenda.",
+    kind: "fullstack",
+    icon: "Scissors",
+    seedPrompt:
+      "Una web para una barbería llamada 'The Barber House'. Página de inicio con hero, catálogo de servicios (corte, arreglo de barba, afeitado clásico, combo corte+barba) con precio y duración de cada uno, perfil de cada barbero con foto, especialidad y galería de trabajos realizados, y ubicación con horario. Página de reserva: elegir servicio, elegir barbero (u 'cualquiera disponible'), ver huecos libres calculados según la agenda real de ese barbero ese día, rellenar nombre y teléfono, y confirmar. Área de cliente opcional con historial de citas pasadas y próxima cita. Panel de gestión para cada barbero/administrador: agenda del día con las citas, posibilidad de marcarlas como completadas o de cancelarlas, y añadir bloqueos de horario (descansos, vacaciones). Diseño masculino y con carácter, negro y marfil con acentos dorados, tipografía con estilo vintage/barbershop.",
+  },
+  {
+    id: "veterinaria-mascotas",
+    name: "Clínica veterinaria",
+    description:
+      "Veterinaria con servicios, reserva de cita para mascotas y ficha clínica básica por animal.",
+    kind: "fullstack",
+    icon: "PawPrint",
+    seedPrompt:
+      "Una web para una clínica veterinaria llamada 'VetCare Animal'. Página de inicio con servicios (consulta general, vacunación, cirugía, peluquería canina, urgencias 24h), equipo de veterinarios con especialidad, y testimonios de dueños de mascotas. Página de reserva de cita: datos del dueño, datos de la mascota (nombre, especie, raza, edad), motivo de la visita, fecha y hora disponible. Área de cliente con login: listado de sus mascotas registradas, y por cada una su ficha básica (vacunas puestas con fecha, peso registrado en cada visita, próximas revisiones), e historial de citas. Panel de gestión para el veterinario: agenda del día, ficha clínica completa de cada mascota que atiende (poder añadir una nueva entrada: diagnóstico, tratamiento, peso, próxima revisión recomendada), y listado de todos los pacientes (mascotas) registrados en la clínica. Diseño cercano y confiable, verde y blanco, iconografía de huellas y mascotas.",
+  },
+  {
+    id: "autoescuela-clases",
+    name: "Autoescuela",
+    description:
+      "Autoescuela con paquetes de clases, reserva de clases prácticas y seguimiento del progreso del alumno.",
+    kind: "fullstack",
+    icon: "Car",
+    seedPrompt:
+      "Una web para una autoescuela llamada 'Conduce Ya'. Página de inicio con los tipos de carnet que se pueden sacar (B, A2, A), paquetes de clases prácticas (10, 20, bono ilimitado) con precio, información sobre el examen teórico y práctico, y testimonios de alumnos aprobados. Página de matriculación con selección de tipo de carnet y paquete, checkout simulado. Área de alumno con login: horas de clase práctica consumidas y restantes de su bono, reserva de próxima clase práctica eligiendo profesor y franja horaria disponible, test de teórico online tipo examen (preguntas de opción múltiple con corrección automática al final) para practicar, y calendario con sus próximas clases. Panel de gestión para la autoescuela: listado de alumnos con horas consumidas/restantes de cada bono, agenda de clases prácticas de todos los profesores, y alta de nuevos alumnos. Diseño práctico y directo, azul y amarillo (señalización vial), iconografía de tráfico.",
+  },
+  {
+    id: "taller-mecanico",
+    name: "Taller mecánico",
+    description:
+      "Taller de coches con solicitud de cita para revisión/reparación y seguimiento del estado del vehículo.",
+    kind: "fullstack",
+    icon: "Wrench",
+    seedPrompt:
+      "Una web para un taller mecánico llamado 'AutoFix Taller'. Página de inicio con servicios (cambio de aceite, revisión pre-ITV, frenos, neumáticos, diagnosis electrónica, reparación general), presupuesto orientativo de cada servicio, y opiniones de clientes. Página de solicitud de cita: datos del vehículo (marca, modelo, matrícula, año), servicio deseado o descripción del problema, fecha preferida, datos de contacto. Área de cliente con login: sus vehículos registrados, y por cada uno el historial de intervenciones realizadas (fecha, qué se hizo, coste), y estado de la reparación en curso si tiene el coche en el taller ahora mismo (recibido → diagnosticando → reparando → listo para recoger). Panel de gestión para el taller: cola de vehículos actualmente en el taller con su estado editable, calendario de citas próximas, y ficha de cada cliente con sus vehículos e historial completo. Diseño industrial y robusto, gris oscuro y naranja, tipografía técnica.",
+  },
+  {
+    id: "academia-clases-particulares",
+    name: "Academia de clases particulares",
+    description:
+      "Academia/profesores particulares con catálogo de asignaturas, reserva de clases y seguimiento del alumno.",
+    kind: "fullstack",
+    icon: "GraduationCap",
+    seedPrompt:
+      "Una web para una academia de refuerzo escolar llamada 'Academia Progresa'. Página de inicio con asignaturas disponibles (matemáticas, física y química, inglés, lengua) por nivel educativo (primaria, ESO, bachillerato), modalidad (individual u online), precio por hora o bono de horas, y profesorado con su especialidad y experiencia. Página de matriculación con selección de asignatura, modalidad y bono de horas, checkout simulado. Área de alumno/padre con login: horas de bono restantes, reserva de próxima clase eligiendo profesor y horario disponible, y calendario de clases programadas. Panel de gestión para la academia: listado de alumnos matriculados con horas consumidas/restantes de cada bono, agenda de todos los profesores, y un espacio simple de seguimiento donde el profesor puede dejar una nota breve tras cada clase (progreso, deberes, temas a reforzar) visible para el padre/alumno. Diseño educativo y cercano, azul y amarillo suave, tipografía clara y legible.",
+  },
+  {
+    id: "eventos-organizacion",
+    name: "Organización de eventos/bodas",
+    description:
+      "Wedding planner / organización de eventos con catálogo de servicios, presupuesto y seguimiento del proyecto.",
+    kind: "fullstack",
+    icon: "PartyPopper",
+    seedPrompt:
+      "Una web para una organizadora de bodas y eventos llamada 'Momento Perfecto Eventos'. Página de inicio con tipos de evento que organizan (bodas, comuniones, eventos de empresa), paquetes de servicios (organización integral, coordinación del día, solo asesoramiento) con lo que incluye cada uno, galería de eventos anteriores con fotos, y testimonios de clientes. Página de solicitud de presupuesto con formulario (tipo de evento, fecha aproximada, número de invitados, presupuesto orientativo, datos de contacto) que envía la solicitud para que la organizadora responda. Área de cliente con login (para quien ya ha contratado): línea de tiempo del proyecto con las tareas y su estado (proveedor de catering confirmado, localización reservada, etc.), documentos compartidos, y mensajes con la organizadora. Panel de gestión para la organizadora: listado de solicitudes de presupuesto recibidas, proyectos activos con su línea de tiempo de tareas editable, y directorio de proveedores habituales (catering, fotografía, música) con contacto. Diseño elegante y romántico, tonos rosa palo/dorado sobre blanco, tipografía manuscrita para títulos.",
+  },
+  {
+    id: "tienda-moda-boutique",
+    name: "Boutique de moda",
+    description:
+      "Tienda de ropa online con catálogo por categorías, tallas/variantes, carrito y panel de gestión de stock.",
+    kind: "fullstack",
+    icon: "Shirt",
+    seedPrompt:
+      "Una tienda online de ropa llamada 'Loom Boutique'. Catálogo organizado por categorías (mujer, hombre, accesorios) y subcategorías, cada producto con varias fotos, selector de talla y color (cada combinación con su propio stock), precio, y descripción del material. Página de producto individual con galería ampliable, selector de variante, botón añadir al carrito, y productos relacionados. Carrito y checkout con datos de envío y pago simulado, resumen del pedido y confirmación. Cuenta de cliente con historial de pedidos y estado de envío (preparando/enviado/entregado). Panel de administración: gestión de productos (alta/edición con fotos, precio, variantes de talla/color y stock de cada una), listado de pedidos recibidos con posibilidad de cambiar su estado, y alerta de productos con poco stock. Diseño minimalista y editorial, blanco y negro con tipografía elegante, mucho espacio en blanco al estilo revista de moda.",
+  },
+  {
+    id: "cafeteria-especialidad",
+    name: "Cafetería de especialidad",
+    description:
+      "Cafetería con carta, pedido para recoger en tienda y programa de puntos de fidelidad.",
+    kind: "fullstack",
+    icon: "Coffee",
+    seedPrompt:
+      "Una web para una cafetería de especialidad llamada 'Grano y Ritual'. Página de inicio con la carta (cafés de especialidad, tés, repostería, tostas) organizada por categorías, foto y precio de cada producto, historia de la cafetería y origen de sus cafés, y ubicación con horario. Sistema de pedido para recoger en tienda: elegir productos, personalizar (tipo de leche, tamaño, azúcar), ver el total, y elegir franja horaria de recogida, con confirmación y número de pedido. Cuenta de cliente con login: puntos de fidelidad acumulados (1 punto por cada euro gastado, canjeables por productos gratis a partir de cierto umbral), e historial de pedidos. Panel de gestión: cola de pedidos entrantes por franja horaria para que el equipo los prepare a tiempo, gestión de la carta (añadir/editar productos y precios), y listado de clientes con sus puntos de fidelidad. Diseño cálido y artesanal, tonos tierra y crema, tipografía con carácter, fotografía de producto muy cuidada.",
+  },
+  {
+    id: "agencia-viajes",
+    name: "Agencia de viajes",
+    description:
+      "Agencia de viajes con catálogo de paquetes/destinos, solicitud de reserva y panel de gestión de viajes.",
+    kind: "fullstack",
+    icon: "Plane",
+    seedPrompt:
+      "Una web para una agencia de viajes llamada 'Horizonte Viajes'. Página de inicio con destinos/paquetes destacados en tarjetas (foto, destino, duración, precio desde, fechas disponibles), buscador por destino y fechas, y testimonios de viajeros. Ficha de paquete individual con galería de fotos, itinerario día a día, qué incluye (vuelos, hotel, excursiones, comidas) y qué no incluye, precio por persona según ocupación, y formulario de 'Solicitar reserva' con número de viajeros y datos de contacto. Área de cliente con login: sus reservas en curso con estado (solicitada/confirmada/pagada), documentación del viaje disponible para descarga cuando esté confirmado, y viajes pasados. Panel de gestión para la agencia: listado de solicitudes de reserva recibidas con posibilidad de confirmarlas, gestión del catálogo de paquetes (alta/edición con fotos, itinerario y precio), y listado de clientes con sus reservas históricas. Diseño inspirador y aventurero, azul cielo y blanco con acentos coral, fotografía de gran formato de paisajes.",
+  },
 ];
 
 /**
