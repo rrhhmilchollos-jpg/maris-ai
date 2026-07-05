@@ -1961,6 +1961,12 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   if ((normalized === "claude-sonnet-4-7" || normalized === "claude-opus-4-8") && !context?.hasEverPaid) {
     normalized = "claude-sonnet-4-6";
   }
+  // GPT-5.4: mismo criterio que Sonnet 4.7/Opus 4.8 -- solo pago verificado
+  // (aclarado explícitamente por el usuario). Haiku 4.5, en cambio, se deja
+  // abierto para todos sin este bloqueo, por ser el modelo económico.
+  if (normalized === "gpt-5.4" && !context?.hasEverPaid) {
+    normalized = "claude-sonnet-4-6";
+  }
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
 
