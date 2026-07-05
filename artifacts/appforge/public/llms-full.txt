@@ -116,7 +116,7 @@ A diferencia de Base44 donde el código queda en su plataforma, Maris AI exporta
 No. Maris AI está diseñado para emprendedores, autónomos y dueños de negocio sin conocimientos técnicos. Solo describes tu idea en español y los agentes hacen todo el trabajo.
 
 **¿Cuánto cuesta?**
-15 créditos gratis al registrarte, sin tarjeta. Los paquetes van desde 20€ por 100 créditos. Los créditos nunca caducan.
+65 créditos gratis al registrarte, sin tarjeta. Los paquetes van desde 20€ por 160 créditos. Los créditos nunca caducan.
 
 **¿El código generado es mío?**
 Sí, el código es 100% tuyo. Puedes exportarlo a GitHub, modificarlo, desplegarlo donde quieras y venderlo. Sin restricciones.
