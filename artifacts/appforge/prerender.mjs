@@ -125,7 +125,7 @@ const ROUTES = [
 <li><strong>Portafolios</strong> — Webs personales y profesionales</li>
 </ul>
 <h2>¿Cómo se crean estas apps?</h2>
-<p>El usuario describe su idea en español. Los 11 agentes de IA de Maris AI (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, QA, PM, Image Agent y Visual Evaluator) trabajan en paralelo y generan el código completo en menos de 5 minutos.</p>`
+<p>El usuario describe su idea en español. Los 11 agentes de IA de Maris AI (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, API Integrator, QA Reviewer, Testing Agent, PM Agent, Image Agent y Visual Evaluator) trabajan en paralelo y generan el código completo en menos de 5 minutos.</p>`
   },
   {
     path: "/news",

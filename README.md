@@ -1,6 +1,6 @@
 # Maris AI
 
-Maris AI es una plataforma innovadora que transforma tus ideas en aplicaciones web y móviles reales en minutos, utilizando un pipeline avanzado de 9 agentes de inteligencia artificial especializados. Diseñada para emprendedores, startups y desarrolladores, Maris AI genera código profesional, escalable y listo para producción con tecnologías como React, TypeScript, Tailwind CSS, Express y MongoDB.
+Maris AI es una plataforma innovadora que transforma tus ideas en aplicaciones web y móviles reales en minutos, utilizando un pipeline avanzado de 11 agentes de inteligencia artificial especializados. Diseñada para emprendedores, startups y desarrolladores, Maris AI genera código profesional, escalable y listo para producción con tecnologías como React, TypeScript, Tailwind CSS, Express y MongoDB.
 
 Descubre el futuro del desarrollo de aplicaciones con IA y el Vibe Coding en [https://www.marisai.es/](https://www.marisai.es/).
 

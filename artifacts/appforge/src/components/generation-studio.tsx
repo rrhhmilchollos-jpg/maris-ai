@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import {
   Code2, Eye, Loader2, CheckCircle2, Zap, Rocket, RefreshCcw,
   Paperclip, Send, Sparkles, Github, Search,
-  Database, Server, MessageSquare, Terminal, Square,
+  Server, MessageSquare, Terminal, Square,
   ChevronRight, FileCode2, Layout as LayoutIcon, Palette,
-  Shield, Plug, Wrench, X, Maximize2, Minimize2, AlertTriangle,
-  Clock, CheckCheck, Play, Globe, Bug, ShieldCheck
+  Shield, Plug, X, Maximize2, Minimize2, AlertTriangle,
+  Clock, CheckCheck, Play, Globe, Bug
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +53,15 @@ interface ChatMessage {
 
 // ─── Agent Config (matches generate.ts phases exactly) ────────────────────────
 
+// ENCONTRADO: cada fase (patcher/testing/validator/repair) tenía su propia
+// entrada en AGENT_CONFIG con la misma etiqueta "testing-agent" -- como la
+// barra de abajo renderiza un chip POR CLAVE (no por etiqueta única),
+// mostraba 4 chips duplicados diciendo lo mismo. Reescrito con una clave
+// por agente real y PHASE_TO_AGENT haciendo de traductor de fases del
+// backend a esa clave única. También se fusiona "database" en "architect"
+// (el diseño de datos vive dentro de la salida del Architect, no es una
+// llamada de IA separada) y se añade "evaluator" (Visual Evaluator, Claude
+// Vision) que antes no tenía ninguna representación aquí.
 const AGENT_CONFIG: Record<string, {
   label: string;
   shortLabel: string;
@@ -65,37 +74,43 @@ const AGENT_CONFIG: Record<string, {
   researcher:  { label: "Researcher",        shortLabel: "R",  icon: Search,       color: "text-blue-400",    bg: "bg-blue-500/15",    borderColor: "border-blue-500/30",    phase: "researching" },
   architect:   { label: "Architect",         shortLabel: "A",  icon: LayoutIcon,   color: "text-purple-400",  bg: "bg-purple-500/15",  borderColor: "border-purple-500/30",  phase: "architecting" },
   designer:    { label: "Designer",          shortLabel: "D",  icon: Palette,      color: "text-pink-400",    bg: "bg-pink-500/15",    borderColor: "border-pink-500/30",    phase: "designing" },
-  database:    { label: "Database",          shortLabel: "DB", icon: Database,     color: "text-amber-400",   bg: "bg-amber-500/15",   borderColor: "border-amber-500/30",   phase: "schema" },
   frontend:    { label: "Frontend Engineer", shortLabel: "FE", icon: Code2,        color: "text-emerald-400", bg: "bg-emerald-500/15", borderColor: "border-emerald-500/30", phase: "frontend" },
   backend:     { label: "Backend Engineer",  shortLabel: "BE", icon: Server,       color: "text-indigo-400",  bg: "bg-indigo-500/15",  borderColor: "border-indigo-500/30",  phase: "backend" },
   integration: { label: "API Integrator",    shortLabel: "AI", icon: Plug,         color: "text-yellow-400",  bg: "bg-yellow-500/15",  borderColor: "border-yellow-500/30",  phase: "integrations" },
-  qa:          { label: "QA Specialist",     shortLabel: "QA", icon: Shield,       color: "text-cyan-400",    bg: "bg-cyan-500/15",    borderColor: "border-cyan-500/30",    phase: "testing" },
-  // testing-agent: experto técnico de reparación — nombre en azul cielo
-  patcher:     { label: "testing-agent",     shortLabel: "TA", icon: Bug,          color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "patching" },
-  testing:     { label: "testing-agent",     shortLabel: "TA", icon: Bug,          color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "testing" },
-  validator:   { label: "testing-agent",     shortLabel: "TA", icon: ShieldCheck,  color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "validating" },
-  repair:      { label: "testing-agent",     shortLabel: "TA", icon: Wrench,       color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "fixing" },
-  coder:       { label: "Frontend Engineer", shortLabel: "FE", icon: Code2,        color: "text-emerald-400", bg: "bg-emerald-500/15", borderColor: "border-emerald-500/30", phase: "frontend" },
+  // Comparten canal "qa" en el backend real (apps.ts, fase "qa") — el
+  // texto del propio mensaje distingue cuál de los dos habla.
+  qa:          { label: "QA Reviewer / PM Agent", shortLabel: "QA", icon: Shield, color: "text-cyan-400",    bg: "bg-cyan-500/15",    borderColor: "border-cyan-500/30",    phase: "testing" },
+  testingAgent:{ label: "testing-agent",     shortLabel: "TA", icon: Bug,          color: "text-sky-400",     bg: "bg-sky-500/15",     borderColor: "border-sky-500/30",     phase: "patching" },
+  // Visual Evaluator (Claude Vision) — JobLog agent:"evaluator"
+  evaluator:   { label: "Visual Evaluator",  shortLabel: "VE", icon: Eye,          color: "text-violet-400",  bg: "bg-violet-500/15",  borderColor: "border-violet-500/30",  phase: "evaluating" },
   system:      { label: "Maris AI",          shortLabel: "M",  icon: Sparkles,     color: "text-violet-400",  bg: "bg-violet-500/15",  borderColor: "border-violet-500/30",  phase: "" },
 };
 
-// Map server phase → agent key
+// Map server phase → agent key (traduce TODAS las fases/tags reales del
+// backend a una de las claves únicas de arriba, sin crear duplicados)
 const PHASE_TO_AGENT: Record<string, string> = {
   researching: "researcher",
   architecting: "architect",
   designing: "designer",
-  schema: "database",
+  schema: "architect",
+  database: "architect",
   frontend: "frontend",
   backend: "backend",
   generating: "frontend",
+  coder: "frontend",
   integrations: "integration",
   integrating: "integration",
-  testing:    "testing",
+  testing:    "testingAgent",
+  patcher:    "testingAgent",
+  validator:  "testingAgent",
+  validating: "testingAgent",
+  repair:     "testingAgent",
+  fixing:     "testingAgent",
+  patching:   "testingAgent",
   qa:         "qa",
   reviewing:  "qa",
-  patching:   "patcher",
-  validating: "validator",
-  fixing:     "repair",
+  evaluator:  "evaluator",
+  evaluating: "evaluator",
   parsing: "system",
   starting: "system",
   queued: "system",

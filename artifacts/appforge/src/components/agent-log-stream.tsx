@@ -6,29 +6,48 @@ import {
   type JobLogEntry,
 } from "@/lib/api-client";
 import {
-  Bot, Code2, Search, Sparkles, Database, Server, Zap, CheckCircle2,
+  Bot, Code2, Search, Sparkles, Server, Zap, CheckCircle2,
   Terminal, ShieldCheck, Wrench, Bug, Eye, FolderOpen, ChevronDown, ChevronRight,
   Layers, Puzzle,
 } from "lucide-react";
 
 // ─── Configuración de agentes ────────────────────────────────────────────────
+// Lista verificada contra el código real del pipeline (no contra marketing):
+// Researcher, Architect, Designer, Frontend Engineer, Backend Engineer,
+// API Integrator, QA Reviewer, Testing Agent, PM Agent, Image Agent,
+// Visual Evaluator. "Database"/"schema" NO es un agente separado — el
+// diseño de datos vive dentro de la salida del Architect, así que se
+// fusiona bajo la misma etiqueta en vez de aparentar un paso que no
+// existe. PM Agent comparte el mismo canal de log ("qa") que QA Reviewer
+// en el pipeline real (routes/apps.ts, fase "qa") — el propio texto del
+// mensaje ya dice "PM Agent: ..." cuando corresponde, así que quedan
+// agrupados bajo la misma etiqueta visual en vez de fingir un tag que no
+// existe en el backend.
 const AGENT_CONFIG: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
   researcher:   { label: "Researcher",          icon: Search,       color: "text-blue-400",    bgColor: "bg-blue-400/10" },
   architect:    { label: "Architect",            icon: Layers,       color: "text-indigo-400",  bgColor: "bg-indigo-400/10" },
+  schema:       { label: "Architect",            icon: Layers,       color: "text-indigo-400",  bgColor: "bg-indigo-400/10" },
+  database:     { label: "Architect",            icon: Layers,       color: "text-indigo-400",  bgColor: "bg-indigo-400/10" },
   designer:     { label: "Designer",             icon: Sparkles,     color: "text-pink-400",    bgColor: "bg-pink-400/10" },
-  schema:       { label: "Database",             icon: Database,     color: "text-yellow-400",  bgColor: "bg-yellow-400/10" },
-  database:     { label: "Database",             icon: Database,     color: "text-yellow-400",  bgColor: "bg-yellow-400/10" },
   frontend:     { label: "Frontend Engineer",    icon: Zap,          color: "text-emerald-400", bgColor: "bg-emerald-400/10" },
+  coder:        { label: "Frontend Engineer",    icon: Code2,        color: "text-emerald-400", bgColor: "bg-emerald-400/10" },
   backend:      { label: "Backend Engineer",     icon: Server,       color: "text-cyan-400",    bgColor: "bg-cyan-400/10" },
   integrations: { label: "API Integrator",       icon: Puzzle,       color: "text-orange-400",  bgColor: "bg-orange-400/10" },
   integration:  { label: "API Integrator",       icon: Puzzle,       color: "text-orange-400",  bgColor: "bg-orange-400/10" },
-  qa:           { label: "QA Specialist",        icon: CheckCircle2, color: "text-cyan-400",    bgColor: "bg-cyan-400/10" },
+  // "qa" cubre tanto al QA Reviewer como al PM Agent (Quality Gate final)
+  // -- ambos loguean bajo el mismo tag "qa" en apps.ts, el texto del
+  // mensaje ya distingue cuál habla en cada momento.
+  qa:           { label: "QA Reviewer / PM Agent", icon: CheckCircle2, color: "text-cyan-400",  bgColor: "bg-cyan-400/10" },
   // testing-agent — nombre en azul cielo
   patcher:      { label: "testing-agent",        icon: Bug,          color: "text-sky-400",     bgColor: "bg-sky-400/10" },
   testing:      { label: "testing-agent",        icon: Bug,          color: "text-sky-400",     bgColor: "bg-sky-400/10" },
   validator:    { label: "testing-agent",        icon: ShieldCheck,  color: "text-sky-400",     bgColor: "bg-sky-400/10" },
   repair:       { label: "testing-agent",        icon: Wrench,       color: "text-sky-400",     bgColor: "bg-sky-400/10" },
-  coder:        { label: "Frontend Engineer",    icon: Code2,        color: "text-emerald-400", bgColor: "bg-emerald-400/10" },
+  // Visual Evaluator (Claude Vision) — escribe con agent:"evaluator" en JobLog
+  evaluator:    { label: "Visual Evaluator",     icon: Eye,          color: "text-violet-400",  bgColor: "bg-violet-400/10" },
+  // Image Agent genera imágenes en segundo plano sin log visible por
+  // diseño (no bloquea ni se muestra como paso de espera al cliente) —
+  // por eso no tiene entrada aquí: no hay ningún log real con ese tag.
   system:       { label: "Sistema",              icon: Bot,          color: "text-white/60",    bgColor: "bg-white/5" },
 };
 

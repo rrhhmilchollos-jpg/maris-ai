@@ -141,7 +141,7 @@ router.get("/bot-render/", (_req: Request, res: Response) => {
 <h2>¿Cómo funciona?</h2>
 <ol>
 <li><strong>Describe tu app</strong> — escribe en español lo que quieres construir.</li>
-<li><strong>11 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend, Backend, Database, QA, DevOps y Optimizer.</li>
+<li><strong>11 agentes IA trabajan en paralelo</strong> — Researcher, Architect, Designer, Frontend, Backend, API Integrator, QA Reviewer, Testing Agent, PM Agent, Image Agent y Visual Evaluator.</li>
 <li><strong>App lista en menos de 5 minutos</strong> — React + TypeScript + Tailwind + Express + MongoDB. Código 100% tuyo, exportable a GitHub.</li>
 </ol>
 <h2>Alternativa en español a Bolt, Lovable y v0</h2>

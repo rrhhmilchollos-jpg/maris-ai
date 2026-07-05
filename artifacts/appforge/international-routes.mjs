@@ -58,7 +58,7 @@ export const ENGLISH_ROUTES = [
 <p>Maris AI is a vibe coding platform that lets anyone build complete web apps using AI. 11 specialized agents generate your frontend, backend, and database in under 5 minutes. No coding skills needed.</p>
 <h2>Why choose Maris AI?</h2>
 <ul>
-<li><strong>11 specialized AI agents</strong> — Researcher, Architect, Designer, Frontend, Backend, QA, PM, Image, Visual Evaluator</li>
+<li><strong>11 specialized AI agents</strong> — Researcher, Architect, Designer, Frontend, Backend, API Integrator, QA, Testing, PM, Image, Visual Evaluator</li>
 <li><strong>Complete stack generated</strong> — React + TypeScript + Tailwind + Express + MongoDB</li>
 <li><strong>65 free credits</strong> to start, no credit card required</li>
 <li><strong>Credits never expire</strong> — use them whenever you need</li>
@@ -158,7 +158,7 @@ ${CROSS_LINKS_EN}`
 <dt>Pricing model</dt><dd>Maris AI uses credits that never expire. Bolt.new charges a monthly subscription — unused credits are lost.</dd>
 <dt>Cost per app</dt><dd>Maris AI: €0.11-0.13 per credit, apps cost 3-10 credits. Bolt.new: $20/month subscription regardless of usage.</dd>
 <dt>Code ownership</dt><dd>Both let you export code. Maris AI exports to GitHub with one click.</dd>
-<dt>AI agents</dt><dd>Maris AI uses 11 specialized agents (Researcher, Architect, Designer, Frontend, Backend, QA, PM, Image, Visual). Bolt.new uses a single AI model.</dd>
+<dt>AI agents</dt><dd>Maris AI uses 11 specialized agents (Researcher, Architect, Designer, Frontend, Backend, API Integrator, QA, Testing, PM, Image, Visual Evaluator). Bolt.new uses a single AI model.</dd>
 </dl>
 <h2>When to choose Maris AI</h2>
 <ul>
