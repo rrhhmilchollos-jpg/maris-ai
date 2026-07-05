@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -150,6 +151,12 @@ export default function DashboardPage() {
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [ultraThinking, setUltraThinking] = useState<boolean>(false);
+  // Teaser comercial del botón Ultra: se abre al pasar el ratón por encima
+  // (escritorio) o al tocar (móvil) SOLO para quien no tiene Ultra
+  // desbloqueado — a petición explícita del usuario, para "engancharlos a
+  // que quieran comprar". Quien ya puede usar Ultra no ve este teaser, el
+  // botón le funciona directamente.
+  const [showUltraTeaser, setShowUltraTeaser] = useState(false);
   const [legacyMode, setLegacyMode] = useState<boolean>(false);
   const [language, setLanguage] = useState<"typescript" | "javascript">("typescript");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -806,36 +813,83 @@ export default function DashboardPage() {
                         )}
                       </SelectContent>
                     </Select>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Bloqueo total: cuentas free no pueden ni pulsar
-                        // el botón, aunque manipularan el disabled del DOM.
-                        if (!hasVerifiedPayment && !isAdmin) return;
-                        setUltraThinking(v => {
-                          const next = !v;
-                          // Al entrar en Ultra, forzar Sonnet 4.7 por defecto
-                          // (el usuario elige luego si quiere Opus 4.8). Al
-                          // salir de Ultra, volver a "auto" -- el modelo
-                          // 4.7/4.8 seleccionado ya no aparece en la lista
-                          // normal y no tendría sentido dejarlo puesto.
-                          setCoderModel(next ? "claude-sonnet-4-7" : "auto");
-                          return next;
-                        });
-                      }}
-                      disabled={isWorking || (!hasVerifiedPayment && !isAdmin)}
-                      title={!hasVerifiedPayment && !isAdmin ? "Ultra solo está disponible para clientes con pago verificado" : undefined}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${
-                        !hasVerifiedPayment && !isAdmin
-                          ? "text-white/10 cursor-not-allowed border border-transparent"
-                          : ultraThinking
-                          ? "bg-violet-600/30 text-violet-300 border border-violet-500/40"
-                          : "text-white/20 hover:text-white/50 border border-transparent"
-                      }`}
-                    >
-                      {(!hasVerifiedPayment && !isAdmin) ? <Lock className="h-3 w-3" /> : <Brain className="h-3 w-3" />}
-                      <span className="hidden sm:inline">Ultra</span>
-                    </button>
+                    <Popover open={showUltraTeaser && !hasVerifiedPayment && !isAdmin} onOpenChange={(o) => { if (hasVerifiedPayment || isAdmin) return; setShowUltraTeaser(o); }}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Bloqueo total: cuentas free no pueden ni pulsar
+                            // el botón, aunque manipularan el disabled del DOM.
+                            // En vez de no hacer nada, en móvil (sin hover)
+                            // el toque abre el teaser comercial.
+                            if (!hasVerifiedPayment && !isAdmin) {
+                              setShowUltraTeaser((v) => !v);
+                              return;
+                            }
+                            setUltraThinking(v => {
+                              const next = !v;
+                              // Al entrar en Ultra, forzar Sonnet 4.7 por defecto
+                              // (el usuario elige luego si quiere Opus 4.8). Al
+                              // salir de Ultra, volver a "auto" -- el modelo
+                              // 4.7/4.8 seleccionado ya no aparece en la lista
+                              // normal y no tendría sentido dejarlo puesto.
+                              setCoderModel(next ? "claude-sonnet-4-7" : "auto");
+                              return next;
+                            });
+                          }}
+                          onMouseEnter={() => { if (!hasVerifiedPayment && !isAdmin) setShowUltraTeaser(true); }}
+                          onMouseLeave={() => { if (!hasVerifiedPayment && !isAdmin) setShowUltraTeaser(false); }}
+                          disabled={isWorking}
+                          title={!hasVerifiedPayment && !isAdmin ? "Ultra solo está disponible para clientes con pago verificado" : undefined}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${
+                            !hasVerifiedPayment && !isAdmin
+                              ? "text-white/20 hover:text-white/40 border border-transparent cursor-pointer"
+                              : ultraThinking
+                              ? "bg-violet-600/30 text-violet-300 border border-violet-500/40"
+                              : "text-white/20 hover:text-white/50 border border-transparent"
+                          }`}
+                        >
+                          {(!hasVerifiedPayment && !isAdmin) ? <Lock className="h-3 w-3" /> : <Brain className="h-3 w-3" />}
+                          <span className="hidden sm:inline">Ultra</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        className="w-72 bg-[#16161e] border-violet-500/30 p-0 overflow-hidden"
+                        onMouseEnter={() => setShowUltraTeaser(true)}
+                        onMouseLeave={() => setShowUltraTeaser(false)}
+                      >
+                        <div className="p-3 space-y-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-md bg-violet-600/20 flex items-center justify-center">
+                              <Lock className="h-3.5 w-3.5 text-violet-300" />
+                            </div>
+                            <p className="text-xs font-bold text-white">Modo Ultra — solo clientes de pago</p>
+                          </div>
+                          <p className="text-[11px] text-white/50 leading-relaxed">
+                            Desbloquea los agentes especializados con los modelos más potentes de Anthropic:
+                          </p>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 rounded-md bg-fuchsia-500/10 border border-fuchsia-500/20 px-2 py-1.5">
+                              <Sparkles className="h-3 w-3 text-fuchsia-400 flex-shrink-0" />
+                              <span className="text-[11px] font-semibold text-fuchsia-200">Sonnet 4.7</span>
+                            </div>
+                            <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
+                              <Brain className="h-3 w-3 text-amber-400 flex-shrink-0" />
+                              <span className="text-[11px] font-semibold text-amber-200">Opus 4.8</span>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full h-7 text-[11px] bg-violet-600 hover:bg-violet-500 text-white"
+                            onClick={() => setLocation("/billing")}
+                          >
+                            Actualizar a un plan de pago
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                     <button type="button" onClick={() => setLegacyMode(v => !v)} disabled={isWorking}
                       className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${legacyMode ? "bg-amber-600/30 text-amber-300 border border-amber-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}>
                       <RefreshCw className="h-3 w-3" /><span className="hidden sm:inline">Legacy</span>
