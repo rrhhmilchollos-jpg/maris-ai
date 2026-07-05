@@ -212,6 +212,61 @@ function detectTechStack(files: Record<string, string>, allPaths: string[]): str
   return Array.from(stack).slice(0, 8);
 }
 
+/**
+ * ENCONTRADO A PETICIÓN DEL USUARIO: el importador construye el bundle
+ * concatenando TODOS los archivos de texto en uno solo (buildFrontendCode),
+ * asumiendo un proyecto simple (HTML/CSS/JS o React+Vite ya empaquetado
+ * como bundle único) -- el mismo formato que generan los propios agentes
+ * de Maris AI. Un proyecto de Astro exportado desde Wix rompe esta
+ * suposición de raíz:
+ *   1. Astro no tiene un index.html con <script> — renderiza páginas
+ *      server-side desde archivos .astro (sintaxis propia, no JSX), así
+ *      que concatenarlo todo produce basura no ejecutable.
+ *   2. El proyecto depende de los SDK de @wix/* (data, bookings, stores,
+ *      members...), que llaman a APIs internas de la infraestructura de
+ *      Wix. Esto NO tiene arreglo posible desde Maris AI: aunque
+ *      supiéramos parsear Astro perfectamente, el código seguiría sin
+ *      funcionar fuera de Wix porque depende de servicios que Wix no
+ *      expone a terceros -- es su propio vendor lock-in.
+ * En vez de generar en silencio un bundle roto sin explicar por qué, se
+ * detecta esto ANTES de construir el bundle y se devuelve un error claro.
+ */
+function detectIncompatibleFramework(files: Record<string, string>, allPaths: string[]): string | null {
+  const hasWixConfig = allPaths.some((p) => /(^|\/)wix\.config\.json$/.test(p));
+  const hasAstroConfig = allPaths.some((p) => /(^|\/)astro\.config\.(mjs|ts|js)$/.test(p));
+  const hasAstroFiles = allPaths.some((p) => p.endsWith(".astro"));
+  const packageJsonEntry = allPaths.find((p) => /(^|\/)package\.json$/.test(p));
+  const packageJsonContent = packageJsonEntry ? files[packageJsonEntry] || "" : "";
+  const usesWixSdk = /"@wix\//.test(packageJsonContent) || allPaths.some((p) => p.includes("wix.config"));
+
+  if (hasWixConfig || hasAstroConfig || hasAstroFiles || usesWixSdk) {
+    return (
+      "Este proyecto es de Wix (Astro + SDK de Wix) y no se puede importar en Maris AI. " +
+      "Depende de servicios internos de Wix (@wix/data, @wix/bookings, @wix/stores, etc.) " +
+      "que solo funcionan dentro de la infraestructura de Wix — ni siquiera copiando el código " +
+      "perfectamente funcionaría fuera de su plataforma. Si quieres recrear este proyecto en " +
+      "Maris AI, la forma correcta es describir en un prompt qué hace la web (secciones, " +
+      "funcionalidades, diseño) para que los agentes la generen desde cero con tecnología " +
+      "100% exportable (React + Express + MongoDB), en vez de importar el código de Wix directamente."
+    );
+  }
+
+  // Otro caso frecuente: proyectos Next.js con App Router (server components,
+  // rutas API server-side) -- tampoco encajan en el modelo de bundle único
+  // de Maris AI, mismo motivo de fondo que Astro.
+  const hasNextConfig = allPaths.some((p) => /(^|\/)next\.config\.(js|mjs|ts)$/.test(p));
+  if (hasNextConfig) {
+    return (
+      "Este proyecto es de Next.js con renderizado en servidor y no se puede importar " +
+      "directamente en Maris AI (que trabaja con un bundle de frontend + backend Express, " +
+      "no con el modelo de servidor de Next.js). Describe la funcionalidad en un prompt " +
+      "para que los agentes la recreen desde cero."
+    );
+  }
+
+  return null;
+}
+
 // ── POST /api/import-app ─────────────────────────────────────────────────
 router.post("/import-app", requireAuth, upload.single("file"), async (req: any, res: any) => {
   try {
@@ -238,6 +293,12 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
 
     if (extracted.allPaths.length === 0) {
       return res.status(400).json({ error: "El archivo está vacío o no se pudo extraer." });
+    }
+
+    const incompatibilityReason = detectIncompatibleFramework(extracted.files, extracted.allPaths);
+    if (incompatibilityReason) {
+      logger.info({ userId, filename: req.file.originalname }, "Import rechazado: framework incompatible detectado");
+      return res.status(400).json({ error: incompatibilityReason });
     }
 
     const title = detectProjectTitle(extracted.files);
