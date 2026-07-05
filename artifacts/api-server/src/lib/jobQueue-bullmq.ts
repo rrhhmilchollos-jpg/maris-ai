@@ -226,6 +226,34 @@ export async function registerGenerateWorker(
             `Security: Job ${jobId} does not belong to user ${userId}. Rejecting.`
           );
         }
+
+        // ENCONTRADO ANTES DE ACTIVAR ESTA COLA (a peticion del usuario,
+        // revision completa antes de conectar): jobQueueMongo.ts limita a 1
+        // generacion activa por usuario a la vez (para que un solo cliente
+        // no acapare toda la capacidad concurrente) -- esta version de
+        // Redis no tenia ninguna proteccion equivalente. Se anade la misma
+        // regla aqui, consultando MongoDB directamente (no una variable en
+        // memoria, porque con Redis puede haber VARIAS instancias
+        // procesando a la vez -- la comprobacion tiene que valer para todas
+        // ellas, no solo para el proceso local).
+        const runningInDB = await GenerationJob.countDocuments({
+          userId,
+          status: "running",
+          _id: { $ne: jobId },
+        });
+        if (runningInDB >= 1) {
+          logger.info({ jobId, userId, runningInDB }, "Usuario ya tiene un job corriendo — reencolando para más tarde en vez de procesar en paralelo");
+          // Reencolar con un pequeño retraso en vez de procesar ahora mismo
+          // -- lanzar un error normal haría que BullMQ lo cuente como
+          // "intento fallido" (gastando reintentos sin necesidad), así que
+          // se reencola explícitamente con backoff propio.
+          await queue!.add(
+            `generate-${jobId}`,
+            { jobId, userId } as JobPayload,
+            { jobId: `${jobId}-retry-${Date.now()}`, delay: 5_000, attempts: 1, removeOnComplete: true },
+          );
+          return;
+        }
         
         // Update status to running
         await GenerationJob.findByIdAndUpdate(jobId, {
@@ -236,17 +264,37 @@ export async function registerGenerateWorker(
         const attempt = (bullJob.attemptsMade ?? 0) + 1;
         await handler(jobId, { attempt, maxAttempts: 3 });
         
-        // Mark as succeeded
-        await GenerationJob.findByIdAndUpdate(jobId, {
-          $set: { status: "succeeded", phase: "succeeded", updatedAt: new Date() },
-        });
-        
-        logger.info({ jobId, userId }, "Job succeeded");
+        // ENCONTRADO Y CORREGIDO ANTES DE ACTIVAR ESTA COLA (a peticion del
+        // usuario, tras revisar a fondo antes de conectar nada): este bloque
+        // marcaba el job como "succeeded" INCONDICIONALMENTE en cuanto el
+        // handler (runJobById, definido en apps.ts) terminaba sin lanzar
+        // error -- pero runJobById ya gestiona su PROPIO estado final de
+        // forma mucho mas matizada (incluido "reviewing" para el sistema de
+        // garantia de primera generacion construido antes en esta misma
+        // sesion, que oculta al cliente una app que no supero el control de
+        // calidad hasta que un admin la revise). Sobrescribir aqui a
+        // "succeeded" sin condicion habria roto esa logica en silencio --
+        // la app habria pasado a "succeeded" igualmente aunque runJobById
+        // hubiera decidido "reviewing". Ahora, igual que hace la version
+        // Mongo (jobQueueMongo.ts): NO tocar el estado si el handler ya
+        // termino sin error -- el propio handler es la fuente de verdad de
+        // su estado final.
+        logger.info({ jobId, userId }, "Job handler completado sin errores");
       } catch (err) {
         logger.error(
           { err, jobId, userId, attempt: bullJob.attemptsMade },
           "Job processing error"
         );
+
+        // Misma comprobación defensiva que jobQueueMongo.ts: si el job ya
+        // quedó marcado como éxito (o en revisión, por el sistema de
+        // garantía de primera generación) por el propio handler antes de
+        // que este catch se disparase, no lo pisamos con un fallo.
+        const currentJob = await GenerationJob.findById(jobId).select("status").lean() as any;
+        if (currentJob?.status === "succeeded" || currentJob?.status === "reviewing") {
+          logger.info({ jobId, status: currentJob.status }, "Job ya resuelto por el handler — ignorando el catch del worker");
+          return;
+        }
         
         // Update job with error context, but only mark as terminal failure if attempts are exhausted
         const isFinalAttempt = (bullJob.attemptsMade ?? 0) + 1 >= (bullJob.opts.attempts ?? 3);
