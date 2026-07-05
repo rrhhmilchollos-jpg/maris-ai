@@ -113,6 +113,8 @@ import {
   AlertTriangle,
   ShoppingCart,
   ShieldCheck,
+  Calendar,
+  Fingerprint,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
@@ -2323,29 +2325,121 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-6">
               {accountSettingsTab === "personal" && (
-                <div className="space-y-5">
-                  <h3 className="text-base font-bold text-white">Información personal</h3>
-                  <div className="flex items-center gap-4">
-                    <Avatar className="h-14 w-14 md:h-16 md:w-16 border-2 border-white/10">
-                      <AvatarImage src={user?.imageUrl} />
-                      <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-xl font-bold text-white">{user?.firstName?.charAt(0) || "M"}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-white">{user?.fullName || firstName}</p>
-                      <p className="text-sm text-white/45">{user?.primaryEmailAddress?.emailAddress || me?.email}</p>
-                      {isAdmin && <span className="inline-flex items-center gap-1 mt-1 text-xs text-yellow-400"><Crown className="h-3 w-3" />Propietario</span>}
+                <div className="space-y-6">
+                  {/* Cabecera de identidad */}
+                  <div
+                    className={`relative overflow-hidden rounded-2xl border p-5 md:p-6 ${
+                      isAdmin
+                        ? "border-yellow-500/20 bg-gradient-to-br from-[#7c3aed]/15 via-[#150f22] to-yellow-500/[0.06]"
+                        : "border-white/[0.07] bg-white/[0.03]"
+                    }`}
+                  >
+                    {isAdmin && (
+                      <div className="pointer-events-none absolute -top-20 -right-16 h-52 w-52 rounded-full bg-yellow-400/10 blur-3xl" />
+                    )}
+                    <div className="relative flex items-start gap-4">
+                      <div className={isAdmin ? "relative shrink-0 rounded-full bg-gradient-to-br from-yellow-400 via-[#c084fc] to-[#7c3aed] p-[2px]" : "relative shrink-0"}>
+                        <Avatar className="h-16 w-16 md:h-[72px] md:w-[72px] border-2 border-[#0d0f1a]">
+                          <AvatarImage src={user?.imageUrl} />
+                          <AvatarFallback className="bg-gradient-to-br from-[#7c3aed] to-[#5b21b6] text-2xl font-bold text-white">
+                            {(user?.fullName || firstName || "M").charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        {isAdmin && (
+                          <div className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full border border-yellow-500/40 bg-[#0d0f1a]">
+                            <Crown className="h-3.5 w-3.5 text-yellow-400" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-lg font-bold text-white truncate">{user?.fullName || firstName}</p>
+                          {isAdmin ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2.5 py-0.5 text-[11px] font-bold text-yellow-400">
+                              <Crown className="h-3 w-3" />Propietario
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-semibold text-white/60">
+                              {(me as any)?.planName ?? "Starter"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-sm text-white/45">{user?.primaryEmailAddress?.emailAddress || me?.email}</p>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-white/35">
+                          {(me as any)?.marisId && (
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText((me as any).marisId);
+                                toast({ title: "ID copiado" });
+                              }}
+                              className="inline-flex items-center gap-1.5 font-mono transition hover:text-white/65"
+                              title="Copiar ID universal"
+                            >
+                              <Fingerprint className="h-3 w-3" />
+                              {(me as any).marisId}
+                              <Copy className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+                          {(me as any)?.createdAt && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Calendar className="h-3 w-3" />
+                              Miembro desde {new Date((me as any).createdAt).toLocaleDateString("es-ES", { month: "long", year: "numeric" })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+
+                  {/* Métricas */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
-                      <p className="text-xs text-white/35 uppercase tracking-widest">Racha</p>
-                      <p className="mt-2 text-xl md:text-2xl font-bold text-orange-400 flex items-center gap-2"><Flame className="h-5 w-5" />{(stats as any)?.streak ?? 1} días</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-white/35">Racha</p>
+                      <p className="mt-2 flex items-center gap-1.5 text-xl md:text-2xl font-bold text-orange-400">
+                        <Flame className="h-5 w-5" />{(stats as any)?.streak ?? 1}<span className="text-xs font-medium text-white/30">días</span>
+                      </p>
                     </div>
                     <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
-                      <p className="text-xs text-white/35 uppercase tracking-widest">Créditos</p>
-                      <p className="mt-2 text-xl md:text-2xl font-bold text-yellow-400 flex items-center gap-2"><Cpu className="h-5 w-5" />{isAdmin ? "∞" : credits}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-white/35">Créditos</p>
+                      <p className="mt-2 flex items-center gap-1.5 text-xl md:text-2xl font-bold text-yellow-400">
+                        <Cpu className="h-5 w-5" />{isAdmin ? "∞" : credits}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-white/35">Apps generadas</p>
+                      <p className="mt-2 flex items-center gap-1.5 text-xl md:text-2xl font-bold text-[#c084fc]">
+                        <Sparkles className="h-5 w-5" />{(me as any)?.appsGenerated ?? stats?.appsGenerated ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-white/35">Plan</p>
+                      <p className="mt-2 flex items-center gap-1.5 text-base md:text-lg font-bold text-emerald-400">
+                        <ShieldCheck className="h-5 w-5" />{isAdmin ? "Propietario" : ((me as any)?.planName ?? "Starter")}
+                      </p>
                     </div>
                   </div>
+
+                  {/* Permisos de propietario — solo visible para tu cuenta admin */}
+                  {isAdmin && (
+                    <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 md:p-5">
+                      <p className="mb-3 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-white/35">
+                        <Crown className="h-3.5 w-3.5 text-yellow-400" />Permisos de propietario activos
+                      </p>
+                      <div className="grid gap-2.5 sm:grid-cols-2">
+                        {[
+                          { label: "Créditos ilimitados", icon: Cpu },
+                          { label: "Editor de código completo", icon: Code },
+                          { label: "Despliegue directo a Railway", icon: Rocket },
+                          { label: "Panel de administración", icon: LayoutDashboard },
+                        ].map((perm) => (
+                          <div key={perm.label} className="flex items-center gap-2.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
+                            <perm.icon className="h-3.5 w-3.5 shrink-0 text-yellow-400/80" />
+                            <span className="text-[13px] text-white/70">{perm.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {accountSettingsTab === "apikey" && (
