@@ -1947,7 +1947,20 @@ async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraSc
 }
 
 function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; hasEverPaid?: boolean }) {
-  const normalized = normalizeCoderModel(requestedModel);
+  let normalized = normalizeCoderModel(requestedModel);
+  // BLOQUEO SERVER-SIDE (a petición explícita del usuario: "prohibido bajo
+  // ningún concepto" cuentas free en modo Ultra): el frontend ya bloquea el
+  // botón Ultra para quien no tiene pago verificado, pero eso es solo
+  // cosmético — cualquiera con acceso a la API podría pedir
+  // "claude-sonnet-4-7"/"claude-opus-4-8" directamente en el body de la
+  // petición. Aquí es donde de verdad se hace cumplir: si se pide uno de
+  // los 2 modelos Ultra y el usuario NO tiene hasEverPaid=true (esto ya
+  // incluye a los admins vía `hasEverPaid || isAdmin` en el caller), se
+  // degrada en silencio a Sonnet 4.6 en vez de servir el modelo Ultra sin
+  // autorización.
+  if ((normalized === "claude-sonnet-4-7" || normalized === "claude-opus-4-8") && !context?.hasEverPaid) {
+    normalized = "claude-sonnet-4-6";
+  }
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
 

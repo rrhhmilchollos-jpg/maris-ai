@@ -46,7 +46,7 @@ import {
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
   Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
-  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown
+  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock
 } from "lucide-react";
 import {
   Dialog,
@@ -179,6 +179,13 @@ export default function DashboardPage() {
     "video-ai": 3, "imagen-ai": 3,
   };
   const isPaidPlan = !!(stats as any)?.isPremium;
+  // Distinto de isPaidPlan: isPaidPlan refleja el PLAN ACTUAL (puede ser
+  // true para un admin sin ningún pago real). hasVerifiedPayment refleja
+  // si el usuario ha completado alguna vez un pago de verdad (Stripe/Viva)
+  // -- el campo correcto para gatear el modo Ultra (Sonnet 4.7/Opus 4.8),
+  // a petición explícita del usuario: "solo clientes de pago verificados
+  // que ya hayan realizado pagos".
+  const hasVerifiedPayment = !!(stats as any)?.hasEverPaid;
   const computeRealCost = (kindKey: string) => {
     const base = BASE_KIND_COSTS[kindKey] ?? 3;
     return isPaidPlan ? base * 10 : Math.min(base * 13, 50);
@@ -763,41 +770,71 @@ export default function DashboardPage() {
                         <SelectValue placeholder="Modelo" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#16161e] border-white/10">
-                        <SelectItem value="auto" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (11 Agentes)</div></SelectItem>
-                        {/* Haiku 4.5 y GPT-5.4: restringidos a admin durante la
-                            fase de prueba (a petición explícita del usuario).
-                            El sistema de hitos ya obliga a TODOS los modelos a
-                            trabajar módulo a módulo (ver generateApp en
-                            apps.ts), lo que en teoría hace mucho más seguro
-                            usarlos que antes -- pero esto no se ha validado
-                            aún con generaciones reales, así que de momento
-                            solo el admin puede seleccionarlos para probarlos
-                            con calma antes de abrirlos a clientes reales. */}
-                        {isAdmin && (
-                          <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido) — solo admin, en pruebas</div></SelectItem>
-                        )}
-                        <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
-                        <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
-                        {/* Sonnet 4.7 y Opus 4.8: solo clientes de pago Y con
-                            Ultra activado (a petición explícita del usuario).
-                            Igual que GPT-5.4/Haiku manual, sin probar aún con
-                            generaciones reales dentro del sistema de hitos —
-                            por eso el doble requisito (pago + Ultra), no solo
-                            uno de los dos. */}
-                        {isPaidPlan && ultraThinking && (
+                        {ultraThinking ? (
+                          // MODO ULTRA: exclusivamente Sonnet 4.7 y Opus 4.8,
+                          // nada más. No se mezcla con la lista normal — a
+                          // petición explícita del usuario, Ultra es su
+                          // propio modo con solo estos 2 modelos. Solo
+                          // llega aquí quien ya tiene pago verificado (o es
+                          // admin), porque el botón Ultra está bloqueado
+                          // para el resto — ver más abajo.
                           <>
                             <SelectItem value="claude-sonnet-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-fuchsia-400" />Sonnet 4.7 — Ultra</div></SelectItem>
                             <SelectItem value="claude-opus-4-8" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Opus 4.8 — Ultra</div></SelectItem>
                           </>
-                        )}
-                        {isAdmin && (
-                          <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4 — solo admin, en pruebas</div></SelectItem>
+                        ) : (
+                          <>
+                            <SelectItem value="auto" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (11 Agentes)</div></SelectItem>
+                            {/* Haiku 4.5 y GPT-5.4: restringidos a admin durante la
+                                fase de prueba (a petición explícita del usuario).
+                                El sistema de hitos ya obliga a TODOS los modelos a
+                                trabajar módulo a módulo (ver generateApp en
+                                apps.ts), lo que en teoría hace mucho más seguro
+                                usarlos que antes -- pero esto no se ha validado
+                                aún con generaciones reales, así que de momento
+                                solo el admin puede seleccionarlos para probarlos
+                                con calma antes de abrirlos a clientes reales. */}
+                            {isAdmin && (
+                              <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido) — solo admin, en pruebas</div></SelectItem>
+                            )}
+                            <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
+                            <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
+                            {isAdmin && (
+                              <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4 — solo admin, en pruebas</div></SelectItem>
+                            )}
+                          </>
                         )}
                       </SelectContent>
                     </Select>
-                    <button type="button" onClick={() => setUltraThinking(v => !v)} disabled={isWorking}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${ultraThinking ? "bg-violet-600/30 text-violet-300 border border-violet-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}>
-                      <Brain className="h-3 w-3" /><span className="hidden sm:inline">Ultra</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Bloqueo total: cuentas free no pueden ni pulsar
+                        // el botón, aunque manipularan el disabled del DOM.
+                        if (!hasVerifiedPayment && !isAdmin) return;
+                        setUltraThinking(v => {
+                          const next = !v;
+                          // Al entrar en Ultra, forzar Sonnet 4.7 por defecto
+                          // (el usuario elige luego si quiere Opus 4.8). Al
+                          // salir de Ultra, volver a "auto" -- el modelo
+                          // 4.7/4.8 seleccionado ya no aparece en la lista
+                          // normal y no tendría sentido dejarlo puesto.
+                          setCoderModel(next ? "claude-sonnet-4-7" : "auto");
+                          return next;
+                        });
+                      }}
+                      disabled={isWorking || (!hasVerifiedPayment && !isAdmin)}
+                      title={!hasVerifiedPayment && !isAdmin ? "Ultra solo está disponible para clientes con pago verificado" : undefined}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${
+                        !hasVerifiedPayment && !isAdmin
+                          ? "text-white/10 cursor-not-allowed border border-transparent"
+                          : ultraThinking
+                          ? "bg-violet-600/30 text-violet-300 border border-violet-500/40"
+                          : "text-white/20 hover:text-white/50 border border-transparent"
+                      }`}
+                    >
+                      {(!hasVerifiedPayment && !isAdmin) ? <Lock className="h-3 w-3" /> : <Brain className="h-3 w-3" />}
+                      <span className="hidden sm:inline">Ultra</span>
                     </button>
                     <button type="button" onClick={() => setLegacyMode(v => !v)} disabled={isWorking}
                       className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${legacyMode ? "bg-amber-600/30 text-amber-300 border border-amber-500/40" : "text-white/20 hover:text-white/50 border border-transparent"}`}>

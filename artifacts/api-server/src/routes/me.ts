@@ -54,6 +54,12 @@ router.get("/me", requireAuth, async (req, res) => {
       appsGenerated: appsCount,
       isAdmin,
       isPremium,
+      // hasEverPaid: a diferencia de isPremium (que puede ser true para un
+      // admin sin pago real, o depender del plan actual), esto refleja si
+      // el usuario ha completado alguna vez un pago real (Stripe/Viva) —
+      // el campo correcto para gatear funciones "solo pago verificado"
+      // como el modo Ultra (Sonnet 4.7 / Opus 4.8).
+      hasEverPaid: !!u.hasEverPaid,
       lifetimeCreditsPurchased,
       createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString(),
       // ID Universal Maris AI del usuario
