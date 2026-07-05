@@ -199,6 +199,14 @@ export interface IGeneratedApp {
   watermarkRemovalPrice?: number;
   watermarkRemovalStripeSessionId?: string;
   watermarkRemovalVivaOrderCode?: number;
+  // Preview en vivo (SSR) — para proyectos importados que necesitan un
+  // servidor real corriendo (Next.js App Router, etc.), a diferencia del
+  // resto de apps de Maris AI que se sirven como bundle estático via
+  // buildDeployHtml. Ver lib/ssrImportBuilder.ts.
+  renderMode?: "static" | "ssr-live";
+  livePreviewUrl?: string;
+  livePreviewSandboxId?: string;
+  livePreviewExpiresAt?: Date;
   deploymentStatus?: string;
   deploymentError?: string;
   marisaiSubdomain?: string;
@@ -297,6 +305,10 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     watermarkRemovalPrice: { type: Number, default: 9.99 },
     watermarkRemovalStripeSessionId: { type: String },
     watermarkRemovalVivaOrderCode: { type: Number },
+    renderMode: { type: String, enum: ["static", "ssr-live"], default: "static" },
+    livePreviewUrl: { type: String },
+    livePreviewSandboxId: { type: String },
+    livePreviewExpiresAt: { type: Date },
     deploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
     deploymentError: { type: String },
     marisaiSubdomain: { type: String, unique: true, sparse: true },

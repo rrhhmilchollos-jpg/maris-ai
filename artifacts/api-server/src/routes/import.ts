@@ -232,8 +232,9 @@ function detectTechStack(files: Record<string, string>, allPaths: string[]): str
  * Esto NO es una promesa de que todo proyecto Astro compilará: si usa
  * integraciones @wix/astro que requieren el servicio de build en la nube
  * de Wix, el build fallará igualmente -- pero fallará con el error REAL
- * de Astro, no con una suposición nuestra. Ver detectUnbuildableFramework
- * para los casos que sí son imposibles sin excepción (Next.js SSR).
+ * de Astro, no con una suposición nuestra. Ver needsSSRServer para el
+ * caso de Next.js, que ahora se intenta con un servidor en vivo en vez
+ * de rechazarse de entrada.
  */
 function needsAstroBuild(files: Record<string, string>, allPaths: string[]): boolean {
   const hasAstroConfig = allPaths.some((p) => /(^|\/)astro\.config\.(mjs|ts|js)$/.test(p));
@@ -242,25 +243,16 @@ function needsAstroBuild(files: Record<string, string>, allPaths: string[]): boo
 }
 
 /**
- * Frameworks que NO tienen forma posible de funcionar con el modelo de
- * preview de Maris AI (bundle estático servido al navegador), sin importar
- * cuánta infraestructura se añada -- a diferencia de Astro (que SÍ se
- * puede compilar a estático), Next.js con App Router depende de un
- * servidor Node.js corriendo de forma continua (Server Components,
- * Server Actions, rutas API server-side) para funcionar, no de un build
- * único que produzca archivos estáticos servibles.
+ * Proyectos que necesitan un servidor real corriendo (no un build estático)
+ * para funcionar de verdad: Next.js con App Router es el caso más común
+ * (Server Components, Server Actions, rutas API dinámicas). Antes esto se
+ * rechazaba de entrada por considerarse imposible -- a petición explícita
+ * del usuario, ahora se intenta de verdad arrancando un servidor persistente
+ * en un sandbox E2B (ver ssrImportBuilder.ts) y sirviendo su URL en vivo,
+ * en vez de un bundle estático guardado.
  */
-function detectUnbuildableFramework(allPaths: string[]): string | null {
-  const hasNextConfig = allPaths.some((p) => /(^|\/)next\.config\.(js|mjs|ts)$/.test(p));
-  if (hasNextConfig) {
-    return (
-      "Este proyecto es de Next.js con renderizado en servidor y no se puede importar " +
-      "directamente en Maris AI (que trabaja con un bundle de frontend + backend Express, " +
-      "no con un servidor Node.js seguido de renderizado dinámico como Next.js). Describe " +
-      "la funcionalidad en un prompt para que los agentes la recreen desde cero."
-    );
-  }
-  return null;
+function needsSSRServer(allPaths: string[]): boolean {
+  return allPaths.some((p) => /(^|\/)next\.config\.(js|mjs|ts)$/.test(p));
 }
 
 // ── POST /api/import-app ─────────────────────────────────────────────────
@@ -291,16 +283,25 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       return res.status(400).json({ error: "El archivo está vacío o no se pudo extraer." });
     }
 
-    const unbuildableReason = detectUnbuildableFramework(extracted.allPaths);
-    if (unbuildableReason) {
-      logger.info({ userId, filename: req.file.originalname }, "Import rechazado: framework sin build estático posible");
-      return res.status(400).json({ error: unbuildableReason });
-    }
-
     let filesForBundle = extracted.files;
     let allPathsForBundle = extracted.allPaths;
+    let ssrLiveResult: { liveUrl: string; sandboxId: string; expiresAt: Date } | null = null;
 
-    if (needsAstroBuild(extracted.files, extracted.allPaths)) {
+    if (needsSSRServer(extracted.allPaths)) {
+      logger.info({ userId, filename: req.file.originalname }, "Import: proyecto con SSR (Next.js) detectado — arrancando servidor en vivo en E2B");
+      const { startSSRServerInE2B } = await import("../lib/ssrImportBuilder");
+      const ssrResult = await startSSRServerInE2B(extracted.files);
+      if (!ssrResult.ok || !ssrResult.liveUrl || !ssrResult.sandboxId || !ssrResult.expiresAt) {
+        logger.warn({ userId, reason: ssrResult.reason }, "Import: arranque de servidor SSR falló");
+        return res.status(422).json({
+          error: ssrResult.reason || "No se pudo arrancar el servidor del proyecto.",
+          buildLog: ssrResult.buildLog?.slice(0, 4000),
+          installLog: ssrResult.installLog?.slice(0, 2000),
+        });
+      }
+      ssrLiveResult = { liveUrl: ssrResult.liveUrl, sandboxId: ssrResult.sandboxId, expiresAt: ssrResult.expiresAt };
+      logger.info({ userId, liveUrl: ssrLiveResult.liveUrl, expiresAt: ssrLiveResult.expiresAt }, "Import: servidor SSR en vivo listo");
+    } else if (needsAstroBuild(extracted.files, extracted.allPaths)) {
       logger.info({ userId, filename: req.file.originalname }, "Import: proyecto Astro detectado — compilando en sandbox E2B");
       const { buildAstroProjectInE2B } = await import("../lib/astroImportBuilder");
       const astroResult = await buildAstroProjectInE2B(extracted.files);
@@ -322,10 +323,15 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
 
     const title = detectProjectTitle(filesForBundle);
     const description = detectDescription(filesForBundle);
-    const techStack = needsAstroBuild(extracted.files, extracted.allPaths)
-      ? [...detectTechStack(filesForBundle, allPathsForBundle), "Astro (compilado)"]
+    const extraTechTag = ssrLiveResult ? "Next.js (servidor en vivo)" : needsAstroBuild(extracted.files, extracted.allPaths) ? "Astro (compilado)" : null;
+    const techStack = extraTechTag
+      ? [...detectTechStack(filesForBundle, allPathsForBundle), extraTechTag]
       : detectTechStack(filesForBundle, allPathsForBundle);
-    let frontendCode = buildFrontendCode(filesForBundle, allPathsForBundle);
+    // Con SSR en vivo no hay bundle que guardar -- el "contenido" de la app
+    // es el servidor corriendo en el sandbox, no código almacenado.
+    let frontendCode = ssrLiveResult
+      ? "// Este proyecto usa un servidor en vivo (SSR) — ver GeneratedApp.livePreviewUrl. No hay bundle estático almacenado."
+      : buildFrontendCode(filesForBundle, allPathsForBundle);
 
     // MongoDB tiene límite de 16MB por documento. Truncar si es necesario.
     const MAX_CODE_BYTES = 12 * 1024 * 1024; // 12MB para dejar margen
@@ -350,6 +356,14 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       publicSlug: makeSlug(),
       plannedPages: [],
       requiredEnvVars: [],
+      ...(ssrLiveResult
+        ? {
+            renderMode: "ssr-live",
+            livePreviewUrl: ssrLiveResult.liveUrl,
+            livePreviewSandboxId: ssrLiveResult.sandboxId,
+            livePreviewExpiresAt: ssrLiveResult.expiresAt,
+          }
+        : {}),
     });
 
     res.status(201).json({
@@ -358,7 +372,10 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       description,
       techStack,
       filesImported: extracted.allPaths.length,
-      message: `Proyecto "${title}" importado con éxito (${extracted.allPaths.length} archivos).`,
+      message: ssrLiveResult
+        ? `Proyecto "${title}" importado con éxito — servidor en vivo activo durante 30 minutos.`
+        : `Proyecto "${title}" importado con éxito (${extracted.allPaths.length} archivos).`,
+      ...(ssrLiveResult ? { renderMode: "ssr-live", livePreviewUrl: ssrLiveResult.liveUrl, livePreviewExpiresAt: ssrLiveResult.expiresAt } : {}),
     });
   } catch (err) {
     logger.error({ err }, "POST /api/import-app error");

@@ -756,7 +756,12 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const hasRenderableCode = frontendCode.length >= 20 && !hasMilestonePlaceholder;
   const API_BASE = import.meta.env.VITE_API_URL ?? "";
   const previewEndpointUrl = app?._id ? `${API_BASE}/api/apps/${app._id}/preview` : "";
-  const deployedUrl = app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
+  // Prioridad máxima: proyectos importados con servidor SSR en vivo (Next.js
+  // vía ssrImportBuilder.ts) — su "preview" es literalmente el servidor
+  // corriendo en el sandbox, no un bundle servido por Maris AI.
+  const deployedUrl = (app?.renderMode === "ssr-live" && app?.livePreviewUrl)
+    ? app.livePreviewUrl
+    : app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
 
   const isDeployedForShowcase = !!(app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || app?.marisaiSubdomain);
   const [showcasePending, setShowcasePending] = useState(false);
@@ -2108,6 +2113,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   previewSize === "mobile" ? "px-[calc(50%-190px)]" :
                   previewSize === "tablet" ? "px-[calc(50%-384px)]" : ""
                 }`}>
+                  {app?.renderMode === "ssr-live" && (
+                    <div className="absolute left-3 top-3 md:left-4 md:top-4 z-20 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300 backdrop-blur">
+                      ⚡ Servidor en vivo (Next.js) — preview temporal, no un bundle guardado
+                    </div>
+                  )}
                   {showStaticBuildState ? (
                     <AppPreviewWaitingState />
                   ) : deployedUrl ? (
