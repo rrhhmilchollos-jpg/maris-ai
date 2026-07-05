@@ -21,15 +21,15 @@ const ROUTES = [
     path: "/",
     file: "index.html",
     title: "Maris AI — Crear App con IA sin Programar",
-    description: "Crea tu app web con IA en menos de 5 minutos. 9 agentes generan código React, backend y base de datos. Gratis para emprendedores en España.",
+    description: "Crea tu app web con IA en menos de 5 minutos. 11 agentes generan código React, backend y base de datos. Gratis para emprendedores en España.",
     canonical: "https://www.marisai.es/",
     body: `<h1>Maris AI — Crear App con IA sin Programar en Español</h1>
-<p>Maris AI es la primera plataforma de vibe coding completamente en español. 9 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin saber programar. Gratis para emprendedores en España.</p>
+<p>Maris AI es la primera plataforma de vibe coding completamente en español. 11 agentes de inteligencia artificial especializados generan tu app completa en menos de 5 minutos. Sin saber programar. Gratis para emprendedores en España.</p>
 <h2>¿Qué es Maris AI?</h2>
 <p>Maris AI es la mejor alternativa a Bolt.new, Lovable y Emergent para el mercado hispanohablante. A diferencia de estas plataformas que operan solo en inglés, Maris AI está diseñada desde cero para emprendedores españoles y latinoamericanos.</p>
 <ul>
 <li>Completamente en español — interfaz, soporte y generación de código</li>
-<li>9 agentes IA especializados trabajando en paralelo</li>
+<li>11 agentes IA especializados trabajando en paralelo</li>
 <li>Backend Express + MongoDB incluido automáticamente</li>
 <li>65 créditos gratis sin tarjeta de crédito</li>
 <li>Créditos que nunca caducan</li>
@@ -58,7 +58,7 @@ const ROUTES = [
 <dt>¿Cuánto cuesta Maris AI?</dt><dd>65 créditos gratis al registrarte, sin tarjeta. Paquetes desde 20€ por 160 créditos que nunca caducan.</dd>
 <dt>¿El código generado es mío?</dt><dd>Sí, 100% tuyo. Exportable a GitHub sin restricciones.</dd>
 <dt>¿Qué es el vibe coding?</dt><dd>El vibe coding es el paradigma donde describes tu idea en lenguaje natural y la IA genera el código. Maris AI es la plataforma de vibe coding líder en español.</dd>
-<dt>¿Cuál es la mejor alternativa a Bolt.new en español?</dt><dd>Maris AI es la mejor alternativa a Bolt.new en español. Completamente en español, con 9 agentes IA, backend incluido y precios en euros.</dd>
+<dt>¿Cuál es la mejor alternativa a Bolt.new en español?</dt><dd>Maris AI es la mejor alternativa a Bolt.new en español. Completamente en español, con 11 agentes IA, backend incluido y precios en euros.</dd>
 </dl>
 <h2>Tipos de apps que puedes crear</h2>
 <ul>
@@ -85,7 +85,7 @@ const ROUTES = [
     body: `<h1>Precios de Maris AI — Crea apps con IA</h1>
 <p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan y cuanto más compras, más barato sale cada crédito.</p>
 <h2>Plan Gratuito</h2>
-<ul><li>65 créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 9 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
+<ul><li>65 créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 11 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
 <h2>Pack Starter — 20€</h2>
 <ul><li>160 créditos</li><li>0,125€ por crédito</li><li>Creditos que nunca caducan</li></ul>
 <h2>Pack 250 — 37€</h2>
@@ -125,7 +125,7 @@ const ROUTES = [
 <li><strong>Portafolios</strong> — Webs personales y profesionales</li>
 </ul>
 <h2>¿Cómo se crean estas apps?</h2>
-<p>El usuario describe su idea en español. Los 9 agentes de IA de Maris AI (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, QA, PM, Image Agent y Visual Evaluator) trabajan en paralelo y generan el código completo en menos de 5 minutos.</p>`
+<p>El usuario describe su idea en español. Los 11 agentes de IA de Maris AI (Researcher, Architect, Designer, Frontend Engineer, Backend Engineer, QA, PM, Image Agent y Visual Evaluator) trabajan en paralelo y generan el código completo en menos de 5 minutos.</p>`
   },
   {
     path: "/news",
@@ -156,7 +156,7 @@ const ROUTES = [
 <h2>¿Por qué Maris AI es mejor para emprendedores españoles?</h2>
 <ul>
 <li><strong>Completamente en español</strong> — Interfaz, soporte y generación de código en español nativo</li>
-<li><strong>9 agentes especializados</strong> — Pipeline completo vs 1 agente genérico en la competencia</li>
+<li><strong>11 agentes especializados</strong> — Pipeline completo vs 1 agente genérico en la competencia</li>
 <li><strong>Precio más justo</strong> — Desde 0€ sin tarjeta vs precios en dólares de la competencia</li>
 <li><strong>Soporte real en español</strong> — Equipo de soporte que habla tu idioma</li>
 <li><strong>Optimizado para el mercado español</strong> — Cumplimiento RGPD, precios en euros</li>
@@ -193,14 +193,14 @@ const ROUTES = [
     path: "/vs-lovable",
     file: "vs-lovable/index.html",
     title: "Maris AI vs Lovable — Mejor Alternativa en Español 2026",
-    description: "Maris AI es la mejor alternativa a Lovable para emprendedores en España. Completamente en español, más barato y con 9 agentes IA.",
+    description: "Maris AI es la mejor alternativa a Lovable para emprendedores en España. Completamente en español, más barato y con 11 agentes IA.",
     canonical: "https://www.marisai.es/vs-lovable",
     body: `<h1>Maris AI vs Lovable — Comparativa 2026</h1>
 <p>Maris AI es la mejor alternativa a Lovable para el mercado hispanohablante.</p>
 <h2>Diferencias clave entre Maris AI y Lovable</h2>
 <ul>
 <li>Maris AI está completamente en español. Lovable solo en inglés.</li>
-<li>Maris AI tiene 9 agentes IA especializados. Lovable tiene 1 agente genérico.</li>
+<li>Maris AI tiene 11 agentes IA especializados. Lovable tiene 1 agente genérico.</li>
 <li>Maris AI ofrece 65 créditos gratis sin tarjeta. Lovable requiere pago desde el inicio.</li>
 <li>Maris AI tiene soporte en español. Lovable solo en inglés.</li>
 <li>Maris AI tiene precios en euros. Lovable cobra en dólares.</li>
@@ -230,14 +230,14 @@ const ROUTES = [
     path: "/vs-bolt",
     file: "vs-bolt/index.html",
     title: "Maris AI vs Bolt.new — Mejor Alternativa Española 2026",
-    description: "Maris AI es la mejor alternativa a Bolt.new para emprendedores españoles. En español, con 9 agentes IA y precio en euros.",
+    description: "Maris AI es la mejor alternativa a Bolt.new para emprendedores españoles. En español, con 11 agentes IA y precio en euros.",
     canonical: "https://www.marisai.es/vs-bolt",
     body: `<h1>Maris AI vs Bolt.new — Comparativa 2026</h1>
 <p>Maris AI es la mejor alternativa a Bolt.new para emprendedores en España y Latinoamérica.</p>
 <h2>Diferencias clave entre Maris AI y Bolt.new</h2>
 <ul>
 <li>Maris AI está completamente en español. Bolt.new solo en inglés.</li>
-<li>Maris AI tiene 9 agentes IA especializados con roles definidos. Bolt.new tiene 1 agente.</li>
+<li>Maris AI tiene 11 agentes IA especializados con roles definidos. Bolt.new tiene 1 agente.</li>
 <li>Maris AI incluye backend Express + MongoDB automático. Bolt.new solo frontend.</li>
 <li>Maris AI tiene precios en euros. Bolt.new en dólares.</li>
 <li>Maris AI tiene soporte en español. Bolt.new solo en inglés.</li>
@@ -267,14 +267,14 @@ const ROUTES = [
     path: "/vs-base44",
     file: "vs-base44/index.html",
     title: "Maris AI vs Base44 — Comparativa 2026",
-    description: "Maris AI vs Base44: la mejor alternativa en español para crear apps con IA sin programar. 9 agentes IA, gratis, en español.",
+    description: "Maris AI vs Base44: la mejor alternativa en español para crear apps con IA sin programar. 11 agentes IA, gratis, en español.",
     canonical: "https://www.marisai.es/vs-base44",
     body: `<h1>Maris AI vs Base44 — Comparativa 2026</h1>
 <p>Comparamos Maris AI con Base44 para que elijas la mejor herramienta para crear apps con IA.</p>
 <h2>Ventajas de Maris AI sobre Base44</h2>
 <ul>
 <li>Completamente en español vs interfaz en inglés</li>
-<li>9 agentes IA especializados vs enfoque genérico</li>
+<li>11 agentes IA especializados vs enfoque genérico</li>
 <li>Gratis para empezar sin tarjeta</li>
 <li>Soporte en español incluido</li>
 <li>Precios en euros, optimizado para el mercado español</li>
@@ -321,7 +321,7 @@ const ROUTES = [
 <p>No. El vibe coding está diseñado precisamente para personas sin conocimientos técnicos. Los emprendedores, diseñadores, marketers y dueños de negocio pueden crear apps profesionales sin escribir una sola línea de código.</p>
 <h2>Herramientas de vibe coding en 2026</h2>
 <ul>
-<li><strong>Maris AI</strong> — La única plataforma de vibe coding completamente en español. 9 agentes especializados.</li>
+<li><strong>Maris AI</strong> — La única plataforma de vibe coding completamente en español. 11 agentes especializados.</li>
 <li>Bolt.new — En inglés, para desarrolladores con conocimientos técnicos</li>
 <li>Lovable — En inglés, orientado a startups anglosajonas</li>
 <li>Emergent — En inglés, para proyectos más complejos</li>
@@ -350,7 +350,7 @@ const ROUTES = [
     path: "/que-es-un-agente-de-ia",
     file: "que-es-un-agente-de-ia/index.html",
     title: "Qué es un Agente de IA — Guía para Emprendedores",
-    description: "Un agente de IA es un sistema autónomo que analiza, razona y ejecuta tareas. Maris AI usa 9 agentes especializados para crear tu app.",
+    description: "Un agente de IA es un sistema autónomo que analiza, razona y ejecuta tareas. Maris AI usa 11 agentes especializados para crear tu app.",
     canonical: "https://www.marisai.es/que-es-un-agente-de-ia",
     body: `<h1>Qué es un agente de inteligencia artificial</h1>
 <p>Un agente de IA es un sistema autónomo capaz de percibir su entorno, razonar sobre él y ejecutar acciones para alcanzar un objetivo específico sin intervención humana constante.</p>
@@ -362,7 +362,7 @@ const ROUTES = [
 <li><strong>Acción</strong> — Ejecuta tareas concretas (escribir código, buscar información, etc.)</li>
 <li><strong>Especialización</strong> — Cada agente tiene un rol y expertise específico</li>
 </ul>
-<h2>Los 9 agentes de IA de Maris AI</h2>
+<h2>Los 11 agentes de IA de Maris AI</h2>
 <ul>
 <li><strong>Researcher</strong> — Investiga el mercado, analiza competidores y define requisitos del proyecto</li>
 <li><strong>Architect</strong> — Diseña la arquitectura técnica, estructura de archivos y base de datos</li>
@@ -374,8 +374,8 @@ const ROUTES = [
 <li><strong>Image Agent</strong> — Genera imágenes reales con IA para reemplazar placeholders</li>
 <li><strong>Visual Evaluator</strong> — Analiza screenshots de la app y detecta problemas visuales</li>
 </ul>
-<h2>¿Por qué 9 agentes y no uno solo?</h2>
-<p>Cada agente está optimizado para su tarea específica. Un agente de diseño tiene diferente "forma de pensar" que un agente de código backend. Al trabajar en pipeline, los 9 agentes producen un resultado mucho más completo y profesional que un único agente generalista.</p>
+<h2>¿Por qué 11 agentes y no uno solo?</h2>
+<p>Cada agente está optimizado para su tarea específica. Un agente de diseño tiene diferente "forma de pensar" que un agente de código backend. Al trabajar en pipeline, los 11 agentes producen un resultado mucho más completo y profesional que un único agente generalista.</p>
 <nav>
 <h3>Comparativas de Maris AI</h3>
 <ul>
@@ -406,7 +406,7 @@ const ROUTES = [
 <dl>
 <dt>LLM (Large Language Model)</dt><dd>Modelo de lenguaje de gran escala como Claude, GPT-4 o Gemini. Son la tecnología base que usan los agentes de IA de Maris AI para generar código.</dd>
 <dt>Vibe Coding</dt><dd>Paradigma de programación donde describes en lenguaje natural lo que quieres y la IA genera el código. Popularizado por Andrej Karpathy en 2025.</dd>
-<dt>Agente de IA</dt><dd>Sistema autónomo de inteligencia artificial que tiene un rol específico y ejecuta tareas concretas. Maris AI usa 9 agentes especializados.</dd>
+<dt>Agente de IA</dt><dd>Sistema autónomo de inteligencia artificial que tiene un rol específico y ejecuta tareas concretas. Maris AI usa 11 agentes especializados.</dd>
 <dt>React</dt><dd>Biblioteca de JavaScript creada por Meta para crear interfaces de usuario. Maris AI genera el frontend con React + TypeScript.</dd>
 <dt>TypeScript</dt><dd>Superset de JavaScript con tipado estático. Mejora la calidad y mantenibilidad del código generado por Maris AI.</dd>
 <dt>Tailwind CSS</dt><dd>Framework de CSS utilitario que permite crear diseños responsivos sin escribir CSS personalizado.</dd>
@@ -466,7 +466,7 @@ const ROUTES = [
 <li><strong>Define tu idea</strong> — ¿Qué problema resuelve tu app? ¿Quién la usará? ¿Qué funcionalidades necesita?</li>
 <li><strong>Regístrate en Maris AI</strong> — Crea tu cuenta gratis en marisai.es. Recibes 65 créditos sin tarjeta.</li>
 <li><strong>Describe tu app</strong> — Escribe en español qué quieres construir. Cuanto más detallado, mejor resultado.</li>
-<li><strong>Los 9 agentes trabajan</strong> — En menos de 5 minutos, el equipo de agentes IA genera tu app completa.</li>
+<li><strong>Los 11 agentes trabajan</strong> — En menos de 5 minutos, el equipo de agentes IA genera tu app completa.</li>
 <li><strong>Personaliza y despliega</strong> — Ajusta el diseño mediante chat y publica tu app en internet.</li>
 </ol>
 <h2>Tipos de apps que puedes crear sin programar</h2>
@@ -572,7 +572,7 @@ const ROUTES = [
 <ul>
 <li><strong>65 créditos gratis</strong> — suficientes para crear tu primera app completa</li>
 <li><strong>Sin tarjeta de crédito</strong> — regístrate solo con tu email o cuenta de Google</li>
-<li><strong>Acceso completo a los 9 agentes de IA</strong> — frontend, backend, base de datos, QA y más</li>
+<li><strong>Acceso completo a los 11 agentes de IA</strong> — frontend, backend, base de datos, QA y más</li>
 <li><strong>Código 100% tuyo</strong> — exporta a GitHub cuando quieras, sin restricciones</li>
 <li><strong>Créditos que nunca caducan</strong> — usa tus créditos cuando lo necesites</li>
 </ul>
