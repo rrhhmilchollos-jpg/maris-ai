@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Calendar, User, Share2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Calendar, User, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -31,6 +31,7 @@ export default function NewsDetailPage() {
   const { slug } = useParams() as { slug: string };
   const { toast } = useToast();
   const [article, setArticle] = useState<NewsArticle | null>(null);
+  const [relatedArticles, setRelatedArticles] = useState<NewsArticle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -173,6 +174,24 @@ export default function NewsDetailPage() {
       script.innerHTML = JSON.stringify(jsonLd);
       document.head.appendChild(script);
 
+      // Artículos relacionados: mejora el enlazado interno hacia cada
+      // /news/<slug> (antes cada artículo solo recibía 1 enlace interno en
+      // todo el sitio — señal débil para que Google lo priorice). Prioriza
+      // artículos que comparten tags; si no hay suficientes, rellena con
+      // los más recientes que no sean el actual.
+      try {
+        const allRes = await fetch("/api/news");
+        if (allRes.ok) {
+          const all: NewsArticle[] = await allRes.json();
+          const others = all.filter((a) => a.slug !== data.slug);
+          const byTag = others.filter((a) => (a.tags || []).some((t) => (data.tags || []).includes(t)));
+          const rest = others.filter((a) => !byTag.includes(a));
+          setRelatedArticles([...byTag, ...rest].slice(0, 3));
+        }
+      } catch {
+        // No pasa nada si falla — la sección de relacionados simplemente no se muestra
+      }
+
     } catch (error) {
       toast({
         title: "Error",
@@ -298,6 +317,35 @@ export default function NewsDetailPage() {
             ))}
           </div>
         </article>
+
+        {/* Artículos relacionados */}
+        {relatedArticles.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Artículos relacionados</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {relatedArticles.map((related) => (
+                <Card
+                  key={related._id}
+                  className="bg-card/40 border-white/5 hover:border-primary/30 transition-colors cursor-pointer group"
+                  onClick={() => {
+                    setLocation(`/news/${related.slug}`);
+                    window.scrollTo(0, 0);
+                  }}
+                >
+                  <CardContent className="p-4 space-y-2">
+                    <p className="font-medium text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                      {related.title}
+                    </p>
+                    <div className="flex items-center gap-1 text-xs text-primary/80">
+                      Leer más
+                      <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Divider */}
         <div className="border-t border-white/10 my-8"></div>

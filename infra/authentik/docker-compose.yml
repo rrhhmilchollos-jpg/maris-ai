@@ -1,0 +1,101 @@
+# ─── Authentik — servidor de identidad propio para Maris AI ──────────────────
+# FASE 1: entorno de pruebas local con Docker Desktop. NO tocar producción
+# (Clerk sigue siendo el auth real de marisai.es) hasta que esto funcione
+# de punta a punta en local y lo hayamos validado juntos.
+#
+# NOTA IMPORTANTE: el docker-compose que trajiste solo tenía "postgresql" y
+# "server". A eso le faltan 2 piezas OBLIGATORIAS de Authentik:
+#   - redis: usado para colas de tareas y caché de sesiones — sin esto,
+#     Authentik ni siquiera arranca.
+#   - worker: proceso separado que ejecuta tareas en segundo plano (envío
+#     de emails, tareas programadas, sincronización). El "server" por sí
+#     solo NO las ejecuta.
+# Este compose es la versión completa y correcta según la arquitectura real
+# de Authentik (goauthentik.io/docs/install-config/install/docker-compose).
+
+services:
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - database:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASS:?error}
+      POSTGRES_USER: ${PG_USER:-authentik}
+      POSTGRES_DB: ${PG_DB:-authentik}
+
+  redis:
+    image: docker.io/library/redis:alpine
+    restart: unless-stopped
+    command: --save 60 1 --loglevel warning
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
+
+  server:
+    image: ghcr.io/goauthentik/server:2026.3.0
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?error}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS:?error}
+      # En local no hay HTTPS todavía — lo activamos en la fase de VPS real
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    volumes:
+      - ./media:/media
+      - ./custom-templates:/templates
+    ports:
+      - "9000:9000"   # HTTP (solo local/pruebas)
+      - "9443:9443"   # HTTPS interno autofirmado
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/goauthentik/server:2026.3.0
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?error}
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_POSTGRESQL__HOST: postgresql
+      AUTHENTIK_POSTGRESQL__USER: ${PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME: ${PG_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS:?error}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    # El worker necesita acceso al socket de Docker para algunas tareas
+    # internas (blueprints, etc.) — es el patrón oficial de Authentik.
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./media:/media
+      - ./certs:/certs
+      - ./custom-templates:/templates
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  database:
+    driver: local
+  redis:
+    driver: local
