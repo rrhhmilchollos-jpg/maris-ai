@@ -42,7 +42,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     Panel
                   </Link>
                   <Link href="/billing" className="transition-colors hover:text-foreground/80 text-foreground/60">
-                    Facturación
+                    Recargar créditos
                   </Link>
                   {isAdmin && (
                     <Link href="/admin" className="transition-colors hover:text-primary text-primary/80 font-semibold flex items-center gap-1">
@@ -85,7 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setLocation("/billing")}>
                       <CreditCard className="mr-2 h-4 w-4 text-muted-foreground" />
-                      <span>Facturación</span>
+                      <span>Recargar créditos</span>
                     </DropdownMenuItem>
                     {isAdmin && (
                       <DropdownMenuItem onClick={() => setLocation("/admin")}>
