@@ -2037,7 +2037,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               />
             </div>
 
-            {(app as any)?.architecture !== "serverless" && (
+            {isAdmin && (app as any)?.architecture !== "serverless" && (
               <div className="hidden md:block">
                 <RailwayDeployButton
                   appId={id}
