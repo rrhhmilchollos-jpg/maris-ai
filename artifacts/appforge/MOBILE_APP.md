@@ -1,140 +1,92 @@
-# Maris AI — App híbrida Android (guía completa)
+# Maris AI — Publicar en Google Play con PWABuilder
 
-## Fase 1 — YA HECHA (en este commit)
+## Lo que ya está preparado en el repo (hecho en este commit)
 
-- Capacitor instalado (`@capacitor/core`, `@capacitor/cli`, `@capacitor/android`)
-- Proyecto nativo Android generado en `android/` (Gradle, manifest, todo lo
-  necesario para compilar)
-- `capacitor.config.ts`: `appId: es.marisai.app`, apunta a `dist/` (el mismo
-  build de siempre)
-- `.env.capacitor`: fija la URL del backend de forma absoluta
-  (`VITE_API_URL=https://maris-ai-api-server-production-fbad.up.railway.app`)
-  porque dentro de la app nativa no existe el proxy de Vercel que reescribe
-  `/api/...` en la web
-- Confirmado que el backend ya permite el origen `https://localhost` (el que
-  usa Capacitor por defecto) — no hace falta tocar el CORS
+- **Iconos PNG reales** generados a partir de `logo.svg`, en los tamaños y
+  propósitos que PWABuilder/Google Play exigen (antes solo había un SVG,
+  que PWABuilder no procesa bien para el paquete Android):
+  - `icon-192-any.png`, `icon-512-any.png` (fondo transparente)
+  - `icon-512-maskable.png` (fondo sólido `#0a0a0f`, logo con margen de
+    seguridad para que Android no lo recorte al aplicar la máscara circular/
+    squircle del icono)
+  - `apple-touch-icon.png` (180×180, fondo sólido — antes esta ruta estaba
+    rota, `index.html` la referenciaba pero el archivo no existía)
+- `manifest.json` actualizado para declarar estos iconos correctamente
+- `public/.well-known/assetlinks.json` — plantilla lista, **te falta
+  rellenar tu huella SHA-256 real** (instrucciones dentro del propio
+  archivo, y en el Paso 3 de abajo)
 
-## Lo que TÚ necesitas hacer (yo no tengo Android SDK ni un móvil aquí)
+## Paso 1 — Generar el paquete en PWABuilder
 
-### Paso 1 — Instalar Android Studio
+1. Ve a **https://www.pwabuilder.com**
+2. Pega `https://www.marisai.es` y dale a analizar
+3. PWABuilder leerá tu `manifest.json` — debería puntuar bien ahora que
+   tiene iconos PNG reales. Si marca algo en amarillo/rojo, dímelo y lo
+   revisamos
+4. En la pestaña **Android**, genera el paquete. Te dará a elegir entre:
+   - **Dejar que PWABuilder firme por ti** (más simple, pero la clave la
+     gestiona su plataforma)
+   - **Usar tu propia clave de firma** (recomendado si ya tienes o vas a
+     tener más apps — más control, pero tú gestionas la clave y su backup)
 
-Descárgalo de https://developer.android.com/studio (gratis). Al abrirlo la
-primera vez, te guía para instalar el Android SDK — acepta todo por defecto.
+## Paso 2 — Descargar y quedarte con la huella SHA-256
 
-### Paso 2 — Clonar el repo y preparar el proyecto
+Al generar el paquete, PWABuilder te muestra (o incluye en un archivo
+`assetlinks.json` de ejemplo dentro del ZIP descargado) la huella SHA-256
+de la clave de firma usada. Cópiala — la necesitas para el paso 3.
 
+Si prefieres generarla tú mismo a partir de tu propio keystore:
 ```bash
-git clone https://github.com/rrhhmilchollos-jpg/maris-ai.git
-cd maris-ai/artifacts/appforge
-pnpm install
+keytool -list -v -keystore tu-clave.keystore
 ```
+Busca la línea `SHA256:` en la salida.
 
-### Paso 3 — Generar el icono real de la app
+## Paso 3 — Completar assetlinks.json y desplegarlo
 
-Ahora mismo la app usa el icono genérico de Capacitor. Para poner el logo
-real de Maris AI:
+Abre `artifacts/appforge/public/.well-known/assetlinks.json` en el repo,
+sustituye `TU_HUELLA_SHA256_AQUI` por la huella real (formato
+`AA:BB:CC:...`), borra las claves `_COMENTARIO`/`_INSTRUCCIONES`, haz
+commit y despliega.
 
-```bash
-pnpm add -D @capacitor/assets
+**Verifica que funciona antes de subir nada a Google Play:**
 ```
-
-Coloca tu logo en alta resolución (mínimo 1024×1024px, fondo transparente o
-sólido) en `appforge/resources/icon.png`, y un splash screen en
-`appforge/resources/splash.png` (2732×2732px recomendado), luego:
-
-```bash
-npx capacitor-assets generate --android
+https://www.marisai.es/.well-known/assetlinks.json
 ```
+Debe devolver el JSON tal cual, con tu huella real. Si esto no está bien
+ANTES de publicar, la app se abrirá con la barra de direcciones de Chrome
+visible en vez de verse como una app nativa — o Google puede rechazarla.
 
-Esto genera automáticamente todos los tamaños que Android necesita.
+## Paso 4 — Subir a Google Play Console
 
-### Paso 4 — Compilar y sincronizar
+Mismo proceso que cualquier app Android:
 
-```bash
-pnpm cap:sync
-```
+1. Cuenta en https://play.google.com/console/signup (pago único 25$,
+   verificación de identidad puede tardar hasta 48h la primera vez)
+2. Crear la app, subir el `.aab` que te dio PWABuilder
+3. Ficha de la tienda: descripción, capturas de pantalla (puedo ayudarte a
+   redactar la descripción), icono 512×512 (ya tienes `icon-512-any.png`),
+   gráfico de la ficha 1024×500
+4. Política de privacidad: puedes reutilizar
+   `https://www.marisai.es/legal/privacidad`
+5. Cuestionario de clasificación de contenido y "Data Safety" (declarar qué
+   datos recopilas — email, datos de pago vía Stripe, etc.)
+6. Enviar a revisión — Google tarda normalmente 1-7 días en apps nuevas
 
-Esto construye la web con la URL de API correcta y copia el resultado
-dentro del proyecto Android.
+## Aviso importante — Google Play Billing
 
-### Paso 5 — Abrir en Android Studio y probar
+Si en algún momento permites que los clientes compren créditos **desde
+dentro de la app** (no solo desde la web), Google Play exige su propio
+sistema de facturación (Google Play Billing) y se queda con comisión
+(15-30%). Si los pagos de Maris AI siempre pasan por Stripe en la web y la
+app solo abre esa misma web, esto normalmente no aplica — pero es una
+política que Google vigila activamente y puede rechazar la app si lo
+detecta mal implementado. Confírmalo con cuidado antes de enviar a
+revisión.
 
-```bash
-npx cap open android
-```
+## Alternativa ya preparada: Capacitor + Android Studio
 
-Se abre Android Studio con el proyecto. Dale a ▶ (Run) para probarlo en un
-emulador o en tu móvil conectado por USB (con "Depuración USB" activada en
-Ajustes de desarrollador). **Prueba de verdad el flujo completo**: login,
-generar una app, ver el preview, pagar — antes de publicar nada.
-
-### Paso 6 — Generar la clave de firma (keystore)
-
-**Esto es crítico y solo lo haces tú, una vez, y la guardas para siempre.**
-Si la pierdes, no podrás volver a actualizar la app en Google Play jamás —
-tendrías que publicarla como una app nueva.
-
-En Android Studio: `Build` → `Generate Signed Bundle / APK` → `Android App
-Bundle` → `Create new...`. Rellena los datos (te pedirá una contraseña —
-guárdala en un gestor de contraseñas, no la pierdas) y guarda el archivo
-`.keystore` en un sitio seguro **fuera del repositorio** (ya está excluido
-en `.gitignore`, pero además haz una copia de seguridad tú mismo, por
-ejemplo en un USB o en tu gestor de contraseñas).
-
-### Paso 7 — Compilar el AAB firmado
-
-Mismo asistente del paso 6, eligiendo tu keystore — genera un archivo
-`.aab` (Android App Bundle), el formato que exige Google Play desde 2021
-(ya no aceptan `.apk` directamente para publicaciones nuevas).
-
-## Fase 3 — Publicar en Google Play (necesita tu cuenta)
-
-### Paso 1 — Cuenta de Google Play Console
-
-https://play.google.com/console/signup — pago único de 25$. Necesitas
-verificar identidad (puede tardar hasta 48h la primera vez).
-
-### Paso 2 — Crear la ficha de la app
-
-Dentro de Play Console → "Crear app". Necesitarás:
-- **Nombre**: Maris AI
-- **Descripción corta y larga**: puedo ayudarte a redactarlas si quieres
-- **Capturas de pantalla**: mínimo 2, recomendado 4-8, del móvil real
-- **Icono**: 512×512px
-- **Gráfico de la ficha**: 1024×500px
-- **Política de privacidad**: URL pública — puedes reutilizar
-  `https://www.marisai.es/legal/privacidad` si cubre bien el uso de datos
-  dentro de la app (revísala, puede necesitar una sección específica de
-  app móvil)
-
-### Paso 3 — Cuestionario de clasificación de contenido
-
-Preguntas sobre el contenido de la app (violencia, contenido para adultos,
-etc.) — para Maris AI, casi todo "No" dado que es una herramienta de
-generación de código.
-
-### Paso 4 — Declaración de datos (Data Safety)
-
-Google exige declarar qué datos recopilas y para qué (email, nombre, datos
-de pago vía Stripe, etc.) — importante ser preciso aquí, Google revisa esto
-activamente y puede rechazar la app si no coincide con el comportamiento
-real.
-
-### Paso 5 — Subir el AAB y enviar a revisión
-
-Sube el `.aab` del Paso 7 de la Fase 2 en la sección "Producción" (o
-"Prueba interna" primero, recomendado, para probar con pocos usuarios antes
-del lanzamiento público). Google revisa en **1-7 días** normalmente para
-apps nuevas.
-
-## Notas importantes
-
-- **Pagos dentro de la app**: si en algún momento permites que los clientes
-  compren créditos DESDE la app de Android (no solo desde la web), Google
-  Play exige usar su sistema de facturación (Google Play Billing) y se
-  queda con una comisión (15-30%) — si los pagos siempre pasan por la web
-  de Maris AI y la app solo abre esa web, esto no aplica, pero es una regla
-  que Google vigila y puede rechazar la app si lo detecta mal implementado.
-  Te recomiendo confirmarlo con cuidado antes de enviar a revisión.
-- **App Bundle vs universal**: `.aab` permite que Google sirva versiones
-  optimizadas por dispositivo — es lo normal, no hay que hacer nada extra.
+Si en el futuro necesitas funciones nativas que un TWA no puede dar
+(notificaciones push nativas, acceso a cámara/archivos del sistema, etc.),
+ya hay un proyecto Capacitor completo y funcional en `android/` (ver
+commit anterior) como alternativa — no hace falta usarlo ahora, pero está
+listo si lo necesitas.

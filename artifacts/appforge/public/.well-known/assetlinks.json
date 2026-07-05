@@ -1,0 +1,19 @@
+{
+  "_COMENTARIO": "Este archivo verifica ante Android que tú controlas tanto marisai.es como la app de Google Play, para que la app se abra SIN la barra de URL de Chrome (como una app nativa de verdad). SIN este archivo bien rellenado, Google Play puede rechazar la app o esta se abrirá con la barra de navegador visible.",
+  "_INSTRUCCIONES": [
+    "1. Genera el paquete Android en https://www.pwabuilder.com apuntando a https://www.marisai.es",
+    "2. PWABuilder te dará una huella SHA-256 de la clave de firma (si dejas que PWABuilder firme por ti) o la generas tú mismo con: keytool -list -v -keystore tu-clave.keystore",
+    "3. Sustituye TU_HUELLA_SHA256_AQUI (abajo) por esa huella real, en formato XX:XX:XX:... (con dos puntos entre cada par)",
+    "4. Haz commit y despliega este archivo en producción ANTES de subir la app a Google Play",
+    "5. Verifica que funciona visitando: https://www.marisai.es/.well-known/assetlinks.json — debe devolver este JSON tal cual",
+    "6. Borra estas dos claves _COMENTARIO/_INSTRUCCIONES antes de publicar (son solo para ti, Google las ignora pero es más limpio quitarlas)"
+  ],
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "es.marisai.app",
+    "sha256_cert_fingerprints": [
+      "TU_HUELLA_SHA256_AQUI"
+    ]
+  }
+}
