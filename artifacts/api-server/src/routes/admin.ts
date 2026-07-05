@@ -3311,4 +3311,53 @@ router.post("/admin/payments/refund", async (req: any, res: any): Promise<void> 
   }
 });
 
+// ─── Diagnóstico de frecuencia de errores — datos reales, no especulación ──
+// A peticion explicita del usuario: antes de decidir si cambiar wouter por
+// react-router-dom en toda la plataforma (o cualquier otra decision de
+// fondo similar en el futuro), medir con datos reales cuantas veces un
+// patron de error concreto ha ocurrido de verdad en produccion, en vez de
+// decidir a ojo. Reutiliza AgentMemory, que ya guarda cada errorMessage
+// real que el ciclo de reparacion ha visto y arreglado.
+router.get("/admin/diagnostics/error-frequency", async (req: any, res: any): Promise<void> => {
+  await connectDB();
+  try {
+    const query = String(req.query.query || "").trim();
+    if (!query) {
+      res.status(400).json({ error: "Falta el parámetro ?query= (texto a buscar dentro de errorMessage)" });
+      return;
+    }
+    const matches = await AgentMemory.find(
+      { errorMessage: new RegExp(query, "i") },
+      { errorMessage: 1, language: 1, framework: 1, successCount: 1, createdAt: 1 },
+    ).sort({ createdAt: -1 }).lean();
+
+    const totalOccurrences = matches.length;
+    const totalReuses = matches.reduce((sum, m: any) => sum + (m.successCount || 1), 0);
+    const oldestSeen = matches.length > 0 ? matches[matches.length - 1].createdAt : null;
+    const newestSeen = matches.length > 0 ? matches[0].createdAt : null;
+
+    res.json({
+      query,
+      totalOccurrences,
+      // totalReuses cuenta cada vez que el mismo parche se ha vuelto a
+      // aplicar ante un error casi identico (successCount) -- da una idea
+      // real de "cuantas veces le ha pasado esto de verdad a un cliente",
+      // no solo cuantos parches distintos hay guardados.
+      totalReuses,
+      oldestSeen,
+      newestSeen,
+      samples: matches.slice(0, 20).map((m: any) => ({
+        errorMessage: m.errorMessage.slice(0, 200),
+        language: m.language,
+        framework: m.framework,
+        successCount: m.successCount,
+        createdAt: m.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    logger.error({ err }, "GET /admin/diagnostics/error-frequency failed");
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;
