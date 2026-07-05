@@ -36,6 +36,37 @@ export interface SSRServerResult {
 }
 
 /**
+ * Extiende la vida de un sandbox SSR ya existente (heartbeat) — se llama
+ * periódicamente mientras el cliente tiene el preview abierto, para que no
+ * se apague a los 30 minutos si sigue mirándolo. Usa el método ESTÁTICO
+ * Sandbox.setTimeout(sandboxId, ms), que no necesita reconectar (levantar)
+ * el sandbox entero solo para tocar su timeout.
+ *
+ * Límite real de E2B (no de Maris AI): 1 hora máx. en el plan Hobby, 24h
+ * en el plan Pro -- si la cuenta de E2B configurada es Hobby, extender más
+ * allá de 1 hora total de vida fallará aunque el código esté bien.
+ */
+export async function extendSSRSandbox(
+  sandboxId: string,
+  additionalMs: number = SANDBOX_LIFETIME_MS,
+): Promise<{ ok: boolean; newExpiresAt?: Date; reason?: string }> {
+  if (!isE2BEnabled()) {
+    return { ok: false, reason: "E2B_API_KEY no configurada." };
+  }
+  try {
+    await Sandbox.setTimeout(sandboxId, additionalMs);
+    return { ok: true, newExpiresAt: new Date(Date.now() + additionalMs) };
+  } catch (err: any) {
+    // Motivo más probable: el sandbox ya murió (timeout anterior alcanzado)
+    // y no se puede "revivir" solo extendiendo su timeout -- hace falta
+    // un reinicio completo (ver restartSSRServer más abajo / el endpoint
+    // /apps/:id/ssr-preview/restart).
+    logger.warn({ err, sandboxId }, "extendSSRSandbox: no se pudo extender (probablemente ya murió)");
+    return { ok: false, reason: "El sandbox ya no está vivo — hace falta reiniciarlo, no solo extenderlo." };
+  }
+}
+
+/**
  * Arranca un servidor Next.js (u otro framework SSR) DE VERDAD dentro de un
  * sandbox E2B, y deja el sandbox vivo con el servidor corriendo en segundo
  * plano — a diferencia de astroImportBuilder.ts (que compila y se queda solo

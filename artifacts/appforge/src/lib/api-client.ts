@@ -196,6 +196,16 @@ export function useRefundPayment() {
     mutationFn: (body) => apiFetch("/api/admin/payments/refund", { method: "POST", body: JSON.stringify(body) }),
   });
 }
+export function useSSRPreviewHeartbeat() {
+  return useMutation<any, any, { appId: string }>({
+    mutationFn: ({ appId }) => apiFetch(`/api/apps/${appId}/ssr-preview/heartbeat`, { method: "POST" }),
+  });
+}
+export function useRestartSSRPreview() {
+  return useMutation<any, any, { appId: string }>({
+    mutationFn: ({ appId }) => apiFetch(`/api/apps/${appId}/ssr-preview/restart`, { method: "POST" }),
+  });
+}
 export function useListAdminUsers(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAdminUsersQueryKey(), queryFn: () => apiFetch("/api/admin/users"), ...(opts?.query as any) });
 }

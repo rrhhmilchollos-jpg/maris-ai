@@ -207,6 +207,12 @@ export interface IGeneratedApp {
   livePreviewUrl?: string;
   livePreviewSandboxId?: string;
   livePreviewExpiresAt?: Date;
+  // Proyecto original completo (JSON de { ruta: contenido }), SOLO para
+  // renderMode==="ssr-live" -- necesario para poder reconstruir el
+  // servidor cuando el sandbox muera (E2B lo mata solo al llegar a su
+  // timeout, o si el usuario lo reinicia manualmente). Sin esto, un
+  // sandbox muerto sería irrecuperable: no habría con qué reconstruirlo.
+  importedSourceFilesJson?: string;
   deploymentStatus?: string;
   deploymentError?: string;
   marisaiSubdomain?: string;
@@ -309,6 +315,7 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     livePreviewUrl: { type: String },
     livePreviewSandboxId: { type: String },
     livePreviewExpiresAt: { type: Date },
+    importedSourceFilesJson: { type: String },
     deploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
     deploymentError: { type: String },
     marisaiSubdomain: { type: String, unique: true, sparse: true },

@@ -342,6 +342,22 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
 
     logger.info({ userId, title, files: extracted.allPaths.length, frontendCodeLen: frontendCode.length }, "Proyecto extraído correctamente");
 
+    // Para SSR en vivo, además del placeholder en frontendCode, guardamos
+    // el proyecto ORIGINAL completo (antes del build) — es lo único que
+    // permite reconstruir el servidor cuando el sandbox muera. Mismo
+    // límite de tamaño que frontendCode, con su propio aviso si no cabe
+    // (en cuyo caso el reinicio automático no será posible más adelante,
+    // pero se avisa ahora en vez de fallar en silencio meses después).
+    let importedSourceFilesJson: string | undefined;
+    if (ssrLiveResult) {
+      const rawJson = JSON.stringify(extracted.files);
+      if (Buffer.byteLength(rawJson, "utf8") > MAX_CODE_BYTES) {
+        logger.warn({ userId, title }, "Proyecto SSR demasiado grande para guardar el original — el reinicio automático no funcionará si el sandbox muere");
+      } else {
+        importedSourceFilesJson = rawJson;
+      }
+    }
+
     const app = await GeneratedApp.create({
       userId,
       title,
@@ -362,6 +378,7 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
             livePreviewUrl: ssrLiveResult.liveUrl,
             livePreviewSandboxId: ssrLiveResult.sandboxId,
             livePreviewExpiresAt: ssrLiveResult.expiresAt,
+            importedSourceFilesJson,
           }
         : {}),
     });

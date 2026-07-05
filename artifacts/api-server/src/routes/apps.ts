@@ -8402,6 +8402,81 @@ router.get("/apps/:id/preview-debug", async (req: any, res: any) => {
   }
 });
 
+// ── SSR en vivo (proyectos importados tipo Next.js) — heartbeat y reinicio ──
+// A peticion explicita del usuario, terminando el sistema empezado en la
+// sesion anterior (ver lib/ssrImportBuilder.ts).
+
+router.post("/apps/:id/ssr-preview/heartbeat", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId: req.userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if ((app as any).renderMode !== "ssr-live" || !(app as any).livePreviewSandboxId) {
+      return res.status(400).json({ error: "Esta app no usa un servidor SSR en vivo." });
+    }
+
+    const { extendSSRSandbox } = await import("../lib/ssrImportBuilder");
+    const result = await extendSSRSandbox((app as any).livePreviewSandboxId);
+
+    if (!result.ok) {
+      // No es un error grave -- simplemente informamos al frontend de que
+      // el sandbox ya murió, para que ofrezca el botón de reiniciar en vez
+      // de seguir intentando un heartbeat sobre algo que ya no existe.
+      return res.json({ ok: false, expired: true, reason: result.reason });
+    }
+
+    await GeneratedApp.updateOne({ _id: app._id }, { $set: { livePreviewExpiresAt: result.newExpiresAt } });
+    res.json({ ok: true, expiresAt: result.newExpiresAt });
+  } catch (err: any) {
+    logger.error({ err }, "POST /apps/:id/ssr-preview/heartbeat error");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/apps/:id/ssr-preview/restart", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId: req.userId });
+    if (!app) return res.status(404).json({ error: "App no encontrada" });
+    if ((app as any).renderMode !== "ssr-live") {
+      return res.status(400).json({ error: "Esta app no usa un servidor SSR en vivo." });
+    }
+    const sourceJson = (app as any).importedSourceFilesJson;
+    if (!sourceJson) {
+      return res.status(422).json({
+        error: "No se guardó el proyecto original de esta app (probablemente porque era demasiado grande) — no se puede reiniciar automáticamente. Vuelve a importar el archivo original.",
+      });
+    }
+
+    let files: Record<string, string>;
+    try {
+      files = JSON.parse(sourceJson);
+    } catch {
+      return res.status(500).json({ error: "El proyecto original guardado está corrupto — vuelve a importar el archivo." });
+    }
+
+    const { startSSRServerInE2B } = await import("../lib/ssrImportBuilder");
+    const result = await startSSRServerInE2B(files);
+    if (!result.ok || !result.liveUrl || !result.sandboxId || !result.expiresAt) {
+      return res.status(422).json({
+        error: result.reason || "No se pudo reiniciar el servidor.",
+        buildLog: result.buildLog?.slice(0, 4000),
+      });
+    }
+
+    await GeneratedApp.updateOne(
+      { _id: app._id },
+      { $set: { livePreviewUrl: result.liveUrl, livePreviewSandboxId: result.sandboxId, livePreviewExpiresAt: result.expiresAt } },
+    );
+
+    logger.info({ userId: req.userId, appId: app._id, liveUrl: result.liveUrl }, "SSR preview reiniciado correctamente");
+    res.json({ ok: true, livePreviewUrl: result.liveUrl, livePreviewExpiresAt: result.expiresAt });
+  } catch (err: any) {
+    logger.error({ err }, "POST /apps/:id/ssr-preview/restart error");
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();

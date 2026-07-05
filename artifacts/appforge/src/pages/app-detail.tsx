@@ -26,6 +26,8 @@ import {
   getGetGenerationJobLogsQueryKey,
   useGetNotifications,
   useGetCreditsHistory,
+  useSSRPreviewHeartbeat,
+  useRestartSSRPreview,
 } from "@/lib/api-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DeployModal } from "@/components/deploy-modal";
@@ -764,6 +766,59 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     : app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || (app?.marisaiSubdomain ? `https://${app.marisaiSubdomain}.marisai.es` : "") || previewEndpointUrl;
 
   const isDeployedForShowcase = !!(app?.vercelUrl || app?.vercelDeployUrl || app?.deploymentUrl || app?.marisaiSubdomain);
+
+  // ── SSR en vivo: heartbeat mientras se mira el preview + detección de
+  // expiración + reinicio manual. Ver lib/ssrImportBuilder.ts (backend).
+  const isSSRLive = app?.renderMode === "ssr-live";
+  const ssrExpiresAt = app?.livePreviewExpiresAt ? new Date(app.livePreviewExpiresAt) : null;
+  const [ssrExpired, setSsrExpired] = useState(false);
+  const [ssrRestarting, setSsrRestarting] = useState(false);
+  const ssrHeartbeat = useSSRPreviewHeartbeat();
+  const ssrRestart = useRestartSSRPreview();
+
+  useEffect(() => {
+    if (!isSSRLive || !app?._id) return;
+    // Comprobación inmediata: si ya venía expirado de antes (el cliente
+    // cerró la pestaña y volvió pasados los 30 min), no intentar cargar
+    // el iframe con una URL muerta -- mostrar directamente el aviso.
+    if (ssrExpiresAt && ssrExpiresAt.getTime() < Date.now()) {
+      setSsrExpired(true);
+      return;
+    }
+    // Heartbeat cada 5 minutos mientras la pestaña sigue abierta con el
+    // preview visible -- extiende el sandbox otros 30 min cada vez, así
+    // que un cliente mirando el preview sin cortes nunca lo ve caducar.
+    const interval = setInterval(async () => {
+      try {
+        const res = await ssrHeartbeat.mutateAsync({ appId: String(app._id) });
+        if (!res.ok) {
+          setSsrExpired(true);
+          clearInterval(interval);
+        }
+      } catch {
+        // Un fallo de red puntual en el heartbeat no debe marcar el
+        // preview como expirado -- solo lo hacemos si el backend confirma
+        // explícitamente que el sandbox murió (res.ok === false arriba).
+      }
+    }, 5 * 60_000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSSRLive, app?._id]);
+
+  const handleRestartSSRPreview = async () => {
+    if (!app?._id) return;
+    setSsrRestarting(true);
+    try {
+      await ssrRestart.mutateAsync({ appId: String(app._id) });
+      setSsrExpired(false);
+      queryClient.invalidateQueries({ queryKey: getGetAppQueryKey(String(app._id)) });
+      toast({ title: "✅ Preview reiniciado", description: "El servidor en vivo ha vuelto a arrancar." });
+    } catch (err: any) {
+      toast({ title: "No se pudo reiniciar", description: err?.message || "Error desconocido", variant: "destructive" });
+    } finally {
+      setSsrRestarting(false);
+    }
+  };
   const [showcasePending, setShowcasePending] = useState(false);
   const handleToggleShowcase = async (checked: boolean) => {
     if (!app?._id) return;
@@ -2113,12 +2168,28 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   previewSize === "mobile" ? "px-[calc(50%-190px)]" :
                   previewSize === "tablet" ? "px-[calc(50%-384px)]" : ""
                 }`}>
-                  {app?.renderMode === "ssr-live" && (
+                  {isSSRLive && (
                     <div className="absolute left-3 top-3 md:left-4 md:top-4 z-20 rounded-full border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300 backdrop-blur">
                       ⚡ Servidor en vivo (Next.js) — preview temporal, no un bundle guardado
                     </div>
                   )}
-                  {showStaticBuildState ? (
+                  {isSSRLive && ssrExpired ? (
+                    <div className="flex flex-col items-center gap-4 text-center max-w-sm px-6">
+                      <div className="h-12 w-12 rounded-full bg-amber-500/10 border border-amber-500/30 grid place-items-center">
+                        <RefreshCw className="h-5 w-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">El preview en vivo ha caducado</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Los servidores en vivo (Next.js) se apagan automáticamente pasado un tiempo para no gastar recursos sin uso. Puedes reiniciarlo cuando quieras.
+                        </p>
+                      </div>
+                      <Button size="sm" onClick={handleRestartSSRPreview} disabled={ssrRestarting}>
+                        {ssrRestarting && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                        Reiniciar preview
+                      </Button>
+                    </div>
+                  ) : showStaticBuildState ? (
                     <AppPreviewWaitingState />
                   ) : deployedUrl ? (
                     <iframe
