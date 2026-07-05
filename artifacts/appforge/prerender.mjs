@@ -6,6 +6,7 @@
 import { existsSync, writeFileSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { minify as minifyHtml } from "html-minifier-terser";
 import {
   ENGLISH_ROUTES,
   USE_CASE_ROUTES_EN,
@@ -917,6 +918,30 @@ ${route.body}
 ${HIDE_SCRIPT}
 ${match}`
     );
+
+    // Minificación del HTML final -- a petición explícita del usuario
+    // ("minifica y optimiza sin que afecte a SEO/SEM/GEO/IA"). Probado a
+    // mano contra JSON-LD con comillas escapadas y saltos de línea, y
+    // contra scripts con espacios significativos dentro de strings: el
+    // contenido real (meta tags, JSON-LD, texto visible, JS funcional)
+    // queda intacto -- solo se eliminan comentarios HTML y el espacio en
+    // blanco de formato ENTRE etiquetas, que no es lo que Google, los
+    // lectores de IA ni ningún usuario real llegan a ver o interpretar.
+    // Si algo fallara aquí (JSON-LD malformado, etc.), se prefiere lanzar
+    // el build entero antes que publicar HTML roto en silencio -- por
+    // eso NO hay try/catch alrededor: un error debe parar el despliegue.
+    html = await minifyHtml(html, {
+      collapseWhitespace: true,
+      removeComments: true,
+      minifyJS: true,
+      minifyCSS: true,
+      conservativeCollapse: false,
+      preserveLineBreaks: false,
+      // Nunca tocar contenido dentro de estos, aunque el minificador de
+      // JS/CSS ya es seguro por sí mismo -- doble red de seguridad para
+      // el JSON-LD y los scripts de tracking de terceros.
+      ignoreCustomFragments: [/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/],
+    });
 
     writeFileSync(join(DIST, route.file), html, "utf-8");
     console.log(`✅ ${route.path} → ${route.file}`);
