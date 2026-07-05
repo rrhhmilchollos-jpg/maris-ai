@@ -215,55 +215,51 @@ function detectTechStack(files: Record<string, string>, allPaths: string[]): str
 /**
  * ENCONTRADO A PETICIÓN DEL USUARIO: el importador construye el bundle
  * concatenando TODOS los archivos de texto en uno solo (buildFrontendCode),
- * asumiendo un proyecto simple (HTML/CSS/JS o React+Vite ya empaquetado
- * como bundle único) -- el mismo formato que generan los propios agentes
- * de Maris AI. Un proyecto de Astro exportado desde Wix rompe esta
- * suposición de raíz:
- *   1. Astro no tiene un index.html con <script> — renderiza páginas
- *      server-side desde archivos .astro (sintaxis propia, no JSX), así
- *      que concatenarlo todo produce basura no ejecutable.
- *   2. El proyecto depende de los SDK de @wix/* (data, bookings, stores,
- *      members...), que llaman a APIs internas de la infraestructura de
- *      Wix. Esto NO tiene arreglo posible desde Maris AI: aunque
- *      supiéramos parsear Astro perfectamente, el código seguiría sin
- *      funcionar fuera de Wix porque depende de servicios que Wix no
- *      expone a terceros -- es su propio vendor lock-in.
- * En vez de generar en silencio un bundle roto sin explicar por qué, se
- * detecta esto ANTES de construir el bundle y se devuelve un error claro.
+ * asumiendo un proyecto simple (HTML/CSS/JS o React+Vite ya empaquetado)
+ * -- el mismo formato que generan los propios agentes de Maris AI. Un
+ * proyecto Astro (con o sin Wix) rompe esa suposición: no tiene un
+ * index.html con <script>, usa archivos .astro (sintaxis propia, no JSX)
+ * y enrutado por archivos, no un bundle único.
+ *
+ * SOLUCIÓN (a petición explícita del usuario, tras confirmar que no
+ * necesita que los servicios de Wix funcionen, solo que el proyecto se
+ * ABRA correctamente): en vez de intentar parsear .astro nosotros mismos,
+ * se compila el proyecto DE VERDAD en un sandbox E2B (ver
+ * astroImportBuilder.ts) y se usa el resultado ya compilado (HTML/CSS/JS
+ * estándar en dist/) como bundle -- exactamente lo que el resto del
+ * sistema de preview de Maris AI ya sabe mostrar sin cambios.
+ *
+ * Esto NO es una promesa de que todo proyecto Astro compilará: si usa
+ * integraciones @wix/astro que requieren el servicio de build en la nube
+ * de Wix, el build fallará igualmente -- pero fallará con el error REAL
+ * de Astro, no con una suposición nuestra. Ver detectUnbuildableFramework
+ * para los casos que sí son imposibles sin excepción (Next.js SSR).
  */
-function detectIncompatibleFramework(files: Record<string, string>, allPaths: string[]): string | null {
-  const hasWixConfig = allPaths.some((p) => /(^|\/)wix\.config\.json$/.test(p));
+function needsAstroBuild(files: Record<string, string>, allPaths: string[]): boolean {
   const hasAstroConfig = allPaths.some((p) => /(^|\/)astro\.config\.(mjs|ts|js)$/.test(p));
   const hasAstroFiles = allPaths.some((p) => p.endsWith(".astro"));
-  const packageJsonEntry = allPaths.find((p) => /(^|\/)package\.json$/.test(p));
-  const packageJsonContent = packageJsonEntry ? files[packageJsonEntry] || "" : "";
-  const usesWixSdk = /"@wix\//.test(packageJsonContent) || allPaths.some((p) => p.includes("wix.config"));
+  return hasAstroConfig || hasAstroFiles;
+}
 
-  if (hasWixConfig || hasAstroConfig || hasAstroFiles || usesWixSdk) {
-    return (
-      "Este proyecto es de Wix (Astro + SDK de Wix) y no se puede importar en Maris AI. " +
-      "Depende de servicios internos de Wix (@wix/data, @wix/bookings, @wix/stores, etc.) " +
-      "que solo funcionan dentro de la infraestructura de Wix — ni siquiera copiando el código " +
-      "perfectamente funcionaría fuera de su plataforma. Si quieres recrear este proyecto en " +
-      "Maris AI, la forma correcta es describir en un prompt qué hace la web (secciones, " +
-      "funcionalidades, diseño) para que los agentes la generen desde cero con tecnología " +
-      "100% exportable (React + Express + MongoDB), en vez de importar el código de Wix directamente."
-    );
-  }
-
-  // Otro caso frecuente: proyectos Next.js con App Router (server components,
-  // rutas API server-side) -- tampoco encajan en el modelo de bundle único
-  // de Maris AI, mismo motivo de fondo que Astro.
+/**
+ * Frameworks que NO tienen forma posible de funcionar con el modelo de
+ * preview de Maris AI (bundle estático servido al navegador), sin importar
+ * cuánta infraestructura se añada -- a diferencia de Astro (que SÍ se
+ * puede compilar a estático), Next.js con App Router depende de un
+ * servidor Node.js corriendo de forma continua (Server Components,
+ * Server Actions, rutas API server-side) para funcionar, no de un build
+ * único que produzca archivos estáticos servibles.
+ */
+function detectUnbuildableFramework(allPaths: string[]): string | null {
   const hasNextConfig = allPaths.some((p) => /(^|\/)next\.config\.(js|mjs|ts)$/.test(p));
   if (hasNextConfig) {
     return (
       "Este proyecto es de Next.js con renderizado en servidor y no se puede importar " +
       "directamente en Maris AI (que trabaja con un bundle de frontend + backend Express, " +
-      "no con el modelo de servidor de Next.js). Describe la funcionalidad en un prompt " +
-      "para que los agentes la recreen desde cero."
+      "no con un servidor Node.js seguido de renderizado dinámico como Next.js). Describe " +
+      "la funcionalidad en un prompt para que los agentes la recreen desde cero."
     );
   }
-
   return null;
 }
 
@@ -295,16 +291,41 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       return res.status(400).json({ error: "El archivo está vacío o no se pudo extraer." });
     }
 
-    const incompatibilityReason = detectIncompatibleFramework(extracted.files, extracted.allPaths);
-    if (incompatibilityReason) {
-      logger.info({ userId, filename: req.file.originalname }, "Import rechazado: framework incompatible detectado");
-      return res.status(400).json({ error: incompatibilityReason });
+    const unbuildableReason = detectUnbuildableFramework(extracted.allPaths);
+    if (unbuildableReason) {
+      logger.info({ userId, filename: req.file.originalname }, "Import rechazado: framework sin build estático posible");
+      return res.status(400).json({ error: unbuildableReason });
     }
 
-    const title = detectProjectTitle(extracted.files);
-    const description = detectDescription(extracted.files);
-    const techStack = detectTechStack(extracted.files, extracted.allPaths);
-    let frontendCode = buildFrontendCode(extracted.files, extracted.allPaths);
+    let filesForBundle = extracted.files;
+    let allPathsForBundle = extracted.allPaths;
+
+    if (needsAstroBuild(extracted.files, extracted.allPaths)) {
+      logger.info({ userId, filename: req.file.originalname }, "Import: proyecto Astro detectado — compilando en sandbox E2B");
+      const { buildAstroProjectInE2B } = await import("../lib/astroImportBuilder");
+      const astroResult = await buildAstroProjectInE2B(extracted.files);
+      if (!astroResult.ok || !astroResult.files) {
+        logger.warn({ userId, reason: astroResult.reason }, "Import: build de Astro falló");
+        return res.status(422).json({
+          error: astroResult.reason || "No se pudo compilar el proyecto Astro.",
+          buildLog: astroResult.buildLog?.slice(0, 4000),
+          installLog: astroResult.installLog?.slice(0, 2000),
+        });
+      }
+      // Sustituir: ya no usamos el código fuente .astro sin compilar, sino
+      // el resultado real de la compilación (HTML/CSS/JS estándar) —
+      // exactamente lo que el resto del sistema de preview ya sabe mostrar.
+      filesForBundle = astroResult.files;
+      allPathsForBundle = Object.keys(astroResult.files);
+      logger.info({ userId, compiledFileCount: allPathsForBundle.length }, "Import: proyecto Astro compilado correctamente, usando dist/ real");
+    }
+
+    const title = detectProjectTitle(filesForBundle);
+    const description = detectDescription(filesForBundle);
+    const techStack = needsAstroBuild(extracted.files, extracted.allPaths)
+      ? [...detectTechStack(filesForBundle, allPathsForBundle), "Astro (compilado)"]
+      : detectTechStack(filesForBundle, allPathsForBundle);
+    let frontendCode = buildFrontendCode(filesForBundle, allPathsForBundle);
 
     // MongoDB tiene límite de 16MB por documento. Truncar si es necesario.
     const MAX_CODE_BYTES = 12 * 1024 * 1024; // 12MB para dejar margen
