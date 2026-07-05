@@ -16,6 +16,22 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { GoogleGenAI, Modality } from "@google/genai";
+import multer from "multer";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "@ffmpeg-installer/ffmpeg";
+import { writeFile, unlink, mkdtemp, readFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+
+ffmpeg.setFfmpegPath(ffmpegPath.path);
+
+// Subida de la foto + la canción real del cliente (multipart, no JSON) —
+// los archivos de audio pueden pesar varios MB, mucho más de lo razonable
+// para meter en un body JSON en base64.
+const uploadMedia = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB máximo por archivo
+});
 
 const router = Router();
 
@@ -308,5 +324,175 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     return res.status(500).json({ error: "Error generando el videoclip. Se han intentado reembolsar los créditos.", details: error?.message });
   }
 });
+
+// ─── POST /api/video/music-video-with-real-song ────────────────────────────
+// Segunda parte de la funcion "tipo Pollo AI", completando el hueco que se
+// dejo documentado en el endpoint anterior: aqui SI se usa la cancion REAL
+// que el cliente sube, no el audio que compone Veo por su cuenta.
+//
+// FLUJO:
+//   1. Veo genera el VIDEO a partir de la foto (igual que el endpoint
+//      anterior) -- se descarta su audio propio.
+//   2. ffmpeg recorta la cancion real del cliente a la duracion del video.
+//   3. ffmpeg mezcla el video (sin audio) + la cancion recortada (como
+//      unico audio) en un archivo final.
+//
+// LIMITE HONESTO: Veo genera clips de 8 segundos por llamada -- esta
+// primera version sincroniza los primeros 8 segundos de la cancion real
+// del cliente con un clip de 8 segundos, no un videoclip completo de
+// duracion real (2-4 minutos). Encadenar varias generaciones de Veo para
+// cubrir la cancion entera es tecnicamente posible (Veo soporta extension
+// de escena) pero es una ampliacion aparte, no construida aqui -- cada
+// 8 segundos adicionales vuelve a costar lo mismo en la API de Veo.
+router.post(
+  "/video/music-video-with-real-song",
+  requireAuth,
+  uploadMedia.fields([{ name: "photo", maxCount: 1 }, { name: "song", maxCount: 1 }]),
+  async (req: Request, res: Response) => {
+    const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
+    const photoFile = files?.photo?.[0];
+    const songFile = files?.song?.[0];
+    const { styleDescription, tier = "lite" } = req.body;
+    const userId = (req as any).userId as string;
+    const isAdmin = !!(req as any).dbUser?.isAdmin;
+
+    if (!photoFile) return res.status(400).json({ error: "Falta la foto (campo 'photo')." });
+    if (!songFile) return res.status(400).json({ error: "Falta la canción real (campo 'song')." });
+    if (!styleDescription || String(styleDescription).trim().length < 5) {
+      return res.status(400).json({ error: "Describe brevemente el estilo/mood del videoclip." });
+    }
+
+    const selectedTier = VEO_TIERS[tier] ? tier : "lite";
+    const { model, creditCost: baseCost } = VEO_TIERS[selectedTier];
+    // +10 créditos extra sobre el coste base -- cubre el procesado de ffmpeg
+    // (CPU/tiempo real del servidor, no solo la llamada a Veo). Propuesta,
+    // igual que el resto de precios de esta función — ajustar según margen.
+    const creditCost = baseCost + 10;
+
+    let tempDir: string | null = null;
+
+    try {
+      const { chargeCredits } = await import("../lib/credits");
+      const charge = await chargeCredits({
+        userId,
+        isAdmin,
+        amount: creditCost,
+        description: `Videoclip musical con canción real (Veo + ffmpeg, calidad: ${selectedTier})`,
+      });
+      if (!charge.ok) {
+        return res.status(402).json({ error: "Créditos insuficientes para este tipo de generación." });
+      }
+
+      const genai = getGenAI();
+      const prompt =
+        `Music video style clip. The person in the reference photo is the main subject, ` +
+        `performing/featured in a ${styleDescription} music video. Cinematic camera movement, ` +
+        `dynamic lighting matching the mood: ${styleDescription}.`;
+
+      logger.info({ userId, tier: selectedTier }, "Veo: generando vídeo (sin audio propio) para mezclar con canción real");
+
+      let operation = await (genai as any).models.generateVideos({
+        model,
+        prompt,
+        image: { imageBytes: photoFile.buffer.toString("base64"), mimeType: photoFile.mimetype },
+      });
+
+      const POLL_INTERVAL_MS = 5000;
+      const MAX_WAIT_MS = 5 * 60_000;
+      const deadline = Date.now() + MAX_WAIT_MS;
+      while (!operation.done) {
+        if (Date.now() > deadline) {
+          await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: timeout generando el vídeo base" });
+          return res.status(504).json({ error: "La generación está tardando demasiado. Se te han reembolsado los créditos." });
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        operation = await (genai as any).operations.getVideosOperation({ operation });
+      }
+
+      const generatedVideo = operation.response?.generatedVideos?.[0];
+      if (!generatedVideo?.video?.uri) {
+        await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
+        return res.status(502).json({ error: "No se pudo generar el vídeo base. Se te han reembolsado los créditos." });
+      }
+
+      const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+      const downloadUrl = `${generatedVideo.video.uri}${generatedVideo.video.uri.includes("?") ? "&" : "?"}key=${apiKey}`;
+      const videoResp = await fetch(downloadUrl);
+      if (!videoResp.ok) {
+        await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
+        return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Se te han reembolsado los créditos." });
+      }
+      const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
+
+      // Archivos temporales para el procesado de ffmpeg -- limpiados SIEMPRE
+      // en el finally, generación exitosa o no.
+      tempDir = await mkdtemp(join(tmpdir(), "maris-mv-"));
+      const rawVideoPath = join(tempDir, "raw.mp4");
+      const songPath = join(tempDir, `song.${songFile.originalname.split(".").pop() || "mp3"}`);
+      const finalPath = join(tempDir, "final.mp4");
+
+      await writeFile(rawVideoPath, videoBuffer);
+      await writeFile(songPath, songFile.buffer);
+
+      // Duración real del vídeo generado por Veo, para recortar la canción
+      // a esa misma duración exacta (nunca al revés — el vídeo manda).
+      const videoDurationSec: number = await new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(rawVideoPath, (err, data) => {
+          if (err) return reject(err);
+          resolve(data.format.duration ?? 8);
+        });
+      });
+
+      logger.info({ userId, videoDurationSec }, "ffmpeg: mezclando vídeo de Veo con la canción real del cliente");
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(rawVideoPath)
+          .input(songPath)
+          .outputOptions([
+            "-map 0:v:0", // vídeo: solo la pista de vídeo del clip de Veo
+            "-map 1:a:0", // audio: solo la pista de audio de la canción real
+            "-c:v copy", // no recodificar el vídeo — más rápido, sin pérdida
+            "-c:a aac",
+            "-shortest", // cortar al más corto de los dos (el vídeo, normalmente)
+          ])
+          .duration(videoDurationSec)
+          .save(finalPath)
+          .on("end", () => resolve())
+          .on("error", (err) => reject(err));
+      });
+
+      const finalBuffer = await readFile(finalPath);
+      const finalBase64 = finalBuffer.toString("base64");
+
+      logger.info({ userId, sizeKB: Math.round(finalBuffer.length / 1024) }, "Videoclip con canción real generado correctamente");
+      return res.json({
+        ok: true,
+        videoUrl: `data:video/mp4;base64,${finalBase64}`,
+        tier: selectedTier,
+        creditsCharged: creditCost,
+        durationSeconds: videoDurationSec,
+        note: `Clip de ${Math.round(videoDurationSec)}s sincronizado con los primeros segundos de tu canción real — no es el videoclip completo de la canción entera (eso necesitaría encadenar varias generaciones de Veo, con su coste correspondiente).`,
+      });
+    } catch (error: any) {
+      logger.error({ error: error?.message, userId }, "Error generando videoclip con canción real");
+      try {
+        const { chargeCredits } = await import("../lib/credits");
+        const { creditCost: baseCostRefund } = VEO_TIERS[tier] ? VEO_TIERS[tier] : VEO_TIERS.lite;
+        await chargeCredits({ userId, isAdmin, amount: -(baseCostRefund + 10), description: "Reembolso: error generando videoclip con canción real" });
+      } catch { /* no bloquear la respuesta de error por un fallo en el reembolso */ }
+      return res.status(500).json({ error: "Error generando el videoclip. Se han intentado reembolsar los créditos.", details: error?.message });
+    } finally {
+      // Limpieza de archivos temporales — siempre, haya ido bien o mal.
+      if (tempDir) {
+        await Promise.all(
+          ["raw.mp4", `song.${songFile?.originalname.split(".").pop() || "mp3"}`, "final.mp4"].map((f) =>
+            unlink(join(tempDir!, f)).catch(() => {}),
+          ),
+        );
+      }
+    }
+  },
+);
 
 export default router;
