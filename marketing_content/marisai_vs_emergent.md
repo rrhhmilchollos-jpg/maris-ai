@@ -8,7 +8,7 @@ Maris AI es la primera plataforma de generación de aplicaciones full-stack dise
 
 | Característica | Maris AI |
 |---|---|
-| Agentes Especializados | 9 Agentes (Pipeline Completo) |
+| Agentes Especializados | 11 Agentes (Pipeline Completo) |
 | Modelos de IA | Claude + Gemini + GPT (Multi-modelo) |
 | Calidad del Código | Arquitectura Senior (Vite + Tailwind) |
 | Backend e Infraestructura | Express + MongoDB (Render) |

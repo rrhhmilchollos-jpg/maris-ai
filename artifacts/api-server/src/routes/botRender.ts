@@ -153,7 +153,7 @@ router.get("/bot-render/", (_req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.send(html(
-    "Maris AI | Generador de Apps con IA — 9 Agentes Especializados",
+    "Maris AI | Generador de Apps con IA — 11 Agentes Especializados",
     "Describe tu idea y 11 agentes IA generan tu app completa en menos de 5 minutos. Sin programar. Alternativa en español a Bolt y Lovable.",
     `${BASE}/`,
     body
@@ -194,7 +194,7 @@ router.get("/bot-render/vs-emergent", (_req: Request, res: Response) => {
 <h2>¿Por qué elegir Maris AI?</h2>
 <ul>
 <li><strong>Interfaz en Español</strong>: No pierdas tiempo traduciendo.</li>
-<li><strong>9 Agentes Especializados</strong>: Un pipeline real de desarrollo (Arquitecto, QA, DevOps...).</li>
+<li><strong>11 Agentes Especializados</strong>: Un pipeline real de desarrollo (Researcher, Architect, Designer, Frontend, Backend, QA, PM, entre otros).</li>
 <li><strong>Código Full-stack</strong>: No solo hacemos el diseño, generamos el backend y la base de datos.</li>
 </ul>
 </main>`;
