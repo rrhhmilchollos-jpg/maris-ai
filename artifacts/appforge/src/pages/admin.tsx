@@ -29,6 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AdminTicketsPanel } from "@/components/admin-tickets-panel";
 import { AdminPaymentsPanel } from "@/components/admin-payments-panel";
+import { ErrorFrequencyDiagnostic } from "@/components/error-frequency-diagnostic";
 import { AdminNewsEditor } from "@/components/admin-news-editor";
 import { AdminPresencePanel } from "@/components/admin-presence-panel";
 import { Button } from "@/components/ui/button";
@@ -411,6 +412,8 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
             <BarChart3 className="h-4 w-4" /> Panel de métricas avanzado
           </Button>
         </div>
+
+        <ErrorFrequencyDiagnostic />
 
         {/* Tabs */}
         <Tabs defaultValue={initialTab} className="w-full">

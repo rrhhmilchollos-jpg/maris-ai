@@ -206,6 +206,11 @@ export function useRestartSSRPreview() {
     mutationFn: ({ appId }) => apiFetch(`/api/apps/${appId}/ssr-preview/restart`, { method: "POST" }),
   });
 }
+export function useErrorFrequencyDiagnostic() {
+  return useMutation<any, any, { query: string }>({
+    mutationFn: ({ query }) => apiFetch(`/api/admin/diagnostics/error-frequency?query=${encodeURIComponent(query)}`),
+  });
+}
 export function useListAdminUsers(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAdminUsersQueryKey(), queryFn: () => apiFetch("/api/admin/users"), ...(opts?.query as any) });
 }
