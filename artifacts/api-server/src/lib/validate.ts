@@ -83,6 +83,24 @@ const KNOWN_BAD_PACKAGE_IMPORTS: Array<{ pattern: RegExp; message: string }> = [
     pattern: /import\s*\{[^}]*\buseParams\b[^}]*\}\s*from\s*["']wouter["']/,
     message: "useParams does not exist in \"wouter\" (it's from react-router-dom). Use: const [match, params] = useRoute(\"/path/:id\"); then params.id.",
   },
+  // ENCONTRADO EN PRODUCCIÓN (app "La Taberna del Mar", importada por el
+  // usuario y revisada manualmente): las 3 reglas de arriba solo atrapan
+  // "hook de react-router-dom importado por error DESDE wouter" -- no
+  // atrapan el caso de que un archivo importe DIRECTAMENTE el paquete real
+  // "react-router-dom" (BrowserRouter, Routes, Route, Navigate...), que es
+  // una importación 100% válida en sí misma, solo que del paquete
+  // equivocado para un proyecto que en el resto de archivos usa wouter.
+  // Este patrón es aún más peligroso que los 3 anteriores porque esbuild
+  // lo valida sin ningún problema (react-router-dom si es una dependencia
+  // real instalada) y ni siquiera lanza el error de "export no encontrado"
+  // en el navegador -- simplemente crea DOS sistemas de rutas
+  // incompatibles conviviendo en la misma app, con la navegación real rota
+  // de forma silenciosa (los <Link> de wouter no funcionan dentro de un
+  // <BrowserRouter> de react-router-dom, y viceversa).
+  {
+    pattern: /import\s*\{[^}]*\}\s*from\s*["']react-router-dom["']/,
+    message: "This project uses \"wouter\" for routing, not react-router-dom — importing directly from \"react-router-dom\" creates two incompatible routing systems in the same app (navigation will silently break even though the code compiles). Replace BrowserRouter/Routes/Route/Navigate/Switch with wouter's <Router>/<Switch>/<Route>/<Redirect>, useNavigate with useLocation()[1], useParams with useRoute(\"/path/:id\")[1], and remove the react-router-dom import entirely.",
+  },
 ];
 
 function detectKnownBadPackageImports(
