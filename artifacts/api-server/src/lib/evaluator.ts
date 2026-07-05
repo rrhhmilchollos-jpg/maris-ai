@@ -322,7 +322,28 @@ export async function evaluateApp(opts: {
   log?: Logger;
 }): Promise<EvaluatorReport> {
   const { app, baseUrl, userIntent, plannedPages, log } = opts;
-  const url = `${baseUrl.replace(/\/$/, "")}/p/${app.publicSlug}`;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (caso real reportado: app "La Taberna
+  // del Mar" — el evaluador reportaba "muestra contenido de marketing de
+  // Maris AI" + "error 404 en todas las pantallas"):
+  //
+  // Esta URL apuntaba a `${baseUrl}/p/${publicSlug}` (baseUrl = marisai.es,
+  // el dominio del FRONTEND de Maris AI). El problema: la ruta "/p/:slug"
+  // NO EXISTE en ningún sitio — ni en el router de React (App.tsx no tiene
+  // esa ruta, cae al catch-all <Route component={NotFound}/>), ni como
+  // rewrite en vercel.json. Al navegar ahí, Vercel sirve el index.html
+  // genérico de Maris AI (con su contenido SEO visible antes de hidratar)
+  // y luego React monta y no encuentra ruta -> NotFound. Puppeteer
+  // capturaba exactamente eso: un instante del marketing de Maris AI y/o
+  // la pantalla 404 -- NUNCA la app real del cliente. Esto probablemente
+  // afectaba a TODAS las evaluaciones visuales, no solo a esta app, porque
+  // "/p/:slug" nunca ha sido una ruta real desde que este evaluador existe.
+  //
+  // Fix: usar el MISMO endpoint que ya usa el botón de preview real que
+  // ve el cliente (/api/apps/:id/preview, servido por este mismo backend
+  // vía buildDeployHtml con el frontendCode real de la app) — nunca un
+  // dominio/ruta que no exista de verdad.
+  const apiBaseUrl = (process.env.MARIS_AI_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app").replace(/\/$/, "");
+  const url = `${apiBaseUrl}/api/apps/${app.id}/preview`;
   log?.info({ appId: app.id, url }, "👁 Evaluator capturing screenshots");
   const shots = await takeScreenshots(url);
   const verdict = await judgeWithVision(

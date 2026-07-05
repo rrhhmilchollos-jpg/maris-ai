@@ -524,7 +524,7 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
 
   try {
     const app = await (GeneratedApp as any).findOne({ _id: appId, userId })
-      .select("title description frontendCode publicSlug prompt")
+      .select("title description frontendCode publicSlug prompt vercelDeployUrl deploymentStatus customDomain customDomainVerified")
       .lean();
 
     if (!app) {
@@ -533,8 +533,6 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
     }
 
     const { runVisualTester, takeScreenshots } = await import("../lib/visualTester");
-
-    const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
 
     // Callback de progreso compartido por ambos caminos (con o sin
     // publicSlug) — persiste en VisualTestJob.progressNote, lo que el
@@ -547,7 +545,19 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
     };
 
     let effectiveSlug = app.publicSlug;
-    if (!effectiveSlug) {
+    // ENCONTRADO A PETICIÓN DEL USUARIO (caso real "La Taberna del Mar" —
+    // el visual tester reportaba contenido de marketing de Maris AI + 404):
+    // tener un publicSlug NO significa que la app esté desplegada de
+    // verdad. Cada app se despliega a su PROPIO subdominio de Vercel (o
+    // dominio propio), nunca a "marisai.es/p/<slug>" — esa ruta no existe
+    // en ningún sitio del frontend de Maris AI. Usar el publicSlug como
+    // señal de "desplegada" hacía que este código intentara capturar
+    // capturas de pantalla de una URL que caía en el catch-all del propio
+    // marisai.es, mostrando SU marketing en vez de la app del cliente.
+    const realDeployUrl = app.customDomain && app.customDomainVerified
+      ? `https://${app.customDomain}`
+      : (app.deploymentStatus === "deployed" && app.vercelDeployUrl ? app.vercelDeployUrl : null);
+    if (!realDeployUrl) {
       const internalBaseUrl = process.env.INTERNAL_API_URL || `http://localhost:${process.env.PORT || 3000}`;
       const previewUrl = `${internalBaseUrl}/api/apps/${appId}/preview`;
       logger.info({ appId, previewUrl, jobId }, "[visual-test] No hay publicSlug — usando preview interno");
@@ -619,7 +629,7 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
         backendCode: app.backendCode || "",
         publicSlug: effectiveSlug,
       },
-      baseUrl,
+      baseUrl: realDeployUrl,
       prompt: app.prompt || app.description || app.title || "",
       autoFix,
       log: logger,

@@ -840,9 +840,14 @@ export async function runVisualTester(opts: {
 }): Promise<VisualReport> {
   const { app, baseUrl, prompt, autoFix, log, onProgress } = opts;
   const report = async (note: string) => { try { await onProgress?.(note); } catch { /* nunca bloquear el ciclo por un fallo de progreso */ } };
-  // Usamos /_inner directamente para que Puppeteer capture el contenido real
-  // en lugar del wrapper HTML que solo contiene un <iframe> (que Puppeteer no penetra)
-  const url = `${baseUrl.replace(/\/$/, "")}/p/${app.publicSlug}/_inner`;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (caso real "La Taberna del Mar"): esto
+  // asumía que `baseUrl` era el dominio de Maris AI (marisai.es) y que la
+  // app estaba servida ahí en "/p/<slug>/_inner" — una ruta que nunca ha
+  // existido. Cada app se despliega a su PROPIO dominio (subdominio de
+  // Vercel o dominio propio del cliente). El caller (deployment.ts) ahora
+  // pasa esa URL real y completa en `baseUrl` — se usa tal cual, sin
+  // añadirle ningún path inventado encima.
+  const url = baseUrl.replace(/\/$/, "");
 
   let currentBundle = app.frontendCode;
   let currentBackendCode = app.backendCode;
