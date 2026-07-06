@@ -14,6 +14,7 @@ export interface AstroBuildResult {
   installLog?: string;
   buildLog?: string;
   reason?: string;
+  removedPackages?: string[];
 }
 
 /**
@@ -224,16 +225,20 @@ export async function buildAstroProjectInE2B(
     );
 
     // ENCONTRADO CON DATOS REALES (caso FANTASYWEB-main.zip, tras resolver
-    // el problema de memoria): el proyecto pedía una versión EXACTA de un
-    // paquete de Wix (@wix/babel-plugin-jsx-dynamic-data@1.0.13) que ya no
-    // existe en el registro público de npm (npm error ETARGET). Esto NO
-    // es la limitación de autenticación con Wix que se documentó antes --
-    // es simplemente una versión retirada del registro, con arreglo real:
-    // sustituir por la última versión disponible del MISMO paquete y
-    // reintentar. Hasta 3 intentos, por si hay más de un paquete con este
-    // mismo problema (frecuente en proyectos con package.json antiguos).
+    // el problema de memoria): dos tipos distintos de fallo real de npm:
+    //   1. ETARGET: el paquete existe públicamente, pero la versión EXACTA
+    //      pedida fue retirada del registro -- se sustituye por la última
+    //      versión disponible del mismo paquete (esto SÍ es solucionable).
+    //   2. E404: el paquete no existe en absoluto en el registro público
+    //      (confirmado con una petición real antes de asumirlo) -- esto es
+    //      genuinamente un paquete privado/interno de Wix, no accesible
+    //      desde fuera por nadie. Se quita del package.json y se sigue
+    //      intentando sin él -- el resultado final avisa honestamente de
+    //      qué paquetes se quitaron, para que quede claro que la
+    //      funcionalidad ligada a ellos puede no funcionar.
     let finalInstall = install;
-    for (let attempt = 0; attempt < 3 && finalInstall.exitCode !== 0; attempt++) {
+    const removedPackages: string[] = [];
+    for (let attempt = 0; attempt < 5 && finalInstall.exitCode !== 0; attempt++) {
       // BUG PROPIO ENCONTRADO Y CORREGIDO: el regex anterior no contemplaba
       // que los paquetes de Wix empiezan con "@" (paquetes con scope,
       // "@wix/algo") -- [^\s@] excluye el propio símbolo @ del nombre del
@@ -241,21 +246,21 @@ export async function buildAstroProjectInE2B(
       // Confirmado con una prueba real antes de aplicar este cambio.
       const etargetMatch = /npm error notarget No matching version found for (@?[^\s@]+)@([\d.]+)/i.exec(finalInstall.stderr)
         || /npm error notarget No matching version found for (@?[^\s@]+)@([\d.]+)/i.exec(finalInstall.stdout);
-      if (!etargetMatch) break; // No es este tipo de error concreto — no seguir reintentando a ciegas.
+      const notFoundMatch = /npm error 404\s+'(@?[^'@]+(?:\/[^'@]+)?)@[^']*' is not in this registry/i.exec(finalInstall.stderr)
+        || /npm error 404\s+'(@?[^'@]+(?:\/[^'@]+)?)@[^']*' is not in this registry/i.exec(finalInstall.stdout);
 
-      const [, missingPackage, missingVersion] = etargetMatch;
-      const latestVersion = await getLatestAvailableVersion(missingPackage);
-      if (!latestVersion) {
-        logger.warn({ missingPackage, missingVersion }, "No se encontró ninguna versión alternativa en el registro de npm — no se puede corregir automáticamente");
-        break;
-      }
+      let fixScript: string | null = null;
+      let logMsg: string;
 
-      logger.info({ missingPackage, missingVersion, latestVersion }, `Versión ${missingVersion} de ${missingPackage} no existe — sustituyendo por ${latestVersion} y reintentando`);
-
-      // Corregir package.json dentro del propio sandbox con un pequeño
-      // script de Node (más fiable que sed con nombres de paquete con
-      // scope "@wix/..." que incluyen barras).
-      const fixScript = `
+      if (etargetMatch) {
+        const [, missingPackage, missingVersion] = etargetMatch;
+        const latestVersion = await getLatestAvailableVersion(missingPackage);
+        if (!latestVersion) {
+          logger.warn({ missingPackage, missingVersion }, "No se encontró ninguna versión alternativa en el registro de npm — no se puede corregir automáticamente");
+          break;
+        }
+        logMsg = `Versión ${missingVersion} de ${missingPackage} no existe — sustituyendo por ${latestVersion} y reintentando`;
+        fixScript = `
 const fs = require('fs');
 const path = '${APP_DIR}/package.json';
 const pkg = JSON.parse(fs.readFileSync(path, 'utf-8'));
@@ -267,6 +272,36 @@ for (const section of ['dependencies', 'devDependencies']) {
 fs.writeFileSync(path, JSON.stringify(pkg, null, 2));
 console.log('Corregido: ${missingPackage} -> ${latestVersion}');
 `.trim();
+      } else if (notFoundMatch) {
+        const [, missingPackage] = notFoundMatch;
+        // Confirmar de verdad contra el registro real antes de quitarlo --
+        // nunca asumir que "no aparece en el log" significa "no existe".
+        const confirmedMissing = await getLatestAvailableVersion(missingPackage);
+        if (confirmedMissing) {
+          logger.warn({ missingPackage }, "El log decía 404 pero el paquete sí existe en el registro — no se quita, algo más raro está pasando");
+          break;
+        }
+        removedPackages.push(missingPackage);
+        logMsg = `${missingPackage} no existe en absoluto en el registro público (paquete privado de Wix) — se quita y se reintenta sin él`;
+        fixScript = `
+const fs = require('fs');
+const path = '${APP_DIR}/package.json';
+const pkg = JSON.parse(fs.readFileSync(path, 'utf-8'));
+for (const section of ['dependencies', 'devDependencies']) {
+  if (pkg[section]) delete pkg[section]['${missingPackage}'];
+}
+fs.writeFileSync(path, JSON.stringify(pkg, null, 2));
+console.log('Eliminado: ${missingPackage}');
+`.trim();
+      } else {
+        break; // No es ninguno de estos dos patrones conocidos — no seguir reintentando a ciegas.
+      }
+
+      logger.info({ attempt }, logMsg);
+
+      // Corregir package.json dentro del propio sandbox con un pequeño
+      // script de Node (más fiable que sed con nombres de paquete con
+      // scope "@wix/..." que incluyen barras).
       await runCommandCapturingOutput(sandbox, `node -e "${fixScript.replace(/"/g, '\\"')}"`, 15_000);
 
       finalInstall = await runCommandCapturingOutput(
@@ -283,7 +318,8 @@ console.log('Corregido: ${missingPackage} -> ${latestVersion}');
         installLog:
           `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
           `=== npm install --omit=dev (exitCode=${finalInstall.exitCode}, tras posibles reintentos de versión) ===\n${finalInstall.stdout}\n${finalInstall.stderr}`,
-        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${finalInstall.exitCode}). Revisa el log de instalación para más detalle.`,
+        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${finalInstall.exitCode}). Revisa el log de instalación para más detalle.${removedPackages.length > 0 ? ` (Se quitaron automáticamente estos paquetes privados de Wix, no existen públicamente: ${removedPackages.join(", ")} — el fallo persiste por otro motivo distinto)` : ""}`,
+        removedPackages: removedPackages.length > 0 ? removedPackages : undefined,
       };
     }
 
@@ -336,8 +372,8 @@ console.log('Corregido: ${missingPackage} -> ${latestVersion}');
       }
     }
 
-    logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length }, "Astro import: build completado correctamente");
-    return { ok: true, files: outFiles, installLog: finalInstall.stdout, buildLog: build.stdout };
+    logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length, removedPackages }, "Astro import: build completado correctamente");
+    return { ok: true, files: outFiles, installLog: finalInstall.stdout, buildLog: build.stdout, removedPackages: removedPackages.length > 0 ? removedPackages : undefined };
   } catch (err: any) {
     // Este catch ahora solo debería dispararse por fallos AJENOS a los
     // comandos en sí (fallo al crear el sandbox, al escribir archivos,

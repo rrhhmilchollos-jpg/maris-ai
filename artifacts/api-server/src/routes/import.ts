@@ -377,6 +377,7 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
     let filesForBundle = extracted.files;
     let allPathsForBundle = extracted.allPaths;
     let ssrLiveResult: { liveUrl: string; sandboxId: string; expiresAt: Date } | null = null;
+    let astroRemovedPackages: string[] | undefined;
 
     if (needsSSRServer(extracted.allPaths)) {
       logger.info({ userId, filename: req.file.originalname }, "Import: proyecto con SSR (Next.js) detectado — arrancando servidor en vivo en E2B");
@@ -409,6 +410,7 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       // exactamente lo que el resto del sistema de preview ya sabe mostrar.
       filesForBundle = astroResult.files;
       allPathsForBundle = Object.keys(astroResult.files);
+      astroRemovedPackages = astroResult.removedPackages;
       logger.info({ userId, compiledFileCount: allPathsForBundle.length }, "Import: proyecto Astro compilado correctamente, usando dist/ real");
     }
 
@@ -482,7 +484,10 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       filesImported: extracted.allPaths.length,
       message: ssrLiveResult
         ? `Proyecto "${title}" importado con éxito — servidor en vivo activo durante 30 minutos.`
-        : `Proyecto "${title}" importado con éxito (${extracted.allPaths.length} archivos).`,
+        : astroRemovedPackages && astroRemovedPackages.length > 0
+          ? `Proyecto "${title}" importado con éxito, pero se tuvieron que quitar ${astroRemovedPackages.length} paquete(s) privados de Wix que no existen públicamente: ${astroRemovedPackages.join(", ")}. Puede que alguna funcionalidad ligada a ellos no funcione.`
+          : `Proyecto "${title}" importado con éxito (${extracted.allPaths.length} archivos).`,
+      ...(astroRemovedPackages && astroRemovedPackages.length > 0 ? { removedPackages: astroRemovedPackages } : {}),
       ...(ssrLiveResult ? { renderMode: "ssr-live", livePreviewUrl: ssrLiveResult.liveUrl, livePreviewExpiresAt: ssrLiveResult.expiresAt } : {}),
     });
   } catch (err) {
