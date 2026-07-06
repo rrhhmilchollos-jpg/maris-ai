@@ -34,6 +34,30 @@ export interface AstroBuildResult {
  * comportamiento del valor de retorno) -- así el log real nunca se pierde,
  * tire el SDK excepción o no.
  */
+/**
+ * Consulta el registro REAL de npm para saber qué versiones existen de
+ * verdad de un paquete -- necesario para el caso encontrado con datos
+ * reales (FANTASYWEB-main.zip): el proyecto pedía
+ * @wix/babel-plugin-jsx-dynamic-data@1.0.13 exacto, pero esa versión
+ * concreta fue retirada del registro público en algún momento (hay un
+ * hueco real entre 1.0.11 y 1.0.16, confirmado consultando el registro) --
+ * no es que el paquete sea privado de Wix, es que esa versión ya no existe.
+ */
+async function getLatestAvailableVersion(packageName: string): Promise<string | null> {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/${packageName}`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const distTags = data["dist-tags"];
+    if (distTags?.latest) return distTags.latest;
+    const versions = Object.keys(data.versions || {});
+    return versions.length > 0 ? versions[versions.length - 1] : null;
+  } catch (err) {
+    logger.warn({ err, packageName }, "No se pudo consultar el registro de npm para buscar una versión alternativa");
+    return null;
+  }
+}
+
 async function runCommandCapturingOutput(
   sandbox: Sandbox,
   cmd: string,
@@ -198,14 +222,63 @@ export async function buildAstroProjectInE2B(
       `cd ${APP_DIR} && npm install --omit=dev --no-audit --no-fund --loglevel=warn && npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
       INSTALL_TIMEOUT_MS,
     );
-    if (install.exitCode !== 0) {
-      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: instalación falló (npm --omit=dev)");
+
+    // ENCONTRADO CON DATOS REALES (caso FANTASYWEB-main.zip, tras resolver
+    // el problema de memoria): el proyecto pedía una versión EXACTA de un
+    // paquete de Wix (@wix/babel-plugin-jsx-dynamic-data@1.0.13) que ya no
+    // existe en el registro público de npm (npm error ETARGET). Esto NO
+    // es la limitación de autenticación con Wix que se documentó antes --
+    // es simplemente una versión retirada del registro, con arreglo real:
+    // sustituir por la última versión disponible del MISMO paquete y
+    // reintentar. Hasta 3 intentos, por si hay más de un paquete con este
+    // mismo problema (frecuente en proyectos con package.json antiguos).
+    let finalInstall = install;
+    for (let attempt = 0; attempt < 3 && finalInstall.exitCode !== 0; attempt++) {
+      const etargetMatch = /npm error notarget No matching version found for ([^\s@]+(?:\/[^\s@]+)?)@([\d.]+)/i.exec(finalInstall.stderr)
+        || /npm error notarget No matching version found for ([^\s@]+(?:\/[^\s@]+)?)@([\d.]+)/i.exec(finalInstall.stdout);
+      if (!etargetMatch) break; // No es este tipo de error concreto — no seguir reintentando a ciegas.
+
+      const [, missingPackage, missingVersion] = etargetMatch;
+      const latestVersion = await getLatestAvailableVersion(missingPackage);
+      if (!latestVersion) {
+        logger.warn({ missingPackage, missingVersion }, "No se encontró ninguna versión alternativa en el registro de npm — no se puede corregir automáticamente");
+        break;
+      }
+
+      logger.info({ missingPackage, missingVersion, latestVersion }, `Versión ${missingVersion} de ${missingPackage} no existe — sustituyendo por ${latestVersion} y reintentando`);
+
+      // Corregir package.json dentro del propio sandbox con un pequeño
+      // script de Node (más fiable que sed con nombres de paquete con
+      // scope "@wix/..." que incluyen barras).
+      const fixScript = `
+const fs = require('fs');
+const path = '${APP_DIR}/package.json';
+const pkg = JSON.parse(fs.readFileSync(path, 'utf-8'));
+for (const section of ['dependencies', 'devDependencies']) {
+  if (pkg[section] && pkg[section]['${missingPackage}']) {
+    pkg[section]['${missingPackage}'] = '${latestVersion}';
+  }
+}
+fs.writeFileSync(path, JSON.stringify(pkg, null, 2));
+console.log('Corregido: ${missingPackage} -> ${latestVersion}');
+`.trim();
+      await runCommandCapturingOutput(sandbox, `node -e "${fixScript.replace(/"/g, '\\"')}"`, 15_000);
+
+      finalInstall = await runCommandCapturingOutput(
+        sandbox,
+        `cd ${APP_DIR} && npm install --omit=dev --no-audit --no-fund --loglevel=warn && npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
+        INSTALL_TIMEOUT_MS,
+      );
+    }
+
+    if (finalInstall.exitCode !== 0) {
+      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: finalInstall.exitCode, stderr: finalInstall.stderr.slice(0, 2000) }, "Astro import: instalación falló (npm --omit=dev, tras reintentos de versión)");
       return {
         ok: false,
         installLog:
           `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
-          `=== npm install --omit=dev (exitCode=${install.exitCode}) ===\n${install.stdout}\n${install.stderr}`,
-        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${install.exitCode}). Revisa el log de instalación para más detalle.`,
+          `=== npm install --omit=dev (exitCode=${finalInstall.exitCode}, tras posibles reintentos de versión) ===\n${finalInstall.stdout}\n${finalInstall.stderr}`,
+        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${finalInstall.exitCode}). Revisa el log de instalación para más detalle.`,
       };
     }
 
@@ -221,7 +294,7 @@ export async function buildAstroProjectInE2B(
       logger.warn({ sandboxId: sandbox.sandboxId, exitCode: build.exitCode, stderr: build.stderr.slice(0, 2000) }, "Astro import: astro build falló");
       return {
         ok: false,
-        installLog: install.stdout,
+        installLog: finalInstall.stdout,
         buildLog: build.stdout + "\n" + build.stderr,
         reason: `El proyecto no compiló con Astro (código de salida ${build.exitCode}). Si usa integraciones propias de Wix (@wix/astro) que requieren su servicio de build en la nube, es posible que este proyecto en concreto no se pueda compilar fuera de Wix. Revisa el log de compilación para ver el error real.`,
       };
@@ -235,7 +308,7 @@ export async function buildAstroProjectInE2B(
     if (distPaths.length === 0) {
       return {
         ok: false,
-        installLog: install.stdout,
+        installLog: finalInstall.stdout,
         buildLog: build.stdout,
         reason: "El build de Astro terminó sin errores pero no generó ningún archivo en dist/ — revisa la configuración de salida (outDir) del proyecto.",
       };
@@ -259,7 +332,7 @@ export async function buildAstroProjectInE2B(
     }
 
     logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length }, "Astro import: build completado correctamente");
-    return { ok: true, files: outFiles, installLog: install.stdout, buildLog: build.stdout };
+    return { ok: true, files: outFiles, installLog: finalInstall.stdout, buildLog: build.stdout };
   } catch (err: any) {
     // Este catch ahora solo debería dispararse por fallos AJENOS a los
     // comandos en sí (fallo al crear el sandbox, al escribir archivos,
