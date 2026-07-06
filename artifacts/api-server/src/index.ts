@@ -9,6 +9,7 @@ import { startSelfMonitor } from "./lib/selfMonitor";
 import { startAppHealthMonitor } from "./lib/autoRepairAgent";
 import { runAutopilotTick } from "./lib/aiAutopilot";
 import { runRecurringBillingTick } from "./lib/recurringBilling";
+import { runFreeCreditsRenewalTick } from "./lib/freeCreditsRenewal";
 import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
 import { connectDB } from "./lib/db";
@@ -195,6 +196,22 @@ httpServer.listen(finalPort, async (err?: Error) => {
     logger.info("Recurring Billing (Viva.com) started — hourly tick");
   } catch (recurringErr) {
     logger.error({ err: recurringErr }, "Failed to start Recurring Billing");
+  }
+
+  // 6b-2) Caducidad mensual de créditos del plan GRATIS — mismo ciclo que
+  // el plan de pago (ver lib/freeCreditsRenewal.ts), a petición explícita:
+  // los créditos no deben acumularse indefinidamente en ningún plan, ni
+  // siquiera el gratuito, igual que en emergent.sh.
+  try {
+    runFreeCreditsRenewalTick().catch((err) => logger.error({ err }, "Free credits renewal initial tick failed"));
+    const freeCreditsInterval = setInterval(
+      () => runFreeCreditsRenewalTick().catch((err) => logger.error({ err }, "Free credits renewal tick failed")),
+      60 * 60 * 1000,
+    );
+    freeCreditsInterval.unref();
+    logger.info("Free Credits Renewal started — hourly tick");
+  } catch (freeCreditsErr) {
+    logger.error({ err: freeCreditsErr }, "Failed to start Free Credits Renewal");
   }
 
   // 6c) Emails de reactivación automática — una vez al día a las 10:00h España.

@@ -131,6 +131,12 @@ export async function ensureUser(clerkUserId: string, ip?: string): Promise<IUse
         phoneNumber: phoneNumber ?? undefined,
         credits: isAdminEmail(email) ? 999999999 : (shouldGiveFreeCredits ? 65 : 0),
         planCredits: isAdminEmail(email) ? 0 : (shouldGiveFreeCredits ? 65 : 0),
+        // A petición explícita: los créditos del plan gratis también
+        // caducan al mes (igual que en emergent.sh), no solo los de pago.
+        // Arrancamos aquí el mismo reloj de 30 días que ya usa
+        // grantPlanCredits() para las renovaciones de pago — ver
+        // freeCreditsRenewal.ts, que reutiliza esa misma función.
+        planExpiresAt: (isAdminEmail(email) || !shouldGiveFreeCredits) ? undefined : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         freeCreditsUsed: shouldGiveFreeCredits,
         registrationIp: ip,
         // ID Universal Maris AI — generado automáticamente al crear el usuario

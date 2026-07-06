@@ -115,6 +115,9 @@ router.post("/clerk/webhook", async (req: Request, res: Response): Promise<void>
           planCredits: isAdmin ? 0 : 65,
           freeCreditsUsed: !isAdmin,
           plan: "free",
+          // Igual que en ensureUser() (lib/auth.ts) — arranca el ciclo
+          // mensual de caducidad de créditos del plan gratis desde el alta.
+          planExpiresAt: isAdmin ? undefined : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           createdAt: new Date(data.created_at ?? Date.now()),
         });
 
