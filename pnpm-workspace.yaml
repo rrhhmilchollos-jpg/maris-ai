@@ -42,6 +42,7 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
+  - '@ffmpeg-installer/ffmpeg'
   - '@swc/core'
   - esbuild
   - msw
