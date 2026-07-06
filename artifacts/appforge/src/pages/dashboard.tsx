@@ -456,6 +456,13 @@ export default function DashboardPage() {
       const initial = await apiFetch<any>("/api/import-app", { method: "POST", body: formData });
       const importId = initial.id;
       setImportStatusMessage(initial.message || "Importando...");
+      // BUG ENCONTRADO A PETICION DEL USUARIO: la lista de "Apps
+      // recientes" solo se refrescaba al TERMINAR la importación -- el
+      // usuario no veía la tarjeta nueva (con su etiqueta "Importando...")
+      // hasta que el proceso ya había acabado, dando la falsa impresión
+      // de que la importación ni siquiera se había iniciado. Se invalida
+      // la lista YA, en cuanto se confirma que el registro se creó.
+      queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
 
       const POLL_INTERVAL_MS = 4000;
       const MAX_WAIT_MS = 15 * 60_000; // 15 min como límite razonable de espera en el propio navegador
