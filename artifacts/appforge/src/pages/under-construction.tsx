@@ -82,6 +82,8 @@ export default function UnderConstructionPage() {
         <img
           src={`${basePath}/logo.svg`}
           alt="Maris AI"
+          width="48"
+          height="48"
           className="mb-10 h-12 w-auto drop-shadow-[0_0_28px_rgba(168,85,247,0.45)]"
         />
 
