@@ -98,19 +98,19 @@ export async function startSSRServerInE2B(
     }));
     await sandbox.files.write(writeEntries);
 
-    // Mismo cambio que en astroImportBuilder.ts -- corepack primero (viene
-    // con Node, más fiable que depender de que npx pueda descargar pnpm),
-    // con npx como respaldo si corepack no está disponible.
-    const pnpmSetup = await sandbox.commands.run(
-      "corepack enable && corepack prepare pnpm@9 --activate",
-      { timeoutMs: 60_000 },
-    ).catch(() => ({ exitCode: 1 } as any));
-    const pnpmCommand = pnpmSetup.exitCode === 0 ? "pnpm" : "npx --yes pnpm@9";
-
+    // Mismo hallazgo que en astroImportBuilder.ts: corepack y pnpm deben
+    // ir en la MISMA llamada/sesión de shell, o el PATH que prepara
+    // corepack se pierde antes de que pnpm llegue a usarse.
     const install = await sandbox.commands.run(
-      `cd ${APP_DIR} && ${pnpmCommand} install --reporter=silent`,
+      `cd ${APP_DIR} && corepack enable && corepack prepare pnpm@9 --activate && pnpm install --reporter=silent`,
       { timeoutMs: INSTALL_TIMEOUT_MS },
-    );
+    ).catch(async () => {
+      // Último recurso: npx en la misma sesión también.
+      return sandbox.commands.run(
+        `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
+        { timeoutMs: INSTALL_TIMEOUT_MS },
+      );
+    });
     if (install.exitCode !== 0) {
       logger.warn({ sandboxId: sandbox.sandboxId, stderr: install.stderr.slice(0, 2000) }, "SSR import: npm install falló");
       await sandbox.kill().catch(() => {});

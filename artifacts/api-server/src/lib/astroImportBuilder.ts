@@ -146,34 +146,43 @@ export async function buildAstroProjectInE2B(
     );
     logger.info({ sandboxId: sandbox.sandboxId, diagOutput: diag.stdout.slice(0, 1500) }, "Diagnóstico del entorno del sandbox antes de instalar");
 
-    const pnpmSetup = await runCommandCapturingOutput(
-      sandbox,
-      "corepack enable && corepack prepare pnpm@9 --activate",
-      60_000,
-    );
-    const pnpmCommand = pnpmSetup.exitCode === 0 ? "pnpm" : "npx --yes pnpm@9";
-    if (pnpmSetup.exitCode !== 0) {
-      logger.warn({ sandboxId: sandbox.sandboxId, stderr: pnpmSetup.stderr.slice(0, 500) }, "corepack no disponible, usando npx como respaldo para pnpm");
-    }
-
+    // ENCONTRADO CON DATOS REALES (a petición del usuario, tras el
+    // diagnóstico explícito): corepack preparaba pnpm correctamente
+    // (exitCode=0, "Preparing pnpm@9 for immediate activation..."), pero
+    // la SIGUIENTE llamada a sandbox.commands.run() para "pnpm install"
+    // fallaba al instante sin ninguna salida -- indica que cada llamada
+    // separada puede abrir una sesión de shell nueva que no hereda el
+    // PATH/shims que corepack acaba de preparar en la llamada anterior.
+    // FIX: todo en UNA SOLA llamada, mismo shell, para que nada se pierda
+    // entre medias. Si corepack fallara aquí dentro, el && corta la
+    // cadena y npm/pnpm nunca llega a intentarse con algo roto a medias.
     const install = await runCommandCapturingOutput(
       sandbox,
-      `cd ${APP_DIR} && ${pnpmCommand} install --reporter=silent`,
+      `cd ${APP_DIR} && corepack enable && corepack prepare pnpm@9 --activate && pnpm install --reporter=silent`,
       INSTALL_TIMEOUT_MS,
     );
     if (install.exitCode !== 0) {
-      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: npm install falló");
-      return {
-        ok: false,
-        // El diagnóstico y el resultado de la preparación de pnpm se
-        // incluyen SIEMPRE aquí -- así, pase lo que pase, hay algo real
-        // que revisar en vez de un log vacío otra vez.
-        installLog:
-          `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
-          `=== PREPARACIÓN DE PNPM (corepack, exitCode=${pnpmSetup.exitCode}) ===\n${pnpmSetup.stdout}\n${pnpmSetup.stderr}\n\n` +
-          `=== COMANDO EJECUTADO: ${pnpmCommand} install ===\n${install.stdout}\n${install.stderr}`,
-        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${install.exitCode}). Revisa el log de instalación para más detalle.`,
-      };
+      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: instalación falló (corepack+pnpm en una sola sesión)");
+      // Si aun así falla, reintentamos una vez más con npx como último
+      // recurso, en la MISMA sesión también, por si el problema fuera
+      // específico de corepack y no de memoria/dependencias.
+      const fallbackInstall = await runCommandCapturingOutput(
+        sandbox,
+        `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
+        INSTALL_TIMEOUT_MS,
+      );
+      if (fallbackInstall.exitCode !== 0) {
+        return {
+          ok: false,
+          installLog:
+            `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
+            `=== INTENTO 1 (corepack+pnpm en una sesión, exitCode=${install.exitCode}) ===\n${install.stdout}\n${install.stderr}\n\n` +
+            `=== INTENTO 2 (npx como último recurso, exitCode=${fallbackInstall.exitCode}) ===\n${fallbackInstall.stdout}\n${fallbackInstall.stderr}`,
+          reason: `No se pudieron instalar las dependencias del proyecto tras 2 intentos (códigos de salida ${install.exitCode} y ${fallbackInstall.exitCode}). Revisa el log de instalación para más detalle.`,
+        };
+      }
+      // El segundo intento sí funcionó -- seguimos con su resultado.
+      Object.assign(install, fallbackInstall);
     }
 
     // Se usa el binario de Astro directamente (no el script "build" del
