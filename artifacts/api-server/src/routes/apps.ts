@@ -528,6 +528,57 @@ Output STRICT JSON only: {"frontendCode":"all files as one string, separated by 
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// VUE FRONTEND — Vue 3 (Composition API) + Vite + Tailwind. ENCONTRADO Y
+// CORREGIDO a petición del usuario: kind="vue" no generaba absolutamente
+// ningún código Vue -- la selección de systemPrompt solo comprobaba
+// plan.platform==="mobile-native", así que un prompt con kind="vue" recibía
+// el mismo prompt de React de siempre, con el mismo scaffold main.tsx/App.tsx
+// etiquetado como "Vue" por fuera. Este prompt genera Vue real: componentes
+// .vue de un solo archivo (SFC), <script setup> con Composition API, y
+// vue-router para multi-página.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildVueFrontendSystemPrompt(): string {
+  return `
+[IDENTIDAD Y PROPOSITO]
+Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos.
+Tu rol específico aquí es el de Vue Engineer: el usuario ha elegido explícitamente "Vue" como tipo de proyecto. Genera SIEMPRE Vue 3 real — NUNCA React, NUNCA JSX/TSX.
+
+[ROL ESPECIFICO: VUE ENGINEER]
+Stack OBLIGATORIO: Vue 3 (Composition API con \`<script setup lang="ts">\`) + Vite + TypeScript + Tailwind v3 + vue-router 4 (si hay más de una página) + lucide-vue-next para iconos.
+NUNCA uses: React, JSX/TSX, hooks de React (useState/useEffect), wouter/react-router-dom (usa vue-router), Options API (usa siempre \`<script setup>\`).
+
+ARCHIVOS OBLIGATORIOS:
+- index.html, package.json, vite.config.ts (con @vitejs/plugin-vue), tsconfig.json, tailwind.config.ts, postcss.config.js
+- src/main.ts — \`createApp(App).use(router).mount('#app')\`
+- src/App.vue — layout raíz con \`<RouterView />\`
+- src/router/index.ts — define TODAS las rutas del plan con \`createRouter({ history: createWebHistory(), routes: [...] })\`
+- src/pages/<Nombre>.vue — una por cada página del plan (equivalente a "pages" del blueprint)
+- src/components/<Nombre>.vue — componentes reutilizables
+- src/composables/use<Nombre>.ts — equivalente Vue de los hooks (lógica reutilizable con \`ref\`/\`computed\`/\`watch\`)
+- src/lib/<nombre>.ts — utilidades (formatters, cliente API, etc.)
+- src/style.css — estilos globales + directivas Tailwind
+
+CONVENCIONES DE COMPONENTE (.vue SFC):
+- Estructura siempre: \`<script setup lang="ts">\` primero, luego \`<template>\`, luego \`<style scoped>\` si hace falta CSS extra fuera de Tailwind.
+- Props tipadas con \`defineProps<{ ... }>()\`, eventos con \`defineEmits<{ ... }>()\`.
+- Estado reactivo con \`ref()\`/\`reactive()\`, derivados con \`computed()\`, efectos con \`watch()\`/\`watchEffect()\`.
+- Listas con \`v-for\` + \`:key\` obligatorio, condicionales con \`v-if\`/\`v-else\`, nunca mezclar \`v-if\` y \`v-for\` en el mismo elemento.
+- Navegación programática: \`import { useRouter } from 'vue-router'; const router = useRouter(); router.push('/ruta')\`.
+- Conexión con backend real igual que en React: usa una función \`apiUrl(path)\` centralizada en src/lib/api.ts basada en \`import.meta.env.VITE_API_URL\`, exactamente con la misma lógica que se usaría en el proyecto web estándar de Maris AI, para que funcione igual en preview y en producción con dominios distintos.
+
+CALIDAD (igual de exigente que el frontend React estándar):
+- Código real y completo — cero TODOs, cero componentes placeholder.
+- Estados de loading/error/empty reales en cualquier componente que haga fetch.
+- Diseño pulido con Tailwind: jerarquía visual clara, espaciados generosos, hover/focus states, transiciones.
+- Todo el texto de UI en español (es-ES).
+- CONCISO: código limpio y denso, sin comentarios excesivos ni relleno.
+
+Usa '// === FILE: <path> ===' para separar archivos. Incluye siempre un README.md con \`npm install\` + \`npm run dev\`.
+Output STRICT JSON only: {"frontendCode":"all files as one string, separated by '// === FILE: <path> ===', plus README.md"}
+- Close every quote, brace and bracket. Output ONLY the JSON object.`;
+}
+
 const BACKEND_SYSTEM_PROMPT = `
 [IDENTIDAD Y PROPOSITO — LEE ESTO PRIMERO]
 Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos (apps, webs, SaaS, dashboards, e-commerce, etc.).
@@ -2243,6 +2294,8 @@ Now produce the JSON object with frontendCode containing every listed file.`;
   const provider = frontendModel === "gpt-5.4" ? "gpt-5" : resolveCoderProvider(frontendModel);
   const systemPrompt = (kind === "python-api" || kind === "django")
     ? buildPythonSystemPrompt(kind)
+    : kind === "vue"
+    ? buildVueFrontendSystemPrompt()
     : plan.platform === "mobile-native"
     ? buildMobileFrontendSystemPrompt()
     : buildFrontendSystemPrompt(language, kind);
@@ -4433,8 +4486,13 @@ export async function generateApp(
   // o kind=django habría producido Python correcto en la Fase de coder para
   // acto seguido destruirlo/corromperlo en las fases de QA posteriores.
   const isPythonKind = requestContext?.kind === "python-api" || requestContext?.kind === "django";
-  const runQa = execPlan.phases.includes("qa") && !isPythonKind;
-  const runTests = execPlan.phases.includes("tests") && !isPythonKind;
+  // ENCONTRADO al implementar Vue real: validateBundle/runTestingAgent/PM Agent
+  // buscan un entry point React (src/App.tsx), igual que con Python -- Vue usa
+  // App.vue + main.ts, así que el mismo riesgo de "reparar" código válido
+  // creyéndolo roto aplica aquí también.
+  const isNonReactKind = isPythonKind || requestContext?.kind === "vue";
+  const runQa = execPlan.phases.includes("qa") && !isNonReactKind;
+  const runTests = execPlan.phases.includes("tests") && !isNonReactKind;
 
   /* === Phase 1: research + architect === */
   let research = "";
@@ -4859,7 +4917,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
   // Saltada para kind=python-api/django: runTestingAgent y validateBundle
   // buscan un entry point React (src/App.tsx) y "reparan" cualquier bundle
   // que no lo tenga -- destruirían Python válido creyendo que está roto.
-  const testedFrontend = isPythonKind
+  const testedFrontend = isNonReactKind
     ? frontendResult.code
     : await runPhase("testing", async () => {
     const result = await runTestingAgent(frontendResult.code, {
@@ -4879,11 +4937,11 @@ Output STRICT JSON only, no markdown, no explanation.`,
     }
     return result;
   });
-  if (isPythonKind) await log("qa", "Proyecto Python — se omiten Testing Agent y validador de navegación (son específicos de React/Vite).");
+  if (isNonReactKind) await log("qa", "Proyecto no-React — se omiten Testing Agent y validador de navegación (son específicos de React/Vite estándar).");
 
   /* === Phase 6: validate → patch loop (Final Polish) === */
   // Misma razón: runValidatePatchLoop compila con esbuild asumiendo JS/TS.
-  let finalFrontend = isPythonKind
+  let finalFrontend = isNonReactKind
     ? testedFrontend
     : await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
@@ -4898,11 +4956,11 @@ Output STRICT JSON only, no markdown, no explanation.`,
       agentModelPlan.tier === "ultra" ? 8 : undefined, // proyectos ultra-complejos: más margen de reparación
     ),
   );
-  if (isPythonKind) await log("validator", "Proyecto Python — se omite el compilador esbuild (solo aplica a JS/TS).");
+  if (isNonReactKind) await log("validator", "Proyecto no-React — se omite el compilador esbuild (solo aplica al scaffold React/Vite estándar).");
 
   /* === Phase 7: PM Agent Quality Gate (Emergent.sh Style) === */
-  if (isPythonKind) {
-    await log("qa", "Proyecto Python — se omite el PM Agent Quality Gate (compara contra un blueprint de páginas/componentes React).");
+  if (isNonReactKind) {
+    await log("qa", "Proyecto no-React — se omite el PM Agent Quality Gate (compara contra un blueprint de páginas/componentes React).");
   } else {
   onProgress?.({ phase: "qa", progress: 95, note: "📋 PM Agent: verificando que la app cumple todos los requisitos del usuario…" });
   await log("qa", "📋 PM Agent activado — Quality Gate final al estilo emergent.sh…");
