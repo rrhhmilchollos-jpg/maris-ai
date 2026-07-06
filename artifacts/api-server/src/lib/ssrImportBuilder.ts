@@ -98,8 +98,11 @@ export async function startSSRServerInE2B(
     }));
     await sandbox.files.write(writeEntries);
 
+    // Mismo cambio que en astroImportBuilder.ts (ver ese archivo para el
+    // caso real que lo motivó: "signal: killed" por falta de memoria RAM
+    // al instalar un proyecto con muchas dependencias con npm).
     const install = await sandbox.commands.run(
-      `cd ${APP_DIR} && npm install --no-audit --no-fund --loglevel=error`,
+      `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
       { timeoutMs: INSTALL_TIMEOUT_MS },
     );
     if (install.exitCode !== 0) {

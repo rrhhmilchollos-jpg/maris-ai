@@ -115,9 +115,20 @@ export async function buildAstroProjectInE2B(
     }));
     await sandbox.files.write(writeEntries);
 
+    // ENCONTRADO A PETICION DEL USUARIO (caso real: import de FANTASYWEB-
+    // main.zip fallando con "signal: killed" en el log de instalación --
+    // el sistema operativo del sandbox mata el proceso a la fuerza por
+    // quedarse sin memoria RAM, no un fallo normal de npm). Un proyecto
+    // Wix con decenas de paquetes @wix/* es especialmente pesado de
+    // instalar, y npm es conocido por su alto consumo de memoria en
+    // árboles de dependencias grandes (no libera RAM durante la
+    // instalación secuencial, solo al final). pnpm resuelve esto con un
+    // almacén de contenido compartido y hard-links -- mismo resultado,
+    // mucha menos memoria pico. Usamos npx para no depender de que pnpm
+    // esté preinstalado en la imagen base del sandbox.
     const install = await runCommandCapturingOutput(
       sandbox,
-      `cd ${APP_DIR} && npm install --no-audit --no-fund --loglevel=error`,
+      `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
       INSTALL_TIMEOUT_MS,
     );
     if (install.exitCode !== 0) {
