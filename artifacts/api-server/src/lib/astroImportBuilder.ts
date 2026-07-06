@@ -60,7 +60,11 @@ async function runCommandCapturingOutput(
     // cualquier otro fallo) -- gracias a los callbacks de arriba, stdout/
     // stderr YA están rellenos con la salida real capturada mientras
     // corría, independientemente de que el SDK lance o no.
-    const exitCodeMatch = /exit code (\d+)/i.exec(err?.message || "");
+    // BUG PROPIO ENCONTRADO Y CORREGIDO: buscaba "exit code" pero E2B usa
+    // literalmente "exit status" en sus mensajes (confirmado por los
+    // propios errores reales vistos: "exit status 254", "exit status 1")
+    // -- el regex nunca coincidía.
+    const exitCodeMatch = /exit (?:code|status) (\d+)/i.exec(err?.message || "");
     return {
       exitCode: exitCodeMatch ? parseInt(exitCodeMatch[1], 10) : 1,
       stdout,
@@ -129,6 +133,19 @@ export async function buildAstroProjectInE2B(
     // red) -- si corepack no está disponible en la imagen del sandbox, se
     // cae a npx como respaldo. Nunca se asume que un solo camino
     // funcionará siempre.
+    // DIAGNÓSTICO EXPLÍCITO (a petición del usuario, tras 3 intentos con
+    // fallos "instantáneos" sin ningún log real detrás): en vez de seguir
+    // adivinando qué hay disponible en el sandbox, se comprueba
+    // explícitamente ANTES de intentar instalar nada, y este diagnóstico
+    // se incluye SIEMPRE en la respuesta si algo falla después -- para no
+    // volver a depender de conjeturas.
+    const diag = await runCommandCapturingOutput(
+      sandbox,
+      "echo '--NODE--'; node --version; echo '--NPM--'; npm --version; echo '--WHICH-COREPACK--'; which corepack || echo 'no encontrado'; echo '--WHICH-PNPM--'; which pnpm || echo 'no encontrado'; echo '--CWD--'; pwd; echo '--APPDIR--'; ls -la " + APP_DIR + " | head -20",
+      30_000,
+    );
+    logger.info({ sandboxId: sandbox.sandboxId, diagOutput: diag.stdout.slice(0, 1500) }, "Diagnóstico del entorno del sandbox antes de instalar");
+
     const pnpmSetup = await runCommandCapturingOutput(
       sandbox,
       "corepack enable && corepack prepare pnpm@9 --activate",
@@ -148,7 +165,13 @@ export async function buildAstroProjectInE2B(
       logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: npm install falló");
       return {
         ok: false,
-        installLog: install.stdout + "\n" + install.stderr,
+        // El diagnóstico y el resultado de la preparación de pnpm se
+        // incluyen SIEMPRE aquí -- así, pase lo que pase, hay algo real
+        // que revisar en vez de un log vacío otra vez.
+        installLog:
+          `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
+          `=== PREPARACIÓN DE PNPM (corepack, exitCode=${pnpmSetup.exitCode}) ===\n${pnpmSetup.stdout}\n${pnpmSetup.stderr}\n\n` +
+          `=== COMANDO EJECUTADO: ${pnpmCommand} install ===\n${install.stdout}\n${install.stderr}`,
         reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${install.exitCode}). Revisa el log de instalación para más detalle.`,
       };
     }
