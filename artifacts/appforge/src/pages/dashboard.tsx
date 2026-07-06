@@ -910,7 +910,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   <Button type="submit" disabled={isWorking || !prompt.trim()} className="h-8 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-[12px] font-bold">
-                    {isWorking ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar <span className="hidden sm:inline">({kindCost} cr)</span></>}
+                    {isWorking ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar</>}
                   </Button>
                 </div>
               </div>
