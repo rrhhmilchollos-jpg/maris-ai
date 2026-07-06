@@ -245,7 +245,7 @@ export async function buildAstroProjectInE2B(
       // que pase, sin arrastrar el resto de dependencias de desarrollo
       // (linters, tipos, herramientas propias de Wix) que son las que más
       // memoria consumen y no hacen falta para compilar.
-      `cd ${APP_DIR} && npm install --omit=dev --no-audit --no-fund --loglevel=warn && npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
+      `cd ${APP_DIR} && CI=1 npm install --omit=dev --no-audit --no-fund --loglevel=warn && CI=1 npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
       INSTALL_TIMEOUT_MS,
     );
 
@@ -350,7 +350,7 @@ console.log('Override añadido: ${missingPackage} -> stub vacío local');
 
       finalInstall = await runCommandCapturingOutput(
         sandbox,
-        `cd ${APP_DIR} && npm install --omit=dev --no-audit --no-fund --loglevel=warn && npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
+        `cd ${APP_DIR} && CI=1 npm install --omit=dev --no-audit --no-fund --loglevel=warn && CI=1 npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
         INSTALL_TIMEOUT_MS,
       );
     }
@@ -372,7 +372,7 @@ console.log('Override añadido: ${missingPackage} -> stub vacío local');
     // propia autenticación en la nube de Wix, imposible desde aquí).
     const build = await runCommandCapturingOutput(
       sandbox,
-      `cd ${APP_DIR} && npx astro build`,
+      `cd ${APP_DIR} && ASTRO_TELEMETRY_DISABLED=1 npx astro build`,
       BUILD_TIMEOUT_MS,
     );
     if (build.exitCode !== 0) {
