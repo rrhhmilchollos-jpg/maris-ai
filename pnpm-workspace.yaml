@@ -4,15 +4,6 @@ packages:
   - lib/integrations/*
   - scripts
 
-allowBuilds:
-  '@clerk/shared': true
-  '@google/genai': true
-  es5-ext: true
-  esbuild: true
-  msgpackr-extract: true
-  protobufjs: true
-  puppeteer: true
-
 autoInstallPeers: false
 
 catalog:
@@ -42,10 +33,16 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
-  - '@ffmpeg-installer/ffmpeg'
+  - '@clerk/shared'
+  - '@ffmpeg-installer/linux-x64'
+  - '@google/genai'
   - '@swc/core'
+  - es5-ext
   - esbuild
+  - msgpackr-extract
   - msw
+  - protobufjs
+  - puppeteer
   - unrs-resolver
 
 overrides:

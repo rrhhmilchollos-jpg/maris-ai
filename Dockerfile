@@ -15,6 +15,9 @@ COPY lib/integrations-gemini-ai/package.json ./lib/integrations-gemini-ai/
 COPY lib/integrations-anthropic-ai/package.json ./lib/integrations-anthropic-ai/
 COPY lib/services/package.json ./lib/services/
 
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 RUN npm install -g pnpm@10.11.0 --quiet
 RUN pnpm install --no-frozen-lockfile --prefer-offline 2>/dev/null || pnpm install --no-frozen-lockfile
 
