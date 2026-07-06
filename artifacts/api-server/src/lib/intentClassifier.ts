@@ -136,8 +136,18 @@ function looksLikeConversational(message: string): boolean {
  * production data/state instead of rebuilding source files.
  */
 const EXEC_KEYWORD_PATTERNS: RegExp[] = [
-  // Operaciones directas sobre BD/CRM — requieren contexto de datos REAL
-  /\b(mongodb|mongo\s*db|base\s+de\s+datos|bbdd|database|colecci[oó]n|collection)\b/i,
+  // BUG ENCONTRADO CON DATOS REALES (a petición del usuario, tras ver que un
+  // prompt de "construye toda esta plataforma... backend Express + MongoDB
+  // real" se clasificaba como operación de datos en vez de construir código):
+  // este primer patrón disparaba con solo NOMBRAR la tecnología en cualquier
+  // parte del mensaje ("MongoDB", "base de datos"), sin exigir ningún verbo
+  // de operación real cerca -- al contrario que TODOS los demás patrones de
+  // esta misma lista, que sí combinan acción + dominio con ".*". Cualquier
+  // prompt de construcción que simplemente MENCIONE la tecnología de base de
+  // datos que debe usar (algo normal y esperado al pedir un backend real)
+  // caía aquí por error. Corregido para exigir un verbo de operación de
+  // datos genuino cerca, igual que el resto de patrones de la lista.
+  /\b(mongodb|mongo\s*db|base\s+de\s+datos|bbdd|database|colecci[oó]n|collection)\b.*\b(a[ñn]ade|agrega|inserta|elimina|borra|modifica|actualiza|consulta|muestra|lista)\b|\b(a[ñn]ade|agrega|inserta|elimina|borra|modifica|actualiza|consulta|muestra|lista)\b.*\b(mongodb|mongo\s*db|base\s+de\s+datos|bbdd|database|colecci[oó]n|collection)\b/i,
   /\b(insertar|inserta|inyectar|persistir|grabar)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|colecci[oó]n))\b/i,
   /\b(registra|registrar|alta|dar\s+de\s+alta)\b.*\b(usuario|cliente|lead|trabajador|empleado)\b.*\b(en\s+(?:la\s+)?(?:base\s+de\s+datos|crm|bbdd|mongodb|sistema))\b/i,
   // CRM/pipeline de ventas — solo cuando hay contexto de operación sobre datos
