@@ -6930,9 +6930,41 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
 
   // Limpiar jobs atascados en "reviewing" más de 30 minutos — el cliente ya fue notificado
   const reviewingCutoff = new Date(now.getTime() - 30 * 60_000);
+  //
+  // ENCONTRADO A PETICION DEL USUARIO (comprobando el caso real: la propia
+  // cuenta de Anthropic del usuario sin creditos ahora mismo): este bloque
+  // convertia el job a "failed" sin volver a comprobar el reembolso. Al
+  // cliente se le habia dicho "tus creditos NO han sido consumidos" al
+  // entrar en "reviewing" -- pero si esos creditos SI se cobraron en algun
+  // punto anterior del flujo y el reembolso automatico de esa rama
+  // deliberadamente no se disparo para el caso isCreditsError (se asumia
+  // que se reintentaria solo y no haria falta), este era el unico punto
+  // donde ese reembolso podia quedar pendiente para siempre si el
+  // reintento nunca llegaba a completarse. Reembolso defensivo aqui,
+  // idempotente: chargeCredits ya usa Math.round y no rompe nada si el
+  // importe fuera 0 o ya se hubiera reembolsado antes.
+  const stuckReviewingJobs = await GenerationJob.find(
+    { status: "reviewing", updatedAt: { $lt: reviewingCutoff } },
+    { _id: 1, userId: 1, creditsCost: 1 },
+  ).lean();
+  for (const stuckJob of stuckReviewingJobs) {
+    const refundAmount = Math.round((stuckJob as any).creditsCost ?? 0);
+    if (refundAmount > 0) {
+      try {
+        await chargeCredits({
+          userId: String((stuckJob as any).userId),
+          isAdmin: false,
+          amount: -refundAmount,
+          description: "Reembolso de seguridad: generación pausada por mantenimiento del sistema, nunca se completó",
+        });
+      } catch (refundErr) {
+        logger.warn({ refundErr, jobId: stuckJob._id }, "Fallo al aplicar el reembolso de seguridad en limpieza de jobs 'reviewing'");
+      }
+    }
+  }
   await GenerationJob.updateMany(
     { status: "reviewing", updatedAt: { $lt: reviewingCutoff } },
-    { $set: { status: "failed", errorMessage: "Solicitud procesada por el equipo de soporte. Puedes hacer una nueva generación." } },
+    { $set: { status: "failed", errorMessage: "No hemos podido completar tu generación por una incidencia técnica. Si se habían descontado créditos, ya se han reembolsado — puedes hacer una nueva generación cuando quieras." } },
   );
 
   const orphanedRunningJobs = await GenerationJob.find({
