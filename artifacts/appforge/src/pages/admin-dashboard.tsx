@@ -130,6 +130,18 @@ async function runE2BSmoke(): Promise<E2BSmokeResponse> {
   });
 }
 
+interface E2BTemplateBuildResponse {
+  ok: boolean;
+  alias?: string;
+  reason?: string;
+}
+
+async function buildE2BImportTemplate(): Promise<E2BTemplateBuildResponse> {
+  return apiFetch<E2BTemplateBuildResponse>("/api/admin/e2b-build-import-template", {
+    method: "POST",
+  });
+}
+
 function formatDuration(ms: number): string {
   if (!ms || ms <= 0) return "—";
   if (ms < 1000) return `${ms} ms`;
@@ -3173,6 +3185,8 @@ export default function AdminDashboardPage() {
   const [, setLocation] = useLocation();
   const [smokeResult, setSmokeResult] = useState<E2BSmokeResponse | null>(null);
   const [smokeRunning, setSmokeRunning] = useState(false);
+  const [templateBuildResult, setTemplateBuildResult] = useState<E2BTemplateBuildResponse | null>(null);
+  const [templateBuilding, setTemplateBuilding] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [jobFilter, setJobFilter] = useState<"all" | "failed" | "running" | "queued">("all");
   const [jobSearch, setJobSearch] = useState("");
@@ -4106,6 +4120,46 @@ export default function AdminDashboardPage() {
                         {smokeResult.output && <pre className="mt-1 whitespace-pre-wrap text-muted-foreground">{smokeResult.output}</pre>}
                       </div>
                     )}
+
+                    <div className="border-t border-white/5 pt-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Plantilla con más memoria (4GB en vez de los 512MB por defecto) para importar proyectos grandes
+                        (ej. exports de Wix) sin que la instalación de dependencias se quede sin memoria. Solo hace falta
+                        pulsar esto <strong>una vez</strong> — se reutiliza en todas las importaciones futuras.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={templateBuilding}
+                        onClick={async () => {
+                          setTemplateBuilding(true);
+                          setTemplateBuildResult(null);
+                          try {
+                            const res = await buildE2BImportTemplate();
+                            setTemplateBuildResult(res);
+                            toast({
+                              title: res.ok ? "✅ Plantilla construida" : "❌ Fallo al construir",
+                              description: res.ok ? `Lista: ${res.alias}` : res.reason,
+                              variant: res.ok ? "default" : "destructive",
+                            });
+                          } catch (err) {
+                            const reason = err instanceof Error ? err.message : String(err);
+                            setTemplateBuildResult({ ok: false, reason });
+                            toast({ title: "❌ Fallo al construir", description: reason, variant: "destructive" });
+                          } finally {
+                            setTemplateBuilding(false);
+                          }
+                        }}
+                        className="gap-2"
+                      >
+                        {templateBuilding ? <><Loader2 className="h-3 w-3 animate-spin" />Construyendo (puede tardar varios minutos)…</> : <><Server className="h-3 w-3" />Construir plantilla de 4GB para importaciones grandes</>}
+                      </Button>
+                      {templateBuildResult && (
+                        <div className={`text-xs rounded-lg border px-3 py-2 ${templateBuildResult.ok ? "border-emerald-500/40 bg-emerald-500/10" : "border-red-500/40 bg-red-500/10"}`}>
+                          {templateBuildResult.ok ? `✓ Plantilla "${templateBuildResult.alias}" lista para usarse` : `✗ Falló: ${templateBuildResult.reason}`}
+                        </div>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
 
