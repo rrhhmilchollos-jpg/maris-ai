@@ -361,8 +361,10 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
 
     logger.info({ userId, filename: req.file.originalname, size: buffer.length }, "Importando proyecto desde archivo");
 
+    // La EXTRACCIÓN del zip/rar es rápida (segundos) -- se hace aquí,
+    // síncrona, antes de responder. Lo que puede tardar minutos (compilar
+    // en E2B con reintentos) se hace DESPUÉS, en segundo plano.
     let extracted: { files: Record<string, string>; allPaths: string[] };
-
     if (isRar) {
       extracted = await extractRarToBundle(buffer);
     } else {
@@ -374,121 +376,40 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       return res.status(400).json({ error: "El archivo está vacío o no se pudo extraer." });
     }
 
-    let filesForBundle = extracted.files;
-    let allPathsForBundle = extracted.allPaths;
-    let ssrLiveResult: { liveUrl: string; sandboxId: string; expiresAt: Date } | null = null;
-    let astroRemovedPackages: string[] | undefined;
+    const title = detectProjectTitle(extracted.files);
 
-    if (needsSSRServer(extracted.allPaths)) {
-      logger.info({ userId, filename: req.file.originalname }, "Import: proyecto con SSR (Next.js) detectado — arrancando servidor en vivo en E2B");
-      const { startSSRServerInE2B } = await import("../lib/ssrImportBuilder");
-      const ssrResult = await startSSRServerInE2B(extracted.files);
-      if (!ssrResult.ok || !ssrResult.liveUrl || !ssrResult.sandboxId || !ssrResult.expiresAt) {
-        logger.warn({ userId, reason: ssrResult.reason }, "Import: arranque de servidor SSR falló");
-        return res.status(422).json({
-          error: ssrResult.reason || "No se pudo arrancar el servidor del proyecto.",
-          buildLog: ssrResult.buildLog?.slice(0, 4000),
-          installLog: ssrResult.installLog?.slice(0, 2000),
-        });
-      }
-      ssrLiveResult = { liveUrl: ssrResult.liveUrl, sandboxId: ssrResult.sandboxId, expiresAt: ssrResult.expiresAt };
-      logger.info({ userId, liveUrl: ssrLiveResult.liveUrl, expiresAt: ssrLiveResult.expiresAt }, "Import: servidor SSR en vivo listo");
-    } else if (needsAstroBuild(extracted.files, extracted.allPaths)) {
-      logger.info({ userId, filename: req.file.originalname }, "Import: proyecto Astro detectado — compilando en sandbox E2B");
-      const { buildAstroProjectInE2B } = await import("../lib/astroImportBuilder");
-      const astroResult = await buildAstroProjectInE2B(extracted.files);
-      if (!astroResult.ok || !astroResult.files) {
-        logger.warn({ userId, reason: astroResult.reason }, "Import: build de Astro falló");
-        return res.status(422).json({
-          error: astroResult.reason || "No se pudo compilar el proyecto Astro.",
-          buildLog: astroResult.buildLog?.slice(0, 4000),
-          installLog: astroResult.installLog?.slice(0, 2000),
-        });
-      }
-      // Sustituir: ya no usamos el código fuente .astro sin compilar, sino
-      // el resultado real de la compilación (HTML/CSS/JS estándar) —
-      // exactamente lo que el resto del sistema de preview ya sabe mostrar.
-      filesForBundle = astroResult.files;
-      allPathsForBundle = Object.keys(astroResult.files);
-      astroRemovedPackages = astroResult.removedPackages;
-      logger.info({ userId, compiledFileCount: allPathsForBundle.length }, "Import: proyecto Astro compilado correctamente, usando dist/ real");
-    }
-
-    const title = detectProjectTitle(filesForBundle);
-    const description = detectDescription(filesForBundle);
-    const extraTechTag = ssrLiveResult ? "Next.js (servidor en vivo)" : needsAstroBuild(extracted.files, extracted.allPaths) ? "Astro (compilado)" : null;
-    const techStack = extraTechTag
-      ? [...detectTechStack(filesForBundle, allPathsForBundle), extraTechTag]
-      : detectTechStack(filesForBundle, allPathsForBundle);
-    // Con SSR en vivo no hay bundle que guardar -- el "contenido" de la app
-    // es el servidor corriendo en el sandbox, no código almacenado.
-    let frontendCode = ssrLiveResult
-      ? "// Este proyecto usa un servidor en vivo (SSR) — ver GeneratedApp.livePreviewUrl. No hay bundle estático almacenado."
-      : buildFrontendCode(filesForBundle, allPathsForBundle);
-
-    // MongoDB tiene límite de 16MB por documento. Truncar si es necesario.
-    const MAX_CODE_BYTES = 12 * 1024 * 1024; // 12MB para dejar margen
-    if (Buffer.byteLength(frontendCode, 'utf8') > MAX_CODE_BYTES) {
-      logger.warn({ userId, title, frontendCodeLen: frontendCode.length }, "frontendCode demasiado grande, truncando a 12MB");
-      frontendCode = frontendCode.slice(0, MAX_CODE_BYTES / 2) + "\n\n// [TRUNCADO: proyecto demasiado grande para almacenar completo. Usa archivos más pequeños o divide el proyecto.]";
-    }
-
-    logger.info({ userId, title, files: extracted.allPaths.length, frontendCodeLen: frontendCode.length }, "Proyecto extraído correctamente");
-
-    // Para SSR en vivo, además del placeholder en frontendCode, guardamos
-    // el proyecto ORIGINAL completo (antes del build) — es lo único que
-    // permite reconstruir el servidor cuando el sandbox muera. Mismo
-    // límite de tamaño que frontendCode, con su propio aviso si no cabe
-    // (en cuyo caso el reinicio automático no será posible más adelante,
-    // pero se avisa ahora en vez de fallar en silencio meses después).
-    let importedSourceFilesJson: string | undefined;
-    if (ssrLiveResult) {
-      const rawJson = JSON.stringify(extracted.files);
-      if (Buffer.byteLength(rawJson, "utf8") > MAX_CODE_BYTES) {
-        logger.warn({ userId, title }, "Proyecto SSR demasiado grande para guardar el original — el reinicio automático no funcionará si el sandbox muere");
-      } else {
-        importedSourceFilesJson = rawJson;
-      }
-    }
-
+    // Registro creado YA, en estado "processing" -- el cliente recibe el
+    // ID al instante y consulta el estado por su cuenta (ver GET
+    // /import-app/:id/status más abajo), en vez de mantener la petición
+    // HTTP original abierta durante todo el proceso.
     const app = await GeneratedApp.create({
       userId,
       title,
       prompt: `[IMPORTADO] ${title} — importado desde ${req.file.originalname}`,
-      description,
-      techStack,
-      frontendCode,
+      description: detectDescription(extracted.files),
+      techStack: [],
+      frontendCode: "// Importación en curso...",
       backendCode: "// Proyecto importado desde archivo. Backend no incluido.",
-      language: techStack.includes("TypeScript") ? "typescript" : "javascript",
+      language: "javascript",
       kind: "landing",
       status: "ready",
       publicSlug: makeSlug(),
       plannedPages: [],
       requiredEnvVars: [],
-      ...(ssrLiveResult
-        ? {
-            renderMode: "ssr-live",
-            livePreviewUrl: ssrLiveResult.liveUrl,
-            livePreviewSandboxId: ssrLiveResult.sandboxId,
-            livePreviewExpiresAt: ssrLiveResult.expiresAt,
-            importedSourceFilesJson,
-          }
-        : {}),
+      importStatus: "processing",
     });
 
-    res.status(201).json({
+    res.status(202).json({
       id: String(app._id),
       title,
-      description,
-      techStack,
-      filesImported: extracted.allPaths.length,
-      message: ssrLiveResult
-        ? `Proyecto "${title}" importado con éxito — servidor en vivo activo durante 30 minutos.`
-        : astroRemovedPackages && astroRemovedPackages.length > 0
-          ? `Proyecto "${title}" importado con éxito, pero se tuvieron que quitar ${astroRemovedPackages.length} paquete(s) privados de Wix que no existen públicamente: ${astroRemovedPackages.join(", ")}. Puede que alguna funcionalidad ligada a ellos no funcione.`
-          : `Proyecto "${title}" importado con éxito (${extracted.allPaths.length} archivos).`,
-      ...(astroRemovedPackages && astroRemovedPackages.length > 0 ? { removedPackages: astroRemovedPackages } : {}),
-      ...(ssrLiveResult ? { renderMode: "ssr-live", livePreviewUrl: ssrLiveResult.liveUrl, livePreviewExpiresAt: ssrLiveResult.expiresAt } : {}),
+      importStatus: "processing",
+      message: `Importando "${title}"... esto puede tardar varios minutos si el proyecto necesita compilarse.`,
+    });
+
+    // A partir de aquí, todo en segundo plano -- la petición HTTP ya
+    // respondió, nada de lo siguiente puede volver a usar `res`.
+    processImportInBackground(String(app._id), userId, extracted, req.file.originalname).catch((err) => {
+      logger.error({ err, appId: app._id }, "Fallo inesperado procesando la importación en segundo plano");
     });
   } catch (err) {
     logger.error({ err }, "POST /api/import-app error");
@@ -499,9 +420,6 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
   } finally {
     // Limpieza garantizada del archivo temporal en disco -- se ejecuta
     // tanto si el import tuvo éxito como si falló en cualquier punto.
-    // Sin esto, con diskStorage el /tmp del servidor se llenaría con
-    // cada importación (antes, con memoryStorage, esto no hacía falta
-    // porque el buffer solo vivía en RAM y se liberaba solo).
     if (req.file?.path) {
       fs.unlink(req.file.path, (unlinkErr) => {
         if (unlinkErr) logger.warn({ unlinkErr, path: req.file.path }, "No se pudo borrar el archivo temporal de importación");
@@ -509,5 +427,140 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
     }
   }
 });
+
+// GET /import-app/:id/status -- el frontend consulta esto periódicamente
+// en vez de esperar una única petición larga que puede cortarse por el
+// camino (ver hallazgo real: error de CORS que en realidad era un timeout
+// de proxy tras varios minutos de reintentos de compilación).
+router.get("/import-app/:id/status", requireAuth, async (req: any, res: any) => {
+  try {
+    await connectDB();
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId: req.userId }).lean();
+    if (!app) return res.status(404).json({ error: "Importación no encontrada." });
+
+    res.json({
+      id: String(app._id),
+      importStatus: (app as any).importStatus || "ready", // apps antiguas sin este campo = ya estaban listas
+      title: app.title,
+      description: app.description,
+      techStack: app.techStack,
+      importError: (app as any).importError,
+      buildLog: (app as any).importBuildLog?.slice(0, 4000),
+      installLog: (app as any).importInstallLog?.slice(0, 2000),
+      renderMode: (app as any).renderMode,
+      livePreviewUrl: (app as any).livePreviewUrl,
+      livePreviewExpiresAt: (app as any).livePreviewExpiresAt,
+    });
+  } catch (err) {
+    logger.error({ err }, "GET /api/import-app/:id/status error");
+    res.status(500).json({ error: "Error al consultar el estado de la importación." });
+  }
+});
+
+/**
+ * Trabajo pesado de la importación (SSR/Astro build con reintentos) --
+ * corre completamente en segundo plano, sin ninguna petición HTTP
+ * esperando. Actualiza el registro de GeneratedApp cuando termina, éxito
+ * o fallo.
+ */
+async function processImportInBackground(
+  appId: string,
+  userId: string,
+  extracted: { files: Record<string, string>; allPaths: string[] },
+  originalFilename: string,
+): Promise<void> {
+  try {
+    let filesForBundle = extracted.files;
+    let allPathsForBundle = extracted.allPaths;
+    let ssrLiveResult: { liveUrl: string; sandboxId: string; expiresAt: Date } | null = null;
+    let astroRemovedPackages: string[] | undefined;
+
+    if (needsSSRServer(extracted.allPaths)) {
+      logger.info({ userId, appId }, "Import: proyecto con SSR (Next.js) detectado — arrancando servidor en vivo en E2B");
+      const { startSSRServerInE2B } = await import("../lib/ssrImportBuilder");
+      const ssrResult = await startSSRServerInE2B(extracted.files);
+      if (!ssrResult.ok || !ssrResult.liveUrl || !ssrResult.sandboxId || !ssrResult.expiresAt) {
+        await GeneratedApp.findByIdAndUpdate(appId, {
+          $set: {
+            importStatus: "failed",
+            importError: ssrResult.reason || "No se pudo arrancar el servidor del proyecto.",
+            importBuildLog: ssrResult.buildLog,
+            importInstallLog: ssrResult.installLog,
+          },
+        });
+        return;
+      }
+      ssrLiveResult = { liveUrl: ssrResult.liveUrl, sandboxId: ssrResult.sandboxId, expiresAt: ssrResult.expiresAt };
+    } else if (needsAstroBuild(extracted.files, extracted.allPaths)) {
+      logger.info({ userId, appId }, "Import: proyecto Astro detectado — compilando en sandbox E2B");
+      const { buildAstroProjectInE2B } = await import("../lib/astroImportBuilder");
+      const astroResult = await buildAstroProjectInE2B(extracted.files);
+      if (!astroResult.ok || !astroResult.files) {
+        await GeneratedApp.findByIdAndUpdate(appId, {
+          $set: {
+            importStatus: "failed",
+            importError: astroResult.reason || "No se pudo compilar el proyecto Astro.",
+            importBuildLog: astroResult.buildLog,
+            importInstallLog: astroResult.installLog,
+          },
+        });
+        return;
+      }
+      filesForBundle = astroResult.files;
+      allPathsForBundle = Object.keys(astroResult.files);
+      astroRemovedPackages = astroResult.removedPackages;
+    }
+
+    const title = detectProjectTitle(filesForBundle);
+    const description = detectDescription(filesForBundle);
+    const extraTechTag = ssrLiveResult ? "Next.js (servidor en vivo)" : needsAstroBuild(extracted.files, extracted.allPaths) ? "Astro (compilado)" : null;
+    const techStack = extraTechTag
+      ? [...detectTechStack(filesForBundle, allPathsForBundle), extraTechTag]
+      : detectTechStack(filesForBundle, allPathsForBundle);
+    let frontendCode = ssrLiveResult
+      ? "// Este proyecto usa un servidor en vivo (SSR) — ver GeneratedApp.livePreviewUrl. No hay bundle estático almacenado."
+      : buildFrontendCode(filesForBundle, allPathsForBundle);
+
+    const MAX_CODE_BYTES = 12 * 1024 * 1024;
+    if (Buffer.byteLength(frontendCode, "utf8") > MAX_CODE_BYTES) {
+      frontendCode = frontendCode.slice(0, MAX_CODE_BYTES / 2) + "\n\n// [TRUNCADO: proyecto demasiado grande para almacenar completo.]";
+    }
+
+    let importedSourceFilesJson: string | undefined;
+    if (ssrLiveResult) {
+      const rawJson = JSON.stringify(extracted.files);
+      if (Buffer.byteLength(rawJson, "utf8") <= MAX_CODE_BYTES) {
+        importedSourceFilesJson = rawJson;
+      }
+    }
+
+    await GeneratedApp.findByIdAndUpdate(appId, {
+      $set: {
+        title,
+        description,
+        techStack,
+        frontendCode,
+        language: techStack.includes("TypeScript") ? "typescript" : "javascript",
+        importStatus: "ready",
+        ...(ssrLiveResult
+          ? {
+              renderMode: "ssr-live",
+              livePreviewUrl: ssrLiveResult.liveUrl,
+              livePreviewSandboxId: ssrLiveResult.sandboxId,
+              livePreviewExpiresAt: ssrLiveResult.expiresAt,
+              importedSourceFilesJson,
+            }
+          : {}),
+      },
+    });
+
+    logger.info({ userId, appId, title }, "Import: procesado en segundo plano completado correctamente");
+  } catch (err: any) {
+    logger.error({ err, appId }, "Import: fallo inesperado en el procesado de segundo plano");
+    await GeneratedApp.findByIdAndUpdate(appId, {
+      $set: { importStatus: "failed", importError: err?.message || "Error inesperado procesando la importación." },
+    }).catch(() => {});
+  }
+}
 
 export default router;

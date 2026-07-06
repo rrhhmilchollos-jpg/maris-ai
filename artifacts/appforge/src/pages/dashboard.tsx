@@ -233,6 +233,7 @@ export default function DashboardPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ title: string; filesImported: number } | null>(null);
   const [importErrorDetail, setImportErrorDetail] = useState<{ reason: string; buildLog?: string; installLog?: string } | null>(null);
+  const [importStatusMessage, setImportStatusMessage] = useState<string | null>(null);
 
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
   const [customInstructions, setCustomInstructions] = useState("");
@@ -427,14 +428,47 @@ export default function DashboardPage() {
     if (!importFile) return;
     setImportLoading(true);
     setImportResult(null);
+    setImportErrorDetail(null);
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      const data = await apiFetch<any>("/api/import-app", { method: "POST", body: formData });
-      setImportResult({ title: data.title, filesImported: data.filesImported });
-      queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-      toast({ title: `✅ "${data.title}" importado`, description: `${data.filesImported} archivos cargados.` });
-      setTimeout(() => { setImportDialogOpen(false); setImportFile(null); setImportResult(null); }, 2000);
+      // ENCONTRADO A PETICION DEL USUARIO (consola del navegador: error de
+      // CORS en /api/import-app que en realidad era un timeout de proxy --
+      // con varios reintentos de compilación de varios minutos cada uno,
+      // la petición original podía tardar tanto que algún proxy por el
+      // camino cortaba la conexión a mitad). El backend ahora responde al
+      // instante (202) con un ID, y el trabajo real corre en segundo
+      // plano -- aquí se consulta el estado cada pocos segundos en vez de
+      // esperar una única petición larga.
+      const initial = await apiFetch<any>("/api/import-app", { method: "POST", body: formData });
+      const importId = initial.id;
+      setImportStatusMessage(initial.message || "Importando...");
+
+      const POLL_INTERVAL_MS = 4000;
+      const MAX_WAIT_MS = 15 * 60_000; // 15 min como límite razonable de espera en el propio navegador
+      const deadline = Date.now() + MAX_WAIT_MS;
+
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        const status = await apiFetch<any>(`/api/import-app/${importId}/status`);
+        if (status.importStatus === "ready") {
+          setImportResult({ title: status.title, filesImported: 0 });
+          queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
+          toast({ title: `✅ "${status.title}" importado`, description: "El proyecto se importó correctamente." });
+          setTimeout(() => { setImportDialogOpen(false); setImportFile(null); setImportResult(null); }, 2000);
+          return;
+        }
+        if (status.importStatus === "failed") {
+          toast({ title: "Error al importar", description: status.importError, variant: "destructive" });
+          if (status.buildLog || status.installLog) {
+            setImportErrorDetail({ reason: status.importError, buildLog: status.buildLog, installLog: status.installLog });
+          }
+          return;
+        }
+        // Sigue "processing" -- seguir esperando y consultando.
+        setImportStatusMessage("Importando... esto puede tardar varios minutos si el proyecto necesita compilarse.");
+      }
+      toast({ title: "Sigue en proceso", description: "La importación está tardando más de lo esperado. Puedes cerrar esta ventana — se avisará cuando termine.", variant: "destructive" });
     } catch (err: any) {
       // ENCONTRADO A PETICION DEL USUARIO (caso real: import de un ZIP de
       // Wix fallando con "exit status 254" sin ninguna pista útil): el
@@ -1093,7 +1127,13 @@ export default function DashboardPage() {
                   <div className="flex flex-col items-center gap-3 py-4 text-center">
                     <CheckCircle2 className="h-12 w-12 text-green-500" />
                     <p className="font-medium text-lg">"{importResult.title}"</p>
-                    <p className="text-sm text-muted-foreground">{importResult.filesImported} archivos importados correctamente.</p>
+                    <p className="text-sm text-muted-foreground">Proyecto importado correctamente.</p>
+                  </div>
+                ) : importLoading ? (
+                  <div className="flex flex-col items-center gap-3 py-8 text-center">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground max-w-xs">{importStatusMessage || "Importando..."}</p>
+                    <p className="text-xs text-muted-foreground/70">Puedes cerrar esta ventana — se avisará cuando termine.</p>
                   </div>
                 ) : (
                   <>
@@ -1109,12 +1149,17 @@ export default function DashboardPage() {
                   </>
                 )}
               </div>
-              {!importResult && (
+              {!importResult && !importLoading && (
                 <DialogFooter>
-                  <Button variant="ghost" onClick={() => setImportDialogOpen(false)} disabled={importLoading}>Cancelar</Button>
-                  <Button onClick={handleImportProject} disabled={!importFile || importLoading} className="gap-2">
-                    {importLoading ? <><Loader2 className="h-4 w-4 animate-spin" />Importando…</> : <><FolderUp className="h-4 w-4" />Importar proyecto</>}
+                  <Button variant="ghost" onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleImportProject} disabled={!importFile} className="gap-2">
+                    <FolderUp className="h-4 w-4" />Importar proyecto
                   </Button>
+                </DialogFooter>
+              )}
+              {importLoading && (
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setImportDialogOpen(false)}>Cerrar y seguir esperando</Button>
                 </DialogFooter>
               )}
             </DialogContent>

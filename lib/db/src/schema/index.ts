@@ -213,6 +213,20 @@ export interface IGeneratedApp {
   // timeout, o si el usuario lo reinicia manualmente). Sin esto, un
   // sandbox muerto sería irrecuperable: no habría con qué reconstruirlo.
   importedSourceFilesJson?: string;
+  // Estado de la importación en segundo plano -- a petición del usuario,
+  // tras confirmar con la consola del navegador que una importación con
+  // muchos reintentos (proyectos tipo Wix con dependencias problemáticas)
+  // puede tardar tanto que algún proxy por el camino corta la conexión a
+  // mitad, mostrando un confuso "error de CORS" en vez de indicar que
+  // simplemente se ha tardado demasiado. Ahora el endpoint responde al
+  // instante con este registro en "processing", y el trabajo pesado
+  // (extraer, compilar en E2B con reintentos) corre en segundo plano,
+  // actualizando estos campos cuando termina -- el frontend consulta el
+  // estado por su cuenta en vez de esperar una única petición larga.
+  importStatus?: "processing" | "ready" | "failed";
+  importError?: string;
+  importBuildLog?: string;
+  importInstallLog?: string;
   deploymentStatus?: string;
   deploymentError?: string;
   marisaiSubdomain?: string;
@@ -316,6 +330,10 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     livePreviewSandboxId: { type: String },
     livePreviewExpiresAt: { type: Date },
     importedSourceFilesJson: { type: String },
+    importStatus: { type: String, enum: ["processing", "ready", "failed"] },
+    importError: { type: String },
+    importBuildLog: { type: String },
+    importInstallLog: { type: String },
     deploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
     deploymentError: { type: String },
     marisaiSubdomain: { type: String, unique: true, sparse: true },
