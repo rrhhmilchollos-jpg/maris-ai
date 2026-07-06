@@ -34,9 +34,14 @@ export interface TemplateBuildResult {
 export async function buildImportTemplate(): Promise<TemplateBuildResult> {
   const logs: string[] = [];
   try {
-    const template = Template()
-      .fromImage("node:20")
-      .runCmd("corepack enable");
+    // NOTA: se quitó un paso de "corepack enable" que había aquí antes --
+    // era para un enfoque con pnpm/corepack que se descartó (ver
+    // astroImportBuilder.ts, ahora usa npm puro con --omit=dev). Ese paso
+    // fallaba durante la CONSTRUCCIÓN de la propia plantilla ("failed to
+    // run command 'corepack enable': exit status 1"), y no aporta nada
+    // al objetivo real de esta plantilla (más memoria), así que se quita
+    // en vez de intentar depurarlo sin necesidad.
+    const template = Template().fromImage("node:20");
 
     await Template.build(template, {
       alias: IMPORT_TEMPLATE_ALIAS,
