@@ -13,10 +13,16 @@ import { makeSlug } from "../lib/deployBundle";
 
 const router = Router();
 
-// ── Multer: accept zip/rar up to 50MB (MongoDB tiene límite de 16MB por documento) ─
+// ── Multer: acepta zip/rar hasta 200MB (mismo techo que la protección
+// anti zip-bomb de más abajo, MAX_UNCOMPRESSED_BYTES — no tiene sentido
+// aceptar en la subida más de lo que luego se va a rechazar igualmente).
+// El contenido de TEXTO extraído (frontendCode) sigue teniendo su propio
+// límite de 12MB por el límite de 16MB/documento de MongoDB (ver
+// MAX_CODE_BYTES más abajo) — eso es independiente del peso del ZIP en
+// sí, que puede incluir imágenes/fuentes binarias pesadas sin problema.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB máximo para evitar timeout de MongoDB
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB máximo de subida
   fileFilter: (_req, file, cb) => {
     const allowed = [
       "application/zip",
@@ -36,13 +42,36 @@ const upload = multer({
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
+// BUG REAL encontrado (causa de "proyectos que no se suben enteros"):
+// esta lista se usa para decidir qué archivos del ZIP se leen como texto
+// y se incluyen en el proyecto importado. Faltaban extensiones de uso
+// muy común — sobre todo ".astro" (el propio framework Astro) y ".mjs"
+// (así se llaman casi siempre astro.config.mjs, tailwind.config.mjs,
+// postcss.config.mjs) — así que en cualquier proyecto Astro real, las
+// páginas .astro Y sus archivos de configuración se descartaban en
+// silencio ANTES de intentar compilar nada. buildAstroProjectInE2B()
+// recibe únicamente lo que sobrevive a este filtro (ver import.ts más
+// abajo), así que sin este arreglo el build fallaría por archivos
+// faltantes incluso si E2B funcionara perfectamente.
 const TEXT_EXTS = new Set([
-  ".html", ".htm", ".css", ".js", ".ts", ".tsx", ".jsx",
-  ".json", ".md", ".txt", ".xml", ".svg", ".yaml", ".yml",
+  ".html", ".htm", ".css", ".scss", ".sass", ".less",
+  ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".tsx", ".jsx",
+  ".astro", ".vue", ".svelte",
+  ".json", ".md", ".mdx", ".txt", ".xml", ".svg", ".yaml", ".yml", ".toml",
   ".env", ".sh", ".py", ".rb", ".php", ".rs",
 ]);
 
+// Archivos de configuración habituales que no tienen "extensión" real
+// según path.extname (p.ej. path.extname(".npmrc") === "" en Node) —
+// sin este caso especial también se descartaban en silencio.
+const TEXT_DOTFILES = new Set([
+  ".npmrc", ".gitignore", ".env", ".env.example", ".eslintrc",
+  ".prettierrc", ".editorconfig", ".nvmrc",
+]);
+
 function isTextFile(filename: string): boolean {
+  const base = path.basename(filename).toLowerCase();
+  if (TEXT_DOTFILES.has(base)) return true;
   return TEXT_EXTS.has(path.extname(filename).toLowerCase());
 }
 
