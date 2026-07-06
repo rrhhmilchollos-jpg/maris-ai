@@ -119,16 +119,29 @@ export async function buildAstroProjectInE2B(
     // main.zip fallando con "signal: killed" en el log de instalación --
     // el sistema operativo del sandbox mata el proceso a la fuerza por
     // quedarse sin memoria RAM, no un fallo normal de npm). Un proyecto
-    // Wix con decenas de paquetes @wix/* es especialmente pesado de
-    // instalar, y npm es conocido por su alto consumo de memoria en
-    // árboles de dependencias grandes (no libera RAM durante la
-    // instalación secuencial, solo al final). pnpm resuelve esto con un
-    // almacén de contenido compartido y hard-links -- mismo resultado,
-    // mucha menos memoria pico. Usamos npx para no depender de que pnpm
-    // esté preinstalado en la imagen base del sandbox.
+    // Wix con decenas de paquetes @wix/* y sus transitivas es
+    // precisamente el caso mas exigente posible para esto. pnpm resuelve
+    // el mismo arbol de dependencias con mucha menos memoria pico gracias
+    // a su almacen de contenido compartido y hard-links.
+    //
+    // Traer pnpm via corepack (viene integrado con Node.js desde la v16.9,
+    // no depende de una descarga bajo demanda de npx que puede fallar por
+    // red) -- si corepack no está disponible en la imagen del sandbox, se
+    // cae a npx como respaldo. Nunca se asume que un solo camino
+    // funcionará siempre.
+    const pnpmSetup = await runCommandCapturingOutput(
+      sandbox,
+      "corepack enable && corepack prepare pnpm@9 --activate",
+      60_000,
+    );
+    const pnpmCommand = pnpmSetup.exitCode === 0 ? "pnpm" : "npx --yes pnpm@9";
+    if (pnpmSetup.exitCode !== 0) {
+      logger.warn({ sandboxId: sandbox.sandboxId, stderr: pnpmSetup.stderr.slice(0, 500) }, "corepack no disponible, usando npx como respaldo para pnpm");
+    }
+
     const install = await runCommandCapturingOutput(
       sandbox,
-      `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
+      `cd ${APP_DIR} && ${pnpmCommand} install --reporter=silent`,
       INSTALL_TIMEOUT_MS,
     );
     if (install.exitCode !== 0) {

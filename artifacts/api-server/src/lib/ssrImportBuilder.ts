@@ -98,11 +98,17 @@ export async function startSSRServerInE2B(
     }));
     await sandbox.files.write(writeEntries);
 
-    // Mismo cambio que en astroImportBuilder.ts (ver ese archivo para el
-    // caso real que lo motivó: "signal: killed" por falta de memoria RAM
-    // al instalar un proyecto con muchas dependencias con npm).
+    // Mismo cambio que en astroImportBuilder.ts -- corepack primero (viene
+    // con Node, más fiable que depender de que npx pueda descargar pnpm),
+    // con npx como respaldo si corepack no está disponible.
+    const pnpmSetup = await sandbox.commands.run(
+      "corepack enable && corepack prepare pnpm@9 --activate",
+      { timeoutMs: 60_000 },
+    ).catch(() => ({ exitCode: 1 } as any));
+    const pnpmCommand = pnpmSetup.exitCode === 0 ? "pnpm" : "npx --yes pnpm@9";
+
     const install = await sandbox.commands.run(
-      `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
+      `cd ${APP_DIR} && ${pnpmCommand} install --reporter=silent`,
       { timeoutMs: INSTALL_TIMEOUT_MS },
     );
     if (install.exitCode !== 0) {
