@@ -282,16 +282,35 @@ console.log('Corregido: ${missingPackage} -> ${latestVersion}');
           break;
         }
         removedPackages.push(missingPackage);
-        logMsg = `${missingPackage} no existe en absoluto en el registro público (paquete privado de Wix) — se quita y se reintenta sin él`;
+        logMsg = `${missingPackage} no existe en absoluto en el registro público (paquete privado de Wix) — se sustituye por un stub vacío vía "overrides" y se reintenta`;
+        // CORRECCIÓN IMPORTANTE (a petición del usuario, tras confirmar que
+        // el primer intento de "quitarlo del package.json" no funcionaba
+        // de verdad -- el mismo error volvía a aparecer idéntico): borrar
+        // la entrada de dependencies/devDependencies del package.json RAÍZ
+        // solo sirve si el paquete está listado ahí DIRECTAMENTE. Si en
+        // cambio es una dependencia ANIDADA (la pide otro paquete de Wix
+        // por dentro, no el proyecto en sí), esa entrada nunca estaba en el
+        // package.json raíz -- borrar algo que no existía ahí no cambia
+        // nada, y npm vuelve a toparse con la misma dependencia anidada.
+        //
+        // FIX de verdad: usar "overrides" de npm, que SÍ alcanza a
+        // cualquier nivel de anidamiento, apuntando el paquete que falta a
+        // un stub local vacío (un paquete mínimo sin ninguna dependencia
+        // real, que existe físicamente en el sandbox) -- así, sea quien
+        // sea quien pida este paquete, obtiene el stub vacío en vez de un
+        // 404 que rompe toda la instalación.
         fixScript = `
 const fs = require('fs');
 const path = '${APP_DIR}/package.json';
+const stubDir = '/home/user/wix-stub';
+if (!fs.existsSync(stubDir)) fs.mkdirSync(stubDir, { recursive: true });
+fs.writeFileSync(stubDir + '/package.json', JSON.stringify({ name: 'wix-stub', version: '1.0.0', main: 'index.js' }, null, 2));
+fs.writeFileSync(stubDir + '/index.js', 'module.exports = {};\\n');
 const pkg = JSON.parse(fs.readFileSync(path, 'utf-8'));
-for (const section of ['dependencies', 'devDependencies']) {
-  if (pkg[section]) delete pkg[section]['${missingPackage}'];
-}
+pkg.overrides = pkg.overrides || {};
+pkg.overrides['${missingPackage}'] = 'file:../wix-stub';
 fs.writeFileSync(path, JSON.stringify(pkg, null, 2));
-console.log('Eliminado: ${missingPackage}');
+console.log('Override añadido: ${missingPackage} -> stub vacío local');
 `.trim();
       } else {
         break; // No es ninguno de estos dos patrones conocidos — no seguir reintentando a ciegas.
