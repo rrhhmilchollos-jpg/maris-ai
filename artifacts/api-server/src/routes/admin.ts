@@ -3392,4 +3392,16 @@ router.get("/admin/playbooks", async (req: any, res: any): Promise<void> => {
   }
 });
 
+// ─── Plantilla E2B con más memoria para importaciones grandes ──────────────
+router.post("/admin/e2b-build-import-template", async (_req: any, res: any): Promise<void> => {
+  try {
+    const { buildImportTemplate } = await import("../lib/e2bTemplateSetup");
+    const result = await buildImportTemplate();
+    res.json(result);
+  } catch (err: any) {
+    logger.error({ err }, "POST /admin/e2b-build-import-template failed");
+    res.status(500).json({ ok: false, reason: String(err) });
+  }
+});
+
 export default router;

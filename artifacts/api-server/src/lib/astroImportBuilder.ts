@@ -1,6 +1,7 @@
 import { Sandbox } from "e2b";
 import { isE2BEnabled } from "./e2bValidator";
 import { logger } from "./logger";
+import { IMPORT_TEMPLATE_ALIAS } from "./e2bTemplateSetup";
 
 const SANDBOX_TIMEOUT_MS = 8 * 60_000;
 const INSTALL_TIMEOUT_MS = 4 * 60_000;
@@ -110,7 +111,20 @@ export async function buildAstroProjectInE2B(
 
   let sandbox: Sandbox | null = null;
   try {
-    sandbox = await Sandbox.create({ timeoutMs: SANDBOX_TIMEOUT_MS });
+    // Se usa la plantilla personalizada con más memoria (4GB vs los 512MB
+    // por defecto -- ver e2bTemplateSetup.ts, causa real confirmada del
+    // "Killed"/código 137 en el import de FANTASYWEB-main.zip) si ya se
+    // construyó. Si aún no se ha construido (primera vez, o el usuario
+    // todavía no ha disparado POST /api/admin/e2b-build-import-template),
+    // se cae al sandbox por defecto sin plantilla -- nunca se rompe el
+    // import por completo solo porque la plantilla no exista todavía.
+    try {
+      sandbox = await Sandbox.create(IMPORT_TEMPLATE_ALIAS, { timeoutMs: SANDBOX_TIMEOUT_MS });
+      logger.info({ template: IMPORT_TEMPLATE_ALIAS }, "Astro import: usando plantilla personalizada con 4GB de RAM");
+    } catch (templateErr) {
+      logger.warn({ templateErr }, "Plantilla personalizada no disponible todavía, usando sandbox por defecto (512MB) -- puede volver a fallar por memoria en proyectos grandes");
+      sandbox = await Sandbox.create({ timeoutMs: SANDBOX_TIMEOUT_MS });
+    }
     logger.info({ sandboxId: sandbox.sandboxId, fileCount: Object.keys(files).length }, "E2B: sandbox creado para build de proyecto Astro importado");
 
     const writeEntries = Object.entries(files).map(([path, data]) => ({
