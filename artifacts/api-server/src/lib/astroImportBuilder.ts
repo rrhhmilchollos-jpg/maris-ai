@@ -16,6 +16,60 @@ export interface AstroBuildResult {
 }
 
 /**
+ * ENCONTRADO A PETICION DEL USUARIO (caso real: import de FANTASYWEB-main.zip
+ * fallando con "exit status 254", un mensaje inútil sin ningún log real
+ * detrás): la documentación oficial de E2B es ambigua/inconsistente entre
+ * SDKs sobre si sandbox.commands.run() LANZA una excepción cuando el
+ * comando termina con código de salida distinto de cero, o si simplemente
+ * DEVUELVE el resultado con exitCode poblado -- el codigo original de este
+ * archivo asumia lo segundo (`if (install.exitCode !== 0)`), pero si el SDK
+ * en realidad lanza excepcion, esa comprobacion nunca se ejecuta: salta
+ * directo al catch generico de mas abajo, que solo tenia `err.message`
+ * (algo como "Command exited with code 254") SIN el stdout/stderr real que
+ * explica el porque.
+ *
+ * FIX: capturar stdout/stderr con los callbacks onStdout/onStderr MIENTRAS
+ * el comando corre (esto funciona siempre, esté documentado o no el
+ * comportamiento del valor de retorno) -- así el log real nunca se pierde,
+ * tire el SDK excepción o no.
+ */
+async function runCommandCapturingOutput(
+  sandbox: Sandbox,
+  cmd: string,
+  timeoutMs: number,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  let stdout = "";
+  let stderr = "";
+  try {
+    const result = await sandbox.commands.run(cmd, {
+      timeoutMs,
+      onStdout: (data: string) => { stdout += data; },
+      onStderr: (data: string) => { stderr += data; },
+    });
+    // Si el SDK devuelve el resultado normalmente (no lanza excepción),
+    // preferimos su stdout/stderr acumulado por si el nuestro se quedó
+    // corto por cualquier motivo -- pero nos quedamos con el más largo de
+    // los dos por seguridad, nunca perdemos información.
+    return {
+      exitCode: result.exitCode ?? 0,
+      stdout: (result.stdout && result.stdout.length > stdout.length) ? result.stdout : stdout,
+      stderr: (result.stderr && result.stderr.length > stderr.length) ? result.stderr : stderr,
+    };
+  } catch (err: any) {
+    // El comando lanzó una excepción (código de salida distinto de cero, o
+    // cualquier otro fallo) -- gracias a los callbacks de arriba, stdout/
+    // stderr YA están rellenos con la salida real capturada mientras
+    // corría, independientemente de que el SDK lance o no.
+    const exitCodeMatch = /exit code (\d+)/i.exec(err?.message || "");
+    return {
+      exitCode: exitCodeMatch ? parseInt(exitCodeMatch[1], 10) : 1,
+      stdout,
+      stderr: stderr || err?.message || String(err),
+    };
+  }
+}
+
+/**
  * Compila un proyecto Astro importado dentro de un sandbox E2B real, en vez
  * de intentar "entender" su código fuente (que es lo que rompía con
  * proyectos exportados desde Wix — ver el hallazgo completo en import.ts).
@@ -61,39 +115,41 @@ export async function buildAstroProjectInE2B(
     }));
     await sandbox.files.write(writeEntries);
 
-    const install = await sandbox.commands.run(
+    const install = await runCommandCapturingOutput(
+      sandbox,
       `cd ${APP_DIR} && npm install --no-audit --no-fund --loglevel=error`,
-      { timeoutMs: INSTALL_TIMEOUT_MS },
+      INSTALL_TIMEOUT_MS,
     );
     if (install.exitCode !== 0) {
-      logger.warn({ sandboxId: sandbox.sandboxId, stderr: install.stderr.slice(0, 2000) }, "Astro import: npm install falló");
+      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: npm install falló");
       return {
         ok: false,
         installLog: install.stdout + "\n" + install.stderr,
-        reason: "No se pudieron instalar las dependencias del proyecto. Revisa el log de instalación para más detalle.",
+        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${install.exitCode}). Revisa el log de instalación para más detalle.`,
       };
     }
 
     // Se usa el binario de Astro directamente (no el script "build" del
     // package.json, que en un export de Wix es "wix build" — requiere su
     // propia autenticación en la nube de Wix, imposible desde aquí).
-    const build = await sandbox.commands.run(
+    const build = await runCommandCapturingOutput(
+      sandbox,
       `cd ${APP_DIR} && npx astro build`,
-      { timeoutMs: BUILD_TIMEOUT_MS },
+      BUILD_TIMEOUT_MS,
     );
     if (build.exitCode !== 0) {
-      logger.warn({ sandboxId: sandbox.sandboxId, stderr: build.stderr.slice(0, 2000) }, "Astro import: astro build falló");
+      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: build.exitCode, stderr: build.stderr.slice(0, 2000) }, "Astro import: astro build falló");
       return {
         ok: false,
         installLog: install.stdout,
         buildLog: build.stdout + "\n" + build.stderr,
-        reason: "El proyecto no compiló con Astro. Si usa integraciones propias de Wix (@wix/astro) que requieren su servicio de build en la nube, es posible que este proyecto en concreto no se pueda compilar fuera de Wix.",
+        reason: `El proyecto no compiló con Astro (código de salida ${build.exitCode}). Si usa integraciones propias de Wix (@wix/astro) que requieren su servicio de build en la nube, es posible que este proyecto en concreto no se pueda compilar fuera de Wix. Revisa el log de compilación para ver el error real.`,
       };
     }
 
     // Leer el resultado compilado (dist/) — HTML/CSS/JS estándar, ya sin
     // ninguna dependencia de la sintaxis .astro.
-    const listResult = await sandbox.commands.run(`find ${APP_DIR}/dist -type f`, { timeoutMs: 15_000 });
+    const listResult = await runCommandCapturingOutput(sandbox, `find ${APP_DIR}/dist -type f`, 15_000);
     const distPaths = listResult.stdout.split("\n").map((l) => l.trim()).filter(Boolean);
 
     if (distPaths.length === 0) {
@@ -125,8 +181,12 @@ export async function buildAstroProjectInE2B(
     logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length }, "Astro import: build completado correctamente");
     return { ok: true, files: outFiles, installLog: install.stdout, buildLog: build.stdout };
   } catch (err: any) {
-    logger.error({ err }, "buildAstroProjectInE2B: error inesperado");
-    return { ok: false, reason: `Error inesperado compilando el proyecto: ${err?.message || String(err)}` };
+    // Este catch ahora solo debería dispararse por fallos AJENOS a los
+    // comandos en sí (fallo al crear el sandbox, al escribir archivos,
+    // etc.) -- los fallos de comandos ya se capturan con detalle real
+    // dentro de runCommandCapturingOutput, arriba.
+    logger.error({ err }, "buildAstroProjectInE2B: error inesperado (no relacionado con un comando)");
+    return { ok: false, reason: `Error inesperado preparando el sandbox: ${err?.message || String(err)}` };
   } finally {
     if (sandbox) {
       try {

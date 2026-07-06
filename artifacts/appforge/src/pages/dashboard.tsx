@@ -47,7 +47,7 @@ import {
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
   Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
-  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock
+  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock, AlertTriangle
 } from "lucide-react";
 import {
   Dialog,
@@ -232,6 +232,7 @@ export default function DashboardPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ title: string; filesImported: number } | null>(null);
+  const [importErrorDetail, setImportErrorDetail] = useState<{ reason: string; buildLog?: string; installLog?: string } | null>(null);
 
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
   const [customInstructions, setCustomInstructions] = useState("");
@@ -435,7 +436,20 @@ export default function DashboardPage() {
       toast({ title: `✅ "${data.title}" importado`, description: `${data.filesImported} archivos cargados.` });
       setTimeout(() => { setImportDialogOpen(false); setImportFile(null); setImportResult(null); }, 2000);
     } catch (err: any) {
+      // ENCONTRADO A PETICION DEL USUARIO (caso real: import de un ZIP de
+      // Wix fallando con "exit status 254" sin ninguna pista útil): el
+      // backend YA devuelve buildLog/installLog reales en err.data cuando
+      // la compilación falla, pero antes solo se mostraba err.message en
+      // un toast pequeño -- se perdía toda esa información. Ahora se
+      // guarda el detalle completo para mostrarlo en un diálogo legible.
       toast({ title: "Error al importar", description: err.message, variant: "destructive" });
+      if (err?.data?.buildLog || err?.data?.installLog) {
+        setImportErrorDetail({
+          reason: err.message,
+          buildLog: err.data.buildLog,
+          installLog: err.data.installLog,
+        });
+      }
     } finally {
       setImportLoading(false);
     }
@@ -1103,6 +1117,44 @@ export default function DashboardPage() {
                   </Button>
                 </DialogFooter>
               )}
+            </DialogContent>
+          </Dialog>
+
+          {/* Detalle del error de importación (log real de build/install) —
+              antes se perdía toda esta información en un simple toast. */}
+          <Dialog open={!!importErrorDetail} onOpenChange={(o) => { if (!o) setImportErrorDetail(null); }}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-red-400">
+                  <AlertTriangle className="h-5 w-5" /> Error al compilar el proyecto
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">{importErrorDetail?.reason}</p>
+              {importErrorDetail?.buildLog && (
+                <div>
+                  <p className="text-xs font-semibold text-white/70 mb-1">Log de compilación:</p>
+                  <pre className="max-h-64 overflow-y-auto rounded-md bg-black/40 p-3 text-[11px] text-white/60 whitespace-pre-wrap">{importErrorDetail.buildLog}</pre>
+                </div>
+              )}
+              {importErrorDetail?.installLog && (
+                <div>
+                  <p className="text-xs font-semibold text-white/70 mb-1">Log de instalación:</p>
+                  <pre className="max-h-40 overflow-y-auto rounded-md bg-black/40 p-3 text-[11px] text-white/60 whitespace-pre-wrap">{importErrorDetail.installLog}</pre>
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const text = `${importErrorDetail?.reason}\n\n--- BUILD LOG ---\n${importErrorDetail?.buildLog || ""}\n\n--- INSTALL LOG ---\n${importErrorDetail?.installLog || ""}`;
+                    navigator.clipboard.writeText(text);
+                    toast({ title: "Copiado", description: "Log completo copiado al portapapeles." });
+                  }}
+                >
+                  Copiar log completo
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 
