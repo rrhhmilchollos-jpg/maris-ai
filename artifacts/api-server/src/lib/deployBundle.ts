@@ -3,6 +3,7 @@ import { randomInt } from "node:crypto";
 import { bundleToFiles } from "./exportZip";
 import { injectWatermarkToHTML } from "./watermark";
 import { resolveDynamicPins } from "./dynamicPinning";
+import { logger } from "./logger";
 
 /**
  * Bundles the generated frontend into a single self-contained HTML page that
@@ -55,6 +56,33 @@ export async function buildDeployHtml(opts: {
       kind: opts.kind ?? "",
     });
   }
+
+  // ENCONTRADO CON DATOS REALES (a petición del usuario: import de un HTML
+  // estático puro -- FANTASYWEB-maris-ai.zip, solo un index.html, sin
+  // src/App.tsx ni nada de React -- mostraba una vista previa en blanco
+  // total, sin ningún error visible). Causa: pickEntry() más abajo exige
+  // encontrar src/main.tsx, src/index.tsx o src/App.tsx -- un HTML
+  // completo y autocontenido (con su propio <html>/<head>/<style>/
+  // <script>, típico de proyectos importados que no son React) no tiene
+  // ninguno de esos archivos, pickEntry devuelve null, y la función
+  // lanzaba un error que se perdía en silencio antes de llegar al
+  // iframe -- de ahí la pantalla en blanco sin explicación.
+  //
+  // FIX: si el bundle es (o contiene) un único index.html que YA es un
+  // documento HTML completo (empieza por <!DOCTYPE html> o <html), se
+  // sirve tal cual, sin pasar por esbuild -- no hace falta "compilar"
+  // nada que el navegador ya sabe interpretar directamente.
+  const rawVfs = bundleToFiles(opts.bundle);
+  const rawFileNames = Object.keys(rawVfs);
+  const soloIndexHtml = rawFileNames.length === 1 && /(^|\/)index\.html$/i.test(rawFileNames[0]);
+  if (soloIndexHtml) {
+    const htmlContent = rawVfs[rawFileNames[0]];
+    if (/^\s*<!DOCTYPE html>|^\s*<html[\s>]/i.test(htmlContent)) {
+      logger.info({ title: opts.title }, "buildDeployHtml: bundle es un HTML estático autocontenido -- sirviendo directamente sin esbuild");
+      return opts.hasWatermark ? injectWatermarkToHTML(htmlContent, opts.removeWatermarkUrl) : htmlContent;
+    }
+  }
+
   const vfs = bundleToFiles(opts.bundle);
   const entry = pickEntry(vfs);
   if (!entry) {
