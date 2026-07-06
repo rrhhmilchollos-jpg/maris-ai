@@ -156,33 +156,43 @@ export async function buildAstroProjectInE2B(
     // FIX: todo en UNA SOLA llamada, mismo shell, para que nada se pierda
     // entre medias. Si corepack fallara aquí dentro, el && corta la
     // cadena y npm/pnpm nunca llega a intentarse con algo roto a medias.
+    // CAMBIO DE ESTRATEGIA (a petición del usuario, tras 5 intentos):
+    // corepack y npx mostraban el mismo patrón raro -- imprimían un
+    // mensaje inicial y luego morían en silencio con exit status 1, tanto
+    // en la misma sesión como en sesiones separadas. Esto ya no encaja
+    // con un problema de PATH/sesión (mi teoría anterior) -- huele más a
+    // un problema de RED del propio sandbox al intentar la SEGUNDA
+    // descarga (la del paquete de pnpm en sí desde el registro de npm),
+    // algo que npm puro no necesita porque ya viene instalado de fábrica.
+    //
+    // Se vuelve a npm puro (que SÍ dio información real e interpretable
+    // la primera vez: "signal: killed", un fallo de memoria genuino) y se
+    // ataca esa causa original de forma más directa: --omit=dev evita
+    // instalar dependencias de desarrollo (linters, TypeScript de
+    // desarrollo, herramientas propias de Wix no necesarias para compilar
+    // con astro build) -- en un proyecto Wix Vibe con eslint-rules/
+    // eslint.config.ts propios, esto puede recortar una parte sustancial
+    // del árbol de dependencias y por tanto de la memoria pico necesaria.
     const install = await runCommandCapturingOutput(
       sandbox,
-      `cd ${APP_DIR} && corepack enable && corepack prepare pnpm@9 --activate && pnpm install --reporter=silent`,
+      // "astro" suele vivir en devDependencies en la mayoría de proyectos
+      // Astro (es una herramienta de build, no runtime) -- se instala
+      // explícitamente aparte para garantizar que esté disponible pase lo
+      // que pase, sin arrastrar el resto de dependencias de desarrollo
+      // (linters, tipos, herramientas propias de Wix) que son las que más
+      // memoria consumen y no hacen falta para compilar.
+      `cd ${APP_DIR} && npm install --omit=dev --no-audit --no-fund --loglevel=warn && npm install astro --no-save --no-audit --no-fund --loglevel=warn`,
       INSTALL_TIMEOUT_MS,
     );
     if (install.exitCode !== 0) {
-      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: instalación falló (corepack+pnpm en una sola sesión)");
-      // Si aun así falla, reintentamos una vez más con npx como último
-      // recurso, en la MISMA sesión también, por si el problema fuera
-      // específico de corepack y no de memoria/dependencias.
-      const fallbackInstall = await runCommandCapturingOutput(
-        sandbox,
-        `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
-        INSTALL_TIMEOUT_MS,
-      );
-      if (fallbackInstall.exitCode !== 0) {
-        return {
-          ok: false,
-          installLog:
-            `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
-            `=== INTENTO 1 (corepack+pnpm en una sesión, exitCode=${install.exitCode}) ===\n${install.stdout}\n${install.stderr}\n\n` +
-            `=== INTENTO 2 (npx como último recurso, exitCode=${fallbackInstall.exitCode}) ===\n${fallbackInstall.stdout}\n${fallbackInstall.stderr}`,
-          reason: `No se pudieron instalar las dependencias del proyecto tras 2 intentos (códigos de salida ${install.exitCode} y ${fallbackInstall.exitCode}). Revisa el log de instalación para más detalle.`,
-        };
-      }
-      // El segundo intento sí funcionó -- seguimos con su resultado.
-      Object.assign(install, fallbackInstall);
+      logger.warn({ sandboxId: sandbox.sandboxId, exitCode: install.exitCode, stderr: install.stderr.slice(0, 2000) }, "Astro import: instalación falló (npm --omit=dev)");
+      return {
+        ok: false,
+        installLog:
+          `=== DIAGNÓSTICO DEL ENTORNO ===\n${diag.stdout}\n${diag.stderr}\n\n` +
+          `=== npm install --omit=dev (exitCode=${install.exitCode}) ===\n${install.stdout}\n${install.stderr}`,
+        reason: `No se pudieron instalar las dependencias del proyecto (código de salida ${install.exitCode}). Revisa el log de instalación para más detalle.`,
+      };
     }
 
     // Se usa el binario de Astro directamente (no el script "build" del
