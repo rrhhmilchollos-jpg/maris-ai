@@ -18,12 +18,11 @@ import { logger } from "../lib/logger";
 import { GoogleGenAI, Modality } from "@google/genai";
 import multer from "multer";
 import ffmpeg from "fluent-ffmpeg";
-import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import { writeFile, unlink, mkdtemp, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
-ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 
 // Subida de la foto + la canción real del cliente (multipart, no JSON) —
 // los archivos de audio pueden pesar varios MB, mucho más de lo razonable

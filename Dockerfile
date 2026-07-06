@@ -29,6 +29,7 @@ WORKDIR /app
 # Chromium + dependencias para Puppeteer
 RUN apt-get update && apt-get install -y \
     chromium \
+    ffmpeg \
     ca-certificates \
     fonts-liberation \
     fonts-noto-color-emoji \
