@@ -139,6 +139,54 @@ async function importAdmZip(): Promise<any> {
   throw new Error("No se pudo cargar adm-zip. Reinicia el servicio e inténtalo de nuevo.");
 }
 
+/**
+ * ENCONTRADO A PETICION DEL USUARIO (caso real: import de un ZIP de GitHub
+ * fallando con "npm ERR! enoent ... no such file or directory, open
+ * '.../astro-import/package.json'" pese a que el ZIP SÍ contenía un
+ * package.json): los ZIPs generados por GitHub ("Download ZIP"), y muchos
+ * exportadores similares, envuelven TODO el contenido dentro de una única
+ * carpeta raíz con el nombre del repo/rama (ej. "FANTASYWEB-main/package.json"
+ * en vez de "package.json" a secas). extractZipToBundle/extractRarToBundle
+ * conservaban esa carpeta tal cual en las claves de `files`, así que al
+ * escribir esos archivos dentro del sandbox de build (astroImportBuilder.ts
+ * o startSSRServerInE2B) el package.json terminaba un nivel más profundo de
+ * lo que el comando `npm install` (ejecutado en la raíz del sandbox)
+ * esperaba encontrarlo.
+ *
+ * FIX: si TODAS las rutas comparten un único primer segmento de carpeta,
+ * se elimina ese segmento de todas las claves antes de devolver el bundle
+ * -- así el resto del pipeline (Astro build, SSR, importación normal) sigue
+ * funcionando exactamente igual tanto si el ZIP viene con carpeta
+ * envolvente como si no.
+ */
+function stripCommonRootFolder(
+  files: Record<string, string>,
+  allPaths: string[],
+): { files: Record<string, string>; allPaths: string[] } {
+  if (allPaths.length === 0) return { files, allPaths };
+
+  const firstSegments = allPaths.map((p) => p.split("/")[0]);
+  const uniqueFirstSegments = new Set(firstSegments);
+
+  // Solo se quita el prefijo si TODOS los archivos están dentro de la MISMA
+  // única carpeta raíz, y esa carpeta no es el archivo entero (es decir,
+  // hay al menos un "/" en cada ruta -- si no, no hay nada que envuelva).
+  const allNested = allPaths.every((p) => p.includes("/"));
+  if (uniqueFirstSegments.size !== 1 || !allNested) {
+    return { files, allPaths };
+  }
+
+  const prefix = `${firstSegments[0]}/`;
+  const newFiles: Record<string, string> = {};
+  for (const [p, content] of Object.entries(files)) {
+    const strippedKey = p.startsWith(prefix) ? p.slice(prefix.length) : p;
+    newFiles[strippedKey] = content;
+  }
+  const newAllPaths = allPaths.map((p) => (p.startsWith(prefix) ? p.slice(prefix.length) : p));
+
+  return { files: newFiles, allPaths: newAllPaths };
+}
+
 async function extractRarToBundle(buffer: Buffer): Promise<{ files: Record<string, string>; allPaths: string[] }> {
   // Write buffer to tmp, extract with node-unrar-js or system unrar
   const tmpRar = `/tmp/import_${Date.now()}.rar`;
@@ -320,6 +368,7 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
     } else {
       extracted = await extractZipToBundle(buffer);
     }
+    extracted = stripCommonRootFolder(extracted.files, extracted.allPaths);
 
     if (extracted.allPaths.length === 0) {
       return res.status(400).json({ error: "El archivo está vacío o no se pudo extraer." });
