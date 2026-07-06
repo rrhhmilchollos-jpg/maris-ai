@@ -8812,6 +8812,16 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     if (!app?.frontendCode) return res.status(404).send("<h1>App no encontrada</h1>");
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    // ENCONTRADO A PETICION DEL USUARIO: este endpoint no fijaba NINGUNA
+    // cabecera de control de caché -- un navegador puede (y en la
+    // practica lo hizo, causando confusion real) seguir sirviendo una
+    // respuesta antigua cacheada dentro del iframe de preview, incluso
+    // despues de refrescar la pagina entera (F5 no siempre fuerza a un
+    // <iframe> a volver a pedir su src si el navegador cree que la copia
+    // que tiene sigue siendo valida). Un preview NUNCA debe cachearse --
+    // siempre tiene que reflejar el estado real y actual de la app.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
     res.setHeader("Content-Security-Policy", "frame-ancestors *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; connect-src *; img-src * data: blob:; font-src *");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
