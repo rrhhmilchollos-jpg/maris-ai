@@ -41,7 +41,22 @@ export async function buildImportTemplate(): Promise<TemplateBuildResult> {
     // run command 'corepack enable': exit status 1"), y no aporta nada
     // al objetivo real de esta plantilla (más memoria), así que se quita
     // en vez de intentar depurarlo sin necesidad.
-    const template = Template().fromImage("node:20");
+    // AMPLIACIÓN (a petición explícita del usuario: "revisa todo, instala
+    // dependencias y herramientas para que Astro funcione perfectamente"):
+    // node:20 (Debian, no Alpine) ya trae lo necesario para que la
+    // mayoría de paquetes con binarios precompilados funcionen sin nada
+    // extra (sharp, por ejemplo, descarga su propio libvips precompilado
+    // en sistemas glibc como este -- confirmado contra la documentación
+    // oficial de sharp antes de asumirlo). Pero algunos paquetes nativos
+    // de npm NO tienen binario precompilado para toda arquitectura/versión
+    // y necesitan compilar desde cero en el momento de instalar -- eso
+    // requiere python3, make y un compilador de C++ (g++), que la imagen
+    // base de node:20 NO trae instalados por defecto. git se añade porque
+    // algunos paquetes se instalan directamente desde una URL de git, no
+    // desde el registro de npm.
+    const template = Template()
+      .fromImage("node:20")
+      .runCmd("apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*");
 
     await Template.build(template, {
       alias: IMPORT_TEMPLATE_ALIAS,
