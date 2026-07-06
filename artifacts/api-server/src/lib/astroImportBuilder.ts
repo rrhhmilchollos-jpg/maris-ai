@@ -375,24 +375,56 @@ console.log('Override añadido: ${missingPackage} -> stub vacío local');
     }
 
     const outFiles: Record<string, string> = {};
+    const readErrors: string[] = [];
     for (const fullPath of distPaths) {
       const relative = fullPath.replace(`${APP_DIR}/dist/`, "");
       try {
         // NOTA: sandbox.files.read() es el método estándar del SDK de E2B
-        // para leer contenido de archivos -- no ha sido posible probarlo
-        // en vivo contra un proyecto Astro real en este entorno de trabajo.
-        // Si al probarlo con un caso real da problemas de codificación
-        // (sobre todo con binarios como imágenes/fuentes en dist/), revisar
-        // si el SDK necesita un segundo parámetro de formato.
+        // para leer contenido de archivos como texto -- verificado contra
+        // la documentación oficial. PERO: archivos BINARIOS (imágenes
+        // .png/.jpg, fuentes .woff2) leídos como texto se CORROMPEN (la
+        // decodificación de texto pierde información de bytes reales) --
+        // no lanzan error, pero el contenido queda inservible. Dado que
+        // buildFrontendCode() + isTextFile() ya filtran a solo archivos de
+        // texto de todos modos, las imágenes NUNCA llegan a incluirse en
+        // el bundle final -- limitación real y conocida del sistema
+        // actual (guarda todo como un único string de texto), no un bug
+        // de esta lectura en concreto. Documentado explícitamente aquí en
+        // vez de fallar en silencio sin que se sepa por qué faltan.
         const content = await sandbox.files.read(fullPath);
         outFiles[relative] = typeof content === "string" ? content : String(content);
-      } catch (readErr) {
+      } catch (readErr: any) {
+        readErrors.push(`${relative}: ${readErr?.message || String(readErr)}`);
         logger.warn({ readErr, fullPath }, "No se pudo leer un archivo de dist/ tras el build de Astro — se omite");
       }
     }
 
-    logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length, removedPackages }, "Astro import: build completado correctamente");
-    return { ok: true, files: outFiles, installLog: finalInstall.stdout, buildLog: build.stdout, removedPackages: removedPackages.length > 0 ? removedPackages : undefined };
+    // ENCONTRADO A PETICION DEL USUARIO (caso real: import "exitoso" que
+    // en el editor de código solo mostraba la plantilla vacía por
+    // defecto, sin nada del contenido real): antes, si TODAS las lecturas
+    // fallaban, la función igualmente devolvía ok:true con outFiles
+    // vacío -- un "éxito" completamente vacío que luego el editor de
+    // código rellenaba con su plantilla por defecto, dando la falsa
+    // impresión de que algo se había importado. Ahora se falla de
+    // verdad si no se pudo leer NINGÚN archivo, con los errores reales de
+    // lectura incluidos.
+    if (Object.keys(outFiles).length === 0) {
+      return {
+        ok: false,
+        installLog: finalInstall.stdout,
+        buildLog: `${build.stdout}\n\n=== ERRORES DE LECTURA (${distPaths.length} archivos en dist/, 0 leídos con éxito) ===\n${readErrors.join("\n")}`,
+        reason: `El build de Astro generó ${distPaths.length} archivo(s) en dist/, pero no se pudo leer el contenido de ninguno. Revisa el log de compilación para ver los errores de lectura reales.`,
+      };
+    }
+
+    logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length, totalDistFiles: distPaths.length, readErrorCount: readErrors.length, removedPackages }, "Astro import: build completado correctamente");
+    return {
+      ok: true,
+      files: outFiles,
+      installLog: finalInstall.stdout,
+      buildLog: readErrors.length > 0 ? `${build.stdout}\n\n=== ${readErrors.length} archivo(s) no se pudieron leer (probablemente binarios: imágenes, fuentes) ===\n${readErrors.join("\n")}` : build.stdout,
+      removedPackages: removedPackages.length > 0 ? removedPackages : undefined,
+    };
   } catch (err: any) {
     // Este catch ahora solo debería dispararse por fallos AJENOS a los
     // comandos en sí (fallo al crear el sandbox, al escribir archivos,
