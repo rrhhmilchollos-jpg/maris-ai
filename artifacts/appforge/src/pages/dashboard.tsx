@@ -1087,7 +1087,7 @@ export default function DashboardPage() {
                       className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${importFile ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50 hover:bg-white/5"}`}>
                       <FolderUp className="h-8 w-8 mb-2 text-muted-foreground" />
                       {importFile ? <span className="text-sm font-medium text-primary">{importFile.name}</span> : (
-                        <><span className="text-sm text-muted-foreground">Haz clic o arrastra tu archivo aquí</span><span className="text-xs text-muted-foreground mt-1">ZIP o RAR · máx. 200 MB</span></>
+                        <><span className="text-sm text-muted-foreground">Haz clic o arrastra tu archivo aquí</span><span className="text-xs text-muted-foreground mt-1">ZIP o RAR · máx. 1.5 GB</span></>
                       )}
                       <input id="import-file-input" type="file" accept=".zip,.rar,application/zip,application/x-rar-compressed" className="hidden" onChange={e => setImportFile(e.target.files?.[0] ?? null)} />
                     </label>

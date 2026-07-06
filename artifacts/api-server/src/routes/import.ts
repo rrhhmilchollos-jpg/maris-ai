@@ -13,16 +13,25 @@ import { makeSlug } from "../lib/deployBundle";
 
 const router = Router();
 
-// ── Multer: acepta zip/rar hasta 200MB (mismo techo que la protección
-// anti zip-bomb de más abajo, MAX_UNCOMPRESSED_BYTES — no tiene sentido
-// aceptar en la subida más de lo que luego se va a rechazar igualmente).
-// El contenido de TEXTO extraído (frontendCode) sigue teniendo su propio
-// límite de 12MB por el límite de 16MB/documento de MongoDB (ver
-// MAX_CODE_BYTES más abajo) — eso es independiente del peso del ZIP en
-// sí, que puede incluir imágenes/fuentes binarias pesadas sin problema.
+// ── Multer: acepta zip/rar hasta 1.5GB.
+//
+// IMPORTANTE — cambio de memoryStorage() a diskStorage(): con archivos de
+// hasta 1.5GB, guardarlos enteros en RAM (como hacía antes) es peligroso
+// de verdad — 3-4 usuarios importando a la vez podrían agotar la memoria
+// del servidor y tirar el api-server para TODOS los usuarios, no solo
+// para quien está importando. Con diskStorage, el archivo se escribe
+// directamente a disco (streaming) sin pasar por la RAM del proceso.
+// El archivo temporal se borra siempre al terminar (ver finally más abajo).
+const UPLOAD_TMP_DIR = process.env.IMPORT_TMP_DIR || "/tmp/maris-ai-imports";
+if (!fs.existsSync(UPLOAD_TMP_DIR)) {
+  fs.mkdirSync(UPLOAD_TMP_DIR, { recursive: true });
+}
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB máximo de subida
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOAD_TMP_DIR),
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`),
+  }),
+  limits: { fileSize: 1.5 * 1024 * 1024 * 1024 }, // 1.5GB máximo de subida
   fileFilter: (_req, file, cb) => {
     const allowed = [
       "application/zip",
@@ -88,7 +97,7 @@ async function extractZipToBundle(buffer: Buffer): Promise<{ files: Record<strin
   // ── Anti zip-bomb: comprobar el tamaño descomprimido total declarado ──────
   // antes de leer ningún contenido. Un ZIP de pocos KB puede declarar
   // gigabytes de contenido descomprimido y agotar la memoria del servidor.
-  const MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024; // 200MB
+  const MAX_UNCOMPRESSED_BYTES = 3 * 1024 * 1024 * 1024; // 3GB (deja margen razonable sobre el límite de subida de 1.5GB)
   const totalUncompressed = entries.reduce((sum: number, e: any) => sum + (e.header?.size ?? 0), 0);
   if (totalUncompressed > MAX_UNCOMPRESSED_BYTES) {
     throw new Error(
@@ -293,7 +302,11 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
       return res.status(400).json({ error: "No se recibió ningún archivo." });
     }
 
-    const buffer = req.file.buffer;
+    // Con diskStorage, multer ya no da req.file.buffer -- el archivo está
+    // escrito en disco en req.file.path. Lo leemos aquí una sola vez; el
+    // resto de la función sigue exactamente igual que antes (recibe el
+    // mismo Buffer que recibía con memoryStorage).
+    const buffer = fs.readFileSync(req.file.path);
     const originalName = req.file.originalname.toLowerCase();
     const isRar = originalName.endsWith(".rar");
     const userId = req.userId as string;
@@ -428,6 +441,17 @@ router.post("/import-app", requireAuth, upload.single("file"), async (req: any, 
     // Always return JSON, never HTML
     if (!res.headersSent) {
       res.status(500).json({ error: err instanceof Error ? err.message : "Error al importar el proyecto." });
+    }
+  } finally {
+    // Limpieza garantizada del archivo temporal en disco -- se ejecuta
+    // tanto si el import tuvo éxito como si falló en cualquier punto.
+    // Sin esto, con diskStorage el /tmp del servidor se llenaría con
+    // cada importación (antes, con memoryStorage, esto no hacía falta
+    // porque el buffer solo vivía en RAM y se liberaba solo).
+    if (req.file?.path) {
+      fs.unlink(req.file.path, (unlinkErr) => {
+        if (unlinkErr) logger.warn({ unlinkErr, path: req.file.path }, "No se pudo borrar el archivo temporal de importación");
+      });
     }
   }
 });
