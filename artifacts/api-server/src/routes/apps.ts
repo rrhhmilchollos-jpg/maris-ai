@@ -119,7 +119,7 @@ interface RouteGenerationRequestContext {
  *   - Patcher       (Claude Sonnet)        — auto-fix
  * ========================================================================== */
 
-function buildFrontendSystemPrompt(language: GenLanguage): string {
+function buildFrontendSystemPrompt(language: GenLanguage, kind?: string): string {
   const isTS = language === "typescript";
   const ext = isTS ? "tsx" : "jsx";
   const utilExt = isTS ? "ts" : "js";
@@ -129,6 +129,23 @@ function buildFrontendSystemPrompt(language: GenLanguage): string {
   const tsRules = isTS
     ? "- TypeScript is allowed: type annotations, interfaces and generics are fine where they help readability."
     : `- IMPORTANT: this app is plain JavaScript. Do NOT emit ANY TypeScript syntax: no \`: Type\` annotations, no \`interface\`, no \`type Foo = …\` aliases, no \`as Foo\` casts, no generics like \`useState<string>\`, no \`tsconfig.json\`, no \`vite-env.d.ts\`. Use JSDoc comments if you really need to express a type.`;
+  // ENCONTRADO a petición del usuario: kind="hybrid-pwa" no generaba absolutamente
+  // nada distinto de una web normal (confirmado con grep: cero menciones a
+  // manifest.json o service-worker en todo el pipeline) pese a cobrarse como
+  // "preset avanzado" (3 créditos). A diferencia de Vue/Svelte/Next.js (que
+  // necesitarían un framework distinto por completo), una PWA real es una
+  // capa ADITIVA sobre el mismo React/Vite que ya generamos — así que aquí
+  // basta con instruir al mismo Frontend Engineer para que añada los
+  // archivos y el registro correctos, sin tocar el resto del prompt.
+  const pwaBlock = kind === "hybrid-pwa" ? `
+
+PWA REAL — OBLIGATORIO (el usuario ha pedido explícitamente una Progressive Web App, instalable y con soporte offline básico). Además de todos los archivos de arriba, incluye SIEMPRE:
+- public/manifest.json — con "name", "short_name", "start_url": "/", "display": "standalone", "background_color" y "theme_color" coherentes con el design system, "icons" apuntando a public/icon-192.png y public/icon-512.png (192x192 y 512x512, purpose "any maskable").
+- public/icon-192.png y public/icon-512.png — genera un SVG simple embebido como PNG placeholder no es posible aquí; en su lugar crea public/icon.svg con un diseño simple basado en el nombre/tema del proyecto Y referencia ese mismo icon.svg también como "icons" en el manifest con type "image/svg+xml" (además de los PNG, por si el usuario los sustituye luego) — así el manifest es válido incluso antes de que el usuario suba iconos reales.
+- public/service-worker.js — cache-first para assets estáticos (JS/CSS/imágenes) generados por Vite, network-first para llamadas a /api/*. Debe registrar un evento "install" (cachea el shell de la app) y "fetch" (sirve desde cache si existe, si no va a red).
+- src/registerServiceWorker.${utilExt} — función que registra public/service-worker.js vía \`navigator.serviceWorker.register('/service-worker.js')\`, solo si \`'serviceWorker' in navigator\`, envuelta en \`window.addEventListener('load', ...)\`. Debe llamarse desde src/main.${ext}.
+- En index.html: \`<link rel="manifest" href="/manifest.json">\` y \`<meta name="theme-color" content="...">\` dentro de <head>, coherente con el color de \`theme_color\` del manifest.
+- README.md debe incluir una sección "## PWA — instalación y límites reales" explicando: (1) cómo probarla (Chrome DevTools → Application → Manifest/Service Workers), (2) que el soporte offline cubre el shell de la app y llamadas ya cacheadas, NO datos nuevos sin conexión, (3) que para verla instalable de verdad hace falta HTTPS (Vercel ya lo da automáticamente en producción).` : "";
   return `
 [IDENTIDAD Y PROPOSITO — LEE ESTO PRIMERO]
 Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos (apps, webs, SaaS, dashboards, e-commerce, etc.).
@@ -390,7 +407,7 @@ FORMATEO LOCALIZADO:
 - Fechas: toLocaleDateString("es-ES") o date-fns/format con locale es.
 - Moneda: toLocaleString("es-ES", { style: "currency", currency: "EUR" }) o segun sector.
 - Numeros grandes: toLocaleString("es-ES") para separadores de miles correctos.
-
+${pwaBlock}
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
@@ -2228,7 +2245,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     ? buildPythonSystemPrompt(kind)
     : plan.platform === "mobile-native"
     ? buildMobileFrontendSystemPrompt()
-    : buildFrontendSystemPrompt(language);
+    : buildFrontendSystemPrompt(language, kind);
   let accumulated = "";
   let truncated = false;
 
