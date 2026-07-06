@@ -8924,9 +8924,10 @@ window.motion = {div:'div',span:'span',button:'button',section:'section',p:'p',h
 window.AnimatePresence = ({children})=>children;
 </script>
 <script type="text/babel" data-presets="react,typescript">
-const {useState,useEffect,useRef,useCallback,useMemo,useContext,useReducer,forwardRef,createContext,memo,Fragment} = React;
-const clsx = (...a) => a.flat().filter(Boolean).join(' ');
-const cn = clsx;
+/* useState/useEffect/etc, clsx y cn ya están declarados como globales por
+   el <script> anterior (polyfills) -- comparten el mismo scope global al
+   no ser modules, así que NO se redeclaran aquí (causaba
+   "Identifier 'useState' has already been declared" en el navegador). */
 
 ${cleanApp}
 
