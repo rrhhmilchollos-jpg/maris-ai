@@ -8,6 +8,30 @@ const INSTALL_TIMEOUT_MS = 4 * 60_000;
 const BUILD_TIMEOUT_MS = 3 * 60_000;
 const APP_DIR = "/home/user/astro-import";
 
+// Imágenes binarias reales (no .svg, que ya es texto y ya se incluía) --
+// a petición explícita del usuario, tras confirmar que ninguna imagen
+// real de un proyecto importado sobrevivía nunca al proceso, ni con la
+// lectura funcionando bien. Se leen como bytes de verdad (no como texto,
+// que las corrompería) y se incrustan como data URI base64 directamente
+// en el HTML/CSS que las referencia -- mismo enfoque que ya usa el resto
+// de Maris AI para las imágenes generadas por IA (base64 embebido, sin
+// almacenamiento de blobs aparte).
+const IMAGE_EXTS: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".bmp": "image/bmp",
+};
+// Presupuesto de imágenes embebidas en base64 -- MongoDB tiene límite de
+// 16MB por documento y el resto del bundle de texto también necesita
+// espacio (ver MAX_CODE_BYTES en import.ts). Se para de incrustar más
+// imágenes al llegar a este límite, en vez de reventar el límite de
+// tamaño del documento o desplazar contenido de texto importante.
+const MAX_IMAGE_EMBED_BYTES = 6 * 1024 * 1024; // 6MB en base64 (~4.5MB de imágenes reales)
+
 export interface AstroBuildResult {
   ok: boolean;
   files?: Record<string, string>;
@@ -15,6 +39,7 @@ export interface AstroBuildResult {
   buildLog?: string;
   reason?: string;
   removedPackages?: string[];
+  skippedImages?: string[];
 }
 
 /**
@@ -376,8 +401,44 @@ console.log('Override añadido: ${missingPackage} -> stub vacío local');
 
     const outFiles: Record<string, string> = {};
     const readErrors: string[] = [];
+    const imageDataUris: Record<string, string> = {}; // nombre de archivo -> data:image/...;base64,...
+    const skippedImages: string[] = [];
+    let embeddedImageBytes = 0;
+
     for (const fullPath of distPaths) {
       const relative = fullPath.replace(`${APP_DIR}/dist/`, "");
+      const ext = ("." + relative.split(".").pop()!).toLowerCase();
+
+      if (IMAGE_EXTS[ext]) {
+        // Imagen binaria real -- leer como BYTES, nunca como texto (la
+        // decodificación de texto corrompe datos binarios sin avisar).
+        try {
+          if (embeddedImageBytes >= MAX_IMAGE_EMBED_BYTES) {
+            skippedImages.push(relative);
+            continue;
+          }
+          const bytes = await sandbox.files.read(fullPath, { format: "bytes" } as any);
+          const buffer = Buffer.from(bytes as any);
+          const base64 = buffer.toString("base64");
+          if (embeddedImageBytes + base64.length > MAX_IMAGE_EMBED_BYTES) {
+            skippedImages.push(relative);
+            continue;
+          }
+          embeddedImageBytes += base64.length;
+          // Se indexa por nombre de archivo (basename), no por ruta
+          // completa -- Astro suele referenciar assets con rutas
+          // relativas o absolutas distintas al path físico real dentro de
+          // dist/, y el nombre de archivo (con su hash único que genera
+          // Astro) es lo único que coincide de forma fiable en el HTML/CSS.
+          const basename = relative.split("/").pop()!;
+          imageDataUris[basename] = `data:${IMAGE_EXTS[ext]};base64,${base64}`;
+        } catch (readErr: any) {
+          readErrors.push(`${relative} (imagen): ${readErr?.message || String(readErr)}`);
+          logger.warn({ readErr, fullPath }, "No se pudo leer una imagen de dist/ — se omite, la web puede quedar con huecos donde debería haber fotos");
+        }
+        continue;
+      }
+
       try {
         // NOTA: sandbox.files.read() es el método estándar del SDK de E2B
         // para leer contenido de archivos como texto -- verificado contra
@@ -399,6 +460,31 @@ console.log('Override añadido: ${missingPackage} -> stub vacío local');
       }
     }
 
+    // Sustituir las referencias a imágenes en el HTML/CSS/JS de texto por
+    // sus data URIs embebidos -- así el navegador las muestra directamente
+    // sin necesitar ningún archivo aparte ni servicio de almacenamiento.
+    // Se sustituye por NOMBRE DE ARCHIVO (con su hash único de Astro), lo
+    // que evita coincidencias falsas con rutas parecidas pero distintas.
+    if (Object.keys(imageDataUris).length > 0) {
+      for (const [path, textContent] of Object.entries(outFiles)) {
+        let replaced = textContent;
+        for (const [basename, dataUri] of Object.entries(imageDataUris)) {
+          if (replaced.includes(basename)) {
+            // Reemplaza cualquier aparición del nombre de archivo dentro de
+            // rutas típicas (src="...", url(...), href="...") por el data
+            // URI completo -- regex simple pero seguro: solo actúa si el
+            // nombre de archivo aparece de verdad, evitando coste
+            // innecesario en archivos que no lo mencionan.
+            const escaped = basename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const pathPattern = new RegExp(`(["'(])[^"')]*${escaped}(["')])`, "g");
+            replaced = replaced.replace(pathPattern, `$1${dataUri}$2`);
+          }
+        }
+        if (replaced !== textContent) outFiles[path] = replaced;
+      }
+      logger.info({ embeddedImageCount: Object.keys(imageDataUris).length, embeddedBytes: embeddedImageBytes, skippedCount: skippedImages.length }, "Imágenes reales incrustadas como base64 en el HTML/CSS del proyecto importado");
+    }
+
     // ENCONTRADO A PETICION DEL USUARIO (caso real: import "exitoso" que
     // en el editor de código solo mostraba la plantilla vacía por
     // defecto, sin nada del contenido real): antes, si TODAS las lecturas
@@ -417,13 +503,14 @@ console.log('Override añadido: ${missingPackage} -> stub vacío local');
       };
     }
 
-    logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length, totalDistFiles: distPaths.length, readErrorCount: readErrors.length, removedPackages }, "Astro import: build completado correctamente");
+    logger.info({ sandboxId: sandbox.sandboxId, outFileCount: Object.keys(outFiles).length, totalDistFiles: distPaths.length, readErrorCount: readErrors.length, skippedImagesCount: skippedImages.length, removedPackages }, "Astro import: build completado correctamente");
     return {
       ok: true,
       files: outFiles,
       installLog: finalInstall.stdout,
-      buildLog: readErrors.length > 0 ? `${build.stdout}\n\n=== ${readErrors.length} archivo(s) no se pudieron leer (probablemente binarios: imágenes, fuentes) ===\n${readErrors.join("\n")}` : build.stdout,
+      buildLog: readErrors.length > 0 ? `${build.stdout}\n\n=== ${readErrors.length} archivo(s) no se pudieron leer ===\n${readErrors.join("\n")}` : build.stdout,
       removedPackages: removedPackages.length > 0 ? removedPackages : undefined,
+      skippedImages: skippedImages.length > 0 ? skippedImages : undefined,
     };
   } catch (err: any) {
     // Este catch ahora solo debería dispararse por fallos AJENOS a los
