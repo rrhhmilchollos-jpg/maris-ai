@@ -452,6 +452,65 @@ Output STRICT JSON only: {"frontendCode":"all files as one string, separated by 
 - Close every quote, brace and bracket. Output ONLY the JSON object.`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PYTHON BACKEND (python-api / django) — ENCONTRADO Y CORREGIDO a petición
+// del usuario: hasta ahora, kind="python-api"/"django" SOLO generaba Python
+// real cuando el usuario elegía una plantilla prefabricada de la galería
+// (templates.ts, con código hardcodeado). Si el usuario escribía su propio
+// prompt libre y elegía "Python API" o "Django" en el desplegable, el
+// sistema seguía llamando a buildFrontendSystemPrompt (React/Vite) porque
+// la selección de systemPrompt solo comprobaba plan.platform==="mobile-native"
+// -- nunca comprobaba kind. Resultado: se cobraba el precio de "preset
+// avanzado" (3 créditos) por una app React normal etiquetada como Python.
+// Este system prompt sigue exactamente las mismas convenciones de stack que
+// ya usan las plantillas de la galería (fastapi-todo / django-blog en
+// templates.ts) para que el resultado sea coherente tanto si el usuario
+// parte de una plantilla como si escribe su propio prompt desde cero.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildPythonSystemPrompt(kind: "python-api" | "django"): string {
+  const stackBlock = kind === "django"
+    ? `Stack OBLIGATORIO: Python 3.11+ con Django 5.1, server-rendered con plantillas Django (NO React, NO Vite, NO Tailwind por CDN).
+
+ARCHIVOS OBLIGATORIOS:
+- requirements.txt (incluye "django==5.1.4" y cualquier otra dependencia real que uses)
+- manage.py
+- <paquete_proyecto>/settings.py (DEBUG=True, ALLOWED_HOSTS=['*'], SECRET_KEY con comentario "change-me-in-production", DATABASES sqlite3 por defecto, INSTALLED_APPS incluyendo tu(s) app(s))
+- <paquete_proyecto>/urls.py, wsgi.py, asgi.py
+- Al menos una app Django real con: models.py, views.py, urls.py, admin.py (registra los modelos con list_display sensato), templates/<app>/*.html
+- README.md con: "pip install -r requirements.txt", "python manage.py makemigrations", "python manage.py migrate", "python manage.py createsuperuser", "python manage.py runserver 0.0.0.0:8000"
+
+Usa el ORM de Django (no SQLAlchemy). CSS puede ir embebido en un base.html con {% block content %} — mantenlo simple y coherente con lo que pide el usuario.`
+    : `Stack OBLIGATORIO: Python 3.11+ con FastAPI 0.115+ + uvicorn + SQLAlchemy 2.0 + pydantic v2 + SQLite.
+
+ARCHIVOS OBLIGATORIOS:
+- requirements.txt (fastapi, "uvicorn[standard]", sqlalchemy, pydantic — versiones recientes y compatibles entre sí)
+- main.py — define \`app = FastAPI(title=..., version="1.0.0")\`, modelos pydantic de entrada/salida con type hints estrictos, modelos SQLAlchemy con declarative_base + Session local, motor sqlite (\`app.db\`) y \`Base.metadata.create_all(engine)\` al arranque
+- Endpoints REST completos y coherentes con lo que pide el usuario (como mínimo: GET /health, y CRUD real sobre el/los recurso(s) principal(es) del dominio pedido)
+- CORSMiddleware con allow_origins=['*'] para que cualquier frontend pueda probarlo
+- README.md con: "pip install -r requirements.txt", "uvicorn main:app --reload --port 8000", un ejemplo curl por endpoint, y una sección "Deploy a Vercel" explicando que se necesita un api/index.py que reexporte \`app\` y un vercel.json con @vercel/python (Maris lo añade automáticamente al desplegar)`;
+
+  return `
+[IDENTIDAD Y PROPOSITO]
+Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos.
+Tu rol específico aquí es el de Python Backend Engineer: el usuario ha elegido explícitamente "${kind === "django" ? "Django" : "API en Python"}" como tipo de proyecto. Genera SIEMPRE Python real y funcional — NUNCA React, NUNCA JavaScript, NUNCA Vite.
+
+[ROL ESPECIFICO: PYTHON BACKEND ENGINEER]
+${stackBlock}
+
+CALIDAD:
+- Código real y completo — cero TODOs, cero funciones vacías ni endpoints placeholder.
+- Type hints estrictos en todo el código Python.
+- Manejo de errores real (404 cuando un recurso no existe, validación de entrada vía pydantic, etc.).
+- Todo el texto orientado al usuario (mensajes, docs del README) en español (es-ES); nombres de variables/funciones en inglés como es convención en Python.
+- NO incluyas absolutamente NADA de frontend HTML/JS separado salvo que el propio framework lo requiera (plantillas Django), ni package.json, ni vite.config, ni tailwind.
+
+LIMITACIÓN A DOCUMENTAR — el README.md debe explicar honestamente que esto es el código fuente del backend, listo para ejecutar localmente o desplegar, pero que el usuario deberá instalar Python/pip él mismo si no usa el despliegue automático de Maris AI.
+
+Usa '// === FILE: <path> ===' para separar cada archivo dentro de frontendCode. Incluye SIEMPRE todos los archivos listados como obligatorios arriba.
+Output STRICT JSON only: {"frontendCode":"all files as one string, separated by '// === FILE: <path> ===', plus README.md"}
+- Close every quote, brace and bracket. Output ONLY the JSON object.`;
+}
+
 const BACKEND_SYSTEM_PROMPT = `
 [IDENTIDAD Y PROPOSITO — LEE ESTO PRIMERO]
 Eres un agente especializado dentro del equipo de IA de Maris AI — la plataforma española para GENERAR PROYECTOS DE SOFTWARE completos (apps, webs, SaaS, dashboards, e-commerce, etc.).
@@ -2126,6 +2185,7 @@ async function generateFrontendCode(
   agentPlan = selectAgentModelPlan(prompt, coderModel),
   onPartial?: (text: string) => void,
   isFreeUser = false,
+  kind?: string,
 ): Promise<CodeGenResult> {
   const planSummary = JSON.stringify({
     title: plan.title,
@@ -2164,7 +2224,9 @@ Now produce the JSON object with frontendCode containing every listed file.`;
 
   const frontendModel = agentPlan.agents.frontend.model;
   const provider = frontendModel === "gpt-5.4" ? "gpt-5" : resolveCoderProvider(frontendModel);
-  const systemPrompt = plan.platform === "mobile-native"
+  const systemPrompt = (kind === "python-api" || kind === "django")
+    ? buildPythonSystemPrompt(kind)
+    : plan.platform === "mobile-native"
     ? buildMobileFrontendSystemPrompt()
     : buildFrontendSystemPrompt(language);
   let accumulated = "";
@@ -4344,8 +4406,18 @@ export async function generateApp(
   const runResearch = execPlan.phases.includes("research");
   const runDesign = execPlan.phases.includes("design");
   const runIntegration = execPlan.phases.includes("integration");
-  const runQa = execPlan.phases.includes("qa");
-  const runTests = execPlan.phases.includes("tests");
+  // ENCONTRADO a petición del usuario implementando generación real de
+  // Python (python-api/django) en prompt libre: reviewBundle, runTestingAgent,
+  // validateBundle/runValidatePatchLoop y el PM Agent Quality Gate (Fase 7)
+  // están todos diseñados para React/Vite -- exigen encontrar un entry point
+  // tipo src/App.tsx, revisan "pages/components" contra el blueprint, y el
+  // Patcher Agent puede reescribir código creyendo que está "roto" cuando en
+  // realidad es Python válido. Sin este bypass, generar con kind=python-api
+  // o kind=django habría producido Python correcto en la Fase de coder para
+  // acto seguido destruirlo/corromperlo en las fases de QA posteriores.
+  const isPythonKind = requestContext?.kind === "python-api" || requestContext?.kind === "django";
+  const runQa = execPlan.phases.includes("qa") && !isPythonKind;
+  const runTests = execPlan.phases.includes("tests") && !isPythonKind;
 
   /* === Phase 1: research + architect === */
   let research = "";
@@ -4558,7 +4630,7 @@ export async function generateApp(
           logger.info({ kb: Math.round(chars / 1000) }, "coder: frontend progress");
         }
       }, turboModel, language, templateContextBlock, agentModelPlan,
-      (partial) => { frontendAccumulated = partial; }, isFreeUser);
+      (partial) => { frontendAccumulated = partial; }, isFreeUser, kind);
       clearInterval(coderHeartbeat);
       return result;
     } catch (err) {
@@ -4767,7 +4839,12 @@ Output STRICT JSON only, no markdown, no explanation.`,
   await log("qa", issueCount > 0 ? `${issueCount} issue(s) detectada(s) — pasando al patcher.` : "Sin issues detectadas en revisión inicial.", issueCount > 0 ? "warn" : "info");
 
   /* === Phase 5: Testing Agent (Systematic Validation & Repair) === */
-  const testedFrontend = await runPhase("testing", async () => {
+  // Saltada para kind=python-api/django: runTestingAgent y validateBundle
+  // buscan un entry point React (src/App.tsx) y "reparan" cualquier bundle
+  // que no lo tenga -- destruirían Python válido creyendo que está roto.
+  const testedFrontend = isPythonKind
+    ? frontendResult.code
+    : await runPhase("testing", async () => {
     const result = await runTestingAgent(frontendResult.code, {
       jobId: jobId || "unknown",
       prompt,
@@ -4785,10 +4862,13 @@ Output STRICT JSON only, no markdown, no explanation.`,
     }
     return result;
   });
+  if (isPythonKind) await log("qa", "Proyecto Python — se omiten Testing Agent y validador de navegación (son específicos de React/Vite).");
 
   /* === Phase 6: validate → patch loop (Final Polish) === */
-  await log("validator", "Compilando bundle con esbuild para verificar sintaxis y dependencias…");
-  let finalFrontend = await runPhase("validate-patch-loop", () =>
+  // Misma razón: runValidatePatchLoop compila con esbuild asumiendo JS/TS.
+  let finalFrontend = isPythonKind
+    ? testedFrontend
+    : await runPhase("validate-patch-loop", () =>
     runValidatePatchLoop(
       testedFrontend,
       report,
@@ -4801,8 +4881,12 @@ Output STRICT JSON only, no markdown, no explanation.`,
       agentModelPlan.tier === "ultra" ? 8 : undefined, // proyectos ultra-complejos: más margen de reparación
     ),
   );
+  if (isPythonKind) await log("validator", "Proyecto Python — se omite el compilador esbuild (solo aplica a JS/TS).");
 
   /* === Phase 7: PM Agent Quality Gate (Emergent.sh Style) === */
+  if (isPythonKind) {
+    await log("qa", "Proyecto Python — se omite el PM Agent Quality Gate (compara contra un blueprint de páginas/componentes React).");
+  } else {
   onProgress?.({ phase: "qa", progress: 95, note: "📋 PM Agent: verificando que la app cumple todos los requisitos del usuario…" });
   await log("qa", "📋 PM Agent activado — Quality Gate final al estilo emergent.sh…");
   const emergentBlueprint: EmergentArchitectBlueprint = {
@@ -4873,6 +4957,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
     }
   } catch (pmErr) {
     await log("qa", "PM Agent: validación omitida por error interno.", "warn");
+  }
   }
 
   /* === Phase 7b: Integration Agent Enhanced (Emergent.sh Style) === */
