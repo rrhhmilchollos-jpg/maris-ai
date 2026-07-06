@@ -234,8 +234,13 @@ export async function buildAstroProjectInE2B(
     // mismo problema (frecuente en proyectos con package.json antiguos).
     let finalInstall = install;
     for (let attempt = 0; attempt < 3 && finalInstall.exitCode !== 0; attempt++) {
-      const etargetMatch = /npm error notarget No matching version found for ([^\s@]+(?:\/[^\s@]+)?)@([\d.]+)/i.exec(finalInstall.stderr)
-        || /npm error notarget No matching version found for ([^\s@]+(?:\/[^\s@]+)?)@([\d.]+)/i.exec(finalInstall.stdout);
+      // BUG PROPIO ENCONTRADO Y CORREGIDO: el regex anterior no contemplaba
+      // que los paquetes de Wix empiezan con "@" (paquetes con scope,
+      // "@wix/algo") -- [^\s@] excluye el propio símbolo @ del nombre del
+      // paquete, así que nunca coincidía con nada que empezara por él.
+      // Confirmado con una prueba real antes de aplicar este cambio.
+      const etargetMatch = /npm error notarget No matching version found for (@?[^\s@]+)@([\d.]+)/i.exec(finalInstall.stderr)
+        || /npm error notarget No matching version found for (@?[^\s@]+)@([\d.]+)/i.exec(finalInstall.stdout);
       if (!etargetMatch) break; // No es este tipo de error concreto — no seguir reintentando a ciegas.
 
       const [, missingPackage, missingVersion] = etargetMatch;
