@@ -378,7 +378,20 @@ export default function DashboardPage() {
     if (me?.isPremium && coderModel === "auto") setCoderModel("auto");
   }, [me?.isPremium, coderModel]);
 
-  const { data: apps, isLoading: appsLoading } = useListApps();
+  const { data: apps, isLoading: appsLoading } = useListApps({
+    query: {
+      // Mientras haya alguna importación en curso, se refresca sola cada
+      // 5s para que el badge de estado se actualice sin recargar la
+      // página a mano -- así el usuario puede ver el progreso real desde
+      // el propio panel, sin depender de tener abierta la ventana
+      // original de importación (que puede cerrarse o tardar más de lo
+      // que esa ventana esperaba).
+      refetchInterval: (query: any) => {
+        const list = query?.state?.data as any[] | undefined;
+        return list?.some((a) => a.importStatus === "processing") ? 5000 : false;
+      },
+    },
+  });
   const isAdmin = !!me?.isAdmin;
 
   useEffect(() => {
@@ -1220,7 +1233,19 @@ export default function DashboardPage() {
                     {forkingId === (app.id || app._id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-6">{app.title}</CardTitle>
+                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-6 flex items-center gap-2">
+                      {app.title}
+                      {app.importStatus === "processing" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                          <Loader2 className="h-2.5 w-2.5 animate-spin" />Importando...
+                        </span>
+                      )}
+                      {app.importStatus === "failed" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 shrink-0">
+                          Importación falló
+                        </span>
+                      )}
+                    </CardTitle>
                     <CardDescription className="line-clamp-2">{app.description}</CardDescription>
                   </CardHeader>
                   <CardFooter className="text-xs text-muted-foreground border-t border-white/5 pt-3">
