@@ -28,6 +28,15 @@ router.get("/api/sitemap.xml", async (_req: Request, res: Response) => {
     { loc: "https://www.marisai.es/", freq: "daily", priority: "1.0" },
     { loc: "https://www.marisai.es/pricing", freq: "weekly", priority: "0.9" },
     { loc: "https://www.marisai.es/vs-emergent", freq: "monthly", priority: "0.8" },
+    // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría SEO/GEO): estas 3
+    // páginas de comparación existen y están bien construidas (schema.org
+    // FAQ, tabla comparativa, veredicto), pero nunca se habían incluido
+    // en el sitemap -- solo vs-emergent estaba. Sin aparecer aquí,
+    // Google (y cualquier IA que use el sitemap para descubrir contenido)
+    // podía tardar mucho mas en encontrarlas, o no encontrarlas nunca.
+    { loc: "https://www.marisai.es/vs-bolt", freq: "monthly", priority: "0.8" },
+    { loc: "https://www.marisai.es/vs-lovable", freq: "monthly", priority: "0.8" },
+    { loc: "https://www.marisai.es/vs-base44", freq: "monthly", priority: "0.8" },
     { loc: "https://www.marisai.es/news", freq: "hourly", priority: "0.8" },
     { loc: "https://www.marisai.es/showcase", freq: "daily", priority: "0.8" },
     { loc: "https://www.marisai.es/glosario", freq: "weekly", priority: "0.7" },
