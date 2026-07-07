@@ -6030,7 +6030,16 @@ router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
     // 1) Validar frontend
     const frontendReport = await validateBundle(app.frontendCode);
     let backendReport: ValidationReport | null = null;
-    if (app.backendCode) {
+    // ENCONTRADO A PETICION DEL USUARIO (caso real: Health Check mostrando
+    // 2 incidencias en un proyecto importado -- una del frontend, otra del
+    // backend): todo proyecto importado desde un ZIP/RAR guarda el backend
+    // como un simple comentario placeholder ("Backend no incluido"), NUNCA
+    // como código real -- validarlo como si fuera código React/Express
+    // real siempre falla con "no FILE markers found", incluso cuando esto
+    // es exactamente lo esperado para un import de solo frontend. Se omite
+    // la validación del backend si no tiene ningún marcador de archivo real.
+    const backendHasRealCode = !!app.backendCode && app.backendCode.includes("// === FILE:");
+    if (backendHasRealCode) {
       try {
         backendReport = await validateBundle(app.backendCode);
       } catch (err) {

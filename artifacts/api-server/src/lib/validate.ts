@@ -404,6 +404,28 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   const filesAnalyzed = Object.keys(vfs).length;
   logger.info({ filesAnalyzed }, "VALIDATOR: Bundle parseado.");
 
+  // ENCONTRADO A PETICION DEL USUARIO (caso real: "Pre-Deployment Health
+  // Check" marcando 2 incidencias falsas -- "no entry file" y "no FILE
+  // markers" -- en un proyecto importado que es HTML estatico puro, sin
+  // React en absoluto). Esta funcion se disenó para validar codigo React
+  // generado por IA durante el ciclo de reparacion (tester.ts) -- nunca
+  // tuvo en cuenta que un bundle valido puede ser simplemente un
+  // index.html autocontenido, sin ningun punto de entrada React que
+  // buscar. deployAppToVercel (el codigo que SI hace el despliegue real)
+  // ya reconoce esto correctamente (variable isStaticHtml) -- esta
+  // funcion de validacion, usada tambien como "chequeo previo" separado
+  // del despliegue real, no lo reconocia, dando una falsa alarma que
+  // asustaba sin motivo aunque el deploy fuera a funcionar bien.
+  const singleFilePaths = Object.keys(vfs);
+  const isStaticHtmlBundle =
+    singleFilePaths.length === 1 &&
+    /(^|\/)index\.html$/i.test(singleFilePaths[0]) &&
+    /^\s*<!DOCTYPE html>|^\s*<html[\s>]/i.test(vfs[singleFilePaths[0]] || "");
+  if (isStaticHtmlBundle) {
+    logger.info("VALIDATOR: bundle es HTML estático autocontenido -- válido sin punto de entrada React");
+    return { ok: true, issues: [], filesAnalyzed, durationMs: Date.now() - started };
+  }
+
   if (filesAnalyzed === 0) {
     // Mensaje mejorado que ayuda al usuario a entender qué salió mal
     const diagnosticMsg = bundle.length === 0
