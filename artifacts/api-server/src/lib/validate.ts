@@ -416,13 +416,24 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   // funcion de validacion, usada tambien como "chequeo previo" separado
   // del despliegue real, no lo reconocia, dando una falsa alarma que
   // asustaba sin motivo aunque el deploy fuera a funcionar bien.
-  const singleFilePaths = Object.keys(vfs);
-  const isStaticHtmlBundle =
-    singleFilePaths.length === 1 &&
-    /(^|\/)index\.html$/i.test(singleFilePaths[0]) &&
-    /^\s*<!DOCTYPE html>|^\s*<html[\s>]/i.test(vfs[singleFilePaths[0]] || "");
+  // ENCONTRADO A PETICION DEL USUARIO (caso real: tras el primer fix, el
+  // Health Check bajó de 2 a 1 incidencia -- la del backend se arregló,
+  // pero la del frontend seguía apareciendo). CAUSA: mi comprobación
+  // anterior exigía que el bundle tuviera EXACTAMENTE un único archivo
+  // (index.html a solas) -- demasiado estricta. Un proyecto estático real
+  // suele tener MÁS archivos (CSS aparte, imágenes, etc.), y esa
+  // comprobación nunca coincidía para esos casos. Corregido para usar
+  // EXACTAMENTE la misma lógica que ya usa deployAppToVercel (la función
+  // que hace el despliegue real) -- "isStaticHtml": no hay ningún archivo
+  // de entrada React conocido Y existe un index.html, sin importar
+  // cuántos otros archivos acompañen. Mismo criterio en los dos sitios,
+  // para no volver a tener dos funciones que no se ponen de acuerdo.
+  const hasReactEntry =
+    vfs["src/main.tsx"] || vfs["src/main.jsx"] || vfs["src/main.ts"] || vfs["src/main.js"] ||
+    vfs["apps/web/src/main.tsx"] || vfs["apps/web/src/main.ts"];
+  const isStaticHtmlBundle = !hasReactEntry && vfs["index.html"] != null;
   if (isStaticHtmlBundle) {
-    logger.info("VALIDATOR: bundle es HTML estático autocontenido -- válido sin punto de entrada React");
+    logger.info("VALIDATOR: bundle es un proyecto HTML estático (con o sin CSS/JS aparte) -- válido sin punto de entrada React");
     return { ok: true, issues: [], filesAnalyzed, durationMs: Date.now() - started };
   }
 
