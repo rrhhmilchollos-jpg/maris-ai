@@ -106,7 +106,11 @@ export async function startSSRServerInE2B(
       { timeoutMs: INSTALL_TIMEOUT_MS },
     ).catch(async () => {
       // Último recurso: npx en la misma sesión también.
-      return sandbox.commands.run(
+      // (sandbox! -- dentro de este closure anidado TS no puede garantizar
+      // que 'sandbox' siga sin ser null, aunque en la práctica siempre lo
+      // está aquí: solo se llega a este .catch si la línea anterior, que
+      // ya usó 'sandbox' sin problema, se ejecutó primero.)
+      return sandbox!.commands.run(
         `cd ${APP_DIR} && npx --yes pnpm@9 install --reporter=silent`,
         { timeoutMs: INSTALL_TIMEOUT_MS },
       );

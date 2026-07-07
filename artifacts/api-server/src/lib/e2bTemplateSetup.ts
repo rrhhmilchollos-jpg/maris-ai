@@ -58,8 +58,7 @@ export async function buildImportTemplate(): Promise<TemplateBuildResult> {
       .fromImage("node:20")
       .runCmd("apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*");
 
-    await Template.build(template, {
-      alias: IMPORT_TEMPLATE_ALIAS,
+    await Template.build(template, IMPORT_TEMPLATE_ALIAS, {
       // 4GB de RAM -- 8x lo que trae el sandbox por defecto (512 MiB).
       // Suficiente margen para instalar un proyecto grande tipo Wix Vibe
       // sin quedarse sin memoria a mitad de npm install. 2 vCPU es
@@ -67,9 +66,15 @@ export async function buildImportTemplate(): Promise<TemplateBuildResult> {
       // sobre todo E/S de disco y red durante la instalación).
       cpuCount: 2,
       memoryMB: 4096,
-      onBuildLogs: (msg: string) => {
-        logs.push(msg);
-        defaultBuildLogger()(msg);
+      // ENCONTRADO: onBuildLogs recibe un objeto LogEntry (con .message,
+      // .level, .timestamp), no un string plano como asumía el código
+      // original -- por eso no compilaba. También se corrigió pasar el
+      // alias como segundo argumento posicional en vez de dentro de
+      // options, ya que el campo 'alias' dentro de options está marcado
+      // @deprecated en la propia definición de tipos del SDK de e2b.
+      onBuildLogs: (logEntry) => {
+        logs.push(logEntry.message);
+        defaultBuildLogger()(logEntry);
       },
     });
 

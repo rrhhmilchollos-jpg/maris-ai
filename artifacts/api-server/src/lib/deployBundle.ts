@@ -79,7 +79,7 @@ export async function buildDeployHtml(opts: {
     const htmlContent = rawVfs[rawFileNames[0]];
     if (/^\s*<!DOCTYPE html>|^\s*<html[\s>]/i.test(htmlContent)) {
       logger.info({ title: opts.title }, "buildDeployHtml: bundle es un HTML estático autocontenido -- sirviendo directamente sin esbuild");
-      return opts.hasWatermark ? injectWatermarkToHTML(htmlContent, opts.removeWatermarkUrl) : htmlContent;
+      return opts.hasWatermark ? injectWatermarkToHTML(htmlContent, undefined, opts.removeWatermarkUrl) : htmlContent;
     }
   }
 
