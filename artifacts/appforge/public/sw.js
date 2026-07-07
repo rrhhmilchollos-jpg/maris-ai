@@ -31,6 +31,18 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
+  // ENCONTRADO a petición del usuario (crash real en consola: "Failed to
+  // execute 'put' on 'Cache': Request scheme 'chrome-extension' is
+  // unsupported"): algunas extensiones del navegador inyectan content
+  // scripts que hacen fetch() con esquemas que la Cache API no admite
+  // (chrome-extension://, moz-extension://, etc.). Como este listener
+  // intercepta CUALQUIER fetch dentro de su scope -- incluidos los de
+  // extensiones de terceros, no solo los de la propia app -- hay que
+  // filtrar por esquema http/https ANTES de intentar cachear nada.
+  if (!request.url.startsWith("http://") && !request.url.startsWith("https://")) {
+    return;
+  }
+
   // Nunca interceptar peticiones a la API — siempre red, siempre en tiempo real.
   if (request.url.includes("/api/")) {
     return;
