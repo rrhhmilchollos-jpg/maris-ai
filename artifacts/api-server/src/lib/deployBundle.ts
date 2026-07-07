@@ -1,6 +1,7 @@
 import * as esbuild from "esbuild";
 import { randomInt } from "node:crypto";
 import { bundleToFiles } from "./exportZip";
+import { isStaticHtmlBundle } from "@workspace/bundle-format";
 import { injectWatermarkToHTML } from "./watermark";
 import { resolveDynamicPins } from "./dynamicPinning";
 import { logger } from "./logger";
@@ -68,17 +69,17 @@ export async function buildDeployHtml(opts: {
   // lanzaba un error que se perdía en silencio antes de llegar al
   // iframe -- de ahí la pantalla en blanco sin explicación.
   //
-  // FIX: si el bundle es (o contiene) un único index.html que YA es un
-  // documento HTML completo (empieza por <!DOCTYPE html> o <html), se
-  // sirve tal cual, sin pasar por esbuild -- no hace falta "compilar"
-  // nada que el navegador ya sabe interpretar directamente.
+  // FIX: si el bundle es un proyecto HTML estático (con o sin CSS/JS
+  // aparte -- ya no exige que sea un único archivo, esa versión antigua
+  // se sustituyó por la comprobación compartida con validate.ts y el
+  // resto del proyecto, vía @workspace/bundle-format), se sirve
+  // directamente el index.html real, sin pasar por esbuild -- no hace
+  // falta "compilar" nada que el navegador ya sabe interpretar.
   const rawVfs = bundleToFiles(opts.bundle);
-  const rawFileNames = Object.keys(rawVfs);
-  const soloIndexHtml = rawFileNames.length === 1 && /(^|\/)index\.html$/i.test(rawFileNames[0]);
-  if (soloIndexHtml) {
-    const htmlContent = rawVfs[rawFileNames[0]];
+  if (isStaticHtmlBundle(rawVfs)) {
+    const htmlContent = rawVfs["index.html"];
     if (/^\s*<!DOCTYPE html>|^\s*<html[\s>]/i.test(htmlContent)) {
-      logger.info({ title: opts.title }, "buildDeployHtml: bundle es un HTML estático autocontenido -- sirviendo directamente sin esbuild");
+      logger.info({ title: opts.title }, "buildDeployHtml: bundle es un proyecto HTML estático -- sirviendo index.html directamente sin esbuild");
       return opts.hasWatermark ? injectWatermarkToHTML(htmlContent, undefined, opts.removeWatermarkUrl) : htmlContent;
     }
   }
