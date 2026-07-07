@@ -31,9 +31,39 @@ type ConnectorId =
   | "salesforce" | "hubspot" | "zoho-crm" | "dynamics365" | "sap-business-one"
   | "webhook";
 
+// ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de seguridad, mismo hilo
+// que los hallazgos anteriores del día): verifySupabase() hace una
+// petición real a una URL COMPLETAMENTE controlada por el usuario
+// (SUPABASE_URL), a diferencia de verifyNotion/verifyAirtable (que
+// siempre llaman a un host fijo, el usuario solo aporta la clave). Sin
+// esta comprobación, un usuario malicioso podría poner una URL interna
+// (metadatos de AWS/GCP, localhost, red privada de Railway) y usar el
+// servidor de Maris AI como intermediario para sondear su propia
+// infraestructura interna (SSRF) -- el mensaje de resultado (ok/error)
+// ya filtra si ese host interno responde o no, aunque no se devuelva el
+// cuerpo completo de la respuesta.
+function isPrivateOrInternalHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "0.0.0.0") return true;
+  // Rangos de IP privados/reservados habituales (RFC 1918 + link-local +
+  // metadatos de nube) -- comprobación por prefijo, suficiente sin
+  // necesitar una librería de parseo de IP completa para este caso.
+  const privatePrefixes = ["10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.30.", "172.31.", "192.168.", "169.254."];
+  return privatePrefixes.some((p) => h.startsWith(p));
+}
+
 async function verifySupabase(values: Record<string, string>): Promise<{ ok: boolean; message: string }> {
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = values;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return { ok: false, message: "Faltan URL o Anon Key." };
+  let parsed: URL;
+  try {
+    parsed = new URL(SUPABASE_URL);
+  } catch {
+    return { ok: false, message: "SUPABASE_URL no es una URL válida." };
+  }
+  if (parsed.protocol !== "https:" || isPrivateOrInternalHost(parsed.hostname)) {
+    return { ok: false, message: "SUPABASE_URL debe ser una URL https:// pública (no se permiten direcciones internas/privadas)." };
+  }
   const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/`, {
     headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
   });
@@ -150,6 +180,13 @@ async function verifySalesforce(values: Record<string, string>): Promise<{ ok: b
   if (!SALESFORCE_INSTANCE_URL || !SALESFORCE_ACCESS_TOKEN) {
     return { ok: false, message: "Faltan la URL de instancia o el Access Token (obtenido vía OAuth2 con tu Connected App de Salesforce)." };
   }
+  // Mismo hallazgo de seguridad que verifySupabase -- URL controlada por
+  // el usuario, validada contra SSRF antes de conectar.
+  let sfUrl: URL;
+  try { sfUrl = new URL(SALESFORCE_INSTANCE_URL); } catch { return { ok: false, message: "SALESFORCE_INSTANCE_URL no es una URL válida." }; }
+  if (sfUrl.protocol !== "https:" || isPrivateOrInternalHost(sfUrl.hostname)) {
+    return { ok: false, message: "SALESFORCE_INSTANCE_URL debe ser una URL https:// pública." };
+  }
   const res = await fetch(`${SALESFORCE_INSTANCE_URL.replace(/\/$/, "")}/services/data/v59.0/`, {
     headers: { Authorization: `Bearer ${SALESFORCE_ACCESS_TOKEN}` },
   });
@@ -162,6 +199,11 @@ async function verifyZohoCRM(values: Record<string, string>): Promise<{ ok: bool
   const { ZOHO_ACCESS_TOKEN, ZOHO_API_DOMAIN } = values;
   if (!ZOHO_ACCESS_TOKEN) return { ok: false, message: "Falta el Access Token OAuth2 de Zoho." };
   const domain = ZOHO_API_DOMAIN || "www.zohoapis.com";
+  // Mismo hallazgo -- ZOHO_API_DOMAIN es opcional y editable por el
+  // usuario (para las distintas regiones de Zoho), validado igual.
+  if (isPrivateOrInternalHost(domain.toLowerCase())) {
+    return { ok: false, message: "ZOHO_API_DOMAIN no puede ser una dirección interna/privada." };
+  }
   const res = await fetch(`https://${domain}/crm/v6/org`, {
     headers: { Authorization: `Zoho-oauthtoken ${ZOHO_ACCESS_TOKEN}` },
   });
@@ -174,6 +216,12 @@ async function verifyDynamics365(values: Record<string, string>): Promise<{ ok: 
   const { DYNAMICS_RESOURCE_URL, DYNAMICS_ACCESS_TOKEN } = values;
   if (!DYNAMICS_RESOURCE_URL || !DYNAMICS_ACCESS_TOKEN) {
     return { ok: false, message: "Faltan la URL del entorno o el Access Token (obtenido vía Azure AD / Entra ID OAuth2)." };
+  }
+  // Mismo hallazgo -- validado igual antes de conectar.
+  let dynUrl: URL;
+  try { dynUrl = new URL(DYNAMICS_RESOURCE_URL); } catch { return { ok: false, message: "DYNAMICS_RESOURCE_URL no es una URL válida." }; }
+  if (dynUrl.protocol !== "https:" || isPrivateOrInternalHost(dynUrl.hostname)) {
+    return { ok: false, message: "DYNAMICS_RESOURCE_URL debe ser una URL https:// pública." };
   }
   const res = await fetch(`${DYNAMICS_RESOURCE_URL.replace(/\/$/, "")}/api/data/v9.2/WhoAmI`, {
     headers: { Authorization: `Bearer ${DYNAMICS_ACCESS_TOKEN}`, Accept: "application/json" },
