@@ -708,6 +708,13 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
    - Indices .index() para campos de busqueda frecuente
    - populate() para relaciones entre modelos
    - toJSON({ virtuals: true, versionKey: false })
+   - RENDIMIENTO EN CONSULTAS DE LECTURA: usa .lean() en TODAS las consultas
+     de solo lectura (GET) que no necesiten metodos de instancia de Mongoose
+     -- evita el overhead de hidratar documentos completos como instancias
+     cuando solo hace falta el JSON plano. En listados con muchos campos,
+     usa .select() para proyectar solo los campos que el frontend consume
+     de verdad en esa vista concreta, en vez de traer el documento entero
+     por defecto.
 
 7. SEED DATA REAL:
    - 8-12 registros con datos en espanol (nombres, ciudades, descripciones reales)
