@@ -1027,3 +1027,50 @@ export async function runVisualTester(opts: {
     screenshots: lastShots,
   };
 }
+
+/**
+ * ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de "contras" del vibe
+ * coding — punto real y confirmado: las apps de clientes son SPAs sin
+ * ningún contenido visible en el HTML inicial, a diferencia de la propia
+ * web de Maris AI, que sí tiene prerenderizado desde hace tiempo).
+ *
+ * Navega con Puppeteer a la home ya desplegada de una app de cliente,
+ * espera a que React renderice de verdad, y extrae el HTML resultante
+ * del contenedor #root -- ese HTML se puede insertar después en el
+ * documento inicial servido, para que cualquier rastreador que lea el
+ * HTML en crudo (sin ejecutar JavaScript, o con ejecución limitada) vea
+ * contenido real en vez de una carcasa vacía.
+ *
+ * SEGURO para usuarios reales: las apps generadas usan
+ * `ReactDOM.createRoot(...).render(<App />)` (confirmado en el prompt
+ * real, no hydrateRoot) -- createRoot SUSTITUYE el contenido del nodo al
+ * montar, no intenta "casarlo" con el HTML existente, así que no hay
+ * ningún riesgo de errores de hidratación por insertar HTML previo ahí.
+ */
+export async function prerenderAppHome(url: string): Promise<string | null> {
+  let browser: Browser | null = null;
+  try {
+    browser = await launchBrowser();
+    const page: Page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 800 });
+    await page.goto(url, { waitUntil: "networkidle0", timeout: 20_000 });
+    // Margen extra para animaciones de entrada / datos cargados de forma
+    // asíncrona tras el primer render -- mismo tipo de espera que ya usa
+    // takeScreenshots() más arriba en este archivo para el mismo problema.
+    await new Promise((r) => setTimeout(r, 1500));
+    const rootHtml: string = await page.evaluate(() => {
+      const root = document.getElementById("root");
+      return root ? root.innerHTML : "";
+    });
+    if (!rootHtml || rootHtml.trim().length < 20) {
+      rootLogger.warn({ url }, "prerenderAppHome: el contenido extraído está vacío o es demasiado corto -- se descarta");
+      return null;
+    }
+    return rootHtml;
+  } catch (err) {
+    rootLogger.warn({ err, url }, "prerenderAppHome: no se pudo prerenderizar -- se continúa sin esto, no es bloqueante");
+    return null;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}

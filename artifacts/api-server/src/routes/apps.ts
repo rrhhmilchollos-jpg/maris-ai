@@ -8037,8 +8037,30 @@ export async function runDeployForApp(args: {
   if (!result.ok) {
     throw new Error(`Deploy failed: ${JSON.stringify(result.failure)}`);
   }
+  const url = result.result.url;
+  // Prerenderizado de la home real, en segundo plano -- NUNCA bloquea la
+  // respuesta del deploy al cliente (Puppeteer puede tardar varios
+  // segundos, y esto es una mejora de SEO, no algo que el cliente esté
+  // esperando ver). Si falla por cualquier motivo, se ignora en
+  // silencio -- no es bloqueante ni crítico para que el deploy en sí
+  // haya sido un éxito.
+  void (async () => {
+    try {
+      const { prerenderAppHome } = await import("../lib/visualTester");
+      const html = await prerenderAppHome(url);
+      if (html) {
+        await GeneratedApp.updateOne(
+          { _id: args.appId },
+          { $set: { prerenderedHomeHtml: html.slice(0, 500_000), prerenderedAt: new Date() } },
+        );
+        args.log.info({ appId: args.appId }, "Prerenderizado de la home guardado tras el deploy");
+      }
+    } catch (err) {
+      args.log.warn({ err, appId: args.appId }, "Prerenderizado tras el deploy falló -- ignorado, no es bloqueante");
+    }
+  })();
   return {
-    url: result.result.url,
+    url,
     slug: (result.result as any).slug ?? "",
   };
 }

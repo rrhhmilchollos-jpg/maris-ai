@@ -126,7 +126,7 @@ export async function deployAppToVercel(opts: {
   const deployFiles =
     appKind === "python-api" || appKind === "django"
       ? preparePythonProjectForVercel(bundleFiles, appKind)
-      : prepareViteProjectForVercel(bundleFiles, isStaticHtml, row.title);
+      : prepareViteProjectForVercel(bundleFiles, isStaticHtml, row.title, (row as any).prerenderedHomeHtml);
 
   let projectId = row.vercelProjectId;
   const projectName = sanitiseProjectName(`maris-${appId.slice(0, 8)}-${row.title}`);
@@ -742,6 +742,7 @@ function prepareViteProjectForVercel(
   files: Record<string, string>,
   isStaticHtml = false,
   appTitle = "Maris AI App",
+  prerenderedHomeHtml?: string,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [rawPath, contents] of Object.entries(files)) {
@@ -912,6 +913,24 @@ function prepareViteProjectForVercel(
       "</body>",
       `    <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}</script>\n` +
       `  </body>`,
+    );
+  }
+
+  // Inyectar el HTML prerenderizado real (si existe) dentro de
+  // <div id="root"> -- SEGURO para usuarios reales porque las apps
+  // generadas usan ReactDOM.createRoot(...).render(<App />), que
+  // SUSTITUYE el contenido del nodo al montar en vez de intentar
+  // "hidratarlo" -- cero riesgo de errores de hidratación. Un
+  // rastreador que lea el HTML en crudo (sin ejecutar JavaScript, o con
+  // ejecución limitada) sí ve contenido real en vez de un div vacío.
+  // Idempotente: solo si el contenedor está realmente vacío, para no
+  // duplicar contenido en redeploys sobre un index.html ya inyectado
+  // antes con contenido de una versión anterior de la app.
+  const prerendered = prerenderedHomeHtml;
+  if (out["index.html"] && prerendered && /<div id=["']root["']\s*><\/div>/.test(out["index.html"])) {
+    out["index.html"] = out["index.html"].replace(
+      /<div id=["']root["']\s*><\/div>/,
+      `<div id="root">${prerendered}</div>`,
     );
   }
 
