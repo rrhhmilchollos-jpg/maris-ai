@@ -8075,8 +8075,31 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
     // frontend hace polling de GET /apps/:id/deploy-status, que lee
     // deployPhase — escrito en vivo dentro de deployAppToVercel en cada
     // fase real del proceso (no una animación con temporizadores).
-    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch((err) => {
+    // ENCONTRADO A PETICION DEL USUARIO (caso real: deploy que siempre
+    // mostraba "El despliegue no se pudo completar" sin ningun detalle):
+    // este catch solo registraba el error en los logs del SERVIDOR --
+    // nunca lo guardaba en GeneratedApp.deployError, que es exactamente
+    // el campo que lee GET /apps/:id/deploy-status para mostrarselo al
+    // cliente. Resultado: el campo se quedaba siempre en null (solo se
+    // limpiaba al empezar, nunca se rellenaba al fallar), y el frontend
+    // caia siempre en su mensaje generico de respaldo.
+    runDeployForApp({ appId: req.params.id, userId, log: logger }).catch(async (err) => {
       logger.error({ err, appId: req.params.id }, "[deploy] Falló el deploy en segundo plano");
+      const rawMessage = err instanceof Error ? err.message : String(err);
+      // El mensaje de runDeployForApp viene como 'Deploy failed:
+      // {"kind":"...","status":...,"message":"..."}' -- se intenta
+      // extraer el "message" real de ese JSON para mostrar algo legible,
+      // con el texto completo como respaldo si el parseo falla.
+      let friendlyMessage = rawMessage;
+      try {
+        const jsonPart = rawMessage.replace(/^Deploy failed:\s*/, "");
+        const parsed = JSON.parse(jsonPart);
+        friendlyMessage = parsed?.message || parsed?.kind || rawMessage;
+      } catch { /* si no es JSON, se usa el mensaje crudo tal cual */ }
+      await GeneratedApp.updateOne(
+        { _id: req.params.id },
+        { $set: { deployError: friendlyMessage.slice(0, 500), deployPhase: "failed" } },
+      ).catch((dbErr) => logger.error({ dbErr }, "No se pudo guardar deployError en la base de datos"));
     });
 
     res.status(202).json({ status: "started", creditsCharged, freeRedeploy: withinGraceWindow, isFirstPaidDeploy });
