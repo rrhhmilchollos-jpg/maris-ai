@@ -6960,10 +6960,20 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
     const refundAmount = Math.round((stuckJob as any).creditsCost ?? 0);
     if (refundAmount > 0) {
       try {
-        await chargeCredits({
+        // ENCONTRADO CON DATOS REALES (auditoria de codigo, mismo dia):
+        // este reembolso usaba chargeCredits() con un importe negativo --
+        // la aritmetica cuadraba bien (el saldo se restauraba
+        // correctamente), pero la transaccion quedaba mal categorizada:
+        // chargeCredits() SIEMPRE crea kind:"usage", incluso con importe
+        // negativo, en vez de kind:"refund" -- corromperia cualquier
+        // informe financiero que distinga gastado de reembolsado. Existe
+        // una funcion dedicada refundCredits() que categoriza bien esto;
+        // se usa aqui en su lugar.
+        const { refundCredits } = await import("../lib/credits");
+        await refundCredits({
           userId: String((stuckJob as any).userId),
           isAdmin: false,
-          amount: -refundAmount,
+          amount: refundAmount,
           description: "Reembolso de seguridad: generación pausada por mantenimiento del sistema, nunca se completó",
         });
       } catch (refundErr) {
