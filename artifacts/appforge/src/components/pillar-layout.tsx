@@ -115,7 +115,7 @@ export function PillarLayout({
   }, [slug, pageTitle, metaDescription, h1, canonicalUrl]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background">
       <section className="py-20 md:py-24 border-b border-white/5">
         <div className="container px-4 mx-auto max-w-3xl text-center">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-6 leading-tight">{h1}</h1>
@@ -165,6 +165,6 @@ export function PillarLayout({
           </p>
         </div>
       </footer>
-    </div>
+    </main>
   );
 }

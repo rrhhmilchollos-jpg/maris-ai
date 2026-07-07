@@ -132,7 +132,7 @@ export default function DemoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#06060f] text-white">
+    <main className="min-h-screen bg-[#06060f] text-white">
       {/* ── Header ── */}
       <header className="border-b border-white/[0.06] bg-[#06060f]/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -411,6 +411,6 @@ export default function DemoPage() {
         </div>
 
       </div>
-    </div>
+    </main>
   );
 }
