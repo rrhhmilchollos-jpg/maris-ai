@@ -6204,10 +6204,16 @@ Responde SOLO con JSON estricto, sin markdown:
     if (codeReviewChargeApplied) {
       try {
         const userId = req.userId as string;
-        await chargeCredits({
+        // Corregido para usar refundCredits() en vez de chargeCredits con
+        // importe negativo -- este último categoriza SIEMPRE como
+        // kind:"usage" sin importar el signo, corrompiendo los informes
+        // financieros que distinguen gastado de reembolsado (mismo
+        // hallazgo ya corregido en la limpieza de jobs "reviewing").
+        const { refundCredits } = await import("../lib/credits");
+        await refundCredits({
           userId,
           isAdmin: false,
-          amount: -CODE_REVIEW_COST,
+          amount: CODE_REVIEW_COST,
           description: "Reembolso automático — fallo en revisión de código",
         });
       } catch (refundErr) {
@@ -7805,11 +7811,11 @@ export async function runJobById(jobId: string): Promise<void> {
             );
             const failedCost = Math.round((job as any).creditsCost ?? 0);
             if (failedCost > 0) {
-              const { chargeCredits } = await import("../lib/credits");
-              await chargeCredits({
+              const { refundCredits } = await import("../lib/credits");
+              await refundCredits({
                 userId: job.userId,
                 isAdmin: false,
-                amount: -failedCost,
+                amount: failedCost,
                 description: "Reembolso automático — garantía de primera app (no se logró app funcional tras reparación completa)",
               });
             }
@@ -7929,10 +7935,11 @@ export async function runJobById(jobId: string): Promise<void> {
     if (!isCreditsError && creditsCostToRefund > 0) {
       try {
         const { chargeCredits } = await import("../lib/credits");
-        await chargeCredits({
+        const { refundCredits } = await import("../lib/credits");
+        await refundCredits({
           userId: job.userId,
           isAdmin: false,
-          amount: -creditsCostToRefund, // negativo = reembolso, siempre entero
+          amount: creditsCostToRefund,
           description: `Reembolso automático por fallo del sistema en generación de app`,
         });
         logger.info({ jobId, refunded: job.creditsCost }, "Credits refunded after generation failure");
