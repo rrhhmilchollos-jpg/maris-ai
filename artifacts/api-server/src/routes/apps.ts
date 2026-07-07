@@ -8107,7 +8107,7 @@ router.post("/apps/:id/deploy", requireAuth, async (req: any, res: any) => {
       } catch { /* si no es JSON, se usa el mensaje crudo tal cual */ }
       await GeneratedApp.updateOne(
         { _id: req.params.id },
-        { $set: { deployError: friendlyMessage.slice(0, 500), deployPhase: "failed" } },
+        { $set: { deployError: friendlyMessage.slice(0, 500), deployPhase: "error" } },
       ).catch((dbErr) => logger.error({ dbErr }, "No se pudo guardar deployError en la base de datos"));
     });
 
