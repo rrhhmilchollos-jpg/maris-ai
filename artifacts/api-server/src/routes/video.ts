@@ -38,7 +38,7 @@ const router = Router();
 let _genai: GoogleGenAI | null = null;
 function getGenAI() {
   if (!_genai) {
-    const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+    const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
     _genai = new GoogleGenAI({ apiKey });
   }
   return _genai;
@@ -294,7 +294,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     // Para producción con volumen real, lo correcto sería subir el vídeo a
     // almacenamiento propio (blob storage) y devolver una URL corta, no
     // embeber el archivo entero -- documentado como mejora futura.
-    const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+    const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
     const downloadUrl = `${generatedVideo.video.uri}${generatedVideo.video.uri.includes("?") ? "&" : "?"}key=${apiKey}`;
     const videoResp = await fetch(downloadUrl);
     if (!videoResp.ok) {
@@ -414,7 +414,7 @@ router.post(
         return res.status(502).json({ error: "No se pudo generar el vídeo base. Se te han reembolsado los créditos." });
       }
 
-      const apiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+      const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY || "";
       const downloadUrl = `${generatedVideo.video.uri}${generatedVideo.video.uri.includes("?") ? "&" : "?"}key=${apiKey}`;
       const videoResp = await fetch(downloadUrl);
       if (!videoResp.ok) {

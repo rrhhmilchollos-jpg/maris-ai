@@ -45,7 +45,7 @@ function appBaseUrl(): string {
 // pins the flash image model and we want to opt into Pro per the user's
 // request ("nano banana pro el nuevo actual").
 const imageClient = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY,
   httpOptions: {
     apiVersion: "",
     baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
