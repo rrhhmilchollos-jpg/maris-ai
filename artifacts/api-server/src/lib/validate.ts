@@ -444,10 +444,23 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
       : bundle.includes("// === FILE:")
         ? "Bundle has FILE markers but no valid files were extracted. Check the format of separators."
         : "No FILE markers found. Expected format: '// === FILE: <path> ===' followed by code.";
-    
+
+    // ENCONTRADO A PETICION DEL USUARIO: este caso concreto (marcadores
+    // presentes pero extracción fallida) se investigó a fondo sin poder
+    // reproducirlo -- probado el archivo real, la extracción del ZIP, y
+    // el análisis del bundle, los tres funcionan correctamente de forma
+    // aislada. En vez de seguir adivinando, se incluye ahora un adelanto
+    // real del contenido del bundle (primeros y últimos 300 caracteres)
+    // en el propio mensaje de error -- la próxima vez que esto ocurra,
+    // habrá datos reales que ver en vez de tener que reproducirlo a ciegas.
+    const preview = bundle.length > 700
+      ? `${bundle.slice(0, 300)}\n...[${bundle.length - 600} caracteres omitidos]...\n${bundle.slice(-300)}`
+      : bundle;
+    logger.warn({ bundleLength: bundle.length, bundlePreview: preview }, "VALIDATOR: bundle vacío/sin parsear -- contenido real para diagnóstico");
+
     return {
       ok: false,
-      issues: [{ file: "(bundle)", message: `Empty or unparseable bundle. ${diagnosticMsg}` }],
+      issues: [{ file: "(bundle)", message: `Empty or unparseable bundle. ${diagnosticMsg} [Longitud real: ${bundle.length} caracteres]` }],
       filesAnalyzed: 0,
       durationMs: Date.now() - started,
     };
