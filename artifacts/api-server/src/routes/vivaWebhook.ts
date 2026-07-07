@@ -16,6 +16,7 @@
  */
 import { Router, type Request, type Response } from "express";
 import { GeneratedApp } from "@workspace/db/schema";
+import { verifyTransaction, isTransactionPaid } from "../lib/vivaPayments";
 import { logger } from "../lib/logger";
 
 export const vivaWebhookRouter = Router();
@@ -95,6 +96,38 @@ vivaWebhookRouter.post("/webhooks/viva", async (req: Request, res: Response) => 
       const merchantTrns = body.EventData.MerchantTrns || "";
       const transactionId = body.EventData.TransactionId;
       const orderCode = body.EventData.OrderCode;
+
+      // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de seguridad real):
+      // este webhook procesaba pagos SOLO confiando en el propio cuerpo
+      // de la petición POST (StatusId === "F") -- sin ninguna verificación
+      // de IP, firma, ni llamada real a la API de Viva. A diferencia de
+      // /billing/confirm (que SÍ llama a verifyTransaction() +
+      // isTransactionPaid() antes de dar nada por bueno), cualquiera que
+      // conociera esta URL podía enviar un payload fabricado con un
+      // MerchantTrns tipo "topup:USER_ID:pack-100:160" y TransactionId
+      // inventado, y el sistema concedía los créditos sin comprobar que
+      // el pago hubiera ocurrido de verdad -- fallo de seguridad real con
+      // impacto económico directo (créditos gratis sin pagar). Se añade
+      // aquí EXACTAMENTE la misma verificación que ya usa /billing/confirm,
+      // como debió tener desde el principio.
+      if (!transactionId) {
+        logger.warn({ merchantTrns, orderCode }, "Webhook de Viva sin TransactionId -- ignorado, no se puede verificar");
+        res.status(200).json({ received: true, verified: false });
+        return;
+      }
+      let verifiedTx;
+      try {
+        verifiedTx = await verifyTransaction(transactionId);
+      } catch (err) {
+        logger.error({ err, transactionId, merchantTrns }, "No se pudo verificar la transacción del webhook de Viva contra su API real -- ignorado por seguridad");
+        res.status(200).json({ received: true, verified: false });
+        return;
+      }
+      if (!verifiedTx || !isTransactionPaid(verifiedTx)) {
+        logger.warn({ transactionId, merchantTrns }, "Webhook de Viva con transactionId que NO verifica como pagado en la API real -- ignorado, posible intento de fraude");
+        res.status(200).json({ received: true, verified: false });
+        return;
+      }
 
       const watermarkMatch = merchantTrns.match(/^watermark_removal:(.+)$/);
       if (watermarkMatch) {
