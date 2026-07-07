@@ -55,7 +55,7 @@ export default function UnderConstructionPage() {
   }, []);
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#09090b] px-6 text-center">
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#09090b] px-6 text-center">
       {/* Orbes de gradiente violeta — el "latido" de la marca */}
       <div
         aria-hidden
@@ -97,6 +97,16 @@ export default function UnderConstructionPage() {
           <br />
           que va a sorprenderte
         </h1>
+
+        {/* Subtítulo -- añadido a propósito para que el texto real de esta
+            página supere con margen los 200 caracteres que exige el script
+            que oculta el bloque de contenido SEO (ver index.html,
+            checkHide()) -- sin esto, el texto real de la página se quedaba
+            justo por debajo de ese umbral, y el bloque SEO nunca llegaba a
+            desaparecer, mostrándose mezclado con esta pantalla. */}
+        <p className="mb-8 max-w-md text-base text-[#a1a1aa]">
+          Estamos preparando una nueva versión de Maris AI con funciones que todavía no hemos anunciado. Vuelve pronto para descubrirlas.
+        </p>
 
         {/* Frase elegante rotatoria */}
         <div className="mb-12 h-8">
@@ -158,6 +168,6 @@ export default function UnderConstructionPage() {
       >
         Acceso del equipo →
       </a>
-    </div>
+    </main>
   );
 }
