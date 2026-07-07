@@ -8750,8 +8750,21 @@ router.get("/apps/:id/styles/:file", async (req: any, res: any) => {
 });
 
 // GET /api/apps/:id/preview-debug — diagnóstico del preview
-router.get("/apps/:id/preview-debug", async (req: any, res: any) => {
+// ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de seguridad, mismo tipo de
+// hallazgo que los webhooks de Viva/Clerk): este endpoint de depuración no
+// exigía NINGUNA autenticación y devolvía el código fuente COMPLETO
+// (appTsxContent, mainTsxContent, fragmentos de cualquier archivo con
+// useNavigate) de CUALQUIER app, solo con conocer o adivinar su ID -- sin
+// comprobar en absoluto que quien pregunta sea el propietario. Filtración
+// real de propiedad intelectual de clientes (código que pagaron créditos
+// por generar). Al ser una herramienta de diagnóstico interno, se limita
+// ahora a la cuenta de administrador real, mismo patrón ya usado en
+// PUT /apps/:id/code.
+router.get("/apps/:id/preview-debug", requireAuth, async (req: any, res: any) => {
   try {
+    if (!isAdminEmail(req.dbUser?.email)) {
+      return res.status(403).json({ error: "Solo la cuenta propietaria puede acceder a esta herramienta de diagnóstico." });
+    }
     await connectDB();
     const app = await GeneratedApp.findById(req.params.id).select("frontendCode title kind").lean() as any;
     if (!app?.frontendCode) return res.status(404).json({ error: "App no encontrada" });
