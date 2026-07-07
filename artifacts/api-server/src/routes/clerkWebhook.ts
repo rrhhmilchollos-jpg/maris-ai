@@ -48,13 +48,18 @@ async function verifyClerkWebhook(req: Request): Promise<any | null> {
     );
     return payload;
   } catch (svixErr: any) {
-    // Si svix no está instalado, verificar con cabecera básica
+    // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de seguridad, mismo
+    // hallazgo que el webhook de Viva): este respaldo aceptaba el webhook
+    // con solo comprobar que las CABECERAS svix-id/svix-signature
+    // estuvieran presentes -- sin validar que el VALOR de la firma fuera
+    // correcto. Cualquiera podía falsificarlo con valores inventados, sin
+    // necesitar conocer el secreto real. Confirmado que 'svix' SÍ está
+    // instalado como dependencia real del proyecto (package.json), así
+    // que este camino no debería activarse en la práctica -- pero por
+    // defensa en profundidad, se falla cerrado (rechazar) en vez de
+    // degradar a una comprobación que no verifica nada de verdad.
     if (svixErr?.code === "ERR_MODULE_NOT_FOUND" || svixErr?.message?.includes("Cannot find")) {
-      logger.warn("clerkWebhook: svix no instalado — verificando con cabecera básica");
-      // Verificación mínima: que venga con las cabeceras de Clerk
-      if (req.headers["svix-id"] && req.headers["svix-signature"]) {
-        return req.body;
-      }
+      logger.error("clerkWebhook: svix no disponible en tiempo de ejecución -- rechazando el webhook por seguridad, en vez de aceptarlo con una comprobación débil");
       return null;
     }
     logger.warn({ err: svixErr }, "clerkWebhook: firma inválida");
