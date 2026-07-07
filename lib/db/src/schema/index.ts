@@ -204,6 +204,11 @@ export interface IGeneratedApp {
   // resto de apps de Maris AI que se sirven como bundle estático via
   // buildDeployHtml. Ver lib/ssrImportBuilder.ts.
   renderMode?: "static" | "ssr-live";
+  // Ver comentario junto a la definición del esquema Mongoose (más abajo)
+  // -- HTML prerenderizado real de la home de la app, para servir a
+  // crawlers en vez de la carcasa vacía de la SPA.
+  prerenderedHomeHtml?: string;
+  prerenderedAt?: Date;
   livePreviewUrl?: string;
   livePreviewSandboxId?: string;
   livePreviewExpiresAt?: Date;
@@ -326,6 +331,17 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     watermarkRemovalStripeSessionId: { type: String },
     watermarkRemovalVivaOrderCode: { type: Number },
     renderMode: { type: String, enum: ["static", "ssr-live"], default: "static" },
+    // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de "contras" del vibe
+    // coding, punto real y confirmado: las apps de clientes son SPAs sin
+    // prerenderizado -- a diferencia de la propia web de Maris AI, que sí
+    // lo tiene desde hace tiempo, las apps generadas para clientes nunca
+    // tuvieron esto). HTML ya renderizado (via Puppeteer, reutilizando
+    // launchBrowser() de visualTester.ts) de la página de inicio real de
+    // la app desplegada -- se sirve a crawlers conocidos (Googlebot,
+    // GPTBot, etc.) en vez de la carcasa vacía de la SPA, sin afectar a
+    // usuarios reales, que siguen recibiendo la app interactiva normal.
+    prerenderedHomeHtml: { type: String },
+    prerenderedAt: { type: Date },
     livePreviewUrl: { type: String },
     livePreviewSandboxId: { type: String },
     livePreviewExpiresAt: { type: Date },
