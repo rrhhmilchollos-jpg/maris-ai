@@ -1172,7 +1172,18 @@ router.get("/admin/metrics", async (_req, res) => {
     publishedApps: { today: publishedToday, total: publishedTotal },
     server: getMetricsSnapshot(),
     queue: { ready: isQueueReady(), jobs24hByStatus: queueByStatus },
-    redis: getRedisStatus(),
+    redis: (() => {
+      // ENCONTRADO A PETICIÓN DEL USUARIO (panel mostrando "Redis:
+      // Desconectado" pese a que el usuario confirmó haber añadido
+      // REDIS_URL en Railway): getRedisStatus() devuelve el campo
+      // "lastPingOk", pero el frontend (admin-dashboard.tsx) busca
+      // "data.redis?.connected" -- un campo que nunca existía en la
+      // respuesta, así que siempre caía en "Desconectado" sin importar
+      // el estado real de la conexión. Se añade el alias "connected"
+      // sin quitar los campos originales, por si algo más los usa.
+      const status = getRedisStatus();
+      return { ...status, connected: status.lastPingOk, latencyMs: status.lastPingMs };
+    })(),
     revenueCentsTotal,
     e2b: {
       configured: isE2BEnabled(),
