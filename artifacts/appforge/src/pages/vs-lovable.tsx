@@ -38,7 +38,7 @@ export default function VsLovablePage() {
     if (!canonical) { canonical = document.createElement("link") as HTMLLinkElement; canonical.rel = "canonical"; document.head.appendChild(canonical); }
     canonical.href = "https://www.marisai.es/vs-lovable";
     const jsonLd = { "@context": "https://schema.org", "@graph": [
-      { "@type": "Article", "headline": "Maris AI vs Lovable 2026", "author": { "@type": "Organization", "name": "Maris AI" }, "dateModified": "2026-07-01" },
+      { "@type": "Article", "headline": "Maris AI vs Lovable 2026", "image": "https://www.marisai.es/opengraph.jpg", "author": { "@type": "Organization", "name": "Maris AI" }, "datePublished": "2026-01-15", "dateModified": "2026-07-01" },
       { "@type": "FAQPage", "mainEntity": FAQS.map(f => ({ "@type": "Question", "name": f.q, "acceptedAnswer": { "@type": "Answer", "text": f.a } })) }
     ]};
     let s = document.getElementById("jsonld-vs") as HTMLScriptElement | null;

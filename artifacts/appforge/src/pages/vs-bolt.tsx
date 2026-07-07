@@ -37,7 +37,7 @@ export default function VsBoltPage() {
     if (!canonical) { canonical = document.createElement("link") as HTMLLinkElement; canonical.rel = "canonical"; document.head.appendChild(canonical); }
     canonical.href = "https://www.marisai.es/vs-bolt";
     const jsonLd = { "@context": "https://schema.org", "@graph": [
-      { "@type": "Article", "headline": "Maris AI vs Bolt.new 2026 — Alternativa en español para no programadores | Maris AI", "author": { "@type": "Organization", "name": "Maris AI" }, "dateModified": "2026-07-01" },
+      { "@type": "Article", "headline": "Maris AI vs Bolt.new 2026 — Alternativa en español para no programadores | Maris AI", "image": "https://www.marisai.es/opengraph.jpg", "author": { "@type": "Organization", "name": "Maris AI" }, "datePublished": "2026-01-15", "dateModified": "2026-07-01" },
       { "@type": "FAQPage", "mainEntity": FAQS.map(f => ({ "@type": "Question", "name": f.q, "acceptedAnswer": { "@type": "Answer", "text": f.a } })) }
     ]};
     let s = document.getElementById("jsonld-vs") as HTMLScriptElement | null;
