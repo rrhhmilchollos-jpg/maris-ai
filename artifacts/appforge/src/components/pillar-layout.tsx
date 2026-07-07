@@ -81,6 +81,7 @@ export function PillarLayout({
       "@type": "Article",
       "headline": h1,
       "description": metaDescription,
+      "image": "https://www.marisai.es/opengraph.jpg",
       "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
       "inLanguage": "es",
       "articleSection": "Glosario de IA",
