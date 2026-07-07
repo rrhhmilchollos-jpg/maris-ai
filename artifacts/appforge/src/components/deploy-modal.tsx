@@ -967,7 +967,7 @@ export function DeployModal({
               </div>
               {watermarkHasMark !== false && (
                 <p className="mt-2.5 text-xs text-white/25">
-                  Pago único con tarjeta (Viva.com). Tu app deja de mostrar la marca de agua y el enlace a Maris AI permanentemente.
+                  Pago único con tarjeta bancaria. Tu app deja de mostrar la marca de agua y el enlace a Maris AI permanentemente.
                 </p>
               )}
             </div>
