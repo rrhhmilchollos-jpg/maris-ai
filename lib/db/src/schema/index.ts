@@ -914,6 +914,16 @@ export const PanelRuntimeError: Model<IPanelRuntimeError> =
 export interface IAgentNote extends Document {
   userId: string;
   notes: string;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de onboarding): la
+  // pantalla de onboarding llevaba tiempo intentando guardar estos dos
+  // campos en PUT /me/preferences, pero el endpoint solo entendía
+  // "notes" -- la petición fallaba siempre con 400, en silencio (el
+  // try/catch de la pantalla se lo tragaba). El check verde de "Tipo de
+  // proyecto seleccionado" en el paso 3 del onboarding confirmaba algo
+  // que nunca se guardaba de verdad. Añadidos aquí, en la misma
+  // colección de preferencias por usuario que ya existía.
+  preferredAppType?: string;
+  onboardingCompleted?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -922,6 +932,8 @@ const AgentNoteSchema = new Schema<IAgentNote>(
   {
     userId: { type: String, required: true, unique: true },
     notes: { type: String, default: "" },
+    preferredAppType: { type: String },
+    onboardingCompleted: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

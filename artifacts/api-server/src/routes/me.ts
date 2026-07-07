@@ -134,8 +134,12 @@ router.get("/me/preferences", requireAuth, async (req, res) => {
   try {
     await connectDB();
     const userId = req.userId!;
-    const row = await AgentNote.findOne({ userId }, { notes: 1 }).lean();
-    res.json({ notes: row?.notes ?? "" });
+    const row = await AgentNote.findOne({ userId }, { notes: 1, preferredAppType: 1, onboardingCompleted: 1 }).lean();
+    res.json({
+      notes: row?.notes ?? "",
+      preferredAppType: row?.preferredAppType ?? null,
+      onboardingCompleted: row?.onboardingCompleted ?? false,
+    });
   } catch (err) {
     logger.error({ err }, "GET /me/preferences error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });
@@ -146,18 +150,51 @@ router.put("/me/preferences", requireAuth, async (req, res) => {
   try {
     await connectDB();
     const userId = req.userId!;
-    const notes: unknown = req.body?.notes;
-    if (typeof notes !== "string") {
-      res.status(400).json({ error: "notes debe ser una cadena" });
+    const update: Record<string, unknown> = {};
+
+    // ENCONTRADO A PETICIÓN DEL USUARIO: este endpoint solo aceptaba
+    // "notes" -- la pantalla de onboarding llevaba tiempo mandando
+    // también onboardingCompleted/preferredAppType, que se rechazaban
+    // siempre con 400 sin que nadie se enterara (el onboarding se traga
+    // el error en silencio). Ahora acepta los tres campos, cada uno
+    // opcional e independiente -- se puede actualizar solo uno sin tocar
+    // los demás, útil tanto para el onboarding como para el propio
+    // editor de notas que ya usaba este endpoint.
+    if (req.body?.notes !== undefined) {
+      const notes: unknown = req.body.notes;
+      if (typeof notes !== "string") {
+        res.status(400).json({ error: "notes debe ser una cadena" });
+        return;
+      }
+      update.notes = notes.slice(0, 3000);
+    }
+    if (req.body?.preferredAppType !== undefined) {
+      const val: unknown = req.body.preferredAppType;
+      if (val !== null && typeof val !== "string") {
+        res.status(400).json({ error: "preferredAppType debe ser una cadena o null" });
+        return;
+      }
+      update.preferredAppType = val;
+    }
+    if (req.body?.onboardingCompleted !== undefined) {
+      update.onboardingCompleted = Boolean(req.body.onboardingCompleted);
+    }
+
+    if (Object.keys(update).length === 0) {
+      res.status(400).json({ error: "No se recibió ningún campo válido para actualizar" });
       return;
     }
-    const trimmed = notes.slice(0, 3000);
-    await AgentNote.findOneAndUpdate(
+
+    const row = await AgentNote.findOneAndUpdate(
       { userId },
-      { $set: { notes: trimmed } },
+      { $set: update },
       { upsert: true, new: true },
-    );
-    res.json({ notes: trimmed });
+    ).lean();
+    res.json({
+      notes: row?.notes ?? "",
+      preferredAppType: row?.preferredAppType ?? null,
+      onboardingCompleted: row?.onboardingCompleted ?? false,
+    });
   } catch (err) {
     logger.error({ err }, "PUT /me/preferences error");
     res.status(500).json({ error: err instanceof Error ? err.message : "Error interno" });

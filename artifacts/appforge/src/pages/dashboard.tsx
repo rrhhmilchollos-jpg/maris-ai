@@ -165,6 +165,35 @@ export default function DashboardPage() {
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django" | "video-ai" | "imagen-ai";
   const [kind, setKind] = useState<Kind>("fullstack");
+  // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de onboarding): el paso 3
+  // del onboarding guardaba el tipo de app elegido (preferredAppType) vía
+  // PUT /me/preferences, pero ese endpoint solo aceptaba "notes" -- la
+  // preferencia nunca llegaba a guardarse de verdad (arreglado en el
+  // propio endpoint), y aunque se hubiera guardado, el dashboard nunca la
+  // leía al llegar -- el usuario elegía su tipo de app en el onboarding
+  // para nada, siempre aterrizaba con "fullstack" por defecto. Se lee
+  // aquí una sola vez al montar el componente, solo se aplica si el
+  // usuario no ha tocado el selector todavía (kindTouchedRef), para no
+  // pisar una elección manual si esto tardara en llegar.
+  const kindTouchedRef = useRef(false);
+  useEffect(() => {
+    apiFetch<{ preferredAppType?: string | null }>("/api/me/preferences")
+      .then((prefs) => {
+        if (kindTouchedRef.current || !prefs?.preferredAppType) return;
+        const ONBOARDING_TO_KIND: Record<string, Kind> = {
+          web: "fullstack",
+          landing: "landing",
+          ecommerce: "fullstack",
+          api: "python-api",
+          mobile: "mobile",
+          ui: "fullstack",
+        };
+        const mapped = ONBOARDING_TO_KIND[prefs.preferredAppType];
+        if (mapped) setKind(mapped);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Movido aquí arriba (antes vivía más abajo en el componente) porque
   // KIND_META, justo debajo, necesita stats.isPremium para calcular el
   // coste real en créditos — ver comentario en BASE_KIND_COSTS.
@@ -783,7 +812,7 @@ export default function DashboardPage() {
           <div className="px-6 pb-4">
             <div className="flex flex-wrap gap-1.5">
               {(Object.entries(KIND_META) as [Kind, typeof KIND_META[Kind]][]).map(([k, meta]) => (
-                <button key={k} type="button" onClick={() => setKind(k)} disabled={isWorking}
+                <button key={k} type="button" onClick={() => { kindTouchedRef.current = true; setKind(k); }} disabled={isWorking}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
                     kind === k ? "bg-primary/15 border-primary/40 text-primary shadow-sm shadow-primary/10" : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
                   }`}>
