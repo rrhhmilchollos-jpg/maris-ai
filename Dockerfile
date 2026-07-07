@@ -8,6 +8,7 @@ COPY artifacts/appforge/package.json ./artifacts/appforge/
 COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
 COPY scripts/package.json ./scripts/
 COPY lib/db/package.json ./lib/db/
+COPY lib/bundle-format/package.json ./lib/bundle-format/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 COPY lib/api-spec/package.json ./lib/api-spec/
