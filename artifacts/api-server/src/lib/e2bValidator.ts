@@ -85,6 +85,16 @@ export interface E2BBuildResult {
   sandboxId?: string;
   /** Resultado de comprobar que el import map de esm.sh resuelve de verdad. */
   esmImportCheck?: { ok: boolean; checked: number; failures: EsmImportFailure[] };
+  // ENCONTRADO A PETICIÓN DEL USUARIO (a raíz de una crítica real y
+  // documentada sobre vibe coding: "los modelos de lenguaje proponen
+  // soluciones que incluyen librerías desactualizadas o brechas de
+  // seguridad comunes" -- confirmado que npm install corría con
+  // --no-audit, sin comprobar nada). Resultado de `npm audit` tras el
+  // build -- informativo, nunca bloquea la entrega (una vulnerabilidad
+  // en una dependencia transitiva no debería impedir que el cliente
+  // reciba su app), pero deja constancia real para que se pueda mostrar
+  // con honestidad en vez de fingir que no existe.
+  securityAudit?: { ok: boolean; critical: number; high: number; moderate: number; low: number; raw?: string };
 }
 
 export function isE2BEnabled(): boolean {
@@ -204,6 +214,52 @@ export async function validateBundleInE2B(opts: {
       };
     }
 
+    // Auditoría de seguridad real de las dependencias -- informativa,
+    // nunca bloquea la entrega. Se usa --json para poder contar por
+    // severidad de forma fiable en vez de parsear texto libre, y se
+    // limita a 15s (no debe alargar de forma notable el ciclo de
+    // reparación por algo que no es bloqueante).
+    let securityAudit: E2BBuildResult["securityAudit"];
+    try {
+      const audit = await sandbox.commands.run(
+        `cd ${APP_DIR} && npm audit --json`,
+        { timeoutMs: 15_000 },
+      );
+      const parsed = JSON.parse(audit.stdout || "{}");
+      const vulns = parsed?.metadata?.vulnerabilities;
+      if (vulns) {
+        securityAudit = {
+          ok: (vulns.critical ?? 0) === 0 && (vulns.high ?? 0) === 0,
+          critical: vulns.critical ?? 0,
+          high: vulns.high ?? 0,
+          moderate: vulns.moderate ?? 0,
+          low: vulns.low ?? 0,
+        };
+      }
+    } catch (auditErr) {
+      // npm audit devuelve exit code != 0 cuando SÍ encuentra
+      // vulnerabilidades (comportamiento normal, no un fallo real) -- se
+      // intenta igualmente parsear el JSON en el catch antes de rendirse
+      // del todo, para no perder el resultado real por este detalle.
+      const errWithOutput = auditErr as { stdout?: string };
+      try {
+        const parsed = JSON.parse(errWithOutput?.stdout || "{}");
+        const vulns = parsed?.metadata?.vulnerabilities;
+        if (vulns) {
+          securityAudit = {
+            ok: (vulns.critical ?? 0) === 0 && (vulns.high ?? 0) === 0,
+            critical: vulns.critical ?? 0,
+            high: vulns.high ?? 0,
+            moderate: vulns.moderate ?? 0,
+            low: vulns.low ?? 0,
+          };
+        }
+      } catch {
+        // Si de verdad no se pudo obtener nada legible, se omite --
+        // esto es informativo, no debe romper la validación real.
+      }
+    }
+
     // El build de npm pasó — eso NO garantiza que el preview real (esm.sh en
     // el navegador del cliente) vaya a cargar. Comprobamos las URLs reales
     // que se van a servir antes de dar la reparación por buena.
@@ -239,6 +295,7 @@ export async function validateBundleInE2B(opts: {
       reason: esmImportCheck.ok ? undefined : "esm_import_unresolved",
       sandboxId: sandbox.sandboxId,
       esmImportCheck,
+      securityAudit,
     };
   } catch (err) {
     return {
