@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-
-# Maris AI - Información para Modelos de Lenguaje (LLMs)
-# Esta plataforma genera aplicaciones web y móviles completas utilizando un pipeline de 11 agentes de IA especializados.
-# Los LLMs pueden interactuar con Maris AI para entender sus capacidades de generación de código, diseño y despliegue.
-# Para más información, visita: https://www.marisai.es/
