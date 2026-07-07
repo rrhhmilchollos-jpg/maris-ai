@@ -21,6 +21,7 @@
 import { Router, type Request, type Response } from "express";
 import { requireAuth } from "../lib/auth";
 import { logger } from "../lib/logger";
+import dns from "node:dns/promises";
 
 const router = Router();
 
@@ -42,14 +43,44 @@ type ConnectorId =
 // infraestructura interna (SSRF) -- el mensaje de resultado (ok/error)
 // ya filtra si ese host interno responde o no, aunque no se devuelva el
 // cuerpo completo de la respuesta.
-function isPrivateOrInternalHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "0.0.0.0") return true;
-  // Rangos de IP privados/reservados habituales (RFC 1918 + link-local +
-  // metadatos de nube) -- comprobación por prefijo, suficiente sin
-  // necesitar una librería de parseo de IP completa para este caso.
+//
+// SEGUNDA CAPA (encontrada al auditar este mismo fix): comprobar solo el
+// TEXTO del hostname no basta -- un atacante puede registrar un dominio
+// propio (ej. "evil-domain.com") con un registro DNS que apunte a
+// 169.254.169.254 (metadatos de AWS/GCP) o a una IP privada. El texto
+// "evil-domain.com" no coincide con ningún prefijo privado, así que la
+// comprobación por texto lo dejaría pasar, pero el fetch() real sí se
+// conectaría a esa IP interna igualmente ("DNS rebinding", el bypass
+// más común contra este tipo de protección). Ahora, además de mirar el
+// texto, se resuelve el DNS de verdad con dns.lookup() y se comprueba
+// la IP real a la que resuelve, rechazando si CUALQUIERA de las
+// direcciones resueltas es privada/interna.
+function isPrivateOrInternalIP(ip: string): boolean {
+  const h = ip.toLowerCase();
+  if (h === "127.0.0.1" || h === "::1" || h === "0.0.0.0" || h === "::") return true;
+  // IPv4 mapeada en IPv6 (::ffff:127.0.0.1) -- se comprueba la parte IPv4.
+  const v4Mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  const ipv4 = v4Mapped ? v4Mapped[1] : h;
   const privatePrefixes = ["10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.30.", "172.31.", "192.168.", "169.254."];
-  return privatePrefixes.some((p) => h.startsWith(p));
+  if (privatePrefixes.some((p) => ipv4.startsWith(p))) return true;
+  // IPv6: link-local (fe80::/10) y direcciones únicas locales (fc00::/7, fd00::/8).
+  if (/^fe[89ab][0-9a-f]:/.test(h) || /^f[cd][0-9a-f]{2}:/.test(h)) return true;
+  return false;
+}
+
+async function isPrivateOrInternalHost(hostname: string): Promise<boolean> {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || isPrivateOrInternalIP(h)) return true;
+  try {
+    const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+    return addresses.some((a) => isPrivateOrInternalIP(a.address));
+  } catch {
+    // Si el hostname no resuelve en absoluto, se deja que el fetch()
+    // posterior falle de forma natural con su propio error de red --
+    // no es una dirección interna conocida, no hay nada que bloquear
+    // aquí por seguridad (solo sería un dominio mal escrito).
+    return false;
+  }
 }
 
 async function verifySupabase(values: Record<string, string>): Promise<{ ok: boolean; message: string }> {
@@ -61,7 +92,7 @@ async function verifySupabase(values: Record<string, string>): Promise<{ ok: boo
   } catch {
     return { ok: false, message: "SUPABASE_URL no es una URL válida." };
   }
-  if (parsed.protocol !== "https:" || isPrivateOrInternalHost(parsed.hostname)) {
+  if (parsed.protocol !== "https:" || await isPrivateOrInternalHost(parsed.hostname)) {
     return { ok: false, message: "SUPABASE_URL debe ser una URL https:// pública (no se permiten direcciones internas/privadas)." };
   }
   const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/`, {
@@ -184,7 +215,7 @@ async function verifySalesforce(values: Record<string, string>): Promise<{ ok: b
   // el usuario, validada contra SSRF antes de conectar.
   let sfUrl: URL;
   try { sfUrl = new URL(SALESFORCE_INSTANCE_URL); } catch { return { ok: false, message: "SALESFORCE_INSTANCE_URL no es una URL válida." }; }
-  if (sfUrl.protocol !== "https:" || isPrivateOrInternalHost(sfUrl.hostname)) {
+  if (sfUrl.protocol !== "https:" || await isPrivateOrInternalHost(sfUrl.hostname)) {
     return { ok: false, message: "SALESFORCE_INSTANCE_URL debe ser una URL https:// pública." };
   }
   const res = await fetch(`${SALESFORCE_INSTANCE_URL.replace(/\/$/, "")}/services/data/v59.0/`, {
@@ -201,7 +232,7 @@ async function verifyZohoCRM(values: Record<string, string>): Promise<{ ok: bool
   const domain = ZOHO_API_DOMAIN || "www.zohoapis.com";
   // Mismo hallazgo -- ZOHO_API_DOMAIN es opcional y editable por el
   // usuario (para las distintas regiones de Zoho), validado igual.
-  if (isPrivateOrInternalHost(domain.toLowerCase())) {
+  if (await isPrivateOrInternalHost(domain.toLowerCase())) {
     return { ok: false, message: "ZOHO_API_DOMAIN no puede ser una dirección interna/privada." };
   }
   const res = await fetch(`https://${domain}/crm/v6/org`, {
@@ -220,7 +251,7 @@ async function verifyDynamics365(values: Record<string, string>): Promise<{ ok: 
   // Mismo hallazgo -- validado igual antes de conectar.
   let dynUrl: URL;
   try { dynUrl = new URL(DYNAMICS_RESOURCE_URL); } catch { return { ok: false, message: "DYNAMICS_RESOURCE_URL no es una URL válida." }; }
-  if (dynUrl.protocol !== "https:" || isPrivateOrInternalHost(dynUrl.hostname)) {
+  if (dynUrl.protocol !== "https:" || await isPrivateOrInternalHost(dynUrl.hostname)) {
     return { ok: false, message: "DYNAMICS_RESOURCE_URL debe ser una URL https:// pública." };
   }
   const res = await fetch(`${DYNAMICS_RESOURCE_URL.replace(/\/$/, "")}/api/data/v9.2/WhoAmI`, {

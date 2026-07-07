@@ -93,7 +93,7 @@ vivaWebhookRouter.post("/webhooks/viva", async (req: Request, res: Response) => 
 
     // 1796 = Transaction Payment Created (pago completado con éxito)
     if (body.EventTypeId === 1796 && body.EventData?.StatusId === "F") {
-      const merchantTrns = body.EventData.MerchantTrns || "";
+      let merchantTrns = body.EventData.MerchantTrns || "";
       const transactionId = body.EventData.TransactionId;
       const orderCode = body.EventData.OrderCode;
 
@@ -127,6 +127,22 @@ vivaWebhookRouter.post("/webhooks/viva", async (req: Request, res: Response) => 
         logger.warn({ transactionId, merchantTrns }, "Webhook de Viva con transactionId que NO verifica como pagado en la API real -- ignorado, posible intento de fraude");
         res.status(200).json({ received: true, verified: false });
         return;
+      }
+
+      // SEGUNDA CAPA encontrada al auditar el fix anterior: verificar que
+      // el pago es REAL no basta -- 'merchantTrns' (que decide A QUIÉN y
+      // QUÉ se le acredita: usuario, pack, importe) seguía viniendo del
+      // cuerpo SIN VERIFICAR de la petición. Un atacante podía reutilizar
+      // el transactionId de CUALQUIER pago real y pequeño ya completado
+      // (el suyo propio, por ejemplo) y fabricar un MerchantTrns tipo
+      // "topup:SU_PROPIO_USER_ID:pack-1000:9999" -- la verificación de
+      // arriba pasaría (el pago SÍ existió de verdad), pero se acreditaría
+      // el pack más caro pagando solo el más barato. Fix: usar el
+      // merchantTrns que devuelve la propia API de Viva para ESA
+      // transacción verificada (fijado en el momento de crear el
+      // checkout, no manipulable vía este webhook), no el del cuerpo.
+      if (verifiedTx.merchantTrns) {
+        merchantTrns = verifiedTx.merchantTrns;
       }
 
       const watermarkMatch = merchantTrns.match(/^watermark_removal:(.+)$/);
