@@ -32,6 +32,7 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@sentry/node": "^10.53.1",
     "@workspace/api-zod": "workspace:*",
+    "@workspace/bundle-format": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/integrations-anthropic-ai": "workspace:*",
     "@workspace/integrations-gemini-ai": "workspace:*",

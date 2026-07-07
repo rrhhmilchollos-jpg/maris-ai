@@ -81,6 +81,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@workspace/bundle-format": "workspace:*",
     "@capacitor/core": "^8.4.1",
     "@capacitor/android": "^8.4.1",
     "@clerk/localizations": "^4.6.6",

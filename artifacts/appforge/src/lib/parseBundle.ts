@@ -1,27 +1,24 @@
 import type { SandpackFiles } from "@codesandbox/sandpack-react";
+import { parseFileMarkers } from "@workspace/bundle-format";
 
-const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
-
+/**
+ * ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de duplicados/código
+ * obsoleto): esta función tenía su propia copia completa del bucle de
+ * extracción del formato "// === FILE: ===", por separado de las dos
+ * versiones del backend (exportZip.ts, validate.ts) -- 3 implementaciones
+ * de la misma lógica sin compartir código, causa real de varios bugs de
+ * sesiones anteriores. Ahora reutiliza el núcleo compartido
+ * (@workspace/bundle-format), y solo mantiene AQUÍ el comportamiento que
+ * es genuinamente específico de este consumidor: si no hay ningún
+ * marcador, el preview de Sandpack necesita ALGO que mostrar aunque sea
+ * el bundle entero volcado en un único archivo -- el backend, en cambio,
+ * prefiere saber explícitamente que no se extrajo nada (bundle vacío),
+ * así que esa parte no se movió al paquete compartido.
+ */
 export function parseBundle(bundle: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!bundle) return out;
-  const matches: { path: string; index: number }[] = [];
-  let m: RegExpExecArray | null;
-  FILE_MARKER.lastIndex = 0;
-  while ((m = FILE_MARKER.exec(bundle)) !== null) {
-    matches.push({ path: m[1].trim(), index: m.index + m[0].length });
-  }
-  if (matches.length === 0) {
+  const out = parseFileMarkers(bundle);
+  if (Object.keys(out).length === 0 && bundle) {
     out["src/App.tsx"] = bundle;
-    return out;
-  }
-  for (let i = 0; i < matches.length; i++) {
-    const start = matches[i].index;
-    const end = i + 1 < matches.length
-      ? bundle.lastIndexOf("// === FILE:", matches[i + 1].index)
-      : bundle.length;
-    const safeEnd = end > start ? end : bundle.length;
-    out[matches[i].path] = bundle.slice(start, safeEnd).replace(/^\n+/, "").trimEnd();
   }
   return out;
 }

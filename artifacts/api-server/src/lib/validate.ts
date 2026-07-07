@@ -1,7 +1,7 @@
 import * as esbuild from "esbuild";
 import path from "node:path";
 
-import { parseFileMarkers } from "./exportZip";
+import { parseFileMarkers, isStaticHtmlBundle } from "@workspace/bundle-format";
 import { logger } from "./logger";
 
 export interface BuildIssue {
@@ -419,13 +419,10 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   // EXACTAMENTE la misma lógica que ya usa deployAppToVercel (la función
   // que hace el despliegue real) -- "isStaticHtml": no hay ningún archivo
   // de entrada React conocido Y existe un index.html, sin importar
-  // cuántos otros archivos acompañen. Mismo criterio en los dos sitios,
-  // para no volver a tener dos funciones que no se ponen de acuerdo.
-  const hasReactEntry =
-    vfs["src/main.tsx"] || vfs["src/main.jsx"] || vfs["src/main.ts"] || vfs["src/main.js"] ||
-    vfs["apps/web/src/main.tsx"] || vfs["apps/web/src/main.ts"];
-  const isStaticHtmlBundle = !hasReactEntry && vfs["index.html"] != null;
-  if (isStaticHtmlBundle) {
+  // cuántos otros archivos acompañen. Ahora importada de
+  // @workspace/bundle-format, para que los dos sitios NUNCA puedan volver
+  // a desincronizarse entre sí.
+  if (isStaticHtmlBundle(vfs)) {
     logger.info("VALIDATOR: bundle es un proyecto HTML estático (con o sin CSS/JS aparte) -- válido sin punto de entrada React");
     return { ok: true, issues: [], filesAnalyzed, durationMs: Date.now() - started };
   }

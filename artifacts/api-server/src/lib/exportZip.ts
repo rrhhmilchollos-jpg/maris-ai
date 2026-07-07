@@ -37,53 +37,16 @@ function applyExportProtection(files: Record<string, string>, userId: string, ap
   return protected_;
 }
 
-const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
+// FILE_MARKER se movió a @workspace/bundle-format (parseFileMarkers) --
+// ya no hace falta aquí tras la unificación.
 
 /**
  * Parse the '// === FILE: <path> ===' bundle into a flat { path: contents } map.
  * Identical contract to the validator / Sandpack parser, but kept independent
  * so a future change there does not silently mutate the export format.
  */
-/**
- * ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de duplicados/código
- * obsoleto): esta misma lógica de "extraer archivos de un bundle
- * // === FILE: ===" estaba reimplementada por separado en exportZip.ts
- * (bundleToFiles) y en validate.ts (parseBundleToVFS antigua), sin
- * compartir código -- causa raíz real de varios de los bugs de hoy
- * (cada vez que arreglaba algo en un sitio, el otro sitio se quedaba
- * desincronizado). Esta función es ahora el núcleo COMPARTIDO -- extrae
- * los pares ruta/contenido en bruto, con la protección contra rutas
- * maliciosas (path traversal) que solo tenía exportZip.ts. Cada
- * consumidor (exportZip.ts, validate.ts) aplica su propio filtrado
- * específico ENCIMA de este resultado común, en vez de reimplementar el
- * análisis desde cero.
- */
-export function parseFileMarkers(bundle: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!bundle) return out;
-  const matches: { path: string; index: number }[] = [];
-  let m: RegExpExecArray | null;
-  FILE_MARKER.lastIndex = 0;
-  while ((m = FILE_MARKER.exec(bundle)) !== null) {
-    matches.push({ path: m[1].trim(), index: m.index + m[0].length });
-  }
-  if (matches.length === 0) return out;
-  for (let i = 0; i < matches.length; i++) {
-    const start = matches[i].index;
-    const end = i + 1 < matches.length
-      ? bundle.lastIndexOf("// === FILE:", matches[i + 1].index)
-      : bundle.length;
-    const safeEnd = end > start ? end : bundle.length;
-    let p = matches[i].path;
-    if (p.startsWith("./")) p = p.slice(2);
-    if (p.startsWith("/")) p = p.slice(1);
-    // Defensa contra path traversal en rutas generadas -- antes solo la
-    // tenía bundleToFiles, ahora la comparten todos los consumidores.
-    if (p.includes("..")) continue;
-    out[p] = bundle.slice(start, safeEnd).replace(/^\n+/, "").trimEnd() + "\n";
-  }
-  return out;
-}
+export { parseFileMarkers, filesToBundle, isStaticHtmlBundle } from "@workspace/bundle-format";
+import { parseFileMarkers } from "@workspace/bundle-format";
 
 export function bundleToFiles(bundle: string): Record<string, string> {
   return parseFileMarkers(bundle);
