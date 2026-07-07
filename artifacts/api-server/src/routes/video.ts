@@ -233,7 +233,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
   const { model, creditCost } = VEO_TIERS[selectedTier];
 
   try {
-    const { chargeCredits } = await import("../lib/credits");
+    const { chargeCredits, refundCredits } = await import("../lib/credits");
     const charge = await chargeCredits({
       userId,
       isAdmin,
@@ -267,7 +267,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
       if (Date.now() > deadline) {
         logger.error({ userId }, "Veo: timeout esperando la generación del videoclip");
         // Reembolsar -- el cliente no debe pagar por un intento que nunca terminó.
-        await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: timeout generando videoclip musical" });
+        await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: timeout generando videoclip musical" });
         return res.status(504).json({ error: "La generación del videoclip está tardando demasiado. Se te han reembolsado los créditos." });
       }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -277,7 +277,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     const generatedVideo = operation.response?.generatedVideos?.[0];
     if (!generatedVideo?.video?.uri) {
       logger.error({ userId, operation }, "Veo: la operación terminó sin devolver ningún vídeo");
-      await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
+      await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
       return res.status(502).json({ error: "No se pudo generar el videoclip. Se te han reembolsado los créditos." });
     }
 
@@ -299,7 +299,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     const videoResp = await fetch(downloadUrl);
     if (!videoResp.ok) {
       logger.error({ userId, status: videoResp.status }, "Veo: no se pudo descargar el vídeo generado desde Google");
-      await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
+      await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
       return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Se te han reembolsado los créditos." });
     }
     const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
@@ -317,8 +317,8 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     logger.error({ error: error?.message, userId }, "Veo: error generando videoclip musical");
     // Intentar reembolsar si el cobro llegó a completarse antes del fallo.
     try {
-      const { chargeCredits } = await import("../lib/credits");
-      await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: error generando videoclip musical" });
+      const { chargeCredits, refundCredits } = await import("../lib/credits");
+      await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: error generando videoclip musical" });
     } catch { /* no bloquear la respuesta de error por un fallo en el reembolso */ }
     return res.status(500).json({ error: "Error generando el videoclip. Se han intentado reembolsar los créditos.", details: error?.message });
   }
@@ -371,7 +371,7 @@ router.post(
     let tempDir: string | null = null;
 
     try {
-      const { chargeCredits } = await import("../lib/credits");
+      const { chargeCredits, refundCredits } = await import("../lib/credits");
       const charge = await chargeCredits({
         userId,
         isAdmin,
@@ -401,7 +401,7 @@ router.post(
       const deadline = Date.now() + MAX_WAIT_MS;
       while (!operation.done) {
         if (Date.now() > deadline) {
-          await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: timeout generando el vídeo base" });
+          await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: timeout generando el vídeo base" });
           return res.status(504).json({ error: "La generación está tardando demasiado. Se te han reembolsado los créditos." });
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -410,7 +410,7 @@ router.post(
 
       const generatedVideo = operation.response?.generatedVideos?.[0];
       if (!generatedVideo?.video?.uri) {
-        await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
+        await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
         return res.status(502).json({ error: "No se pudo generar el vídeo base. Se te han reembolsado los créditos." });
       }
 
@@ -418,7 +418,7 @@ router.post(
       const downloadUrl = `${generatedVideo.video.uri}${generatedVideo.video.uri.includes("?") ? "&" : "?"}key=${apiKey}`;
       const videoResp = await fetch(downloadUrl);
       if (!videoResp.ok) {
-        await chargeCredits({ userId, isAdmin, amount: -creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
+        await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
         return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Se te han reembolsado los créditos." });
       }
       const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
@@ -476,9 +476,9 @@ router.post(
     } catch (error: any) {
       logger.error({ error: error?.message, userId }, "Error generando videoclip con canción real");
       try {
-        const { chargeCredits } = await import("../lib/credits");
+        const { chargeCredits, refundCredits } = await import("../lib/credits");
         const { creditCost: baseCostRefund } = VEO_TIERS[tier] ? VEO_TIERS[tier] : VEO_TIERS.lite;
-        await chargeCredits({ userId, isAdmin, amount: -(baseCostRefund + 10), description: "Reembolso: error generando videoclip con canción real" });
+        await refundCredits({ userId, isAdmin, amount: (baseCostRefund + 10), description: "Reembolso: error generando videoclip con canción real" });
       } catch { /* no bloquear la respuesta de error por un fallo en el reembolso */ }
       return res.status(500).json({ error: "Error generando el videoclip. Se han intentado reembolsar los créditos.", details: error?.message });
     } finally {
