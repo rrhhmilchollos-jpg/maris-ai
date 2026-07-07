@@ -13,7 +13,18 @@ const router = Router();
 router.get("/watermark/:appId/status", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = (req as any).auth?.userId;
+    // ENCONTRADO A PETICIÓN DEL USUARIO (reporte real: "la marca de agua
+    // no sale en ningún proyecto, ni nuevos ni viejos, y el botón de
+    // quitarla está desactivado"): las 3 rutas de este archivo leían
+    // (req as any).auth?.userId -- un campo que NO EXISTE en este
+    // proyecto. requireAuth (lib/auth.ts) pone el ID del usuario en
+    // req.userId directamente, patrón usado consistentemente en TODO el
+    // resto del backend. Con el campo equivocado, userId era siempre
+    // undefined, esta ruta devolvía 401 "no autenticado" en cada
+    // llamada, y el frontend interpretaba ese fallo silencioso como "sin
+    // marca de agua que quitar" -- explica los dos sintomas reportados a
+    // la vez.
+    const userId = (req as any).userId;
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
     }
@@ -67,7 +78,7 @@ router.post("/watermark/:appId/verify-removal", requireAuth, async (req: Request
 router.post("/watermark/:appId/remove-viva", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = (req as any).userId;
     if (!userId) {
       return res.status(401).json({ error: "No autenticado" });
     }
@@ -106,7 +117,7 @@ router.post("/watermark/:appId/remove-viva", requireAuth, async (req: Request, r
 router.post("/watermark/:appId/verify-removal-viva", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = (req as any).auth?.userId;
+    const userId = (req as any).userId;
     const { transactionId } = req.body;
 
     if (!userId) {
