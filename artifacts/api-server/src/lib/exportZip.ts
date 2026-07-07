@@ -44,7 +44,21 @@ const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
  * Identical contract to the validator / Sandpack parser, but kept independent
  * so a future change there does not silently mutate the export format.
  */
-export function bundleToFiles(bundle: string): Record<string, string> {
+/**
+ * ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de duplicados/código
+ * obsoleto): esta misma lógica de "extraer archivos de un bundle
+ * // === FILE: ===" estaba reimplementada por separado en exportZip.ts
+ * (bundleToFiles) y en validate.ts (parseBundleToVFS antigua), sin
+ * compartir código -- causa raíz real de varios de los bugs de hoy
+ * (cada vez que arreglaba algo en un sitio, el otro sitio se quedaba
+ * desincronizado). Esta función es ahora el núcleo COMPARTIDO -- extrae
+ * los pares ruta/contenido en bruto, con la protección contra rutas
+ * maliciosas (path traversal) que solo tenía exportZip.ts. Cada
+ * consumidor (exportZip.ts, validate.ts) aplica su propio filtrado
+ * específico ENCIMA de este resultado común, en vez de reimplementar el
+ * análisis desde cero.
+ */
+export function parseFileMarkers(bundle: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!bundle) return out;
   const matches: { path: string; index: number }[] = [];
@@ -61,14 +75,18 @@ export function bundleToFiles(bundle: string): Record<string, string> {
       : bundle.length;
     const safeEnd = end > start ? end : bundle.length;
     let p = matches[i].path;
-    // Drop any leading "./" or "/" so the archive does not contain absolute paths.
     if (p.startsWith("./")) p = p.slice(2);
     if (p.startsWith("/")) p = p.slice(1);
-    // Defensive against path traversal in generated paths.
+    // Defensa contra path traversal en rutas generadas -- antes solo la
+    // tenía bundleToFiles, ahora la comparten todos los consumidores.
     if (p.includes("..")) continue;
     out[p] = bundle.slice(start, safeEnd).replace(/^\n+/, "").trimEnd() + "\n";
   }
   return out;
+}
+
+export function bundleToFiles(bundle: string): Record<string, string> {
+  return parseFileMarkers(bundle);
 }
 
 /**

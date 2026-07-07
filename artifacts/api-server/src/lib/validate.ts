@@ -1,6 +1,7 @@
 import * as esbuild from "esbuild";
 import path from "node:path";
 
+import { parseFileMarkers } from "./exportZip";
 import { logger } from "./logger";
 
 export interface BuildIssue {
@@ -318,28 +319,20 @@ const SKIP_EXACT = new Set([
  * Drops build configs, tests, e2e and markdown — same rules as the Sandpack parser.
  */
 export function parseBundleToVFS(bundle: string): Record<string, string> {
+  // Núcleo de análisis compartido con exportZip.ts (ver parseFileMarkers)
+  // -- antes esta función tenía su propia copia completa del bucle de
+  // extracción, ahora solo aplica su filtrado específico (excluir tests,
+  // configs, .md) encima del resultado común.
+  const raw = parseFileMarkers(bundle);
   const out: Record<string, string> = {};
-  if (!bundle) return out;
-  const matches: { path: string; index: number }[] = [];
-  let m: RegExpExecArray | null;
-  FILE_MARKER.lastIndex = 0;
-  while ((m = FILE_MARKER.exec(bundle)) !== null) {
-    matches.push({ path: m[1].trim(), index: m.index + m[0].length });
-  }
-  if (matches.length === 0) return out;
-  for (let i = 0; i < matches.length; i++) {
-    const start = matches[i].index;
-    const end = i + 1 < matches.length
-      ? bundle.lastIndexOf("// === FILE:", matches[i + 1].index)
-      : bundle.length;
-    const safeEnd = end > start ? end : bundle.length;
-    let p = matches[i].path;
-    if (p.startsWith("./")) p = p.slice(2);
+  for (const [p, content] of Object.entries(raw)) {
     if (SKIP_EXACT.has(p)) continue;
     if (SKIP_PREFIXES.some((pre) => p.startsWith(pre))) continue;
     if (/\.(test|spec)\.[tj]sx?$/.test(p)) continue;
     if (/\.md$/.test(p)) continue;
-    out[p] = bundle.slice(start, safeEnd).replace(/^\n+/, "").trimEnd();
+    // parseFileMarkers añade un "\n" final (pensado para exportar a zip);
+    // aquí se quita para mantener el comportamiento exacto de antes.
+    out[p] = content.replace(/\n$/, "");
   }
   return out;
 }
