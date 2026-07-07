@@ -736,6 +736,16 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - Los campos del body deben coincidir con los FormData/JSON del frontend
     - Las respuestas deben tener la estructura que el frontend espera
 
+11. CONSISTENCIA DE NOMENCLATURA (importante en ediciones sobre proyectos
+    ya existentes, no solo en la primera generacion):
+    - camelCase para variables, funciones y campos de modelos -- SIEMPRE,
+      sin excepciones ni mezclas con snake_case.
+    - Si estas EDITANDO un proyecto ya generado antes, lee las
+      convenciones de nombres ya usadas en los archivos existentes y
+      SIGUE ESE MISMO ESTILO -- no introduzcas una convencion nueva o
+      distinta para el codigo nuevo que anadas, aunque prefieras otra
+      forma de nombrar las cosas.
+
 11. PAGINACION Y BUSQUEDA:
     - GET /resource?page=1&limit=20&q=busqueda&sort=createdAt&order=desc
     - Respuesta: { data: [...], total: N, page: N, totalPages: N }
