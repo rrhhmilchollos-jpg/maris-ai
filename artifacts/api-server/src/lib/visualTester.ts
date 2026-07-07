@@ -1059,7 +1059,14 @@ export async function prerenderAppHome(url: string): Promise<string | null> {
     // takeScreenshots() más arriba en este archivo para el mismo problema.
     await new Promise((r) => setTimeout(r, 1500));
     const rootHtml: string = await page.evaluate(() => {
-      const root = document.getElementById("root");
+      // (globalThis as any).document -- este callback se ejecuta DENTRO del
+      // navegador vía Puppeteer, donde `document` sí existe de verdad en
+      // tiempo de ejecución. Se usa `globalThis as any` en vez de añadir la
+      // librería "dom" al tsconfig del backend, porque eso introduciría
+      // globales de navegador (window, document, etc.) en TODO el proyecto
+      // Node y podría chocar con los propios globales de Node en otros
+      // archivos del backend.
+      const root = (globalThis as any).document.getElementById("root");
       return root ? root.innerHTML : "";
     });
     if (!rootHtml || rootHtml.trim().length < 20) {

@@ -33,6 +33,7 @@
 import type { Logger } from "pino";
 import { GeneratedApp } from "@workspace/db/schema";
 import { bundleToFiles } from "./exportZip";
+import { isStaticHtmlBundle } from "@workspace/bundle-format";
 
 const VERCEL_API = "https://api.vercel.com";
 const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID;
@@ -114,14 +115,16 @@ export async function deployAppToVercel(opts: {
 
   // Detect plain HTML/CSS/JS bundles (no React/Vite entry point).
   // These should be deployed as static sites, not built with Vite.
+  // ENCONTRADO al auditar el commit 3cbdcb0 (Ivan) y el refactor de
+  // @workspace/bundle-format (commits 113a476/5c43e36): este archivo tenía
+  // su PROPIA copia inline de esta comprobación, divergente de la que ya
+  // usan deployBundle.ts/validate.ts/exportZip.ts a través del paquete
+  // compartido -- exactamente la 4ª ubicación que quedó fuera de esa
+  // unificación. Ahora usa el mismo detector que todos los demás.
   const isStaticHtml =
     appKind !== "python-api" &&
     appKind !== "django" &&
-    !bundleFiles["src/main.tsx"] &&
-    !bundleFiles["src/main.jsx"] &&
-    !bundleFiles["src/main.ts"] &&
-    !bundleFiles["src/main.js"] &&
-    bundleFiles["index.html"] != null;
+    isStaticHtmlBundle(bundleFiles);
 
   const deployFiles =
     appKind === "python-api" || appKind === "django"
