@@ -3,6 +3,7 @@ import { validateBundle } from "./validate";
 import { patchBundle, patchBundleMultiFile, type GenLanguage, type BuildIssue, type ValidationReport } from "./shared-agents";
 import { logger } from "./logger";
 import { rememberPatch, extractFixHint, redactSecrets } from "./agentMemory";
+import { GenerationJob } from "@workspace/db/schema";
 
 export interface TestResult {
   test: string;
@@ -33,6 +34,11 @@ export async function runTestingAgent(
   let currentBundle = bundle;
   let allPassing = false;
   let cycle = 0;
+  // Declarado fuera del bucle a propósito -- report (más abajo) vive
+  // dentro del while y no está disponible tras salir de él, pero
+  // necesitamos su último valor para saber qué problemas quedaron sin
+  // resolver si se agotan los ciclos.
+  let lastReport: ValidationReport | null = null;
   // A petición EXPLÍCITA del usuario: el Testing Agent debe ser invisible
   // para el cliente cuando no hay nada que corregir -- antes se anunciaba
   // ("activado", "ciclo 1/5 escaneando...", "¡todas las pruebas pasaron!")
@@ -63,6 +69,7 @@ export async function runTestingAgent(
 
     // 1. RUN VALIDATION
     const report: ValidationReport = await validateBundle(currentBundle);
+    lastReport = report;
     
     // 1.1 DETECT BROKEN LINKS (Navegación)
     const brokenLinks: BuildIssue[] = [];
@@ -256,6 +263,19 @@ export async function runTestingAgent(
 
   if (!allPassing) {
     log("testing", "⚠️ Algunos problemas persisten pero se ha alcanzado el límite de ciclos o el parche no convergió.", "warn");
+    // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de calidad de la
+    // primera generación): antes esta información se perdía por completo
+    // al devolver solo el bundle -- el cliente recibía su app sin ningún
+    // indicio de que quedaron problemas conocidos sin resolver. Se
+    // guarda ahora en el propio job (accesible vía jobId, sin necesitar
+    // cambiar la firma de la función ni tocar los 4 sitios que la
+    // llaman) para que quede constancia real, consultable desde el panel
+    // admin y, más adelante, mostrable al cliente con honestidad.
+    const issuesSummary = (lastReport?.issues ?? []).slice(0, 5).map((i) => `${i.file}: ${i.message}`).join(" | ");
+    await GenerationJob.updateOne(
+      { _id: options.jobId },
+      { $set: { hasKnownQualityIssues: true, knownQualityIssuesSummary: issuesSummary.slice(0, 500) } },
+    ).catch((err) => logger.warn({ err, jobId: options.jobId }, "No se pudo guardar hasKnownQualityIssues en el job"));
   }
 
   return currentBundle;

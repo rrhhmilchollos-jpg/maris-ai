@@ -466,6 +466,16 @@ export interface IGenerationJob extends Document {
   // únicamente en el panel de admin, para que el equipo pueda diagnosticar
   // el problema real sin exponerlo al cliente.
   internalErrorMessage?: string;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de calidad de la primera
+  // generación): el Testing Agent (tester.ts) sabe internamente cuando se
+  // agotan los 5 ciclos de reparación SIN resolver todos los problemas
+  // detectados -- pero esa información solo se escribía en un log interno
+  // del servidor y se perdía por completo al devolver el resultado. El
+  // cliente recibía su app marcada como "lista" sin ningún indicio de que
+  // quedaron problemas conocidos sin resolver. Este campo permite que
+  // tester.ts deje constancia real de esto en el propio job.
+  hasKnownQualityIssues?: boolean;
+  knownQualityIssuesSummary?: string;
   currentAgent?: string;
   awaitingApproval?: boolean;
   approvedFacets?: string[];
@@ -534,6 +544,8 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     appId: { type: String },
     errorMessage: { type: String },
     internalErrorMessage: { type: String },
+    hasKnownQualityIssues: { type: Boolean, default: false },
+    knownQualityIssuesSummary: { type: String },
     currentAgent: { type: String },
     awaitingApproval: { type: Boolean, default: false },
     approvedFacets: { type: [String], default: [] },
