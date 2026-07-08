@@ -9157,6 +9157,27 @@ ${cssCode}
 <body>
 <div id="root"></div>
 <script>
+/* ENCONTRADO A PETICIÓN DEL USUARIO (caso real: preview mostrando "no se
+   encontró componente" sin más detalle -- el identificador detectado
+   era SOLO el stub de relleno "AnimatePresence", confirmando que el
+   código real de la app nunca llegó a ejecutarse, probablemente por un
+   error de Babel o de ejecución que fallaba en silencio). Captura real
+   del primer error de JavaScript (sintaxis de Babel o error en tiempo
+   de ejecución) para poder mostrarlo de verdad en vez de solo detectar
+   la ausencia del componente después del hecho. */
+window.__marisFirstError = null;
+window.addEventListener('error', function(e) {
+  if (!window.__marisFirstError) {
+    window.__marisFirstError = (e && e.error && e.error.message) || e.message || String(e);
+  }
+}, true);
+window.addEventListener('unhandledrejection', function(e) {
+  if (!window.__marisFirstError) {
+    window.__marisFirstError = 'Promise rechazada: ' + ((e.reason && e.reason.message) || String(e.reason));
+  }
+});
+</script>
+<script>
 /* Polyfills React hooks globals */
 const {useState,useEffect,useRef,useCallback,useMemo,useContext,useReducer,useLayoutEffect,useId,useTransition,useDeferredValue,forwardRef,createContext,memo,Fragment,lazy,Suspense} = React;
 /* Stubs para dependencias externas comunes */
@@ -9197,14 +9218,20 @@ const __toRender = (
        En vez de fingir éxito, se muestra la lista real de identificadores
        detectados en window para dar información de diagnóstico genuina. */
     const detected = Object.keys(window).filter((k) => /^[A-Z]/.test(k) && typeof window[k] === 'function').slice(0, 15);
+    const realError = window.__marisFirstError;
     return React.createElement('div',{style:{padding:'2rem',maxWidth:'600px',margin:'4rem auto',fontFamily:'Inter,sans-serif'}},
       React.createElement('h1',{style:{fontSize:'1.75rem',fontWeight:'700',marginBottom:'1rem',color:'#B91C1C'}},'⚠️ No se encontró un componente de interfaz para mostrar'),
-      React.createElement('p',{style:{color:'#6B7280',marginBottom:'1rem'}},'El código generado (' + '${appSizeKb}' + 'KB) no incluye ningún componente React reconocible (' + '${componentName}' + ', App, o una exportación por defecto) en este punto de la generación -- puede que sea un paso intermedio (solo backend/estructura) o que algo falle.'),
-      detected.length > 0 && React.createElement('div',{style:{background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:'8px',padding:'1rem',color:'#991B1B',fontSize:'0.85rem',marginBottom:'1rem'}},
+      React.createElement('p',{style:{color:'#6B7280',marginBottom:'1rem'}},'El código generado (' + '${appSizeKb}' + 'KB) no incluye ningún componente React reconocible (' + '${componentName}' + ', App, o una exportación por defecto) en este punto de la generación.'),
+      realError && React.createElement('div',{style:{background:'#FEF2F2',border:'2px solid #DC2626',borderRadius:'8px',padding:'1rem',color:'#7F1D1D',fontSize:'0.85rem',marginBottom:'1rem',fontFamily:'monospace',whiteSpace:'pre-wrap'}},
+        React.createElement('strong',{style:{fontFamily:'Inter,sans-serif'}},'Error real detectado: '), realError
+      ),
+      !realError && detected.length > 0 && React.createElement('div',{style:{background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:'8px',padding:'1rem',color:'#991B1B',fontSize:'0.85rem',marginBottom:'1rem'}},
         React.createElement('strong',null,'Identificadores detectados: '), detected.join(', ')
       ),
       React.createElement('div',{style:{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:'8px',padding:'1rem',color:'#1D4ED8',fontSize:'0.9rem'}},
-        'Si la generación sigue en curso, espera a que termine. Si ya terminó y sigues viendo esto, cuéntaselo al chat para que se revise.'
+        realError
+          ? 'Copia el error de arriba y pégalo en el chat para que se revise y repare.'
+          : 'Si la generación sigue en curso, espera a que termine. Si ya terminó y sigues viendo esto, cuéntaselo al chat para que se revise.'
       )
     );
   }
