@@ -326,7 +326,7 @@ export default function ShowcasePage() {
                 </Button>
               </Link>
             </div>
-            <p className="text-xs text-white/30">Soporte en español · WhatsApp +34 611 935 616 · Sin compromisos</p>
+            <p className="text-xs text-white/30">Soporte por ticket (respuesta en menos de 3-4 horas) · WhatsApp para casos urgentes: <a href="https://wa.me/34611935616" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60 transition-colors">+34 611 935 616</a> · Sin compromisos</p>
           </div>
         </section>
 
