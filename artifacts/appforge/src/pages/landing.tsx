@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Zap, Code2, Globe, ArrowRight, CheckCircle2, LayoutDashboard,
   Database, Smartphone, Newspaper, ChevronRight, GitBranch, Star,
-  Users, TrendingUp, Clock, Activity
+  Users, TrendingUp, Clock, Activity, Menu, X
 } from "lucide-react";
 
 // Líneas de código que se van escribiendo
@@ -110,6 +110,12 @@ export default function LandingPage() {
   // evocador, fácil de sustituir (seleccionado automáticamente al hacer
   // foco, ver el input onFocus más abajo).
   const [prompt, setPrompt] = useState("Crea una app de gestión de tareas con tableros kanban, modo oscuro y notificaciones en tiempo real");
+  // ENCONTRADO A PETICIÓN DEL USUARIO (investigación de fricción móvil):
+  // el <nav> completo (Precios, Showcase, Blog, Comparativa) usaba
+  // "hidden md:flex" -- oculto por completo en móvil, sin ningún menú
+  // alternativo. Un visitante en móvil no tenía forma de llegar a esas
+  // páginas desde la cabecera.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0.3]);
 
@@ -152,6 +158,15 @@ export default function LandingPage() {
             <Link href="/news" className="hover:text-white transition-colors">Blog</Link>
             <Link href="/vs-emergent" className="hover:text-white transition-colors">Comparativa</Link>
           </nav>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="md:hidden flex items-center justify-center h-10 w-10 rounded-lg hover:bg-white/10 transition-colors text-white"
+            aria-label={mobileMenuOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
           <div className="flex items-center space-x-3">
             {isSignedIn ? (
               <Link href="/dashboard">
@@ -178,6 +193,14 @@ export default function LandingPage() {
             )}
           </div>
         </div>
+        {mobileMenuOpen && (
+          <nav className="md:hidden border-t border-white/10 bg-background/95 backdrop-blur-xl px-4 py-3 flex flex-col gap-1">
+            <Link href="/pricing" onClick={() => setMobileMenuOpen(false)} className="px-3 py-3 rounded-lg hover:bg-white/10 text-white text-sm transition-colors">Precios</Link>
+            <Link href="/showcase" onClick={() => setMobileMenuOpen(false)} className="px-3 py-3 rounded-lg hover:bg-white/10 text-white text-sm transition-colors">Showcase</Link>
+            <Link href="/news" onClick={() => setMobileMenuOpen(false)} className="px-3 py-3 rounded-lg hover:bg-white/10 text-white text-sm transition-colors">Blog</Link>
+            <Link href="/vs-emergent" onClick={() => setMobileMenuOpen(false)} className="px-3 py-3 rounded-lg hover:bg-white/10 text-white text-sm transition-colors">Comparativa</Link>
+          </nav>
+        )}
       </header>
 
       {/* Hero */}
