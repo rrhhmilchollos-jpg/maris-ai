@@ -2956,6 +2956,75 @@ El equipo de Maris AI`,
 ];
 
 /**
+ * BrokenBundlesPanel — ENCONTRADO A PETICIÓN DEL USUARIO (caso real: app
+ * con título "Here are your Instructions", contenido inválido guardado
+ * como si fuera una generación exitosa). Botón real, sin necesitar la
+ * consola del navegador ni pegar URLs a mano: llama a
+ * GET /admin/apps/broken-bundles (con la autenticación real del panel,
+ * vía apiFetch) y muestra la lista de apps afectadas, si las hay.
+ */
+function BrokenBundlesPanel() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{
+    totalChecked: number;
+    totalBroken: number;
+    apps: Array<{ id: string; userEmail: string | null; title: string; status: string; frontendCodeLength: number; createdAt: string }>;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const runScan = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch<typeof result>("/api/admin/apps/broken-bundles");
+      setResult(data);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo completar la búsqueda.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="bg-card/40 border-white/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-red-400" />
+          Apps ya existentes con contenido inválido
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-white/60">
+          Revisa todas las apps ya generadas y encuentra cuáles tienen el mismo problema real que se corrigió para las generaciones nuevas (contenido guardado sin ser código válido).
+        </p>
+        <Button size="sm" onClick={runScan} disabled={loading} className="bg-red-600/80 hover:bg-red-600 text-white">
+          {loading ? "Buscando…" : "Buscar apps rotas"}
+        </Button>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        {result && (
+          <div className="space-y-2">
+            <p className="text-xs text-white/70">
+              Revisadas: <strong>{result.totalChecked}</strong> · Rotas encontradas:{" "}
+              <strong className={result.totalBroken > 0 ? "text-red-400" : "text-emerald-400"}>{result.totalBroken}</strong>
+            </p>
+            {result.apps.length > 0 && (
+              <div className="max-h-64 overflow-auto space-y-1.5 pr-1">
+                {result.apps.map((a) => (
+                  <div key={a.id} className="text-xs bg-white/5 rounded p-2 flex flex-col gap-0.5">
+                    <span className="font-semibold text-white/90">{a.title || "(sin título)"}</span>
+                    <span className="text-white/50">{a.userEmail || "(sin email)"} · {a.frontendCodeLength} caracteres · {new Date(a.createdAt).toLocaleString("es-ES")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * BroadcastButton — botón de campaña masiva a todos los clientes.
  * Abre un dialog con la plantilla "Volver a Maris AI" editable
  * y envía el email a todos los usuarios con al menos 1 job generado.
@@ -3661,6 +3730,14 @@ export default function AdminDashboardPage() {
                       ))}
                     </CardContent>
                   </Card>
+
+                  {/* ENCONTRADO A PETICIÓN DEL USUARIO: panel real para
+                      encontrar, sin tener que usar la consola del
+                      navegador, las apps ya existentes afectadas por el
+                      mismo problema del caso "Here are your Instructions"
+                      -- llama a GET /admin/apps/broken-bundles (ya con la
+                      autenticación real del panel, vía apiFetch). */}
+                  <BrokenBundlesPanel />
                 </div>
               </TabsContent>
 
