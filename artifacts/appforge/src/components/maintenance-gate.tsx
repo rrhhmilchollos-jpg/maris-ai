@@ -68,9 +68,26 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
     }
   }
 
-  // Aún sin respuesta del estado → no parpadear la página de construcción:
-  // se renderiza la app con normalidad (fail-open también durante la carga).
-  if (maintenance === null) return <>{children}</>;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (Lighthouse real: CLS de 1,000 --
+  // el máximo posible -- causado exactamente por este punto: mientras se
+  // comprueba /api/site-status se mostraba el contenido real completo
+  // (children), y en cuanto la comprobación confirmaba maintenance=true,
+  // se sustituía TODO por la pantalla de construcción -- el salto más
+  // grande posible en una página. El usuario quiere mantener el modo
+  // construcción activo a propósito, así que no se cambia ESE
+  // comportamiento -- solo se evita el "parpadeo" mostrando un estado
+  // neutro y de tamaño estable (pantalla completa, sin contenido que
+  // cambie de tamaño) mientras se espera la respuesta, en vez del
+  // contenido real que luego habría que descartar. El principio de
+  // "fail-open" (si /api/site-status no responde, mostrar el sitio con
+  // normalidad) se mantiene intacto vía el .catch() de arriba.
+  if (maintenance === null) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[hsl(240_10%_4%)]">
+        <Loader2 className="h-6 w-6 animate-spin text-white/30" />
+      </div>
+    );
+  }
 
   // Rutas de autenticación siempre accesibles (puerta de entrada del equipo).
   const isAuthRoute = location.startsWith("/sign-in") || location.startsWith("/sign-up");
