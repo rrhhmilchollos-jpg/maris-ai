@@ -116,7 +116,26 @@ export default function DashboardPage() {
   // -- mantenerlo hubiera duplicado la misma petición cada 5s dos veces
   // a la vez (una desde aquí, otra desde la campanita) mientras el
   // cliente está en el dashboard.
-  const [prompt, setPrompt] = useState("");
+  // ENCONTRADO A PETICIÓN DEL USUARIO (investigación del 70% de abandono
+  // entre form_start y generate_app): landing.tsx GUARDA la idea escrita
+  // antes de redirigir a /sign-up (localStorage.appforge_pending_prompt),
+  // pero NINGÚN sitio del código la leía después -- confirmado con grep
+  // en todo el proyecto. Un visitante que SÍ completaba el registro
+  // perdía igualmente su idea original y tenía que volver a escribirla
+  // desde cero en el panel -- el flujo se quedó a medias, guardando pero
+  // nunca recuperando. Se completa aquí: al cargar el panel, si existe
+  // una idea pendiente, se usa como valor inicial y se borra de
+  // localStorage (uso único, no debe reaparecer en visitas futuras).
+  const [prompt, setPrompt] = useState(() => {
+    try {
+      const pending = localStorage.getItem("appforge_pending_prompt");
+      if (pending) {
+        localStorage.removeItem("appforge_pending_prompt");
+        return pending;
+      }
+    } catch { /* localStorage no disponible -- no bloquea nada */ }
+    return "";
+  });
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
   const [ultraThinking, setUltraThinking] = useState<boolean>(false);

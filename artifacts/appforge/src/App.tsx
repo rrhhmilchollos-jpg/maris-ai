@@ -270,10 +270,30 @@ function SignInPage() {
 }
 
 function SignUpPage() {
+  // ENCONTRADO A PETICIÓN DEL USUARIO (investigación del 70% de abandono
+  // entre form_start y generate_app en la landing): quien escribe su idea
+  // y pulsa "Generar App" sin sesión iniciada aterriza aquí, en un
+  // formulario de registro genérico que no reconoce en absoluto lo que
+  // acaba de escribir -- sensación de "muro frío" justo en el punto de
+  // mayor fricción del embudo. Se añade un mensaje breve que confirma que
+  // su idea ya está guardada, para que la conexión entre "escribí algo" y
+  // "ahora regístrate" sea explícita, no un salto de contexto sin
+  // explicación.
+  const [pendingPrompt] = useState<string | null>(() => {
+    try { return localStorage.getItem("appforge_pending_prompt"); } catch { return null; }
+  });
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090b] px-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background"></div>
       <div className="relative z-10 w-full max-w-md">
+        {pendingPrompt && (
+          <div className="mb-4 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-center">
+            <p className="text-sm text-white/90">
+              ✨ Tu idea ya está guardada — crea tu cuenta gratis para verla cobrar vida:
+            </p>
+            <p className="mt-1 text-xs text-primary font-medium line-clamp-2">"{pendingPrompt}"</p>
+          </div>
+        )}
         <SignUp
           routing="path"
           path={`${basePath}/sign-up`}
