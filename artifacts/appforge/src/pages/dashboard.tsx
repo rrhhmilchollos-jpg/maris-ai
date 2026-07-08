@@ -818,7 +818,7 @@ export default function DashboardPage() {
               <div className="relative bg-[#0a0a10] border border-white/[0.07] rounded-xl focus-within:border-primary/40 transition-all">
                 <Textarea
                   placeholder={kindMeta.placeholder}
-                  className="min-h-[100px] sm:min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-sm text-white placeholder:text-white/20 p-3 sm:p-4 pb-14"
+                  className="min-h-[100px] sm:min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-base md:text-sm text-white placeholder:text-white/20 p-3 sm:p-4 pb-14"
                   value={prompt}
                   onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); }}
                   disabled={isWorking}
@@ -1076,7 +1076,7 @@ export default function DashboardPage() {
                 </div>
               )}
               {currentQuestion?.type === "textarea" && (
-                <Textarea placeholder={currentQuestion.placeholder} className="min-h-[120px] bg-background/50 border-white/10 focus:border-primary/50 resize-none text-sm"
+                <Textarea placeholder={currentQuestion.placeholder} className="min-h-[120px] bg-background/50 border-white/10 focus:border-primary/50 resize-none text-base md:text-sm"
                   value={onboardingAnswers[onboardingStep] || ""} onChange={(e) => handleOnboardingAnswer(e.target.value)} autoFocus />
               )}
             </div>

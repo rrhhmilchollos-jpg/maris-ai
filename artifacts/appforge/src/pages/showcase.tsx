@@ -222,7 +222,7 @@ export default function ShowcasePage() {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Buscar apps..."
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pl-9 pr-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pl-9 pr-3 py-2 text-base sm:text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-primary/50"
                 />
               </div>
             </div>
