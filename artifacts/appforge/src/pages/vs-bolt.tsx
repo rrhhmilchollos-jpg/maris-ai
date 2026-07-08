@@ -175,7 +175,7 @@ export default function VsBoltPage() {
               <Link href="/sign-up"><Button size="lg" className="bg-primary hover:bg-primary/90 text-white font-bold gap-2 h-12 px-8 shadow-lg shadow-primary/30"><Rocket className="h-5 w-5" />Crear cuenta gratis</Button></Link>
               <Link href="/demo"><Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/[0.05] h-12 px-8 gap-2"><Zap className="h-5 w-5" />Ver demo en vivo</Button></Link>
             </div>
-            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte por ticket (respuesta en menos de 3-4 horas) · WhatsApp para casos urgentes: +34 611 935 616</p>
+            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte por ticket (respuesta en menos de 3-4 horas) · WhatsApp para casos urgentes: <a href="https://wa.me/34611935616" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/60 transition-colors">+34 611 935 616</a></p>
           </div>
         </section>
       </div>
