@@ -6,7 +6,7 @@ const EXTRACTOR_MODEL = "claude-haiku-4-5";
 
 export interface MemoryExtractorInput {
   userId: string;
-  appId: number;
+  appId: string;
   userPrompt: string;
   appDescription: string;
 }

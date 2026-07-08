@@ -7604,6 +7604,33 @@ export async function runJobById(jobId: string): Promise<void> {
         }).catch((err) => logger.warn({ err }, "No se pudo crear el mensaje de aviso de build fallido"));
       }
 
+      // ENCONTRADO A PETICIÓN DEL USUARIO ('que capacidad de enseñanza
+      // tienen los agentes'): runMemoryExtractor() (agentMemoryExtractor.ts)
+      // existía completo y bien construido -- modelo barato (Haiku),
+      // guardas reales contra filtrar secretos, diseñado para fallar en
+      // silencio -- pero nunca se llamaba desde ningún sitio. Sus
+      // funciones de destino (appendAppNotes/appendUserPreferences) SÍ
+      // están conectadas por el otro lado (loadAgentMemory las lee en
+      // cada edición) -- solo faltaba esta pieza para cerrar el círculo
+      // completo de aprendizaje. Se lanza en segundo plano (no se espera
+      // su resultado) para no alargar la respuesta al cliente por algo
+      // que es una mejora, no una funcionalidad crítica.
+      if (!finalResult.buildErrorSummary) {
+        void (async () => {
+          try {
+            const { runMemoryExtractor } = await import("../lib/agentMemoryExtractor");
+            await runMemoryExtractor({
+              userId: job.userId,
+              appId: String(job.editAppId),
+              userPrompt: job.prompt || "",
+              appDescription: finalResult.description || "",
+            });
+          } catch (memErr) {
+            logger.warn({ memErr }, "runMemoryExtractor falló tras edición (no crítico)");
+          }
+        })();
+      }
+
       // MEDIDOR DE CÓMPUTO DINÁMICO (estilo Emergent.sh) — a petición
       // explícita del usuario. El cobro fijo inicial (POST /apps/:id/messages,
       // 5 créditos paid / 0.2 free) sigue actuando como filtro de entrada
