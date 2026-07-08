@@ -112,6 +112,30 @@ export async function learnFromSuccessfulProject(opts: {
     const summary = response?.content?.find((c: any) => c.type === "text")?.text?.trim();
     if (!summary) return;
 
+    // ENCONTRADO A PETICIÓN DEL USUARIO (refuerzo de sistemas de
+    // aprendizaje): a diferencia de agentMemory.ts (que sí deduplica por
+    // similitud semántica), esta función guardaba cada proyecto exitoso
+    // como una entrada NUEVA sin ningún límite -- si se generan muchos
+    // proyectos exitosos del mismo sector con el tiempo, la colección
+    // crece sin control con patrones probablemente muy parecidos entre
+    // sí. Límite razonable: máximo 20 manuales guardados por combinación
+    // sector+tipo -- al llegar al límite, solo se guarda el nuevo si su
+    // calidad supera a la entrada más floja ya guardada, que se
+    // descarta. Mantiene la colección acotada quedándose con los
+    // mejores patrones con el tiempo, no con todos indiscriminadamente.
+    const MAX_PLAYBOOKS_PER_VERTICAL = 20;
+    const existingForVertical = await ProjectPlaybook.find({ businessVertical: vertical, kind: opts.kind })
+      .sort({ qualityScore: 1 })
+      .lean();
+    if (existingForVertical.length >= MAX_PLAYBOOKS_PER_VERTICAL) {
+      const worst = existingForVertical[0] as any;
+      if (opts.qualityScore <= worst.qualityScore) {
+        logger.info({ appId: opts.appId, vertical }, "📚 Playbook descartado -- límite alcanzado y calidad no supera al peor ya guardado");
+        return;
+      }
+      await ProjectPlaybook.deleteOne({ _id: worst._id });
+    }
+
     await ProjectPlaybook.create({
       businessVertical: vertical,
       kind: opts.kind,
