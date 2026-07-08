@@ -8,6 +8,8 @@ import {
   GenerationJob,
   CreditTransaction,
   AgentMemory,
+  ProjectPlaybook,
+  AgentNote,
   JobLog,
   UserNotification,
   AppMessage,
@@ -685,6 +687,55 @@ router.get("/admin/apps/broken-bundles", async (_req, res) => {
       frontendCodeLength: typeof r.frontendCode === "string" ? r.frontendCode.length : 0,
       createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : (r.createdAt ?? null),
     })),
+  });
+});
+
+// GET /admin/learning-systems
+// ENCONTRADO A PETICIÓN DEL USUARIO ('dame un porcentaje... para saber
+// todo lo que saben'): la valoración cualitativa de cada sistema de
+// aprendizaje no sustituye a datos reales -- este endpoint cuenta
+// cuántas entradas de verdad existen hoy en cada uno, para poder ver el
+// progreso real con el tiempo, no solo una foto fija de hoy.
+router.get("/admin/learning-systems", async (_req, res) => {
+  await connectDB();
+  const [
+    agentMemoryCount,
+    agentMemoryTotalReuses,
+    playbookCount,
+    playbookTotalReuses,
+    playbooksByVertical,
+    appNotesCount,
+    userPrefsCount,
+  ] = await Promise.all([
+    AgentMemory.countDocuments({}),
+    AgentMemory.aggregate([{ $group: { _id: null, total: { $sum: "$successCount" } } }]),
+    ProjectPlaybook.countDocuments({}),
+    ProjectPlaybook.aggregate([{ $group: { _id: null, total: { $sum: "$timesReused" } } }]),
+    ProjectPlaybook.aggregate([{ $group: { _id: "$businessVertical", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+    AgentNote.countDocuments({ notes: { $exists: true, $ne: "" } }),
+    AgentNote.countDocuments({}),
+  ]);
+  res.json({
+    agentMemory: {
+      description: "Recuerda arreglos de errores pasados (Testing Agent)",
+      entriesGuardadas: agentMemoryCount,
+      vecesReutilizadoEnTotal: (agentMemoryTotalReuses[0] as any)?.total ?? 0,
+    },
+    projectPlaybooks: {
+      description: "Manuales de proyectos similares ya exitosos",
+      entriesGuardadas: playbookCount,
+      vecesReutilizadoEnTotal: (playbookTotalReuses[0] as any)?.total ?? 0,
+      porSector: playbooksByVertical.map((v: any) => ({ sector: v._id, cantidad: v.count })),
+    },
+    integrationPlaybooks: {
+      description: "Manuales de integraciones (Stripe, Supabase...) -- lista fija en código, no crece sola",
+      entriesConfiguradas: "fijo, no cuenta con base de datos",
+    },
+    agentMemoryContext: {
+      description: "Notas de proyecto (app_notes) y preferencias de usuario (user_preferences)",
+      cuentasConNotasDeProyecto: appNotesCount,
+      cuentasTotalesRegistradas: userPrefsCount,
+    },
   });
 });
 
