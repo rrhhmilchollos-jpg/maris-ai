@@ -226,7 +226,7 @@ export default function LandingPage() {
             <motion.div variants={fadeIn} className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
               {["Panel CRM", "E-commerce", "App móvil", "Dashboard analytics", "SaaS MVP", "Landing page"].map((ex) => (
                 <button key={ex} onClick={() => setPrompt(`Crea un ${ex.toLowerCase()}`)}
-                  className="px-3 py-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:text-white transition-all text-xs">
+                  className="px-4 py-2.5 min-h-[40px] rounded-full border border-white/10 bg-white/5 hover:bg-white/10 hover:text-white transition-all text-xs">
                   {ex}
                 </button>
               ))}
