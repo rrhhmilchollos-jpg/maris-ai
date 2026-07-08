@@ -110,43 +110,12 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // ── Notificaciones de soporte ──
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [notifDismissed, setNotifDismissed] = useState<Set<string>>(new Set());
-  const prevNotifIdsRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    const fetchNotifs = async () => {
-      try {
-        const data = await apiFetch<any>("/api/notifications");
-        const unread = (data.notifications || []).filter((n: any) => !n.read);
-        setNotifications(unread);
-
-        // FIX: si llega una notificación nueva de soporte (support_patch),
-        // invalidar la lista de apps para que el cliente vea la app actualizada
-        // inmediatamente sin necesidad de refrescar la página.
-        const newSupportNotifs = unread.filter(
-          (n: any) => n.type === "support_patch" && !prevNotifIdsRef.current.has(n._id)
-        );
-        if (newSupportNotifs.length > 0) {
-          queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: getGetMyStatsQueryKey() });
-        }
-        // Actualizar el set de IDs conocidos
-        prevNotifIdsRef.current = new Set(unread.map((n: any) => n._id));
-      } catch { /* silencioso */ }
-    };
-    fetchNotifs();
-    // FIX: reducir de 30s a 5s para que el banner aparezca casi inmediatamente
-    // cuando soporte desbloquea la app.
-    const interval = setInterval(fetchNotifs, 5000);
-    return () => clearInterval(interval);
-  }, [queryClient]);
-
-  const dismissNotif = async (id: string) => {
-    setNotifDismissed(p => new Set([...p, id]));
-    try { await apiFetch<any>(`/api/notifications/${id}/read`, { method: "PATCH" }); } catch { /* silencioso */ }
-  };
+  // Notificaciones de soporte: movidas a la campanita del layout
+  // compartido (components/layout.tsx, NotificationsBell) a petición
+  // explícita del usuario. Se elimina también este fetch/efecto de aquí
+  // -- mantenerlo hubiera duplicado la misma petición cada 5s dos veces
+  // a la vez (una desde aquí, otra desde la campanita) mientras el
+  // cliente está en el dashboard.
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
   const [coderModel, setCoderModel] = useState<string>("auto");
@@ -732,46 +701,11 @@ export default function DashboardPage() {
     <Layout>
       <div className="container max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
 
-        {/* ── Notificaciones de soporte ── */}
-        {/* ENCONTRADO A PETICIÓN DEL USUARIO (caso real con captura: dos
-            avisos idénticos seguidos, causado por el bucle de aiAutopilot.ts
-            ya corregido en el backend). Protección extra aquí en el
-            frontend: si por cualquier motivo llegaran a existir avisos
-            duplicados (contenido idéntico para la misma app), solo se
-            muestra el primero -- nunca dos iguales seguidos, sin importar
-            la causa de fondo. */}
-        {notifications
-          .filter(n => !notifDismissed.has(n._id))
-          .filter((n, idx, arr) => arr.findIndex(o => o.appId === n.appId && o.message === n.message) === idx)
-          .map((notif) => (
-          <div key={notif._id}
-            className="relative flex items-start gap-4 rounded-xl border border-violet-500/40 bg-violet-500/8 px-5 py-4 shadow-lg shadow-violet-500/10 animate-in slide-in-from-top-2">
-            <div className="shrink-0 mt-0.5">
-              <div className="h-9 w-9 rounded-full bg-violet-500/20 flex items-center justify-center">
-                <BellRing className="h-5 w-5 text-violet-400" />
-              </div>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-violet-300 mb-1 flex items-center gap-2">
-                Actualización del equipo de soporte
-                {notif.appTitle && (
-                  <span className="text-[10px] font-mono bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-full border border-violet-500/30">
-                    {notif.appTitle}
-                  </span>
-                )}
-              </p>
-              <p className="text-sm text-white/80 leading-relaxed">{notif.message.replace(/\*\*/g, "")}</p>
-              {notif.appId && (
-                <button onClick={() => setLocation(`/apps/${notif.appId}`)} className="mt-2 inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors">
-                  <ExternalLink className="h-3 w-3" />Ver mi app actualizada
-                </button>
-              )}
-            </div>
-            <button onClick={() => dismissNotif(notif._id)} className="shrink-0 text-white/30 hover:text-white/60 transition-colors mt-0.5">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
+        {/* Notificaciones de soporte: movidas a la campanita del layout
+            compartido (components/layout.tsx, NotificationsBell) a
+            petición explícita del usuario -- ya no se muestran sueltas
+            aquí, ocupando toda la parte de arriba de la pantalla de
+            inicio. */}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <Card className="bg-card/50 border-white/5 shadow-sm">
