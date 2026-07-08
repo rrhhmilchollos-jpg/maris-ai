@@ -25,8 +25,10 @@ import {
   CreditTransaction,
   JobLog,
   AppMessage,
+  Ticket,
 } from "@workspace/db/schema";
 import { enqueueGenerateJob } from "./jobQueue";
+import { notifyAdminSupportTicket } from "./notify";
 
 const AI_MODEL = "claude-haiku-4-5-20251001"; // Rápido y barato para diagnóstico
 const AI_MODEL_SMART = "claude-sonnet-4-6";   // Para análisis complejos
@@ -606,5 +608,41 @@ export async function runAutopilotTick(): Promise<void> {
     runHealthMonitor(),
     autoFixBrokenApps(),
     sendDailySummary(),
+    checkStaleTickets(),
   ]);
+}
+
+// ENCONTRADO A PETICIÓN DEL USUARIO (red de seguridad real para la
+// promesa de "respuesta en menos de 3-4 horas" ahora visible en 5
+// páginas públicas de marisai.es -- ver commits del mismo día sobre las
+// páginas de comparación): sin esto, la promesa dependía por completo
+// de que alguien revisara el correo a mano. Con un solo fundador
+// llevando varios productos a la vez, un ticket real podía quedar sin
+// respuesta mucho más de lo prometido, sin que nadie se enterase hasta
+// que el cliente se quejara.
+async function checkStaleTickets(): Promise<void> {
+  try {
+    await connectDB();
+    const THREE_HOURS_AGO = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const staleTickets = await Ticket.find({
+      status: "open",
+      responses: { $size: 0 }, // sin ninguna respuesta todavía
+      createdAt: { $lte: THREE_HOURS_AGO },
+      staleReminderSentAt: { $exists: false }, // aviso único, no repetido
+    }).limit(20).lean();
+
+    for (const ticket of staleTickets) {
+      const user = await User.findById(ticket.userId).select("email").lean() as any;
+      await notifyAdminSupportTicket({
+        userEmail: user?.email,
+        subject: `⏰ SIN RESPONDER (${Math.round((Date.now() - new Date(ticket.createdAt).getTime()) / (60 * 60 * 1000))}h): ${ticket.subject}`,
+        message: ticket.message,
+        ticketId: String(ticket._id),
+      });
+      await Ticket.updateOne({ _id: ticket._id }, { $set: { staleReminderSentAt: new Date() } });
+      logger.warn({ ticketId: String(ticket._id) }, "aiAutopilot: ticket sin responder tras 3h -- aviso de recordatorio enviado");
+    }
+  } catch (err) {
+    logger.error({ err }, "aiAutopilot.checkStaleTickets error");
+  }
 }

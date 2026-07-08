@@ -1056,6 +1056,12 @@ export interface ITicket extends Document {
   }>;
   createdAt: Date;
   updatedAt: Date;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (red de seguridad real para la
+  // promesa de "respuesta en menos de 3-4 horas" ahora visible en 5
+  // páginas públicas): evita mandar el mismo aviso de "ticket sin
+  // responder" cada 5 minutos para siempre -- mismo tipo de bucle que
+  // ya se corrigió antes hoy en aiAutopilot.ts.
+  staleReminderSentAt?: Date;
 }
 
 const TicketSchema = new Schema<ITicket>(
@@ -1082,6 +1088,7 @@ const TicketSchema = new Schema<ITicket>(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    staleReminderSentAt: { type: Date },
   },
   { timestamps: true },
 );
