@@ -9235,8 +9235,40 @@ window.lucideReact = new Proxy({default:LucideIcon},{get:(_,k)=>k==='default'?Lu
 /* recharts stub */
 window.recharts = new Proxy({},{get:(_,k)=>()=>null});
 /* framer-motion stub */
-window.motion = {div:'div',span:'span',button:'button',section:'section',p:'p',h1:'h1',h2:'h2',h3:'h3',ul:'ul',li:'li'};
+/* framer-motion stub -- DINÁMICO en vez de una lista corta fija.
+   ENCONTRADO A PETICIÓN DEL USUARIO (caso real: app con
+   "Identificadores detectados: AnimatePresence" -- el único stub que
+   sobrevivía era este, sugiriendo que el resto del código nunca llegó a
+   ejecutarse por completo). La lista fija anterior (div, span, button,
+   section, p, h1, h2, h3, ul, li) no cubría TODAS las etiquetas HTML
+   que motion.X puede usar en código real (motion.img, motion.nav,
+   motion.a, motion.svg, etc.) -- si el código generado usaba una
+   etiqueta fuera de esa lista corta, motion.esaEtiqueta era undefined,
+   y usar un valor undefined como tipo de elemento JSX (<motion.algo>)
+   lanza un error real de React que puede no propagarse de forma clara.
+   Con un Proxy (mismo patrón ya usado abajo para lucide-react y
+   recharts), CUALQUIER motion.loquesea funciona automáticamente. */
+window.motion = new Proxy({}, { get: (_, tag) => tag });
 window.AnimatePresence = ({children})=>children;
+/* ENCONTRADO A PETICIÓN DEL USUARIO: el prompt permite explícitamente
+   react-hook-form, zod, @hookform/resolvers, react-day-picker, date-fns
+   y matter-js (ver sección LIBRARIES del prompt del Frontend Engineer),
+   pero ninguna tenía ningún respaldo aquí -- solo se les recortaba el
+   import. Intenté primero cargar las versiones REALES vía esm.sh con
+   control manual de Babel, pero no tengo forma de probar ese cambio en
+   un navegador real en este entorno, y es demasiado arriesgado para el
+   preview de TODAS las apps de la plataforma sin poder verificarlo --
+   revertido. En su lugar, respaldos mínimos y seguros (mismo criterio
+   que ya usaba recharts: mejor un componente que no hace nada visible
+   a que la app entera no cargue) -- suficiente para que el resto de la
+   app SÍ se muestre, aunque estos formularios/calendarios concretos no
+   tengan funcionalidad real en el preview. Pendiente de abordar con
+   pruebas reales en otra sesión si hace falta soporte completo. */
+window.useForm = () => ({ register: () => ({}), handleSubmit: (fn) => (e) => { e && e.preventDefault && e.preventDefault(); }, formState: { errors: {} }, watch: () => undefined, setValue: () => {}, reset: () => {} });
+window.zodResolver = () => undefined;
+window.z = new Proxy({}, { get: () => new Proxy({}, { get: (_, k) => (k === 'parse' || k === 'safeParse') ? (v) => v : () => window.z } ) } );
+window.DayPicker = (props) => React.createElement('div', {className:'text-xs text-gray-400 p-2 border rounded'}, 'Selector de fecha (solo visible en la app publicada)');
+window.Matter = new Proxy({}, { get: () => new Proxy(function(){}, { get: () => () => ({}), apply: () => ({}) }) });
 </script>
 <script type="text/babel" data-presets="react,typescript">
 /* useState/useEffect/etc, clsx y cn ya están declarados como globales por
