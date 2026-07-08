@@ -9185,13 +9185,29 @@ const __toRender = (
   typeof ${componentName} !== 'undefined' ? ${componentName} :
   typeof App !== 'undefined' ? App :
   typeof __DefaultExport !== 'undefined' ? __DefaultExport :
-  () => React.createElement('div',{style:{padding:'2rem',maxWidth:'600px',margin:'4rem auto',fontFamily:'Inter,sans-serif'}},
-    React.createElement('h1',{style:{fontSize:'1.75rem',fontWeight:'700',marginBottom:'1rem'}},'${title}'),
-    React.createElement('p',{style:{color:'#6B7280',marginBottom:'1.5rem'}},'App de ${appSizeKb}KB generada correctamente.'),
-    React.createElement('div',{style:{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:'8px',padding:'1rem',color:'#1D4ED8',fontSize:'0.9rem'}},
-      'Para ver la app completa despliégala desde el panel con el botón Deploy.'
-    )
-  )
+  () => {
+    /* ENCONTRADO A PETICIÓN DEL USUARIO (captura real: preview mostrando
+       "generada correctamente" cuando en realidad NO se encontró ningún
+       componente de React que ejecutar -- mensaje falsamente positivo y
+       confuso). Este bloque se activa cuando ninguno de los 3 nombres
+       esperados existe en el ámbito global tras transpilar -- ya sea
+       porque el bundle genuinamente no tiene un componente de UI todavía
+       (p.ej. un hito intermedio solo de backend/infraestructura), o
+       porque el nombre real no coincide con ninguno de los 3 esperados.
+       En vez de fingir éxito, se muestra la lista real de identificadores
+       detectados en window para dar información de diagnóstico genuina. */
+    const detected = Object.keys(window).filter((k) => /^[A-Z]/.test(k) && typeof window[k] === 'function').slice(0, 15);
+    return React.createElement('div',{style:{padding:'2rem',maxWidth:'600px',margin:'4rem auto',fontFamily:'Inter,sans-serif'}},
+      React.createElement('h1',{style:{fontSize:'1.75rem',fontWeight:'700',marginBottom:'1rem',color:'#B91C1C'}},'⚠️ No se encontró un componente de interfaz para mostrar'),
+      React.createElement('p',{style:{color:'#6B7280',marginBottom:'1rem'}},'El código generado (' + '${appSizeKb}' + 'KB) no incluye ningún componente React reconocible (' + '${componentName}' + ', App, o una exportación por defecto) en este punto de la generación -- puede que sea un paso intermedio (solo backend/estructura) o que algo falle.'),
+      detected.length > 0 && React.createElement('div',{style:{background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:'8px',padding:'1rem',color:'#991B1B',fontSize:'0.85rem',marginBottom:'1rem'}},
+        React.createElement('strong',null,'Identificadores detectados: '), detected.join(', ')
+      ),
+      React.createElement('div',{style:{background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:'8px',padding:'1rem',color:'#1D4ED8',fontSize:'0.9rem'}},
+        'Si la generación sigue en curso, espera a que termine. Si ya terminó y sigues viendo esto, cuéntaselo al chat para que se revise.'
+      )
+    );
+  }
 );
 
 try {
