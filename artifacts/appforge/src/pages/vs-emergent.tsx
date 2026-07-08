@@ -114,7 +114,7 @@ export default function VsEmergentPage() {
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-8 text-center space-y-4">
             <div className="flex justify-center gap-1">{[1,2,3,4,5].map(s => <Star key={s} className="h-5 w-5 fill-yellow-400 text-yellow-400" />)}</div>
             <h2 className="text-2xl font-bold text-white">Nuestro veredicto</h2>
-            <p className="text-white/70 leading-relaxed max-w-2xl mx-auto">Emergent.sh es técnicamente muy capaz y tiene un enfoque multi-agente similar al de Maris AI, pero está completamente en inglés y sin soporte en español. Para el mercado hispanohablante, Maris AI es la opción natural: mismo nivel de calidad técnica, en español, con soporte humano por WhatsApp y precios en euros.</p>
+            <p className="text-white/70 leading-relaxed max-w-2xl mx-auto">Emergent.sh es técnicamente muy capaz y tiene un enfoque multi-agente similar al de Maris AI, pero está completamente en inglés y sin soporte en español. Para el mercado hispanohablante, Maris AI es la opción natural: mismo nivel de calidad técnica, primera plataforma nativa en español, con soporte real (tickets con respuesta en menos de 3-4 horas, y WhatsApp para casos urgentes) y precios en euros.</p>
             <Link href="/sign-up"><Button size="lg" className="mt-2 bg-primary hover:bg-primary/90 text-white font-bold gap-2 shadow-lg shadow-primary/30">Empezar con Maris AI gratis <ArrowRight className="h-5 w-5" /></Button></Link>
           </div>
         </section>
@@ -170,12 +170,12 @@ export default function VsEmergentPage() {
         <section className="container px-4 mx-auto max-w-3xl text-center">
           <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-cyan-500/10 border border-primary/20 p-10 space-y-5">
             <h2 className="text-3xl font-black text-white">¿Listo para crear tu app?</h2>
-            <p className="text-white/60 max-w-md mx-auto">Únete a más de 2.400 emprendedores que ya eligieron la alternativa en español. Empieza gratis hoy.</p>
+            <p className="text-white/60 max-w-md mx-auto">La primera plataforma de creación de apps con IA nativa en español — hecha para hispanohablantes, no traducida después. Empieza gratis hoy.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/sign-up"><Button size="lg" className="bg-primary hover:bg-primary/90 text-white font-bold gap-2 h-12 px-8 shadow-lg shadow-primary/30"><Rocket className="h-5 w-5" />Crear cuenta gratis</Button></Link>
               <Link href="/demo"><Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/[0.05] h-12 px-8 gap-2"><Zap className="h-5 w-5" />Ver demo en vivo</Button></Link>
             </div>
-            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte en español · WhatsApp +34 611 935 616</p>
+            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte por ticket (respuesta en menos de 3-4 horas) · WhatsApp para casos urgentes: +34 611 935 616</p>
           </div>
         </section>
       </div>

@@ -171,12 +171,12 @@ export default function VsLovablePage() {
         <section className="container px-4 mx-auto max-w-3xl text-center">
           <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-cyan-500/10 border border-primary/20 p-10 space-y-5">
             <h2 className="text-3xl font-black text-white">¿Listo para crear tu app?</h2>
-            <p className="text-white/60 max-w-md mx-auto">Únete a más de 2.400 emprendedores que ya eligieron la alternativa en español. Empieza gratis hoy.</p>
+            <p className="text-white/60 max-w-md mx-auto">La primera plataforma de creación de apps con IA nativa en español — hecha para hispanohablantes, no traducida después. Empieza gratis hoy.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/sign-up"><Button size="lg" className="bg-primary hover:bg-primary/90 text-white font-bold gap-2 h-12 px-8 shadow-lg shadow-primary/30"><Rocket className="h-5 w-5" />Crear cuenta gratis</Button></Link>
               <Link href="/demo"><Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/[0.05] h-12 px-8 gap-2"><Zap className="h-5 w-5" />Ver demo en vivo</Button></Link>
             </div>
-            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte en español · WhatsApp +34 611 935 616</p>
+            <p className="text-xs text-white/30">Sin tarjeta de crédito · Soporte por ticket (respuesta en menos de 3-4 horas) · WhatsApp para casos urgentes: +34 611 935 616</p>
           </div>
         </section>
       </div>
