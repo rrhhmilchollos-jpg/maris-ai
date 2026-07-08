@@ -102,11 +102,12 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
       {/* Pastilla flotante de control — SOLO admins */}
       {isAdmin && (
         <div
-          className={`fixed bottom-4 left-4 z-[9999] flex items-center gap-3 rounded-full border px-4 py-2 text-xs shadow-2xl backdrop-blur-md transition-colors ${
+          className={`fixed z-[9999] flex items-center gap-3 rounded-full border px-4 py-2 text-xs shadow-2xl backdrop-blur-md transition-colors ${
             maintenance
               ? "border-amber-500/40 bg-amber-950/80 text-amber-200"
               : "border-white/10 bg-black/70 text-zinc-400"
           }`}
+          style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))", left: "1rem" }}
         >
           <Construction className="h-3.5 w-3.5" />
           <span className="font-medium">
