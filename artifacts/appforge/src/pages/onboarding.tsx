@@ -15,6 +15,7 @@ import {
   Code,
   Palette,
   Database,
+  Loader2,
 } from "lucide-react";
 
 // ✅ Seguimiento 4: Pantalla de bienvenida/onboarding para nuevos usuarios
@@ -47,8 +48,31 @@ export default function OnboardingPage() {
   const { user } = useUser();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  // ENCONTRADO A PETICIÓN DEL USUARIO (investigación real del embudo,
+  // 70% de abandono): quien llega aquí CON una idea ya escrita en la
+  // landing (localStorage.appforge_pending_prompt) se encuentra con un
+  // asistente de 3 pasos que, en el paso 2, le pregunta "¿Qué quieres
+  // crear?" con una lista genérica -- redundante e incoherente, porque
+  // YA nos dijo exactamente qué quería crear. Para este caso concreto,
+  // se salta el asistente entero y se va directo al panel, donde el
+  // arreglo anterior (dashboard.tsx) ya recupera esa idea automáticamente.
+  // Quien llega SIN idea pendiente (entró directo a marisai.es/sign-up,
+  // por ejemplo) sigue viendo el asistente completo con normalidad.
+  const [skippingToPendingIdea] = useState(() => {
+    try { return Boolean(localStorage.getItem("appforge_pending_prompt")); } catch { return false; }
+  });
 
   const firstName = user?.firstName || user?.fullName?.split(" ")[0] || "ahí";
+
+  useEffect(() => {
+    if (skippingToPendingIdea) {
+      apiFetch("/api/me/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onboardingCompleted: true }),
+      }).catch(() => {}).finally(() => setLocation("/dashboard"));
+    }
+  }, [skippingToPendingIdea, setLocation]);
 
   useEffect(() => {
     fireMetaPixelRegistration();
@@ -66,6 +90,14 @@ export default function OnboardingPage() {
       }
     } catch {}
   }, []);
+
+  if (skippingToPendingIdea) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090b]">
+        <Loader2 className="h-6 w-6 animate-spin text-white/30" />
+      </div>
+    );
+  }
 
   const APP_TYPES = [
     { id: "web", label: "App Web", icon: Globe, description: "SaaS, dashboards, portales", cost: 3 },
