@@ -7709,6 +7709,51 @@ export async function runJobById(jobId: string): Promise<void> {
       // desde el botón "Subir a GitHub" en su panel de apps
       }
     } else {
+      // ── VALIDACIÓN DE INTEGRIDAD ANTES DE CREAR LA APP NUEVA ──────────────
+      // ENCONTRADO A PETICIÓN DEL USUARIO (caso real reportado con capturas:
+      // app con título "Here are your Instructions", 2180KB, sin ningún
+      // componente React real -- ni error de JavaScript ni de Babel, solo
+      // contenido invisible/mal formado). Causa raíz real: a diferencia del
+      // camino de EDICIÓN (que sí valida "// === FILE:" + longitud mínima
+      // antes de sobrescribir, ver el bloque `if (job.editAppId)` más
+      // arriba), este camino de GENERACIÓN NUEVA no tenía ninguna
+      // validación equivalente -- si la respuesta de la IA venía mal
+      // formada (p.ej. texto de instrucciones filtrado en vez del bundle
+      // real), se guardaba igualmente como si fuera un éxito, sin ningún
+      // filtro. Mismo criterio exacto que ya protege las ediciones.
+      const newAppFc = finalResult.frontendCode;
+      const newAppValid = typeof newAppFc === "string" && newAppFc.includes("// === FILE:") && newAppFc.length > 200;
+      if (!newAppValid) {
+        logger.error(
+          { jobId, userId: job.userId, fcLen: typeof newAppFc === "string" ? newAppFc.length : -1, title: finalResult.title },
+          "Generación nueva produjo un resultado inválido/incompleto — NO se crea la app, créditos reembolsados",
+        );
+        const refundAmount = Math.round(job.creditsCost ?? 0);
+        if (refundAmount > 0) {
+          try {
+            const { refundCredits } = await import("../lib/credits");
+            await refundCredits({
+              userId: job.userId,
+              isAdmin: false,
+              amount: refundAmount,
+              description: "Reembolso automático — la generación no produjo un resultado válido",
+            });
+          } catch (refundErr) {
+            logger.warn({ refundErr, jobId }, "Fallo al reembolsar tras generación inválida");
+          }
+        }
+        await GenerationJob.findByIdAndUpdate(jobId, {
+          $set: {
+            status: "failed",
+            phase: "failed",
+            errorMessage: "La generación no produjo un resultado válido (respuesta del modelo mal formada). Tus créditos han sido reembolsados — intenta de nuevo, quizá reformulando la petición.",
+            updatedAt: new Date(),
+          },
+        });
+        await log("system", "⚠️ La generación no produjo un resultado válido — no se ha creado ninguna app rota. Tus créditos han sido reembolsados. Intenta de nuevo.", "error");
+        return;
+      }
+
       // ── INTEGRIDAD DEL BUNDLE — detectar archivos truncados antes de guardar ──
       // FIX 2: NO ejecutar detectTruncatedFiles si el testing agent ya aprobó
       // el bundle con score >= 75. Si el testing pasó, el bundle está bien —
