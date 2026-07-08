@@ -13,6 +13,18 @@
  *    (autenticado con Basic Auth: Nº identificación del comerciante : Clave API).
  * 2. Tras verificar, Viva permite activar el evento "Transaction Payment
  *    Created" — a partir de ahí, cada pago real dispara un POST aquí.
+ *
+ * HUECO REAL ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de reembolsos,
+ * 2026-07-09): este webhook SOLO escucha EventTypeId 1796 (pago creado
+ * con éxito) -- no hay ningún manejo de reembolsos ni contracargos. Si un
+ * cliente reembolsa un pago a través de Viva, este sistema nunca se
+ * entera, y los créditos concedidos por ese pago se quedan asignados
+ * para siempre, aunque el dinero ya se haya devuelto. NO implementado a
+ * ciegas aquí porque no está confirmado el EventTypeId/formato real que
+ * usa Viva para notificar reembolsos -- adivinarlo mal podría no
+ * reaccionar a nada, o peor, reaccionar a un evento equivocado. Antes de
+ * implementarlo, hay que confirmar el EventTypeId real de reembolso
+ * contra la documentación oficial de Viva o un reembolso de prueba real.
  */
 import { Router, type Request, type Response } from "express";
 import { GeneratedApp } from "@workspace/db/schema";
