@@ -648,6 +648,46 @@ router.get("/admin/apps", async (_req, res) => {
   );
 });
 
+// GET /admin/apps/broken-bundles
+// ENCONTRADO A PETICIÓN DEL USUARIO (caso real: app "Here are your
+// Instructions" con contenido inválido guardado como si fuera una
+// generación exitosa -- causa raíz ya corregida para generaciones
+// NUEVAS, ver POST /apps y la validación antes de GeneratedApp.create()).
+// Este endpoint aplica el MISMO criterio de validación a TODAS las apps
+// YA EXISTENTES, para encontrar cuáles quedaron rotas de esta misma
+// forma ANTES del arreglo -- da una lista real y accionable en vez de
+// tener que revisar app por app a mano.
+router.get("/admin/apps/broken-bundles", async (_req, res) => {
+  await connectDB();
+  const apps = await GeneratedApp.find(
+    { status: { $in: ["ready", "succeeded"] } },
+    { userId: 1, title: 1, createdAt: 1, frontendCode: 1, status: 1 },
+  ).sort({ createdAt: -1 }).lean();
+
+  const broken = apps.filter((a: any) => {
+    const fc = a.frontendCode;
+    return !(typeof fc === "string" && fc.includes("// === FILE:") && fc.length > 200);
+  });
+
+  const userIds = [...new Set(broken.map((a: any) => a.userId))];
+  const users = await User.find({ _id: { $in: userIds } }, { email: 1 }).lean();
+  const emailMap = new Map(users.map((u) => [String(u._id), u.email]));
+
+  res.json({
+    totalChecked: apps.length,
+    totalBroken: broken.length,
+    apps: broken.map((r: any) => ({
+      id: String(r._id),
+      userId: r.userId,
+      userEmail: emailMap.get(r.userId) ?? null,
+      title: r.title,
+      status: r.status,
+      frontendCodeLength: typeof r.frontendCode === "string" ? r.frontendCode.length : 0,
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : (r.createdAt ?? null),
+    })),
+  });
+});
+
 router.get("/admin/jobs", async (_req, res) => {
   await connectDB();
   const sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
