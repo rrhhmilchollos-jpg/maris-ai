@@ -10,7 +10,7 @@ const COMPARISON = [
   { feature: "Soporte en español", maris: "WhatsApp + email", competitor: "No disponible", marisWins: true },
   { feature: "Enfoque multi-agente", maris: "11 agentes especializados", competitor: "Sí, multi-agente", marisWins: false },
   { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Sí, incluido", marisWins: false },
-  { feature: "Plan de pago desde", maris: "19€/mes", competitor: "20$/mes (~18€)", marisWins: false },
+  { feature: "Plan de pago desde", maris: "19€/mes", competitor: "17$/mes (~16€)", marisWins: false },
   { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, mensualmente", marisWins: true },
   { feature: "Exportación código completo", maris: "Sí, frontend + backend", competitor: "Sí, incluido", marisWins: false },
   { feature: "Deploy automático", maris: "Sí, a Vercel", competitor: "Sí, incluido", marisWins: false },
