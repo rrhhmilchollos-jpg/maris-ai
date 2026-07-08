@@ -103,7 +103,13 @@ function AuroraBackground() {
 export default function LandingPage() {
   const [, setLocation] = useLocation();
   const { isSignedIn } = useAuth();
-  const [prompt, setPrompt] = useState("");
+  // ENCONTRADO A PETICIÓN DEL USUARIO (investigación real de Emergent.sh):
+  // su cuadro de generación aparece con texto YA ESCRITO ("Build me a
+  // dashboard"), no vacío -- reduce la sensación de página en blanco nada
+  // más entrar. Aplicado aquí el mismo criterio con un ejemplo real y
+  // evocador, fácil de sustituir (seleccionado automáticamente al hacer
+  // foco, ver el input onFocus más abajo).
+  const [prompt, setPrompt] = useState("Crea una app de gestión de tareas con tableros kanban, modo oscuro y notificaciones en tiempo real");
   const { scrollY } = useScroll();
   const heroOpacity = useTransform(scrollY, [0, 400], [1, 0.3]);
 
@@ -201,6 +207,7 @@ export default function LandingPage() {
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
+                  onFocus={(e) => e.target.select()}
                   placeholder="ej. Crea una app de gestión de tareas con tableros kanban, modo oscuro y notificaciones..."
                   className="min-h-[60px] max-h-[200px] resize-y border-0 focus-visible:ring-0 bg-transparent text-base placeholder:text-muted-foreground/60 shadow-none"
                   data-testid="input-prompt"
