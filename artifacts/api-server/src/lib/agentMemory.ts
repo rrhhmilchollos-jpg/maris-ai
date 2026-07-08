@@ -165,11 +165,20 @@ export async function recallSimilar(
     language?: string;
     errorContext?: string;
     minSuccessCount?: number;
+    // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de sistemas de
+    // aprendizaje): esta función no tenía ningún límite de antigüedad --
+    // un arreglo guardado hace un año podía seguir recomendándose igual
+    // que uno de ayer, aunque el código base/convenciones hubieran
+    // cambiado bastante desde entonces. Por defecto, 180 días -- lo
+    // bastante generoso para no descartar patrones genuinamente
+    // duraderos, pero con un límite real en vez de ninguno.
+    maxAgeDays?: number;
   } = {},
 ): Promise<MemoryRecallResult[]> {
   const limit = Math.max(1, Math.min(10, options.limit ?? 3));
   const threshold = options.threshold ?? 0.7;
   const minSuccessCount = Math.max(1, options.minSuccessCount ?? 1);
+  const maxAgeDays = options.maxAgeDays ?? 180;
 
   try {
     await connectDB();
@@ -183,7 +192,10 @@ export async function recallSimilar(
     // recorre todo AgentMemory sin este filtro). Si se quiere que las
     // entradas antiguas cuenten desde ya, hace falta un backfill puntual:
     // AgentMemory.updateMany({ successCount: { $exists: false } }, { $set: { successCount: 1 } })
-    const query: Record<string, unknown> = { successCount: { $gte: minSuccessCount } };
+    const query: Record<string, unknown> = {
+      successCount: { $gte: minSuccessCount },
+      createdAt: { $gte: new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) },
+    };
     if (options.language) query.language = options.language;
 
     const entries = await AgentMemory.find(query).lean();
