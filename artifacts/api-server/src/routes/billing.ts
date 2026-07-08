@@ -202,7 +202,7 @@ router.post(
     // cron — no hay nada que cancelar en Viva mismo. Basta con borrar la
     // referencia local; el usuario sigue con acceso hasta planExpiresAt
     // (igual que el comportamiento original con Stripe).
-    if (!user.vivaInitialTransactionId && !user.stripeSubscriptionId) {
+    if (!user.vivaInitialTransactionId) {
       res.status(400).json({ error: "No tienes una suscripción activa." });
       return;
     }
@@ -388,7 +388,7 @@ router.get(
       planExpiresAt: user.planExpiresAt?.toISOString() ?? null,
       credits: user.credits,
       hasActiveSubscription:
-        !!(user.vivaInitialTransactionId || user.stripeSubscriptionId) &&
+        !!user.vivaInitialTransactionId &&
         !!user.planExpiresAt &&
         new Date(user.planExpiresAt) > new Date(),
     });

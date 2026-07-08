@@ -49,7 +49,12 @@ export interface IUser {
   plan?: string;
   planCredits?: number;
   planExpiresAt?: Date;
-  stripeSubscriptionId?: string;
+  // ENCONTRADO A PETICIÓN DEL USUARIO: Stripe en Maris AI solo debe existir
+  // como capacidad que los agentes integran en las apps DE LOS CLIENTES
+  // cuando lo piden -- nunca como sistema de facturación propio de Maris AI
+  // (eso es Viva.com, en exclusiva). Este campo stripeSubscriptionId nunca
+  // se llegó a asignar en ningún sitio del código real -- confirmado con
+  // grep antes de eliminarlo, no era una suposición.
   // Viva.com — migración desde Stripe. La recurrencia de Viva NO usa un
   // objeto "Subscription" como Stripe: el primer pago se crea con
   // allowRecurring=true, y los cobros mensuales siguientes son
@@ -127,7 +132,8 @@ const UserSchema = new Schema<IUser>(
     plan: { type: String, default: "free" },
     planCredits: { type: Number, default: 0 },
     planExpiresAt: { type: Date },
-    stripeSubscriptionId: { type: String },
+    // stripeSubscriptionId eliminado -- nunca se usó de verdad, ver
+    // comentario junto a la interfaz TypeScript más arriba en este archivo.
     vivaInitialTransactionId: { type: String },
     vivaSourceCode: { type: String },
     vivaLastChargeAt: { type: Date },
