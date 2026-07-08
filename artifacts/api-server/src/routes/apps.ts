@@ -7275,6 +7275,24 @@ export async function runJobById(jobId: string): Promise<void> {
         log,
         onProgress,
       });
+      // ENCONTRADO A PETICIÓN DEL USUARIO (investigación de riesgos reales
+      // para clientes): este camino sobrescribía frontendCode DIRECTAMENTE
+      // con el resultado del Testing Agent, sin tomar ninguna instantánea
+      // antes -- a diferencia del flujo principal de edición (línea ~7525),
+      // que sí protege exactamente este caso. Si el diagnóstico del Testing
+      // Agent es erróneo (caso real ya visto: el evaluador visual viendo el
+      // marketing de Maris AI en vez de la app del cliente por una URL
+      // rota, ya corregida), esto podía sobrescribir en silencio una app
+      // que funcionaba con una "reparación" de un problema que no existía
+      // de verdad -- sin ninguna vía de recuperación. Se añade el mismo
+      // snapshotCurrentApp() ya usado y probado en el flujo principal.
+      const { snapshotCurrentApp } = await import("../lib/appRevisions");
+      await snapshotCurrentApp({
+        appId: String(targetAppId),
+        source: "edit",
+        summary: "Snapshot automático antes de revisión profunda del Testing Agent",
+        jobId: String(jobId),
+      });
       await GeneratedApp.findByIdAndUpdate(targetAppId, {
         $set: { frontendCode: reviewedFrontend, updatedAt: new Date() },
       });
