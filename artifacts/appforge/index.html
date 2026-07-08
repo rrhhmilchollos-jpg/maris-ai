@@ -128,6 +128,19 @@
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#7c3aed" />
   <meta name="msapplication-TileColor" content="#7c3aed" />
+  <!-- ENCONTRADO A PETICIÓN DEL USUARIO (investigación real iOS vs
+       Android): faltaban las etiquetas especificas de iOS Safari para
+       "Añadir a inicio" -- sin apple-mobile-web-app-capable, al añadir
+       marisai.es a la pantalla de inicio en iPhone se abría como una
+       pestaña normal de Safari (con barra de direcciones visible), no
+       como una app real a pantalla completa. Android (via manifest.json
+       + theme-color, ya presentes) sí tenía la experiencia completa;
+       iOS no la tenía por tener su propio sistema de etiquetas
+       separado, no basado en manifest.json de la misma forma. -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Maris AI" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://clerk.marisai.es" crossorigin />
