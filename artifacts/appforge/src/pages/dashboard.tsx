@@ -733,7 +733,17 @@ export default function DashboardPage() {
       <div className="container max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
 
         {/* ── Notificaciones de soporte ── */}
-        {notifications.filter(n => !notifDismissed.has(n._id)).map((notif) => (
+        {/* ENCONTRADO A PETICIÓN DEL USUARIO (caso real con captura: dos
+            avisos idénticos seguidos, causado por el bucle de aiAutopilot.ts
+            ya corregido en el backend). Protección extra aquí en el
+            frontend: si por cualquier motivo llegaran a existir avisos
+            duplicados (contenido idéntico para la misma app), solo se
+            muestra el primero -- nunca dos iguales seguidos, sin importar
+            la causa de fondo. */}
+        {notifications
+          .filter(n => !notifDismissed.has(n._id))
+          .filter((n, idx, arr) => arr.findIndex(o => o.appId === n.appId && o.message === n.message) === idx)
+          .map((notif) => (
           <div key={notif._id}
             className="relative flex items-start gap-4 rounded-xl border border-violet-500/40 bg-violet-500/8 px-5 py-4 shadow-lg shadow-violet-500/10 animate-in slide-in-from-top-2">
             <div className="shrink-0 mt-0.5">
