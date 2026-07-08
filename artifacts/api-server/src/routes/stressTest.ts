@@ -20,7 +20,7 @@
 import { Router, type Request, type Response } from "express";
 import autocannon from "autocannon";
 import { GeneratedApp } from "@workspace/db/schema";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, isAdminEmail } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { chargeCredits } from "../lib/credits";
 
@@ -33,9 +33,14 @@ const STRESS_TEST_CREDIT_COST = 5;
 router.post("/apps/:appId/stress-test", requireAuth, async (req: Request, res: Response) => {
   try {
     const { appId } = req.params;
-    const userId = (req as any).auth?.userId;
-    const isAdmin = !!(req as any).auth?.isAdmin;
+    // ENCONTRADO A PETICIÓN DEL USUARIO (mismo hallazgo que watermark.ts):
+    // req.auth?.userId no existe en este proyecto -- requireAuth pone el
+    // ID en req.userId directamente. Con el campo equivocado, este
+    // endpoint devolvía siempre 401, y ademas isAdmin nunca se calculaba
+    // correctamente tampoco.
+    const userId = (req as any).userId as string | undefined;
     if (!userId) return res.status(401).json({ error: "No autenticado" });
+    const isAdmin = isAdminEmail((req as any).dbUser?.email);
 
     const appData = await GeneratedApp.findOne({ _id: appId, userId }).lean();
     if (!appData) return res.status(404).json({ error: "App no encontrada" });

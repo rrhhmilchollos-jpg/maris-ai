@@ -8580,7 +8580,7 @@ router.put("/apps/:id/code", requireAuth, async (req: any, res: any) => {
 router.get("/notifications", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
-    const userId = req.auth?.userId;
+    const userId = req.userId as string;
     const notifs = await UserNotification.find({ userId })
       .sort({ createdAt: -1 })
       .limit(20)
@@ -8595,7 +8595,7 @@ router.get("/notifications", requireAuth, async (req: any, res: any) => {
 router.patch("/notifications/:id/read", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
-    const userId = req.auth?.userId;
+    const userId = req.userId as string;
     await UserNotification.findOneAndUpdate(
       { _id: req.params.id, userId },
       { $set: { read: true } }
@@ -8610,7 +8610,7 @@ router.patch("/notifications/:id/read", requireAuth, async (req: any, res: any) 
 router.patch("/notifications/read-all", requireAuth, async (req: any, res: any) => {
   try {
     await connectDB();
-    const userId = req.auth?.userId;
+    const userId = req.userId as string;
     await UserNotification.updateMany({ userId, read: false }, { $set: { read: true } });
     res.json({ ok: true });
   } catch (err) {
