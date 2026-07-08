@@ -520,6 +520,21 @@ export interface IGenerationJob extends Document {
   autoFixedFromJobId?: string;
   repairChainDepth?: number;
   autoDiagnosed?: boolean;
+  // ENCONTRADO A PETICIÓN DEL USUARIO (caso real confirmado con capturas
+  // del propio panel de notificaciones: DOCENAS de avisos duplicados
+  // "detectamos un problema" / "arreglado, +10 créditos" para las MISMAS
+  // 2 apps, una tras otra). Causa raíz DISTINTA de repairChainDepth (que
+  // protege cadenas de jobs que se reparan unos a otros): aquí
+  // autoFixBrokenApps() (aiAutopilot.ts) solo comprobaba si HABÍA un job
+  // de arreglo AHORA MISMO en cola/corriendo -- en cuanto ese job
+  // terminaba (arreglara el problema de verdad o no), la comprobación
+  // dejaba de detectarlo, y si la app seguía "pareciendo sospechosa"
+  // (menos de 5KB), el siguiente ciclo (cada 10 min) lanzaba OTRO intento
+  // nuevo, con OTRA notificación y OTROS 10 créditos de "compensación" --
+  // indefinidamente, sin límite. Este campo cuenta los intentos reales
+  // por APP (no por cadena de jobs), para poder parar tras un número
+  // razonable en vez de repetir para siempre.
+  autopilotFixAttempts?: number;
   autoDiagnosisNote?: string;
   checkpointData?: any;
   editAppId?: string;
@@ -579,6 +594,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     awaitingApproval: { type: Boolean, default: false },
     approvedFacets: { type: [String], default: [] },
     autoFixedFromJobId: { type: String },
+    autopilotFixAttempts: { type: Number },
     repairChainDepth: { type: Number, default: 0 },
     autoDiagnosed: { type: Boolean, default: false },
     autoDiagnosisNote: { type: String },

@@ -24,6 +24,7 @@ import {
   UserNotification,
   CreditTransaction,
   JobLog,
+  AppMessage,
 } from "@workspace/db/schema";
 import { enqueueGenerateJob } from "./jobQueue";
 
@@ -378,6 +379,17 @@ export async function autoFixBrokenApps(): Promise<void> {
   if (Date.now() - lastAppCheck < 10 * 60 * 1000) return;
   lastAppCheck = Date.now();
 
+  // ENCONTRADO A PETICIÓN DEL USUARIO (caso real confirmado con capturas:
+  // docenas de notificaciones duplicadas para las mismas 2 apps -- ver
+  // comentario junto a autopilotFixAttempts en el esquema). Tope real de
+  // intentos por app: si tras varios intentos automáticos la app SIGUE
+  // pareciendo rota, seguir reintentando cada 10 minutos para siempre no
+  // la arregla -- solo genera spam de notificaciones y créditos de
+  // "compensación" repetidos sin fin. A partir de este límite, se deja
+  // de reintentar automáticamente y se avisa una única vez de que hace
+  // falta revisión manual.
+  const MAX_AUTOPILOT_ATTEMPTS_PER_APP = 2;
+
   try {
     await connectDB();
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
@@ -387,7 +399,7 @@ export async function autoFixBrokenApps(): Promise<void> {
       createdAt: { $gte: oneHourAgo },
       status: "ready",
       $expr: { $lt: [{ $strLenCP: "$frontendCode" }, 5000] }, // Menos de 5KB = sospechoso
-    }).select("_id userId title frontendCode prompt").lean() as any[];
+    }).select("_id userId title frontendCode prompt autopilotFixAttempts").lean() as any[];
 
     for (const app of suspectApps) {
       // Verificar si ya hay un job de auto-fix para esta app
@@ -397,6 +409,22 @@ export async function autoFixBrokenApps(): Promise<void> {
         autoFixedFromJobId: { $exists: true },
       }).lean();
       if (existingFix) continue;
+
+      const attemptsSoFar = app.autopilotFixAttempts ?? 0;
+      if (attemptsSoFar >= MAX_AUTOPILOT_ATTEMPTS_PER_APP) {
+        // Ya se intentó el máximo de veces -- avisar UNA sola vez (marcando
+        // el intento como "agotado" para no repetir este aviso tampoco) en
+        // vez de seguir intentando cada 10 minutos para siempre.
+        if (attemptsSoFar === MAX_AUTOPILOT_ATTEMPTS_PER_APP) {
+          await GeneratedApp.updateOne({ _id: app._id }, { $inc: { autopilotFixAttempts: 1 } });
+          await AppMessage.create({
+            appId: app._id,
+            role: "assistant",
+            content: `⚠️ Hemos intentado corregir automáticamente tu app **${app.title || "Tu app"}** varias veces sin lograrlo del todo. Para no seguir intentándolo en bucle, hemos parado los intentos automáticos — por favor, abre un **ticket de soporte** contándonos qué falla, y lo revisamos manualmente. Disculpa las molestias. 💜`,
+          }).catch(() => {});
+        }
+        continue;
+      }
 
       // Diagnóstico rápido del código
       const codeSnippet = (app.frontendCode || "").slice(0, 1000);
@@ -414,6 +442,7 @@ export async function autoFixBrokenApps(): Promise<void> {
       if (!isBroken) continue;
 
       // Lanzar corrección automática
+      await GeneratedApp.updateOne({ _id: app._id }, { $inc: { autopilotFixAttempts: 1 } });
       const cleanPrompt = (app.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 400);
       const newJobId = new mongoose.Types.ObjectId().toString();
       await GenerationJob.create({
@@ -428,7 +457,7 @@ export async function autoFixBrokenApps(): Promise<void> {
         autoFixedFromJobId: "autopilot-broken-app",
       });
       await enqueueGenerateJob(newJobId);
-      logger.info({ appId: String(app._id), newJobId }, "aiAutopilot: app rota detectada y corrección lanzada");
+      logger.info({ appId: String(app._id), newJobId, attempt: attemptsSoFar + 1 }, "aiAutopilot: app rota detectada y corrección lanzada");
     }
   } catch (err) {
     logger.error({ err }, "aiAutopilot.autoFixBrokenApps error");
