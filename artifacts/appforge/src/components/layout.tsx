@@ -125,7 +125,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[env(safe-area-inset-top)]">
         <div className="container flex h-auto md:h-14 max-w-screen-2xl items-center flex-col md:flex-row gap-2 md:gap-0 py-2 md:py-0">
           <div className="flex px-4 md:px-8 w-full items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">

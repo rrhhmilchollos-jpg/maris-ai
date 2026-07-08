@@ -140,7 +140,7 @@ export default function LandingPage() {
       </a>
       <AuroraBackground />
 
-      <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl" role="banner">
+      <header className="fixed top-0 z-50 w-full border-b border-border/10 bg-background/60 backdrop-blur-xl pt-[env(safe-area-inset-top)]" role="banner">
         <div className="container flex h-14 max-w-screen-2xl items-center px-3 md:px-8 justify-between">
           <div className="flex items-center space-x-2">
             <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" width="24" height="24" className="h-6 w-6" fetchPriority="high" decoding="sync" />
