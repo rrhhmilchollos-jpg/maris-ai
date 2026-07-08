@@ -215,6 +215,7 @@ export interface IGeneratedApp {
   // crawlers en vez de la carcasa vacía de la SPA.
   prerenderedHomeHtml?: string;
   prerenderedAt?: Date;
+  lastBuildErrorSummary?: string;
   livePreviewUrl?: string;
   livePreviewSandboxId?: string;
   livePreviewExpiresAt?: Date;
@@ -348,6 +349,12 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     // usuarios reales, que siguen recibiendo la app interactiva normal.
     prerenderedHomeHtml: { type: String },
     prerenderedAt: { type: Date },
+    // ENCONTRADO A PETICIÓN DEL USUARIO (revisión honesta del build real):
+    // cuando el build real en E2B falla y la reparación automática tampoco
+    // lo arregla, antes se entregaba la app en silencio, sin avisar al
+    // cliente. Este campo guarda el error real (texto legible, no la
+    // traza cruda) para poder mostrarlo en la vista previa y en el chat.
+    lastBuildErrorSummary: { type: String },
     livePreviewUrl: { type: String },
     livePreviewSandboxId: { type: String },
     livePreviewExpiresAt: { type: Date },

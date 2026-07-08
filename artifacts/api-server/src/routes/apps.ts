@@ -1623,6 +1623,13 @@ export interface GeneratedAppPayload {
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
   requiredEnvVars?: Array<{ name: string; why: string; value?: string }>;
   architecture?: "monolith" | "microservices" | "serverless";
+  // ENCONTRADO A PETICIÓN DEL USUARIO (aviso honesto al cliente cuando el
+  // build real en E2B falla y la reparación automática no lo arregla):
+  // este campo viaja de forma natural a través del mismo camino que ya
+  // valida y guarda el resultado (ver GET /notifications y el punto
+  // donde se construye finalResult más abajo en este archivo) -- sin
+  // necesitar pasar un callback por varias capas de funciones.
+  buildErrorSummary?: string;
 }
 
 // ENCONTRADO a petición explícita del usuario (siguiendo el diagnóstico de
@@ -3109,6 +3116,13 @@ async function runValidatePatchLoop(
   phaseGates: { validate: boolean; patch: boolean } = { validate: true, patch: true },
   agentModelPlan?: ReturnType<typeof selectAgentModelPlan>,
   maxIterationsOverride?: number,
+  // ENCONTRADO A PETICIÓN DEL USUARIO: callback opcional para avisar
+  // honestamente cuando el build real en E2B falla y la reparación
+  // automática tampoco lo arregla -- deliberadamente opcional (en vez de
+  // cambiar lo que la función devuelve) para no romper las otras 2
+  // llamadas a esta misma función que no tienen appId/contexto de chat
+  // disponible.
+  onBuildError?: (summary: string) => void,
 ): Promise<string> {
   // Modelo del agente "patcher" según el plan (Sonnet para paid, Haiku para
   // free). Si no se pasa plan, patchBundle usa su valor por defecto
@@ -3301,17 +3315,21 @@ async function runValidatePatchLoop(
                 finalFrontend = patched;
               } else {
                 emit("patcher", `△ patch tras E2B introdujo ${reReport.issues.length} issue(s) — descartando`, "warn");
+                onBuildError?.(`El intento de reparación introdujo nuevos problemas y se descartó. Error original: ${issue.message.slice(0, 400)}`);
               }
             } catch (revErr) {
               logger.warn({ err: revErr }, "post-E2B patch revalidation threw");
               emit("patcher", "△ revalidación tras E2B falló — descartando patch", "warn");
+              onBuildError?.(`No se pudo verificar la reparación. Error original: ${issue.message.slice(0, 400)}`);
             }
           } else {
             emit("patcher", "△ patch tras E2B sin cambios — dejando bundle previo", "warn");
+            onBuildError?.(`El reparador no logró corregir el error de compilación. Error real: ${issue.message.slice(0, 400)}`);
           }
         } catch (patchErr) {
           logger.warn({ err: patchErr }, "patcher failed after E2B build error");
           emit("patcher", "△ reparador falló tras E2B — dejando bundle previo", "warn");
+          onBuildError?.(`El reparador falló al intentar corregir el error de compilación. Error real: ${issue.message.slice(0, 400)}`);
         }
       } else {
         emit("validator", `△ E2B saltado · ${e2b.reason ?? "unknown"}`, "warn");
@@ -3491,6 +3509,10 @@ async function singleEditPass(
   log?: AgentLog,
 ): Promise<GeneratedAppPayload> {
   const emit: AgentLog = log ?? (() => {});
+  // ENCONTRADO A PETICIÓN DEL USUARIO: captura el resumen del error real de
+  // build si el sandbox E2B falla y la reparación automática no lo arregla
+  // -- se incluye en el resultado final para avisar honestamente al cliente.
+  let buildErrorCapture: string | undefined;
   
   // OPTIMIZACIÓN DE CONTEXTO: no enviar bundles completos salvo que sea imprescindible.
   // Anthropic factura por tokens de entrada y aquí estaba el mayor consumo.
@@ -4544,6 +4566,8 @@ export async function generateApp(
       log,
       { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
       agentModelPlan,
+      undefined,
+      (summary) => { buildErrorCapture = summary; },
     );
 
     // Backend en modo edición — antes este bloque NO existía: el modo Edit
@@ -4674,6 +4698,7 @@ export async function generateApp(
           { validate: true, patch: true },
           agentModelPlan,
           3, // menos ciclos que la generación inicial: aquí solo corregimos lo que el QA marcó, no repetimos la validación sintáctica completa que ya pasó arriba
+          (summary) => { buildErrorCapture = summary; },
         );
         if (qaPatched && qaPatched.length > 500) {
           finalFrontendAfterQa = qaPatched;
@@ -4687,7 +4712,7 @@ export async function generateApp(
 
     onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
     log("system", "Empaquetando todo…");
-    return { ...result, frontendCode: finalFrontendAfterQa, backendCode: editedBackendCode };
+    return { ...result, frontendCode: finalFrontendAfterQa, backendCode: editedBackendCode, buildErrorSummary: buildErrorCapture || undefined };
   }
 
   // Phase gates
@@ -7555,12 +7580,29 @@ export async function runJobById(jobId: string): Promise<void> {
           backendCode: finalResult.backendCode,
           plannedPages: finalResult.plannedPages || [],
           requiredEnvVars: finalResult.requiredEnvVars || [],
+          // ENCONTRADO A PETICIÓN DEL USUARIO: se guarda (o se limpia, si
+          // esta edición sí compiló bien) el resumen del último error de
+          // build real -- lo usa el preview para mostrar la banda roja.
+          lastBuildErrorSummary: finalResult.buildErrorSummary || null,
           status: "ready",
           // Limpiar pendingAdminApproval: si el admin regeneró esta app,
           // ahora que está lista debe ser visible para el cliente.
           pendingAdminApproval: false,
         },
       });
+
+      // ENCONTRADO A PETICIÓN DEL USUARIO: aviso honesto al cliente cuando
+      // el build real en E2B falló y la reparación automática no lo
+      // arregló -- antes esto se entregaba en silencio. No revierte la
+      // edición (sigue siendo mejor que nada), pero el cliente se entera
+      // de verdad de que puede no funcionar del todo.
+      if (finalResult.buildErrorSummary) {
+        await AppMessage.create({
+          appId: job.editAppId,
+          role: "assistant",
+          content: `⚠️ La compilación real de tu app falló y no logré repararla del todo automáticamente — esto puede no funcionar correctamente. Revisa la banda roja de la vista previa para ver el error exacto, y puedes copiarlo y pegarlo aquí para que lo revise de nuevo.`,
+        }).catch((err) => logger.warn({ err }, "No se pudo crear el mensaje de aviso de build fallido"));
+      }
 
       // MEDIDOR DE CÓMPUTO DINÁMICO (estilo Emergent.sh) — a petición
       // explícita del usuario. El cobro fijo inicial (POST /apps/:id/messages,
@@ -8999,8 +9041,21 @@ router.post("/apps/:id/ssr-preview/restart", requireAuth, async (req: any, res: 
 router.get("/apps/:id/preview", async (req: any, res: any) => {
   try {
     await connectDB();
-    const app = await GeneratedApp.findById(req.params.id).select("frontendCode title").lean() as any;
+    const app = await GeneratedApp.findById(req.params.id).select("frontendCode title lastBuildErrorSummary").lean() as any;
     if (!app?.frontendCode) return res.status(404).send("<h1>App no encontrada</h1>");
+
+    // ENCONTRADO A PETICIÓN DEL USUARIO: banda roja real en el preview con
+    // el error de build sin resolver, cuando lo hay -- inyectada FUERA del
+    // <div id="root"> para que React (que usa createRoot, no hydrateRoot --
+    // ver commit del prerenderizado) nunca la borre al montar la app.
+    // Incluye un botón para copiar el error y mandarlo al chat.
+    const buildErrorBanner = app.lastBuildErrorSummary
+      ? `<div id="maris-build-error-banner" style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#7f1d1d;color:#fff;padding:12px 16px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.5;box-shadow:0 2px 8px rgba(0,0,0,.3);">
+        <strong>⚠️ La última compilación real falló y no se pudo reparar del todo automáticamente:</strong>
+        <div style="margin-top:4px;opacity:.9;max-height:80px;overflow:auto;white-space:pre-wrap;font-family:monospace;font-size:11px;">${String(app.lastBuildErrorSummary).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('maris-build-error-banner').innerText.replace('Copiar error','').trim());this.innerText='✓ Copiado';" style="margin-top:6px;background:#fff;color:#7f1d1d;border:none;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-weight:600;">Copiar error</button>
+      </div>`
+      : "";
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     // ENCONTRADO A PETICION DEL USUARIO: este endpoint no fijaba NINGUNA
@@ -9025,7 +9080,10 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
       const patched = html.replace(
         /Content-Security-Policy[^<]*/g, ""
       );
-      return res.send(patched);
+      const withBanner = buildErrorBanner
+        ? patched.replace(/<body[^>]*>/i, (m) => `${m}${buildErrorBanner}`)
+        : patched;
+      return res.send(withBanner);
     } catch (esbuildErr: any) {
       const errMsg = esbuildErr?.message || String(esbuildErr);
       logger.warn({ err: errMsg, appId: req.params.id }, "esbuild failed, using Babel fallback");
