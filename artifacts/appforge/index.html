@@ -6,11 +6,31 @@
        dispara los mismos píxeles que producción, contaminando los datos de
        conversión de Google Ads/Meta con tráfico interno de desarrollo —
        justo el tipo de problema ya confirmado antes con la doble conversión
-       de Google Ads. -->
+       de Google Ads.
+
+       ENCONTRADO A PETICIÓN DEL USUARIO (además): sus propias visitas y
+       generaciones de prueba en marisai.es se contaban igual que las de un
+       cliente real, contaminando los datos de Analytics/Ads/Meta/TikTok --
+       sin forma de ver conversión real. Añadida una exclusión real y
+       persistente: visitando marisai.es/?no-track=1 UNA SOLA VEZ, se
+       guarda una marca en el propio navegador (localStorage, no depende de
+       la IP -- sigue funcionando aunque cambie de red, VPN o datos
+       móviles) que desactiva el seguimiento para siempre en ese navegador
+       concreto, hasta que se borre manualmente. Para revertirlo:
+       marisai.es/?no-track=0 -->
   <script>
     (function () {
+      var params = new URLSearchParams(window.location.search);
+      if (params.has("no-track")) {
+        try {
+          if (params.get("no-track") === "0") { localStorage.removeItem("marisNoTrack"); }
+          else { localStorage.setItem("marisNoTrack", "1"); }
+        } catch (e) { /* localStorage no disponible (modo privado, etc.) -- no bloquea nada */ }
+      }
+      var isOwnerExcluded = false;
+      try { isOwnerExcluded = localStorage.getItem("marisNoTrack") === "1"; } catch (e) { /* silencioso */ }
       var ALLOWED_TRACKING_HOSTS = ["www.marisai.es", "marisai.es"];
-      window.__marisTrackingAllowed = ALLOWED_TRACKING_HOSTS.indexOf(window.location.hostname) !== -1;
+      window.__marisTrackingAllowed = !isOwnerExcluded && ALLOWED_TRACKING_HOSTS.indexOf(window.location.hostname) !== -1;
     })();
   </script>
   <meta charset="UTF-8" />
