@@ -3602,10 +3602,24 @@ async function fastPatchEdit(
   onProgress?.({ phase: "fixing", progress: 30, note: "Aplicando parche directo…" });
   log("patcher", "⚡ Parche quirúrgico — solo archivos afectados.");
   try {
+    // ENCONTRADO A PETICIÓN DEL USUARIO (pregunta real: "si un cliente
+    // envía un prompt largo, ¿lo ignoran los agentes o falla la
+    // generación?"): este límite de 1200 caracteres para las instrucciones
+    // del propio cliente era muy bajo comparado con los 55.000 caracteres
+    // que se permiten del código del bundle en la MISMA llamada -- una
+    // asimetría real, no una decisión deliberada de presupuesto de
+    // tokens. Si el cliente mandaba una edición larga y detallada
+    // (varios cambios en un mismo mensaje), todo lo que pasara de 1200
+    // caracteres se perdía en silencio -- el agente ni siquiera llegaba a
+    // verlo, y si aun así "funcionaba" con la instrucción incompleta, el
+    // cliente nunca se enteraba de que parte de su petición se ignoró.
+    // Ampliado a 6000 caracteres -- cubre con holgura cualquier
+    // instrucción de edición realista, manteniendo proporción razonable
+    // con el resto del contexto de la llamada.
     const resp = await createClaudeMessageWithFallback("patcher", "claude-sonnet-4-6", {
       max_tokens: 8000,
       system: buildFastPatchPrompt(),
-      messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,1200)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles and deletedFiles only.` }]
+      messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,6000)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles and deletedFiles only.` }]
     });
     const raw = (resp.content[0] as any).text ?? "";
     const parsed = extractJsonObject<{changedFiles?:Record<string,string>; deletedFiles?: string[]}>(raw);
