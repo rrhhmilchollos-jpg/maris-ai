@@ -27,6 +27,21 @@ const BUSINESS_VERTICAL_KEYWORDS: Record<string, string[]> = {
   moda: ["boutique", "tienda de ropa", "moda", "tallas", "prenda", "outfit"],
   cafeteria: ["cafetería", "café de especialidad", "tostas", "puntos de fidelidad", "recoger en tienda"],
   viajes: ["agencia de viajes", "paquete de viaje", "destino turístico", "itinerario de viaje", "vuelos y hotel"],
+  // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de sistemas de
+  // aprendizaje, "añade todo lo que les falta"): la lista original solo
+  // cubría 13 sectores -- si un prompt hablaba de un sector fuera de esa
+  // lista, detectBusinessVertical() devolvía null y todo el sistema de
+  // manuales de proyecto quedaba desactivado en silencio para ese
+  // proyecto. Añadidos 9 sectores comunes más que claramente faltaban.
+  hotel: ["hotel", "hostal", "reserva de habitación", "check-in", "check-out", "huésped", "recepción del hotel", "pensión completa"],
+  tienda_online: ["tienda online", "ecommerce", "carrito de compra", "catálogo de productos", "envío a domicilio", "pasarela de pago", "marketplace"],
+  abogados: ["abogado", "despacho de abogados", "asesoría legal", "bufete", "consulta jurídica", "demanda", "contrato legal"],
+  spa_estetica: ["spa", "centro de estética", "masaje", "tratamiento facial", "manicura", "pedicura", "depilación"],
+  floristeria: ["floristería", "ramo de flores", "flores a domicilio", "arreglo floral", "florista"],
+  gestoria: ["gestoría", "asesoría fiscal", "asesoría contable", "trámites administrativos", "declaración de la renta", "gestor administrativo"],
+  construccion: ["construcción", "reforma", "obra", "albañil", "presupuesto de reforma", "contratista", "reforma integral"],
+  limpieza: ["empresa de limpieza", "servicio de limpieza", "limpieza del hogar", "limpieza de oficinas", "personal de limpieza"],
+  guarderia: ["guardería", "escuela infantil", "cuidado de niños", "canguro", "educación infantil"],
 };
 
 function normalize(text: string): string {
