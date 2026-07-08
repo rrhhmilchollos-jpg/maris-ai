@@ -238,7 +238,19 @@ export async function rememberPatch(input: RememberInput): Promise<AgentMemoryEn
     await connectDB();
     const vec = await embedText(embedInputText(input.errorMessage, input.errorContext));
 
-    const entries = await AgentMemory.find({}).lean();
+    // ENCONTRADO A PETICIÓN DEL USUARIO (refuerzo de sistemas de
+    // aprendizaje): esta comprobación de duplicados cargaba TODA la
+    // colección sin ningún filtro (AgentMemory.find({})) -- con pocas
+    // entradas no se nota, pero a medida que el sistema aprende de más
+    // generaciones reales, esta comparación uno-a-uno en JavaScript se
+    // vuelve cada vez más lenta en cada guardado nuevo. Se acota primero
+    // por idioma (si se conoce) y a los últimos 500 registros más
+    // recientes -- suficiente para detectar duplicados genuinos sin
+    // comparar contra memorias de hace mucho tiempo que ya no son
+    // relevantes de todos modos.
+    const dupQuery: Record<string, unknown> = {};
+    if (input.language) dupQuery.language = input.language;
+    const entries = await AgentMemory.find(dupQuery).sort({ createdAt: -1 }).limit(500).lean();
     const dup = entries
       .filter((e) => Array.isArray(e.embedding) && e.embedding.length === EMBED_DIMS)
       .map((e) => ({ id: e._id, similarity: cosineSimilarity(vec, e.embedding as number[]) }))
