@@ -231,8 +231,69 @@ export async function runTestingAgent(
 
     const activeBrokenLinks = brokenLinks.filter((b) => report.issues.includes(b) || activeIssues.includes(b));
     if (activeBrokenLinks.length > 0) {
-      log("testing", `🔗 Se detectaron ${activeBrokenLinks.length} enlaces rotos. Forzando reparación de navegación...`);
-      for (const b of activeBrokenLinks) if (!report.issues.includes(b)) report.issues.push(b);
+      // REPARACIÓN QUIRÚRGICA DETERMINISTA — estilo emergent.sh. ENCONTRADO
+      // en producción: para arreglar un simple href el flujo anterior metía
+      // los enlaces en el patcher LLM, que acababa REESCRIBIENDO PÁGINAS
+      // ENTERAS ("✏️ Generando src/pages/RegisterPage.tsx (reescritura
+      // completa)…" — 14 KB regenerados para tocar una línea), tardísimo y
+      // con riesgo de romper código que funcionaba. Un enlace roto tiene una
+      // reparación MECÁNICA que no necesita IA: apuntarlo a la ruta definida
+      // más parecida de App.tsx (o "/" si no hay ninguna razonable). Se
+      // reescribe SOLO el atributo href, byte a byte — cero tokens, cero
+      // riesgo, milisegundos en vez de minutos.
+      log("testing", `🔗 ${activeBrokenLinks.length} enlace(s) rotos — aplicando reparación quirúrgica de navegación (solo el atributo href, sin reescribir páginas)...`);
+      const knownRoutes = [...routes].map(String);
+      const closestRoute = (broken: string): string => {
+        const seg = broken.split("/").filter(Boolean);
+        let best = "/";
+        let bestScore = 0;
+        for (const r of knownRoutes) {
+          if (r.includes(":") || r.includes("*")) continue; // no enlazar a rutas paramétricas
+          const rseg = r.split("/").filter(Boolean);
+          let score = 0;
+          for (let i = 0; i < Math.min(seg.length, rseg.length); i++) {
+            if (seg[i].toLowerCase() === rseg[i].toLowerCase()) score += 2;
+            else if (rseg[i].toLowerCase().includes(seg[i].toLowerCase()) || seg[i].toLowerCase().includes(rseg[i].toLowerCase())) score += 1;
+          }
+          if (score > bestScore) { bestScore = score; best = r; }
+        }
+        return bestScore > 0 ? best : "/";
+      };
+      let surgicalFixes = 0;
+      const unfixedLinks: BuildIssue[] = [];
+      for (const b of activeBrokenLinks) {
+        const m = b.message.match(/apunta a "([^"]+)"/);
+        const badHref = m?.[1];
+        if (!badHref) { unfixedLinks.push(b); continue; }
+        const replacement = closestRoute(badHref.split("?")[0].replace(/\/+$/, "") || "/");
+        const before = currentBundle;
+        // Sustituir SOLO apariciones exactas del href roto (comillas simples y dobles)
+        currentBundle = currentBundle
+          .split(`href="${badHref}"`).join(`href="${replacement}"`)
+          .split(`href='${badHref}'`).join(`href='${replacement}'`)
+          .split(`to="${badHref}"`).join(`to="${replacement}"`)
+          .split(`to='${badHref}'`).join(`to='${replacement}'`);
+        if (currentBundle !== before) {
+          surgicalFixes++;
+          log("testing", `🔗 Enlace corregido: "${badHref}" → "${replacement}" (reparación directa, sin regenerar código).`);
+        } else {
+          // No se encontró el literal en el bundle — dejar que el patcher LLM lo trate
+          unfixedLinks.push(b);
+        }
+      }
+      if (surgicalFixes > 0) {
+        lastPatchedBundle = currentBundle;
+      }
+      // Recomponer la lista de issues: los NO-enlace + los enlaces que la
+      // reparación quirúrgica no pudo tocar (esos sí van al patcher LLM).
+      report.issues = [
+        ...report.issues.filter((i) => !brokenLinks.includes(i as any)),
+        ...unfixedLinks,
+      ];
+      if (report.issues.length === 0 && report.ok) {
+        log("testing", `✅ Navegación reparada quirúrgicamente (${surgicalFixes} enlace(s)). Re-validando...`);
+        continue;
+      }
     }
 
     // 2. ANALYZE ISSUES — con detalle REAL de qué se está corrigiendo, para

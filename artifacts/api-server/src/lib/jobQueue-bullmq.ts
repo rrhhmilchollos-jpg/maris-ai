@@ -29,6 +29,10 @@ export interface JobPayload {
 export interface AttemptContext {
   attempt: number;
   maxAttempts: number;
+  // true cuando esta cola YA hizo el claim atómico (queued→running) antes de
+  // llamar al handler — el handler no debe intentar reclamar de nuevo (lo
+  // vería "running" fresco y saldría sin ejecutar nada).
+  alreadyClaimed?: boolean;
 }
 
 type JobHandler = (jobId: string, ctx: AttemptContext) => Promise<void>;
@@ -255,14 +259,36 @@ export async function registerGenerateWorker(
           return;
         }
         
-        // Update status to running
-        await GenerationJob.findByIdAndUpdate(jobId, {
-          $set: { status: "running", updatedAt: new Date() },
-        });
+        // CLAIM ATÓMICO (queued→running) — mismo patrón que jobQueueMongo.ts.
+        // CAUSA RAÍZ de la duplicación vista en producción (cada mensaje del
+        // CoreOrchestrator y cada "🔨 archivo actualizado" DOS veces): los
+        // endpoints históricos hacían "enqueueGenerateJob + runJobById
+        // inmediato" — con esta cola activa, el worker además recogía el
+        // mismo job de Redis, ejecutándolo EN PARALELO con la copia
+        // in-process del api-server (doble tiempo y doble coste LLM). Este
+        // findOneAndUpdate solo deja pasar a UN proceso: si la otra copia ya
+        // lo reclamó (status "running" con heartbeat fresco), se suelta aquí.
+        const claimedByQueue = await GenerationJob.findOneAndUpdate(
+          {
+            _id: jobId,
+            $or: [
+              { status: "queued" },
+              // running con heartbeat caducado (>2 min sin latido; el
+              // heartbeat real escribe cada 30s) = proceso muerto → reclamable
+              { status: "running", updatedAt: { $lt: new Date(Date.now() - 2 * 60 * 1000) } },
+            ],
+          },
+          { $set: { status: "running", updatedAt: new Date() } },
+          { new: true },
+        );
+        if (!claimedByQueue) {
+          logger.info({ jobId, userId }, "BullMQ: job ya reclamado por otro proceso — evitando ejecución duplicada");
+          return;
+        }
         
         // Execute the handler
         const attempt = (bullJob.attemptsMade ?? 0) + 1;
-        await handler(jobId, { attempt, maxAttempts: 3 });
+        await handler(jobId, { attempt, maxAttempts: 3, alreadyClaimed: true });
         
         // ENCONTRADO Y CORREGIDO ANTES DE ACTIVAR ESTA COLA (a peticion del
         // usuario, tras revisar a fondo antes de conectar nada): este bloque

@@ -7293,11 +7293,55 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   }
 }
 
-export async function runJobById(jobId: string): Promise<void> {
+export async function runJobById(
+  jobId: string,
+  ctx?: { attempt?: number; maxAttempts?: number; alreadyClaimed?: boolean },
+): Promise<void> {
   await connectDB();
+  // RECLAMO ATÓMICO — CAUSA RAÍZ de la duplicación vista en producción
+  // ("Activando edición por hitos" y cada "🔨 archivo actualizado" DOS veces,
+  // duplicando el tiempo y el coste de cada generación): con la cola
+  // Redis/BullMQ activa, el patrón histórico "enqueueGenerateJob(jobId) +
+  // runJobById(jobId) inmediato" de los endpoints ejecutaba el MISMO job dos
+  // veces en paralelo — una in-process en el api-server y otra en el worker
+  // que lo recogía de la cola. (Con la cola Mongo antigua esto era inocuo:
+  // el único proceso con worker registrado era el mismo api-server.) Este
+  // claim atómico vía findOneAndUpdate garantiza que SOLO UN proceso puede
+  // pasar de aquí, gane quien gane la carrera — y protege TODOS los caminos
+  // de entrada (los 5 endpoints, BullMQ, reclaim de huérfanos, autopilot)
+  // sin depender de que cada llamador lo haga bien.
+  // Cuando la COLA (BullMQ o Mongo) ya hizo su propio claim atómico antes de
+  // llamar aquí, pasa alreadyClaimed:true — reintentar el claim en ese caso
+  // fallaría siempre (el job ya está "running" fresco, reclamado por la propia
+  // cola) y ningún job se ejecutaría nunca.
+  if (!ctx?.alreadyClaimed) {
+    const HEARTBEAT_FRESH_MS = 2 * 60 * 1000; // el heartbeat real escribe cada 30s
+    const claimed = await GenerationJob.findOneAndUpdate(
+      {
+        _id: jobId,
+        $or: [
+          { status: "queued" },
+          // "running" con heartbeat CADUCADO = proceso muerto → reclamable
+          // (reclaimOrphanedJobs y los reintentos de BullMQ siguen funcionando)
+          { status: "running", updatedAt: { $lt: new Date(Date.now() - HEARTBEAT_FRESH_MS) } },
+        ],
+      },
+      { $set: { status: "running", updatedAt: new Date() } },
+      { new: true },
+    );
+    if (!claimed) {
+      const existing = await GenerationJob.findById(jobId).select("status").lean() as any;
+      if (existing) {
+        logger.info(
+          { jobId, status: existing.status },
+          "runJobById: job ya reclamado por otro proceso (o en estado terminal) — evitando ejecución duplicada",
+        );
+      }
+      return;
+    }
+  }
   const job = await GenerationJob.findById(jobId);
   if (!job) return;
-
   const log = async (agent: string, message: string, level: string = "info") => {
     await JobLog.create({ jobId, agent, message, level });
   };

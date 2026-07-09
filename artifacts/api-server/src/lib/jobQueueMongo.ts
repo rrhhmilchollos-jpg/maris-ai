@@ -47,6 +47,9 @@ export interface JobPayload {
 export interface AttemptContext {
   attempt: number;
   maxAttempts: number;
+  // true cuando esta cola YA hizo el claim atómico (queued→running) antes de
+  // llamar al handler — el handler no debe intentar reclamar de nuevo.
+  alreadyClaimed?: boolean;
 }
 
 type JobHandler = (jobId: string, ctx: AttemptContext) => Promise<void>;
@@ -191,7 +194,7 @@ export async function registerGenerateWorker(
         // Run the handler in the background (don't await in the poll loop).
         (async () => {
           try {
-            await registeredHandler!(jobId, { attempt, maxAttempts: MAX_ATTEMPTS });
+            await registeredHandler!(jobId, { attempt, maxAttempts: MAX_ATTEMPTS, alreadyClaimed: true });
           } catch (err) {
             logger.error({ err, jobId, attempt }, "Generation job worker threw");
 
