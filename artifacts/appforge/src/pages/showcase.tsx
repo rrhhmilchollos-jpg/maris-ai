@@ -18,58 +18,6 @@ interface ShowcaseItem {
   publishedAt: string;
 }
 
-// Casos de éxito destacados — datos reales de clientes
-const FEATURED_CASES = [
-  {
-    name: "Carlos M.",
-    role: "Autónomo · Madrid",
-    app: "App de reservas para restaurante",
-    quote: "En 8 minutos tenía mi app de reservas funcionando. Lo que me iba a costar 3.000€ con un freelance lo hice yo solo por una fracción del precio.",
-    saved: "~3.000€ ahorrados",
-    time: "8 minutos",
-    emoji: "🍽️",
-    avatar: "C",
-    color: "from-orange-500/20 to-red-500/10",
-    border: "border-orange-500/20",
-  },
-  {
-    name: "Laura P.",
-    role: "Emprendedora · Barcelona",
-    app: "Plataforma de cursos online",
-    quote: "Lancé mi academia online en un día. Maris AI entiende lo que quieres en español perfectamente. Ninguna otra herramienta lo hace tan bien.",
-    saved: "~8.000€ ahorrados",
-    time: "1 día",
-    emoji: "🎓",
-    avatar: "L",
-    color: "from-purple-500/20 to-violet-500/10",
-    border: "border-purple-500/20",
-  },
-  {
-    name: "Iván S.",
-    role: "Startup · México DF",
-    app: "CRM para equipo de ventas",
-    quote: "Lancé mi MVP en un día. Mis inversores no podían creer que lo había hecho yo solo. Maris AI genera código real, no demos de juguete.",
-    saved: "~12.000€ ahorrados",
-    time: "1 día",
-    emoji: "📊",
-    avatar: "I",
-    color: "from-blue-500/20 to-cyan-500/10",
-    border: "border-blue-500/20",
-  },
-  {
-    name: "María R.",
-    role: "Fisioterapeuta · Sevilla",
-    app: "App de gestión de clínica",
-    quote: "Ahora gestiono todas mis citas y expedientes desde una sola app que hice yo misma. No sé programar pero con Maris AI no hizo falta.",
-    saved: "~5.000€ ahorrados",
-    time: "2 horas",
-    emoji: "🏥",
-    avatar: "M",
-    color: "from-green-500/20 to-emerald-500/10",
-    border: "border-green-500/20",
-  },
-];
-
 const KIND_LABELS: Record<string, string> = {
   fullstack: "Full-stack",
   landing: "Landing page",
@@ -168,47 +116,6 @@ export default function ShowcasePage() {
               </Link>
             </div>
           </motion.div>
-        </section>
-
-        {/* ── Casos de éxito destacados ── */}
-        <section className="container max-w-6xl mx-auto px-4 pb-16">
-          <h2 className="text-2xl font-black text-white text-center mb-2">Historias reales de clientes</h2>
-          <p className="text-muted-foreground text-center mb-8 text-sm">Emprendedores reales que crearon sus apps con Maris AI</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {FEATURED_CASES.map((c, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className={`rounded-2xl border ${c.border} bg-gradient-to-br ${c.color} p-6 space-y-4`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-lg font-bold text-white">{c.avatar}</div>
-                    <div>
-                      <p className="font-bold text-white">{c.name}</p>
-                      <p className="text-xs text-white/50">{c.role}</p>
-                    </div>
-                  </div>
-                  <div className="text-2xl">{c.emoji}</div>
-                </div>
-                <div className="flex gap-1">{[1,2,3,4,5].map(s => <Star key={s} className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />)}</div>
-                <p className="text-sm text-white/75 italic leading-relaxed">"{c.quote}"</p>
-                <div className="text-xs font-semibold text-white/60">{c.app}</div>
-                <div className="flex gap-3 pt-1">
-                  <div className="flex-1 rounded-lg bg-black/20 px-3 py-2 text-center">
-                    <div className="text-lg font-black text-green-400">{c.saved}</div>
-                    <div className="text-[10px] text-white/40">vs agencia tradicional</div>
-                  </div>
-                  <div className="flex-1 rounded-lg bg-black/20 px-3 py-2 text-center">
-                    <div className="text-lg font-black text-primary">{c.time}</div>
-                    <div className="text-[10px] text-white/40">para tener la app lista</div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
         </section>
 
         {/* ── Galería de apps ── */}

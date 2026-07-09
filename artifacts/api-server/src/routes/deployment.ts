@@ -612,9 +612,21 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
         return;
       } catch (previewErr: any) {
         logger.warn({ appId, jobId, err: previewErr?.message }, "[visual-test] Preview interno falló — devolviendo NOT_DEPLOYED");
+        const prevMsg = previewErr?.message || "";
+        // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría real, confirmada con
+        // el codigo): este catch mostraba SIEMPRE "usa Deploy primero" sin
+        // comprobar la causa real -- si el fallo real era que Chromium no
+        // podia arrancar en el contenedor ("Failed to launch the browser
+        // process"), el cliente veia un mensaje que le mandaba a desplegar
+        // de nuevo, cuando el problema real no tenia nada que ver con eso.
+        const isChromiumIssue = prevMsg.includes("chromium") || prevMsg.includes("puppeteer") ||
+          prevMsg.includes("executable") || prevMsg.includes("ENOENT") || prevMsg.includes("spawn") ||
+          prevMsg.includes("Cannot find") || prevMsg.includes("Failed to launch") || prevMsg.includes("browser process");
         await (VisualTestJob as any).findByIdAndUpdate(jobId, {
           status: "failed",
-          errorMessage: "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
+          errorMessage: isChromiumIssue
+            ? `Testing visual con screenshots no disponible en este entorno. Error real: ${prevMsg.slice(0, 200)}`
+            : "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
         });
         return;
       }
@@ -657,7 +669,8 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
     if (
       msg.includes("chromium") || msg.includes("puppeteer") ||
       msg.includes("executable") || msg.includes("no_chromium") ||
-      msg.includes("ENOENT") || msg.includes("spawn") || msg.includes("Cannot find")
+      msg.includes("ENOENT") || msg.includes("spawn") || msg.includes("Cannot find") ||
+      msg.includes("Failed to launch") || msg.includes("browser process")
     ) {
       await finish({
         success: false,
