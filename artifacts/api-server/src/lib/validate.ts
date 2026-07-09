@@ -396,6 +396,26 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   const vfs = parseBundleToVFS(bundle);
   const filesAnalyzed = Object.keys(vfs).length;
   logger.info({ filesAnalyzed }, "VALIDATOR: Bundle parseado.");
+  // CAUSA RAÍZ REAL del bucle infinito "1 problema(s)" del Testing Agent
+  // (encontrada con los logs de producción del proyecto "Club Paladium",
+  // filesAnalyzed: 0 con bundleLength: 44172): parseBundleToVFS DESCARTA
+  // "index.html" vía SKIP_EXACT (correcto para proyectos React, donde es
+  // boilerplate), pero para un proyecto HTML estático de UN SOLO archivo
+  // index.html eso deja el VFS COMPLETAMENTE VACÍO. Entonces:
+  //   1. isStaticHtmlBundle(vfs) daba false (¡index.html ya no estaba!)
+  //   2. filesAnalyzed === 0 → issue "Empty or unparseable bundle"
+  //   3. el Testing Agent mandaba ese falso error al patcher LLM, que
+  //      regeneraba el HTML (intacto), se volvía a descartar, y así en
+  //      bucle hasta agotar todos los ciclos — minutos de LLM quemados en
+  //      "reparar" un proyecto que estaba perfecto.
+  // FIX: comprobar isStaticHtmlBundle sobre los archivos CRUDOS del bundle
+  // (antes de cualquier filtrado), igual que hace deployAppToVercel — el
+  // despliegue real, que por eso nunca fallaba con estos proyectos.
+  const rawFiles = parseFileMarkers(bundle);
+  if (isStaticHtmlBundle(rawFiles)) {
+    logger.info("VALIDATOR: bundle es un proyecto HTML estático (detectado sobre archivos crudos) -- válido sin punto de entrada React");
+    return { ok: true, issues: [], filesAnalyzed: Object.keys(rawFiles).length, durationMs: Date.now() - started };
+  }
 
   // ENCONTRADO A PETICION DEL USUARIO (caso real: "Pre-Deployment Health
   // Check" marcando 2 incidencias falsas -- "no entry file" y "no FILE
