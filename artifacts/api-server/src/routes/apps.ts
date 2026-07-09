@@ -2174,7 +2174,11 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-sonnet-4-7" | "claude-opus-4-7" | "claude-opus-4-8";
+// FIX (2026-07-09): eliminado "claude-sonnet-4-7" del tipo — ese modelo NO
+// existe en la API de Anthropic (404 not_found_error verificado contra
+// https://api.anthropic.com/v1/models con la API key real). Los IDs legados
+// se remapean en normalizeCoderModel a modelos reales.
+type ClaudeCoderModel = "claude-haiku-4-5" | "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-opus-4-7" | "claude-opus-4-8";
 
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
@@ -2187,7 +2191,10 @@ interface AgentModelChoice {
 
 
 
-const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-7", "claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-haiku-4-5"];
+// FIX (2026-07-09): quitado "claude-sonnet-4-7" (inexistente, 404) que
+// encabezaba la lista de fallback — cada generación empezaba con un fallo
+// garantizado antes de llegar a un modelo real.
+const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-haiku-4-5"];
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   const normalized = normalizeCoderModel(coderModel);
@@ -2200,20 +2207,23 @@ function normalizeCoderModel(coderModel?: string): string {
   if (!value || value === "auto" || value === "automatic") return "auto";
   if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
   if (["claude-haiku", "claude-haiku-4-5", "haiku", "fast", "basic"].includes(value)) return "claude-haiku-4-5";
-  // Sonnet 4.7 y Opus 4.8 (Ultra, solo pago): se reconocen explícitamente
-  // ANTES de las reglas genéricas de opus/sonnet, para que no caigan por
-  // error en la rama de la versión anterior (4.6/4.7).
-  if (["claude-sonnet-4-7", "sonnet-4-7", "sonnet-ultra"].includes(value)) return "claude-sonnet-4-7";
+  // Opus 4.8 (Ultra, solo pago) se reconoce explícitamente ANTES de las
+  // reglas genéricas de opus, para que no caiga en la rama de la versión
+  // anterior (4.7).
+  // FIX (2026-07-09): los IDs "claude-sonnet-4-7"/"sonnet-4-7"/"sonnet-ultra"
+  // apuntaban a un modelo que NO existe en la API de Anthropic (404
+  // verificado). El tier Ultra de Sonnet se remapea a "claude-sonnet-4-6"
+  // (el Sonnet real más reciente disponible con la key actual) para que las
+  // selecciones antiguas guardadas en el frontend no rompan la generación.
   if (["claude-opus-4-8", "opus-4-8", "opus-ultra"].includes(value)) return "claude-opus-4-8";
   if (["claude-opus", "claude-opus-4-7", "opus", "robust", "max"].includes(value)) return "claude-opus-4-7";
-  if (["claude-sonnet", "claude-sonnet-4-6", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "claude-sonnet-4-6";
+  if (["claude-sonnet", "claude-sonnet-4-6", "claude-sonnet-4-7", "sonnet-4-7", "sonnet-ultra", "claude-sonnet-4-8", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "claude-sonnet-4-6";
   return value;
 }
 
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   const normalized = normalizeCoderModel(coderModel);
   if (normalized === "claude-haiku-4-5") return "claude-haiku-4-5";
-  if (normalized === "claude-sonnet-4-7") return "claude-sonnet-4-7";
   if (normalized === "claude-opus-4-8") return "claude-opus-4-8";
   if (normalized === "claude-opus-4-7") return "claude-opus-4-7";
   return "claude-sonnet-4-6";
@@ -2295,16 +2305,17 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // ningún concepto" cuentas free en modo Ultra): el frontend ya bloquea el
   // botón Ultra para quien no tiene pago verificado, pero eso es solo
   // cosmético — cualquiera con acceso a la API podría pedir
-  // "claude-sonnet-4-7"/"claude-opus-4-8" directamente en el body de la
-  // petición. Aquí es donde de verdad se hace cumplir: si se pide uno de
-  // los 2 modelos Ultra y el usuario NO tiene hasEverPaid=true (esto ya
-  // incluye a los admins vía `hasEverPaid || isAdmin` en el caller), se
-  // degrada en silencio a Sonnet 4.6 en vez de servir el modelo Ultra sin
-  // autorización.
-  if ((normalized === "claude-sonnet-4-7" || normalized === "claude-opus-4-8") && !context?.hasEverPaid) {
+  // "claude-opus-4-8" directamente en el body de la petición. Aquí es donde
+  // de verdad se hace cumplir: si se pide el modelo Ultra y el usuario NO
+  // tiene hasEverPaid=true (esto ya incluye a los admins vía
+  // `hasEverPaid || isAdmin` en el caller), se degrada en silencio a
+  // Sonnet 4.6 en vez de servir el modelo Ultra sin autorización.
+  // NOTA (2026-07-09): "claude-sonnet-4-7" ya no llega aquí — no existe en
+  // la API de Anthropic y normalizeCoderModel lo remapea a Sonnet 4.6.
+  if (normalized === "claude-opus-4-8" && !context?.hasEverPaid) {
     normalized = "claude-sonnet-4-6";
   }
-  // GPT-5.4: mismo criterio que Sonnet 4.7/Opus 4.8 -- solo pago verificado
+  // GPT-5.4: mismo criterio que Opus 4.8 -- solo pago verificado
   // (aclarado explícitamente por el usuario). Haiku 4.5, en cambio, se deja
   // abierto para todos sin este bloqueo, por ser el modelo económico.
   if (normalized === "gpt-5.4" && !context?.hasEverPaid) {
@@ -5579,11 +5590,16 @@ router.post("/clerk-sync-users", requireAuth, async (req: any, res: any) => {
 });
 
 router.get("/models", requireAuth, async (req: any, res: any) => {
+  // FIX (2026-07-09): "claude-sonnet-4-8" y "claude-4-8-pro" NO existen en
+  // la API de Anthropic (404 verificado) — sustituidos por los modelos
+  // reales disponibles con la API key actual: Sonnet 4.6, Opus 4.8 y
+  // Haiku 4.5 (todos verificados con respuesta 200 contra la API real).
   const availableModels = [
     { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
+    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
     { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
-    { id: "claude-sonnet-4-8", name: "Claude 4.8 Sonnet", description: "El estándar de oro para ingeniería. Requiere créditos extra." },
-    { id: "claude-4-8-pro", name: "Claude 4.8 Pro (Opus)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
+    { id: "claude-opus-4-8", name: "Claude Opus 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI. Coste premium." }
   ];
   res.json(availableModels);
@@ -7096,8 +7112,10 @@ router.get("/models", async (_req: any, res: any) => {
       { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (rápido / básico)", provider: "anthropic" },
       { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (equilibrado)", provider: "anthropic" },
       { id: "claude-opus-4-7", name: "Claude Opus 4.7 (robusto / máxima calidad)", provider: "anthropic" },
+      { id: "claude-opus-4-8", name: "Claude Opus 4.8 (Ultra — solo pago verificado)", provider: "anthropic" },
       { id: "gpt-5.4", name: "GPT-5.4 (frontend alternativo con fallback Claude)", provider: "openai" },
       { id: "claude-4-8-sonnet", name: "Compatibilidad: Claude 4.8 Sonnet → Sonnet 4.6", provider: "anthropic" },
+      { id: "claude-sonnet-4-7", name: "Compatibilidad: Sonnet 4.7 → Sonnet 4.6 (el 4.7 no existe en la API)", provider: "anthropic" },
       { id: "claude-mithos", name: "Compatibilidad: Claude Mithos → Sonnet 4.6", provider: "anthropic" },
       { id: "gemini-3", name: "Compatibilidad: Gemini 3 → Sonnet 4.6", provider: "anthropic" },
     ];

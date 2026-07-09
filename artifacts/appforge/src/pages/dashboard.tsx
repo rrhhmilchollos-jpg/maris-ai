@@ -838,15 +838,18 @@ export default function DashboardPage() {
                       </SelectTrigger>
                       <SelectContent className="bg-[#16161e] border-white/10">
                         {ultraThinking ? (
-                          // MODO ULTRA: exclusivamente Sonnet 4.7 y Opus 4.8,
+                          // MODO ULTRA: exclusivamente los modelos Ultra,
                           // nada más. No se mezcla con la lista normal — a
                           // petición explícita del usuario, Ultra es su
-                          // propio modo con solo estos 2 modelos. Solo
-                          // llega aquí quien ya tiene pago verificado (o es
-                          // admin), porque el botón Ultra está bloqueado
-                          // para el resto — ver más abajo.
+                          // propio modo. Solo llega aquí quien ya tiene pago
+                          // verificado (o es admin), porque el botón Ultra
+                          // está bloqueado para el resto — ver más abajo.
+                          // FIX (2026-07-09): eliminado "claude-sonnet-4-7"
+                          // — ese modelo NO existe en la API de Anthropic
+                          // (404 verificado) y era la causa del cuadro rojo
+                          // "Error en la generación" al usar el modo Ultra.
+                          // Opus 4.8 sí existe y es ahora el único Ultra.
                           <>
-                            <SelectItem value="claude-sonnet-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-fuchsia-400" />Sonnet 4.7 — Ultra</div></SelectItem>
                             <SelectItem value="claude-opus-4-8" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Opus 4.8 — Ultra</div></SelectItem>
                           </>
                         ) : (
@@ -888,12 +891,13 @@ export default function DashboardPage() {
                             }
                             setUltraThinking(v => {
                               const next = !v;
-                              // Al entrar en Ultra, forzar Sonnet 4.7 por defecto
-                              // (el usuario elige luego si quiere Opus 4.8). Al
-                              // salir de Ultra, volver a "auto" -- el modelo
-                              // 4.7/4.8 seleccionado ya no aparece en la lista
-                              // normal y no tendría sentido dejarlo puesto.
-                              setCoderModel(next ? "claude-sonnet-4-7" : "auto");
+                              // Al entrar en Ultra, forzar Opus 4.8 (el único
+                              // modelo Ultra real — Sonnet 4.7 NO existe en la
+                              // API de Anthropic, 404 verificado). Al salir de
+                              // Ultra, volver a "auto" -- el modelo Ultra
+                              // seleccionado ya no aparece en la lista normal
+                              // y no tendría sentido dejarlo puesto.
+                              setCoderModel(next ? "claude-opus-4-8" : "auto");
                               return next;
                             });
                           }}
@@ -930,11 +934,10 @@ export default function DashboardPage() {
                           <p className="text-[11px] text-white/50 leading-relaxed">
                             Desbloquea los agentes especializados con los modelos más potentes de Anthropic:
                           </p>
+                          {/* FIX (2026-07-09): quitado "Sonnet 4.7" del teaser
+                              — ese modelo no existe en la API de Anthropic;
+                              el modo Ultra real es Opus 4.8. */}
                           <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 rounded-md bg-fuchsia-500/10 border border-fuchsia-500/20 px-2 py-1.5">
-                              <Sparkles className="h-3 w-3 text-fuchsia-400 flex-shrink-0" />
-                              <span className="text-[11px] font-semibold text-fuchsia-200">Sonnet 4.7</span>
-                            </div>
                             <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
                               <Brain className="h-3 w-3 text-amber-400 flex-shrink-0" />
                               <span className="text-[11px] font-semibold text-amber-200">Opus 4.8</span>

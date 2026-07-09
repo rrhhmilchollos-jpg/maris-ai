@@ -161,23 +161,29 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
 }
 
 // Modelos de Anthropic soportados, de más nuevo a más antiguo dentro de
-// cada familia. Sonnet 4.7 y Opus 4.8 son las versiones más recientes,
-// disponibles solo para clientes de pago con Ultra activado (ver
-// dashboard.tsx) — igual de soportados a nivel de backend que el resto.
-const CLAUDE_MODELS = ["claude-sonnet-4-7", "claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7"];
+// cada familia. Opus 4.8 es la versión más reciente, disponible solo para
+// clientes de pago con Ultra activado (ver dashboard.tsx).
+// FIX (2026-07-09): "claude-sonnet-4-7" NO existe en la API de Anthropic
+// — verificado contra https://api.anthropic.com/v1/models con la API key
+// real: devuelve 404 not_found_error ("model: claude-sonnet-4-7"). Estaba
+// como PRIMER candidato de la lista de fallback, así que muchas llamadas
+// empezaban con un 404 garantizado y, combinado con otros fallos, agotaba
+// candidatos y hacía fallar la generación con el cuadro rojo "Error en la
+// generación". Modelos verificados como disponibles con la key actual:
+// claude-sonnet-4-6, claude-opus-4-8, claude-opus-4-7,
+// claude-haiku-4-5(-20251001).
+const CLAUDE_MODELS = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7"];
 
 function fallbackClaudeModels(model: string): string[] {
-  // ENCONTRADO: esto detectaba la familia del modelo por "¿contiene la
-  // palabra 'opus'?", así que un cliente pidiendo explícitamente
-  // "claude-sonnet-4-7" o "claude-opus-4-8" (las versiones más nuevas)
-  // se encontraba con que el sistema los degradaba en silencio a
-  // sonnet-4-6/opus-4-7 -- ni siquiera intentaba la versión que el
-  // cliente pidió de verdad. Ahora se usa el modelo EXACTO solicitado
-  // como primario si es uno de los soportados, y solo se cae a detección
-  // por familia para strings no reconocidos.
-  const primary = CLAUDE_MODELS.includes(model)
-    ? model
-    : (model.includes("opus") ? "claude-opus-4-7" : "claude-sonnet-4-6");
+  // Se usa el modelo EXACTO solicitado como primario si es uno de los
+  // soportados, y solo se cae a detección por familia para strings no
+  // reconocidos. FIX (2026-07-09): el ID legado "claude-sonnet-4-7" (no
+  // existe en la API de Anthropic, 404 verificado) se remapea a
+  // "claude-sonnet-4-6" en vez de intentarse tal cual.
+  const remapped = model === "claude-sonnet-4-7" ? "claude-sonnet-4-6" : model;
+  const primary = CLAUDE_MODELS.includes(remapped)
+    ? remapped
+    : (remapped.includes("opus") ? "claude-opus-4-8" : "claude-sonnet-4-6");
   return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
 }
 
