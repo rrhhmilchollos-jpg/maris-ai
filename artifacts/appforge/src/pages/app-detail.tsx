@@ -641,7 +641,17 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     } else if (job?.status === "failed") {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
       setActiveJobId(null);
-      toast({ title: "Error en la generación", description: job.errorMessage || "Algo salió mal", variant: "destructive" });
+      // internalErrorMessage solo viene relleno para la cuenta admin (ver
+      // jobs.ts) -- para clientes normales sigue siendo undefined y el
+      // toast se comporta exactamente igual que antes.
+      const internalMsg = (job as any).internalErrorMessage;
+      toast({
+        title: "Error en la generación",
+        description: internalMsg
+          ? `${job.errorMessage || "Algo salió mal"}\n\n🔧 Error técnico real: ${internalMsg}`
+          : job.errorMessage || "Algo salió mal",
+        variant: "destructive",
+      });
     }
   }, [job?.status, id, queryClient, job?.errorMessage, toast]);
 

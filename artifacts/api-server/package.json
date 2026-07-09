@@ -43,6 +43,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "e2b": "^2.21.0",
+    "google-ads-api": "^24.1.0",
     "autocannon": "^8.0.0",
     "express": "^5.2.1",
     "express-mongo-sanitize": "^2.2.0",

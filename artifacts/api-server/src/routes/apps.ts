@@ -3871,6 +3871,13 @@ export async function generateApp(
   requestContext?: RouteGenerationRequestContext,
   jobId?: string,
 ): Promise<GeneratedAppPayload | GatingCheckpointPayload> {
+  // ENCONTRADO al compilar tras los commits recientes: buildErrorCapture se
+  // usaba en esta función (para avisar honestamente al cliente si el
+  // sandbox E2B falla) pero solo estaba declarada en singleEditPass (la
+  // función hermana para ediciones) -- generateApp (esta función, la de
+  // generaciones NUEVAS) nunca tuvo su propia declaración local, así que
+  // no compilaba. Mismo patrón que ya existe en singleEditPass.
+  let buildErrorCapture: string | undefined;
   const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();

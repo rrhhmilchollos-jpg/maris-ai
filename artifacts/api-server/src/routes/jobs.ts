@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { connectDB } from "../lib/db";
-import { requireAuth } from "../lib/auth";
+import { requireAuth, isAdminEmail } from "../lib/auth";
 import { GenerationJob, JobLog, type IJobLog } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 
@@ -58,6 +58,14 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
       progress: job.progress,
       appId: job.appId,
       errorMessage: job.errorMessage,
+      // ENCONTRADO a petición del usuario: el error técnico real (guardado
+      // en internalErrorMessage, ver apps.ts) no era visible en NINGÚN
+      // sitio del panel -- ni para el cliente (correcto, a propósito, para
+      // no exponer detalles internos) ni para el admin (bug: el propio
+      // comentario del código decía "para que el equipo lo revise", pero
+      // nunca se exponía por ningún endpoint con UI real). Solo se incluye
+      // si quien consulta es la cuenta admin -- nunca para clientes.
+      internalErrorMessage: isAdminEmail(req.dbUser?.email) ? (job as any).internalErrorMessage ?? null : undefined,
       updatedAt: job.updatedAt,
       currentAgent: (job as any).currentAgent,
       awaitingApproval: (job as any).awaitingApproval,

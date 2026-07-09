@@ -1377,6 +1377,77 @@ export const SiteSetting: Model<ISiteSetting> =
   mongoose.models.SiteSetting ||
   mongoose.model<ISiteSetting>("SiteSetting", SiteSettingSchema);
 
+// ─── Ad Campaign Proposal (agente de marketing "Niko") ─────────────────────
+// Cada vez que el agente redacta/recomienda una campaña de Google Ads (o una
+// edición de una existente), se guarda aquí como PROPUESTA -- nunca toca la
+// cuenta real de Google Ads hasta que un humano la aprueba explícitamente
+// (status: "approved") y se lanza. El agente puede hacer todo el trabajo
+// intelectual solo; el gasto de dinero real requiere confirmación humana,
+// al menos mientras se genera confianza con el agente (fácil de quitar
+// después: basta con no exigir el paso "approved" antes de lanzar).
+export interface IAdCampaignProposal extends Document {
+  createdByUserId: string;
+  status: "draft" | "approved" | "launched" | "rejected" | "failed";
+  action: "create" | "edit" | "pause" | "resume";
+  targetCampaignId?: string; // id de Google Ads si es una edición de una campaña existente
+  title: string;
+  summary: string;           // resumen en lenguaje natural de lo que propone, para mostrar al humano
+  proposedConfig: {
+    campaignName?: string;
+    dailyBudgetEUR?: number;
+    biddingStrategy?: string;
+    targeting?: {
+      locations?: string[];
+      languages?: string[];
+      devices?: string[];
+      demographics?: string;
+    };
+    adGroups?: {
+      name: string;
+      keywords: string[];
+      headlines: string[];
+      descriptions: string[];
+    }[];
+  };
+  estimatedClicksRange?: string;   // ej. "150-300 clics/semana"
+  estimatedImpressionsRange?: string;
+  reasoning: string;         // por qué el agente recomienda esta configuración
+  reviewedByUserId?: string;
+  reviewedAt?: Date;
+  rejectionReason?: string;
+  googleAdsResult?: {        // se rellena SOLO tras lanzar de verdad contra la API real
+    campaignId?: string;
+    launchedAt?: Date;
+    error?: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const AdCampaignProposalSchema = new Schema<IAdCampaignProposal>(
+  {
+    createdByUserId: { type: String, required: true, index: true },
+    status: { type: String, required: true, default: "draft", index: true },
+    action: { type: String, required: true, default: "create" },
+    targetCampaignId: { type: String },
+    title: { type: String, required: true },
+    summary: { type: String, required: true },
+    proposedConfig: { type: Schema.Types.Mixed, default: {} },
+    estimatedClicksRange: { type: String },
+    estimatedImpressionsRange: { type: String },
+    reasoning: { type: String, required: true },
+    reviewedByUserId: { type: String },
+    reviewedAt: { type: Date },
+    rejectionReason: { type: String },
+    googleAdsResult: { type: Schema.Types.Mixed },
+  },
+  { timestamps: true },
+);
+
+export const AdCampaignProposal: Model<IAdCampaignProposal> =
+  mongoose.models.AdCampaignProposal ||
+  mongoose.model<IAdCampaignProposal>("AdCampaignProposal", AdCampaignProposalSchema);
+
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 
