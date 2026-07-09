@@ -18,9 +18,12 @@ export interface TestingAgentOptions {
   language: GenLanguage;
   log: (agent: string, message: string, level?: "info" | "warn" | "error") => void;
   onProgress?: (update: any) => void;
+  /** true en modo edición de proyecto existente: menos ciclos (2 vs 5), la edición termina minutos antes */
+  isEdit?: boolean;
 }
 
 const MAX_FIX_CYCLES = 5;
+const MAX_EDIT_FIX_CYCLES = 2; // ediciones: tocan pocos archivos — 2 ciclos bastan y la edición termina minutos antes
 
 /**
  * Testing Agent — systematic validation and repair loop.
@@ -31,9 +34,14 @@ export async function runTestingAgent(
   options: TestingAgentOptions
 ): Promise<string> {
   const { log, onProgress, language, prompt, plan } = options;
+  const maxCycles = options.isEdit ? MAX_EDIT_FIX_CYCLES : MAX_FIX_CYCLES;
   let currentBundle = bundle;
   let allPassing = false;
   let cycle = 0;
+  // FIX VELOCIDAD: si dos ciclos consecutivos detectan EXACTAMENTE los mismos
+  // issues, el parche no está convergiendo — seguir quemando ciclos (y
+  // llamadas LLM de minutos cada una) producirá el mismo resultado. Cortar ya.
+  let previousIssuesSignature = "";
   // Declarado fuera del bucle a propósito -- report (más abajo) vive
   // dentro del while y no está disponible tras salir de él, pero
   // necesitamos su último valor para saber qué problemas quedaron sin
@@ -64,7 +72,7 @@ export async function runTestingAgent(
     }
   };
 
-  while (!allPassing && cycle < MAX_FIX_CYCLES) {
+  while (!allPassing && cycle < maxCycles) {
     cycle++;
 
     // 1. RUN VALIDATION
@@ -100,15 +108,44 @@ export async function runTestingAgent(
       for (const m of routeMatches) routes.add(m[1]);
     }
     
-    // Buscar enlaces que apuntan a rutas no definidas
+    // Buscar enlaces que apuntan a rutas no definidas.
+    // FIX VELOCIDAD (bucle "1 problema(s)" repetido observado en producción):
+    // este detector marcaba como "rotos" enlaces perfectamente válidos —
+    // anclas de sección (href="/#galeria"), rutas con query ("/planes?x=1") y
+    // rutas dinámicas de React Router (path="/post/:id" no coincide
+    // literalmente con href="/post/7") — y disparaba al patcher (una llamada
+    // LLM de hasta 4 minutos POR CICLO) para "reparar" algo que no estaba
+    // roto. Como el enlace válido seguía ahí tras el parche, el siguiente
+    // ciclo volvía a marcar EXACTAMENTE el mismo problema: hasta 5 ciclos
+    // de LLM desperdiciados por edición. Ahora: se ignoran anclas y queries,
+    // y las rutas dinámicas se comparan por patrón (":param" → segmento
+    // comodín), igual que hace el router real.
+    const routePatterns = [...routes].map((r) => {
+      const pattern = String(r)
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        .replace(/\\:[^/]+/g, "[^/]+")
+        .replace(/\/\\\*$/, "(/.*)?");
+      return new RegExp(`^${pattern}/?$`);
+    });
+    const routeMatchesHref = (href: string): boolean => {
+      if (routes.has(href)) return true;
+      return routePatterns.some((re) => re.test(href));
+    };
     files.forEach(f => {
       const path = f.split(" ===")[0];
       const hrefMatches = f.matchAll(/href=["'](\/.*?)["']/g);
       for (const m of hrefMatches) {
-        if (m[1] !== "/" && !routes.has(m[1]) && !m[1].startsWith("http")) {
+        const raw = m[1];
+        // Anclas y queries: válidos por definición para el router (misma página / misma ruta)
+        if (raw.includes("#")) continue;
+        const clean = raw.split("?")[0].replace(/\/+$/, "") || "/";
+        if (clean === "/" || raw.startsWith("http")) continue;
+        // Sin App.tsx con rutas detectadas no se puede afirmar nada — no inventar issues
+        if (routes.size === 0) continue;
+        if (!routeMatchesHref(clean)) {
           brokenLinks.push({
             file: path,
-            message: `Enlace roto: el botón apunta a "${m[1]}" pero esa ruta no está definida en App.tsx.`
+            message: `Enlace roto: el botón apunta a "${raw}" pero esa ruta no está definida en App.tsx.`
           });
         }
       }
@@ -137,11 +174,22 @@ export async function runTestingAgent(
       break;
     }
     
+    // Corte por no-convergencia: mismos issues idénticos que el ciclo anterior
+    const issuesSignature = [...report.issues, ...brokenLinks]
+      .map((i) => `${i.file}|${i.message}`)
+      .sort()
+      .join("\n");
+    if (issuesSignature && issuesSignature === previousIssuesSignature) {
+      log("testing", "⚠️ Los mismos problemas persisten tras la reparación — deteniendo ciclos para no repetir intentos idénticos.", "warn");
+      break;
+    }
+    previousIssuesSignature = issuesSignature;
+
     announceIfNeeded();
     onProgress?.({
       phase: "testing",
       progress: 80 + cycle * 2,
-      note: `🧪 Testing Agent: corrigiendo (ciclo ${cycle}/${MAX_FIX_CYCLES})...`,
+      note: `🧪 Testing Agent: corrigiendo (ciclo ${cycle}/${maxCycles})...`,
     });
 
     if (brokenLinks.length > 0) {

@@ -4561,11 +4561,16 @@ export async function generateApp(
           language,
           log,
           onProgress,
+          // FIX VELOCIDAD: en modo edición el Testing Agent usa 2 ciclos máx.
+          // (vs 5 de generación nueva) — las ediciones tocan pocos archivos y
+          // cada ciclo extra puede ser una llamada LLM de minutos.
+          isEdit: true,
         });
-        const navIssues = await validateBundle(tested);
-        if (navIssues.issues.length > 0) {
-          logger.warn(`[QA] Se detectaron ${navIssues.issues.length} problemas de navegación tras el Testing Agent en modo edición.`);
-        }
+        // FIX VELOCIDAD: se eliminó el validateBundle() extra que se ejecutaba
+        // aquí justo después — runTestingAgent YA ejecuta validateBundle en su
+        // último ciclo (es su condición de salida), y runValidatePatchLoop (el
+        // siguiente paso del pipeline) vuelve a validar de todos modos. Era una
+        // tercera validación idéntica cuyo resultado solo se logueaba.
         return tested;
       }).catch((e) => {
         logger.warn({ e }, "runTestingAgent falló en modo edición — continúo con el bundle previo a este paso");
@@ -4598,7 +4603,13 @@ export async function generateApp(
     // explícitamente (evita generar backend no solicitado en ediciones
     // normales de frontend).
     let editedBackendCode = previous.backendCode || "";
-    const wantsBackendNow = /\b(backend|servidor|base de datos|api|endpoint)\b/i.test(cleanedPrompt);
+    // FIX VELOCIDAD: la regex anterior (\b(backend|servidor|base de datos|api|
+    // endpoint)\b) disparaba la GENERACIÓN COMPLETA de backend (planificación +
+    // código + validación sintáctica + hasta 3 ciclos de reparación = varios
+    // minutos extra) con menciones casuales como "conecta el botón a la api" o
+    // "que guarde en la base de datos" en ediciones puramente frontend. Ahora
+    // exige un verbo de construcción explícito cerca del sustantivo backend.
+    const wantsBackendNow = /\b(crea|créa|creame|créame|añade|añáde|agrega|agréga|construye|constrúy|genera|genéra|implementa|impleménta|haz|monta|mónta|continúa|continua|termina|termína|completa|compléta|arregla|arrégla|repara|repára|actualiza|actualíza|modifica|modifíca)\w*\b[^.!?\n]{0,60}\b(backend|servidor|base de datos|api|endpoint)s?\b/i.test(cleanedPrompt);
     if (wantsBackendNow) {
       await log("coder", "Construyendo el backend solicitado — API, rutas y base de datos…");
       // Reutilizamos el plan original de la app (dataModels/files) si está
@@ -4688,6 +4699,23 @@ export async function generateApp(
     // refactorizar/editar que se observa en cualquier plataforma de vibe
     // coding cuando el QA solo corre en la generación inicial.
     let finalFrontendAfterQa = fixedFrontend;
+    // FIX VELOCIDAD (duplicado QA→TESTING→QA→TESTING observado en producción):
+    // este bloque ejecutaba SIEMPRE un SEGUNDO reviewBundle (otra llamada LLM
+    // completa de 30-120s) aunque el PRIMER reviewBundle de arriba ya hubiera
+    // salido limpio Y el bundle no hubiera cambiado desde entonces (testing
+    // agent y validate-loop sin reparaciones). Revisar dos veces exactamente
+    // el mismo código con exactamente el mismo revisor no aporta nada — solo
+    // duplica los mensajes "Sin issues detectadas" y añade minutos. Solo se
+    // re-ejecuta si el bundle CAMBIÓ después del primer QA (hubo reparaciones
+    // o backend nuevo) o si el primer QA no llegó a ejecutarse.
+    const bundleChangedSinceFirstQa = fixedFrontend !== qualityCheckedFrontend;
+    const firstQaRan = execPlan.phases.includes("validate");
+    if (firstQaRan && !bundleChangedSinceFirstQa) {
+      await log("qa", "✅ QA: el código no cambió desde la última revisión — revisión final omitida para entregar antes.");
+      onProgress?.({ phase: "parsing", progress: 90, note: "Procesando archivos…" });
+      log("system", "Empaquetando todo…");
+      return { ...result, frontendCode: finalFrontendAfterQa, backendCode: editedBackendCode, buildErrorSummary: buildErrorCapture || undefined };
+    }
     try {
       const editQaPlan: ProjectPlan = {
         title: previous.title,
