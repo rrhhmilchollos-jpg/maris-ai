@@ -4558,7 +4558,20 @@ export async function generateApp(
     // explícitamente que hay que saltar validación — mismo criterio que ya
     // usaba runValidatePatchLoop con phaseGates.validate.
     let qualityCheckedFrontend = result.frontendCode;
-    if (execPlan.phases.includes("validate")) {
+    // FIX (2026-07-10): "validate" se estaba usando como un único interruptor
+    // para DOS cosas distintas: (1) la comprobación de compilación/sintaxis
+    // (runValidatePatchLoop, más abajo — barata, rápida, y deseable incluso
+    // en cambios triviales para no dejar la app rota) y (2) el QA semántico
+    // (reviewBundle) + Testing Agent de navegación (runTestingAgent) — caros
+    // en tiempo/tokens y pensados para features nuevas o bugs, no para un
+    // cambio de "cambia el color del botón a azul". Como fast-patch también
+    // incluye "validate" en sus phases (para no perder la comprobación de
+    // build), esto hacía que CUALQUIER edición cosmética disparara el mismo
+    // pipeline pesado que una feature nueva. Ahora el QA+Testing Agent solo
+    // corre si el scope NO es "fast-patch"; fast-patch sigue pasando
+    // siempre por runValidatePatchLoop (comprobación de build) más abajo.
+    const runsHeavyQaAndTesting = execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
+    if (runsHeavyQaAndTesting) {
       const editAsPlan: ProjectPlan = {
         title: previous.title,
         description: previous.description,
@@ -4603,8 +4616,10 @@ export async function generateApp(
         logger.warn({ e }, "runTestingAgent falló en modo edición — continúo con el bundle previo a este paso");
         return qualityCheckedFrontend;
       });
+    } else if (!execPlan.phases.includes("validate")) {
+      await log("system", "Plan dice saltar validación (alcance reducido) — se omiten QA, Testing Agent y comprobación de build en esta edición.", "warn");
     } else {
-      await log("system", "Plan dice saltar validación (alcance reducido) — se omiten QA y Testing Agent en esta edición.", "warn");
+      await log("system", "Cambio cosmético (fast-patch) — se omiten QA semántico y Testing Agent; solo se comprueba que el build compile.", "info");
     }
 
     const fixedFrontend = await runValidatePatchLoop(
