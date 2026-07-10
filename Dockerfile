@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y \
     libatk1.0-0 \
     libcairo2 \
     libcups2 \
+    dbus \
     libdbus-1-3 \
     libdrm2 \
     libgbm1 \
@@ -76,6 +77,10 @@ COPY --from=builder /app/pnpm-workspace.yaml ./
 ENV NODE_ENV=production
 ENV NODE_PATH=/app/node_modules
 
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 8080
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "--enable-source-maps", "/app/artifacts/api-server/dist/index.mjs"]
