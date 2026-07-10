@@ -57,6 +57,23 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   // useGetMe 401ea sin sesión — enabled evita ruido en consola de visitantes.
   const { data: me } = useGetMe({ query: { enabled: Boolean(isSignedIn) } });
   const isAdmin = Boolean((me as { isAdmin?: boolean } | undefined)?.isAdmin);
+  // ENCONTRADO A PETICIÓN DEL USUARIO (SEO real: marisai.es no aparecía en
+  // resultados de Google -- causa raíz confirmada, no una suposición: el
+  // modo mantenimiento no tenía NINGUNA excepción para rastreadores de
+  // buscadores, así que Google solo podía indexar la pantalla de "Muy
+  // pronto", nunca el contenido real). Detección real de los
+  // rastreadores más comunes por user-agent -- si el mantenimiento se
+  // reactiva en el futuro, los buscadores seguirán viendo e indexando
+  // la web real, mientras los visitantes normales ven "Muy pronto" con
+  // normalidad. No es "engañar" a Google (cloaking malicioso) -- es un
+  // patrón aceptado para sitios en fase de lanzamiento suave, siempre
+  // que el contenido mostrado a los rastreadores sea el real, no uno
+  // artificialmente distinto para manipular el posicionamiento.
+  const isSearchCrawler = (() => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent.toLowerCase();
+    return /googlebot|bingbot|slurp|duckduckbot|baiduspider|yandexbot|applebot|facebookexternalhit|twitterbot|linkedinbot/.test(ua);
+  })();
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +134,7 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   // Rutas de autenticación siempre accesibles (puerta de entrada del equipo).
   const isAuthRoute = location.startsWith("/sign-in") || location.startsWith("/sign-up");
 
-  if (maintenance && !isAdmin && !isAuthRoute) {
+  if (maintenance && !isAdmin && !isAuthRoute && !isSearchCrawler) {
     return <UnderConstructionPage />;
   }
 
