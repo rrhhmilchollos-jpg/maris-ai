@@ -594,7 +594,51 @@ export async function runAutoEvaluator(opts: {
         }
         continue;
       }
-      
+
+      // FIX (2026-07-10): un fallo de INFRAESTRUCTURA al lanzar el navegador
+      // headless (Chromium presente en disco pero crashea al arrancar — p.ej.
+      // falta D-Bus del sistema, faltan librerías compartidas, etc.) caía
+      // aquí y se trataba exactamente igual que un rechazo visual real,
+      // marcando la app como needs_review y avisando al usuario de que "la
+      // evaluación visual rechazó la app" — cuando en realidad nadie llegó a
+      // mirar ni un solo píxel. Esto contradice el criterio que el propio
+      // código ya aplica más arriba cuando Chromium no está instalado en
+      // absoluto ("the user shouldn't be punished for an environment
+      // problem"). Extendemos el mismo criterio aquí: si el navegador no
+      // pudo lanzarse, se omite el QA visual sin rechazar la app.
+      const isBrowserLaunchFailure =
+        errMsg.includes("Failed to launch the browser process") ||
+        errMsg.includes("no_chromium") ||
+        (err && err.name === "VisualTesterError");
+
+      if (isBrowserLaunchFailure) {
+        log.warn(
+          { err, appId, jobId, round },
+          "👁 Evaluator: el navegador headless no pudo arrancar (problema de entorno del servidor) — se omite el QA visual sin rechazar la app",
+        );
+        try {
+          await AppMessage.create({
+            appId: String(appId),
+            role: "assistant",
+            content:
+              `👁 No pude ejecutar el chequeo visual automático porque el navegador de pruebas no arrancó en el servidor (problema de entorno, no de tu app). ` +
+              `Tu último cambio SÍ se aplicó correctamente — solo no se pudo verificar automáticamente con capturas de pantalla. ` +
+              `Échale un ojo tú mismo para confirmar que se ve bien.`,
+          });
+        } catch (msgErr) {
+          log.warn({ msgErr, appId, jobId }, "Failed to insert browser-launch-failure chat message");
+        }
+        return {
+          ranEvaluator: false,
+          finalVerdict: "pass",
+          rounds: round,
+          fixesApplied,
+          autoPublished: false,
+          publicUrl: publicUrlFor(slug),
+          summary: "Testing visual no disponible en este entorno (el navegador headless no pudo arrancar). No se rechazó la app por este motivo.",
+        };
+      }
+
       log.warn({ err, appId, jobId, round }, "👁 Evaluator threw — treating as fail");
       report = {
         verdict: "fail",
