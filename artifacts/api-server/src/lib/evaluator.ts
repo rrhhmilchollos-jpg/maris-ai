@@ -25,7 +25,7 @@
  * Puppeteer infrastructure to avoid double-launching Chromium.
  */
 import type { Logger } from "pino";
-import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
+import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
 import { CoreOrchestrator } from "@workspace/services";
 import { patchBundle, createClaudeMessageWithFallback, type GenLanguage, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
@@ -47,6 +47,31 @@ import { sendAutoPublishEmail, sendNeedsReviewEmail } from "./notify";
  *  contenido real → necesitamos al menos una ronda más. Subido a 5:
  *  1 análisis inicial + hasta 4 ciclos de fix+reanalysis. */
 const MAX_VISION_ROUNDS = 5;
+
+// ── Protección de bucles (loop protection) ──────────────────────────────────
+// Si el evaluador reporta EXACTAMENTE el mismo conjunto de problemas
+// (misma firma) en SAME_ISSUE_STUCK_THRESHOLD rondas seguidas, el patch/
+// CoreOrchestrator no está resolviendo nada real — es el "Bucle Infinito"
+// que en Emergent.sh se traduce en quemar créditos sin avanzar. Cortamos
+// el loop ANTES de agotar MAX_VISION_ROUNDS para no seguir cobrando
+// rondas que ya sabemos que no van a cambiar el resultado.
+const SAME_ISSUE_STUCK_THRESHOLD = 3;
+
+/** Firma corta y estable de un conjunto de issues del evaluador — dos
+ * rondas con exactamente los mismos problemas (mismo orden-independiente)
+ * producen la misma firma, sin importar el resumen (summary) que puede
+ * variar en redacción aunque el problema real sea idéntico. */
+function issuesSignature(issues: EvaluatorReport["issues"]): string {
+  const normalized = issues
+    .map((i) => `${i.severity}:${i.description.trim().toLowerCase()}`)
+    .sort();
+  let hash = 0;
+  const str = normalized.join("|");
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return `${normalized.length}:${hash}`;
+}
 
 type Severity = "critical" | "major" | "minor";
 
@@ -661,6 +686,53 @@ export async function runAutoEvaluator(opts: {
       `👁 Ronda ${round}: el evaluador encontró ${report.issues.length} problema(s). ${report.summary}`,
       "warn",
     );
+
+    // ── Protección de bucles ──────────────────────────────────────────
+    // Si esta ronda reporta EXACTAMENTE la misma firma de problemas que
+    // la ronda anterior, el patch de la ronda previa no cambió nada real
+    // (aunque "fixesApplied" se haya incrementado). Contamos repeticiones
+    // consecutivas y cortamos antes de gastar más rondas en lo mismo.
+    const signature = issuesSignature(report.issues);
+    let sameIssueRepeatCount = 1;
+    try {
+      const prevJob = await GenerationJob.findById(jobId, {
+        lastIssueSignature: 1,
+        sameIssueRepeatCount: 1,
+      }).lean();
+      if (prevJob?.lastIssueSignature === signature) {
+        sameIssueRepeatCount = (prevJob.sameIssueRepeatCount ?? 0) + 1;
+      }
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: { lastIssueSignature: signature, sameIssueRepeatCount },
+      });
+    } catch (err) {
+      log.warn({ err, appId, jobId }, "No se pudo persistir el estado de protección de bucles (no bloqueante)");
+    }
+
+    if (sameIssueRepeatCount >= SAME_ISSUE_STUCK_THRESHOLD) {
+      log.warn(
+        { appId, jobId, round, sameIssueRepeatCount },
+        "🛑 Loop protection: mismo problema repetido — cortando reparación automática",
+      );
+      recordEvalLog(
+        `🛑 El mismo problema persiste desde hace ${sameIssueRepeatCount} rondas seguidas. Para no seguir gastando créditos en algo que no se está resolviendo, detengo la reparación automática aquí.`,
+        "warn",
+      );
+      try {
+        await GenerationJob.findByIdAndUpdate(jobId, { $set: { stuckLoopDetected: true } });
+        await AppMessage.create({
+          appId: String(appId),
+          role: "assistant",
+          content:
+            `🛑 Detecté que el mismo problema (${report.issues[0]?.description ?? "detectado por el QA visual"}) sigue apareciendo tras varios intentos automáticos seguidos. ` +
+            `Para no seguir consumiendo tus créditos en reintentos que no están funcionando, he pausado la reparación automática aquí. ` +
+            `Puedes revisarlo tú o pedirme que lo intente con un enfoque distinto.`,
+        });
+      } catch (msgErr) {
+        log.warn({ msgErr, appId, jobId }, "Failed to insert stuck-loop AppMessage");
+      }
+      break;
+    }
 
     // Fail path. If we've used our budget, stop.
     if (round >= visionRoundLimit) {
