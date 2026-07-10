@@ -27,7 +27,30 @@ import { useGetMe, apiFetch } from "@/lib/api-client";
 import UnderConstructionPage from "@/pages/under-construction";
 
 export function MaintenanceGate({ children }: { children: ReactNode }) {
-  const [maintenance, setMaintenance] = useState<boolean | null>(null);
+  // ENCONTRADO A PETICIÓN DEL USUARIO (Lighthouse real + reporte de un
+  // vecino en dispositivo nuevo, primera visita: carga muy lenta, CLS de
+  // 1,000 -- el maximo posible, en TODAS las cargas, no solo cuando el
+  // mantenimiento estaba activo). Causa real: el estado empezaba SIEMPRE
+  // en null (mostrando el spinner) hasta que /api/site-status respondía,
+  // y entonces se sustituía TODO por el contenido real -- un salto de
+  // diseño garantizado en cada carga, no solo en la transición de
+  // mantenimiento que se arregló antes.
+  //
+  // FIX: se guarda el último valor conocido en localStorage. En visitas
+  // repetidas (la inmensa mayoría del tráfico real), el contenido
+  // correcto se muestra desde el primer instante, sin spinner ni salto --
+  // la comprobación real sigue ocurriendo en segundo plano para mantener
+  // el valor actualizado, pero ya no bloquea el primer renderizado. Solo
+  // una visita genuinamente nueva (sin nada en localStorage, como la del
+  // vecino que nunca había abierto marisai.es) ve el spinner breve.
+  const [maintenance, setMaintenance] = useState<boolean | null>(() => {
+    try {
+      const cached = localStorage.getItem("marisMaintenanceCache");
+      if (cached === "true") return true;
+      if (cached === "false") return false;
+    } catch { /* localStorage no disponible -- cae al comportamiento normal */ }
+    return null;
+  });
   const [toggling, setToggling] = useState(false);
   const [location] = useLocation();
   const { isSignedIn } = useUser();
@@ -39,7 +62,9 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
     let cancelled = false;
     apiFetch<{ maintenance?: boolean }>("/api/site-status")
       .then((d) => {
-        if (!cancelled) setMaintenance(Boolean(d?.maintenance));
+        const value = Boolean(d?.maintenance);
+        if (!cancelled) setMaintenance(value);
+        try { localStorage.setItem("marisMaintenanceCache", String(value)); } catch { /* silencioso */ }
       })
       .catch(() => {
         if (!cancelled) setMaintenance(false); // fail-open
