@@ -208,7 +208,7 @@ export default function LandingPage() {
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
         <motion.div style={{ opacity: heroOpacity }} className="container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
           <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
-            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/40 bg-primary/20 px-4 py-1.5 text-sm font-semibold text-primary mb-8 backdrop-blur-sm">
+            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/40 bg-primary/20 px-4 py-1.5 text-sm font-semibold text-[hsl(272,72%,68%)] mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
               <span>La revolución del Vibe Coding ha llegado</span>
             </motion.div>
@@ -512,7 +512,7 @@ export default function LandingPage() {
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               ¿Tienes dudas antes de registrarte?{" "}
-              <a href="mailto:hola@marisai.es" className="text-primary underline underline-offset-2 hover:text-primary/80">Escríbenos directamente</a>{" "}
+              <a href="mailto:hola@marisai.es" className="text-[hsl(272,72%,68%)] underline underline-offset-2 hover:text-[hsl(272,72%,75%)]">Escríbenos directamente</a>{" "}
               — respondemos en menos de 24 horas.
             </p>
           </div>
@@ -557,7 +557,7 @@ export default function LandingPage() {
                 <img src={`${import.meta.env.BASE_URL?.replace(/\/$/, "") || ""}/logo.svg`} alt="Maris AI" className="h-5 w-5 opacity-70" width="20" height="20" loading="lazy" decoding="async" />
                 <span className="font-semibold text-muted-foreground">Maris AI</span>
               </div>
-              <p className="text-xs text-muted-foreground/60">Generador de apps con IA. Describe tu idea, recibe una app real.</p>
+              <p className="text-xs text-muted-foreground/80">Generador de apps con IA. Describe tu idea, recibe una app real.</p>
             </div>
             <div>
               <h3 className="font-semibold text-white mb-3 text-sm">Producto</h3>
