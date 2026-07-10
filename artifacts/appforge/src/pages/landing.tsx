@@ -208,7 +208,7 @@ export default function LandingPage() {
       <section className="relative pt-20 pb-16 sm:pt-32 sm:pb-20 md:pt-48 md:pb-32 overflow-hidden min-h-screen flex items-center justify-center">
         <motion.div style={{ opacity: heroOpacity }} className="container px-4 md:px-8 max-w-6xl mx-auto relative z-10">
           <motion.div initial="initial" animate="animate" variants={stagger} className="text-center">
-            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-8 backdrop-blur-sm">
+            <motion.div variants={fadeIn} className="inline-flex items-center rounded-full border border-primary/40 bg-primary/20 px-4 py-1.5 text-sm font-semibold text-primary mb-8 backdrop-blur-sm">
               <Zap className="mr-2 h-3.5 w-3.5" />
               <span>La revolución del Vibe Coding ha llegado</span>
             </motion.div>
@@ -512,7 +512,7 @@ export default function LandingPage() {
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               ¿Tienes dudas antes de registrarte?{" "}
-              <a href="mailto:hola@marisai.es" className="text-primary hover:underline">Escríbenos directamente</a>{" "}
+              <a href="mailto:hola@marisai.es" className="text-primary underline underline-offset-2 hover:text-primary/80">Escríbenos directamente</a>{" "}
               — respondemos en menos de 24 horas.
             </p>
           </div>
@@ -560,7 +560,7 @@ export default function LandingPage() {
               <p className="text-xs text-muted-foreground/60">Generador de apps con IA. Describe tu idea, recibe una app real.</p>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-3 text-sm">Producto</h4>
+              <h3 className="font-semibold text-white mb-3 text-sm">Producto</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><Link href="/pricing" className="hover:text-white transition-colors">Precios</Link></li>
                 <li><Link href="/vs-emergent" className="hover:text-white transition-colors">vs Competidores</Link></li>
@@ -568,14 +568,14 @@ export default function LandingPage() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-3 text-sm">Compañía</h4>
+              <h3 className="font-semibold text-white mb-3 text-sm">Compañía</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="mailto:hola@marisai.es" className="hover:text-white transition-colors">Contacto</a></li>
                 <li><a href="mailto:soporte@marisai.es" className="hover:text-white transition-colors">Soporte</a></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-white mb-3 text-sm">Legal</h4>
+              <h3 className="font-semibold text-white mb-3 text-sm">Legal</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><Link href="/legal/privacidad" className="hover:text-white transition-colors">Privacidad</Link></li>
                 <li><Link href="/legal/aviso-legal" className="hover:text-white transition-colors">Aviso Legal</Link></li>
