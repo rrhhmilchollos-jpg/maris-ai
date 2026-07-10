@@ -2357,16 +2357,43 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   const patcherModel: ClaudeCoderModel = SONNET;    // SIEMPRE Sonnet — reparación crítica
   const execModel: ClaudeCoderModel = isFreeUser ? HAIKU : SONNET; // Ejecutores: Haiku en free
 
+  // ENCONTRADO A PETICIÓN DEL USUARIO (optimización real de coste de
+  // tokens de Anthropic, para proteger el margen): antes, CUALQUIER
+  // usuario de pago recibía Sonnet en TODOS los agentes, sin importar si
+  // la tarea era trivial o compleja -- una landing de una sola página
+  // costaba exactamente igual en tokens que un sistema completo con
+  // varios módulos, porque la decisión dependía solo de "¿ha pagado
+  // alguna vez", no de la complejidad real de ESTA tarea concreta. Ya
+  // existía classifyPromptComplexity() (usado para decidir cuántas
+  // páginas generar), pero no se usaba para elegir el modelo en usuarios
+  // de pago.
+  //
+  // Aplicado SOLO a los 4 agentes acordados explícitamente con el
+  // usuario (Designer, DevOps, Database, Integrator) -- deliberadamente
+  // NO a Frontend/Backend (el código real que ve y usa el cliente, donde
+  // la calidad importa más) ni a Researcher (más barato mantenerlo
+  // consistente con el resto de agentes de "cerebro"). Arquitecto, QA,
+  // Patcher y Repair siguen 100% intocados, tal como se acordó.
+  //
+  // Regla: para clientes de pago, si la tarea es genuinamente "basic"
+  // (la complejidad más baja de las 4), estos 4 agentes usan Haiku en
+  // vez de Sonnet -- ahorro real sin tocar donde de verdad importa. Para
+  // standard/robust/ultra, se mantiene Sonnet como hasta ahora.
+  const isBasicComplexity = complexity.tier === "basic";
+  const lightExecModel: ClaudeCoderModel = isFreeUser
+    ? HAIKU
+    : (isBasicComplexity ? HAIKU : SONNET);
+
   const agents: Record<AgentRole, AgentModelChoice> = {
     researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
     architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre sonnet — define el plan completo"),
-    designer:   makeAgentChoice("designer",   "Designer",   execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    designer:   makeAgentChoice("designer",   "Designer",   lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
     frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:haiku" : "paid:sonnet"})` : "selección manual"),
     backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? HAIKU : SONNET, isFreeUser ? "free: haiku" : "paid: sonnet"),
-    database:   makeAgentChoice("database",   "Database",   execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
-    integrator: makeAgentChoice("integrator", "Integrator", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    database:   makeAgentChoice("database",   "Database",   lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
+    integrator: makeAgentChoice("integrator", "Integrator", lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
     qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre sonnet — quality gate final"),
-    devops:     makeAgentChoice("devops",     "DevOps",     execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
+    devops:     makeAgentChoice("devops",     "DevOps",     lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
     patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre sonnet — reparación crítica"),
     repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre sonnet — recupera JSON malformado"),
   };
