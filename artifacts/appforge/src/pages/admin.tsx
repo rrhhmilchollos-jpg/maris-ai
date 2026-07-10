@@ -519,10 +519,15 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                           <TableCell className="text-right font-mono">{u.appsGenerated}</TableCell>
                           <TableCell>
                             <div className="flex flex-wrap items-center gap-1">
-                              {onlineUserIds.has(String(u.id)) && (
+                              {onlineUserIds.has(String(u.id)) ? (
                                 <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400" title="Conectado ahora mismo">
                                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
                                   En línea
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400" title="Sin conexión activa ahora mismo">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                                  Offline
                                 </span>
                               )}
                               {u.isBanned && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Baneado</Badge>}
