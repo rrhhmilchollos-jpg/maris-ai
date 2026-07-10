@@ -380,15 +380,30 @@ function ClerkQueryClientCacheInvalidator() {
 }
 
 function HomeRedirect() {
+  // ENCONTRADO A PETICIÓN DEL USUARIO (fallo real y urgente en producción:
+  // la ruta "/" mostraba la página 404 "No encontrada" para CUALQUIER
+  // visitante, confirmado con una petición real y directa a
+  // https://www.marisai.es/, no solo para Google). Causa más probable,
+  // respaldada por la propia documentación oficial de Clerk: <Show
+  // when="signed-in"> y <Show when="signed-out"> pueden no cubrir de
+  // forma fiable el estado "todavía cargando" durante la resolución
+  // inicial de la sesión -- Clerk recomienda EXPLÍCITAMENTE usar
+  // useAuth()/useUser() con isLoaded para cualquier decisión de
+  // enrutamiento crítica, en vez de <Show>, precisamente para evitar
+  // este tipo de ambigüedad. Sustituido por el patrón oficial
+  // recomendado: se espera a isLoaded antes de decidir nada, sin
+  // renderizar contenido ambiguo mientras tanto.
+  const { isLoaded, isSignedIn } = useUser();
+  if (!isLoaded) {
+    return <div style={{background:"hsl(240 10% 4%)",minHeight:"100vh"}} />;
+  }
+  if (isSignedIn) {
+    return <Redirect to="/dashboard" />;
+  }
   return (
-    <>
-      <Show when="signed-in">
-        <Redirect to="/dashboard" />
-      </Show>
-      <Show when="signed-out">
-        <Suspense fallback={<div style={{background:"hsl(240 10% 4%)",minHeight:"100vh"}} />}><LandingPage /></Suspense>
-      </Show>
-    </>
+    <Suspense fallback={<div style={{background:"hsl(240 10% 4%)",minHeight:"100vh"}} />}>
+      <LandingPage />
+    </Suspense>
   );
 }
 
