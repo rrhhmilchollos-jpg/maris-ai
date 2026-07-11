@@ -34,6 +34,8 @@ import { DeployModal } from "@/components/deploy-modal";
 import { ReviewInviteModal } from "@/components/review-invite-modal";
 import { WorkflowListPanel } from "@/components/workflow-list-panel";
 import { StressTestModal } from "@/components/stress-test-modal";
+import { AgentStatusPipeline } from "@/components/agent-status-pipeline";
+import { LoopProtectionModal } from "@/components/loop-protection-modal";
 import { GitHubButton } from "@/components/github-button";
 import { RailwayDeployButton } from "@/components/railway-deploy-button";
 import { AdminCodeEditor } from "@/components/admin-code-editor";
@@ -403,6 +405,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [showReviewInvite, setShowReviewInvite] = useState(false);
   const [showWorkflows, setShowWorkflows] = useState(false);
   const [showStressTest, setShowStressTest] = useState(false);
+  const [dismissedProtectionForJobId, setDismissedProtectionForJobId] = useState<string | null>(null);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [accountSettingsTab, setAccountSettingsTab] = useState<"personal" | "apikey" | "agents" | "preferences" | "billing" | "usage">("personal");
   const [rightPanelTab, setRightPanelTab] = useState<"preview" | "code" | "visual-test">("preview");
@@ -1515,6 +1518,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               })}
             </div>
           )}
+          {/* Pipeline de agentes en vivo + quema de créditos (estilo Emergent.sh) */}
+          {isWorking && job && <AgentStatusPipeline job={job} />}
           {/* Agent logs inline */}
           {isWorking && job && jobLogs && jobLogs.length > 0 && (
             <div className="mt-4 space-y-2">
@@ -2584,6 +2589,19 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     {/* Automatización (flujos visuales tipo n8n, privados de esta app) */}
     {showWorkflows && (
       <WorkflowListPanel appId={id} onClose={() => setShowWorkflows(false)} />
+    )}
+
+    {/* Alerta de protección de bucles / presupuesto (rescate guiado) */}
+    {job && (job.stuckLoopDetected || job.budgetExceeded) && dismissedProtectionForJobId !== String(job.id) && (
+      <LoopProtectionModal
+        appId={id}
+        job={job}
+        onClose={() => setDismissedProtectionForJobId(String(job.id))}
+        onForceRetry={() => {
+          sendMutation.mutate({ id, data: { content: "Por favor, intenta una vez más resolver el problema anterior.", attachmentIds: [] } });
+          setDismissedProtectionForJobId(String(job.id));
+        }}
+      />
     )}
 
     {/* Prueba de estrés (tráfico real contra el deploy en producción) */}
