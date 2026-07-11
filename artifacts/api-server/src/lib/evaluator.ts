@@ -175,6 +175,7 @@ async function judgeWithVision(
   app: { title: string; description: string | null },
   userIntent: string,
   plannedPages: Array<{ name: string; route?: string; purpose?: string }> = [],
+  jobId?: string,
 ): Promise<{ verdict: EvaluatorVerdict; issues: EvaluatorIssue[]; summary: string }> {
   type ContentBlock =
     | { type: "text"; text: string }
@@ -284,7 +285,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
     max_tokens: 4000,
     messages: [{ role: "user", content }],
-  });
+  }, { jobId });
 
   const text = response.content
     .map((b: { type: string; text?: string }) => (b.type === "text" ? b.text : ""))
@@ -345,8 +346,9 @@ export async function evaluateApp(opts: {
   userIntent: string;
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
   log?: Logger;
+  jobId?: string;
 }): Promise<EvaluatorReport> {
-  const { app, baseUrl, userIntent, plannedPages, log } = opts;
+  const { app, baseUrl, userIntent, plannedPages, log, jobId } = opts;
   // ENCONTRADO A PETICIÓN DEL USUARIO (caso real reportado: app "La Taberna
   // del Mar" — el evaluador reportaba "muestra contenido de marketing de
   // Maris AI" + "error 404 en todas las pantallas"):
@@ -376,6 +378,7 @@ export async function evaluateApp(opts: {
     { title: app.title, description: app.description },
     userIntent,
     plannedPages,
+    jobId,
   );
   log?.info(
     { appId: app.id, verdict: verdict.verdict, issues: verdict.issues.length },
@@ -595,6 +598,7 @@ export async function runAutoEvaluator(opts: {
         userIntent,
         plannedPages: effectivePlannedPages,
         log,
+        jobId: String(jobId),
       });
     } catch (err: any) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -809,7 +813,7 @@ export async function runAutoEvaluator(opts: {
         const fix404Issues: QAIssue[] = [
           { file: "src/App.tsx", problem: "La app muestra 404 en la ruta raíz.", fix: fix404Prompt },
         ];
-        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "claude-sonnet-4-6");
+        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "claude-sonnet-4-6", String(jobId));
         if (quickFix && quickFix.length > 100 && quickFix.includes("// === FILE:")) {
           patched = quickFix;
           log.info({ appId, jobId, round }, "✅ Fix quirúrgico 404 aplicado en App.tsx");

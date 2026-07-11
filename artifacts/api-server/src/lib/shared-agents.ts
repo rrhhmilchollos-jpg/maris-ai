@@ -1,6 +1,7 @@
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import OpenAI from "openai";
 import { logger } from "./logger";
+import { recordApiUsage } from "./usageMeter";
 
 // Lazy initialization — evita crash si OPENAI_API_KEY no está configurada al arrancar
 let _openai: OpenAI | null = null;
@@ -206,7 +207,12 @@ export async function raceWithTimeout<T>(p: Promise<T>, ms: number, label: strin
 }
 export const AI_CALL_TIMEOUT_MS = 90_000;
 
-export async function createClaudeMessageWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
+export async function createClaudeMessageWithFallback(
+  role: AgentRole,
+  model: string,
+  params: any,
+  meterOpts?: { jobId?: string },
+): Promise<any> {
   let lastError: unknown;
   const MAX_RETRIES = 3;
 
@@ -244,6 +250,8 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
         logger.info({ role, model: candidate }, "Iniciando stream con Anthropic...");
         
         let fullText = "";
+        let usageInputTokens = 0;
+        let usageOutputTokens = 0;
         const stream = (await anthropic.messages.create({ 
           ...params, 
           model: candidate,
@@ -273,10 +281,28 @@ export async function createClaudeMessageWithFallback(role: AgentRole, model: st
           if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
             fullText += event.delta.text;
           }
+          // Medidor de coste interno (usageMeter.ts): message_start trae los
+          // tokens de entrada (incluye el ahorro por prompt caching);
+          // message_delta trae los tokens de salida acumulados hasta ese
+          // punto — nos quedamos con el último valor visto.
+          if (event.type === 'message_start' && event.message?.usage) {
+            usageInputTokens = event.message.usage.input_tokens ?? 0;
+          }
+          if (event.type === 'message_delta' && event.usage) {
+            usageOutputTokens = event.usage.output_tokens ?? usageOutputTokens;
+          }
         }
 
         if (!fullText) throw new Error("Stream vacío");
-        
+
+        recordApiUsage({
+          jobId: meterOpts?.jobId,
+          model: candidate,
+          inputTokens: usageInputTokens,
+          outputTokens: usageOutputTokens,
+          agent: role,
+        });
+
         return { content: [{ type: "text", text: fullText }] };
 
       } catch (err: any) {
@@ -495,6 +521,7 @@ export async function patchBundle(
   language: GenLanguage = "typescript",
   memoryContext: string = "",
   model: string = "claude-sonnet-4-6",
+  jobId?: string,
 ): Promise<string | null> {
   if (issues.length === 0) return null;
 
@@ -536,7 +563,7 @@ export async function patchBundle(
               content: `ISSUES TO FIX:\n${issueList}\n${memoryContext}\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the changed/added files as JSON: {"changedFiles":{"path":"full content"},"deletedFiles":["path"]}.`,
             },
           ],
-        });
+        }, { jobId });
         const raw = (response.content[0] as any).text ?? "";
         const parsed = extractJsonObject<{ changedFiles?: Record<string, string>; deletedFiles?: string[] }>(raw);
         if (!parsed || typeof parsed.changedFiles !== "object" || parsed.changedFiles === null) {
