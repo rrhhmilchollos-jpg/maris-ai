@@ -6641,6 +6641,87 @@ router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
   }
 });
 
+// ── Contador de créditos en vivo (estilo Emergent.sh) ────────────────────────
+// Server-Sent Events en vez de WebSocket: Railway (y la mayoría de proxies)
+// soportan SSE sin configuración especial, es una conexión HTTP normal de
+// solo lectura — más simple de desplegar que un servidor WS aparte, y es
+// exactamente lo que necesita este widget (el cliente nunca manda nada,
+// solo recibe). Emite cada ~1.5s: saldo real de créditos del usuario,
+// estado del job activo (si hay uno) y el coste-en-créditos gastado hasta
+// ahora en esa tarea (ver usageMeter.ts / CENTS_PER_CREDIT_BUDGET_ESTIMATE).
+router.get("/apps/:id/credit-stream", requireAuth, async (req: any, res: any) => {
+  const userId = req.userId as string;
+  const appId = req.params.id;
+
+  const app = await GeneratedApp.findOne({ _id: appId, userId }, { _id: 1 }).lean();
+  if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    // Necesario para que Railway/algunos proxies no bufferen el stream
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+
+  let closed = false;
+  req.on("close", () => {
+    closed = true;
+    clearInterval(interval);
+  });
+
+  const tick = async () => {
+    if (closed) return;
+    try {
+      const [user, job] = await Promise.all([
+        User.findById(userId, { credits: 1 }).lean(),
+        GenerationJob.findOne(
+          { appId, userId, status: { $nin: ["succeeded", "failed"] } },
+          {
+            status: 1,
+            phase: 1,
+            progress: 1,
+            currentAgent: 1,
+            internalApiCostCents: 1,
+            maxCreditsForJob: 1,
+            stuckLoopDetected: 1,
+            budgetExceeded: 1,
+          },
+        ).sort({ updatedAt: -1, createdAt: -1 }).lean(),
+      ]);
+
+      const spentCreditsEquivalent = job
+        ? Math.round(((job.internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE) * 10) / 10
+        : 0;
+
+      const payload = {
+        creditsRemaining: user?.credits ?? null,
+        job: job
+          ? {
+              id: String(job._id),
+              status: job.status,
+              phase: job.phase,
+              progress: job.progress,
+              currentAgent: job.currentAgent,
+              spentCreditsEquivalent,
+              maxCreditsForJob: job.maxCreditsForJob ?? null,
+              stuckLoopDetected: !!job.stuckLoopDetected,
+              budgetExceeded: !!job.budgetExceeded,
+            }
+          : null,
+      };
+
+      if (!closed) res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch (err) {
+      logger.warn({ err, appId, userId }, "credit-stream tick error (no bloqueante)");
+    }
+  };
+
+  await tick();
+  const interval = setInterval(tick, 1500);
+});
+
 
 function redactOperationalSecrets(text: string): string {
   return String(text || "")
