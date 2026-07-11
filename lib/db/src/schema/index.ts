@@ -595,6 +595,14 @@ export interface IGenerationJob extends Document {
   apiCallCount?: number;
   internalInputTokens?: number;
   internalOutputTokens?: number;
+  // ── Presupuesto máximo por tarea (estilo Emergent.sh) ────────────────
+  // El cliente elige un límite ANTES de lanzar la tarea (selector en el
+  // frontend). Si el coste interno real (internalApiCostCents) supera el
+  // equivalente de este límite, el loop de reparación se corta de
+  // inmediato en vez de seguir intentando indefinidamente. undefined =
+  // sin límite (comportamiento actual, tarifa plana normal).
+  maxCreditsForJob?: number;
+  budgetExceeded?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -643,6 +651,8 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     apiCallCount: { type: Number, default: 0 },
     internalInputTokens: { type: Number, default: 0 },
     internalOutputTokens: { type: Number, default: 0 },
+    maxCreditsForJob: { type: Number },
+    budgetExceeded: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
