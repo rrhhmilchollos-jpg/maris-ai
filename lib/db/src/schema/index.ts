@@ -583,6 +583,10 @@ export interface IGenerationJob extends Document {
   // sabemos que no van a arreglar nada distinto.
   sameIssueRepeatCount?: number;
   lastIssueSignature?: string;
+  // Descripción legible (no el hash) del problema que se repite — para
+  // mostrar al cliente en el modal de Loop Protection sin tener que
+  // decodificar la firma interna.
+  lastIssueSummary?: string;
   // true si el loop se cortó por este motivo (no por agotar rondas ni
   // por pasar el QA) — permite distinguir en el panel admin y en el
   // mensaje al cliente por qué quedó en "needs_review".
@@ -646,6 +650,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     partialFrontendCode: { type: String },
     sameIssueRepeatCount: { type: Number, default: 0 },
     lastIssueSignature: { type: String },
+    lastIssueSummary: { type: String },
     stuckLoopDetected: { type: Boolean, default: false },
     internalApiCostCents: { type: Number, default: 0 },
     apiCallCount: { type: Number, default: 0 },

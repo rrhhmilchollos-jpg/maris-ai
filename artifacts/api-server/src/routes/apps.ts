@@ -6671,6 +6671,12 @@ router.get("/apps/:id/credit-stream", requireAuth, async (req: any, res: any) =>
     clearInterval(interval);
   });
 
+  // Para calcular créditos/seg reales entre dos ticks (no una media desde
+  // el principio del job, que diluye picos de gasto y no refleja lo que
+  // está pasando "ahora mismo", que es lo que pide la UI tipo Emergent.sh).
+  let prevSpent = 0;
+  let prevAt = Date.now();
+
   const tick = async () => {
     if (closed) return;
     try {
@@ -6687,6 +6693,9 @@ router.get("/apps/:id/credit-stream", requireAuth, async (req: any, res: any) =>
             maxCreditsForJob: 1,
             stuckLoopDetected: 1,
             budgetExceeded: 1,
+            sameIssueRepeatCount: 1,
+            lastIssueSummary: 1,
+            errorMessage: 1,
           },
         ).sort({ updatedAt: -1, createdAt: -1 }).lean(),
       ]);
@@ -6695,21 +6704,41 @@ router.get("/apps/:id/credit-stream", requireAuth, async (req: any, res: any) =>
         ? Math.round(((job.internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE) * 10) / 10
         : 0;
 
+      const now = Date.now();
+      const elapsedSec = Math.max((now - prevAt) / 1000, 0.001);
+      const burnRatePerSecond = job
+        ? Math.max(0, Math.round(((spentCreditsEquivalent - prevSpent) / elapsedSec) * 100) / 100)
+        : 0;
+      prevSpent = spentCreditsEquivalent;
+      prevAt = now;
+
+      // "frozen" cuando loop-protection o el presupuesto cortaron el job —
+      // el frontend usa esto para decidir si mostrar el modal de rescate.
+      const status = job?.stuckLoopDetected || job?.budgetExceeded ? "frozen" : job ? "working" : "idle";
+
       const payload = {
-        creditsRemaining: user?.credits ?? null,
-        job: job
-          ? {
-              id: String(job._id),
-              status: job.status,
-              phase: job.phase,
-              progress: job.progress,
-              currentAgent: job.currentAgent,
-              spentCreditsEquivalent,
-              maxCreditsForJob: job.maxCreditsForJob ?? null,
-              stuckLoopDetected: !!job.stuckLoopDetected,
-              budgetExceeded: !!job.budgetExceeded,
-            }
-          : null,
+        event: "agent_status_update",
+        data: {
+          creditsRemaining: user?.credits ?? null,
+          activeAgent: job?.currentAgent ?? null,
+          currentTask: job?.phase ?? null,
+          burnRatePerSecond,
+          spentCreditsEquivalent,
+          maxCreditsForJob: job?.maxCreditsForJob ?? null,
+          loopCount: job?.sameIssueRepeatCount ?? 0,
+          status,
+          job: job
+            ? {
+                id: String(job._id),
+                status: job.status,
+                phase: job.phase,
+                progress: job.progress,
+                stuckLoopDetected: !!job.stuckLoopDetected,
+                budgetExceeded: !!job.budgetExceeded,
+                lastIssueSummary: job.lastIssueSummary ?? job.errorMessage ?? null,
+              }
+            : null,
+        },
       };
 
       if (!closed) res.write(`data: ${JSON.stringify(payload)}\n\n`);

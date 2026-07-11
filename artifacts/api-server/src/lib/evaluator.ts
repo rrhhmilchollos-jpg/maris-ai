@@ -710,7 +710,11 @@ export async function runAutoEvaluator(opts: {
         sameIssueRepeatCount = (prevJob.sameIssueRepeatCount ?? 0) + 1;
       }
       await GenerationJob.findByIdAndUpdate(jobId, {
-        $set: { lastIssueSignature: signature, sameIssueRepeatCount },
+        $set: {
+          lastIssueSignature: signature,
+          sameIssueRepeatCount,
+          lastIssueSummary: report.issues[0]?.description ?? report.summary ?? "",
+        },
       });
 
       // ── Presupuesto máximo por tarea ──────────────────────────────
