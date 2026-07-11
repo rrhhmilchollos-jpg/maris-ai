@@ -702,6 +702,8 @@ export async function runAutoEvaluator(opts: {
       const prevJob = await GenerationJob.findById(jobId, {
         lastIssueSignature: 1,
         sameIssueRepeatCount: 1,
+        internalApiCostCents: 1,
+        maxCreditsForJob: 1,
       }).lean();
       if (prevJob?.lastIssueSignature === signature) {
         sameIssueRepeatCount = (prevJob.sameIssueRepeatCount ?? 0) + 1;
@@ -709,6 +711,40 @@ export async function runAutoEvaluator(opts: {
       await GenerationJob.findByIdAndUpdate(jobId, {
         $set: { lastIssueSignature: signature, sameIssueRepeatCount },
       });
+
+      // ── Presupuesto máximo por tarea ──────────────────────────────
+      // CENTS_PER_CREDIT_BUDGET_ESTIMATE: conversión aproximada de coste
+      // interno real (USD cents) a "créditos" a efectos de este límite de
+      // seguridad — NO es la tarifa exacta que se le cobra al cliente
+      // (esa sigue siendo KIND_COSTS, plana). Es solo el margen que
+      // usamos para decidir cuándo un job se está pasando de la raya.
+      const CENTS_PER_CREDIT_BUDGET_ESTIMATE = 8;
+      if (prevJob?.maxCreditsForJob) {
+        const spentCreditsEquivalent = (prevJob.internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE;
+        if (spentCreditsEquivalent >= prevJob.maxCreditsForJob) {
+          log.warn(
+            { appId, jobId, round, spentCreditsEquivalent, maxCreditsForJob: prevJob.maxCreditsForJob },
+            "🛑 Presupuesto de tarea agotado — cortando reparación automática",
+          );
+          recordEvalLog(
+            `🛑 Se alcanzó el presupuesto máximo (${prevJob.maxCreditsForJob} créditos) que fijaste para esta tarea. Detengo la reparación automática aquí para no gastar más de lo acordado.`,
+            "warn",
+          );
+          await GenerationJob.findByIdAndUpdate(jobId, { $set: { budgetExceeded: true } });
+          try {
+            await AppMessage.create({
+              appId: String(appId),
+              role: "assistant",
+              content:
+                `🛑 Esta tarea llegó al presupuesto máximo de ${prevJob.maxCreditsForJob} créditos que fijaste. He detenido la reparación automática para no pasarme del límite. ` +
+                `Si quieres que siga, pídemelo de nuevo o sube el presupuesto para la próxima tarea.`,
+            });
+          } catch (msgErr) {
+            log.warn({ msgErr, appId, jobId }, "Failed to insert budget-exceeded AppMessage");
+          }
+          break;
+        }
+      }
     } catch (err) {
       log.warn({ err, appId, jobId }, "No se pudo persistir el estado de protección de bucles (no bloqueante)");
     }

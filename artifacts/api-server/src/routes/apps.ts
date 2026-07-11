@@ -5859,7 +5859,7 @@ Tipo: ${kind || "fullstack"}` }],
 
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {}, skipGating = false } = req.body;
+    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {}, skipGating = false, maxCreditsForJob } = req.body;
     // skipGating: solo admins pueden pasarlo true — permite generar sin las preguntas de
     // clarificación técnica para entregar la app completa al cliente sin que este tenga
     // que responder nada. Después el admin notifica al cliente y este puede editar libremente.
@@ -6037,6 +6037,14 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       mcpConnectors: connectedMCP.map(([id]) => id),
       // skipGating: solo admins — genera sin preguntas de clarificación al cliente
       skipGating: isAdmin && !!skipGating,
+      // Presupuesto máximo por tarea (estilo Emergent.sh) — opcional, el
+      // cliente lo fija en el selector del frontend antes de enviar el
+      // prompt. Se valida aquí (número positivo) para no guardar basura;
+      // silenciosamente se ignora si no es válido en vez de rechazar toda
+      // la generación por esto.
+      ...(typeof maxCreditsForJob === "number" && maxCreditsForJob > 0
+        ? { maxCreditsForJob }
+        : {}),
     });
 
     await enqueueGenerateJob(jobId);
