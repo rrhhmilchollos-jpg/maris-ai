@@ -453,8 +453,158 @@ router.get("/admin/users/:id/apps", async (req: any, res: any): Promise<void> =>
   }
 });
 
+// ─── Historial unificado de créditos por cliente (auditoría) ────────────────
+// A petición explícita del usuario (dueño de Maris AI): un único sitio para
+// ver, por cliente, cuántos créditos tiene, en qué se los ha gastado (cada
+// generación/edición, con su app asociada) y si está generando AHORA MISMO
+// — para poder responder con datos reales si un cliente reclama por
+// consumo de créditos. Cruza GenerationJob (gasto real por tarea, incluido
+// el coste interno real vía internalApiCostCents) con CreditTransaction
+// (compras/reembolsos/consumos registrados) en una sola línea de tiempo.
+router.get("/admin/users/:id/credit-audit", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const userId = req.params.id;
+    const limit = Math.min(Number(req.query.limit) || 100, 300);
 
-// POST /api/admin/users/:id/set-paid — marcar usuario como paid/free
+    const [user, jobs, transactions] = await Promise.all([
+      User.findById(userId, { credits: 1, planCredits: 1, plan: 1, email: 1, fullName: 1 }).lean() as any,
+      GenerationJob.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .select(
+          "appId editAppId jobKind kind status phase creditsCost internalApiCostCents apiCallCount maxCreditsForJob stuckLoopDetected budgetExceeded isAdmin isDemo createdAt updatedAt errorMessage",
+        )
+        .lean(),
+      CreditTransaction.find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .select("kind amount description priceCents status gateway createdAt")
+        .lean(),
+    ]);
+
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+
+    // Apps referenciadas por los jobs, para poner el título junto a cada
+    // línea de gasto en vez de solo un appId ilegible en el panel.
+    const appIds = [...new Set(jobs.flatMap((j: any) => [j.appId, j.editAppId]).filter(Boolean).map(String))];
+    const apps = appIds.length
+      ? await GeneratedApp.find({ _id: { $in: appIds } }, { title: 1 }).lean()
+      : [];
+    const titleByAppId = new Map(apps.map((a: any) => [String(a._id), a.title as string]));
+
+    const isGeneratingNow = jobs.some((j: any) => !["succeeded", "failed"].includes(j.status));
+
+    res.json({
+      user: {
+        id: String(user._id),
+        email: user.email,
+        fullName: user.fullName,
+        creditsRemaining: user.credits,
+        planCredits: user.planCredits,
+        plan: user.plan,
+      },
+      isGeneratingNow,
+      jobs: jobs.map((j: any) => {
+        const targetAppId = String(j.appId || j.editAppId || "");
+        return {
+          id: String(j._id),
+          appId: targetAppId || null,
+          appTitle: titleByAppId.get(targetAppId) ?? null,
+          type: j.editAppId ? "edición" : j.jobKind === "deep_test" ? "revisión profunda" : "generación",
+          status: j.status,
+          phase: j.phase,
+          creditsCost: j.creditsCost ?? 0,
+          // Coste real interno (Anthropic) — para comparar con creditsCost
+          // y ver el margen real de esta tarea concreta.
+          internalApiCostCents: j.internalApiCostCents ?? 0,
+          apiCallCount: j.apiCallCount ?? 0,
+          maxCreditsForJob: j.maxCreditsForJob ?? null,
+          stuckLoopDetected: !!j.stuckLoopDetected,
+          budgetExceeded: !!j.budgetExceeded,
+          isAdmin: !!j.isAdmin,
+          isDemo: !!j.isDemo,
+          errorMessage: j.errorMessage ?? null,
+          createdAt: j.createdAt?.toISOString?.() ?? null,
+          updatedAt: j.updatedAt?.toISOString?.() ?? null,
+        };
+      }),
+      transactions: transactions.map((t: any) => ({
+        id: String(t._id),
+        kind: t.kind,
+        amount: t.amount,
+        description: t.description,
+        priceCents: t.priceCents ?? null,
+        status: t.status ?? null,
+        gateway: t.gateway ?? null,
+        createdAt: t.createdAt?.toISOString?.() ?? null,
+      })),
+    });
+  } catch (err: any) {
+    logger.error({ err: err?.message, userId: req.params.id }, "admin/users/:id/credit-audit error");
+    res.status(500).json({ error: err?.message || "Error interno" });
+  }
+});
+
+
+// ─── Vista global: qué clientes están generando/editando AHORA MISMO ───────
+router.get("/admin/generating-now", async (_req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const jobs = await GenerationJob.find({ status: { $nin: ["succeeded", "failed"] } })
+      .sort({ updatedAt: -1 })
+      .limit(200)
+      .select("userId appId editAppId jobKind status phase progress currentAgent creditsCost internalApiCostCents createdAt updatedAt")
+      .lean();
+
+    if (jobs.length === 0) {
+      res.json({ count: 0, jobs: [] });
+      return;
+    }
+
+    const userIds = [...new Set(jobs.map((j: any) => String(j.userId)))];
+    const appIds = [...new Set(jobs.flatMap((j: any) => [j.appId, j.editAppId]).filter(Boolean).map(String))];
+    const [users, apps] = await Promise.all([
+      User.find({ _id: { $in: userIds } }, { email: 1, fullName: 1 }).lean(),
+      GeneratedApp.find({ _id: { $in: appIds } }, { title: 1 }).lean(),
+    ]);
+    const userById = new Map(users.map((u: any) => [String(u._id), u]));
+    const titleByAppId = new Map(apps.map((a: any) => [String(a._id), a.title as string]));
+
+    res.json({
+      count: jobs.length,
+      jobs: jobs.map((j: any) => {
+        const targetAppId = String(j.appId || j.editAppId || "");
+        const u = userById.get(String(j.userId));
+        return {
+          jobId: String(j._id),
+          userId: String(j.userId),
+          userEmail: u?.email ?? null,
+          userFullName: u?.fullName ?? null,
+          appId: targetAppId || null,
+          appTitle: titleByAppId.get(targetAppId) ?? null,
+          type: j.editAppId ? "edición" : j.jobKind === "deep_test" ? "revisión profunda" : "generación",
+          status: j.status,
+          phase: j.phase,
+          progress: j.progress,
+          currentAgent: j.currentAgent ?? null,
+          creditsCost: j.creditsCost ?? 0,
+          internalApiCostCents: j.internalApiCostCents ?? 0,
+          createdAt: j.createdAt?.toISOString?.() ?? null,
+          updatedAt: j.updatedAt?.toISOString?.() ?? null,
+        };
+      }),
+    });
+  } catch (err: any) {
+    logger.error({ err: err?.message }, "admin/generating-now error");
+    res.status(500).json({ error: err?.message || "Error interno" });
+  }
+});
+
+
 router.post("/admin/users/:id/set-paid", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { hasEverPaid = true, isPremium = true, plan = "paid" } = req.body ?? {};
