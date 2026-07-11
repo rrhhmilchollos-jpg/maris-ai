@@ -5859,7 +5859,7 @@ Tipo: ${kind || "fullstack"}` }],
 
 router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any) => {
   try {
-    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {}, skipGating = false } = req.body;
+    const { prompt, model, language, attachments, kind, ultraThinking = false, legacyMode = false, mcpConnectors = {}, skipGating = false, maxCreditsForJob } = req.body;
     // skipGating: solo admins pueden pasarlo true — permite generar sin las preguntas de
     // clarificación técnica para entregar la app completa al cliente sin que este tenga
     // que responder nada. Después el admin notifica al cliente y este puede editar libremente.
@@ -6037,6 +6037,14 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
       mcpConnectors: connectedMCP.map(([id]) => id),
       // skipGating: solo admins — genera sin preguntas de clarificación al cliente
       skipGating: isAdmin && !!skipGating,
+      // Presupuesto máximo por tarea (estilo Emergent.sh) — opcional, el
+      // cliente lo fija en el selector del frontend antes de enviar el
+      // prompt. Se valida aquí (número positivo) para no guardar basura;
+      // silenciosamente se ignora si no es válido en vez de rechazar toda
+      // la generación por esto.
+      ...(typeof maxCreditsForJob === "number" && maxCreditsForJob > 0
+        ? { maxCreditsForJob }
+        : {}),
     });
 
     await enqueueGenerateJob(jobId);
@@ -6631,6 +6639,116 @@ router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
     logger.error({ err, appId: req.params.id }, "GET /api/apps/:id/active-job error");
     res.status(500).json({ error: "Error interno" });
   }
+});
+
+// ── Contador de créditos en vivo (estilo Emergent.sh) ────────────────────────
+// Server-Sent Events en vez de WebSocket: Railway (y la mayoría de proxies)
+// soportan SSE sin configuración especial, es una conexión HTTP normal de
+// solo lectura — más simple de desplegar que un servidor WS aparte, y es
+// exactamente lo que necesita este widget (el cliente nunca manda nada,
+// solo recibe). Emite cada ~1.5s: saldo real de créditos del usuario,
+// estado del job activo (si hay uno) y el coste-en-créditos gastado hasta
+// ahora en esa tarea (ver usageMeter.ts / CENTS_PER_CREDIT_BUDGET_ESTIMATE).
+router.get("/apps/:id/credit-stream", requireAuth, async (req: any, res: any) => {
+  const userId = req.userId as string;
+  const appId = req.params.id;
+
+  const app = await GeneratedApp.findOne({ _id: appId, userId }, { _id: 1 }).lean();
+  if (!app) return res.status(404).json({ error: "App no encontrada" });
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    // Necesario para que Railway/algunos proxies no bufferen el stream
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+
+  let closed = false;
+  req.on("close", () => {
+    closed = true;
+    clearInterval(interval);
+  });
+
+  // Para calcular créditos/seg reales entre dos ticks (no una media desde
+  // el principio del job, que diluye picos de gasto y no refleja lo que
+  // está pasando "ahora mismo", que es lo que pide la UI tipo Emergent.sh).
+  let prevSpent = 0;
+  let prevAt = Date.now();
+
+  const tick = async () => {
+    if (closed) return;
+    try {
+      const [user, job] = await Promise.all([
+        User.findById(userId, { credits: 1 }).lean(),
+        GenerationJob.findOne(
+          { appId, userId, status: { $nin: ["succeeded", "failed"] } },
+          {
+            status: 1,
+            phase: 1,
+            progress: 1,
+            currentAgent: 1,
+            internalApiCostCents: 1,
+            maxCreditsForJob: 1,
+            stuckLoopDetected: 1,
+            budgetExceeded: 1,
+            sameIssueRepeatCount: 1,
+            lastIssueSummary: 1,
+            errorMessage: 1,
+          },
+        ).sort({ updatedAt: -1, createdAt: -1 }).lean(),
+      ]);
+
+      const spentCreditsEquivalent = job
+        ? Math.round(((job.internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE) * 10) / 10
+        : 0;
+
+      const now = Date.now();
+      const elapsedSec = Math.max((now - prevAt) / 1000, 0.001);
+      const burnRatePerSecond = job
+        ? Math.max(0, Math.round(((spentCreditsEquivalent - prevSpent) / elapsedSec) * 100) / 100)
+        : 0;
+      prevSpent = spentCreditsEquivalent;
+      prevAt = now;
+
+      // "frozen" cuando loop-protection o el presupuesto cortaron el job —
+      // el frontend usa esto para decidir si mostrar el modal de rescate.
+      const status = job?.stuckLoopDetected || job?.budgetExceeded ? "frozen" : job ? "working" : "idle";
+
+      const payload = {
+        event: "agent_status_update",
+        data: {
+          creditsRemaining: user?.credits ?? null,
+          activeAgent: job?.currentAgent ?? null,
+          currentTask: job?.phase ?? null,
+          burnRatePerSecond,
+          spentCreditsEquivalent,
+          maxCreditsForJob: job?.maxCreditsForJob ?? null,
+          loopCount: job?.sameIssueRepeatCount ?? 0,
+          status,
+          job: job
+            ? {
+                id: String(job._id),
+                status: job.status,
+                phase: job.phase,
+                progress: job.progress,
+                stuckLoopDetected: !!job.stuckLoopDetected,
+                budgetExceeded: !!job.budgetExceeded,
+                lastIssueSummary: job.lastIssueSummary ?? job.errorMessage ?? null,
+              }
+            : null,
+        },
+      };
+
+      if (!closed) res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    } catch (err) {
+      logger.warn({ err, appId, userId }, "credit-stream tick error (no bloqueante)");
+    }
+  };
+
+  await tick();
+  const interval = setInterval(tick, 1500);
 });
 
 

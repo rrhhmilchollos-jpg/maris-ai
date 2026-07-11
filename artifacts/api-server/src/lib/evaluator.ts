@@ -25,7 +25,8 @@
  * Puppeteer infrastructure to avoid double-launching Chromium.
  */
 import type { Logger } from "pino";
-import { GeneratedApp, User, AppMessage, JobLog } from "@workspace/db/schema";
+import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
+import { CENTS_PER_CREDIT_BUDGET_ESTIMATE } from "./usageMeter";
 import { CoreOrchestrator } from "@workspace/services";
 import { patchBundle, createClaudeMessageWithFallback, type GenLanguage, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
@@ -47,6 +48,31 @@ import { sendAutoPublishEmail, sendNeedsReviewEmail } from "./notify";
  *  contenido real → necesitamos al menos una ronda más. Subido a 5:
  *  1 análisis inicial + hasta 4 ciclos de fix+reanalysis. */
 const MAX_VISION_ROUNDS = 5;
+
+// ── Protección de bucles (loop protection) ──────────────────────────────────
+// Si el evaluador reporta EXACTAMENTE el mismo conjunto de problemas
+// (misma firma) en SAME_ISSUE_STUCK_THRESHOLD rondas seguidas, el patch/
+// CoreOrchestrator no está resolviendo nada real — es el "Bucle Infinito"
+// que en Emergent.sh se traduce en quemar créditos sin avanzar. Cortamos
+// el loop ANTES de agotar MAX_VISION_ROUNDS para no seguir cobrando
+// rondas que ya sabemos que no van a cambiar el resultado.
+const SAME_ISSUE_STUCK_THRESHOLD = 3;
+
+/** Firma corta y estable de un conjunto de issues del evaluador — dos
+ * rondas con exactamente los mismos problemas (mismo orden-independiente)
+ * producen la misma firma, sin importar el resumen (summary) que puede
+ * variar en redacción aunque el problema real sea idéntico. */
+function issuesSignature(issues: EvaluatorReport["issues"]): string {
+  const normalized = issues
+    .map((i) => `${i.severity}:${i.description.trim().toLowerCase()}`)
+    .sort();
+  let hash = 0;
+  const str = normalized.join("|");
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return `${normalized.length}:${hash}`;
+}
 
 type Severity = "critical" | "major" | "minor";
 
@@ -150,6 +176,7 @@ async function judgeWithVision(
   app: { title: string; description: string | null },
   userIntent: string,
   plannedPages: Array<{ name: string; route?: string; purpose?: string }> = [],
+  jobId?: string,
 ): Promise<{ verdict: EvaluatorVerdict; issues: EvaluatorIssue[]; summary: string }> {
   type ContentBlock =
     | { type: "text"; text: string }
@@ -259,7 +286,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
     max_tokens: 4000,
     messages: [{ role: "user", content }],
-  });
+  }, { jobId });
 
   const text = response.content
     .map((b: { type: string; text?: string }) => (b.type === "text" ? b.text : ""))
@@ -320,8 +347,9 @@ export async function evaluateApp(opts: {
   userIntent: string;
   plannedPages?: Array<{ name: string; route?: string; purpose?: string }>;
   log?: Logger;
+  jobId?: string;
 }): Promise<EvaluatorReport> {
-  const { app, baseUrl, userIntent, plannedPages, log } = opts;
+  const { app, baseUrl, userIntent, plannedPages, log, jobId } = opts;
   // ENCONTRADO A PETICIÓN DEL USUARIO (caso real reportado: app "La Taberna
   // del Mar" — el evaluador reportaba "muestra contenido de marketing de
   // Maris AI" + "error 404 en todas las pantallas"):
@@ -351,6 +379,7 @@ export async function evaluateApp(opts: {
     { title: app.title, description: app.description },
     userIntent,
     plannedPages,
+    jobId,
   );
   log?.info(
     { appId: app.id, verdict: verdict.verdict, issues: verdict.issues.length },
@@ -570,6 +599,7 @@ export async function runAutoEvaluator(opts: {
         userIntent,
         plannedPages: effectivePlannedPages,
         log,
+        jobId: String(jobId),
       });
     } catch (err: any) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -662,6 +692,93 @@ export async function runAutoEvaluator(opts: {
       "warn",
     );
 
+    // ── Protección de bucles ──────────────────────────────────────────
+    // Si esta ronda reporta EXACTAMENTE la misma firma de problemas que
+    // la ronda anterior, el patch de la ronda previa no cambió nada real
+    // (aunque "fixesApplied" se haya incrementado). Contamos repeticiones
+    // consecutivas y cortamos antes de gastar más rondas en lo mismo.
+    const signature = issuesSignature(report.issues);
+    let sameIssueRepeatCount = 1;
+    try {
+      const prevJob = await GenerationJob.findById(jobId, {
+        lastIssueSignature: 1,
+        sameIssueRepeatCount: 1,
+        internalApiCostCents: 1,
+        maxCreditsForJob: 1,
+      }).lean();
+      if (prevJob?.lastIssueSignature === signature) {
+        sameIssueRepeatCount = (prevJob.sameIssueRepeatCount ?? 0) + 1;
+      }
+      await GenerationJob.findByIdAndUpdate(jobId, {
+        $set: {
+          lastIssueSignature: signature,
+          sameIssueRepeatCount,
+          lastIssueSummary: report.issues[0]?.description ?? report.summary ?? "",
+        },
+      });
+
+      // ── Presupuesto máximo por tarea ──────────────────────────────
+      // CENTS_PER_CREDIT_BUDGET_ESTIMATE (compartida con usageMeter.ts /
+      // el endpoint de streaming en vivo): conversión aproximada de
+      // coste interno real (USD cents) a "créditos" a efectos de este
+      // límite de seguridad — NO es la tarifa exacta que se le cobra al
+      // cliente (esa sigue siendo KIND_COSTS, plana). Es solo el margen
+      // que usamos para decidir cuándo un job se está pasando de la raya.
+      if (prevJob?.maxCreditsForJob) {
+        const spentCreditsEquivalent = (prevJob.internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE;
+        if (spentCreditsEquivalent >= prevJob.maxCreditsForJob) {
+          log.warn(
+            { appId, jobId, round, spentCreditsEquivalent, maxCreditsForJob: prevJob.maxCreditsForJob },
+            "🛑 Presupuesto de tarea agotado — cortando reparación automática",
+          );
+          recordEvalLog(
+            `🛑 Se alcanzó el presupuesto máximo (${prevJob.maxCreditsForJob} créditos) que fijaste para esta tarea. Detengo la reparación automática aquí para no gastar más de lo acordado.`,
+            "warn",
+          );
+          await GenerationJob.findByIdAndUpdate(jobId, { $set: { budgetExceeded: true } });
+          try {
+            await AppMessage.create({
+              appId: String(appId),
+              role: "assistant",
+              content:
+                `🛑 Esta tarea llegó al presupuesto máximo de ${prevJob.maxCreditsForJob} créditos que fijaste. He detenido la reparación automática para no pasarme del límite. ` +
+                `Si quieres que siga, pídemelo de nuevo o sube el presupuesto para la próxima tarea.`,
+            });
+          } catch (msgErr) {
+            log.warn({ msgErr, appId, jobId }, "Failed to insert budget-exceeded AppMessage");
+          }
+          break;
+        }
+      }
+    } catch (err) {
+      log.warn({ err, appId, jobId }, "No se pudo persistir el estado de protección de bucles (no bloqueante)");
+    }
+
+    if (sameIssueRepeatCount >= SAME_ISSUE_STUCK_THRESHOLD) {
+      log.warn(
+        { appId, jobId, round, sameIssueRepeatCount },
+        "🛑 Loop protection: mismo problema repetido — cortando reparación automática",
+      );
+      recordEvalLog(
+        `🛑 El mismo problema persiste desde hace ${sameIssueRepeatCount} rondas seguidas. Para no seguir gastando créditos en algo que no se está resolviendo, detengo la reparación automática aquí.`,
+        "warn",
+      );
+      try {
+        await GenerationJob.findByIdAndUpdate(jobId, { $set: { stuckLoopDetected: true } });
+        await AppMessage.create({
+          appId: String(appId),
+          role: "assistant",
+          content:
+            `🛑 Detecté que el mismo problema (${report.issues[0]?.description ?? "detectado por el QA visual"}) sigue apareciendo tras varios intentos automáticos seguidos. ` +
+            `Para no seguir consumiendo tus créditos en reintentos que no están funcionando, he pausado la reparación automática aquí. ` +
+            `Puedes revisarlo tú o pedirme que lo intente con un enfoque distinto.`,
+        });
+      } catch (msgErr) {
+        log.warn({ msgErr, appId, jobId }, "Failed to insert stuck-loop AppMessage");
+      }
+      break;
+    }
+
     // Fail path. If we've used our budget, stop.
     if (round >= visionRoundLimit) {
       log.info(
@@ -737,7 +854,7 @@ export async function runAutoEvaluator(opts: {
         const fix404Issues: QAIssue[] = [
           { file: "src/App.tsx", problem: "La app muestra 404 en la ruta raíz.", fix: fix404Prompt },
         ];
-        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "claude-sonnet-4-6");
+        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "claude-sonnet-4-6", String(jobId));
         if (quickFix && quickFix.length > 100 && quickFix.includes("// === FILE:")) {
           patched = quickFix;
           log.info({ appId, jobId, round }, "✅ Fix quirúrgico 404 aplicado en App.tsx");

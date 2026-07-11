@@ -574,6 +574,39 @@ export interface IGenerationJob extends Document {
   creditsCost?: number;
   workerId?: string | null;
   partialFrontendCode?: string | null;
+  // ── Protección de bucles (loop protection) ──────────────────────────
+  // Cuenta cuántas rondas SEGUIDAS del evaluador (evaluator.ts) han
+  // reportado la MISMA firma de problema (mismo set de descripciones de
+  // issues) sin que el patch la resuelva. Cuando llega a
+  // SAME_ISSUE_STUCK_THRESHOLD, el loop corta ANTES de agotar
+  // MAX_VISION_ROUNDS, evitando pagar por rondas adicionales que ya
+  // sabemos que no van a arreglar nada distinto.
+  sameIssueRepeatCount?: number;
+  lastIssueSignature?: string;
+  // Descripción legible (no el hash) del problema que se repite — para
+  // mostrar al cliente en el modal de Loop Protection sin tener que
+  // decodificar la firma interna.
+  lastIssueSummary?: string;
+  // true si el loop se cortó por este motivo (no por agotar rondas ni
+  // por pasar el QA) — permite distinguir en el panel admin y en el
+  // mensaje al cliente por qué quedó en "needs_review".
+  stuckLoopDetected?: boolean;
+  // ── Medidor de coste interno real (usageMeter.ts) ────────────────────
+  // Coste REAL en tokens de Anthropic para este job, en céntimos de USD.
+  // No afecta a lo que se cobra al cliente (eso sigue siendo tarifa
+  // plana) — es visibilidad interna para el panel de admin.
+  internalApiCostCents?: number;
+  apiCallCount?: number;
+  internalInputTokens?: number;
+  internalOutputTokens?: number;
+  // ── Presupuesto máximo por tarea (estilo Emergent.sh) ────────────────
+  // El cliente elige un límite ANTES de lanzar la tarea (selector en el
+  // frontend). Si el coste interno real (internalApiCostCents) supera el
+  // equivalente de este límite, el loop de reparación se corta de
+  // inmediato en vez de seguir intentando indefinidamente. undefined =
+  // sin límite (comportamiento actual, tarifa plana normal).
+  maxCreditsForJob?: number;
+  budgetExceeded?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -615,6 +648,16 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     creditsCost: { type: Number, default: 0 },
     workerId: { type: String },
     partialFrontendCode: { type: String },
+    sameIssueRepeatCount: { type: Number, default: 0 },
+    lastIssueSignature: { type: String },
+    lastIssueSummary: { type: String },
+    stuckLoopDetected: { type: Boolean, default: false },
+    internalApiCostCents: { type: Number, default: 0 },
+    apiCallCount: { type: Number, default: 0 },
+    internalInputTokens: { type: Number, default: 0 },
+    internalOutputTokens: { type: Number, default: 0 },
+    maxCreditsForJob: { type: Number },
+    budgetExceeded: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
