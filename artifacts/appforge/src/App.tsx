@@ -23,6 +23,7 @@ const LandingPage = lazy(() => import("@/pages/landing"));
 const DashboardPage = lazy(() => import("@/pages/dashboard"));
 const AppDetailPage = lazy(() => import("@/pages/app-detail"));
 const BillingPage = lazy(() => import("@/pages/billing"));
+const AccountPage = lazy(() => import("@/pages/account"));
 const BillingSuccessPage = lazy(() => import("@/pages/billing-success"));
 const AdminPage = lazy(() => import("@/pages/admin"));
 const AdminDashboardPage = lazy(() => import("@/pages/admin-dashboard"));
@@ -521,6 +522,10 @@ function ClerkProviderWithRoutes() {
 
                 <Route path="/billing">
                   <Gated><BillingPage /></Gated>
+                </Route>
+
+                <Route path="/account">
+                  <Gated><AccountPage /></Gated>
                 </Route>
 
                 <Route path="/billing/success">
