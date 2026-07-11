@@ -26,6 +26,7 @@
  */
 import type { Logger } from "pino";
 import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
+import { CENTS_PER_CREDIT_BUDGET_ESTIMATE } from "./usageMeter";
 import { CoreOrchestrator } from "@workspace/services";
 import { patchBundle, createClaudeMessageWithFallback, type GenLanguage, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
@@ -713,12 +714,12 @@ export async function runAutoEvaluator(opts: {
       });
 
       // ── Presupuesto máximo por tarea ──────────────────────────────
-      // CENTS_PER_CREDIT_BUDGET_ESTIMATE: conversión aproximada de coste
-      // interno real (USD cents) a "créditos" a efectos de este límite de
-      // seguridad — NO es la tarifa exacta que se le cobra al cliente
-      // (esa sigue siendo KIND_COSTS, plana). Es solo el margen que
-      // usamos para decidir cuándo un job se está pasando de la raya.
-      const CENTS_PER_CREDIT_BUDGET_ESTIMATE = 8;
+      // CENTS_PER_CREDIT_BUDGET_ESTIMATE (compartida con usageMeter.ts /
+      // el endpoint de streaming en vivo): conversión aproximada de
+      // coste interno real (USD cents) a "créditos" a efectos de este
+      // límite de seguridad — NO es la tarifa exacta que se le cobra al
+      // cliente (esa sigue siendo KIND_COSTS, plana). Es solo el margen
+      // que usamos para decidir cuándo un job se está pasando de la raya.
       if (prevJob?.maxCreditsForJob) {
         const spentCreditsEquivalent = (prevJob.internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE;
         if (spentCreditsEquivalent >= prevJob.maxCreditsForJob) {

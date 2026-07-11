@@ -22,6 +22,15 @@ const PRICING_PER_MILLION_TOKENS_USD: Record<string, { input: number; output: nu
   default: { input: 3, output: 15 },
 };
 
+/**
+ * Conversión aproximada de coste interno real (USD cents) a "créditos" —
+ * usada SOLO para el presupuesto máximo por tarea y el widget en vivo del
+ * cliente (una estimación de cuánto "vale" en créditos lo que el agente
+ * ha gastado hasta ahora). NO es la tarifa exacta que se cobra al cliente
+ * (esa sigue siendo KIND_COSTS, plana, decidida al lanzar el job).
+ */
+export const CENTS_PER_CREDIT_BUDGET_ESTIMATE = 8;
+
 export function estimateCostCents(model: string, inputTokens: number, outputTokens: number): number {
   const pricing = PRICING_PER_MILLION_TOKENS_USD[model] ?? PRICING_PER_MILLION_TOKENS_USD.default;
   const usd =
