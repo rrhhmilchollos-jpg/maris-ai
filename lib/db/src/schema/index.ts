@@ -587,6 +587,14 @@ export interface IGenerationJob extends Document {
   // por pasar el QA) — permite distinguir en el panel admin y en el
   // mensaje al cliente por qué quedó en "needs_review".
   stuckLoopDetected?: boolean;
+  // ── Medidor de coste interno real (usageMeter.ts) ────────────────────
+  // Coste REAL en tokens de Anthropic para este job, en céntimos de USD.
+  // No afecta a lo que se cobra al cliente (eso sigue siendo tarifa
+  // plana) — es visibilidad interna para el panel de admin.
+  internalApiCostCents?: number;
+  apiCallCount?: number;
+  internalInputTokens?: number;
+  internalOutputTokens?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -631,6 +639,10 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     sameIssueRepeatCount: { type: Number, default: 0 },
     lastIssueSignature: { type: String },
     stuckLoopDetected: { type: Boolean, default: false },
+    internalApiCostCents: { type: Number, default: 0 },
+    apiCallCount: { type: Number, default: 0 },
+    internalInputTokens: { type: Number, default: 0 },
+    internalOutputTokens: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
