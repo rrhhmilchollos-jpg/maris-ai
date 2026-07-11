@@ -3,6 +3,7 @@ import { connectDB } from "../lib/db";
 import { requireAuth, isAdminEmail } from "../lib/auth";
 import { GenerationJob, JobLog, type IJobLog } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
+import { CENTS_PER_CREDIT_BUDGET_ESTIMATE } from "../lib/usageMeter";
 
 const router = Router();
 
@@ -74,6 +75,18 @@ router.get("/jobs/:id", requireAuth, async (req: any, res: any) => {
       partialFrontendCode: (job as any).partialFrontendCode ?? null,
       queuePosition,
       estimatedWaitSeconds,
+      // ── Transparencia de agentes + créditos en vivo (estilo Emergent.sh) ──
+      // Reutiliza este mismo endpoint (ya sondeado cada 1s por el frontend)
+      // en vez de montar un canal aparte — internalApiCostCents ya se
+      // registra en tiempo real (ver usageMeter.ts) durante el ciclo de
+      // reparación automática.
+      spentCreditsEquivalent:
+        Math.round(((job as any).internalApiCostCents ?? 0) / CENTS_PER_CREDIT_BUDGET_ESTIMATE * 10) / 10,
+      maxCreditsForJob: (job as any).maxCreditsForJob ?? null,
+      sameIssueRepeatCount: (job as any).sameIssueRepeatCount ?? 0,
+      stuckLoopDetected: !!(job as any).stuckLoopDetected,
+      budgetExceeded: !!(job as any).budgetExceeded,
+      lastIssueSummary: (job as any).lastIssueSummary ?? null,
     });
   } catch (err) {
     logger.error({ err, jobId: req.params.id }, "GET /api/jobs/:id error");
