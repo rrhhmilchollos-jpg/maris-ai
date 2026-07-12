@@ -1,6 +1,7 @@
 import { connectDB } from "./db";
 import { User, CreditTransaction } from "@workspace/db/schema";
 import { CREDIT_PACKAGES } from "./payments";
+import { checkLowBalance, checkSpikeRate } from "./notificationService";
  
 /**
  * Lifetime EUR spent by the user, in cents.
@@ -197,6 +198,10 @@ export async function chargeCredits(opts: {
   if (updated.credits <= LOW_CREDIT_THRESHOLD) {
     // El frontend manejará la advertencia visual
   }
+
+  // Fire-and-forget: nunca deben retrasar ni poder tumbar un cobro real.
+  checkLowBalance(userId, updated.credits).catch(() => {});
+  checkSpikeRate(userId).catch(() => {});
 
   return { ok: true, newBalance: updated.credits };
 }
