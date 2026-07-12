@@ -6071,12 +6071,24 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
       { userId, pendingAdminApproval: { $ne: true } },
       { frontendCode: 0, backendCode: 0 },
     ).sort({ createdAt: -1 }).lean();
-    
+
+    // Apps con una generación/edición en curso ahora mismo — un solo query
+    // extra y ligero (solo _ids), para poder mostrar un badge real de
+    // "Generando" en la lista en vez de adivinarlo.
+    const activeJobs = await GenerationJob.find(
+      { userId, status: { $nin: ["succeeded", "failed"] } },
+      { appId: 1, editAppId: 1 },
+    ).lean();
+    const generatingAppIds = new Set(
+      activeJobs.flatMap((j: any) => [j.appId, j.editAppId]).filter(Boolean).map(String),
+    );
+
     // Serializar fechas para evitar problemas de serialización
     const serializedApps = apps.map((app: any) => ({
       ...app,
       createdAt: app.createdAt ? (typeof app.createdAt === 'string' ? app.createdAt : app.createdAt.toISOString()) : new Date().toISOString(),
       updatedAt: app.updatedAt ? (typeof app.updatedAt === 'string' ? app.updatedAt : app.updatedAt.toISOString()) : new Date().toISOString(),
+      isGenerating: generatingAppIds.has(String(app._id)),
     }));
     
     res.json(serializedApps);

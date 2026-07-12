@@ -47,7 +47,7 @@ import {
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
   Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
-  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock, AlertTriangle
+  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock, AlertTriangle, Eye
 } from "lucide-react";
 import {
   Dialog,
@@ -150,6 +150,7 @@ export default function DashboardPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [showNoCredits, setShowNoCredits] = useState(false);
   const [appsFilter, setAppsFilter] = useState<"all" | "deployed">("all");
+  const [appSearchQuery, setAppSearchQuery] = useState("");
   const [mcpConnectors, setMcpConnectors] = useState<Record<string, { connected: boolean; values: Record<string, string> }>>({});
   type Kind = "fullstack" | "mobile" | "landing" | "game-2d" | "game-3d" | "hybrid-pwa" | "vue" | "svelte" | "nextjs" | "python-api" | "django" | "video-ai" | "imagen-ai";
   const [kind, setKind] = useState<Kind>("fullstack");
@@ -526,7 +527,9 @@ export default function DashboardPage() {
     }
   };
 
-  const visibleApps = (apps ?? []).filter((a) => appsFilter === "deployed" ? !!a.publicSlug : true);
+  const visibleApps = (apps ?? [])
+    .filter((a) => appsFilter === "deployed" ? !!a.publicSlug : true)
+    .filter((a) => appSearchQuery.trim() ? a.title?.toLowerCase().includes(appSearchQuery.trim().toLowerCase()) : true);
 
   const { data: job } = useGetGenerationJob(activeJobId ?? "", {
     query: {
@@ -1114,6 +1117,16 @@ export default function DashboardPage() {
             </Button>
           </h3>
 
+          <div className="relative mb-4 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={appSearchQuery}
+              onChange={(e) => setAppSearchQuery(e.target.value)}
+              placeholder="Buscar app..."
+              className="pl-9 h-9 text-sm bg-card/40 border-white/10"
+            />
+          </div>
+
           <Dialog open={preferencesDialogOpen} onOpenChange={setPreferencesDialogOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -1229,41 +1242,51 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               {visibleApps.map((app: any) => (
-                <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all cursor-pointer group relative" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
-                  <button className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-red-500/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
-                    onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)} disabled={deletingId === (app.id || app._id)} title="Eliminar proyecto">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                  <button className="absolute top-2 right-10 z-10 p-1.5 rounded-full bg-black/50 text-muted-foreground hover:bg-primary/80 hover:text-white transition-all opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
-                    onClick={(e) => handleForkApp(e, app.id || app._id, app.title)} disabled={forkingId === (app.id || app._id)} title="Duplicar proyecto">
-                    {forkingId === (app.id || app._id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                  <div className="h-16 w-full rounded-t-lg bg-white/[0.03] border-b border-white/5 flex items-center justify-center">
-                    <Code2 className="h-6 w-6 text-muted-foreground/40" />
+                <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all group relative">
+                  <div className="cursor-pointer" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
+                    <div className="h-16 w-full rounded-t-lg bg-white/[0.03] border-b border-white/5 flex items-center justify-center">
+                      <Code2 className="h-6 w-6 text-muted-foreground/40" />
+                    </div>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg truncate group-hover:text-primary transition-colors flex items-center gap-2">
+                        {app.title}
+                        {app.isGenerating && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />Generando
+                          </span>
+                        )}
+                        {(app.marisaiSubdomain || (app.customDomain && app.customDomainVerified)) && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                            Publicada
+                          </span>
+                        )}
+                        {app.importStatus === "processing" && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />Importando...
+                          </span>
+                        )}
+                        {app.importStatus === "failed" && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 shrink-0">
+                            Importación falló
+                          </span>
+                        )}
+                      </CardTitle>
+                      <CardDescription className="line-clamp-2">{app.description}</CardDescription>
+                    </CardHeader>
+                    <p className="px-6 text-xs text-muted-foreground pb-3">
+                      {formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}
+                    </p>
                   </div>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg truncate group-hover:text-primary transition-colors pr-6 flex items-center gap-2">
-                      {app.title}
-                      {(app.marisaiSubdomain || (app.customDomain && app.customDomainVerified)) && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
-                          Publicada
-                        </span>
-                      )}
-                      {app.importStatus === "processing" && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
-                          <Loader2 className="h-2.5 w-2.5 animate-spin" />Importando...
-                        </span>
-                      )}
-                      {app.importStatus === "failed" && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 shrink-0">
-                          Importación falló
-                        </span>
-                      )}
-                    </CardTitle>
-                    <CardDescription className="line-clamp-2">{app.description}</CardDescription>
-                  </CardHeader>
-                  <CardFooter className="text-xs text-muted-foreground border-t border-white/5 pt-3">
-                    {formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}
+                  <CardFooter className="gap-1.5 border-t border-white/5 pt-3">
+                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1.5" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
+                      <Eye className="h-3.5 w-3.5" />Abrir
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={(e) => handleForkApp(e, app.id || app._id, app.title)} disabled={forkingId === (app.id || app._id)} title="Duplicar proyecto">
+                      {forkingId === (app.id || app._id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)} disabled={deletingId === (app.id || app._id)} title="Eliminar proyecto">
+                      <X className="h-3.5 w-3.5 text-red-400" />
+                    </Button>
                   </CardFooter>
                 </Card>
               ))}
