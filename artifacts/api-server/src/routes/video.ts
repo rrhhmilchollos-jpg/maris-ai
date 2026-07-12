@@ -2,7 +2,7 @@
  * video.ts — Generación de vídeo e imagen con IA
  * 
  * Endpoints:
- * - POST /api/video/generate — genera vídeo con Luma AI (text-to-video)
+ * - POST /api/video/generate — genera vídeo con Kling AI (text-to-video, hasta 3 min encadenando segmentos)
  * - POST /api/imagen/generate — genera imagen con Gemini Imagen 3
  * - GET  /api/video/status/:jobId — estado del job de vídeo
  * 
@@ -21,6 +21,7 @@ import ffmpeg from "fluent-ffmpeg";
 import { writeFile, unlink, mkdtemp, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import crypto from "crypto";
 
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 
@@ -101,59 +102,257 @@ router.post("/imagen/generate", requireAuth, async (req: Request, res: Response)
   }
 });
 
+// ─── Kling AI — generación de vídeo real, con duración real ──────────────────
+// A diferencia de Luma (que solo metía "duration: Xs" como texto dentro del
+// prompt, sin que la API lo respetara realmente), Kling SÍ tiene un
+// parámetro `duration` real -- pero limitado a ~10s por llamada (documentado
+// en la API oficial: kling.ai/document-api). Para vídeos más largos (60s,
+// 120s, 180s) se encadenan varios segmentos de 10s: cada uno continúa desde
+// el último frame del anterior (image-to-video), y se unen con ffmpeg al
+// final. Se aplica la marca de agua de Maris AI al vídeo final ya unido.
+const KLING_BASE_URL = "https://api-singapore.klingai.com";
+const KLING_SEGMENT_SECONDS = 10;
+const KLING_MODEL = "kling-v2-6";
+
+// Coste REAL de Kling en modo "std": ronda los 0.25-0.50 USD por segmento de
+// 10s. CREDITS_PER_KLING_SEGMENT es una PROPUESTA con margen (igual que
+// VEO_TIERS más abajo) -- ajústalo según tu conversión real créditos/EUR.
+const CREDITS_PER_KLING_SEGMENT = 10;
+// Recargo fijo por el procesado de ffmpeg (unir + marca de agua) cuando hay
+// más de un segmento -- solo aplica a vídeos largos, no a un clip suelto.
+const MULTI_SEGMENT_SURCHARGE = 5;
+
+function computeVideoCreditCost(durationSec: number): { segmentsTotal: number; creditCost: number } {
+  const segmentsTotal = Math.max(1, Math.ceil(durationSec / KLING_SEGMENT_SECONDS));
+  const creditCost = segmentsTotal * CREDITS_PER_KLING_SEGMENT + (segmentsTotal > 1 ? MULTI_SEGMENT_SURCHARGE : 0);
+  return { segmentsTotal, creditCost };
+}
+
+async function klingRequest(path: string, body: any): Promise<any> {
+  const apiKey = process.env.KLING_API_KEY;
+  const response = await fetch(`${KLING_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json() as any;
+  if (!response.ok || data.code !== 0) {
+    throw new Error(data.message || `Error de Kling AI (HTTP ${response.status})`);
+  }
+  return data.data;
+}
+
+async function pollKlingTask(taskId: string, path: string): Promise<{ videoUrl: string }> {
+  const apiKey = process.env.KLING_API_KEY;
+  const deadline = Date.now() + 3 * 60_000; // 3 min máx por segmento
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const res = await fetch(`${KLING_BASE_URL}${path}/${taskId}`, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+    });
+    const data = (await res.json()) as any;
+    const status = data?.data?.task_status;
+    if (status === "succeed") {
+      const video = data.data?.task_result?.videos?.[0];
+      if (!video?.url) throw new Error("Kling AI no devolvió ningún vídeo");
+      return { videoUrl: video.url };
+    }
+    if (status === "failed") {
+      throw new Error(data?.data?.task_status_msg || "Kling AI falló al generar el segmento");
+    }
+    // submitted / processing -> seguir esperando
+  }
+  throw new Error("Tiempo de espera agotado generando un segmento con Kling AI");
+}
+
+/** Procesa un VideoJob completo en segundo plano: N segmentos + unión + marca de agua. */
+async function processVideoJob(jobId: string, opts: { prompt: string; style: string; segmentsTotal: number }): Promise<void> {
+  const { VideoJob } = await import("@workspace/db/schema");
+  let tempDir: string | null = null;
+  try {
+    tempDir = await mkdtemp(join(tmpdir(), "maris-video-"));
+    const segmentPaths: string[] = [];
+    let lastFramePath: string | null = null;
+
+    for (let i = 0; i < opts.segmentsTotal; i++) {
+      const segmentDuration = i === 0 ? Math.min(10, KLING_SEGMENT_SECONDS) : KLING_SEGMENT_SECONDS;
+      let taskData: any;
+      if (i === 0) {
+        taskData = await klingRequest("/v1/videos/text2video", {
+          model_name: KLING_MODEL,
+          prompt: `${opts.prompt}. Style: ${opts.style}, high quality, cinematic.`,
+          duration: String(segmentDuration),
+          mode: "std",
+          aspect_ratio: "16:9",
+        });
+      } else {
+        // Continuación desde el último frame del segmento anterior, para
+        // dar sensación de escena continua en vez de cortes bruscos.
+        const frameBuffer = await readFile(lastFramePath!);
+        taskData = await klingRequest("/v1/videos/image2video", {
+          model_name: KLING_MODEL,
+          image: frameBuffer.toString("base64"),
+          prompt: `${opts.prompt}. Continue the scene naturally. Style: ${opts.style}.`,
+          duration: String(segmentDuration),
+          mode: "std",
+        });
+      }
+
+      const { videoUrl } = await pollKlingTask(taskData.task_id, i === 0 ? "/v1/videos/text2video" : "/v1/videos/image2video");
+      const segResp = await fetch(videoUrl);
+      const segBuffer = Buffer.from(await segResp.arrayBuffer());
+      const segPath = join(tempDir, `segment_${i}.mp4`);
+      await writeFile(segPath, segBuffer);
+      segmentPaths.push(segPath);
+
+      await VideoJob.findByIdAndUpdate(jobId, { $set: { segmentsDone: i + 1 } });
+
+      if (i < opts.segmentsTotal - 1) {
+        lastFramePath = join(tempDir, `frame_${i}.jpg`);
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg(segPath)
+            .screenshots({ timestamps: ["99%"], filename: `frame_${i}.jpg`, folder: tempDir! })
+            .on("end", () => resolve())
+            .on("error", (err) => reject(err));
+        });
+      }
+    }
+
+    // Unir todos los segmentos con el demuxer concat de ffmpeg.
+    const concatListPath = join(tempDir, "concat.txt");
+    await writeFile(concatListPath, segmentPaths.map((p) => `file '${p}'`).join("\n"));
+    const joinedPath = join(tempDir, "joined.mp4");
+    if (segmentPaths.length > 1) {
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg()
+          .input(concatListPath)
+          .inputOptions(["-f concat", "-safe 0"])
+          .outputOptions(["-c copy"])
+          .save(joinedPath)
+          .on("end", () => resolve())
+          .on("error", (err) => reject(err));
+      });
+    }
+    const preWatermarkPath = segmentPaths.length > 1 ? joinedPath : segmentPaths[0];
+
+    // Marca de agua "Maris AI" -- esquina inferior derecha, semitransparente.
+    const finalPath = join(tempDir, "final.mp4");
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(preWatermarkPath)
+        .videoFilters([
+          {
+            filter: "drawtext",
+            options: {
+              text: "Maris AI",
+              fontcolor: "white@0.75",
+              fontsize: 28,
+              box: 1,
+              boxcolor: "black@0.35",
+              boxborderw: 10,
+              x: "w-tw-24",
+              y: "h-th-24",
+            },
+          },
+        ])
+        .outputOptions(["-c:a copy"])
+        .save(finalPath)
+        .on("end", () => resolve())
+        .on("error", (err) => reject(err));
+    });
+
+    const finalBuffer = await readFile(finalPath);
+    await VideoJob.findByIdAndUpdate(jobId, {
+      $set: { status: "succeeded", videoUrl: `data:video/mp4;base64,${finalBuffer.toString("base64")}` },
+    });
+    logger.info({ jobId, segments: opts.segmentsTotal }, "VideoJob (Kling AI) completado");
+  } catch (error: any) {
+    logger.error({ jobId, error: error?.message }, "VideoJob (Kling AI) falló");
+    try {
+      const job = await VideoJob.findById(jobId).lean();
+      if (job) {
+        const { refundCredits } = await import("../lib/credits");
+        await refundCredits({ userId: job.userId, isAdmin: false, amount: job.creditsCharged, description: "Reembolso: fallo generando vídeo con Kling AI" });
+      }
+    } catch { /* no bloquear el marcado de error por un fallo en el reembolso */ }
+    await VideoJob.findByIdAndUpdate(jobId, { $set: { status: "failed", errorMessage: error?.message } }).catch(() => {});
+  } finally {
+    if (tempDir) {
+      try {
+        const { rm } = await import("fs/promises");
+        await rm(tempDir, { recursive: true, force: true });
+      } catch { /* limpieza best-effort */ }
+    }
+  }
+}
+
 // ─── POST /api/video/generate ─────────────────────────────────────────────────
 router.post("/video/generate", requireAuth, async (req: Request, res: Response) => {
   const { prompt, duration = 10, style = "cinematic" } = req.body;
+  const userId = (req as any).userId as string;
+  const isAdmin = !!(req as any).dbUser?.isAdmin;
   if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
 
+  const klingApiKey = process.env.KLING_API_KEY;
+  if (!klingApiKey) {
+    logger.warn("KLING_API_KEY no configurada — usando generación de frames con Gemini");
+    return res.json({
+      status: "processing",
+      jobId: `gemini-frames-${Date.now()}`,
+      message: "Generando storyboard de vídeo con IA (configura KLING_API_KEY para vídeo real)",
+      estimatedTime: 30,
+      fallbackFrames: true,
+      prompt,
+      duration,
+    });
+  }
+
+  const { segmentsTotal, creditCost } = computeVideoCreditCost(Number(duration));
+
   try {
-    const lumaApiKey = process.env.LUMA_API_KEY;
-    
-    if (!lumaApiKey) {
-      // Sin API key de Luma, generar una secuencia de imágenes IA como fallback
-      logger.warn("LUMA_API_KEY no configurada — usando generación de frames con Gemini");
-      return res.json({
-        status: "processing",
-        jobId: `gemini-frames-${Date.now()}`,
-        message: "Generando storyboard de vídeo con IA (configura LUMA_API_KEY para vídeo real)",
-        estimatedTime: 30,
-        fallbackFrames: true,
-        prompt,
-        duration,
-      });
+    const { chargeCredits } = await import("../lib/credits");
+    const charge = await chargeCredits({
+      userId,
+      isAdmin,
+      amount: creditCost,
+      description: `Vídeo con IA (Kling): ${duration}s (${segmentsTotal} segmento${segmentsTotal > 1 ? "s" : ""})`,
+    });
+    if (!charge.ok) {
+      return res.status(402).json({ error: `Créditos insuficientes. Este vídeo de ${duration}s cuesta ${creditCost} créditos.` });
     }
 
-    // Con Luma AI — generación real de vídeo
-    const lumaResponse = await fetch("https://api.lumalabs.ai/dream-machine/v1/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${lumaApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt: `${prompt}. Style: ${style}, duration: ${duration}s, high quality, cinematic`,
-        aspect_ratio: "16:9",
-        loop: false,
-      }),
+    const { VideoJob } = await import("@workspace/db/schema");
+    const jobId = crypto.randomUUID();
+    await VideoJob.create({
+      _id: jobId,
+      userId,
+      prompt,
+      style,
+      requestedDurationSec: Number(duration),
+      segmentsTotal,
+      segmentsDone: 0,
+      status: "processing",
+      creditsCharged: creditCost,
     });
 
-    if (!lumaResponse.ok) {
-      const err = await lumaResponse.text();
-      logger.error({ err }, "Luma AI error");
-      return res.status(500).json({ error: "Error en Luma AI", details: err });
-    }
-
-    const data = await lumaResponse.json() as { id: string };
-    logger.info({ jobId: data.id }, "Luma AI: job creado");
+    // Fire-and-forget -- el polling del frontend sigue el progreso vía
+    // GET /video/status/:jobId. No await aquí: un vídeo de 180s puede tardar
+    // muchos minutos (18 segmentos encadenados) y esto es un solo request HTTP.
+    processVideoJob(jobId, { prompt, style, segmentsTotal }).catch((err) =>
+      logger.error({ err, jobId }, "processVideoJob: fallo no capturado"),
+    );
 
     return res.json({
       status: "processing",
-      jobId: data.id,
-      estimatedTime: duration * 3,
-      message: `Generando vídeo de ${duration}s con Luma AI...`,
+      jobId,
+      estimatedTime: segmentsTotal * 90,
+      segmentsTotal,
+      creditsCharged: creditCost,
+      message: `Generando vídeo de ${duration}s con Kling AI (${segmentsTotal} segmento${segmentsTotal > 1 ? "s encadenados" : ""})...`,
       prompt,
     });
-
   } catch (error: any) {
     logger.error({ error: error.message }, "Video AI: error");
     return res.status(500).json({ error: error.message });
@@ -169,8 +368,27 @@ router.get("/video/status/:jobId", requireAuth, async (req: Request, res: Respon
     return res.json({ status: "completed", videoUrl: null, fallbackFrames: true });
   }
 
+  try {
+    const { VideoJob } = await import("@workspace/db/schema");
+    const job = await VideoJob.findById(jobId).lean();
+    if (job) {
+      return res.json({
+        status: job.status === "succeeded" ? "completed" : job.status === "failed" ? "error" : "processing",
+        videoUrl: job.videoUrl || null,
+        segmentsDone: job.segmentsDone,
+        segmentsTotal: job.segmentsTotal,
+        errorMessage: job.errorMessage,
+        progress: Math.round((job.segmentsDone / job.segmentsTotal) * 100),
+      });
+    }
+  } catch (err: any) {
+    logger.error({ err: err.message, jobId }, "Error consultando VideoJob");
+  }
+
+  // Compatibilidad con jobs viejos de Luma que pudieran seguir en curso en
+  // el momento del despliegue de este cambio.
   const lumaApiKey = process.env.LUMA_API_KEY;
-  if (!lumaApiKey) return res.status(400).json({ error: "LUMA_API_KEY no configurada" });
+  if (!lumaApiKey) return res.status(404).json({ error: "Job no encontrado" });
 
   try {
     const response = await fetch(`https://api.lumalabs.ai/dream-machine/v1/generations/${jobId}`, {

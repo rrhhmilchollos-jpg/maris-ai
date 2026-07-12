@@ -228,7 +228,7 @@ export default function DashboardPage() {
     nextjs: { label: "Next.js", icon: Server, placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...", cost: computeRealCost("nextjs") },
     "python-api": { label: "Python (FastAPI)", icon: Webhook, placeholder: "ej. Una API REST de tareas con FastAPI, validación pydantic, SQLAlchemy + SQLite y endpoints CRUD completos...", cost: computeRealCost("python-api") },
     django: { label: "Django", icon: Library, placeholder: "ej. Un blog en Django 5 con modelos, vistas, plantillas, admin y SQLite...", cost: computeRealCost("django") },
-    "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: computeRealCost("video-ai") },
+    "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: 10 },
     "imagen-ai": { label: "🖼️ Imagen con IA", icon: ImagePlay, placeholder: "ej. Una imagen realista de un coche deportivo rojo en una montaña al atardecer con luz dorada...", cost: computeRealCost("imagen-ai") },
   };
   const kindMeta = KIND_META[kind] ?? KIND_META.fullstack;
@@ -789,7 +789,7 @@ export default function DashboardPage() {
                   <meta.icon className="h-3 w-3" />
                   {meta.label}
                   {meta.cost > 1 && (
-                    <span className={`ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full ${kind === k ? "bg-primary/20 text-primary" : "bg-white/5 text-white/20"}`}>{meta.cost}cr</span>
+                    <span className={`ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full ${kind === k ? "bg-primary/20 text-primary" : "bg-white/5 text-white/20"}`}>{k === "video-ai" ? `desde ${meta.cost}cr` : `${meta.cost}cr`}</span>
                   )}
                 </button>
               ))}

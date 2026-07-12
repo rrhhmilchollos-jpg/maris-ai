@@ -6,7 +6,7 @@
  * 
  * Capacidades:
  * - Imagen: Gemini Imagen 3 (text-to-image, múltiples estilos)
- * - Vídeo: Luma AI Dream Machine (text-to-video, 5-30s)
+ * - Vídeo: Kling AI (text-to-video, 5s-3min encadenando segmentos)
  * 
  * Supera a Emergent, Lovable, Base44 — ninguno tiene generación nativa de media.
  */
@@ -40,7 +40,7 @@ const VIDEO_STYLES = [
   { id: "animated", label: "Animado", emoji: "✨" },
 ];
 
-const VIDEO_DURATIONS = [5, 10, 15, 20, 30];
+const VIDEO_DURATIONS = [5, 10, 15, 20, 30, 60, 120, 180];
 
 interface MediaAIGeneratorProps {
   mode: MediaMode;
@@ -91,7 +91,13 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
         if (data.jobId) {
           setResult({ jobId: data.jobId, fallback: data.fallbackFrames });
           if (!data.fallbackFrames) {
-            pollVideoStatus(data.jobId);
+            // Cada segmento de Kling puede tardar hasta ~3 min; un vídeo de
+            // 180s son 18 segmentos encadenados, así que el sondeo tiene que
+            // escalar con la duración pedida en vez de un tope fijo de 2 min
+            // (que dejaba vídeos largos marcados como "tiempo agotado"
+            // aunque siguieran generándose bien en segundo plano).
+            const segmentsTotal = data.segmentsTotal ?? Math.max(1, Math.ceil(duration / 10));
+            pollVideoStatus(data.jobId, segmentsTotal);
           }
         }
       } else {
@@ -108,10 +114,13 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
     }
   }
 
-  function pollVideoStatus(jobId: string) {
+  function pollVideoStatus(jobId: string, segmentsTotal: number = 1) {
     setPolling(true);
     let attempts = 0;
-    const maxAttempts = 40; // 2 minutos máx
+    // ~3 min por segmento (tope real de Kling) + margen, dividido en
+    // intervalos de 5s. Para 1 solo clip corto esto sigue siendo ~2 min,
+    // igual que antes; para vídeos largos escala de verdad.
+    const maxAttempts = Math.ceil((segmentsTotal * 3.5 * 60) / 5);
 
     pollRef.current = setInterval(async () => {
       attempts++;
@@ -131,10 +140,12 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
         } else if (data.status === "error") {
           clearInterval(pollRef.current);
           setPolling(false);
-          setError("Error en la generación del vídeo");
+          setError(data.errorMessage || "Error en la generación del vídeo");
+        } else if (typeof data.segmentsDone === "number" && typeof data.segmentsTotal === "number") {
+          setResult(prev => ({ ...prev, segmentsDone: data.segmentsDone, segmentsTotal: data.segmentsTotal }));
         }
       } catch {}
-    }, 3000);
+    }, 5000);
   }
 
   function downloadMedia() {
@@ -167,7 +178,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
               "text-[9px] py-0",
               isVideo ? "bg-rose-500/20 text-rose-300 border-rose-500/30" : "bg-violet-500/20 text-violet-300 border-violet-500/30"
             )}>
-              {isVideo ? "Luma AI" : "Gemini Imagen 3"}
+              {isVideo ? "Kling AI" : "Gemini Imagen 3"}
             </Badge>
           </div>
           <p className="text-[11px] text-white/40">
@@ -203,7 +214,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
       {isVideo && (
         <div>
           <p className="text-[10px] text-white/40 mb-1.5">Duración</p>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
             {VIDEO_DURATIONS.map(d => (
               <button
                 key={d}
@@ -215,10 +226,15 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
                     : "text-white/30 border-white/10 hover:text-white/60"
                 )}
               >
-                {d}s
+                {d < 60 ? `${d}s` : `${d / 60} min`}
               </button>
             ))}
           </div>
+          {duration >= 60 && (
+            <p className="text-[10px] text-white/30 mt-1.5">
+              Los vídeos de 1 min o más se generan encadenando varios clips — puede tardar varios minutos.
+            </p>
+          )}
         </div>
       )}
 
@@ -270,7 +286,9 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
       {polling && (
         <div className="flex items-center gap-2 text-[11px] text-white/50 bg-white/[0.03] rounded-lg px-3 py-2">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-400" />
-          Procesando vídeo en Luma AI... puede tardar 1-2 minutos
+          {result?.segmentsTotal
+            ? `Generando con Kling AI: segmento ${result.segmentsDone ?? 0}/${result.segmentsTotal}...`
+            : "Procesando vídeo con Kling AI... puede tardar 1-3 minutos"}
         </div>
       )}
 
@@ -313,7 +331,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Vídeo generado con Luma AI ({duration}s)
+              Vídeo generado con Kling AI ({duration}s)
             </div>
             <Button variant="outline" size="sm" onClick={downloadMedia} className="h-6 text-[10px] border-white/10 text-white/50 hover:text-white px-2">
               <Download className="h-3 w-3 mr-1" />Descargar

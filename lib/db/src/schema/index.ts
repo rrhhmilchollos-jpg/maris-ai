@@ -1498,6 +1498,48 @@ export const AdCampaignProposal: Model<IAdCampaignProposal> =
   mongoose.models.AdCampaignProposal ||
   mongoose.model<IAdCampaignProposal>("AdCampaignProposal", AdCampaignProposalSchema);
 
+// ─── Video Job (Kling AI — encadenado de segmentos para 1-3 min) ────────────
+// Cada llamada real a Kling genera como máximo ~10s. Para vídeos más largos
+// (60/120/180s) se encadenan varios segmentos (el último frame de cada uno
+// alimenta el siguiente vía image-to-video) y se unen con ffmpeg. Este
+// documento trackea ese proceso multi-paso para que el polling del cliente
+// pueda seguir el progreso real, ya que puede tardar varios minutos.
+export interface IVideoJob {
+  _id: string;
+  userId: string;
+  prompt: string;
+  style: string;
+  requestedDurationSec: number;
+  segmentsTotal: number;
+  segmentsDone: number;
+  status: "processing" | "succeeded" | "failed";
+  errorMessage?: string;
+  creditsCharged: number;
+  videoUrl?: string; // data URL base64 del vídeo final (con marca de agua)
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const VideoJobSchema = new Schema<IVideoJob>(
+  {
+    _id: { type: String, required: true },
+    userId: { type: String, required: true, index: true },
+    prompt: { type: String, required: true },
+    style: { type: String, required: true },
+    requestedDurationSec: { type: Number, required: true },
+    segmentsTotal: { type: Number, required: true },
+    segmentsDone: { type: Number, default: 0 },
+    status: { type: String, required: true, default: "processing" },
+    errorMessage: { type: String },
+    creditsCharged: { type: Number, required: true },
+    videoUrl: { type: String },
+  },
+  { timestamps: true, _id: false },
+);
+
+export const VideoJob: Model<IVideoJob> =
+  mongoose.models.VideoJob || mongoose.model<IVideoJob>("VideoJob", VideoJobSchema);
+
 // ─── Project Seeds ───────────────────────────────────────────────────────────
 export * from "./projectSeeds";
 
