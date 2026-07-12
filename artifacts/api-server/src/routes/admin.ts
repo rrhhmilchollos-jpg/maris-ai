@@ -605,6 +605,33 @@ router.get("/admin/generating-now", async (_req: any, res: any): Promise<void> =
 });
 
 
+// ─── Migración única: dar 30 días de plazo (desde HOY) al saldo de ────────
+// recarga que los clientes ya tenían ANTES del cambio de política (antes
+// "no caducan nunca"). A petición explícita del usuario — aplica también
+// al saldo ya existente, no solo a compras nuevas (creditPurchase ya deja
+// topUpCreditsExpiresAt puesto para compras futuras). Idempotente: solo
+// toca usuarios que aún no tienen topUpCreditsExpiresAt, así que llamarla
+// más de una vez no le quita tiempo a nadie que ya se le haya asignado.
+router.post("/admin/migrations/backfill-topup-expiry", async (_req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const result = await User.updateMany(
+      {
+        topUpCreditsExpiresAt: { $exists: false },
+        $expr: { $gt: ["$credits", { $ifNull: ["$planCredits", 0] }] },
+      },
+      { $set: { topUpCreditsExpiresAt: thirtyDaysFromNow } },
+    );
+    logger.info({ matched: result.matchedCount, modified: result.modifiedCount }, "backfill-topup-expiry done");
+    res.json({ ok: true, usersUpdated: result.modifiedCount, expiresAt: thirtyDaysFromNow.toISOString() });
+  } catch (err: any) {
+    logger.error({ err: err?.message }, "admin/migrations/backfill-topup-expiry error");
+    res.status(500).json({ error: err?.message || "Error interno" });
+  }
+});
+
+// POST /api/admin/users/:id/set-paid — marcar usuario como paid/free
 router.post("/admin/users/:id/set-paid", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { hasEverPaid = true, isPremium = true, plan = "paid" } = req.body ?? {};

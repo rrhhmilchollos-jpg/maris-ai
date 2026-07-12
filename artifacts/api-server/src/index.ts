@@ -230,6 +230,21 @@ httpServer.listen(finalPort, async (err?: Error) => {
     logger.error({ err: expirationErr }, "Failed to start Expiration Notifications");
   }
 
+  // 6b-4) Caducidad de créditos de recarga (30 días) — a petición
+  // explícita del usuario, cambio de política (antes "no caducan nunca").
+  try {
+    const { runTopUpExpirationTick } = await import("./lib/credits");
+    runTopUpExpirationTick().catch((err) => logger.error({ err }, "Top-up expiration initial tick failed"));
+    const topUpExpirationInterval = setInterval(
+      () => runTopUpExpirationTick().catch((err) => logger.error({ err }, "Top-up expiration tick failed")),
+      60 * 60 * 1000,
+    );
+    topUpExpirationInterval.unref();
+    logger.info("Top-up Credit Expiration started — hourly tick");
+  } catch (topUpExpirationErr) {
+    logger.error({ err: topUpExpirationErr }, "Failed to start Top-up Credit Expiration");
+  }
+
   // 6c) Emails de reactivación automática — una vez al día a las 10:00h España.
   // Envía emails personalizados a clientes inactivos (3, 7, 14 y 30 días).
   // Activa con: REACTIVATION_EMAILS_ENABLED=true en Railway.

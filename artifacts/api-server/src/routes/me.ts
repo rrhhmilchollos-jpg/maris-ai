@@ -71,6 +71,8 @@ router.get("/me", requireAuth, async (req, res) => {
       planExpiresAt: u.planExpiresAt?.toISOString() ?? null,
       planActive,
       hasActiveSubscription: !!(u.vivaInitialTransactionId || u.stripeSubscriptionId) && planActive,
+      // Caducidad de créditos de recarga (30 días) — null si no tiene saldo top-up activo.
+      topUpCreditsExpiresAt: (u as any).topUpCreditsExpiresAt?.toISOString() ?? null,
     });
   } catch (err) {
     logger.error({ err }, "GET /me error");

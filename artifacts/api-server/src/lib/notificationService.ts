@@ -64,6 +64,19 @@ export async function checkSpikeRate(userId: string): Promise<void> {
   }
 }
 
+/** Llamado por runTopUpExpirationTick (credits.ts) justo después de expirar el saldo top-up. */
+export async function notifyTopUpExpired(userId: string, creditsLost: number): Promise<void> {
+  try {
+    await UserNotification.create({
+      userId,
+      type: "topup_expired",
+      message: `${creditsLost} créditos de recarga caducaron (pasaron 30 días desde la compra).`,
+    });
+  } catch (err) {
+    logger.warn({ err, userId }, "[notificationService] notifyTopUpExpired error (no bloqueante)");
+  }
+}
+
 /** Tick diario — mismo patrón que runFreeCreditsRenewalTick / runRecurringBillingTick. */
 export async function runExpirationNotificationsTick(): Promise<void> {
   try {
@@ -83,7 +96,27 @@ export async function runExpirationNotificationsTick(): Promise<void> {
         message: `Tu plan se renueva el ${new Date((u as any).planExpiresAt).toLocaleDateString("es-ES")}.`,
       });
     }
-    logger.info({ count: users.length }, "[notificationService] runExpirationNotificationsTick done");
+
+    // Aviso de créditos de recarga a punto de caducar (30 días desde la
+    // compra) — mismo umbral de 48h, notificación distinta para no
+    // confundir "se renueva tu plan" con "vas a perder saldo de recarga".
+    const topUpUsers = await User.find(
+      { topUpCreditsExpiresAt: { $gte: now, $lte: in48h }, credits: { $gt: 0 } },
+      { _id: 1, topUpCreditsExpiresAt: 1, credits: 1, planCredits: 1 },
+    ).lean();
+    for (const u of topUpUsers) {
+      const topUpPortion = Math.max(0, (u.credits ?? 0) - ((u as any).planCredits ?? 0));
+      if (topUpPortion <= 0) continue;
+      const alreadySent = await alreadyNotifiedRecently(String(u._id), "topup_expiring_soon", 24 * 60 * 60 * 1000);
+      if (alreadySent) continue;
+      await UserNotification.create({
+        userId: String(u._id),
+        type: "topup_expiring_soon",
+        message: `Te quedan ${Math.round(topUpPortion * 100) / 100} créditos de recarga que caducan el ${new Date((u as any).topUpCreditsExpiresAt).toLocaleDateString("es-ES")}. Úsalos antes para no perderlos.`,
+      });
+    }
+
+    logger.info({ count: users.length, topUpCount: topUpUsers.length }, "[notificationService] runExpirationNotificationsTick done");
   } catch (err) {
     logger.error({ err }, "[notificationService] runExpirationNotificationsTick error");
   }

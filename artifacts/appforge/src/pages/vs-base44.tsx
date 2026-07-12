@@ -11,7 +11,7 @@ const COMPARISON = [
   { feature: "Propiedad independiente", maris: "Sí, independiente", competitor: "No, adquirido por Wix (2025)", marisWins: true },
   { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Sí, pero con créditos extra", marisWins: true },
   { feature: "Plan de pago desde", maris: "19€/mes", competitor: "40$/mes para dominio propio", marisWins: true },
-  { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, cada mes (sin rollover)", marisWins: true },
+  { feature: "Créditos caducan", maris: "A los 30 días", competitor: "Sí, cada mes (sin rollover)", marisWins: false },
   { feature: "Exportación código", maris: "Frontend + backend", competitor: "Solo frontend (backend queda en Base44)", marisWins: true },
   { feature: "Agentes IA especializados", maris: "11 agentes en paralelo", competitor: "1 modelo general", marisWins: true },
   { feature: "Deploy automático", maris: "Sí, a Vercel", competitor: "Sí, infraestructura Wix", marisWins: false },
@@ -96,7 +96,7 @@ export default function VsBase44Page() {
             {[
               { icon: Globe, title: "100% en español", desc: "Interfaz, soporte, documentación y comunidad en español. Base44 está en inglés — una barrera real para la mayoría de emprendedores.", color: "text-blue-400" },
               { icon: MessageCircle, title: "Soporte humano por WhatsApp", desc: "Equipo real respondiendo en español en menos de 2 horas. Sin bots, sin tickets en inglés, sin esperas de días.", color: "text-green-400" },
-              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos nunca caducan. Base44 cobra en dólares.", color: "text-yellow-400" },
+              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos duran 30 días desde la compra. Base44 cobra en dólares.", color: "text-yellow-400" },
               { icon: Zap, title: "11 agentes IA especializados", desc: "Researcher, arquitecto, diseñador, frontend, backend, base de datos, integraciones, QA, DevOps, testing y reparación trabajando en paralelo.", color: "text-purple-400" },
               { icon: Shield, title: "Backend incluido sin extras", desc: "Express + MongoDB incluidos de serie. Sin servicios externos obligatorios, sin costes ocultos adicionales.", color: "text-red-400" },
               { icon: Clock, title: "Apps completas en 5 minutos", desc: "Frontend + backend + base de datos + deploy automático a Vercel en una sola generación. Sin configuraciones manuales.", color: "text-cyan-400" },

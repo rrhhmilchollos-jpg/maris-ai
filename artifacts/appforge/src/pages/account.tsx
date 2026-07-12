@@ -87,6 +87,12 @@ export default function AccountPage() {
                 : "Tu plan ha expirado."}
             </p>
           )}
+
+          {me.topUpCreditsExpiresAt && (
+            <p className="text-xs text-muted-foreground mt-2 border-t border-white/10 pt-3">
+              Tus créditos de recarga caducan el {new Date(me.topUpCreditsExpiresAt).toLocaleDateString("es-ES")}.
+            </p>
+          )}
         </div>
 
         <div className="rounded-2xl bg-white/5 border border-white/10 divide-y divide-white/10 overflow-hidden">

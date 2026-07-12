@@ -2812,7 +2812,7 @@ const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     label: "Recordatorio: pocos créditos",
     icon: "⚡",
     subject: () => `⚡ Te quedan pocos créditos en Maris AI`,
-    body: () => `Hemos visto que tu saldo de créditos en Maris AI está bajo.\n\nSi quieres seguir creando o editando tus apps sin interrupciones, puedes activar un plan desde la sección de precios — los paquetes empiezan desde 20€ por 160 créditos, que nunca caducan.`,
+    body: () => `Hemos visto que tu saldo de créditos en Maris AI está bajo.\n\nSi quieres seguir creando o editando tus apps sin interrupciones, puedes activar un plan desde la sección de precios — los paquetes empiezan desde 20€ por 160 créditos, válidos durante 30 días.`,
     defaultCredits: 0,
   },
   {
@@ -2870,7 +2870,7 @@ El equipo de Maris AI`,
 
 Llevamos un tiempo sin verte por aquí y queríamos asegurarnos de que todo va bien. Tu proyecto "${appTitle}" sigue guardado y listo para cuando quieras retomarlo — no hemos tocado nada.
 
-Tus créditos siguen ahí también. En Maris AI los créditos nunca caducan, así que no pierdas lo que ya tienes.
+Tu proyecto sigue aquí, pero los créditos de recarga duran 30 días desde la compra — si ya ha pasado ese tiempo, puede que hayan caducado. Entra y comprueba tu saldo para no perder lo que te queda.
 
 Si en algún momento el proyecto se complicó más de lo esperado, no te preocupes — es normal. Cuéntanos qué necesitas y lo resolvemos juntos. Tenemos soporte en español 🇪🇸 y respondemos en menos de 2 horas por correo o WhatsApp (+34 611 935 616).
 
@@ -2950,7 +2950,7 @@ El equipo de Maris AI`,
     label: "📢 CAMPAÑA MASIVA — Volver a Maris AI",
     icon: "📢",
     subject: () => "🚀 Maris AI ha mejorado mucho — te esperamos de vuelta",
-    body: ({ userName }) => `Hola${userName ? ` ${userName}` : ""},\n\nHace un tiempo creaste tu primera app con Maris AI y queremos contarte que la plataforma ha cambiado muchísimo desde entonces.\n\n🏗️ Nuevo orquestador por hitos — tus apps ahora se construyen módulo a módulo, sin pantallas en blanco ni errores a mitad. Proyectos complejos como portales, CRMs y plataformas multi-usuario ahora salen perfectos desde el primer intento.\n\n⚡ Generación hasta 3x más rápida — reducimos los tiempos de espera a la mitad y los resultados son más completos y funcionales.\n\n🔗 Tu dominio personalizado — ahora puedes conectar tu propio dominio a cualquier app que generes. Tu marca, tu URL.\n\n💜 Soporte mejorado — respondemos en menos de 2 horas por WhatsApp y email, en español, sin bots. Somos personas reales que conocen la plataforma a fondo.\n\n🎁 Programa de referidos — comparte tu link personal y gana el 30% de cada compra que haga quien refieras. Sin límite, sin caducidad. Más info en: https://www.marisai.es/afiliados\n\n👉 Vuelve y compruébalo tú mismo: https://www.marisai.es/dashboard\n\nTus créditos siguen ahí esperándote — en Maris AI nunca caducan.\n\nSi tienes alguna duda o quieres que te ayudemos a retomar tu proyecto, responde a este correo o escríbenos por WhatsApp al +34 611 935 616.\n\n¡Hasta pronto!\n\nEl equipo de Maris AI\nsoporte@marisai.es`,
+    body: ({ userName }) => `Hola${userName ? ` ${userName}` : ""},\n\nHace un tiempo creaste tu primera app con Maris AI y queremos contarte que la plataforma ha cambiado muchísimo desde entonces.\n\n🏗️ Nuevo orquestador por hitos — tus apps ahora se construyen módulo a módulo, sin pantallas en blanco ni errores a mitad. Proyectos complejos como portales, CRMs y plataformas multi-usuario ahora salen perfectos desde el primer intento.\n\n⚡ Generación hasta 3x más rápida — reducimos los tiempos de espera a la mitad y los resultados son más completos y funcionales.\n\n🔗 Tu dominio personalizado — ahora puedes conectar tu propio dominio a cualquier app que generes. Tu marca, tu URL.\n\n💜 Soporte mejorado — respondemos en menos de 2 horas por WhatsApp y email, en español, sin bots. Somos personas reales que conocen la plataforma a fondo.\n\n🎁 Programa de referidos — comparte tu link personal y gana el 30% de cada compra que haga quien refieras. Sin límite, sin caducidad. Más info en: https://www.marisai.es/afiliados\n\n👉 Vuelve y compruébalo tú mismo: https://www.marisai.es/dashboard\n\nTus créditos siguen ahí esperándote — pero recuerda que los de recarga duran 30 días desde la compra, así que entra y comprueba tu saldo antes de que caduquen.\n\nSi tienes alguna duda o quieres que te ayudemos a retomar tu proyecto, responde a este correo o escríbenos por WhatsApp al +34 611 935 616.\n\n¡Hasta pronto!\n\nEl equipo de Maris AI\nsoporte@marisai.es`,
     defaultCredits: 0,
   },
 ];
