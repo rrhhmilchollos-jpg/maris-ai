@@ -61,7 +61,7 @@ export const ENGLISH_ROUTES = [
 <li><strong>11 specialized AI agents</strong> — Researcher, Architect, Designer, Frontend, Backend, API Integrator, QA, Testing, PM, Image, Visual Evaluator</li>
 <li><strong>Complete stack generated</strong> — React + TypeScript + Tailwind + Express + MongoDB</li>
 <li><strong>65 free credits</strong> to start, no credit card required</li>
-<li><strong>Credits never expire</strong> — use them whenever you need</li>
+<li><strong>Credits valid for 30 days</strong> — plenty of time to finish your project</li>
 <li><strong>100% exportable code</strong> — export to GitHub, no vendor lock-in</li>
 <li><strong>Euro pricing, GDPR compliant</strong></li>
 </ul>
@@ -72,7 +72,7 @@ export const ENGLISH_ROUTES = [
 <li><strong>App ready in minutes</strong> — complete with frontend, backend, database, and deployment</li>
 </ol>
 <h2>Better alternative to Bolt.new, Lovable & Emergent</h2>
-<p>Unlike Bolt.new (no backend), Lovable (Supabase dependency), and Emergent (opaque credit costs), Maris AI includes a real Express + MongoDB backend, credits that never expire, and transparent pricing in euros.</p>
+<p>Unlike Bolt.new (no backend), Lovable (Supabase dependency), and Emergent (opaque credit costs), Maris AI includes a real Express + MongoDB backend, credits valid for 30 days, and transparent pricing in euros.</p>
 <h2>Types of apps you can build</h2>
 <ul>
 <li>CRM and customer management</li>
@@ -89,9 +89,9 @@ export const ENGLISH_ROUTES = [
 <h2>FAQ</h2>
 <dl>
 <dt>Do I need coding skills?</dt><dd>No. Describe your idea in plain language and Maris AI generates all the code.</dd>
-<dt>How much does it cost?</dt><dd>65 free credits when you sign up, no credit card. Packages from €20 for 160 credits that never expire.</dd>
+<dt>How much does it cost?</dt><dd>65 free credits when you sign up, no credit card. Packages from €20 for 160 credits, valid for 30 days.</dd>
 <dt>Is the code mine?</dt><dd>Yes, 100% yours. Export to GitHub anytime, no restrictions.</dd>
-<dt>What's the best alternative to Bolt.new?</dt><dd>Maris AI includes a real backend, credits that never expire, and costs less per app than Bolt.new or Emergent.</dd>
+<dt>What's the best alternative to Bolt.new?</dt><dd>Maris AI includes a real backend, predictable euro pricing, and costs less per app than Bolt.new or Emergent.</dd>
 </dl>
 ${CROSS_LINKS_EN}`
   },
@@ -99,10 +99,10 @@ ${CROSS_LINKS_EN}`
     path: "/en/pricing",
     file: "en/pricing/index.html",
     title: "Maris AI Pricing — 65 Free Credits, No Credit Card",
-    description: "Start free with 65 credits. Packages from €20 for 160 credits with progressive discounts. Credits never expire. GDPR compliant.",
+    description: "Start free with 65 credits. Packages from €20 for 160 credits with progressive discounts, valid for 30 days. GDPR compliant.",
     canonical: "https://www.marisai.es/en/pricing",
     body: `<h1>Maris AI Pricing — Build apps with AI</h1>
-<p>Start free, no credit card required. Credits never expire, and the more you buy, the cheaper each credit gets.</p>
+<p>Start free, no credit card required. Credits are valid for 30 days from purchase, and the more you buy, the cheaper each credit gets.</p>
 <h2>Credit packages</h2>
 <ul>
 <li><strong>160 credits</strong> — €20 (€0.125/credit)</li>
@@ -116,7 +116,7 @@ ${CROSS_LINKS_EN}`
 <p>A typical app costs 3-10 credits depending on complexity. With 65 free credits you can build 6-20 complete apps.</p>
 <h2>Compared to competitors</h2>
 <ul>
-<li>Emergent: $20/month for 100 credits that EXPIRE monthly — Maris AI credits never expire</li>
+<li>Emergent: $20/month for 100 credits that expire at the end of the billing cycle — Maris AI credits last 30 days from the day you buy them, not tied to a monthly cycle</li>
 <li>Bolt.new: $20/month subscription — Maris AI has no monthly subscription</li>
 <li>Lovable: Requires Supabase — Maris AI includes backend for free</li>
 </ul>
@@ -148,14 +148,14 @@ ${CROSS_LINKS_EN}`
     path: "/en/vs-bolt",
     file: "en/vs-bolt/index.html",
     title: "Maris AI vs Bolt.new — Complete Comparison 2026",
-    description: "Compare Maris AI and Bolt.new. Backend included, credits that never expire, transparent pricing. See why entrepreneurs choose Maris AI.",
+    description: "Compare Maris AI and Bolt.new. Backend included, transparent pricing, credits valid 30 days. See why entrepreneurs choose Maris AI.",
     canonical: "https://www.marisai.es/en/vs-bolt",
     body: `<h1>Maris AI vs Bolt.new — Which is better in 2026?</h1>
 <p>Both platforms let you build apps with AI, but they differ in important ways.</p>
 <h2>Key differences</h2>
 <dl>
 <dt>Backend</dt><dd>Maris AI includes Express + MongoDB backend automatically. Bolt.new generates frontend only — you need to set up your own backend.</dd>
-<dt>Pricing model</dt><dd>Maris AI uses credits that never expire. Bolt.new charges a monthly subscription — unused credits are lost.</dd>
+<dt>Pricing model</dt><dd>Maris AI uses pay-per-use credits valid for 30 days from purchase. Bolt.new charges a monthly subscription — unused credits are lost at the end of the cycle.</dd>
 <dt>Cost per app</dt><dd>Maris AI: €0.11-0.13 per credit, apps cost 3-10 credits. Bolt.new: $20/month subscription regardless of usage.</dd>
 <dt>Code ownership</dt><dd>Both let you export code. Maris AI exports to GitHub with one click.</dd>
 <dt>AI agents</dt><dd>Maris AI uses 11 specialized agents (Researcher, Architect, Designer, Frontend, Backend, API Integrator, QA, Testing, PM, Image, Visual Evaluator). Bolt.new uses a single AI model.</dd>
@@ -164,7 +164,7 @@ ${CROSS_LINKS_EN}`
 <ul>
 <li>You need a complete app with backend and database</li>
 <li>You don't want a monthly subscription</li>
-<li>You want credits that never expire</li>
+<li>You want predictable, pay-per-use pricing in euros</li>
 <li>You want multiple AI agents working in parallel</li>
 </ul>
 <nav><a href="/en/vs-lovable">Maris AI vs Lovable</a> | <a href="/en/vs-emergent">Maris AI vs Emergent</a> | <a href="/en/pricing">See pricing</a></nav>
@@ -174,15 +174,15 @@ ${CROSS_LINKS_EN}`
     path: "/en/vs-lovable",
     file: "en/vs-lovable/index.html",
     title: "Maris AI vs Lovable — Complete Comparison 2026",
-    description: "Compare Maris AI and Lovable. No Supabase dependency, credits that never expire, included backend. Full comparison for entrepreneurs.",
+    description: "Compare Maris AI and Lovable. No Supabase dependency, included backend, transparent 30-day credits. Full comparison for entrepreneurs.",
     canonical: "https://www.marisai.es/en/vs-lovable",
     body: `<h1>Maris AI vs Lovable — Which is better in 2026?</h1>
 <p>Both are AI app builders, but they take different approaches to backend, pricing, and code ownership.</p>
 <h2>Key differences</h2>
 <dl>
 <dt>Backend dependency</dt><dd>Lovable requires Supabase for any backend functionality. Maris AI includes Express + MongoDB — no third-party dependency.</dd>
-<dt>Pricing</dt><dd>Lovable: $20/month subscription. Maris AI: pay-per-use credits that never expire, starting at €20 for 160 credits.</dd>
-<dt>Credit expiration</dt><dd>Lovable credits reset monthly. Maris AI credits never expire.</dd>
+<dt>Pricing</dt><dd>Lovable: $20/month subscription. Maris AI: pay-per-use credits valid for 30 days, starting at €20 for 160 credits.</dd>
+<dt>Credit expiration</dt><dd>Lovable credits reset monthly. Maris AI credits last 30 days from the purchase date, not tied to a calendar month.</dd>
 <dt>AI architecture</dt><dd>Lovable uses a single model. Maris AI uses 11 specialized agents for different aspects of app development.</dd>
 </dl>
 <nav><a href="/en/vs-bolt">Maris AI vs Bolt.new</a> | <a href="/en/vs-emergent">Maris AI vs Emergent</a> | <a href="/en/pricing">See pricing</a></nav>
@@ -192,21 +192,21 @@ ${CROSS_LINKS_EN}`
     path: "/en/vs-emergent",
     file: "en/vs-emergent/index.html",
     title: "Maris AI vs Emergent — Complete Comparison 2026",
-    description: "Compare Maris AI and Emergent.sh. Transparent credit costs, credits that never expire, real backend included. Honest comparison.",
+    description: "Compare Maris AI and Emergent.sh. Transparent credit costs, real backend included, 30-day credit validity. Honest comparison.",
     canonical: "https://www.marisai.es/en/vs-emergent",
     body: `<h1>Maris AI vs Emergent — Which is better in 2026?</h1>
-<p>Emergent is the largest vibe coding platform. Maris AI is a focused alternative with transparent pricing and credits that never expire.</p>
+<p>Emergent is the largest vibe coding platform. Maris AI is a focused alternative with transparent pricing and credits valid for 30 days from purchase.</p>
 <h2>Key differences</h2>
 <dl>
 <dt>Credit transparency</dt><dd>Emergent doesn't show credit costs upfront — users report surprise charges. Maris AI shows exact credit costs for every action.</dd>
-<dt>Credit expiration</dt><dd>Emergent monthly credits expire every billing cycle. Maris AI credits never expire.</dd>
-<dt>Pricing</dt><dd>Emergent: $20/month for 100 credits (expire). Maris AI: €20 one-time for 160 credits (never expire). Maris AI is 3.2x more credits per dollar.</dd>
+<dt>Credit expiration</dt><dd>Emergent monthly credits expire every billing cycle. Maris AI credits are valid for 30 days from the purchase date.</dd>
+<dt>Pricing</dt><dd>Emergent: $20/month for 100 credits (monthly expiration). Maris AI: €20 one-time for 160 credits (30-day validity). Maris AI is 3.2x more credits per dollar.</dd>
 <dt>Backend</dt><dd>Both generate full-stack apps. Emergent uses their managed infrastructure. Maris AI generates Express + MongoDB code you fully own.</dd>
 <dt>Mobile apps</dt><dd>Emergent supports mobile app generation. Maris AI currently focuses on web apps.</dd>
 </dl>
 <h2>When to choose Maris AI over Emergent</h2>
 <ul>
-<li>You want credits that never expire</li>
+<li>You want predictable, pay-per-use pricing in euros</li>
 <li>You want transparent, predictable pricing</li>
 <li>You want to fully own and self-host your code</li>
 <li>You prefer GDPR-compliant European infrastructure</li>
@@ -228,7 +228,7 @@ ${CROSS_LINKS_EN}`
 <li><strong>No credit card required</strong></li>
 <li><strong>11 specialized AI agents</strong> — frontend, backend, database, QA, and more</li>
 <li><strong>Code is 100% yours</strong> — export to GitHub anytime</li>
-<li><strong>Credits never expire</strong></li>
+<li><strong>Credits valid for 30 days from purchase</strong></li>
 </ul>
 <p><a href="/sign-up">Create your free account now →</a></p>
 ${CROSS_LINKS_EN}`

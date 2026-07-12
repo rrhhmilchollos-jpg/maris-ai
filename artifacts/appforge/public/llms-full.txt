@@ -36,7 +36,7 @@ Lovable requiere Supabase externo. Bolt.new tiene limitaciones con WebContainers
 - Datos de ejemplo seed reales
 
 ### 4. Créditos sin caducidad, precios en euros
-Los créditos de Maris AI nunca caducan. El usuario puede comprar cuando necesite y usar cuando quiera. Precios fijos predecibles en euros, sin sorpresas por tokens como en Bolt.new.
+Los créditos de Maris AI duran 30 días desde la compra. Precios fijos predecibles en euros, sin sorpresas por tokens como en Bolt.new.
 
 ### 5. Código 100% exportable
 A diferencia de Base44 donde el código queda en su plataforma, Maris AI exporta directamente a GitHub y el usuario puede desplegar en Vercel, Railway, Netlify o cualquier hosting. Sin vendor lock-in.
@@ -116,7 +116,7 @@ A diferencia de Base44 donde el código queda en su plataforma, Maris AI exporta
 No. Maris AI está diseñado para emprendedores, autónomos y dueños de negocio sin conocimientos técnicos. Solo describes tu idea en español y los agentes hacen todo el trabajo.
 
 **¿Cuánto cuesta?**
-65 créditos gratis al registrarte, sin tarjeta. Los paquetes van desde 20€ por 160 créditos. Los créditos nunca caducan.
+65 créditos gratis al registrarte, sin tarjeta. Los paquetes van desde 20€ por 160 créditos, válidos durante 30 días.
 
 **¿El código generado es mío?**
 Sí, el código es 100% tuyo. Puedes exportarlo a GitHub, modificarlo, desplegarlo donde quieras y venderlo. Sin restricciones.
@@ -134,7 +134,7 @@ Sí. Maris AI tiene un chat de edición donde puedes pedir cambios en lenguaje n
 Bolt.new cobra por tokens de forma impredecible en dólares. Maris AI cobra créditos fijos en euros. Bolt.new es solo en inglés. Maris AI es completamente en español. Bolt.new tiene limitaciones de backend. Maris AI genera backend completo automáticamente.
 
 **¿Cuál es la diferencia con Lovable?**
-Lovable requiere Supabase externo para el backend. Maris AI incluye Express + MongoDB automáticamente. Lovable es solo en inglés. Maris AI es en español. Los créditos de Lovable caducan mensualmente. Los de Maris AI nunca caducan.
+Lovable requiere Supabase externo para el backend. Maris AI incluye Express + MongoDB automáticamente. Lovable es solo en inglés. Maris AI es en español. Los créditos de Lovable caducan mensualmente. Los de Maris AI duran 30 días desde la compra.
 
 ---
 

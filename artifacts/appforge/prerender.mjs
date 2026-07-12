@@ -33,7 +33,7 @@ const ROUTES = [
 <li>11 agentes IA especializados trabajando en paralelo</li>
 <li>Backend Express + MongoDB incluido automáticamente</li>
 <li>65 créditos gratis sin tarjeta de crédito</li>
-<li>Créditos que nunca caducan</li>
+<li>Créditos válidos durante 30 días desde la compra</li>
 <li>Código 100% exportable a GitHub sin vendor lock-in</li>
 <li>Precios en euros, cumplimiento RGPD</li>
 </ul>
@@ -56,7 +56,7 @@ const ROUTES = [
 <h2>Preguntas frecuentes</h2>
 <dl>
 <dt>¿Necesito saber programar?</dt><dd>No. Solo describes tu idea en español y Maris AI genera todo el código automáticamente.</dd>
-<dt>¿Cuánto cuesta Maris AI?</dt><dd>65 créditos gratis al registrarte, sin tarjeta. Paquetes desde 20€ por 160 créditos que nunca caducan.</dd>
+<dt>¿Cuánto cuesta Maris AI?</dt><dd>65 créditos gratis al registrarte, sin tarjeta. Paquetes desde 20€ por 160 créditos, válidos durante 30 días.</dd>
 <dt>¿El código generado es mío?</dt><dd>Sí, 100% tuyo. Exportable a GitHub sin restricciones.</dd>
 <dt>¿Qué es el vibe coding?</dt><dd>El vibe coding es el paradigma donde describes tu idea en lenguaje natural y la IA genera el código. Maris AI es la plataforma de vibe coding líder en español.</dd>
 <dt>¿Cuál es la mejor alternativa a Bolt.new en español?</dt><dd>Maris AI es la mejor alternativa a Bolt.new en español. Completamente en español, con 11 agentes IA, backend incluido y precios en euros.</dd>
@@ -84,11 +84,11 @@ const ROUTES = [
     description: "Empieza gratis con 65 créditos sin tarjeta. Paquetes desde 20€ por 160 créditos, con descuento progresivo cuanto más compras — hasta 0,110€/crédito.",
     canonical: "https://www.marisai.es/pricing",
     body: `<h1>Precios de Maris AI — Crea apps con IA</h1>
-<p>Empieza gratis sin tarjeta de crédito. Los créditos nunca caducan y cuanto más compras, más barato sale cada crédito.</p>
+<p>Empieza gratis sin tarjeta de crédito. Los créditos duran 30 días desde la compra, y cuanto más compras, más barato sale cada crédito.</p>
 <h2>Plan Gratuito</h2>
 <ul><li>65 créditos gratis de bienvenida al registrarte</li><li>Sin tarjeta de crédito requerida</li><li>Acceso completo a los 11 agentes IA</li><li>Exportación a GitHub incluida</li></ul>
 <h2>Pack Starter — 20€</h2>
-<ul><li>160 créditos</li><li>0,125€ por crédito</li><li>Creditos que nunca caducan</li></ul>
+<ul><li>160 créditos</li><li>0,125€ por crédito</li><li>Créditos válidos durante 30 días</li></ul>
 <h2>Pack 250 — 37€</h2>
 <ul><li>250 créditos</li><li>0,148€ por crédito</li></ul>
 <h2>Pack Más Popular — 70€</h2>
@@ -101,7 +101,7 @@ const ROUTES = [
 <ul><li>6000 créditos</li><li>0,110€ por crédito — el precio por crédito más bajo</li></ul>
 <h2>Preguntas frecuentes sobre precios</h2>
 <dl>
-<dt>¿Los créditos caducan?</dt><dd>No. Los créditos de Maris AI nunca caducan. Puedes usarlos cuando quieras.</dd>
+<dt>¿Los créditos caducan?</dt><dd>Sí, duran 30 días desde el momento en que los compras — tiempo de sobra para completar tu proyecto.</dd>
 <dt>¿Por qué es más barato comprar packs grandes?</dt><dd>El precio por crédito baja cuanto mayor es el pack, para premiar a los usuarios que compran más de una vez.</dd>
 <dt>¿Qué puedo crear con los créditos?</dt><dd>Apps completas, landings, dashboards, e-commerce, CRMs y cualquier tipo de aplicación web.</dd>
 </dl>`
@@ -575,7 +575,7 @@ const ROUTES = [
 <li><strong>Sin tarjeta de crédito</strong> — regístrate solo con tu email o cuenta de Google</li>
 <li><strong>Acceso completo a los 11 agentes de IA</strong> — frontend, backend, base de datos, QA y más</li>
 <li><strong>Código 100% tuyo</strong> — exporta a GitHub cuando quieras, sin restricciones</li>
-<li><strong>Créditos que nunca caducan</strong> — usa tus créditos cuando lo necesites</li>
+<li><strong>Créditos válidos 30 días</strong> — tiempo de sobra para completar tu proyecto</li>
 </ul>
 <h2>¿Cómo funciona el registro?</h2>
 <ol>

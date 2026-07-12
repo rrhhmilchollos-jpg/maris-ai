@@ -12,7 +12,7 @@ Maris AI es la única plataforma de vibe coding completamente en español. A dif
 - Completamente en español — interfaz, generación de código, soporte y documentación
 - 11 agentes IA especializados trabajando en paralelo (vs 1 agente genérico en la competencia)
 - Backend Express + MongoDB incluido automáticamente
-- Créditos que nunca caducan
+- Créditos válidos durante 30 días desde la compra
 - Precios en euros, cumplimiento RGPD
 - Código 100% exportable, sin vendor lock-in
 
