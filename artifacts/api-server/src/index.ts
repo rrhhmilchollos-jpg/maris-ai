@@ -214,6 +214,37 @@ httpServer.listen(finalPort, async (err?: Error) => {
     logger.error({ err: freeCreditsErr }, "Failed to start Free Credits Renewal");
   }
 
+  // 6b-3) Aviso de renovación próxima de plan (48h) — notificación al
+  // CLIENTE (campanita/UserNotification), no a los admins. Mismo patrón
+  // que el tick de arriba, cada hora es de sobra para una ventana de 48h.
+  try {
+    const { runExpirationNotificationsTick } = await import("./lib/notificationService");
+    runExpirationNotificationsTick().catch((err) => logger.error({ err }, "Expiration notifications initial tick failed"));
+    const expirationInterval = setInterval(
+      () => runExpirationNotificationsTick().catch((err) => logger.error({ err }, "Expiration notifications tick failed")),
+      60 * 60 * 1000,
+    );
+    expirationInterval.unref();
+    logger.info("Expiration Notifications started — hourly tick");
+  } catch (expirationErr) {
+    logger.error({ err: expirationErr }, "Failed to start Expiration Notifications");
+  }
+
+  // 6b-4) Caducidad de créditos de recarga (30 días) — a petición
+  // explícita del usuario, cambio de política (antes "no caducan nunca").
+  try {
+    const { runTopUpExpirationTick } = await import("./lib/credits");
+    runTopUpExpirationTick().catch((err) => logger.error({ err }, "Top-up expiration initial tick failed"));
+    const topUpExpirationInterval = setInterval(
+      () => runTopUpExpirationTick().catch((err) => logger.error({ err }, "Top-up expiration tick failed")),
+      60 * 60 * 1000,
+    );
+    topUpExpirationInterval.unref();
+    logger.info("Top-up Credit Expiration started — hourly tick");
+  } catch (topUpExpirationErr) {
+    logger.error({ err: topUpExpirationErr }, "Failed to start Top-up Credit Expiration");
+  }
+
   // 6c) Emails de reactivación automática — una vez al día a las 10:00h España.
   // Envía emails personalizados a clientes inactivos (3, 7, 14 y 30 días).
   // Activa con: REACTIVATION_EMAILS_ENABLED=true en Railway.

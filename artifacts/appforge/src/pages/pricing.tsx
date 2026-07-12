@@ -32,7 +32,7 @@ export default function PricingPage() {
     "Backend Express + MongoDB incluido",
     "Exportación de código a GitHub",
     "Despliegue automático en Vercel",
-    "Los créditos nunca caducan",
+    "Los créditos duran 30 días desde la compra",
     "Soporte por email incluido",
   ];
 
@@ -58,7 +58,7 @@ export default function PricingPage() {
               Créditos flexibles para tu éxito.
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Paga solo lo que necesitas. Los créditos nunca caducan y se usan para generar apps con los 11 agentes IA de Maris AI.
+              Paga solo lo que necesitas. Los créditos duran 30 días desde la compra y se usan para generar apps con los 11 agentes IA de Maris AI.
             </p>
             <p className="mt-4 text-sm text-primary font-medium">
               🎁 Regístrate gratis y recibe 65 créditos de bienvenida — sin tarjeta de crédito
@@ -138,7 +138,7 @@ export default function PricingPage() {
                       </Link>
 
                       <p className="text-xs text-muted-foreground text-center">
-                        Los créditos nunca caducan
+                        Los créditos duran 30 días desde la compra
                       </p>
                     </div>
                   </motion.div>
@@ -189,7 +189,7 @@ export default function PricingPage() {
               },
               {
                 q: "¿Los créditos caducan?",
-                a: "No. Los créditos que compras nunca caducan. Puedes usarlos a tu ritmo, sin presión de fechas límite.",
+                a: "Sí, los créditos duran 30 días desde el momento en que los compras. Es tiempo de sobra para completar tu proyecto sin prisas.",
               },
               {
                 q: "¿Puedo comprar más créditos en cualquier momento?",

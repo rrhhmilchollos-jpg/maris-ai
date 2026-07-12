@@ -49,6 +49,12 @@ export interface IUser {
   plan?: string;
   planCredits?: number;
   planExpiresAt?: Date;
+  // Caducidad de 30 días para créditos de recarga (top-up) — a petición
+  // explícita del usuario (cambio de política: antes "no caducan nunca").
+  // Se extiende (nunca se acorta) en cada compra nueva: max(actual, +30
+  // días desde la compra). Aplica también al saldo que los clientes ya
+  // tenían antes del cambio (backfill: ver migración de despliegue).
+  topUpCreditsExpiresAt?: Date;
   // ENCONTRADO A PETICIÓN DEL USUARIO: Stripe en Maris AI solo debe existir
   // como capacidad que los agentes integran en las apps DE LOS CLIENTES
   // cuando lo piden -- nunca como sistema de facturación propio de Maris AI
@@ -132,6 +138,7 @@ const UserSchema = new Schema<IUser>(
     plan: { type: String, default: "free" },
     planCredits: { type: Number, default: 0 },
     planExpiresAt: { type: Date },
+    topUpCreditsExpiresAt: { type: Date },
     // stripeSubscriptionId eliminado -- nunca se usó de verdad, ver
     // comentario junto a la interfaz TypeScript más arriba en este archivo.
     vivaInitialTransactionId: { type: String },

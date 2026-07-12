@@ -1,6 +1,7 @@
 import { connectDB } from "./db";
 import { User, CreditTransaction } from "@workspace/db/schema";
 import { CREDIT_PACKAGES } from "./payments";
+import { checkLowBalance, checkSpikeRate } from "./notificationService";
  
 /**
  * Lifetime EUR spent by the user, in cents.
@@ -110,9 +111,14 @@ export async function creditPurchase(opts: {
     status: "succeeded",
   });
  
+  const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const currentUser = await User.findById(userId, { topUpCreditsExpiresAt: 1 }).lean();
+  const currentExpiry = (currentUser as any)?.topUpCreditsExpiresAt;
+  const newExpiry = currentExpiry && new Date(currentExpiry) > thirtyDaysFromNow ? currentExpiry : thirtyDaysFromNow;
+
   const updated = await User.findByIdAndUpdate(
     userId,
-    { $inc: { credits: Math.round(amount) } },
+    { $inc: { credits: Math.round(amount) }, $set: { topUpCreditsExpiresAt: newExpiry } },
     { new: true, projection: { credits: 1 } },
   ).lean();
  
@@ -133,8 +139,49 @@ export async function creditPurchase(opts: {
 }
  
 /**
- * Refund a previously-charged amount of credits and log the transaction.
+ * Tick diario: expira el saldo de créditos de recarga (top-up) cuyo plazo
+ * de 30 días ya pasó. Mismo patrón que runFreeCreditsRenewalTick — solo
+ * reduce el `credits` total en la parte top-up (nunca toca planCredits,
+ * que tiene su propio ciclo de renovación mensual ya existente).
+ *
+ * A petición explícita del usuario: aplica también al saldo que los
+ * clientes ya tenían antes del cambio de política (creditPurchase ya deja
+ * topUpCreditsExpiresAt puesto en cada compra nueva; para el saldo previo
+ * al cambio, el backfill de despliegue le da 30 días desde el día del
+ * lanzamiento — ver migración).
  */
+export async function runTopUpExpirationTick(): Promise<void> {
+  await connectDB();
+  const now = new Date();
+  const expiredUsers = await User.find(
+    { topUpCreditsExpiresAt: { $lte: now }, credits: { $gt: 0 } },
+    { _id: 1, credits: 1, planCredits: 1 },
+  ).lean();
+
+  for (const u of expiredUsers) {
+    const topUpPortion = Math.max(0, (u.credits ?? 0) - (u.planCredits ?? 0));
+    if (topUpPortion <= 0) {
+      // No quedaba top-up real (ya consumido) — solo limpiar la fecha para no revisarlo cada día.
+      await User.findByIdAndUpdate(u._id, { $unset: { topUpCreditsExpiresAt: "" } });
+      continue;
+    }
+    await User.findByIdAndUpdate(u._id, {
+      $inc: { credits: -topUpPortion },
+      $unset: { topUpCreditsExpiresAt: "" },
+    });
+    await CreditTransaction.create({
+      userId: String(u._id),
+      kind: "usage",
+      amount: -topUpPortion,
+      description: "Caducidad de créditos de recarga (30 días)",
+    });
+    try {
+      const { notifyTopUpExpired } = await import("./notificationService");
+      await notifyTopUpExpired(String(u._id), topUpPortion);
+    } catch { /* no bloqueante */ }
+  }
+}
+
 export async function refundCredits(opts: {
   userId: string;
   isAdmin: boolean;
@@ -198,6 +245,10 @@ export async function chargeCredits(opts: {
     // El frontend manejará la advertencia visual
   }
 
+  // Fire-and-forget: nunca deben retrasar ni poder tumbar un cobro real.
+  checkLowBalance(userId, updated.credits).catch(() => {});
+  checkSpikeRate(userId).catch(() => {});
+
   return { ok: true, newBalance: updated.credits };
 }
 
@@ -244,7 +295,8 @@ export async function grantPlanCredits(opts: {
 
   // 2. Calcular créditos a añadir:
   //    - Resetear los créditos del plan anterior (que habrán caducado)
-  //    - Mantener los créditos top-up (no caducan)
+  //    - Mantener los créditos top-up (caducan a los 30 días, ver
+  //      topUpCreditsExpiresAt / runTopUpExpirationTick más abajo)
   const topUpCredits = Math.max(0, (user.credits ?? 0) - (user.planCredits ?? 0));
   const newTotalCredits = Math.round(topUpCredits + creditsPerMonth);
 

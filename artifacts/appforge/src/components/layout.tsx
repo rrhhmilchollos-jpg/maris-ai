@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { CreditBar } from "@/components/credit-bar";
-import { LogOut, CreditCard, LayoutDashboard, Shield, BellRing } from "lucide-react";
+import { LogOut, CreditCard, LayoutDashboard, Shield, BellRing, User } from "lucide-react";
 
 /**
  * NotificationsBell — ENCONTRADO A PETICIÓN DEL USUARIO (caso real:
@@ -184,6 +184,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <DropdownMenuItem onClick={() => setLocation("/dashboard")}>
                       <LayoutDashboard className="mr-2 h-4 w-4 text-muted-foreground" />
                       <span>Panel</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setLocation("/account")}>
+                      <User className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <span>Mi cuenta</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setLocation("/billing")}>
                       <CreditCard className="mr-2 h-4 w-4 text-muted-foreground" />

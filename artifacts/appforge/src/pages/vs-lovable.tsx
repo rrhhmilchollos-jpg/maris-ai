@@ -11,7 +11,7 @@ const COMPARISON = [
   { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Requiere Supabase (+25$/mes)", marisWins: true },
   { feature: "Precio de entrada", maris: "Gratis (65 créditos)", competitor: "Gratis (5 créditos/día)", marisWins: true },
   { feature: "Plan de pago desde", maris: "19€/mes", competitor: "25$/mes (~23€)", marisWins: true },
-  { feature: "Créditos caducan", maris: "Nunca", competitor: "Sí, a los 2 meses", marisWins: true },
+  { feature: "Créditos caducan", maris: "A los 30 días", competitor: "Sí, a los 2 meses", marisWins: false },
   { feature: "Agentes IA especializados", maris: "11 agentes en paralelo", competitor: "1 agente general", marisWins: true },
   { feature: "Deploy automático a Vercel", maris: "Sí, incluido", competitor: "Sí, incluido", marisWins: false },
   { feature: "Exportación a GitHub", maris: "Sí, incluido", competitor: "Sí, incluido", marisWins: false },
@@ -21,7 +21,7 @@ const COMPARISON = [
 
 const FAQS = [
   { q: "¿Cuál es la principal diferencia entre Maris AI y Lovable?", a: "La diferencia más importante es el idioma y el backend. Maris AI está completamente en español con soporte real en español, mientras que Lovable está solo en inglés. Además, Maris AI incluye backend Express + MongoDB de serie, mientras que Lovable requiere contratar Supabase aparte para tener base de datos real." },
-  { q: "¿Es Maris AI más barato que Lovable?", a: "Para el mercado español, sí. El plan Pro de Lovable cuesta 25$/mes, y si añades Supabase necesitas otros 25$/mes, llegando a 50$/mes en dólares. Maris AI empieza en 19€ con backend incluido. Además, los créditos de Maris AI nunca caducan, mientras que los de Lovable expiran a los 2 meses." },
+  { q: "¿Es Maris AI más barato que Lovable?", a: "Para el mercado español, sí. El plan Pro de Lovable cuesta 25$/mes, y si añades Supabase necesitas otros 25$/mes, llegando a 50$/mes en dólares. Maris AI empieza en 19€ con backend incluido. Además, los créditos de Maris AI duran 30 días desde la compra, tiempo de sobra para completar tu proyecto." },
   { q: "¿Lovable genera apps fullstack como Maris AI?", a: "Lovable es principalmente un builder frontend. Para tener base de datos y autenticación real necesitas conectar Supabase, con coste adicional y configuración técnica. Maris AI genera el stack completo (React + Express + MongoDB) en una sola generación, sin servicios externos." },
   { q: "¿Puedo migrar de Lovable a Maris AI?", a: "Sí. Regístrate en Maris AI gratis y empieza tu proyecto desde cero. Si tienes código de Lovable que quieres continuar, puedes compartirlo con Maris AI a través del chat y los agentes lo tomarán como base." },
   { q: "¿Por qué elegir Maris AI si Lovable tiene más usuarios?", a: "Lovable tiene más usuarios porque lleva más tiempo y es global, pero para el mercado español tiene dos problemas críticos: está en inglés y el soporte no es en español. Maris AI es la única plataforma diseñada específicamente para emprendedores hispanohablantes." },
@@ -97,7 +97,7 @@ export default function VsLovablePage() {
             {[
               { icon: Globe, title: "100% en español", desc: "Interfaz, soporte, documentación y comunidad en español. Lovable está en inglés — una barrera real para la mayoría de emprendedores.", color: "text-blue-400" },
               { icon: MessageCircle, title: "Soporte humano por WhatsApp", desc: "Equipo real respondiendo en español en menos de 2 horas. Sin bots, sin tickets en inglés, sin esperas de días.", color: "text-green-400" },
-              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos nunca caducan. Lovable cobra en dólares y los créditos expiran.", color: "text-yellow-400" },
+              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos duran 30 días desde la compra. Lovable cobra en dólares y sus créditos expiran a los 2 meses.", color: "text-yellow-400" },
               { icon: Zap, title: "11 agentes IA especializados", desc: "Researcher, arquitecto, diseñador, frontend, backend, base de datos, integraciones, QA, DevOps, testing y reparación en paralelo.", color: "text-purple-400" },
               { icon: Shield, title: "Backend incluido sin extras", desc: "Express + MongoDB incluidos de serie. Lovable requiere Supabase (25$/mes extra) para tener backend real.", color: "text-red-400" },
               { icon: Clock, title: "Apps completas en 5 minutos", desc: "Frontend + backend + base de datos + deploy a Vercel en una sola generación. Sin configuraciones manuales.", color: "text-cyan-400" },
@@ -115,7 +115,7 @@ export default function VsLovablePage() {
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-8 text-center space-y-4">
             <div className="flex justify-center gap-1">{[1,2,3,4,5].map(s => <Star key={s} className="h-5 w-5 fill-yellow-400 text-yellow-400" />)}</div>
             <h2 className="text-2xl font-bold text-white">Nuestro veredicto</h2>
-            <p className="text-white/70 leading-relaxed max-w-2xl mx-auto">Si estás en España o Latinoamérica y quieres crear una app real, Maris AI es la elección clara. Lovable es excelente si hablas inglés y ya tienes experiencia con Supabase, pero para el mercado hispanohablante añade fricción innecesaria: inglés en todo, backend externo obligatorio y créditos que caducan.</p>
+            <p className="text-white/70 leading-relaxed max-w-2xl mx-auto">Si estás en España o Latinoamérica y quieres crear una app real, Maris AI es la elección clara. Lovable es excelente si hablas inglés y ya tienes experiencia con Supabase, pero para el mercado hispanohablante añade fricción innecesaria: inglés en todo, backend externo obligatorio y una moneda distinta a la tuya.</p>
             <Link href="/sign-up"><Button size="lg" className="mt-2 bg-primary hover:bg-primary/90 text-white font-bold gap-2 shadow-lg shadow-primary/30">Empezar con Maris AI gratis <ArrowRight className="h-5 w-5" /></Button></Link>
           </div>
         </section>

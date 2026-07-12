@@ -12,7 +12,7 @@ const COMPARISON = [
   { feature: "Backend incluido", maris: "Express + MongoDB", competitor: "Limitado (requiere config manual)", marisWins: true },
   { feature: "Precio de entrada", maris: "Gratis (65 créditos)", competitor: "Gratis (tokens muy limitados)", marisWins: true },
   { feature: "Plan de pago desde", maris: "19€/mes", competitor: "20$/mes (~18€)", marisWins: false },
-  { feature: "Créditos/tokens caducan", maris: "Nunca", competitor: "Sí, con límites mensuales", marisWins: true },
+  { feature: "Créditos/tokens caducan", maris: "A los 30 días", competitor: "Sí, con límites mensuales", marisWins: false },
   { feature: "Agentes IA especializados", maris: "11 agentes en paralelo", competitor: "1 modelo general", marisWins: true },
   { feature: "Deploy automático", maris: "Sí, a Vercel", competitor: "Sí, Netlify/Vercel", marisWins: false },
   { feature: "Precio en euros", maris: "Sí, euros reales", competitor: "No, dólares", marisWins: true },
@@ -20,7 +20,7 @@ const COMPARISON = [
 
 const FAQS = [
   { q: "¿Cuál es la diferencia principal entre Maris AI y Bolt.new?", a: "La diferencia más importante es el público objetivo. Bolt.new está pensado para desarrolladores que quieren ver y editar código en tiempo real. Maris AI está diseñado para emprendedores sin conocimientos técnicos. Además, Maris AI está en español y Bolt.new solo en inglés." },
-  { q: "¿Es Bolt.new más barato que Maris AI?", a: "En precio de entrada son similares, pero el modelo de tokens de Bolt.new es menos predecible: en proyectos complejos los tokens se consumen muy rápido. Maris AI usa un sistema de créditos más predecible y que nunca caducan." },
+  { q: "¿Es Bolt.new más barato que Maris AI?", a: "En precio de entrada son similares, pero el modelo de tokens de Bolt.new es menos predecible: en proyectos complejos los tokens se consumen muy rápido. Maris AI usa un sistema de créditos más predecible, con 30 días de validez desde la compra." },
   { q: "¿Bolt.new genera el backend automáticamente?", a: "Bolt.new genera principalmente código frontend. Para backend real necesitas configurar manualmente servicios externos. Maris AI genera el stack completo (frontend + backend + MongoDB) en una sola generación." },
   { q: "¿Puedo usar Bolt.new si no sé inglés?", a: "Técnicamente sí, pero la interfaz, los mensajes de error y el soporte son todos en inglés. Para emprendedores hispanohablantes esto es una barrera real. Maris AI ofrece todo en español, con soporte por ticket (respuesta en menos de 3-4 horas) y WhatsApp para casos urgentes." },
   { q: "¿Qué pasa si mi app tiene errores en Bolt.new?", a: "En Bolt.new tienes que describir el error en inglés y el modelo lo intenta corregir. En Maris AI tienes un sistema de reparación automática y soporte en español por WhatsApp si falla." },
@@ -96,7 +96,7 @@ export default function VsBoltPage() {
             {[
               { icon: Globe, title: "100% en español", desc: "Interfaz, soporte, documentación y comunidad en español. Bolt.new está en inglés — una barrera real para la mayoría de emprendedores.", color: "text-blue-400" },
               { icon: MessageCircle, title: "Soporte humano por WhatsApp", desc: "Equipo real respondiendo en español en menos de 2 horas. Sin bots, sin tickets en inglés, sin esperas de días.", color: "text-green-400" },
-              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos nunca caducan. Bolt.new cobra en dólares.", color: "text-yellow-400" },
+              { icon: Euro, title: "Precios en euros sin sorpresas", desc: "Pagas en euros, sin conversión de divisa. Los créditos duran 30 días desde la compra. Bolt.new cobra en dólares.", color: "text-yellow-400" },
               { icon: Zap, title: "11 agentes IA especializados", desc: "Researcher, arquitecto, diseñador, frontend, backend, base de datos, integraciones, QA, DevOps, testing y reparación trabajando en paralelo.", color: "text-purple-400" },
               { icon: Shield, title: "Backend incluido sin extras", desc: "Express + MongoDB incluidos de serie. Sin servicios externos obligatorios, sin costes ocultos adicionales.", color: "text-red-400" },
               { icon: Clock, title: "Apps completas en 5 minutos", desc: "Frontend + backend + base de datos + deploy automático a Vercel en una sola generación. Sin configuraciones manuales.", color: "text-cyan-400" },

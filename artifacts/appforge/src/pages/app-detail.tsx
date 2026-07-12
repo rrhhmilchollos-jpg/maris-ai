@@ -399,6 +399,10 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const [previewKey, setPreviewKey] = useState(0);
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
   const [isPreviewClosed, setIsPreviewClosed] = useState(false);
+  // Barra "Vista en vivo activa" — solo debe aparecer cuando el preview
+  // de verdad se pausó (pestaña en segundo plano), no siempre. Se basa en
+  // visibilitychange real del navegador, no en un temporizador falso.
+  const [isPreviewPaused, setIsPreviewPaused] = useState(false);
   const [activeSidebar, setActiveSidebar] = useState<SidebarTab>("chat");
   const [isPublishingGoogle, setIsPublishingGoogle] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
@@ -931,6 +935,23 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     toast({ title: isPreviewMaximized ? "Preview restaurada" : "Preview maximizada", description: isPreviewMaximized ? "Vuelves a ver el chat y los paneles junto a la app." : "La app ocupa toda la pantalla. Usa Restore o × para volver." });
   };
 
+  // Pausa REAL del preview: cuando la pestaña pasa a segundo plano
+  // mientras hay una vista en vivo renderizable, el iframe deja de
+  // recibir foco/recursos del navegador y el contenido puede quedar
+  // desactualizado. Al volver, mostramos la barra para que el usuario
+  // decida si refrescar (Resume) — antes esta barra aparecía siempre,
+  // sin relación real con si algo estaba pausado o no.
+  useEffect(() => {
+    if (!hasRenderableCode || isPreviewClosed) return;
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        setIsPreviewPaused(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [hasRenderableCode, isPreviewClosed]);
+
   const handleClosePreview = () => {
     setIsPreviewMaximized(false);
     setIsPreviewClosed(true);
@@ -1059,6 +1080,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   };
 
   const handleResumePreview = () => {
+    setIsPreviewPaused(false);
     if (hasRenderableCode) {
       handleRefreshPreview();
       return;
@@ -1068,6 +1090,14 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     setActiveSidebar("chat");
     setMobileTab("chat");
     toast({ title: "Preview cerrada", description: "La app aún no tiene frontend renderizable. Revisa el plan o pide cambios en el chat." });
+  };
+
+  // Cierra SOLO la barra de aviso "Vista en vivo activa" — no toca la
+  // preview ni el chat. Antes su botón × llamaba a handleClosePreview,
+  // que cerraba toda la vista previa; era el mismo aspecto pero un efecto
+  // mucho más grande de lo que parecía.
+  const handleDismissPausedBar = () => {
+    setIsPreviewPaused(false);
   };
 
   const handleSidebarClick = (tab: SidebarTab) => {
@@ -2244,27 +2274,29 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     />
                   )}
                 </div>
-                <div className="pointer-events-none absolute bottom-6 left-1/2 w-[90%] md:w-[620px] max-w-[calc(100%-2rem)] -translate-x-1/2">
-                  <div className="pointer-events-auto flex h-[52px] md:h-[56px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-4 md:px-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                    <div className="flex items-center gap-3 text-[12px] md:text-[13px] text-white/55">
-                      <span className={`h-2 w-2 rounded-full ${hasRenderableCode ? "bg-emerald-400" : "bg-white/20"}`} />
-                      <span>{showStaticBuildState ? "Esperando código…" : "Vista en vivo activa"}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-3 md:px-4 py-1.5 text-[12px] md:text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
-                        {hasRenderableCode ? "Resume" : "Cerrar"}
-                      </button>
-                      <button
-                        onClick={handleClosePreview}
-                        title="Cerrar vista previa"
-                        aria-label="Cerrar vista previa"
-                        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-white/40 transition hover:bg-white/[0.08] hover:text-white"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                {isPreviewPaused && (
+                  <div className="pointer-events-none absolute bottom-6 left-1/2 w-[90%] md:w-[620px] max-w-[calc(100%-2rem)] -translate-x-1/2">
+                    <div className="pointer-events-auto flex h-[52px] md:h-[56px] items-center justify-between rounded-lg border border-white/[0.09] bg-[#0b0f18]/95 px-4 md:px-5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                      <div className="flex items-center gap-3 text-[12px] md:text-[13px] text-white/55">
+                        <span className="h-2 w-2 rounded-full bg-amber-400" />
+                        <span>Vista en vivo pausada (pestaña en segundo plano)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={handleResumePreview} className="rounded-md border border-[#8b5cf6]/60 px-3 md:px-4 py-1.5 text-[12px] md:text-[13px] font-bold text-[#a78bfa] transition hover:bg-[#7c3aed]/10 hover:text-white">
+                          Resume
+                        </button>
+                        <button
+                          onClick={handleDismissPausedBar}
+                          title="Cerrar aviso"
+                          aria-label="Cerrar aviso"
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-white/40 transition hover:bg-white/[0.08] hover:text-white"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </div>

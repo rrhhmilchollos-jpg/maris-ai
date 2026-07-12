@@ -294,7 +294,7 @@ router.get("/bot-render/vs-base44", (_req: Request, res: Response) => {
 <li><strong>Exportación de código</strong>: Maris AI genera código 100% exportable a GitHub sin vendor lock-in. Con Base44, el código generado puede tener dependencias de su propia plataforma.</li>
 <li><strong>Backend incluido</strong>: Maris AI genera automáticamente un backend Express + MongoDB completo. Base44 se centra más en el frontend.</li>
 <li><strong>Precios en euros</strong>: Maris AI cobra en euros con cumplimiento RGPD. Ideal para empresas y autónomos en España y Europa.</li>
-<li><strong>Créditos sin caducidad</strong>: Los créditos de Maris AI nunca caducan. 65 créditos gratis al registrarte, sin tarjeta de crédito.</li>
+<li><strong>Créditos con 30 días de validez</strong>: Los créditos de Maris AI duran 30 días desde la compra. 65 créditos gratis al registrarte, sin tarjeta de crédito.</li>
 </ul>
 <h2>¿Cuándo elegir Maris AI sobre Base44?</h2>
 <p>Elige Maris AI si necesitas: aplicaciones con backend real y base de datos, código exportable sin restricciones, soporte en español, precios predecibles en euros, o cumplimiento con la normativa europea de datos (RGPD).</p>
@@ -322,7 +322,7 @@ router.get("/bot-render/vs-lovable", (_req: Request, res: Response) => {
 <ul>
 <li><strong>Sin Supabase obligatorio</strong>: Lovable requiere Supabase para el backend. Maris AI genera su propio backend Express + MongoDB sin dependencias externas.</li>
 <li><strong>En español</strong>: Maris AI está completamente localizada para España y Latinoamérica. Lovable solo opera en inglés.</li>
-<li><strong>Créditos sin caducidad</strong>: A diferencia de Lovable, los créditos de Maris AI nunca caducan.</li>
+<li><strong>Créditos de 30 días</strong>: Los créditos de Maris AI duran 30 días desde la compra, tiempo de sobra para completar tu proyecto.</li>
 <li><strong>Precios predecibles</strong>: Maris AI cobra en euros por proyecto, sin suscripciones mensuales obligatorias.</li>
 <li><strong>Stack completo</strong>: Maris AI genera React + TypeScript + Tailwind + Express + MongoDB. Lovable se centra principalmente en el frontend.</li>
 </ul>
@@ -334,7 +334,7 @@ router.get("/bot-render/vs-lovable", (_req: Request, res: Response) => {
   res.setHeader("Cache-Control", "public, max-age=3600");
   res.send(html(
     "Maris AI vs Lovable — Alternativa en Español con Backend Incluido",
-    "Compara Maris AI con Lovable. Sin Supabase obligatorio, completamente en español, con backend Express + MongoDB incluido y créditos que nunca caducan.",
+    "Compara Maris AI con Lovable. Sin Supabase obligatorio, completamente en español, con backend Express + MongoDB incluido.",
     `${BASE}/vs-lovable`,
     body
   ));
