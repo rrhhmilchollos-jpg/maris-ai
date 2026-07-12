@@ -58,6 +58,32 @@ router.get("/api/sitemap.xml", async (_req: Request, res: Response) => {
     { loc: "https://www.marisai.es/legal/privacidad", freq: "yearly", priority: "0.3" },
     { loc: "https://www.marisai.es/legal/aviso-legal", freq: "yearly", priority: "0.3" },
     { loc: "https://www.marisai.es/legal/cookies", freq: "yearly", priority: "0.3" },
+    // ENCONTRADO en auditoría SEO/GEO: ninguna de las páginas en inglés
+    // (/en/*) ni las páginas de casos de uso en español (/crear/*) estaban
+    // en el sitemap -- existen de verdad (international-routes.mjs las
+    // prerenderiza), pero Google/las IAs no tenían forma de descubrirlas
+    // sin depender solo de enlaces internos.
+    { loc: "https://www.marisai.es/en", freq: "weekly", priority: "0.9" },
+    { loc: "https://www.marisai.es/en/pricing", freq: "weekly", priority: "0.9" },
+    { loc: "https://www.marisai.es/en/showcase", freq: "daily", priority: "0.7" },
+    { loc: "https://www.marisai.es/en/vs-bolt", freq: "monthly", priority: "0.8" },
+    { loc: "https://www.marisai.es/en/vs-lovable", freq: "monthly", priority: "0.8" },
+    { loc: "https://www.marisai.es/en/vs-emergent", freq: "monthly", priority: "0.8" },
+    { loc: "https://www.marisai.es/en/sign-up", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/en/build/crm", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/en/build/online-store", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/en/build/booking-app", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/en/build/saas", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/en/build/dashboard", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/en/build/portfolio", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/crm", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/tienda-online", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/app-reservas", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/saas", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/dashboard", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/portfolio", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/landing-page", freq: "monthly", priority: "0.6" },
+    { loc: "https://www.marisai.es/crear/app-restaurante", freq: "monthly", priority: "0.6" },
   ];
 
   // Artículos individuales — consultados en tiempo real, no codificados a
