@@ -124,6 +124,10 @@ async function toggleE2B(enabled: boolean): Promise<E2BToggleResponse> {
   });
 }
 
+async function backfillTopUpExpiry(): Promise<{ ok: boolean; usersUpdated: number; expiresAt: string }> {
+  return apiFetch<{ ok: boolean; usersUpdated: number; expiresAt: string }>("/api/admin/migrations/backfill-topup-expiry", { method: "POST" });
+}
+
 async function runE2BSmoke(): Promise<E2BSmokeResponse> {
   return apiFetch<E2BSmokeResponse>("/api/admin/e2b-smoke", {
     method: "POST",
@@ -3302,6 +3306,19 @@ export default function AdminDashboardPage() {
     },
   });
 
+  const backfillTopUpExpiryMutation = useMutation({
+    mutationFn: backfillTopUpExpiry,
+    onSuccess: (res) => {
+      toast({
+        title: "Migración aplicada",
+        description: `Se actualizaron ${res.usersUpdated} clientes. Su saldo de recarga caduca el ${new Date(res.expiresAt).toLocaleDateString("es-ES")}. Puedes pulsar el botón otra vez sin problema — solo afecta a quien todavía no tuviera fecha.`,
+      });
+    },
+    onError: (err) => {
+      toast({ title: "Error al aplicar la migración", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    },
+  });
+
   const filteredJobs = (jobsData?.jobs ?? []).filter((job: any) => {
     if (jobFilter !== "all" && job.status !== jobFilter) return false;
     if (jobSearch && !job.userEmail?.toLowerCase().includes(jobSearch.toLowerCase()) && !job.prompt?.toLowerCase().includes(jobSearch.toLowerCase())) return false;
@@ -4236,6 +4253,26 @@ export default function AdminDashboardPage() {
                           {templateBuildResult.ok ? `✓ Plantilla "${templateBuildResult.alias}" lista para usarse` : `✗ Falló: ${templateBuildResult.reason}`}
                         </div>
                       )}
+                    </div>
+
+                    <div className="border-t border-white/5 pt-3 space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Arranca la caducidad de 30 días (créditos de recarga) para los clientes que ya tenían saldo
+                        <strong> antes</strong> de este cambio de política. Solo hace falta pulsar esto <strong>una vez</strong>,
+                        al desplegar — es seguro pulsarlo más de una vez por error, solo afecta a quien todavía no
+                        tuviera fecha de caducidad asignada.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={backfillTopUpExpiryMutation.isPending}
+                        onClick={() => backfillTopUpExpiryMutation.mutate()}
+                        className="gap-2"
+                      >
+                        {backfillTopUpExpiryMutation.isPending
+                          ? <><Loader2 className="h-3 w-3 animate-spin" />Aplicando…</>
+                          : <><Clock className="h-3 w-3" />Activar caducidad de 30 días para saldo existente</>}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
