@@ -3,6 +3,55 @@ import OpenAI from "openai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
 
+// ─── Cliente Groq/Zocoia (fallback cuando Claude no tiene créditos) ────────────
+let _groq: OpenAI | null = null;
+function getGroq(): OpenAI | null {
+  const apiKey = process.env.GROQ_API_KEY || process.env.ZOCOIA_API_KEY;
+  if (!apiKey) return null;
+  if (!_groq) {
+    _groq = new OpenAI({
+      baseURL: process.env.ZOCOIA_API_URL || 'https://api.groq.com/openai/v1',
+      apiKey,
+    });
+  }
+  return _groq;
+}
+
+async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const groq = getGroq();
+  if (!groq) throw new Error('Groq no configurado: añade GROQ_API_KEY a las variables de entorno');
+
+  const groqModel = 'llama-3.3-70b-versatile';
+  logger.warn({ model: groqModel }, '⚡ Usando Groq como fallback (Claude sin créditos)');
+
+  const systemMsg = params.system
+    ? [{ role: 'system' as const, content: typeof params.system === 'string' ? params.system : (params.system as any[]).map((b: any) => b.text || '').join('\n') }]
+    : [];
+
+  const userMessages = (params.messages || []).map((m: any) => ({
+    role: m.role as 'user' | 'assistant',
+    content: Array.isArray(m.content) ? m.content.map((b: any) => b.text || '').join('') : String(m.content || ''),
+  }));
+
+  const response = await groq.chat.completions.create({
+    model: groqModel,
+    messages: [...systemMsg, ...userMessages],
+    max_tokens: params.max_tokens || 2048,
+    temperature: 0.7,
+  });
+
+  const text = response.choices[0]?.message?.content || '';
+  recordApiUsage({
+    jobId: undefined,
+    model: groqModel,
+    inputTokens: response.usage?.prompt_tokens || 0,
+    outputTokens: response.usage?.completion_tokens || 0,
+    agent: 'groq-fallback',
+  });
+
+  return { content: [{ type: 'text', text }] };
+}
+
 // Lazy initialization — evita crash si OPENAI_API_KEY no está configurada al arrancar
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -335,8 +384,13 @@ export async function createClaudeMessageWithFallback(
     }
   }
 
-  logger.error({ role }, "Todos los modelos de Anthropic fallaron");
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  logger.warn({ role }, "Todos los modelos de Anthropic fallaron — intentando con Groq...");
+  try {
+    return await callGroqFallback(params);
+  } catch (groqErr) {
+    logger.error({ role, groqErr }, "Groq también falló");
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
 }
 
 /**
@@ -381,8 +435,15 @@ export async function createClaudeToolCallWithFallback(role: AgentRole, model: s
     }
   }
 
-  logger.error({ role }, "Todos los modelos de Anthropic fallaron (tool call)");
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  logger.warn({ role }, "Todos los modelos de Anthropic fallaron (tool call) — intentando con Groq...");
+  try {
+    const groqResult = await callGroqFallback(params);
+    // Adaptar respuesta Groq al formato Anthropic para tool calls
+    return { content: groqResult.content, stop_reason: 'end_turn', usage: { input_tokens: 0, output_tokens: 0 } };
+  } catch (groqErr) {
+    logger.error({ role, groqErr }, "Groq también falló (tool call)");
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
 }
 
 
