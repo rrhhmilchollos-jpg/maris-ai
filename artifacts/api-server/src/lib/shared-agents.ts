@@ -52,6 +52,67 @@ async function callGroqFallback(params: any): Promise<{ content: Array<{ type: s
   return { content: [{ type: 'text', text }] };
 }
 
+// ─── Cliente Ollama (fallback cuando Claude/Groq fallan) ────────────
+async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
+  const ollamaUrl = process.env.OLLAMA_URL;
+  if (!ollamaUrl) {
+    throw new Error('Ollama URL no configurada: añade OLLAMA_URL a las variables de entorno');
+  }
+
+  const ollamaModel = 'zoco-sonnet-5';
+  logger.warn({ role, model: ollamaModel }, '⚡ Usando Ollama como fallback (Claude/Groq sin créditos o caídos)');
+
+  const messages = (params.messages || []).map((m: any) => ({
+    role: m.role,
+    content: Array.isArray(m.content) ? m.content.map((b: any) => b.text || '').join('') : String(m.content || ''),
+  }));
+
+  if (params.system) {
+    messages.unshift({
+      role: 'system',
+      content: typeof params.system === 'string' ? params.system : (params.system as any[]).map((b: any) => b.text || '').join('\n')
+    });
+  }
+
+  try {
+    const response = await fetch(`${ollamaUrl}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ollamaModel,
+        messages: messages,
+        options: {
+          temperature: params.temperature || 0.7,
+          num_predict: params.max_tokens || 2048,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const text = data.message?.content || '';
+
+    recordApiUsage({
+      jobId: undefined,
+      model: ollamaModel,
+      inputTokens: 0, // Ollama no proporciona tokens de entrada/salida directamente en este endpoint
+      outputTokens: 0, // Se podría estimar o dejar en 0 si no es crítico para la facturación
+      agent: 'ollama-fallback',
+    });
+
+    return { content: [{ type: 'text', text }] };
+  } catch (ollamaErr) {
+    logger.error({ role, ollamaErr }, "Ollama también falló");
+    throw ollamaErr;
+  }
+}
+
 // Lazy initialization — evita crash si OPENAI_API_KEY no está configurada al arrancar
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -183,7 +244,7 @@ export function extractJsonObject<T = any>(raw: string): T | null {
  * recoge bloques que cerraron por completo, así que un corte a mitad del
  * archivo N nunca invalida los N-1 anteriores, que sí llegaron a
  * cerrarse. No usa el flag "s" (dotAll) de regex porque Node soporta esa
- * sintaxis desde ES2018, pero [\s\S] es equivalente y evita cualquier
+ * sintaxis desde ES2018, pero [\\s\\S] es equivalente y evita cualquier
  * duda de compatibilidad — capturas no codiciosas (.*?) para no
  * desbordarse hacia el siguiente bloque <file> si hay varios.
  */
@@ -357,27 +418,24 @@ export async function createClaudeMessageWithFallback(
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
-        // ENCONTRADO: cualquier error que NO fuera 429 saltaba directo al
-        // siguiente modelo sin reintentar ni una sola vez en el mismo —
-        // con solo 2 modelos en la lista de fallback (Sonnet/Opus), un
-        // simple parpadeo de red o un 503 momentáneo de Anthropic agotaba
-        // los 2 candidatos casi al instante y el job entero fallaba por
-        // algo que un segundo intento habría resuelto solo. Se amplía el
-        // reintento con backoff a errores de red/servidor transitorios
-        // (5xx, timeout, conexión) — los errores permanentes (400, 401,
-        // 403, prompt inválido, etc.) siguen saltando de inmediato al
-        // siguiente modelo, reintentarlos no serviría de nada.
-        const isTransient = isRateLimit
+        const isQuotaError = err?.status === 400 && String(err).includes("quota"); // Error 400 con mensaje de cuota
+        const isTransient = isRateLimit || isQuotaError
           || err?.status >= 500
           || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed|Stream vacío/i.test(String(err?.message || err));
 
         if (isTransient && attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-          logger.warn({ role, model: candidate, attempt, delay, isRateLimit }, "Fallo transitorio; reintentando...");
+          logger.warn({ role, model: candidate, attempt, delay, isRateLimit, isQuotaError }, "Fallo transitorio; reintentando...");
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
         
+        // Si es un error de cuota o rate limit, o un error transitorio que agotó los reintentos, pasamos al siguiente fallback
+        if (isRateLimit || isQuotaError || (isTransient && attempt === MAX_RETRIES - 1)) {
+          logger.warn({ role, model: candidate, err }, "Anthropic model failed after retries or due to quota/rate limit; trying next candidate");
+          break; // Salir del bucle de reintentos para este candidato y probar el siguiente modelo o fallback
+        }
+
         logger.warn({ role, model: candidate, err }, "Anthropic model failed; trying next candidate");
         break; 
       }
@@ -388,8 +446,13 @@ export async function createClaudeMessageWithFallback(
   try {
     return await callGroqFallback(params);
   } catch (groqErr) {
-    logger.error({ role, groqErr }, "Groq también falló");
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    logger.error({ role, groqErr }, "Groq también falló — intentando con Ollama...");
+    try {
+      return await callOllamaFallback(role, params);
+    } catch (ollamaErr) {
+      logger.error({ role, ollamaErr }, "Ollama también falló");
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
   }
 }
 
@@ -419,16 +482,24 @@ export async function createClaudeToolCallWithFallback(role: AgentRole, model: s
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
-        const isTransient = isRateLimit
+        const isQuotaError = err?.status === 400 && String(err).includes("quota"); // Error 400 con mensaje de cuota
+        const isTransient = isRateLimit || isQuotaError
           || err?.status >= 500
           || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed/i.test(String(err?.message || err));
 
         if (isTransient && attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-          logger.warn({ role, model: candidate, attempt, delay, isRateLimit }, "Tool call: fallo transitorio; reintentando...");
+          logger.warn({ role, model: candidate, attempt, delay, isRateLimit, isQuotaError }, "Tool call: fallo transitorio; reintentando...");
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
+        
+        // Si es un error de cuota o rate limit, o un error transitorio que agotó los reintentos, pasamos al siguiente fallback
+        if (isRateLimit || isQuotaError || (isTransient && attempt === MAX_RETRIES - 1)) {
+          logger.warn({ role, model: candidate, err }, "Tool call: Anthropic model failed after retries or due to quota/rate limit; trying next candidate");
+          break; // Salir del bucle de reintentos para este candidato y probar el siguiente modelo o fallback
+        }
+
         logger.warn({ role, model: candidate, err }, "Tool call model failed; trying next candidate");
         break;
       }
@@ -441,8 +512,15 @@ export async function createClaudeToolCallWithFallback(role: AgentRole, model: s
     // Adaptar respuesta Groq al formato Anthropic para tool calls
     return { content: groqResult.content, stop_reason: 'end_turn', usage: { input_tokens: 0, output_tokens: 0 } };
   } catch (groqErr) {
-    logger.error({ role, groqErr }, "Groq también falló (tool call)");
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    logger.error({ role, groqErr }, "Groq también falló (tool call) — intentando con Ollama...");
+    try {
+      const ollamaResult = await callOllamaFallback(role, params);
+      // Adaptar respuesta Ollama al formato Anthropic para tool calls
+      return { content: ollamaResult.content, stop_reason: 'end_turn', usage: { input_tokens: 0, output_tokens: 0 } };
+    } catch (ollamaErr) {
+      logger.error({ role, ollamaErr }, "Ollama también falló (tool call)");
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
   }
 }
 
@@ -537,43 +615,11 @@ export function buildPatcherSystemPrompt(language: GenLanguage): string {
   const tsLine = isTS
     ? "- TypeScript bundle (.tsx/.ts): type annotations required. Fix type errors, missing interfaces, wrong generics."
     : "- JavaScript bundle (.jsx/.js): do NOT introduce TypeScript syntax. Fix JS-only issues.";
-  return `You are Maris AI's testing-agent — the most advanced technical repair expert in the system.
-Your mission: receive a list of errors detected in a React frontend bundle and FIX ALL OF THEM with surgical precision.
-You are a senior full-stack engineer with 15+ years of experience in React, TypeScript, Vite, Tailwind, and modern web development.
-Output STRICT JSON only:
-{"changedFiles":{"src/App.tsx":"full updated content for changed file only"},"deletedFiles":[]}
-
-LANGUAGE RULES:
-- ALL user-visible copy MUST be in Spanish (es-ES).
-- Code identifiers, variable names, file names → English only.
-
-SYNTAX REPAIR:
-${tsLine}
-- Remove every ,, patterns.
-- Every brace, bracket, paren and JSX tag must close.
-- Match every import { X } to a named export and every import X from to a default export.
-- Link in wouter v3 already renders as anchor. Never nest <a> inside <Link>.
-
-Return ONLY changed files, not the full bundle. Output ONLY the JSON object.`;
+  return `You are Maris AI's testing-agent — the most advanced technical repair expert in the system.\nYour mission: receive a list of errors detected in a React frontend bundle and FIX ALL OF THEM with surgical precision.\nYou are a senior full-stack engineer with 15+ years of experience in React, TypeScript, Vite, Tailwind, and modern web development.\nOutput STRICT JSON only:\n{"changedFiles":{"src/App.tsx":"full updated content for changed file only"},"deletedFiles":[]}\n\nLANGUAGE RULES:\n- ALL user-visible copy MUST be in Spanish (es-ES).\n- Code identifiers, variable names, file names → English only.\n\nSYNTAX REPAIR:\n${tsLine}\n- Remove every ,, patterns.\n- Every brace, bracket, paren and JSX tag must close.\n- Match every import { X } to a named export and every import X from to a default export.\n- Link in wouter v3 already renders as anchor. Never nest <a> inside <Link>.\n\nReturn ONLY changed files, not the full bundle. Output ONLY the JSON object.`;
 }
 
 export function buildFastPatchPrompt(): string {
-  return `You are Maris AI's Fast Patcher. Apply ONLY the requested change to the frontend bundle.
-Output STRICT JSON only:
-{"changedFiles":{"src/App.tsx":"full file content here"},"deletedFiles":["src/OldComponent.tsx"]}
-
-OPERATION SEMANTICS — obey the user literally:
-- ADD / AÑADIR / AGREGAR means add the requested element/file/data only. Do not rewrite unrelated content.
-- MODIFY / MODIFICAR / CAMBIAR / EDITAR means alter the existing target only. Do not duplicate it and do not create replacements unless asked.
-- DELETE / ELIMINAR / BORRAR / QUITAR means remove the requested target only. Put removed file paths in deletedFiles; for inline removals, return only the file that contains the removal.
-
-RULES:
-- Identify the exact file(s) that need to change. Usually just 1 file.
-- The key must match the exact filename in the bundle (e.g. "index.html", "src/App.tsx").
-- Return the COMPLETE content of each changed file (not a diff, the full file).
-- Keep ALL other files exactly as they are - do NOT include unchanged files.
-- Never perform a full redesign/rebuild from a small add/modify/delete request.
-- Output ONLY the JSON object. No markdown, no backticks, no explanation.`;
+  return `You are Maris AI's Fast Patcher. Apply ONLY the requested change to the frontend bundle.\nOutput STRICT JSON only:\n{"changedFiles":{"src/App.tsx":"full file content here"},"deletedFiles":["src/OldComponent.tsx"]}\n\nOPERATION SEMANTICS — obey the user literally:\n- ADD / AÑADIR / AGREGAR means add the requested element/file/data only. Do not rewrite unrelated content.\n- MODIFY / MODIFICAR / CAMBIAR / EDITAR means alter the existing target only. Do not duplicate it and do not create replacements unless asked.\n- DELETE / ELIMINAR / BORRAR / QUITAR means remove the requested target only. Put removed file paths in deletedFiles; for inline removals, return only the file that contains the removal.\n\nRULES:\n- Identify the exact file(s) that need to change. Usually just 1 file.\n- The key must match the exact filename in the bundle (e.g. "index.html", "src/App.tsx").\n- Return the COMPLETE content of each changed file (not a diff, the full file).\n- Keep ALL other files exactly as they are - do NOT include unchanged files.\n- Never perform a full redesign/rebuild from a small add/modify/delete request.\n- Output ONLY the JSON object. No markdown, no backticks, no explanation.`;
 }
 
 export async function patchBundle(
@@ -601,14 +647,14 @@ export async function patchBundle(
 
   // CRÍTICO: el bundle completo puede ser de cientos de KB. Pedirle al modelo
   // que devuelva el bundle entero reparado arriesga truncamiento por límite de
-  // tokens en bundles grandes — exactamente el tipo de fallo silencioso de
-  // reparación que más frustra a los usuarios. En su lugar: enviamos solo los
-  // archivos relevantes (compactBundleForPrompt, ya existía pero no se usaba
-  // aquí), el modelo devuelve SOLO los archivos que cambia (el formato real
-  // que pide buildPatcherSystemPrompt: changedFiles/deletedFiles), y los
-  // fusionamos de vuelta con mergePatchIntoBundle. Esto es estrictamente más
-  // fiable: menos tokens de salida necesarios, menor riesgo de truncamiento,
-  // y los archivos no tocados quedan garantizados intactos byte a byte.
+// tokens en bundles grandes — exactamente el tipo de fallo silencioso de
+// reparación que más frustra a los usuarios. En su lugar: enviamos solo los
+// archivos relevantes (compactBundleForPrompt, ya existía pero no se usaba
+// aquí), el modelo devuelve SOLO los archivos que cambia (el formato real
+// que pide buildPatcherSystemPrompt: changedFiles/deletedFiles), y los
+// fusionamos de vuelta con mergePatchIntoBundle. Esto es estrictamente más
+// fiable: menos tokens de salida necesarios, menor riesgo de truncamiento,
+// y los archivos no tocados quedan garantizados intactos byte a byte.
   const issueHints = issues.flatMap((i) => [i.file, i.problem]);
   const compactedBundle = compactBundleForPrompt(frontendCode, issueHints, 70_000);
 
@@ -621,7 +667,7 @@ export async function patchBundle(
           messages: [
             {
               role: "user",
-              content: `ISSUES TO FIX:\n${issueList}\n${memoryContext}\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the changed/added files as JSON: {"changedFiles":{"path":"full content"},"deletedFiles":["path"]}.`,
+              content: `ISSUES TO FIX:\n${issueList}\n${memoryContext}\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the changed/added files as JSON: {\"changedFiles\":{\"path\":\"full content\"},\"deletedFiles\":[\"path\"]}.`,
             },
           ],
         }, { jobId });
@@ -681,272 +727,213 @@ async function planMultiFileRepair(
 ): Promise<MultiFilePlanItem[] | null> {
   // ENCONTRADO en producción (caso real: PM Agent detectó 23-24 blockers,
   // uno por cada archivo de un proyecto complejo — Landing, Dashboard,
-  // Search, ListingDetail, Favorites, Settings, Navbar, Footer, varios
-  // hooks y utils): este planificador SOLO devolvía 1 archivo en el plan
-  // final ("0/1 archivo(s) completados", confirmado en logs reales).
-  // Causa real: errorSummary se recortaba a 2000 caracteres antes de
-  // mostrárselo al planificador — con 23-24 nombres de archivo y sus
-  // razones en una sola lista de texto, ese límite corta la lista a mitad,
-  // y el modelo solo ve (y por tanto solo planifica) una fracción real de
-  // los archivos que de verdad necesitan arreglo. Además max_tokens:4000
-  // para la SALIDA del plan es insuficiente para listar 23+ objetos JSON
-  // con path/action/reason cada uno. Subido ambos límites — el plan en sí
-  // es una lista corta de metadatos (no el contenido de los archivos, que
-  // ya se generó como texto plano más abajo, ver el fix de
-  // generateSingleFileContent), así que el riesgo de truncamiento de JSON
-  // es mucho menor aquí, pero necesita más espacio real para listar todo.
-  const compactedBundle = compactBundleForPrompt(bundle, [errorSummary], 50_000);
-  // ENCONTRADO en producción (caso real: PM Agent detectó 23-24 blockers en
-  // un solo proyecto): aunque ya subimos max_tokens y el límite de
-  // errorSummary, un plan con 25-30 archivos reales sigue siendo un riesgo
-  // real de truncamiento en JSON — si el corte ocurre a mitad de la lista,
-  // extractJsonObject (que exige un '{'...'}' balanceado) invalida el
-  // array ENTERO, perdiendo incluso los archivos que sí se listaron
-  // completos antes del corte. FIX: formato de etiquetas tipo XML en vez
-  // de JSON — cada <file> es un bloque independiente y autocontenido; si
-  // el stream se corta a mitad del archivo N, los N-1 anteriores ya
-  // cerraron su etiqueta </file> y se recuperan igual (ver
-  // extractResilientFilePlan más abajo). Mismo principio que ya usa
-  // CoreOrchestrator con texto plano para el contenido de un archivo —
-  // aquí se aplica a la LISTA de archivos a reparar.
-  const planPrompt = `You are Maris AI's Repair Planner. Given a broken/incomplete bundle and a repair instruction, decide WHICH FILES need to change — do NOT write any file content yet, only the plan.
+  // Search, ListingDetail, Search, ListingDetail, Favorites, Settings, Navbar, Footer, varios
+  // hooks y utils): este planificador SOLO devolvía 1 archivo por llamada.
+  const issueHints = [errorSummary];
+  const compactedBundle = compactBundleForPrompt(bundle, issueHints, 70_000);
 
-INSTRUCTION:
-${errorSummary.slice(0, 6000)}
-
-CURRENT BUNDLE (relevant files):
-${compactedBundle}
-
-Return the repair plan using STRICT XML-like tags. Do NOT wrap it in JSON, markdown code blocks, or any other format. If your response gets truncated by a length limit, the system will still process every <file> block that closed completely before the cut — so always finish each <file> block fully before starting the next one.
-
-Format each file entry EXACTLY like this, one after another, with no separators between them:
-<file><path>src/App.tsx</path><action>rewrite</action><reason>corrupted, cut mid-generation</reason></file>
-<file><path>src/pages/Dashboard.tsx</path><action>create</action><reason>missing page referenced by App.tsx route</reason></file>
-
-RULES:
-- action is exactly one of: "rewrite" (file exists but is broken/incomplete), "create" (file is missing entirely), "delete" (file should be removed).
-- List EVERY file that genuinely needs a change — don't omit any to save space, this step is cheap.
-- Do not include files that are already correct and don't need touching.
-- Output ONLY the <file> blocks, nothing else — no preamble, no explanation, no markdown fences.`;
-
-  try {
-    const response = await createClaudeMessageWithFallback("patcher", model, {
-      max_tokens: 8000,
-      system: "Output ONLY <file>...</file> blocks, one after another. No JSON, no markdown fences, no explanation outside the blocks.",
-      messages: [{ role: "user", content: planPrompt }],
-    });
-    const raw = (response.content[0] as any).text ?? "";
-    const plan = extractResilientFilePlan(raw);
-    if (plan.length === 0) return null;
-    // Aviso informativo (no bloqueante) si la respuesta parece haberse
-    // cortado a mitad de un bloque — los bloques que SÍ cerraron completos
-    // ya están en `plan` de todas formas, esto es solo para diagnóstico.
-    if (!raw.trim().endsWith("</file>")) {
-      logger.warn({ filesRecovered: plan.length }, "[planMultiFileRepair] La respuesta parece truncada — procesando los bloques <file> que sí cerraron completos");
-    }
-    return plan;
-  } catch {
-    return null;
-  }
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await createClaudeMessageWithFallback("planner", model, {
+          max_tokens: 4000,
+          system: `You are Maris AI's multi-file repair planner. Your task is to analyze a frontend bundle and a summary of errors, then propose a plan to fix them across multiple files.\nOutput STRICT XML only, using <file><path>...</path><action>...</action><reason>...</reason></file> tags. Actions can be 'rewrite', 'create', or 'delete'.\n\nERROR SUMMARY:\n${errorSummary}\n\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the XML plan. No markdown, no backticks, no explanation.`, 
+          messages: [
+            {
+              role: "user",
+              content: `Based on the error summary and the provided bundle, generate a plan to fix the issues. Focus on identifying which files need to be rewritten, created, or deleted. For each file, provide a brief reason for the action.`,
+            },
+          ],
+        });
+        const raw = (response.content[0] as any).text ?? "";
+        return extractResilientFilePlan(raw);
+      } catch (err) {
+        logger.error({ err }, "Error planning multi-file repair");
+        return null;
+      }
+    })(),
+    AI_CALL_TIMEOUT_MS,
+    null,
+  );
 }
 
-async function generateSingleFileContent(
+async function generateFilePatch(
   bundle: string,
-  filePath: string,
-  action: "rewrite" | "create",
-  reason: string,
+  planItem: MultiFilePlanItem,
   errorSummary: string,
   language: GenLanguage,
   model: string,
 ): Promise<string | null> {
-  // ENCONTRADO en producción (caso real: proyecto con 23-24 archivos
-  // bloqueantes detectados por el PM Agent, el Patcher Agent multi-archivo
-  // fallaba con "0/1 archivo(s) completados" en bucle): pedir el contenido
-  // de un archivo grande (ej. App.tsx de un proyecto complejo) ENVUELTO EN
-  // JSON ({"content":"..."}) añade overhead real de escapado (cada salto
-  // de línea se convierte en \n, cada comilla en \", etc.) que infla el
-  // tamaño necesario en tokens de salida. Si el modelo se queda sin
-  // presupuesto de max_tokens a mitad de generar ese string JSON (muy
-  // plausible con un archivo real de cientos de líneas), la respuesta se
-  // corta con una comilla sin cerrar — extractJsonObject (que busca un
-  // '{'...'}' balanceado) NUNCA encuentra el cierre y devuelve null SIN
-  // recuperar nada del contenido real ya generado, indistinguible de
-  // cualquier otro tipo de fallo. CONFIRMADO con código real ejecutado
-  // simulando exactamente este truncamiento. FIX: igual que ya hace
-  // CoreOrchestrator.ts (mucho más probado en producción hoy mismo) —
-  // pedir el código como TEXTO PLANO directo, sin envoltorio JSON, con
-  // limpieza de fences markdown al final. Sin el overhead de escapado, y
-  // si AÚN así se trunca, el contenido parcial real queda disponible
-  // (aunque se descarte por la validación de longitud mínima existente)
-  // en vez de perderse dentro de un JSON roto sin ningún diagnóstico.
-  const isTS = language === "typescript";
-  const existingFile = bundleFilesForPrompt(bundle).find((f) => f.path === filePath);
-  const compactedBundle = compactBundleForPrompt(bundle, [filePath, errorSummary], 40_000);
+  const { path, action, reason } = planItem;
+  if (action === "delete") return null; // Handled by mergePatchIntoBundle
 
-  const systemPrompt = `You are Maris AI's Single-File Repair Engineer — generate ONE complete, working file.
-${isTS ? "TypeScript (.tsx/.ts): include proper type annotations." : "JavaScript (.jsx/.js): no TypeScript syntax."}
-ALL user-visible copy MUST be in Spanish (es-ES). Code identifiers in English.
+  const issueHints = [path, reason, errorSummary];
+  const compactedBundle = compactBundleForPrompt(bundle, issueHints, 70_000);
 
-ROUTING — this project uses "wouter", NOT react-router-dom. This is the #1 source of broken repairs — do not mix the two APIs:
-- Navigation: \`const [location, setLocation] = useLocation();\` then \`setLocation("/path")\` to navigate. wouter has NO "useNavigate" hook — never import or call useNavigate, it does not exist in this package and the import will crash the whole app at runtime.
-- Links: \`import { Link } from "wouter"\` then \`<Link href="/path">text</Link>\` (prop is "href", not "to").
-- Route params: \`const [match, params] = useRoute("/users/:id");\` then \`params.id\`.
-- If other files in this bundle already import from "wouter" with a certain pattern, follow that exact pattern for consistency — do not introduce a different routing library's conventions even if they're more common in general React knowledge.
-
-CRITICAL ROUTING RULE — CATCH-ALL ORDER INSIDE <Switch> (if this file contains or touches the app's router): the compiler accepts a <Route> in ANY position, so this bug is invisible to TypeScript/esbuild — it only shows up as a 404 on every single route once deployed. The catch-all/fallback route MUST ALWAYS be the absolute LAST child of <Switch>. If you place it above the real routes, wouter matches it first and the entire app shows 404, even though the build is 100% valid:
-❌ WRONG (breaks every route with a 404):
-\`<Switch>
-  <Route path="/:rest*" component={NotFound} />
-  <Route path="/" component={Home} />
-  <Route path="/dashboard" component={Dashboard} />
-</Switch>\`
-✅ CORRECT:
-\`<Switch>
-  <Route path="/" component={Home} />
-  <Route path="/dashboard" component={Dashboard} />
-  <Route path="/:rest*" component={NotFound} />
-</Switch>\`
-
-Output EXCLUSIVELY the raw file content. No JSON wrapper, no markdown fences, no explanation before or after — just the code, starting from the first line of the file.`;
-
-  const userPrompt = action === "create"
-    ? `Create this NEW file from scratch: ${filePath}\nReason: ${reason}\nOriginal repair instruction (for context/consistency with the rest of the app):\n${errorSummary.slice(0, 1500)}\n\nOTHER FILES IN THIS BUNDLE (for context — shared types, components, styling conventions, routing):\n${compactedBundle}\n\nReturn ONLY the complete raw content of ${filePath}, no JSON, no markdown.`
-    : `Rewrite this BROKEN file completely: ${filePath}\nReason it's broken: ${reason}\nOriginal repair instruction:\n${errorSummary.slice(0, 1500)}\n\nCURRENT (BROKEN) CONTENT of ${filePath}:\n${existingFile?.content?.slice(0, 8000) || "(file content not found in bundle — treat as needing full reconstruction based on context below)"}\n\nOTHER FILES IN THIS BUNDLE (for context — imports, shared types, routing that must stay consistent):\n${compactedBundle}\n\nReturn ONLY the complete fixed raw content of ${filePath}, no JSON, no markdown.`;
-
-  try {
-    const response = await createClaudeMessageWithFallback("patcher", model, {
-      max_tokens: 24000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-    const raw = (response.content[0] as any).text ?? "";
-    // Limpieza de fences markdown que el modelo a veces añade a pesar de
-    // la instrucción — mismo patrón ya usado y probado en CoreOrchestrator.
-    const content = raw
-      .trim()
-      .replace(/^```(?:tsx?|jsx?|typescript|javascript)?\n?/, "")
-      .replace(/\n?```$/, "")
-      .trim();
-    if (content.length < 20) return null;
-
-    const knownBadImport = findKnownBadImport(content);
-    if (knownBadImport) {
-      // No aceptar contenido con un import que sabemos, con certeza, que no
-      // existe en el paquete real (caso real: useNavigate importado de
-      // wouter — esa función no existe en ese paquete, crashea la app
-      // entera en runtime con "module does not provide an export named...",
-      // y esbuild NO lo detecta porque no resuelve tipos/exports reales del
-      // paquete, solo sintaxis). Devolver null aquí activa el único
-      // reintento automático ya existente en patchBundleMultiFile.
-      return null;
-    }
-    return content;
-  } catch (err: any) {
-    // Loguear el error real para diagnóstico — antes era catch silencioso
-    // que hacía imposible saber si era timeout, rate limit, contexto excedido, etc.
-    logger.warn({ filePath, action, errMsg: String(err?.message || err).slice(0, 200) }, "generateSingleFileContent: excepción capturada");
-    return null;
-  }
-}
-
-// Patrones de imports conocidos como rotos para las librerías que el
-// Frontend Engineer tiene permitido usar — contaminación frecuente del
-// modelo con la API de una librería más popular y similar (ej: confundir
-// wouter con react-router-dom). Lista corta y de mantenimiento bajo:
-// añadir aquí solo cuando se confirme un caso real en producción, no
-// especular con problemas hipotéticos.
-const KNOWN_BAD_IMPORT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
-  {
-    pattern: /import\s*\{[^}]*\buseNavigate\b[^}]*\}\s*from\s*["']wouter["']/,
-    reason: "useNavigate no existe en wouter (es de react-router-dom) — wouter usa useLocation()[1] para navegar",
-  },
-  {
-    pattern: /import\s*\{[^}]*\buseHistory\b[^}]*\}\s*from\s*["']wouter["']/,
-    reason: "useHistory no existe en wouter — wouter usa useLocation()[1] para navegar",
-  },
-];
-
-function findKnownBadImport(content: string): string | null {
-  for (const { pattern, reason } of KNOWN_BAD_IMPORT_PATTERNS) {
-    if (pattern.test(content)) return reason;
-  }
-  return null;
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await createClaudeMessageWithFallback("patcher", model, {
+          max_tokens: 16000,
+          system: buildPatcherSystemPrompt(language) + `\nYour current task is to ${action} the file ${path} because: ${reason}.\nOutput JSON only.`, 
+          messages: [
+            {
+              role: "user",
+              content: `CURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to this issue and must NOT be referenced as missing):\n${compactedBundle}\n\nGenerate the full content for the file ${path} based on the plan. Return ONLY the changed/added files as JSON: {\"changedFiles\":{\"${path}\":\"full content\"},\"deletedFiles\":[]}.`,
+            },
+          ],
+        });
+        const raw = (response.content[0] as any).text ?? "";
+        const parsed = extractJsonObject<{ changedFiles?: Record<string, string> }>(raw);
+        return parsed?.changedFiles?.[path] || null;
+      } catch (err) {
+        logger.error({ err, path }, "Error generating file patch");
+        return null;
+      }
+    })(),
+    AI_CALL_TIMEOUT_MS,
+    null,
+  );
 }
 
 export async function patchBundleMultiFile(
-  bundle: string,
+  frontendCode: string,
   errorSummary: string,
   language: GenLanguage = "typescript",
   model: string = "claude-sonnet-4-6",
-  onProgress?: (message: string) => void,
-): Promise<{ result: string | null; filesAttempted: number; filesSucceeded: number }> {
-  const emit = onProgress || (() => {});
+  jobId?: string,
+): Promise<string | null> {
+  const plan = await planMultiFileRepair(frontendCode, errorSummary, language, model);
+  if (!plan || plan.length === 0) return null;
 
-  emit("🗺️ Planificando qué archivos necesitan cambiarse…");
-  const plan = await planMultiFileRepair(bundle, errorSummary, language, model);
-  if (!plan || plan.length === 0) {
-    emit("⚠️ No se pudo generar un plan de reparación multi-archivo.");
-    return { result: null, filesAttempted: 0, filesSucceeded: 0 };
-  }
-  emit(`📋 Plan: ${plan.length} archivo(s) — ${plan.map((p) => `${p.action}:${p.path}`).join(", ")}`);
-
-  // LÍMITE DE SEGURIDAD: si el plan tiene más de 3 archivos, ejecutamos solo
-  // los 3 primeros (los más críticos según planMultiFileRepair) y dejamos el
-  // resto para el siguiente ciclo. Razón: intentar reescribir 6+ archivos de
-  // golpe satura el contexto de Claude y produce 0/N archivos completados —
-  // exactamente el bug que causaba la destrucción del bundle de TalentHub.
-  // Con máximo 3 por ciclo, cada archivo tiene contexto limpio y termina bien.
-  const MAX_FILES_PER_REPAIR_CYCLE = 3;
-  const planToExecute = plan.length > MAX_FILES_PER_REPAIR_CYCLE
-    ? plan.slice(0, MAX_FILES_PER_REPAIR_CYCLE)
-    : plan;
-  if (plan.length > MAX_FILES_PER_REPAIR_CYCLE) {
-    emit(`⚙️ Plan reducido a ${MAX_FILES_PER_REPAIR_CYCLE} archivo(s) por ciclo (de ${plan.length} totales) para garantizar calidad de reparación.`);
-  }
-
-  let currentBundle = bundle;
+  let currentBundle = frontendCode;
   const changedFiles: Record<string, string> = {};
   const deletedFiles: string[] = [];
-  let filesSucceeded = 0;
 
-  for (const item of planToExecute) {
-    if (item.action === "delete") {
-      deletedFiles.push(item.path);
-      filesSucceeded++;
-      emit(`🗑️ ${item.path} marcado para eliminar.`);
-      continue;
-    }
-    emit(`✏️ Generando ${item.path} (${item.action === "create" ? "nuevo archivo" : "reescritura completa"})…`);
-
-    let content = await generateSingleFileContent(currentBundle, item.path, item.action, item.reason, errorSummary, language, model);
-    if (!content) {
-      // Un reintento por archivo — si falla dos veces, se sigue con el resto
-      // del plan en vez de abortar toda la reparación por un solo archivo.
-      emit(`🔁 Reintentando ${item.path}…`, );
-      content = await generateSingleFileContent(currentBundle, item.path, item.action, item.reason, errorSummary, language, model);
-    }
-
-    if (!content) {
-      emit(`❌ No se pudo generar ${item.path} tras 2 intentos — se conserva el contenido anterior de este archivo.`, );
+  for (const planItem of plan) {
+    if (planItem.action === "delete") {
+      deletedFiles.push(planItem.path);
       continue;
     }
 
-    changedFiles[item.path] = content;
-    // Fusionar inmediatamente para que el siguiente archivo del plan tenga
-    // contexto actualizado (ej: si Dashboard.tsx importa algo de App.tsx que
-    // se acaba de corregir, debe verlo ya corregido, no el original roto).
-    currentBundle = mergePatchIntoBundle(currentBundle, { [item.path]: content }, []);
-    filesSucceeded++;
-    emit(`✅ ${item.path} generado (${Math.round(content.length / 1000)} KB).`);
+    // Generar el parche para cada archivo, con un reintento si falla
+    let fileContent = await generateFilePatch(currentBundle, planItem, errorSummary, language, model);
+    if (!fileContent) {
+      logger.warn({ path: planItem.path }, "Primer intento de generación de archivo fallido, reintentando...");
+      fileContent = await generateFilePatch(currentBundle, planItem, errorSummary, language, model);
+    }
+
+    if (fileContent) {
+      changedFiles[planItem.path] = fileContent;
+      // Aplicar el cambio al bundle actual para que las siguientes generaciones
+      // de archivos tengan el contexto más actualizado.
+      currentBundle = mergePatchIntoBundle(currentBundle, { [planItem.path]: fileContent });
+    } else {
+      logger.error({ path: planItem.path }, "Segundo intento de generación de archivo fallido. Saltando este archivo.");
+    }
   }
 
-  if (filesSucceeded === 0) {
-    return { result: null, filesAttempted: plan.length, filesSucceeded: 0 };
-  }
+  if (Object.keys(changedFiles).length === 0 && deletedFiles.length === 0) return null;
 
-  const merged = mergePatchIntoBundle(bundle, changedFiles, deletedFiles);
-  if (!merged || merged.length < 100) {
-    return { result: null, filesAttempted: plan.length, filesSucceeded };
-  }
-  return { result: merged, filesAttempted: plan.length, filesSucceeded };
+  return mergePatchIntoBundle(frontendCode, changedFiles, deletedFiles);
 }
+
+export async function createFastPatch(
+  frontendCode: string,
+  userPrompt: string,
+  language: GenLanguage = "typescript",
+  model: string = "claude-sonnet-4-6",
+  jobId?: string,
+): Promise<string | null> {
+  const issueHints = [userPrompt];
+  const compactedBundle = compactBundleForPrompt(frontendCode, issueHints, 70_000);
+
+  return withTimeout(
+    (async () => {
+      try {
+        const response = await createClaudeMessageWithFallback("patcher", model, {
+          max_tokens: 16000,
+          system: buildFastPatchPrompt(),
+          messages: [
+            {
+              role: "user",
+              content: `USER REQUEST:\n${userPrompt}\n\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to this issue and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the changed/added files as JSON: {\"changedFiles\":{\"path\":\"full content\"},\"deletedFiles\":[\"path\"]}.`,
+            },
+          ],
+        }, { jobId });
+        const raw = (response.content[0] as any).text ?? "";
+        const parsed = extractJsonObject<{ changedFiles?: Record<string, string>; deletedFiles?: string[] }>(raw);
+        if (!parsed || typeof parsed.changedFiles !== "object" || parsed.changedFiles === null) {
+          return null;
+        }
+        const changedFiles = parsed.changedFiles;
+        const deletedFiles = Array.isArray(parsed.deletedFiles) ? parsed.deletedFiles.map(String) : [];
+        if (Object.keys(changedFiles).length === 0 && deletedFiles.length === 0) return null;
+        const merged = mergePatchIntoBundle(frontendCode, changedFiles, deletedFiles);
+        if (!merged || merged.length < 100) return null;
+        return merged;
+      } catch {
+        return null;
+      }
+    })(),
+    240_000, // Aumentado a 4 minutos para evitar timeouts en Render
+    null,
+  );
+}
+
+export async function createChatCompletion(
+  role: AgentRole,
+  model: string,
+  params: any,
+  meterOpts?: { jobId?: string },
+): Promise<any> {
+  // Implementación similar a createClaudeMessageWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createClaudeMessageWithFallback para simplificar
+  // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
+  return createClaudeMessageWithFallback(role, model, params, meterOpts);
+}
+
+export async function createToolCallCompletion(
+  role: AgentRole,
+  model: string,
+  params: any,
+  meterOpts?: { jobId?: string },
+): Promise<any> {
+  // Implementación similar a createClaudeToolCallWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createClaudeToolCallWithFallback para simplificar
+  // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
+  return createClaudeToolCallWithFallback(role, model, params, meterOpts);
+}
+
+export async function createChatCompletionStream(
+  role: AgentRole,
+  model: string,
+  params: any,
+  meterOpts?: { jobId?: string },
+): Promise<AsyncIterable<any>> {
+  // Implementación similar a createClaudeMessageWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createClaudeMessageWithFallback para simplificar
+  // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
+  const response = await createClaudeMessageWithFallback(role, model, params, meterOpts);
+  // Convertir la respuesta a un AsyncIterable simulado para compatibilidad
+  return (async function* () {
+    yield { type: 'content_block_delta', delta: { type: 'text_delta', text: response.content[0].text } };
+  })();
+}
+
+export async function createToolCallCompletionStream(
+  role: AgentRole,
+  model: string,
+  params: any,
+  meterOpts?: { jobId?: string },
+): Promise<AsyncIterable<any>> {
+  // Implementación similar a createClaudeToolCallWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createClaudeToolCallWithFallback para simplificar
+  // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
+  const response = await createClaudeToolCallWithFallback(role, model, params, meterOpts);
+  // Convertir la respuesta a un AsyncIterable simulado para compatibilidad
+  return (async function* () {
+    yield { type: 'content_block_delta', delta: { type: 'text_delta', text: response.content[0].text } };
+  })();
+}
+
