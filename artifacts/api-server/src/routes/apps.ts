@@ -5,25 +5,34 @@
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
-// Cliente OpenAI-compatible — CONEXIÓN EXCLUSIVA A ZOCO IA.
-// Ya no apunta a api.openai.com: usa el endpoint /v1/chat/completions del
-// backend de Zoco IA firmado con la API Key de la organización (sk-zoco-...).
-// Lazy: el error se difiere al primer uso para no romper el arranque.
+// Cliente OpenAI-compatible — MOTOR 100% LOCAL (OLLAMA).
+// JAMÁS apunta a api.openai.com. Conecta vía Zoco IA (que reenvía a su
+// servidor de Ollama local) o directamente al endpoint OpenAI-compatible de
+// Ollama con OLLAMA_BASE_URL + apiKey "ollama" (Ollama acepta cualquier
+// string). Lazy: el error se difiere al primer uso para no romper el arranque.
 let _openaiApps: OpenAI | null = null;
 function getOpenAIApps(): OpenAI {
   if (!_openaiApps) {
     const zocoKey = process.env.ZOCOIA_API_KEY;
     const zocoUrl = process.env.ZOCOIA_API_URL;
-    if (!zocoKey || !zocoKey.startsWith("sk-zoco-") || !zocoUrl) {
+    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
+    if (zocoUrl && zocoKey && zocoKey.startsWith("sk-zoco-")) {
+      _openaiApps = new OpenAI({
+        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
+        apiKey: zocoKey,
+      });
+    } else if (ollamaUrl) {
+      _openaiApps = new OpenAI({
+        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
+        apiKey: process.env.OLLAMA_API_KEY || "ollama",
+      });
+    } else {
       throw new Error(
-        "Conexión a Zoco IA no configurada: define ZOCOIA_API_URL y ZOCOIA_API_KEY (sk-zoco-...) en las variables de entorno. " +
-          "Las claves nativas de OpenAI ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+        "Motor local no configurado: define ZOCOIA_API_URL + ZOCOIA_API_KEY (sk-zoco-...) para conectar vía Zoco IA, " +
+          "o OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) para conectar directamente a Ollama. " +
+          "Las APIs en la nube (Groq/Anthropic/OpenAI) están deshabilitadas por decisión de infraestructura.",
       );
     }
-    _openaiApps = new OpenAI({
-      baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
-      apiKey: zocoKey,
-    });
   }
   return _openaiApps;
 }

@@ -18,21 +18,33 @@ import { connectDB } from "./db";
 import { logger } from "./logger";
 import OpenAI from "openai";
 
-// Cliente de embeddings — CONEXIÓN EXCLUSIVA A ZOCO IA (endpoint OpenAI-compatible).
+// Cliente de embeddings — MOTOR 100% LOCAL (vía Zoco IA o directamente el
+// endpoint OpenAI-compatible de Ollama). JAMÁS apunta a api.openai.com.
 // Lazy: evita crash al arrancar si la configuración no está puesta todavía.
 let _openaiCache: OpenAI | null = null;
 function getOpenAICache(): OpenAI {
   if (!_openaiCache) {
     const zocoUrl = process.env.ZOCOIA_API_URL;
-    _openaiCache = new OpenAI({
-      baseURL: zocoUrl ? `${zocoUrl.replace(/\/+$/, "")}/v1` : undefined,
-      apiKey: process.env.ZOCOIA_API_KEY || "dummy",
-    });
+    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
+    if (zocoUrl) {
+      _openaiCache = new OpenAI({
+        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
+        apiKey: process.env.ZOCOIA_API_KEY || "dummy",
+      });
+    } else if (ollamaUrl) {
+      _openaiCache = new OpenAI({
+        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
+        apiKey: process.env.OLLAMA_API_KEY || "ollama",
+      });
+    } else {
+      throw new Error("Motor local no configurado para embeddings: define ZOCOIA_API_URL u OLLAMA_BASE_URL");
+    }
   }
   return _openaiCache;
 }
 
-const EMBED_MODEL = "text-embedding-3-small";
+// Modelo de embeddings del servidor local (en Ollama: nomic-embed-text, etc.)
+const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text";
 const EMBED_DIMS = 1536;
 const DEDUP_THRESHOLD = 0.93;
 const RECALL_THRESHOLD = 0.6;

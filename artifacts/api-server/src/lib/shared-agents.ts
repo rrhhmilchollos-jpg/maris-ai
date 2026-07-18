@@ -3,31 +3,39 @@ import OpenAI from "openai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
 
-// ─── Canal secundario Zoco IA (endpoint OpenAI-compatible /v1/chat/completions) ───
-// CONEXIÓN EXCLUSIVA A ZOCO IA: este canal ya NO apunta a api.groq.com ni a
-// ningún proveedor externo. Usa el endpoint OpenAI-compatible del backend de
-// Zoco IA con la misma API Key sk-zoco- del canal principal. Sirve como vía
-// alternativa del mismo motor cuando el canal /v1/messages se degrada.
+// ─── INFRAESTRUCTURA 100% LOCAL (OLLAMA) ─────────────────────────────────
+// DECISIÓN DE INFRAESTRUCTURA (orden expresa del propietario): NO se usa Groq
+// ni ninguna otra API en la nube. Todo el flujo multi-agente nace y muere en
+// el servidor local de Ollama. Hay dos formas de conectar, ambas locales:
+//   1) VÍA ZOCO IA (recomendada): ZOCOIA_API_URL + ZOCOIA_API_KEY — el backend
+//      de Zoco IA reenvía cada llamada a SU servidor de Ollama local (créditos,
+//      agentes y logs incluidos).
+//   2) OLLAMA DIRECTO: OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) con
+//      apiKey "ollama" — conexión directa al endpoint OpenAI-compatible.
+// El canal secundario ya NO es un proveedor distinto: es un SEGUNDO INTENTO
+// no-streaming contra el mismo motor local (útil cuando el streaming se corta).
 let _groq: OpenAI | null = null;
 function getGroq(): OpenAI | null {
-  const apiKey = process.env.ZOCOIA_API_KEY;
-  const baseUrl = process.env.ZOCOIA_API_URL;
-  if (!apiKey || !baseUrl) return null;
-  if (!apiKey.startsWith('sk-zoco-')) return null; // solo claves de Zoco IA
+  const zocoKey = process.env.ZOCOIA_API_KEY;
+  const zocoUrl = process.env.ZOCOIA_API_URL;
+  const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
   if (!_groq) {
-    _groq = new OpenAI({
-      // El backend de Zoco IA expone POST /v1/chat/completions (formato OpenAI).
-      baseURL: `${baseUrl.replace(/\/+$/, '')}/v1`,
-      apiKey,
-    });
+    if (zocoUrl && zocoKey && zocoKey.startsWith('sk-zoco-')) {
+      _groq = new OpenAI({ baseURL: `${zocoUrl.replace(/\/+$/, '')}/v1`, apiKey: zocoKey });
+    } else if (ollamaUrl) {
+      // Ollama acepta cualquier string como apiKey en su endpoint /v1.
+      _groq = new OpenAI({ baseURL: `${ollamaUrl.replace(/\/+$/, '')}/v1`, apiKey: process.env.OLLAMA_API_KEY || 'ollama' });
+    } else {
+      return null;
+    }
   }
   return _groq;
 }
 async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {
   const groq = getGroq();
-  if (!groq) throw new Error('Canal secundario Zoco IA no configurado: añade ZOCOIA_API_URL y ZOCOIA_API_KEY (sk-zoco-...) a las variables de entorno');
-  const groqModel = 'zoco-plus';
-  logger.warn({ model: groqModel }, '⚡ Usando el canal secundario de Zoco IA (/v1/chat/completions)');
+  if (!groq) throw new Error('Motor local no configurado: añade ZOCOIA_API_URL + ZOCOIA_API_KEY (vía Zoco IA) o OLLAMA_BASE_URL (Ollama directo) a las variables de entorno');
+  const groqModel = process.env.OLLAMA_MODEL_PLUS || 'zoco-plus';
+  logger.warn({ model: groqModel }, '⚡ Segundo intento no-streaming contra el mismo motor local (Ollama)');
 
   const systemMsg = params.system
     ? [{ role: 'system' as const, content: typeof params.system === 'string' ? params.system : (params.system as any[]).map((b: any) => b.text || '').join('\n') }]
@@ -57,15 +65,16 @@ async function callGroqFallback(params: any): Promise<{ content: Array<{ type: s
   return { content: [{ type: 'text', text }] };
 }
 
-// ─── Cliente Ollama (fallback cuando Claude/Groq fallan) ────────────
+// ─── Cliente Ollama directo (último intento, MISMO servidor local) ────────
 async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
-  const ollamaUrl = process.env.OLLAMA_URL;
+  const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
   if (!ollamaUrl) {
-    throw new Error('Ollama URL no configurada: añade OLLAMA_URL a las variables de entorno');
+    throw new Error('Ollama URL no configurada: añade OLLAMA_BASE_URL a las variables de entorno');
   }
 
-  const ollamaModel = 'zoco-sonnet-5';
-  logger.warn({ role, model: ollamaModel }, '⚡ Usando Ollama como fallback (Claude/Groq sin créditos o caídos)');
+  // Nombre EXACTO del modelo en el servidor de Ollama (ollama list).
+  const ollamaModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco-Plus';
+  logger.warn({ role, model: ollamaModel }, '⚡ Último intento: llamada directa al API nativa de Ollama (/api/chat)');
 
   const messages = (params.messages || []).map((m: any) => ({
     role: m.role,
@@ -118,16 +127,34 @@ async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
   }
 }
 
-// Cliente OpenAI-compatible — CONEXIÓN EXCLUSIVA A ZOCO IA.
-// Lazy: evita crash si la configuración no está puesta al arrancar.
+// Cliente OpenAI-compatible — CANAL PRINCIPAL, 100% LOCAL.
+// Conecta vía Zoco IA (que reenvía a su Ollama) o directamente al endpoint
+// OpenAI-compatible de Ollama. JAMÁS apunta a api.openai.com: si no hay
+// configuración local, el error se lanza en el primer uso (lazy) con un
+// mensaje claro en vez de fugar peticiones a la nube.
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) {
     const zocoUrl = process.env.ZOCOIA_API_URL;
-    _openai = new OpenAI({
-      baseURL: zocoUrl ? `${zocoUrl.replace(/\/+$/, "")}/v1` : undefined,
-      apiKey: process.env.ZOCOIA_API_KEY || "dummy",
-    });
+    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
+    if (zocoUrl) {
+      _openai = new OpenAI({
+        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
+        apiKey: process.env.ZOCOIA_API_KEY || "dummy",
+      });
+    } else if (ollamaUrl) {
+      // Ollama acepta cualquier string como apiKey en su endpoint /v1.
+      _openai = new OpenAI({
+        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
+        apiKey: process.env.OLLAMA_API_KEY || "ollama",
+      });
+    } else {
+      throw new Error(
+        "Motor local no configurado: define ZOCOIA_API_URL (+ ZOCOIA_API_KEY) para conectar vía Zoco IA, " +
+          "o OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) para conectar directamente a Ollama. " +
+          "Las APIs en la nube (Groq/Anthropic/OpenAI) están deshabilitadas por decisión de infraestructura.",
+      );
+    }
   }
   return _openai;
 }
