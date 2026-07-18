@@ -21,7 +21,7 @@
  * @see agentMemory.ts para la memoria persistente
  */
 
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+// MODO OPENAI/DEEPSEEK: SDK de Anthropic eliminado — todo viaja por el cliente OpenAI de Zoco IA.
 import { logger } from "./logger";
 import {
   detectIntegrations,

@@ -1,4 +1,4 @@
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeMessageWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { analyzeSpanishIntent, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
@@ -181,15 +181,16 @@ export async function planExecution(
   }
 
   try {
+    // MODO OPENAI/DEEPSEEK: viaja por el cliente OpenAI de Zoco IA (formato
+    // convertido y razonamiento <think> limpiado automáticamente).
     const response = await Promise.race([
-      anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+      createClaudeMessageWithFallback("planner", "zoco-plus", {
         max_tokens: 200,
         system: PLANNER_SYSTEM,
         messages: [{ role: "user", content: `App existente: ${options.hasExistingApp ? "sí" : "no"}\nPetición: ${prompt.slice(0, 1500)}` }],
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("planner timeout")), 8000),
+        setTimeout(() => reject(new Error("planner timeout")), 30000),
       ),
     ]);
     const text = (response as any).content?.[0]?.text ?? "";

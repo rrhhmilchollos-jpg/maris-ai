@@ -14,7 +14,7 @@
  * `execute` bucket maps to ENGINE_EXEC.
  */
 
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { createClaudeMessageWithFallback } from "./shared-agents";
 import type { Logger } from "pino";
 import { analyzeSpanishIntent, firstMatchedTerm, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
@@ -425,15 +425,14 @@ export async function classifyChatIntent(
   const timeoutHandle = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const userContent = buildUserMessage(ctx);
-    const result: any = await (anthropic.messages.create as any)(
-      {
-        model: "claude-sonnet-4-6",
-        max_tokens: 400,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userContent }],
-      },
-      { signal: controller.signal },
-    );
+    // MODO OPENAI/DEEPSEEK: la llamada viaja por el cliente OpenAI de Zoco IA;
+    // createClaudeMessageWithFallback convierte el formato, inyecta la regla
+    // de formato seguro y limpia el razonamiento <think> de DeepSeek-R1.
+    const result: any = await createClaudeMessageWithFallback("classifier", "zoco-plus", {
+      max_tokens: 400,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userContent }],
+    });
     const blocks: any[] = result?.content ?? [];
     const text = blocks
       .filter((b) => b?.type === "text" && typeof b?.text === "string")

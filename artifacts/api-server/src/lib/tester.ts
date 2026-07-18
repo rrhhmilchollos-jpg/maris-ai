@@ -1,4 +1,4 @@
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+// MODO OPENAI/DEEPSEEK: SDK de Anthropic eliminado — todo viaja por el cliente OpenAI de Zoco IA.
 import { validateBundle } from "./validate";
 import { patchBundle, patchBundleMultiFile, type GenLanguage, type BuildIssue, type ValidationReport } from "./shared-agents";
 import { logger } from "./logger";
