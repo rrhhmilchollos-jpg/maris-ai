@@ -18,13 +18,15 @@ import { connectDB } from "./db";
 import { logger } from "./logger";
 import OpenAI from "openai";
 
-// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
+// Cliente de embeddings — CONEXIÓN EXCLUSIVA A ZOCO IA (endpoint OpenAI-compatible).
+// Lazy: evita crash al arrancar si la configuración no está puesta todavía.
 let _openaiCache: OpenAI | null = null;
 function getOpenAICache(): OpenAI {
   if (!_openaiCache) {
+    const zocoUrl = process.env.ZOCOIA_API_URL;
     _openaiCache = new OpenAI({
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy",
+      baseURL: zocoUrl ? `${zocoUrl.replace(/\/+$/, "")}/v1` : undefined,
+      apiKey: process.env.ZOCOIA_API_KEY || "dummy",
     });
   }
   return _openaiCache;

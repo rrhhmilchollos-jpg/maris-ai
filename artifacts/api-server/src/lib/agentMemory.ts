@@ -6,17 +6,16 @@ import { logger } from "./logger";
 
 export type AgentMemoryEntry = IAgentMemory;
 
-// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
+// Cliente de embeddings — CONEXIÓN EXCLUSIVA A ZOCO IA (endpoint OpenAI-compatible).
+// Lazy: evita crash al arrancar si la configuración no está puesta todavía.
 let _openaiMemory: OpenAI | null = null;
 function getOpenAIMemory(): OpenAI {
   if (!_openaiMemory) {
+    const zocoKey = process.env.ZOCOIA_API_KEY ?? "sk-noop";
+    const zocoUrl = process.env.ZOCOIA_API_URL;
     _openaiMemory = new OpenAI({
-      apiKey:
-        process.env.OPENAI_API_KEY ??
-        process.env.MARIS_AI_OPENAI_API_KEY ??
-        process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??
-        "sk-noop",
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL,
+      apiKey: zocoKey,
+      baseURL: zocoUrl ? `${zocoUrl.replace(/\/+$/, "")}/v1` : undefined,
     });
   }
   return _openaiMemory;

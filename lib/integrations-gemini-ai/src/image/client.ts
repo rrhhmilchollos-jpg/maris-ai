@@ -1,22 +1,28 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_BASE_URL) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_BASE_URL must be set. Did you forget to provision the Gemini AI integration?",
-  );
+// CONEXIÓN EXCLUSIVA A ZOCO IA — el canal de imagen ya no usa claves nativas
+// de Gemini: viaja por el gateway multimodal de Zoco IA (ZOCOIA_GEMINI_GATEWAY_URL)
+// firmado con la API Key de la organización (ZOCOIA_API_KEY, sk-zoco-...).
+// Lazy + Proxy: antes este módulo lanzaba el error EN EL IMPORT (rompía el
+// arranque del servidor entero); ahora el error salta solo al primer uso real.
+let _ai: GoogleGenAI | null = null;
+function getAI(): GoogleGenAI {
+  if (_ai) return _ai;
+  const apiKey = process.env.ZOCOIA_API_KEY;
+  const baseUrl = process.env.ZOCOIA_GEMINI_GATEWAY_URL;
+  if (!apiKey || !apiKey.startsWith("sk-zoco-") || !baseUrl) {
+    throw new Error(
+      "Canal de imagen no configurado: define ZOCOIA_API_KEY (sk-zoco-...) y ZOCOIA_GEMINI_GATEWAY_URL. " +
+        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+    );
+  }
+  _ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });
+  return _ai;
 }
 
-if (!process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
-  throw new Error(
-    "AI_INTEGRATIONS_GEMINI_API_KEY must be set. Did you forget to provision the Gemini AI integration?",
-  );
-}
-
-export const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+export const ai = new Proxy({} as GoogleGenAI, {
+  get(_target, prop) {
+    return (getAI() as any)[prop];
   },
 });
 

@@ -3,26 +3,31 @@ import OpenAI from "openai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
 
-// ─── Cliente Groq/Zocoia (fallback cuando Claude no tiene créditos) ────────────
+// ─── Canal secundario Zoco IA (endpoint OpenAI-compatible /v1/chat/completions) ───
+// CONEXIÓN EXCLUSIVA A ZOCO IA: este canal ya NO apunta a api.groq.com ni a
+// ningún proveedor externo. Usa el endpoint OpenAI-compatible del backend de
+// Zoco IA con la misma API Key sk-zoco- del canal principal. Sirve como vía
+// alternativa del mismo motor cuando el canal /v1/messages se degrada.
 let _groq: OpenAI | null = null;
 function getGroq(): OpenAI | null {
-  const apiKey = process.env.GROQ_API_KEY || process.env.ZOCOIA_API_KEY;
-  if (!apiKey) return null;
+  const apiKey = process.env.ZOCOIA_API_KEY;
+  const baseUrl = process.env.ZOCOIA_API_URL;
+  if (!apiKey || !baseUrl) return null;
+  if (!apiKey.startsWith('sk-zoco-')) return null; // solo claves de Zoco IA
   if (!_groq) {
     _groq = new OpenAI({
-      baseURL: process.env.ZOCOIA_API_URL || 'https://api.groq.com/openai/v1',
+      // El backend de Zoco IA expone POST /v1/chat/completions (formato OpenAI).
+      baseURL: `${baseUrl.replace(/\/+$/, '')}/v1`,
       apiKey,
     });
   }
   return _groq;
 }
-
 async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {
   const groq = getGroq();
-  if (!groq) throw new Error('Groq no configurado: añade GROQ_API_KEY a las variables de entorno');
-
-  const groqModel = 'llama-3.3-70b-versatile';
-  logger.warn({ model: groqModel }, '⚡ Usando Groq como fallback (Claude sin créditos)');
+  if (!groq) throw new Error('Canal secundario Zoco IA no configurado: añade ZOCOIA_API_URL y ZOCOIA_API_KEY (sk-zoco-...) a las variables de entorno');
+  const groqModel = 'zoco-plus';
+  logger.warn({ model: groqModel }, '⚡ Usando el canal secundario de Zoco IA (/v1/chat/completions)');
 
   const systemMsg = params.system
     ? [{ role: 'system' as const, content: typeof params.system === 'string' ? params.system : (params.system as any[]).map((b: any) => b.text || '').join('\n') }]
@@ -113,14 +118,15 @@ async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
   }
 }
 
-// Lazy initialization — evita crash si OPENAI_API_KEY no está configurada al arrancar
+// Cliente OpenAI-compatible — CONEXIÓN EXCLUSIVA A ZOCO IA.
+// Lazy: evita crash si la configuración no está puesta al arrancar.
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) {
-    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy";
+    const zocoUrl = process.env.ZOCOIA_API_URL;
     _openai = new OpenAI({
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      apiKey,
+      baseURL: zocoUrl ? `${zocoUrl.replace(/\/+$/, "")}/v1` : undefined,
+      apiKey: process.env.ZOCOIA_API_KEY || "dummy",
     });
   }
   return _openai;

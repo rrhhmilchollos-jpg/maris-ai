@@ -1,36 +1,34 @@
 import { GoogleGenAI } from "@google/genai";
 
+// CONEXIÓN EXCLUSIVA A ZOCO IA — este cliente ya NO se conecta a la API
+// nativa de Google Gemini. Cualquier función visual/multimodal debe pasar
+// por el gateway de Zoco IA:
+//   ZOCOIA_GEMINI_GATEWAY_URL — endpoint del gateway multimodal de Zoco IA
+//   ZOCOIA_API_KEY            — API Key de la organización (sk-zoco-...)
+// Si el gateway no está configurado, la llamada falla con un error claro en
+// vez de fugarse a generativelanguage.googleapis.com.
 // Lazy initialization: do NOT throw at import time.
-// The error is deferred until the client is actually used so the server
-// can start even when GEMINI_API_KEY is not configured.
 let _ai: GoogleGenAI | null = null;
 
 function getAI(): GoogleGenAI {
   if (_ai) return _ai;
 
-  // UNIFICADO a petición del usuario: antes video.ts, imageAgent.ts y este
-  // cliente compartido buscaban la clave con 3 nombres de variable
-  // distintos y en distinto orden -- si en Railway solo estaba puesta UNA
-  // de las tres, unas funciones de Gemini trabajaban y otras no, segun
-  // cual coincidiera. Ahora los 3 sitios usan exactamente el mismo orden.
-  const apiKey =
-    process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
-    process.env.GOOGLE_GENAI_API_KEY ||
-    process.env.GEMINI_API_KEY;
-  const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+  const apiKey = process.env.ZOCOIA_API_KEY;
+  const baseUrl = process.env.ZOCOIA_GEMINI_GATEWAY_URL;
 
-  if (!apiKey) {
+  if (!apiKey || !apiKey.startsWith("sk-zoco-")) {
     throw new Error(
-      "Falta configurar la clave de Gemini. Pon AI_INTEGRATIONS_GEMINI_API_KEY (o GOOGLE_GENAI_API_KEY / GEMINI_API_KEY) en las variables de entorno de Railway.",
+      "Conexión multimodal no configurada: define ZOCOIA_API_KEY (sk-zoco-...) en Railway. " +
+        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+    );
+  }
+  if (!baseUrl) {
+    throw new Error(
+      "Falta ZOCOIA_GEMINI_GATEWAY_URL: el canal multimodal de Maris AI solo funciona a través del gateway de Zoco IA (sin fallback a la API nativa de Google).",
     );
   }
 
-  const opts: ConstructorParameters<typeof GoogleGenAI>[0] = { apiKey };
-  if (baseUrl) {
-    opts.httpOptions = { apiVersion: "", baseUrl };
-  }
-
-  _ai = new GoogleGenAI(opts);
+  _ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });
   return _ai;
 }
 

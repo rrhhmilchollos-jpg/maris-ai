@@ -1,15 +1,28 @@
-import { ai as gemini } from "@workspace/integrations-gemini-ai";
+// CONEXIÓN EXCLUSIVA A ZOCO IA: se eliminó el import del SDK nativo de Gemini
+// (no se usaba en este archivo). El cliente `anthropic` de abajo ya apunta al
+// endpoint de Zoco IA (ver lib/integrations-anthropic-ai/src/client.ts).
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
-// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
+// Cliente OpenAI-compatible — CONEXIÓN EXCLUSIVA A ZOCO IA.
+// Ya no apunta a api.openai.com: usa el endpoint /v1/chat/completions del
+// backend de Zoco IA firmado con la API Key de la organización (sk-zoco-...).
+// Lazy: el error se difiere al primer uso para no romper el arranque.
 let _openaiApps: OpenAI | null = null;
 function getOpenAIApps(): OpenAI {
   if (!_openaiApps) {
+    const zocoKey = process.env.ZOCOIA_API_KEY;
+    const zocoUrl = process.env.ZOCOIA_API_URL;
+    if (!zocoKey || !zocoKey.startsWith("sk-zoco-") || !zocoUrl) {
+      throw new Error(
+        "Conexión a Zoco IA no configurada: define ZOCOIA_API_URL y ZOCOIA_API_KEY (sk-zoco-...) en las variables de entorno. " +
+          "Las claves nativas de OpenAI ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+      );
+    }
     _openaiApps = new OpenAI({
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy",
+      baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
+      apiKey: zocoKey,
     });
   }
   return _openaiApps;
@@ -8203,7 +8216,9 @@ export async function runJobById(
     const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
 
     // ── 1. IMAGE AGENT — reemplaza placeholders Unsplash con imágenes reales ─
-    if (savedAppId && finalResult?.frontendCode && !editResultInvalid && process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
+    // CONEXIÓN EXCLUSIVA A ZOCO IA: el Image Agent solo se activa si el gateway
+    // multimodal de Zoco IA está configurado (antes dependía de la clave nativa de Gemini).
+    if (savedAppId && finalResult?.frontendCode && !editResultInvalid && process.env.ZOCOIA_API_KEY && process.env.ZOCOIA_GEMINI_GATEWAY_URL) {
       try {
         await log("system", "🎨 Generando imágenes reales para tu app…");
         const { generateAppImages } = await import("../lib/imageAgent");

@@ -39,16 +39,27 @@ function appBaseUrl(): string {
   return host ? `https://${host}` : "";
 }
 
-// Use the dedicated client so we can pass the Pro model explicitly. The
-// shared `ai` client at @workspace/integrations-gemini-ai uses the same env
-// vars; we re-instantiate here only because the helper exported from the lib
-// pins the flash image model and we want to opt into Pro per the user's
-// request ("nano banana pro el nuevo actual").
-const imageClient = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
+// CONEXIÓN EXCLUSIVA A ZOCO IA: el cliente de imágenes ya no usa las claves
+// nativas de Gemini — viaja por el gateway multimodal de Zoco IA con la API
+// Key de la organización (sk-zoco-...). Lazy + Proxy para no romper el
+// arranque si el gateway aún no está configurado (el error salta al usarlo).
+let _imageClient: GoogleGenAI | null = null;
+function getImageClient(): GoogleGenAI {
+  if (_imageClient) return _imageClient;
+  const apiKey = process.env.ZOCOIA_API_KEY;
+  const baseUrl = process.env.ZOCOIA_GEMINI_GATEWAY_URL;
+  if (!apiKey || !apiKey.startsWith("sk-zoco-") || !baseUrl) {
+    throw new Error(
+      "Generación de imágenes no configurada: define ZOCOIA_API_KEY (sk-zoco-...) y ZOCOIA_GEMINI_GATEWAY_URL. " +
+        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+    );
+  }
+  _imageClient = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });
+  return _imageClient;
+}
+const imageClient = new Proxy({} as GoogleGenAI, {
+  get(_target, prop) {
+    return (getImageClient() as any)[prop];
   },
 });
 
