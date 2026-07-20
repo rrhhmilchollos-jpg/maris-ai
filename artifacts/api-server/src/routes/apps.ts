@@ -1,43 +1,21 @@
-// CONEXIÓN EXCLUSIVA A ZOCO IA: se eliminó el import del SDK nativo de Gemini
-// MODO OPENAI/DEEPSEEK: el SDK de Anthropic ya NO se usa en este archivo —
-// todas las llamadas de agentes viajan por el cliente OpenAI de Zoco IA
-// (getOpenAIApps de abajo y los helpers de ../lib/shared-agents).
+import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
-// Cliente OpenAI-compatible — MOTOR 100% LOCAL (OLLAMA).
-// JAMÁS apunta a api.openai.com. Conecta vía Zoco IA (que reenvía a su
-// servidor de Ollama local) o directamente al endpoint OpenAI-compatible de
-// Ollama con OLLAMA_BASE_URL + apiKey "ollama" (Ollama acepta cualquier
-// string). Lazy: el error se difiere al primer uso para no romper el arranque.
+// Lazy OpenAI client — evita crash al arrancar si la API key no está configurada
 let _openaiApps: OpenAI | null = null;
 function getOpenAIApps(): OpenAI {
   if (!_openaiApps) {
-    const zocoKey = process.env.ZOCOIA_API_KEY;
-    const zocoUrl = process.env.ZOCOIA_API_URL;
-    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
-    if (zocoUrl && zocoKey && zocoKey.startsWith("sk-zoco-")) {
-      _openaiApps = new OpenAI({
-        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
-        apiKey: zocoKey,
-      });
-    } else if (ollamaUrl) {
-      _openaiApps = new OpenAI({
-        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
-        apiKey: process.env.OLLAMA_API_KEY || "ollama",
-      });
-    } else {
-      throw new Error(
-        "Motor local no configurado: define ZOCOIA_API_URL + ZOCOIA_API_KEY (sk-zoco-...) para conectar vía Zoco IA, " +
-          "o OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) para conectar directamente a Ollama. " +
-          "Las APIs en la nube (Groq/Anthropic/OpenAI) están deshabilitadas por decisión de infraestructura.",
-      );
-    }
+    _openaiApps = new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY || "dummy",
+    });
   }
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
-import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createClaudeToolCallWithFallback, DEEPSEEK_SAFE_FORMAT_RULE, stripReasoning } from "../lib/shared-agents";
+import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createClaudeToolCallWithFallback } from "../lib/shared-agents";
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp } from "../lib/appRevisions";
 import * as esbuild from "esbuild";
@@ -2431,74 +2409,68 @@ function fallbackClaudeModels(model: AgentModelChoice["model"]): ClaudeCoderMode
 
 async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ClaudeCoderModel }> {
   let lastError: unknown;
-  // MODO OPENAI/DEEPSEEK: esta función es la que usan el Frontend Engineer y
-  // el Backend Engineer para generar el código completo de la app — la
-  // llamada más larga y crítica del pipeline. Ahora viaja por el cliente
-  // OpenAI de Zoco IA (detrás responde DeepSeek-R1, formato OpenAI): system
-  // como mensaje system + regla de formato seguro, chunks choices[0].delta y
-  // limpieza del razonamiento <think> antes de devolver el código.
-  const systemText = typeof params.system === "string"
-    ? params.system
-    : Array.isArray(params.system) ? params.system.map((b: any) => b?.text || "").join("\n") : "";
-  const safeSystem = systemText.includes("DeepSeek-R1/OpenAI compatible endpoint")
-    ? systemText
-    : systemText + DEEPSEEK_SAFE_FORMAT_RULE;
-  const openaiMessages = [
-    ...(safeSystem ? [{ role: "system" as const, content: safeSystem }] : []),
-    ...(params.messages || []).map((m: any) => ({
-      role: m.role,
-      content: Array.isArray(m.content) ? m.content.map((b: any) => b?.text || "").join("") : String(m.content ?? ""),
-    })),
-  ];
-  const zocoModel = /haiku|flash/i.test(String(model)) ? "zoco-flash" : /opus|max/i.test(String(model)) ? "zoco-max" : "zoco-plus";
-  {
-    const MAX_ATTEMPTS_PER_MODEL = 3;
+  // Misma conversión automática a prompt caching que createClaudeMessageWithFallback
+  // (shared-agents.ts) — algunos callers de esta función ya convertían el
+  // system a array con cache_control manualmente, otros no (ej. el del
+  // patcher rápido más abajo, system.slice(0, 2000) sin cache_control). Esto
+  // cubre el caso general sin depender de que cada caller lo recuerde.
+  if (typeof params.system === "string" && params.system.length >= 3500) {
+    params = {
+      ...params,
+      system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
+    };
+  }
+  for (const candidate of fallbackClaudeModels(model)) {
+    const MAX_ATTEMPTS_PER_MODEL = 2;
     for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_MODEL; attempt++) {
       try {
         let accumulated = "";
         let lastReport = 0;
         let finishReason: string | undefined;
-        const stream = (await getOpenAIApps().chat.completions.create({
-          model: zocoModel,
-          max_tokens: params.max_tokens || 20000,
-          temperature: params.temperature ?? 0.7,
-          messages: openaiMessages,
-          stream: true,
-        })) as unknown as AsyncIterable<any>;
-        // TIMEOUT DE INACTIVIDAD REAL por chunk — si el stream se queda
-        // colgado a medias, se detecta aquí y se reintenta, sin esperar al
-        // watchdog global (12 min) perdiendo todo el trabajo generado.
+        const stream = anthropic.messages.stream({ ...params, model: candidate });
+        // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createClaudeMessageWithFallback
+        // en shared-agents.ts (ver el comentario extenso ahí): esta función es la
+        // que usan de verdad el Frontend Engineer y el Backend Engineer para
+        // generar el código completo de la app — la llamada más larga y más
+        // crítica de todo el pipeline. Antes de este fix, si el stream se
+        // quedaba colgado a medias (conectado pero sin más chunks), no había
+        // NADA aquí que lo detectara — el job entero se quedaba parado hasta
+        // el watchdog global (12 min), perdiendo todo el trabajo ya generado.
         const iterator = stream[Symbol.asyncIterator]();
         while (true) {
           const { value: chunk, done } = (await raceWithTimeout(
             iterator.next(),
             AI_CALL_TIMEOUT_MS,
-            `${role} code stream chunk (modelo ${zocoModel})`,
+            `${role} code stream chunk (modelo ${candidate})`,
           )) as { value: any; done: boolean };
           if (done) break;
-          const delta = chunk?.choices?.[0]?.delta;
-          if (delta?.content) {
-            accumulated += delta.content;
+          if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+            accumulated += chunk.delta.text;
             if (accumulated.length - lastReport >= 1500) {
               lastReport = accumulated.length;
               onChars(accumulated.length);
             }
           }
-          if (chunk?.choices?.[0]?.finish_reason === "length") finishReason = "MAX_TOKENS";
+          if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
         }
-        accumulated = stripReasoning(accumulated);
-        return { text: accumulated, truncated: finishReason === "MAX_TOKENS", model: zocoModel as ClaudeCoderModel };
+        return { text: accumulated, truncated: finishReason === "MAX_TOKENS", model: candidate };
       } catch (err: any) {
         lastError = err;
+        // ENCONTRADO: cualquier fallo (incluido un simple parpadeo de red o
+        // un 503 momentáneo de Anthropic) saltaba directo al siguiente
+        // modelo sin ni un solo reintento en el mismo — con solo 2 modelos
+        // de fallback, esto agotaba las opciones casi al instante ante
+        // cualquier fallo transitorio. Un reintento rápido antes de
+        // cambiar de modelo resuelve la mayoría de estos casos solo.
         const isTransient = err?.status === 429 || err?.status >= 500
           || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed/i.test(String(err?.message || err));
         if (isTransient && attempt < MAX_ATTEMPTS_PER_MODEL - 1) {
           const delay = 1500 + Math.random() * 1000;
-          logger.warn({ role, model: zocoModel, attempt, delay }, "Streaming agent: fallo transitorio, reintentando");
+          logger.warn({ role, model: candidate, attempt, delay }, "Streaming agent: fallo transitorio, reintentando mismo modelo");
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        logger.warn({ role, model: zocoModel, err }, "Streaming agent: el canal de Zoco IA falló");
+        logger.warn({ role, model: candidate, err }, "Streaming agent model failed; trying fallback");
         break;
       }
     }
@@ -3702,36 +3674,48 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         const fr = chunk.choices[0]?.finish_reason;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
-    } else {
-      // MODO OPENAI/DEEPSEEK: cualquier proveedor no-gpt viaja igualmente por
-      // el cliente OpenAI de Zoco IA (detrás responde DeepSeek-R1) — chunks
-      // formato choices[0].delta.content y regla de formato seguro inyectada.
-      const stream = await getOpenAIApps().chat.completions.create({
-        model: "zoco-plus",
+    } else if (provider === "claude") {
+      const stream = anthropic.messages.stream({
+        model: resolveClaudeCoderModel(coderModel),
         max_tokens: 20000,
-        messages: [
-          { role: "system", content: systemPrompt.includes("DeepSeek-R1/OpenAI compatible endpoint") ? systemPrompt : systemPrompt + DEEPSEEK_SAFE_FORMAT_RULE },
-          { role: "user", content: finalUserContent },
-        ],
-        stream: true,
+        system: systemPrompt,
+        messages: [{ role: "user", content: finalUserContent }],
+      });
+      let lastReportC = 0;
+      const iterator = stream[Symbol.asyncIterator]();
+      while (true) {
+        const { value: chunk, done } = await raceChunk<IteratorResult<any>>(iterator.next());
+        if (done) break;
+        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+          accumulated += chunk.delta.text;
+          observe(accumulated);
+          if (accumulated.length - lastReportC >= PROGRESS_EVERY) { lastReportC = accumulated.length; onChars(accumulated.length); }
+        }
+        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
+      }
+    } else {
+// Claude streaming según el modelo elegido en el selector.
+      const stream = await anthropic.messages.stream({
+        model: resolveClaudeCoderModel(coderModel),
+        max_tokens: 20000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: finalUserContent }],
       });
       let lastReport = 0;
       const iterator = stream[Symbol.asyncIterator]();
       while (true) {
         const { value: chunk, done } = await raceChunk<IteratorResult<any>>(iterator.next());
         if (done) break;
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (delta) {
-          accumulated += delta;
+        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+          accumulated += chunk.delta.text;
           observe(accumulated);
           if (accumulated.length - lastReport >= PROGRESS_EVERY) {
             lastReport = accumulated.length;
             onChars(accumulated.length);
           }
         }
-        if (chunk.choices?.[0]?.finish_reason === "length") finishReason = "MAX_TOKENS";
+        if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       }
-      accumulated = stripReasoning(accumulated);
     }
   } catch (err) {
       // Re-throw with accumulated text attached so caller can recover partial work
@@ -8219,9 +8203,7 @@ export async function runJobById(
     const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
 
     // ── 1. IMAGE AGENT — reemplaza placeholders Unsplash con imágenes reales ─
-    // CONEXIÓN EXCLUSIVA A ZOCO IA: el Image Agent solo se activa si el gateway
-    // multimodal de Zoco IA está configurado (antes dependía de la clave nativa de Gemini).
-    if (savedAppId && finalResult?.frontendCode && !editResultInvalid && process.env.ZOCOIA_API_KEY && process.env.ZOCOIA_GEMINI_GATEWAY_URL) {
+    if (savedAppId && finalResult?.frontendCode && !editResultInvalid && process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {
       try {
         await log("system", "🎨 Generando imágenes reales para tu app…");
         const { generateAppImages } = await import("../lib/imageAgent");
