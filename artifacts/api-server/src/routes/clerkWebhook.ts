@@ -10,7 +10,7 @@
  * - user.deleted  → marcar como inactivo (no borrar datos)
  *
  * Configurar en Clerk Dashboard → Webhooks:
- * URL: https://maris-ai-api-server-production-fbad.up.railway.app/api/clerk/webhook
+ * URL: https://api.marisai.es/api/clerk/webhook
  * Eventos: user.created, user.updated, user.deleted
  * Signing Secret: guardar en env como CLERK_WEBHOOK_SECRET
  */

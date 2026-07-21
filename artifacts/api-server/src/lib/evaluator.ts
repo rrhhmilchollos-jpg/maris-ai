@@ -370,7 +370,7 @@ export async function evaluateApp(opts: {
   // ve el cliente (/api/apps/:id/preview, servido por este mismo backend
   // vía buildDeployHtml con el frontendCode real de la app) — nunca un
   // dominio/ruta que no exista de verdad.
-  const apiBaseUrl = (process.env.MARIS_AI_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app").replace(/\/$/, "");
+  const apiBaseUrl = (process.env.MARIS_AI_API_URL || "https://api.marisai.es").replace(/\/$/, "");
   const url = `${apiBaseUrl}/api/apps/${app.id}/preview`;
   log?.info({ appId: app.id, url }, "👁 Evaluator capturing screenshots");
   const shots = await takeScreenshots(url);

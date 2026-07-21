@@ -124,7 +124,7 @@ app.use(
           "'self'",
           "https://api.marisai.es",
           "https://www.marisai.es",
-          "https://maris-ai-api-server-production-fbad.up.railway.app",
+          "https://api.marisai.es",
           "https://*.railway.app",
           "https://*.clerk.com",
           "https://*.clerk.accounts.dev",

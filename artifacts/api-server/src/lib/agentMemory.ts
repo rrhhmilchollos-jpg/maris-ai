@@ -12,7 +12,7 @@ export type AgentMemoryEntry = IAgentMemory;
 let _openaiMemory: OpenAI | null = null;
 function getOpenAIMemory(): OpenAI {
   if (!_openaiMemory) {
-    const zocoUrl = process.env.ZOCOIA_API_URL;
+    const zocoUrl = process.env.ZOCOIA_API_URL || "https://zocoia.es";
     const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
     if (zocoUrl) {
       _openaiMemory = new OpenAI({

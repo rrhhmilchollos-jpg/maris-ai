@@ -693,7 +693,7 @@ const baseHtml = (() => {
 // Console: cada artículo enlazado en el sitemap quedaba sin indexar. Fix:
 // generar aquí, en build time, el mismo tipo de HTML estático real que ya
 // se genera para /pricing, /showcase, etc., uno por artículo publicado.
-const API_BASE = process.env.VITE_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app";
+const API_BASE = process.env.VITE_API_URL || "https://api.marisai.es";
 
 function escapeHtml(str) {
   return String(str)

@@ -10,8 +10,8 @@ import Anthropic from "@anthropic-ai/sdk";
 // (sk-zoco-...), que se gestiona desde el "Almacén de credenciales" del
 // Dashboard de Zoco IA.
 //
-// Variables de entorno (Railway):
-//   ZOCOIA_API_URL — base URL del backend de Zoco IA (ej: https://zocoia.es)
+// Variables de entorno (Coolify):
+//   ZOCOIA_API_URL — base URL del backend de Zoco IA (por defecto: https://zocoia.es)
 //   ZOCOIA_API_KEY — API Key de Zoco IA (sk-zoco-...)
 //
 // Compatibilidad: el backend de Zoco IA expone POST /v1/messages con el
@@ -35,7 +35,8 @@ function getClient(): Anthropic {
 
   const rawBaseUrl =
     process.env.ZOCOIA_API_URL ||
-    process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL; // alias de compatibilidad
+    process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || // alias de compatibilidad
+    "https://zocoia.es"; // valor por defecto — backend de Zoco IA en producción
 
   if (!apiKey) {
     throw new Error(
@@ -51,7 +52,7 @@ function getClient(): Anthropic {
   }
   if (!rawBaseUrl) {
     throw new Error(
-      "Falta ZOCOIA_API_URL. Configura la URL base del backend de Zoco IA (ej: https://tu-servicio.up.railway.app).",
+      "Falta ZOCOIA_API_URL. Configura la URL base del backend de Zoco IA (ej: https://zocoia.es).",
     );
   }
 

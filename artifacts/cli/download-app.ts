@@ -21,7 +21,7 @@ interface DownloadOptions {
   apiUrl?: string;
 }
 
-const API_BASE_URL = process.env.MARIS_API_URL || "https://maris-ai-api-server-production-fbad.up.railway.app";
+const API_BASE_URL = process.env.MARIS_API_URL || "https://api.marisai.es";
 
 /**
  * Parsea los argumentos de la línea de comandos

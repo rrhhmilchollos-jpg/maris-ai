@@ -24,7 +24,7 @@ import OpenAI from "openai";
 let _openaiCache: OpenAI | null = null;
 function getOpenAICache(): OpenAI {
   if (!_openaiCache) {
-    const zocoUrl = process.env.ZOCOIA_API_URL;
+    const zocoUrl = process.env.ZOCOIA_API_URL || "https://zocoia.es";
     const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
     if (zocoUrl) {
       _openaiCache = new OpenAI({

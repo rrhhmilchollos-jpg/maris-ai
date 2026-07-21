@@ -194,7 +194,7 @@ You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like 
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live"
+            "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live"
           }
         ]
       }
@@ -5400,7 +5400,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
     techStack: plan.techStack,
     frontendCode: (finalFrontend.includes('// === FILE: vercel.json ===') 
       ? finalFrontend 
-      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://maris-ai-api-server-production-fbad.up.railway.app https://*.railway.app https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
+      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
     architecture: plan.architecture,

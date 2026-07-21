@@ -31,16 +31,14 @@ services:
         sync: false
       - key: CLERK_WEBHOOK_SECRET
         sync: false
-      - key: AI_INTEGRATIONS_OPENAI_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_ANTHROPIC_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_GEMINI_API_KEY
+      - key: ZOCOIA_API_URL
+        value: "https://zocoia.es"
+      - key: ZOCOIA_API_KEY
         sync: false
       - key: FRONTEND_BASE_PATH
         value: "/"
       - key: FRONTEND_URL
-        value: "https://www.marisai.es"
+        value: "https://marisai.es"
       - key: WEBHOOK_SECRET
         sync: false
       - key: REDIS_URL
@@ -80,11 +78,9 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false # URL de Redis para BullMQ (debe ser la misma que en el API)
-      - key: AI_INTEGRATIONS_OPENAI_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_ANTHROPIC_API_KEY
-        sync: false
-      - key: AI_INTEGRATIONS_GEMINI_API_KEY
+      - key: ZOCOIA_API_URL
+        value: "https://zocoia.es"
+      - key: ZOCOIA_API_KEY
         sync: false
       - key: GITHUB_TOKEN
         sync: false
