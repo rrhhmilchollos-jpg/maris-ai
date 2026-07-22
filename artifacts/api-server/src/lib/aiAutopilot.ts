@@ -30,8 +30,8 @@ import {
 import { enqueueGenerateJob } from "./jobQueue";
 import { notifyAdminSupportTicket } from "./notify";
 
-const AI_MODEL = "claude-haiku-4-5-20251001"; // Rápido y barato para diagnóstico
-const AI_MODEL_SMART = "claude-sonnet-4-6";   // Para análisis complejos
+const AI_MODEL = "zoco-flash"; // Rápido y barato para diagnóstico
+const AI_MODEL_SMART = "zoco-plus";   // Para análisis complejos
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
 
@@ -169,7 +169,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
       // de salida a mitad de un cambio grande en modo edición — el propio
       // mensaje de error que ve el usuario dice literalmente "cambia al
       // modelo de calidad desde el menú Modelo"), este bloque relanzaba el
-      // job de reparación con el MISMO coderModel ("claude-sonnet-4-6") que
+      // job de reparación con el MISMO coderModel ("zoco-plus") que
       // ya había demostrado no tener suficiente capacidad de salida para ese
       // cambio. El repairInstruction que la IA generaba SÍ recomendaba
       // fragmentar o subir de modelo, pero esa recomendación nunca se
@@ -185,7 +185,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
       // recomienda hacer manualmente al usuario, ahora aplicada de verdad de
       // forma automática. Para el resto de errorType (timeout, syntax,
       // api_limit) se mantiene sonnet, que es el comportamiento original.
-      const repairCoderModel = parsed.errorType === "memory" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+      const repairCoderModel = parsed.errorType === "memory" ? "zoco-max" : "zoco-plus";
 
       await GenerationJob.create({
         _id: newJobId,
@@ -210,7 +210,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
         _id: newJobId,
         userId: job.userId,
         prompt: job.prompt,
-        coderModel: "claude-sonnet-4-6",
+        coderModel: "zoco-plus",
         language: job.language || "typescript",
         kind: job.kind || "fullstack",
         status: "queued", phase: "queued", progress: 0,
@@ -452,7 +452,7 @@ export async function autoFixBrokenApps(): Promise<void> {
         userId: app.userId,
         prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-fix. [ADMIN REPAIR] La app generada quedó incompleta. Complétala según el prompt original: ${cleanPrompt}`,
         editAppId: String(app._id),
-        coderModel: "claude-sonnet-4-6",
+        coderModel: "zoco-plus",
         language: "typescript", kind: "edit",
         status: "queued", phase: "queued", progress: 0,
         isAdmin: true, hasEverPaid: true,

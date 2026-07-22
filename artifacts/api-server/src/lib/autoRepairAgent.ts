@@ -343,7 +343,7 @@ export async function autoRepairBundle(opts: {
         await jlog("🏗️ Daño estructural → CoreOrchestrator reparando archivo por archivo…");
         try {
           const { CoreOrchestrator } = await import("@workspace/services");
-          const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
+          const orchestrator = new CoreOrchestrator(process.cwd(), { model: "zoco-plus" });
           const orchPrompt =
             "[REPARACIÓN AUTOMÁTICA — REPAIR AGENT]\n" +
             "App: \"" + (app.title || "App") + "\"\n\n" +
@@ -367,7 +367,7 @@ export async function autoRepairBundle(opts: {
           await jlog("⚠️ CoreOrchestrator falló — usando patcher estándar", "warn");
         }
       }
-      const patchedCode = await patchBundle(currentCode, issuesForThisCycle, repairKind, "", "claude-sonnet-4-6");
+      const patchedCode = await patchBundle(currentCode, issuesForThisCycle, repairKind, "", "zoco-plus");
       if (!patchedCode || patchedCode === currentCode) {
         log.warn({ cycle }, "Patcher no produjo cambios en este ciclo");
 
@@ -386,7 +386,7 @@ export async function autoRepairBundle(opts: {
             currentCode,
             errorSummary,
             repairKind,
-            "claude-sonnet-4-6",
+            "zoco-plus",
             (msg) => { void jlog(msg); },
           );
           if (multiFileResult.result) {

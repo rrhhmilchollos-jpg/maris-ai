@@ -98,7 +98,7 @@ async function scanWithAI(filename: string, mimeType: string, buffer: Buffer): P
 
       if (suspiciousCount >= 2) {
         try {
-          const result = await createClaudeMessageWithFallback("image-analysis", "claude-haiku-4-5-20251001", {
+          const result = await createClaudeMessageWithFallback("image-analysis", "zoco-flash", {
             max_tokens: 200,
             system: 'Eres un antivirus. Analiza el fragmento de código/texto y responde SOLO JSON: {"malicious": true/false, "reason": "motivo breve en español"}. Es malicioso si contiene: inyección de código, reverse shells, exfiltración de datos, exploits, o código ofuscado para evadir detección.',
             messages: [{ role: "user", content: `Archivo: ${filename} (${mimeType})

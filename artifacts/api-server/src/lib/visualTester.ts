@@ -437,7 +437,7 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
   // pipeline, consistente con el resto de agentes.
   let text = "";
   try {
-    const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
+    const response = await createClaudeMessageWithFallback("visual-evaluator", "zoco-plus", {
       max_tokens: 4000,
       messages: [{ role: "user", content }],
     });
@@ -571,7 +571,7 @@ async function applyVisualFixes(opts: {
       "[applyVisualFixes] Issues críticos → CoreOrchestrator (edición por hitos)",
     );
     try {
-      const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
+      const orchestrator = new CoreOrchestrator(process.cwd(), { model: "zoco-plus" });
 
       // Bloque con los issues EXACTOS de Claude Vision — descripción completa,
       // tipo, viewport y sugerencia de fix tal como los reportó el modelo.
@@ -655,7 +655,7 @@ async function applyVisualFixes(opts: {
   // parches reales tras detectar issues visuales) no tenía timeout de
   // inactividad ni reintento en fallos transitorios — un simple parpadeo
   // de red aquí dejaba la app sin reparar en ese ciclo.
-  const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
+  const response = await createClaudeMessageWithFallback("visual-evaluator", "zoco-plus", {
     max_tokens: 20000,
     messages: [{
       role: "user",

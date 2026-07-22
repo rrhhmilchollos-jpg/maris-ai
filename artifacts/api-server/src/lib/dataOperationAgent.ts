@@ -272,7 +272,7 @@ async function interpretDataRequest(
     `Devuelve SOLO el JSON de la operación. Usa el mapa del proyecto para identificar la colección/entidad exacta donde operar.`,
   ].filter(Boolean).join("\n");
 
-  const result = await createClaudeMessageWithFallback("data-ops", "claude-haiku-4-5", {
+  const result = await createClaudeMessageWithFallback("data-ops", "zoco-flash", {
     max_tokens: 600,
     system: DATA_AGENT_SYSTEM,
     messages: [{ role: "user", content: userContent }],

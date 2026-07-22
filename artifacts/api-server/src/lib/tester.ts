@@ -361,7 +361,7 @@ export async function runTestingAgent(
         currentBundle,
         errorSummary,
         language,
-        "claude-sonnet-4-6",
+        "zoco-plus",
         (msg) => log("testing", msg),
       );
       if (multiFileResult.result) {

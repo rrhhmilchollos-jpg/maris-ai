@@ -16,7 +16,7 @@ import { connectDB } from "./db";
 import { logger } from "./logger";
 import { createClaudeMessageWithFallback } from "./shared-agents";
 
-const ANALYZER_MODEL = "claude-haiku-4-5";
+const ANALYZER_MODEL = "zoco-flash";
 
 // ─── Error Pattern Schema ─────────────────────────────────────────────────────
 

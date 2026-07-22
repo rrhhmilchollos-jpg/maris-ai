@@ -283,7 +283,7 @@ publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   // del loop de reparación. El coste adicional (una llamada de análisis más
   // cara) está justificado: es la diferencia entre un autofix que sabe qué
   // hacer y uno que genera un fix genérico que no resuelve el problema real.
-  const response = await createClaudeMessageWithFallback("visual-evaluator", "claude-sonnet-4-6", {
+  const response = await createClaudeMessageWithFallback("visual-evaluator", "zoco-plus", {
     max_tokens: 4000,
     messages: [{ role: "user", content }],
   }, { jobId });
@@ -854,7 +854,7 @@ export async function runAutoEvaluator(opts: {
         const fix404Issues: QAIssue[] = [
           { file: "src/App.tsx", problem: "La app muestra 404 en la ruta raíz.", fix: fix404Prompt },
         ];
-        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "claude-sonnet-4-6", String(jobId));
+        const quickFix = await patchBundle(currentBundle, fix404Issues, language, "", "zoco-plus", String(jobId));
         if (quickFix && quickFix.length > 100 && quickFix.includes("// === FILE:")) {
           patched = quickFix;
           log.info({ appId, jobId, round }, "✅ Fix quirúrgico 404 aplicado en App.tsx");
@@ -870,7 +870,7 @@ export async function runAutoEvaluator(opts: {
         "🔁 Issues críticos → CoreOrchestrator por hitos",
       );
       try {
-        const orchestrator = new CoreOrchestrator(process.cwd(), { model: "claude-sonnet-4-6" });
+        const orchestrator = new CoreOrchestrator(process.cwd(), { model: "zoco-plus" });
 
         // Issues EXACTOS de Claude Vision — descripción completa tal como los reportó
         const issuesBlock = report.issues

@@ -2,7 +2,7 @@ import { createClaudeMessageWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { appendAppNotes, appendUserPreferences } from "./agentMemoryContext";
 
-const EXTRACTOR_MODEL = "claude-haiku-4-5";
+const EXTRACTOR_MODEL = "zoco-flash";
 
 export interface MemoryExtractorInput {
   userId: string;

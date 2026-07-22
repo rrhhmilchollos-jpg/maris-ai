@@ -16,7 +16,7 @@ export interface GeneratedApp {
   frontendCode: string;
   backendCode: string;
   status: string;
-  /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  /** Coder model preference: auto | zoco-flash | zoco-plus | zoco-max */
   coderModel: string;
   /** Source language: typescript (.tsx) or javascript (.jsx). Locked at creation. */
   language: string;

@@ -704,7 +704,7 @@ export async function seedSeguxatProject(targetEmail: string = "rrhh.milchollos@
       frontendCode: SEGUXAT_FRONTEND_CODE,
       backendCode: SEGUXAT_BACKEND_CODE,
       status: "ready",
-      coderModel: "claude-sonnet-4-6",
+      coderModel: "zoco-plus",
       language: "javascript",
       kind: "landing",
       hasWatermark: false,

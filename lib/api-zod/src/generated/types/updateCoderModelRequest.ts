@@ -7,6 +7,6 @@
  */
 
 export interface UpdateCoderModelRequest {
-  /** auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  /** auto | zoco-flash | zoco-plus | zoco-max */
   coderModel: string;
 }

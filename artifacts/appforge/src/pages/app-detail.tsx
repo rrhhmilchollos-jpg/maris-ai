@@ -1617,7 +1617,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-[11px] text-cyan-400 font-medium">
                   <Eye className="h-3.5 w-3.5" />
-                  Testing visual automático — Claude Vision verifica tu app
+                  Testing visual automático — Zoco IA verifica tu app
                 </div>
                 <button onClick={() => setShowVisualTestInline(false)}
                   className="text-white/25 hover:text-white/60 transition-colors">

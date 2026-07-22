@@ -162,8 +162,8 @@ export async function runArchitectAgent(
 ): Promise<EmergentArchitectBlueprint> {
   log("🏗️ Architect Agent: analizando requisitos y creando blueprint técnico...");
 
-  const response = await createClaudeMessageWithFallback("architect", "claude-sonnet-4-6", {
-    model: "claude-sonnet-4-6",
+  const response = await createClaudeMessageWithFallback("architect", "zoco-plus", {
+    model: "zoco-plus",
     max_tokens: 6000,
     system: ARCHITECT_SYSTEM,
     messages: [
@@ -265,8 +265,8 @@ export async function runDesignerAgent(
 ): Promise<EmergentDesignSystem> {
   log(`🎨 Designer Agent: creando sistema visual para "${blueprint.title}"...`);
 
-  const response = await createClaudeMessageWithFallback("designer", "claude-sonnet-4-6", {
-    model: "claude-sonnet-4-6",
+  const response = await createClaudeMessageWithFallback("designer", "zoco-plus", {
+    model: "zoco-plus",
     max_tokens: 3000,
     system: DESIGNER_SYSTEM,
     messages: [
@@ -490,7 +490,7 @@ ${codePreview}
 Realiza la inspeccion completa y devuelve SOLO el JSON.`;
 
   try {
-    const pmModel = blueprint.complexity === "enterprise" ? "claude-opus-4-7" : "claude-sonnet-4-6";
+    const pmModel = blueprint.complexity === "enterprise" ? "zoco-max" : "zoco-plus";
 
     const response = await createClaudeMessageWithFallback("qa", pmModel, {
       model: pmModel,
@@ -622,7 +622,7 @@ export async function runInvisibleRepairLoop(
         currentCode,
         issuesList,
         "typescript",
-        "claude-sonnet-4-6",
+        "zoco-plus",
         (msg) => log(`[Patcher] ${msg}`),
       );
 

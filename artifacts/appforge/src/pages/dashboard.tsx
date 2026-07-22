@@ -307,7 +307,7 @@ export default function DashboardPage() {
       type: "checkbox" as const,
       options: [
         "Pagos con Stripe",
-        "IA con GPT / Claude / Gemini",
+        "IA con Zoco IA (motor local)",
         "Email con Resend / SendGrid",
         "Google Auth / OAuth",
         "Mapas (Google Maps / Mapbox)",
@@ -851,13 +851,13 @@ export default function DashboardPage() {
                           // propio modo. Solo llega aquí quien ya tiene pago
                           // verificado (o es admin), porque el botón Ultra
                           // está bloqueado para el resto — ver más abajo.
-                          // FIX (2026-07-09): eliminado "claude-sonnet-4-7"
+                          // FIX (2026-07-09): eliminado "zoco-plus"
                           // — ese modelo NO existe en la API de Anthropic
                           // (404 verificado) y era la causa del cuadro rojo
                           // "Error en la generación" al usar el modo Ultra.
                           // Opus 4.8 sí existe y es ahora el único Ultra.
                           <>
-                            <SelectItem value="claude-opus-4-8" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Opus 4.8 — Ultra</div></SelectItem>
+                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Opus 4.8 — Ultra</div></SelectItem>
                           </>
                         ) : (
                           <>
@@ -868,9 +868,9 @@ export default function DashboardPage() {
                                 trabajar módulo a módulo (ver generateApp en
                                 apps.ts), así que no hay restricción de plan
                                 para estos dos. */}
-                            <SelectItem value="claude-haiku-4-5" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div></SelectItem>
-                            <SelectItem value="claude-sonnet-4-6" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
-                            <SelectItem value="claude-opus-4-7" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
+                            <SelectItem value="zoco-flash" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div></SelectItem>
+                            <SelectItem value="zoco-plus" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
+                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
                             {/* GPT-5.4: solo clientes con pago verificado
                                 (hasVerifiedPayment / hasEverPaid) o admin --
                                 a diferencia de Haiku 4.5, que sí está abierto
@@ -904,7 +904,7 @@ export default function DashboardPage() {
                               // Ultra, volver a "auto" -- el modelo Ultra
                               // seleccionado ya no aparece en la lista normal
                               // y no tendría sentido dejarlo puesto.
-                              setCoderModel(next ? "claude-opus-4-8" : "auto");
+                              setCoderModel(next ? "zoco-max" : "auto");
                               return next;
                             });
                           }}
@@ -939,15 +939,15 @@ export default function DashboardPage() {
                             <p className="text-xs font-bold text-white">Modo Ultra — solo clientes de pago</p>
                           </div>
                           <p className="text-[11px] text-white/50 leading-relaxed">
-                            Desbloquea los agentes especializados con los modelos más potentes de Anthropic:
+                            Desbloquea los agentes especializados con los modelos más potentes de Zoco IA:
                           </p>
                           {/* FIX (2026-07-09): quitado "Sonnet 4.7" del teaser
-                              — ese modelo no existe en la API de Anthropic;
-                              el modo Ultra real es Opus 4.8. */}
+                              
+                              el modo Ultra real es Zoco Max. */}
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
                               <Brain className="h-3 w-3 text-amber-400 flex-shrink-0" />
-                              <span className="text-[11px] font-semibold text-amber-200">Opus 4.8</span>
+                              <span className="text-[11px] font-semibold text-amber-200">Zoco Max</span>
                             </div>
                           </div>
                           <Button

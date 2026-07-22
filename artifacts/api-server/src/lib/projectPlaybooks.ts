@@ -92,7 +92,7 @@ export async function learnFromSuccessfulProject(opts: {
       .map((p) => `- ${p.name}${p.purpose ? `: ${p.purpose}` : ""}`)
       .join("\n");
 
-    const response = await createClaudeMessageWithFallback("memory", "claude-haiku-4-5", {
+    const response = await createClaudeMessageWithFallback("memory", "zoco-flash", {
       max_tokens: 400,
       system:
         "Eres un analista que destila patrones reutilizables de proyectos de software exitosos. " +

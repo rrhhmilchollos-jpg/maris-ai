@@ -872,7 +872,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                           const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6", skipGating: true, forceBasicGeneration: true }),
+                            body: JSON.stringify({ prompt: promptToUse, model: "zoco-plus", skipGating: true, forceBasicGeneration: true }),
                           });
                           toast({ title: "⚡ Regeneración básica iniciada", description: d.message });
                         } catch (e: any) {
@@ -898,7 +898,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                           const d = await apiFetch<any>(`/api/admin/users/${app.userId}/generate-app`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ prompt: promptToUse, model: "claude-sonnet-4-6", skipGating: true, forceBasicGeneration: false }),
+                            body: JSON.stringify({ prompt: promptToUse, model: "zoco-plus", skipGating: true, forceBasicGeneration: false }),
                           });
                           toast({ title: "🏗️ Regeneración completa iniciada", description: d.message });
                         } catch (e: any) {

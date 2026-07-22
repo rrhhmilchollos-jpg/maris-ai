@@ -35,7 +35,7 @@ export interface GeneratedApp {
   frontendCode: string;
   backendCode: string;
   status: string;
-  /** Coder model preference: auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  /** Coder model preference: auto | zoco-flash | zoco-plus | zoco-max */
   coderModel: string;
   /** Source language: typescript (.tsx) or javascript (.jsx). Locked at creation. */
   language: string;
@@ -95,7 +95,7 @@ export interface GenerateAppRequest {
   prompt: string;
   /** When provided, edits the existing app iteratively instead of creating a new one */
   appId?: number | null;
-  /** Coder model for the new app. One of: auto | gemini-2.5-flash | claude-sonnet-4-6. Ignored on edits. */
+  /** Coder model for the new app. One of: auto | zoco-flash | zoco-plus | zoco-max. Ignored on edits. */
   coderModel?: string | null;
   /** Source language for the new app: typescript | javascript. Default typescript. Ignored on edits (the app's stored value wins). */
   language?: string | null;
@@ -109,7 +109,7 @@ export interface GenerateAppRequest {
 }
 
 export interface UpdateCoderModelRequest {
-  /** auto | gemini-2.5-flash | claude-sonnet-4-6 */
+  /** auto | zoco-flash | zoco-plus | zoco-max */
   coderModel: string;
 }
 

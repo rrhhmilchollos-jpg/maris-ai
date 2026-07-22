@@ -109,14 +109,14 @@ interface RouteGenerationRequestContext {
 /* ============================================================================
  * Maris AI multi-agent generation pipeline.
  *
- * Todos los agentes usan Anthropic (Claude) por defecto para mayor estabilidad:
- *   - Researcher    (Claude Sonnet/Haiku)  — referencia web
- *   - Architect     (Claude Sonnet)        — plan / estructura
- *   - Designer      (Claude Sonnet/Haiku)  — design system
- *   - Frontend Eng  (Claude Sonnet, streaming) — bundle frontend
- *   - Backend Eng   (Claude Sonnet/Haiku)  — bundle backend
- *   - QA Reviewer   (Claude Sonnet/Haiku)  — revisión
- *   - Patcher       (Claude Sonnet)        — auto-fix
+ * Todos los agentes usan Zoco IA (motor local) para mayor privacidad y control:
+ *   - Researcher    (Zoco Plus/Flash)  — referencia web
+ *   - Architect     (Zoco Plus)        — plan / estructura
+ *   - Designer      (Zoco Plus/Flash)  — design system
+ *   - Frontend Eng  (Zoco Plus, streaming) — bundle frontend
+ *   - Backend Eng   (Zoco Plus/Flash)  — bundle backend
+ *   - QA Reviewer   (Zoco Plus/Flash)  — revisión
+ *   - Patcher       (Zoco Plus)        — auto-fix
  * ========================================================================== */
 
 function buildFrontendSystemPrompt(language: GenLanguage, kind?: string): string {
@@ -1822,7 +1822,7 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
       // Detectar complejidad para elegir modelo
       const promptLen = cleanPrompt.length;
       const isComplex = promptLen > 150 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic|hotel|inmobili|logistic|deporte|academia|eventos|recursos humanos|ecommerce/.test(cleanPrompt);
-      const researchModel = "claude-sonnet-4-6"; // siempre sonnet — haiku truncaba investigaciones
+      const researchModel = "zoco-plus"; // siempre sonnet — haiku truncaba investigaciones
 
       // Sistema de queries multiples para investigacion completa
       const sectorKeywords = cleanPrompt.toLowerCase();
@@ -2025,7 +2025,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
   // principio. Sustituido por createClaudeMessageWithFallback, que además
   // del timeout ya trae reintento en fallos transitorios y fallback
   // Sonnet↔Opus, igual que el resto de agentes del pipeline.
-  const response = await createClaudeMessageWithFallback("architect", "claude-sonnet-4-6", {
+  const response = await createClaudeMessageWithFallback("architect", "zoco-plus", {
     max_tokens: 12000,
     system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
     messages: [{ role: "user", content: userContent }],
@@ -2092,8 +2092,8 @@ ${templateContext ? templateContext : ""}
 Crea el sistema visual completo. Detecta el sector, elige paleta, valida WCAG AA, genera tokens CSS y variantes Tailwind. Solo JSON.`;
 
   // Sonnet minimo para diseno - decision critica que impacta toda la app
-  const designerModel = (agentPlan.agents.designer.model === "claude-haiku-4-5-20251001" || agentPlan.agents.designer.model === "claude-haiku-4-5")
-    ? "claude-sonnet-4-6"
+  const designerModel = (agentPlan.agents.designer.model === "zoco-flash" || agentPlan.agents.designer.model === "zoco-flash")
+    ? "zoco-plus"
     : agentPlan.agents.designer.model;
 
   let raw = "";
@@ -2174,11 +2174,11 @@ interface CodeGenResult {
 }
 
 type CoderProvider = "claude" | "gpt-5";
-// FIX (2026-07-09): eliminado "claude-sonnet-4-7" del tipo — ese modelo NO
+// FIX (2026-07-09): eliminado "zoco-plus" del tipo — ese modelo NO
 // existe en la API de Anthropic (404 not_found_error verificado contra
 // https://api.anthropic.com/v1/models con la API key real). Los IDs legados
 // se remapean en normalizeCoderModel a modelos reales.
-type ClaudeCoderModel = "claude-haiku-4-5" | "claude-haiku-4-5-20251001" | "claude-sonnet-4-6" | "claude-opus-4-7" | "claude-opus-4-8";
+type ClaudeCoderModel = "zoco-flash" | "zoco-flash" | "zoco-plus" | "zoco-max" | "zoco-max";
 
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
@@ -2191,10 +2191,10 @@ interface AgentModelChoice {
 
 
 
-// FIX (2026-07-09): quitado "claude-sonnet-4-7" (inexistente, 404) que
+// FIX (2026-07-09): quitado "zoco-plus" (inexistente, 404) que
 // encabezaba la lista de fallback — cada generación empezaba con un fallo
 // garantizado antes de llegar a un modelo real.
-const CLAUDE_MODELS: ClaudeCoderModel[] = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-haiku-4-5"];
+const CLAUDE_MODELS: ClaudeCoderModel[] = ["zoco-plus", "zoco-max", "zoco-max", "zoco-flash"];
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   const normalized = normalizeCoderModel(coderModel);
@@ -2206,27 +2206,27 @@ function normalizeCoderModel(coderModel?: string): string {
   const value = String(coderModel || "auto").trim().toLowerCase();
   if (!value || value === "auto" || value === "automatic") return "auto";
   if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
-  if (["claude-haiku", "claude-haiku-4-5", "haiku", "fast", "basic"].includes(value)) return "claude-haiku-4-5";
+  if (["claude-haiku", "zoco-flash", "haiku", "fast", "basic"].includes(value)) return "zoco-flash";
   // Opus 4.8 (Ultra, solo pago) se reconoce explícitamente ANTES de las
   // reglas genéricas de opus, para que no caiga en la rama de la versión
   // anterior (4.7).
-  // FIX (2026-07-09): los IDs "claude-sonnet-4-7"/"sonnet-4-7"/"sonnet-ultra"
+  // FIX (2026-07-09): los IDs "zoco-plus"/"sonnet-4-7"/"sonnet-ultra"
   // apuntaban a un modelo que NO existe en la API de Anthropic (404
-  // verificado). El tier Ultra de Sonnet se remapea a "claude-sonnet-4-6"
+  // verificado). El tier Ultra de Sonnet se remapea a "zoco-plus"
   // (el Sonnet real más reciente disponible con la key actual) para que las
   // selecciones antiguas guardadas en el frontend no rompan la generación.
-  if (["claude-opus-4-8", "opus-4-8", "opus-ultra"].includes(value)) return "claude-opus-4-8";
-  if (["claude-opus", "claude-opus-4-7", "opus", "robust", "max"].includes(value)) return "claude-opus-4-7";
-  if (["claude-sonnet", "claude-sonnet-4-6", "claude-sonnet-4-7", "sonnet-4-7", "sonnet-ultra", "claude-sonnet-4-8", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "claude-sonnet-4-6";
+  if (["zoco-max", "opus-4-8", "opus-ultra"].includes(value)) return "zoco-max";
+  if (["claude-opus", "zoco-max", "opus", "robust", "max"].includes(value)) return "zoco-max";
+  if (["claude-sonnet", "zoco-plus", "zoco-plus", "sonnet-4-7", "sonnet-ultra", "claude-sonnet-4-8", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "zoco-plus";
   return value;
 }
 
 function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
   const normalized = normalizeCoderModel(coderModel);
-  if (normalized === "claude-haiku-4-5") return "claude-haiku-4-5";
-  if (normalized === "claude-opus-4-8") return "claude-opus-4-8";
-  if (normalized === "claude-opus-4-7") return "claude-opus-4-7";
-  return "claude-sonnet-4-6";
+  if (normalized === "zoco-flash") return "zoco-flash";
+  if (normalized === "zoco-max") return "zoco-max";
+  if (normalized === "zoco-max") return "zoco-max";
+  return "zoco-plus";
 }
 
 function classifyPromptComplexity(prompt: string, context?: { kind?: string; hasExistingApp?: boolean }): { tier: ComplexityTier; score: number; reasons: string[] } {
@@ -2305,21 +2305,21 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // ningún concepto" cuentas free en modo Ultra): el frontend ya bloquea el
   // botón Ultra para quien no tiene pago verificado, pero eso es solo
   // cosmético — cualquiera con acceso a la API podría pedir
-  // "claude-opus-4-8" directamente en el body de la petición. Aquí es donde
+  // "zoco-max" directamente en el body de la petición. Aquí es donde
   // de verdad se hace cumplir: si se pide el modelo Ultra y el usuario NO
   // tiene hasEverPaid=true (esto ya incluye a los admins vía
   // `hasEverPaid || isAdmin` en el caller), se degrada en silencio a
   // Sonnet 4.6 en vez de servir el modelo Ultra sin autorización.
-  // NOTA (2026-07-09): "claude-sonnet-4-7" ya no llega aquí — no existe en
+  // NOTA (2026-07-09): "zoco-plus" ya no llega aquí — no existe en
   // la API de Anthropic y normalizeCoderModel lo remapea a Sonnet 4.6.
-  if (normalized === "claude-opus-4-8" && !context?.hasEverPaid) {
-    normalized = "claude-sonnet-4-6";
+  if (normalized === "zoco-max" && !context?.hasEverPaid) {
+    normalized = "zoco-plus";
   }
   // GPT-5.4: mismo criterio que Opus 4.8 -- solo pago verificado
   // (aclarado explícitamente por el usuario). Haiku 4.5, en cambio, se deja
   // abierto para todos sin este bloqueo, por ser el modelo económico.
   if (normalized === "gpt-5.4" && !context?.hasEverPaid) {
-    normalized = "claude-sonnet-4-6";
+    normalized = "zoco-plus";
   }
   const auto = normalized === "auto";
   const complexity = classifyPromptComplexity(prompt, context);
@@ -2345,12 +2345,12 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   const isFreeUser = context?.hasEverPaid === false;
 
   const frontendModel: AgentModelChoice["model"] = auto
-    ? (isFreeUser ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6")
+    ? (isFreeUser ? "zoco-flash" : "zoco-plus")
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
 
   // Modelos por rol según tier de usuario
-  const SONNET: ClaudeCoderModel = "claude-sonnet-4-6";
-  const HAIKU: ClaudeCoderModel = "claude-haiku-4-5-20251001";
+  const SONNET: ClaudeCoderModel = "zoco-plus";
+  const HAIKU: ClaudeCoderModel = "zoco-flash";
 
   const architectModel: ClaudeCoderModel = SONNET; // SIEMPRE Sonnet — plan = todo
   const pmModel: ClaudeCoderModel = SONNET;         // SIEMPRE Sonnet — QA = calidad final
@@ -2401,7 +2401,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
 }
 
 function fallbackClaudeModels(model: AgentModelChoice["model"]): ClaudeCoderModel[] {
-  const primary = model === "gpt-5.4" ? "claude-sonnet-4-6" : model;
+  const primary = model === "gpt-5.4" ? "zoco-plus" : model;
   return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
 }
 
@@ -2580,7 +2580,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     truncated = finishReason === "MAX_TOKENS";
     } catch (err) {
       logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
-      const streamed = await streamClaudeTextWithFallback("frontend", "claude-sonnet-4-6", {
+      const streamed = await streamClaudeTextWithFallback("frontend", "zoco-plus", {
         max_tokens: 40000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userContent }],
@@ -2784,7 +2784,7 @@ RULES — non-negotiable:
   try {
     const streamed = await streamClaudeTextWithFallback(
       "frontend",
-      "claude-haiku-4-5-20251001",
+      "zoco-flash",
       {
         max_tokens: 10000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
@@ -3475,7 +3475,7 @@ async function surgicalEditWithTools(
 
     const result = await runAgentWithTools({
       role: "editor",
-      model: "claude-sonnet-4-6",
+      model: "zoco-plus",
       maxIterations: 6,
       systemPrompt: `Eres el agente de edición quirúrgica de Maris AI.
 
@@ -3815,7 +3815,7 @@ async function fastPatchEdit(
     // Ampliado a 6000 caracteres -- cubre con holgura cualquier
     // instrucción de edición realista, manteniendo proporción razonable
     // con el resto del contexto de la llamada.
-    const resp = await createClaudeMessageWithFallback("patcher", "claude-sonnet-4-6", {
+    const resp = await createClaudeMessageWithFallback("patcher", "zoco-plus", {
       max_tokens: 8000,
       system: buildFastPatchPrompt(),
       messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,6000)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles and deletedFiles only.` }]
@@ -3872,7 +3872,7 @@ async function generateGatingQuestions(clientPrompt: string): Promise<GatingQues
     // rechazarse; un stream colgado a medias se habría quedado esperando
     // indefinidamente en vez de caer al fallback. createClaudeMessageWithFallback
     // ya trae el timeout de inactividad + reintentos.
-    const response = await createClaudeMessageWithFallback("gating", "claude-sonnet-4-6", {
+    const response = await createClaudeMessageWithFallback("gating", "zoco-plus", {
       max_tokens: 1500,
       system: `Analyze the user's software request (in Spanish). Identify genuine ambiguity in exactly 3 critical areas that most commonly break complex software projects: Database (SQL vs NoSQL and which engine), Authentication/Roles (who can do what), and Third-Party Integrations (payments, external APIs). For each area, generate ONE short, specific, multiple-choice question in Spanish ONLY IF the user's prompt does not already make a clear, confident choice for that area — if the prompt already answers it (e.g. explicitly mentions "Stripe" or "PostgreSQL" or describes the exact roles), DO NOT ask about that area again.
 
@@ -4191,7 +4191,7 @@ export async function generateApp(
       // El modelo del orquestador: siempre Sonnet para el planificador de hitos
       // (decide el orden y contenido de cada módulo). Los agentes ejecutores
       // dentro de cada hito usan el modelo del plan (Haiku en free, Sonnet en paid).
-      model: isDegradedFreeTier ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6",
+      model: isDegradedFreeTier ? "zoco-flash" : "zoco-plus",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
       maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
       // Pasar el validador esbuild para que el orquestador detecte y regenere
@@ -4509,7 +4509,7 @@ export async function generateApp(
       try {
         await log("system", "🏗️ Activando edición por hitos (CoreOrchestrator) — divide el cambio en archivos concretos en vez de reescribir todo el proyecto de una vez...");
         const editOrchestrator = new CoreOrchestrator(process.cwd(), {
-          model: "claude-sonnet-4-6",
+          model: "zoco-plus",
           backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
         });
         const editResult = await editOrchestrator.editProjectIncremental(
@@ -4988,7 +4988,7 @@ export async function generateApp(
       if (jobId) GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } }).catch(() => {});
     }, 30_000);
     try {
-      const turboModel = "claude-sonnet-4-6";
+      const turboModel = "zoco-plus";
       const kind = requestContext?.kind || "fullstack";
       const complexity = classifyPromptComplexity(prompt, { kind });
 
@@ -5108,7 +5108,7 @@ export async function generateApp(
           reducedPlan, design, research, prompt,
           (chars) => {
             onProgress?.({ phase: "generating", progress: 60 + Math.round(Math.min(chars / 60_000, 1) * 15), note: `⚡ Reintento con plan reducido: ${Math.round(chars / 1000)} KB…` });
-          }, "claude-sonnet-4-6", language, templateContextBlock, selectAgentModelPlan(prompt, "claude-sonnet-4-6"), undefined, isFreeUser,
+          }, "zoco-plus", language, templateContextBlock, selectAgentModelPlan(prompt, "zoco-plus"), undefined, isFreeUser,
         );
         if (retryResult.code && retryResult.code.length > 500) {
           await log("coder", `✅ Frontend listo con plan reducido: ${Math.round(retryResult.code.length / 1000)} KB.`);
@@ -5203,7 +5203,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
             { ...plan, frontendFiles: plan.frontendFiles.slice(0, 3), pages: plan.pages.slice(0, 1), components: plan.components.slice(0, 4) },
             design, research, prompt,
             (chars) => { onProgress?.({ phase: "fixing", progress: 78, note: `⚡ Versión mínima: ${Math.round(chars / 1000)} KB…` }); },
-            "claude-haiku-4-5-20251001", language, templateContextBlock,
+            "zoco-flash", language, templateContextBlock,
           );
           if (lastResortResult.code && lastResortResult.code.length > 500) {
             await log("coder", `✅ Versión mínima lista (${Math.round(lastResortResult.code.length / 1000)} KB). Puedes ir añadiendo funcionalidades.`);
@@ -5666,10 +5666,10 @@ router.get("/models", requireAuth, async (req: any, res: any) => {
   // Haiku 4.5 (todos verificados con respuesta 200 contra la API real).
   const availableModels = [
     { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
-    { id: "claude-haiku-4-5", name: "Claude Haiku 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
-    { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
-    { id: "claude-opus-4-7", name: "Claude Opus 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
-    { id: "claude-opus-4-8", name: "Claude Opus 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
+    { id: "zoco-flash", name: "Claude Haiku 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
+    { id: "zoco-plus", name: "Claude Sonnet 4.6", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
+    { id: "zoco-max", name: "Claude Opus 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
+    { id: "zoco-max", name: "Claude Opus 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI. Coste premium." }
   ];
   res.json(availableModels);
@@ -5725,7 +5725,7 @@ TONO: Cercano, directo, máximo 2-3 frases. Sin "¿en qué más puedo ayudarte?"
       { role: "user", content: message.slice(0, 500) },
     ];
 
-    const response = await createClaudeMessageWithFallback("chat", "claude-haiku-4-5-20251001", {
+    const response = await createClaudeMessageWithFallback("chat", "zoco-flash", {
       max_tokens: 350,
       system: systemPrompt,
       messages,
@@ -5817,7 +5817,7 @@ REGLAS:
 - "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
 - Devuelve ÚNICAMENTE el JSON. Nada más.`;
 
-    const response = await createClaudeMessageWithFallback("planner", "claude-haiku-4-5-20251001", {
+    const response = await createClaudeMessageWithFallback("planner", "zoco-flash", {
       max_tokens: 1000,
       system: [
         {
@@ -5994,9 +5994,9 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
 
     const jobId = new mongoose.Types.ObjectId().toString();
     // Ultra Thinking: usar Sonnet como mínimo con budget de tokens extendido
-    const effectiveModel = ultraThinking && (model === "auto" || model === "claude-haiku-4-5")
-      ? "claude-sonnet-4-6"
-      : model || "claude-sonnet-4-6";
+    const effectiveModel = ultraThinking && (model === "auto" || model === "zoco-flash")
+      ? "zoco-plus"
+      : model || "zoco-plus";
 
     // Legacy mode: prefijo en el prompt para activar modo migración
     const legacyPrefix = legacyMode
@@ -6471,7 +6471,7 @@ router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => 
       app.backendCode ? String(app.backendCode).slice(0, 15000) : "",
     ].filter(Boolean).join("\n\n");
 
-    const response = await createClaudeMessageWithFallback("code-review", "claude-sonnet-4-6", {
+    const response = await createClaudeMessageWithFallback("code-review", "zoco-plus", {
       max_tokens: 2000,
       system: `Eres un revisor de código senior. Analiza el código de una app React/TypeScript (y opcionalmente su backend Express) y da una evaluación honesta de su calidad de producción: buenas prácticas, manejo de errores, accesibilidad básica, estructura. NO repares nada, solo evalúa.
 
@@ -7097,7 +7097,7 @@ Por ejemplo:
       // perfectamente y a ~¼ del precio de Sonnet. En cualquier otro caso
       // (cambio funcional, lógica, nuevas páginas, corrección de errores) se
       // usa el modelo del propio proyecto (app.coderModel) o el default "auto".
-      coderModel: classified.isPurelyVisual ? "claude-haiku-4-5" : (app.coderModel || "auto"),
+      coderModel: classified.isPurelyVisual ? "zoco-flash" : (app.coderModel || "auto"),
       language: app.language || "typescript",
       kind: app.kind || "fullstack",
       status: "queued",
@@ -7308,16 +7308,15 @@ router.put("/apps/:id/auto-publish", requireAuth, async (req: any, res: any) => 
 router.get("/models", async (_req: any, res: any) => {
   try {
     const models = [
-      { id: "auto", name: "Auto (11 agentes: básico → robusto)", provider: "maris", recommended: true },
-      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5 (rápido / básico)", provider: "anthropic" },
-      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6 (equilibrado)", provider: "anthropic" },
-      { id: "claude-opus-4-7", name: "Claude Opus 4.7 (robusto / máxima calidad)", provider: "anthropic" },
-      { id: "claude-opus-4-8", name: "Claude Opus 4.8 (Ultra — solo pago verificado)", provider: "anthropic" },
-      { id: "gpt-5.4", name: "GPT-5.4 (frontend alternativo con fallback Claude)", provider: "openai" },
-      { id: "claude-4-8-sonnet", name: "Compatibilidad: Claude 4.8 Sonnet → Sonnet 4.6", provider: "anthropic" },
-      { id: "claude-sonnet-4-7", name: "Compatibilidad: Sonnet 4.7 → Sonnet 4.6 (el 4.7 no existe en la API)", provider: "anthropic" },
-      { id: "claude-mithos", name: "Compatibilidad: Claude Mithos → Sonnet 4.6", provider: "anthropic" },
-      { id: "gemini-3", name: "Compatibilidad: Gemini 3 → Sonnet 4.6", provider: "anthropic" },
+      { id: "auto", name: "Auto (11 agentes: básico → robusto)", provider: "zocoia", recommended: true },
+      { id: "zoco-flash", name: "Zoco Flash — Ultra-rápido (básico)", provider: "zocoia" },
+      { id: "zoco-plus", name: "Zoco Plus — Equilibrado (recomendado)", provider: "zocoia" },
+      { id: "zoco-max", name: "Zoco Max — Potente y creativo (Pro)", provider: "zocoia" },
+      { id: "zoco-lab", name: "Zoco Lab — Rápido y eficiente (Beta)", provider: "zocoia" },
+      { id: "claude-4-8-sonnet", name: "Compatibilidad: Claude 4.8 Sonnet → Zoco Plus", provider: "zocoia" },
+      { id: "zoco-plus", name: "Compatibilidad: Sonnet 4.7 → Zoco Plus", provider: "zocoia" },
+      { id: "claude-mithos", name: "Compatibilidad: Claude Mithos → Zoco Plus", provider: "zocoia" },
+      { id: "gemini-3", name: "Compatibilidad: Gemini 3 → Zoco Plus", provider: "zocoia" },
     ];
     res.json(models);
   } catch (err) {
@@ -8233,7 +8232,7 @@ export async function runJobById(
           await GenerationJob.create({
             _id: patchJobId, userId: job.userId,
             prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-quality. ${patchPrompt}`,
-            editAppId: String(savedAppId), coderModel: "claude-sonnet-4-6",
+            editAppId: String(savedAppId), coderModel: "zoco-plus",
             language: job.language || "typescript", kind: "edit",
             status: "queued", phase: "queued", progress: 0,
             isAdmin: true, hasEverPaid: true, autoFixedFromJobId: jobId,

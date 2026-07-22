@@ -73,7 +73,7 @@ export async function generateMarisReply(opts: {
   const contextBlock = context ? `\nContexto: ${context}` : "";
 
   try {
-    const response = await createClaudeMessageWithFallback("chat", "claude-haiku-4-5-20251001", {
+    const response = await createClaudeMessageWithFallback("chat", "zoco-flash", {
       max_tokens: 400,
       // OPTIMIZACIÓN: MARIS_PERSONA es estático y largo → cache_control activa 90% descuento
       // El contexto dinámico (appContext, historyBlock) va en el mensaje del usuario, no en el system
@@ -153,7 +153,7 @@ REGLAS:
 - Sin "¡Listo!" genérico. Sin saludos. Directo.`;
 
   try {
-    const response = await createClaudeMessageWithFallback("chat", "claude-haiku-4-5-20251001", {
+    const response = await createClaudeMessageWithFallback("chat", "zoco-flash", {
       max_tokens: 200,
       // OPTIMIZACIÓN: cache_control en el system prompt estático
       system: [

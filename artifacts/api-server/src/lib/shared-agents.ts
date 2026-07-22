@@ -415,7 +415,7 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
 // Modelos de Anthropic soportados, de más nuevo a más antiguo dentro de
 // cada familia. Opus 4.8 es la versión más reciente, disponible solo para
 // clientes de pago con Ultra activado (ver dashboard.tsx).
-// FIX (2026-07-09): "claude-sonnet-4-7" NO existe en la API de Anthropic
+// FIX (2026-07-09): "zoco-plus" NO existe en la API de Anthropic
 // — verificado contra https://api.anthropic.com/v1/models con la API key
 // real: devuelve 404 not_found_error ("model: claude-sonnet-4-7"). Estaba
 // como PRIMER candidato de la lista de fallback, así que muchas llamadas
@@ -424,18 +424,18 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
 // generación". Modelos verificados como disponibles con la key actual:
 // claude-sonnet-4-6, claude-opus-4-8, claude-opus-4-7,
 // claude-haiku-4-5(-20251001).
-const CLAUDE_MODELS = ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7"];
+const CLAUDE_MODELS = ["zoco-plus", "zoco-max", "zoco-max"];
 
 function fallbackClaudeModels(model: string): string[] {
   // Se usa el modelo EXACTO solicitado como primario si es uno de los
   // soportados, y solo se cae a detección por familia para strings no
-  // reconocidos. FIX (2026-07-09): el ID legado "claude-sonnet-4-7" (no
+  // reconocidos. FIX (2026-07-09): el ID legado "zoco-plus" (no
   // existe en la API de Anthropic, 404 verificado) se remapea a
-  // "claude-sonnet-4-6" en vez de intentarse tal cual.
-  const remapped = model === "claude-sonnet-4-7" ? "claude-sonnet-4-6" : model;
+  // "zoco-plus" en vez de intentarse tal cual.
+  const remapped = model === "zoco-plus" ? "zoco-plus" : model;
   const primary = CLAUDE_MODELS.includes(remapped)
     ? remapped
-    : (remapped.includes("opus") ? "claude-opus-4-8" : "claude-sonnet-4-6");
+    : (remapped.includes("opus") ? "zoco-max" : "zoco-plus");
   return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
 }
 
@@ -859,7 +859,7 @@ export async function patchBundle(
   issues: QAIssue[],
   language: GenLanguage = "typescript",
   memoryContext: string = "",
-  model: string = "claude-sonnet-4-6",
+  model: string = "zoco-plus",
   jobId?: string,
 ): Promise<string | null> {
   if (issues.length === 0) return null;
@@ -1032,7 +1032,7 @@ export async function patchBundleMultiFile(
   frontendCode: string,
   errorSummary: string,
   language: GenLanguage = "typescript",
-  model: string = "claude-sonnet-4-6",
+  model: string = "zoco-plus",
   jobId?: string,
 ): Promise<string | null> {
   const plan = await planMultiFileRepair(frontendCode, errorSummary, language, model);
@@ -1074,7 +1074,7 @@ export async function createFastPatch(
   frontendCode: string,
   userPrompt: string,
   language: GenLanguage = "typescript",
-  model: string = "claude-sonnet-4-6",
+  model: string = "zoco-plus",
   jobId?: string,
 ): Promise<string | null> {
   const issueHints = [userPrompt];

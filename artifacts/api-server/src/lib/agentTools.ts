@@ -282,7 +282,7 @@ export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<Agent
     role,
     systemPrompt,
     userMessage,
-    model = "claude-sonnet-4-6",
+    model = "zoco-plus",
     maxIterations = 5,
     ctx = {},
     onToolCall,

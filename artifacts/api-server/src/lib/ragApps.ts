@@ -77,7 +77,7 @@ export async function findSimilarApps(
     for (const { app, score } of scored) {
       try {
         const codeSnippet = (app.frontendCode || "").slice(0, 3000);
-        const response = await createClaudeMessageWithFallback("rag", "claude-haiku-4-5-20251001", {
+        const response = await createClaudeMessageWithFallback("rag", "zoco-flash", {
           max_tokens: 300,
           system: "Analiza este código React y lista los componentes más reutilizables. Devuelve SOLO JSON: {\"components\": [\"NombreComponente: descripción breve\"], \"colorPalette\": \"hex principal\"}. Máximo 5 componentes.",
           messages: [{ role: "user", content: `App: "${app.title}"\nCódigo:\n${codeSnippet}` }],

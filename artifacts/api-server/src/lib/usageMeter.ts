@@ -17,8 +17,8 @@ import { logger } from "./logger";
  * de Anthropic. Fuente: pricing público de Claude a fecha de este código.
  */
 const PRICING_PER_MILLION_TOKENS_USD: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-6": { input: 3, output: 15 },
-  "claude-opus-4-6": { input: 15, output: 75 },
+  "zoco-plus": { input: 3, output: 15 },
+  "zoco-max": { input: 15, output: 75 },
   default: { input: 3, output: 15 },
 };
 

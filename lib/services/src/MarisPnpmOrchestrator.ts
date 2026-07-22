@@ -59,7 +59,7 @@ export class MarisPnpmOrchestrator {
     console.log("🤖 Planificador pnpm analizando dependencias...");
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "zoco-plus",
       max_tokens: 4000,
       system: [{ type: "text", text: PNPM_PLANNER_SYSTEM, cache_control: { type: "ephemeral" } }] as any,
       messages: [
@@ -75,7 +75,7 @@ export class MarisPnpmOrchestrator {
       return JSON.parse(fullJson).milestones;
     } catch {
       const fb = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "zoco-plus",
         max_tokens: 4000,
         system: [{ type: "text", text: PNPM_PLANNER_SYSTEM, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userPrompt }],
@@ -96,7 +96,7 @@ export class MarisPnpmOrchestrator {
       });
 
       const agentResponse = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "zoco-plus",
         max_tokens: 16000, // suficiente para App.tsx completo con router y todos los módulos
         system: [
           { type: "text", text: PNPM_CODE_AGENT_SYSTEM, cache_control: { type: "ephemeral" } },

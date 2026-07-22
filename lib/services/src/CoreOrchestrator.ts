@@ -281,7 +281,7 @@ export class CoreOrchestrator {
   constructor(projectRoot: string, options: CoreOrchestratorOptions = {}) {
     this.projectRoot = projectRoot;
     this.options = {
-      model: options.model ?? "claude-sonnet-4-6",
+      model: options.model ?? "zoco-plus",
       concurrencyPerLayer: options.concurrencyPerLayer ?? 8,
       backendQualityPrompt: options.backendQualityPrompt ?? "",
       maxMilestonesOverride: options.maxMilestonesOverride,

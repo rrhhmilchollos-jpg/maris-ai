@@ -563,7 +563,7 @@ export function GenerationStudio({ jobId, job, phaseLabel, PhaseIcon, appId }: G
   const [message, setMessage] = useState("");
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [selectedModel, setSelectedModel] = useState(
-    () => localStorage.getItem("maris_ai_selected_model") || "claude-sonnet-4-6"
+    () => localStorage.getItem("maris_ai_selected_model") || "zoco-plus"
   );
   const { data: models } = useListModels();
   const { data: me } = useGetMe();
