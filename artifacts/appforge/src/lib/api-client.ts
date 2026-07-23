@@ -64,12 +64,23 @@ export class ApiError extends Error {
     this.data = data;
   }
 }
+// En producción, las solicitudes deben conservar el mismo origen para pasar por el
+// proxy de Vercel `/api/*`. VITE_API_URL solo se admite en desarrollo local; así,
+// una variable residual de despliegue no puede incrustar un host externo en el bundle.
+export function getApiBaseUrl(): string {
+  const configuredBaseUrl = import.meta.env.VITE_API_URL;
+  return import.meta.env.DEV && configuredBaseUrl
+    ? configuredBaseUrl.replace(/\/+$/, "")
+    : "";
+}
+
+export function getApiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${getApiBaseUrl()}${path}`;
+}
+
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = await buildAuthHeaders(options);
-  // En producción (Vercel) usamos el proxy /api/* → Railway, por lo que baseUrl es vacío.
-  // En desarrollo local se puede definir VITE_API_URL para apuntar al servidor local.
-  const baseUrl = import.meta.env.VITE_API_URL || "";
-  const fullPath = path.startsWith("http") ? path : `${baseUrl.replace(/\/$/, "")}${path}`;
+  const fullPath = getApiUrl(path);
   const res = await fetch(fullPath, { credentials: "include", ...options, headers });
   if (!res.ok) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

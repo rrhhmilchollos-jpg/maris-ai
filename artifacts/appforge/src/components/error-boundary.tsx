@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
+import { getApiUrl } from "@/lib/api-client";
 
 interface Props {
   children: ReactNode;
@@ -51,8 +52,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // Reportar el error exacto al backend (best-effort)
     try {
-      const apiBase = (import.meta as any).env?.VITE_API_URL || "";
-      fetch(`${apiBase}/api/panel-error`, {
+      fetch(getApiUrl("/api/panel-error"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

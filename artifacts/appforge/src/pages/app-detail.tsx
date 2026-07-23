@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useClerk, useUser } from "@clerk/react";
 import {
   apiFetch,
+  getApiUrl,
   useGetApp,
   useListAppMessages,
   useSendAppMessage,
@@ -776,8 +777,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const frontendCode = String(app?.frontendCode ?? "").trim();
   const hasMilestonePlaceholder = frontendCode.includes("El código ha sido consolidado en disco por hitos");
   const hasRenderableCode = frontendCode.length >= 20 && !hasMilestonePlaceholder;
-  const API_BASE = import.meta.env.VITE_API_URL ?? "";
-  const previewEndpointUrl = app?._id ? `${API_BASE}/api/apps/${app._id}/preview` : "";
+  const previewEndpointUrl = app?._id ? getApiUrl(`/api/apps/${app._id}/preview`) : "";
   // Prioridad máxima: proyectos importados con servidor SSR en vivo (Next.js
   // vía ssrImportBuilder.ts) — su "preview" es literalmente el servidor
   // corriendo en el sandbox, no un bundle servido por Maris AI.

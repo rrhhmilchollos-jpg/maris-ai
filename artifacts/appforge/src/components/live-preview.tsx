@@ -10,6 +10,7 @@
 import React, { useRef, useEffect, useCallback } from "react";
 import { RefreshCw, Share2, X, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
+import { getApiUrl } from "@/lib/api-client";
 
 interface LivePreviewProps {
   appId: string;
@@ -39,10 +40,9 @@ export function LivePreview({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   // URL final: Vercel URL si existe, si no el endpoint de preview interno
-  const API_BASE = import.meta.env.VITE_API_URL || "";
   const src = vercelUrl
     || externalPreviewUrl
-    || (appId ? `${API_BASE}/api/apps/${appId}/preview` : "");
+    || (appId ? getApiUrl(`/api/apps/${appId}/preview`) : "");
 
   // Escuchar mensajes del iframe (root vacío = error fatal)
   useEffect(() => {

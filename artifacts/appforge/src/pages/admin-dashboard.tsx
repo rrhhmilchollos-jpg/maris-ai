@@ -68,7 +68,7 @@ import {
   Package,
   LayoutDashboard,
 } from "lucide-react";
-import { apiFetch, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs, useRetryAdminJob } from "@/lib/api-client";
+import { apiFetch, getApiBaseUrl, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs, useRetryAdminJob } from "@/lib/api-client";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useLocation } from "wouter";
@@ -2295,7 +2295,7 @@ function LiveMonitorPanel() {
                           className="h-8 text-xs border-sky-400/40 text-sky-300 hover:bg-sky-500/15 font-semibold"
                           disabled={actionLoading[`previewtab_${job.id}`]}
                           onClick={async () => {
-                            const apiBase = import.meta.env.VITE_API_URL || "";
+                            const apiBase = getApiBaseUrl();
                             // Obtener appId — del job o buscando en BD
                             let appId = job.appId;
                             if (!appId) {
@@ -2331,7 +2331,7 @@ function LiveMonitorPanel() {
                             <button
                               className="text-[10px] text-sky-400 hover:text-sky-300 underline shrink-0 ml-2"
                               onClick={() => {
-                                const apiBase = import.meta.env.VITE_API_URL || "";
+                                const apiBase = getApiBaseUrl();
                                 window.open(`${apiBase}/api/admin/apps/${job.appId}/preview`, "_blank", "noopener,noreferrer");
                               }}
                             >
@@ -2339,7 +2339,7 @@ function LiveMonitorPanel() {
                             </button>
                           </div>
                           <iframe
-                            src={`${import.meta.env.VITE_API_URL || ""}/api/apps/${job.appId}/preview`}
+                            src={`${getApiBaseUrl()}/api/apps/${job.appId}/preview`}
                             className="w-full bg-white"
                             style={{ height: 480, border: "none" }}
                             title={`Preview ${job.userEmail}`}
@@ -4063,12 +4063,12 @@ export default function AdminDashboardPage() {
 
               {/* APPS CLIENTES TAB */}
               <TabsContent value="apps" className="space-y-4">
-                <AppsClientesPanel apiBase={import.meta.env.VITE_API_URL || ""} />
+                <AppsClientesPanel apiBase={getApiBaseUrl()} />
               </TabsContent>
 
               {/* DASHBOARDS REMOTOS TAB */}
               <TabsContent value="remote" className="space-y-4">
-                <RemoteDashboardPanel apiBase={import.meta.env.VITE_API_URL || ""} />
+                <RemoteDashboardPanel apiBase={getApiBaseUrl()} />
               </TabsContent>
 
               {/* SYSTEM TAB */}

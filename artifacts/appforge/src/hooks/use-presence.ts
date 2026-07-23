@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useUser } from "@clerk/react";
 import { io, type Socket } from "socket.io-client";
+import { getApiBaseUrl } from "@/lib/api-client";
 
 declare global {
   interface Window {
@@ -47,7 +48,7 @@ export function usePresence() {
         const token = await window.Clerk?.session?.getToken?.();
         if (cancelled || !token) return;
 
-        const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+        const baseUrl = getApiBaseUrl() || window.location.origin;
         const socket = io(baseUrl, {
           auth: { token },
           // CRÍTICO: Limitar reconexión para evitar bucle infinito que
