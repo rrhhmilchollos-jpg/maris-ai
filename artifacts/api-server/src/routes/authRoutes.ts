@@ -10,7 +10,16 @@ import { MarisId, generateUserId } from "../lib/universalId";
 import { logger } from "../lib/logger";
 
 const router = Router();
-const resend = new Resend(process.env.RESEND_API_KEY!);
+// IMPORTANTE: `new Resend(...)` lanza una excepción de inmediato si no hay
+// API key disponible (ni por parámetro ni por env var). Si esto se
+// instanciara aquí arriba a nivel de módulo, la falta de RESEND_API_KEY
+// tumbaría TODO el servidor al arrancar, no solo el envío de emails.
+// Se crea de forma perezosa, solo cuando de verdad hace falta enviar algo.
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Maris AI <no-reply@marisai.es>";
 const APP_URL = process.env.APP_URL || "https://marisai.es";
 const FREE_PLAN_CREDITS = 65; // mismo valor que auth.ts/credits.ts/payments.ts
@@ -140,7 +149,7 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
       await user.save();
 
       const resetUrl = `${APP_URL}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
-      await resend.emails.send({
+      await getResend().emails.send({
         from: FROM_EMAIL,
         to: user.email,
         subject: "Restablece tu contraseña de Maris AI",
