@@ -963,7 +963,31 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
           <div className="px-6 pb-4">
             <div className="flex flex-wrap gap-1.5">
               {(Object.entries(KIND_META) as [Kind, typeof KIND_META[Kind]][]).map(([k, meta]) => (
-                <button key={k} type="button" onClick={() => { kindTouchedRef.current = true; setKind(k); }} disabled={isWorking}
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => {
+                    kindTouchedRef.current = true;
+                    setKind(k);
+                    // ── AUTOCOMPLETADO DE PROMPT AL PINCHAR CATEGORÍA ──────
+                    // A petición explícita del usuario: al pinchar cualquiera
+                    // de estas categorías, el prompt de ejemplo se inserta
+                    // INMEDIATAMENTE como texto real en el textarea (no como
+                    // placeholder), listo para que el cliente pulse
+                    // "Generar app" directamente sin tener que escribir nada.
+                    // Se excluyen video-ai / imagen-ai porque para esos dos
+                    // kinds el formulario/textarea está oculto y se usa
+                    // MediaAIGenerator en su lugar (ver className del <form>
+                    // más abajo: kind === "video-ai" || kind === "imagen-ai").
+                    // Se quita el prefijo "ej. " porque deja de ser un
+                    // ejemplo ilustrativo y pasa a ser el prompt real que se
+                    // va a enviar al pipeline de generación.
+                    if (k !== "video-ai" && k !== "imagen-ai") {
+                      setPrompt(meta.placeholder.replace(/^ej\.\s*/i, ""));
+                      if (inlineHint) setInlineHint(null);
+                    }
+                  }}
+                  disabled={isWorking}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
                     kind === k ? "bg-primary/15 border-primary/40 text-primary shadow-sm shadow-primary/10" : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.06]"
                   }`}>
