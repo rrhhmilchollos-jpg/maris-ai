@@ -33,10 +33,10 @@ Maris AI es la única plataforma de vibe coding completamente en español. A dif
 - **Frontend**: React 18, TypeScript, Tailwind CSS, Vite, shadcn/ui
 - **Backend**: Node.js, Express, TypeScript, Mongoose
 - **Base de datos**: MongoDB Atlas
-- **Auth**: Clerk
+- **Auth**: Sistema propio (email/contraseña, Google OAuth, GitHub OAuth)
 - **Pagos**: Stripe
 - **Deploy frontend**: Vercel
-- **Deploy backend**: Railway
+- **Deploy backend**: Infraestructura propia autogestionada
 - **Testing visual**: Puppeteer + Chromium + Claude Vision
 
 ## Precios (en euros, sin caducidad)

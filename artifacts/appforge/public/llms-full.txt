@@ -30,7 +30,7 @@ La competencia usa un único agente IA que intenta hacer todo. Maris AI tiene 11
 ### 3. Backend automático incluido
 Lovable requiere Supabase externo. Bolt.new tiene limitaciones con WebContainers. Maris AI genera automáticamente un backend Express + MongoDB completo con:
 - API REST con todos los endpoints necesarios
-- Autenticación JWT + Clerk
+- Autenticación JWT propia + login social (Google, GitHub)
 - Validación con Zod
 - Rate limiting y seguridad
 - Datos de ejemplo seed reales
