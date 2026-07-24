@@ -80,9 +80,12 @@ export function AuthCard({ mode }: { mode: "sign-in" | "sign-up" }) {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {mode === "sign-up" && (
           <div>
-            <label className="text-white font-medium text-sm block mb-1">Nombre</label>
+            <label className="text-white font-medium text-sm block mb-1" htmlFor="fullName">Nombre</label>
             <input
+              id="fullName"
+              name="fullName"
               type="text"
+              autoComplete="name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               className="w-full bg-[#18181b] border border-[#27272a] text-white rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-[#a855f7] focus:border-transparent transition-all"
@@ -90,9 +93,12 @@ export function AuthCard({ mode }: { mode: "sign-in" | "sign-up" }) {
           </div>
         )}
         <div>
-          <label className="text-white font-medium text-sm block mb-1">Email</label>
+          <label className="text-white font-medium text-sm block mb-1" htmlFor="email">Email</label>
           <input
+            id="email"
+            name="email"
             type="email"
+            autoComplete="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -100,9 +106,12 @@ export function AuthCard({ mode }: { mode: "sign-in" | "sign-up" }) {
           />
         </div>
         <div>
-          <label className="text-white font-medium text-sm block mb-1">Contraseña</label>
+          <label className="text-white font-medium text-sm block mb-1" htmlFor="password">Contraseña</label>
           <input
+            id="password"
+            name="password"
             type="password"
+            autoComplete={mode === "sign-up" ? "new-password" : "current-password"}
             required
             minLength={8}
             value={password}

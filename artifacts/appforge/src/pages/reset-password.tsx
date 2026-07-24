@@ -50,7 +50,10 @@ export default function ResetPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <input
+              id="newPassword"
+              name="newPassword"
               type="password"
+              autoComplete="new-password"
               required
               minLength={8}
               placeholder="Nueva contraseña (mínimo 8 caracteres)"

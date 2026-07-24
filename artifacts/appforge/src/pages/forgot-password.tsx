@@ -37,7 +37,10 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <input
+              id="email"
+              name="email"
               type="email"
+              autoComplete="email"
               required
               placeholder="tu@email.com"
               value={email}
