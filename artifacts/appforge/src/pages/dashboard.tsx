@@ -47,7 +47,8 @@ import {
   Server, ListTodo, CloudSun, Newspaper, MessagesSquare, ImagePlay, 
   FileText, Brain, Mic, Webhook, Library, type LucideIcon, UserCircle, 
   Settings2, ShieldAlert, TestTube2, HardDrive, FolderUp, CheckCircle2,
-  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock, AlertTriangle, Eye
+  Bell, BellRing, ExternalLink, RefreshCw, ChevronUp, ChevronDown, Lock, AlertTriangle, Eye,
+  PhoneCall, Video, TrendingUp, GraduationCap
 } from "lucide-react";
 import {
   Dialog,
@@ -231,19 +232,19 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
     },
     landing: { 
         label: "Agente de Voz / Telefonía", 
-        icon: PhoneCall, // Cambia Rocket por PhoneCall importándolo de lucide-react si lo deseas
+        icon: PhoneCall, 
         placeholder: "ej. Configuración de agente de voz IA integrado con Twilio para gestionar llamadas entrantes, agendar citas en Calendar y enviar confirmaciones...", 
         cost: computeRealCost("landing") 
     },
     "game-2d": { 
         label: "Agente de Automatización", 
-        icon: Cpu, // Cambia Gamepad2 por Cpu o Bot
+        icon: Cpu, 
         placeholder: "ej. Un bot autónomo para WhatsApp y Telegram que atiende clientes, procesa pedidos, consulta stock y emite facturas automáticamente...", 
         cost: computeRealCost("game-2d") 
     },
     "game-3d": { 
         label: "Agente para RRSS", 
-        icon: Video, // Cambia Box por Video o Sparkles
+        icon: Video, 
         placeholder: "ej. Un sistema que monitoriza tendencias de nicho, redacta guiones para TikTok/Reels, clona tu voz y genera vídeos listos para publicar...", 
         cost: computeRealCost("game-3d") 
     },
@@ -255,19 +256,19 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
     },
     vue: { 
         label: "Asistente Legal / Auditor", 
-        icon: FileText, // Cambia Component por FileText
+        icon: FileText, 
         placeholder: "ej. Una app que audita contratos en PDF, detecta cláusulas de riesgo ocultas y redacta anexos de enmienda basados en la ley vigente...", 
         cost: computeRealCost("vue") 
     },
     svelte: { 
         label: "Analista de Datos Financieros", 
-        icon: TrendingUp, // Cambia Flame por TrendingUp
+        icon: TrendingUp, 
         placeholder: "ej. Un dashboard avanzado de finanzas que escanea facturas corporativas, concilia movimientos bancarios y predice el flujo de caja del trimestre...", 
         cost: computeRealCost("svelte") 
     },
     nextjs: { 
         label: "Plataforma Educativa IA", 
-        icon: GraduationCap, // Cambia Server por GraduationCap
+        icon: GraduationCap, 
         placeholder: "ej. Un tutor interactivo con avatares de IA que simula entrevistas de trabajo reales, evalúa tus respuestas y te da feedback personalizado...", 
         cost: computeRealCost("nextjs") 
     },
@@ -279,10 +280,10 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
     },
     django: { 
         label: "E-commerce Autónomo", 
-        icon: ShoppingBag, // Cambia Library por ShoppingBag
+        icon: ShoppingBag, 
         placeholder: "ej. Tienda online con un recomendador de productos hiper-personalizado basado en el comportamiento del usuario y chat interactivo de ventas...", 
         cost: computeRealCost("django") 
-    }
+    },
     "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: 10 },
     "imagen-ai": { label: "🖼️ Imagen con IA", icon: ImagePlay, placeholder: "ej. Una imagen realista de un coche deportivo rojo en una montaña al atardecer con luz dorada...", cost: computeRealCost("imagen-ai") },
   };
@@ -298,7 +299,6 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
   const [quickChatReply, setQuickChatReply] = useState<string | null>(null);
   const [quickChatLoading, setQuickChatLoading] = useState(false);
 
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [onboardingAnswers, setOnboardingAnswers] = useState<Record<number, string>>({}); 
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -312,6 +312,8 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
   const [customInstructions, setCustomInstructions] = useState("");
   const { data: preferencesData } = useGetMyPreferences({ query: { enabled: preferencesDialogOpen } });
   const updatePreferences = useUpdateMyPreferences();
+
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     if (preferencesData?.notes !== undefined) {
@@ -453,12 +455,6 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
 
   const { data: apps, isLoading: appsLoading } = useListApps({
     query: {
-      // Mientras haya alguna importación en curso, se refresca sola cada
-      // 5s para que el badge de estado se actualice sin recargar la
-      // página a mano -- así el usuario puede ver el progreso real desde
-      // el propio panel, sin depender de tener abierta la ventana
-      // original de importación (que puede cerrarse o tardar más de lo
-      // que esa ventana esperaba).
       refetchInterval: (query: any) => {
         const list = query?.state?.data as any[] | undefined;
         return list?.some((a) => a.importStatus === "processing") ? 5000 : false;
@@ -518,27 +514,13 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      // ENCONTRADO A PETICION DEL USUARIO (consola del navegador: error de
-      // CORS en /api/import-app que en realidad era un timeout de proxy --
-      // con varios reintentos de compilación de varios minutos cada uno,
-      // la petición original podía tardar tanto que algún proxy por el
-      // camino cortaba la conexión a mitad). El backend ahora responde al
-      // instante (202) con un ID, y el trabajo real corre en segundo
-      // plano -- aquí se consulta el estado cada pocos segundos en vez de
-      // esperar una única petición larga.
       const initial = await apiFetch<any>("/api/import-app", { method: "POST", body: formData });
       const importId = initial.id;
       setImportStatusMessage(initial.message || "Importando...");
-      // BUG ENCONTRADO A PETICION DEL USUARIO: la lista de "Apps
-      // recientes" solo se refrescaba al TERMINAR la importación -- el
-      // usuario no veía la tarjeta nueva (con su etiqueta "Importando...")
-      // hasta que el proceso ya había acabado, dando la falsa impresión
-      // de que la importación ni siquiera se había iniciado. Se invalida
-      // la lista YA, en cuanto se confirma que el registro se creó.
       queryClient.invalidateQueries({ queryKey: getListAppsQueryKey() });
 
       const POLL_INTERVAL_MS = 4000;
-      const MAX_WAIT_MS = 15 * 60_000; // 15 min como límite razonable de espera en el propio navegador
+      const MAX_WAIT_MS = 15 * 60_000; 
       const deadline = Date.now() + MAX_WAIT_MS;
 
       while (Date.now() < deadline) {
@@ -558,17 +540,10 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
           }
           return;
         }
-        // Sigue "processing" -- seguir esperando y consultando.
         setImportStatusMessage("Importando... esto puede tardar varios minutos si el proyecto necesita compilarse.");
       }
       toast({ title: "Sigue en proceso", description: "La importación está tardando más de lo esperado. Puedes cerrar esta ventana — se avisará cuando termine.", variant: "destructive" });
     } catch (err: any) {
-      // ENCONTRADO A PETICION DEL USUARIO (caso real: import de un ZIP de
-      // Wix fallando con "exit status 254" sin ninguna pista útil): el
-      // backend YA devuelve buildLog/installLog reales en err.data cuando
-      // la compilación falla, pero antes solo se mostraba err.message en
-      // un toast pequeño -- se perdía toda esa información. Ahora se
-      // guarda el detalle completo para mostrarlo en un diálogo legible.
       toast({ title: "Error al importar", description: err.message, variant: "destructive" });
       if (err?.data?.buildLog || err?.data?.installLog) {
         setImportErrorDetail({
@@ -637,7 +612,7 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
       toast({ title: "Falló la generación", description: job.errorMessage || "Inténtalo otra vez.", variant: "destructive" });
       setActiveJobId(null);
     }
-  }, [job, queryClient, setLocation, toast, activeJobId]);
+  }, [job, queryClient, setLocation, toast, activeJobId, attachments, kind]);
 
   const looksLikeBuildIntent = (text: string): boolean => {
     if (attachments.length > 0) return true;
@@ -679,9 +654,6 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-    // Protección anti-doble-submit: el ref se activa síncronamente antes
-    // de cualquier llamada async, evitando que dos clicks rápidos lancen
-    // dos jobs aunque isWorking aún no se haya actualizado en el estado.
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     setTimeout(() => { isSubmittingRef.current = false; }, 5000);
@@ -743,7 +715,7 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
       } catch { /* silencioso */ }
     }, 8000);
     return () => clearInterval(interval);
-  }, [showNoCredits, isAdmin]);
+  }, [showNoCredits, isAdmin, queryClient, toast]);
 
   const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
   const PhaseIcon = phaseInfo.icon;
@@ -777,13 +749,6 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
   return (
     <Layout>
       <div className="container max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
-
-        {/* Notificaciones de soporte: movidas a la campanita del layout
-            compartido (components/layout.tsx, NotificationsBell) a
-            petición explícita del usuario -- ya no se muestran sueltas
-            aquí, ocupando toda la parte de arriba de la pantalla de
-            inicio. */}
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <Card className="bg-card/50 border-white/5 shadow-sm">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -900,38 +865,15 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
                       </SelectTrigger>
                       <SelectContent className="bg-[#16161e] border-white/10">
                         {ultraThinking ? (
-                          // MODO ULTRA: exclusivamente los modelos Ultra,
-                          // nada más. No se mezcla con la lista normal — a
-                          // petición explícita del usuario, Ultra es su
-                          // propio modo. Solo llega aquí quien ya tiene pago
-                          // verificado (o es admin), porque el botón Ultra
-                          // está bloqueado para el resto — ver más abajo.
-                          // FIX (2026-07-09): eliminado "zoco-plus"
-                          // — ese modelo NO existe en la API de Anthropic
-                          // (404 verificado) y era la causa del cuadro rojo
-                          // "Error en la generación" al usar el modo Ultra.
-                          // Opus 4.8 sí existe y es ahora el único Ultra.
                           <>
                             <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Zoco-Max — Ultra</div></SelectItem>
                           </>
                         ) : (
                           <>
                             <SelectItem value="auto" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (11 Agentes)</div></SelectItem>
-                            {/* Zoco Flash y Zoco Lab: disponibles para todos los
-                                clientes (a petición explícita del usuario) --
-                                el sistema de hitos obliga a TODOS los modelos a
-                                trabajar módulo a módulo (ver generateApp en
-                                apps.ts), así que no hay restricción de plan
-                                para estos dos. */}
                             <SelectItem value="zoco-flash" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Zoco Flash (rápido)</div></SelectItem>
                             <SelectItem value="zoco-plus" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Zoco Plus</div></SelectItem>
                             <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Zoco Max (máx. calidad)</div></SelectItem>
-                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Zoco Lab (máx. calidad)</div></SelectItem>
-                            {/* Zoco Max: solo clientes con pago verificado
-                                (hasVerifiedPayment / hasEverPaid) o admin --
-                                a diferencia de flash, que sí está abierto
-                                a todos por ser económico. Aclarado
-                                explícitamente por el usuario tras dudarlo. */}
                             {(hasVerifiedPayment || isAdmin) && (
                               <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />Zoco Plus</div></SelectItem>
                             )}
@@ -944,22 +886,12 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
                         <button
                           type="button"
                           onClick={() => {
-                            // Bloqueo total: cuentas free no pueden ni pulsar
-                            // el botón, aunque manipularan el disabled del DOM.
-                            // En vez de no hacer nada, en móvil (sin hover)
-                            // el toque abre el teaser comercial.
                             if (!hasVerifiedPayment && !isAdmin) {
                               setShowUltraTeaser((v) => !v);
                               return;
                             }
                             setUltraThinking(v => {
                               const next = !v;
-                              // Al entrar en Ultra, forzar Zoco Max (el único
-                              // modelo Ultra real — Zoco Max NO existe en la
-                              // API de Anthropic, 404 verificado). Al salir de
-                              // Ultra, volver a "auto" -- el modelo Ultra
-                              // seleccionado ya no aparece en la lista normal
-                              // y no tendría sentido dejarlo puesto.
                               setCoderModel(next ? "zoco-max" : "auto");
                               return next;
                             });
@@ -997,9 +929,6 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
                           <p className="text-[11px] text-white/50 leading-relaxed">
                             Desbloquea los agentes especializados con los modelos más potentes de Zoco IA:
                           </p>
-                          {/* FIX (2026-07-09): quitado "Sonnet 4.7" del teaser
-                              
-                              el modo Ultra real es Zoco Max. */}
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">
                               <Brain className="h-3 w-3 text-amber-400 flex-shrink-0" />
@@ -1022,335 +951,158 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
                     </button>
                   </div>
                   <Button type="submit" disabled={isWorking || !prompt.trim()} className="h-8 px-4 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 text-[12px] font-bold">
-                    {isWorking ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar</>}
+                    {isWorking ? <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Iniciando…</> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar app</>}
                   </Button>
                 </div>
               </div>
-              {attachments.length > 0 && <AttachmentChips attachments={attachments} onRemove={(id) => setAttachments((prev: any[]) => { const removed = prev.find((a:any) => a.id === id); if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl); return prev.filter((a:any) => a.id !== id); })} />}
-
-              {(quickChatHistory.length > 0 || quickChatLoading) && (
-                <div className="mt-2 rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04]">
-                    <div className="flex items-center gap-2">
-                      <div className="h-5 w-5 rounded-md bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
-                        <Sparkles className="h-3 w-3 text-white" />
-                      </div>
-                      <span className="text-[11px] font-medium text-white/50">Maris</span>
-                    </div>
-                    <button onClick={() => { setQuickChatHistory([]); setQuickChatReply(null); }} className="text-white/20 hover:text-white/50">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className="px-3 py-2 space-y-2 max-h-48 overflow-y-auto">
-                    {quickChatHistory.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`text-[12px] leading-relaxed px-3 py-1.5 rounded-lg max-w-[85%] ${msg.role === "user" ? "bg-primary/15 text-primary border border-primary/20" : "bg-white/[0.05] text-white/80 border border-white/[0.05]"}`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                    {quickChatLoading && (
-                      <div className="flex justify-start">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.05] border border-white/[0.05] rounded-lg">
-                          <Loader2 className="h-3 w-3 animate-spin text-white/30" />
-                          <span className="text-[12px] text-white/30">escribiendo...</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!me?.isPremium && !isAdmin && (
-              <div className="mx-6 mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-400/90 flex items-center gap-2">
-                <Sparkles className="h-3 w-3 flex-shrink-0" />
-                <span>Plan gratuito — genera una <strong>app completa</strong> con tus 65 créditos. <button onClick={() => setLocation("/billing")} className="underline hover:text-amber-300 transition-colors">Activa un plan</button> para apps completas con backend y sin límites.</span>
-              </div>
-            )}
-
-            <div className="px-6 pb-5">
-              <p className="text-[10px] text-white/20 uppercase tracking-widest font-bold mb-2">Sugerencias rápidas</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  "Agente de voz IA para atención telefónica y agendamiento automático de citas en tiempo real",
-                    "Creador autónomo de contenido y clonación de voz para Reels, TikTok y Shorts",
-                  "App de reservas para restaurante con QR",
-                  "Micro-SaaS financiero con IA para auditar facturas, escanear tickets y optimizar impuestos",
-                  "Asistente legal IA para redactar, analizar y firmar contratos inteligentes automáticamente",
-                  "Plataforma inmobiliaria con agente IA que califica leads por WhatsApp y genera maquetas 3D",
-                  "SaaS educativo con avatares de IA interactivos para simular conversaciones y entrevistas"
-                ].map((suggestion) => (
-                  <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)} disabled={isWorking}
-                    className="text-[11px] px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/40 hover:text-white/80 hover:bg-white/[0.08] hover:border-primary/30 transition-all">
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-t border-white/[0.05] px-6 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Equipo activo</span>
-                <div className="flex items-center gap-1">
-                  {AGENTS.map((agent) => (
-                    <Tooltip key={agent.name}>
-                      <TooltipTrigger asChild>
-                        <div className={`h-6 w-6 rounded-lg bg-white/5 flex items-center justify-center cursor-help hover:bg-white/10 transition-colors ${agent.color}`}>
-                          <agent.icon className="h-3 w-3" />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top"><p className="text-xs font-semibold">{agent.name}</p></TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              </div>
-              <p className="text-[10px] text-white/20 italic hidden sm:block">⌘/Ctrl + Enter para generar rápido</p>
             </div>
           </form>
         </div>
 
-        {/* ─── Onboarding Modal ─── */}
-        <Dialog open={onboardingOpen} onOpenChange={setOnboardingOpen}>
-          <DialogContent className="max-w-lg bg-[#0d0d12] border-white/10">
-            <DialogHeader>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                </div>
-                <span className="text-xs font-bold uppercase tracking-widest text-primary">Maris AI — Análisis del proyecto</span>
+        {/* ─── Recent Apps ───────────────────────────────────────────────────── */}
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                <LayoutDashboard className="h-5 w-5 text-white/70" />
               </div>
-              <DialogTitle className="text-lg font-bold">{currentQuestion?.question}</DialogTitle>
-              <div className="flex items-center gap-1 mt-2">
-                {onboardingQuestions.map((_, i) => (
-                  <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= onboardingStep ? "bg-primary" : "bg-white/10"}`} />
-                ))}
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight">Mis proyectos</h3>
+                <p className="text-[11px] text-white/30 uppercase tracking-widest font-bold">Panel de control</p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Pregunta {onboardingStep + 1} de {onboardingQuestions.length}</p>
-            </DialogHeader>
-            <div className="py-2 space-y-3">
-              {currentQuestion?.type === "checkbox" && currentQuestion.options && (
-                <div className="space-y-2">
-                  {currentQuestion.options.map((option) => {
-                    const checked = (onboardingAnswers[onboardingStep] || "").split(", ").includes(option);
-                    return (
-                      <div key={option} className="flex items-center gap-3 p-3 rounded-lg border border-white/5 hover:border-primary/30 hover:bg-white/5 transition-all cursor-pointer" onClick={() => handleOnboardingCheckbox(option, !checked)}>
-                        <Checkbox checked={checked} onCheckedChange={(c) => handleOnboardingCheckbox(option, !!c)} className="border-white/30" />
-                        <Label className="cursor-pointer text-sm">{option}</Label>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {currentQuestion?.type === "textarea" && (
-                <Textarea placeholder={currentQuestion.placeholder} className="min-h-[120px] bg-background/50 border-white/10 focus:border-primary/50 resize-none text-base md:text-sm"
-                  value={onboardingAnswers[onboardingStep] || ""} onChange={(e) => handleOnboardingAnswer(e.target.value)} autoFocus />
-              )}
             </div>
-            <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white" onClick={handleOnboardingSkip}>Saltar todo y generar</Button>
-              <div className="flex gap-2">
-                {onboardingStep > 0 && (
-                  <Button variant="outline" size="sm" className="border-white/10" onClick={() => setOnboardingStep(p => p - 1)}>Atrás</Button>
-                )}
-                <Button size="sm" className="bg-primary hover:bg-primary/90 min-w-[100px]" onClick={handleOnboardingNext}>
-                  {onboardingStep < onboardingQuestions.length - 1 ? <>Siguiente <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></> : <><Sparkles className="mr-1.5 h-3.5 w-3.5" />Generar app</>}
-                </Button>
+            <div className="flex items-center gap-2">
+              <div className="relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/20 group-focus-within:text-primary/50 transition-colors" />
+                <Input
+                  placeholder="Buscar app..."
+                  className="h-9 w-full sm:w-64 bg-white/[0.03] border-white/10 pl-9 text-xs focus:ring-primary/20"
+                  value={appSearchQuery}
+                  onChange={(e) => setAppSearchQuery(e.target.value)}
+                />
               </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <div>
-          <h3 className="text-xl font-semibold flex items-center mb-4 justify-between">
-            <span className="flex items-center">
-              <Code2 className="h-5 w-5 mr-2 text-muted-foreground" />Apps recientes
-            </span>
-            <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => setPreferencesDialogOpen(true)}>
-              <Settings2 className="h-4 w-4" />Instrucciones personalizadas
-            </Button>
-            <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => { setImportDialogOpen(true); setImportResult(null); setImportFile(null); }}>
-              <FolderUp className="h-4 w-4" />Importar proyecto
-            </Button>
-          </h3>
-
-          <div className="relative mb-4 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={appSearchQuery}
-              onChange={(e) => setAppSearchQuery(e.target.value)}
-              placeholder="Buscar app..."
-              className="pl-9 h-9 text-sm bg-card/40 border-white/10"
-            />
+              <Button variant="outline" size="sm" className="h-9 bg-white/[0.03] border-white/10 text-xs" onClick={() => setImportDialogOpen(true)}>
+                <FolderUp className="mr-2 h-3.5 w-3.5" />Importar
+              </Button>
+            </div>
           </div>
 
-          <Dialog open={preferencesDialogOpen} onOpenChange={setPreferencesDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2"><Settings2 className="h-5 w-5 text-primary" />Instrucciones personalizadas</DialogTitle>
-                <DialogDescription>Cuéntale a Maris AI cosas que quieres que tenga en cuenta en TODAS tus apps.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 py-2">
-                <Textarea value={customInstructions} onChange={(e) => setCustomInstructions(e.target.value.slice(0, 3000))}
-                  placeholder="Ej: Mi negocio se llama 'Café Luna', está en Valencia. Usa tonos cálidos (naranja/marrón)."
-                  className="min-h-[160px] resize-none" maxLength={3000} />
-                <p className="text-xs text-muted-foreground text-right">{customInstructions.length}/3000</p>
-              </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setPreferencesDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSavePreferences} disabled={updatePreferences.isPending} className="gap-2">
-                  {updatePreferences.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}Guardar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2"><FolderUp className="h-5 w-5 text-primary" />Importar proyecto existente</DialogTitle>
-                <DialogDescription>Sube un archivo .zip o .rar con tu proyecto web.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                {importResult ? (
-                  <div className="flex flex-col items-center gap-3 py-4 text-center">
-                    <CheckCircle2 className="h-12 w-12 text-green-500" />
-                    <p className="font-medium text-lg">"{importResult.title}"</p>
-                    <p className="text-sm text-muted-foreground">Proyecto importado correctamente.</p>
-                  </div>
-                ) : importLoading ? (
-                  <div className="flex flex-col items-center gap-3 py-8 text-center">
-                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground max-w-xs">{importStatusMessage || "Importando..."}</p>
-                    <p className="text-xs text-muted-foreground/70">Puedes cerrar esta ventana — se avisará cuando termine.</p>
-                  </div>
-                ) : (
-                  <>
-                    <label htmlFor="import-file-input"
-                      className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${importFile ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50 hover:bg-white/5"}`}>
-                      <FolderUp className="h-8 w-8 mb-2 text-muted-foreground" />
-                      {importFile ? <span className="text-sm font-medium text-primary">{importFile.name}</span> : (
-                        <><span className="text-sm text-muted-foreground">Haz clic o arrastra tu archivo aquí</span><span className="text-xs text-muted-foreground mt-1">ZIP o RAR · máx. 1.5 GB</span></>
-                      )}
-                      <input id="import-file-input" type="file" accept=".zip,.rar,application/zip,application/x-rar-compressed" className="hidden" onChange={e => setImportFile(e.target.files?.[0] ?? null)} />
-                    </label>
-                    {importFile && <p className="text-xs text-muted-foreground text-center">{(importFile.size / 1024 / 1024).toFixed(1)} MB · listo para importar</p>}
-                  </>
-                )}
-              </div>
-              {!importResult && !importLoading && (
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleImportProject} disabled={!importFile} className="gap-2">
-                    <FolderUp className="h-4 w-4" />Importar proyecto
-                  </Button>
-                </DialogFooter>
-              )}
-              {importLoading && (
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setImportDialogOpen(false)}>Cerrar y seguir esperando</Button>
-                </DialogFooter>
-              )}
-            </DialogContent>
-          </Dialog>
-
-          {/* Detalle del error de importación (log real de build/install) —
-              antes se perdía toda esta información en un simple toast. */}
-          <Dialog open={!!importErrorDetail} onOpenChange={(o) => { if (!o) setImportErrorDetail(null); }}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-red-400">
-                  <AlertTriangle className="h-5 w-5" /> Error al compilar el proyecto
-                </DialogTitle>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground">{importErrorDetail?.reason}</p>
-              {importErrorDetail?.buildLog && (
-                <div>
-                  <p className="text-xs font-semibold text-white/70 mb-1">Log de compilación:</p>
-                  <pre className="max-h-64 overflow-y-auto rounded-md bg-black/40 p-3 text-[11px] text-white/60 whitespace-pre-wrap">{importErrorDetail.buildLog}</pre>
-                </div>
-              )}
-              {importErrorDetail?.installLog && (
-                <div>
-                  <p className="text-xs font-semibold text-white/70 mb-1">Log de instalación:</p>
-                  <pre className="max-h-40 overflow-y-auto rounded-md bg-black/40 p-3 text-[11px] text-white/60 whitespace-pre-wrap">{importErrorDetail.installLog}</pre>
-                </div>
-              )}
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const text = `${importErrorDetail?.reason}\n\n--- BUILD LOG ---\n${importErrorDetail?.buildLog || ""}\n\n--- INSTALL LOG ---\n${importErrorDetail?.installLog || ""}`;
-                    navigator.clipboard.writeText(text);
-                    toast({ title: "Copiado", description: "Log completo copiado al portapapeles." });
-                  }}
-                >
-                  Copiar log completo
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
           {appsLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-40 w-full" />)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              {visibleApps.map((app: any) => (
-                <Card key={app.id || app._id} className="bg-card/40 border-white/5 hover:border-primary/50 transition-all group relative">
-                  <div className="cursor-pointer" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
-                    <div className="h-16 w-full rounded-t-lg bg-white/[0.03] border-b border-white/5 flex items-center justify-center">
-                      <Code2 className="h-6 w-6 text-muted-foreground/40" />
+          ) : visibleApps.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleApps.map((app) => (
+                <Card key={app.id} className="group relative bg-[#0d0d12] border-white/[0.05] hover:border-primary/30 transition-all duration-300 overflow-hidden cursor-pointer shadow-sm hover:shadow-primary/5" onClick={() => setLocation(`/app/${app.id}`)}>
+                  <div className="p-5 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                        {(() => {
+                          const Icon = TEMPLATE_ICONS[app.icon || "Box"] || Box;
+                          return <Icon className="h-5 w-5" />;
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/5 text-white/40 hover:text-white" onClick={(e) => handleForkApp(e, app.id, app.title)}>
+                          {forkingId === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 text-white/40 hover:text-destructive" onClick={(e) => handleDeleteApp(e, app.id, app.title)}>
+                          {deletingId === app.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
                     </div>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-lg truncate group-hover:text-primary transition-colors flex items-center gap-2">
-                        {app.title}
-                        {app.isGenerating && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
-                            <Loader2 className="h-2.5 w-2.5 animate-spin" />Generando
-                          </span>
+                    <div>
+                      <h4 className="font-bold text-white group-hover:text-primary transition-colors line-clamp-1">{app.title}</h4>
+                      <p className="text-xs text-white/40 line-clamp-2 mt-1 leading-relaxed">{app.description || "Sin descripción disponible"}</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-white/[0.03]">
+                      <div className="flex items-center gap-2">
+                        {app.publicSlug ? (
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] font-bold px-2 py-0">Publicada</Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-white/5 text-white/30 border-white/10 text-[10px] font-bold px-2 py-0">Borrador</Badge>
                         )}
-                        {(app.marisaiSubdomain || (app.customDomain && app.customDomainVerified)) && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
-                            Publicada
-                          </span>
-                        )}
-                        {app.importStatus === "processing" && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
-                            <Loader2 className="h-2.5 w-2.5 animate-spin" />Importando...
-                          </span>
-                        )}
-                        {app.importStatus === "failed" && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 shrink-0">
-                            Importación falló
-                          </span>
-                        )}
-                      </CardTitle>
-                      <CardDescription className="line-clamp-2">{app.description}</CardDescription>
-                    </CardHeader>
-                    <p className="px-6 text-xs text-muted-foreground pb-3">
-                      {formatDistanceToNow(new Date(app.createdAt), { addSuffix: true, locale: es })}
-                    </p>
+                      </div>
+                      <span className="text-[10px] font-medium text-white/20">{formatDistanceToNow(new Date(app.updatedAt), { addSuffix: true, locale: es })}</span>
+                    </div>
                   </div>
-                  <CardFooter className="gap-1.5 border-t border-white/5 pt-3">
-                    <Button size="sm" variant="outline" className="flex-1 h-8 text-xs gap-1.5" onClick={() => setLocation(`/app/${app.id || app._id}`)}>
-                      <Eye className="h-3.5 w-3.5" />Abrir
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={(e) => handleForkApp(e, app.id || app._id, app.title)} disabled={forkingId === (app.id || app._id)} title="Duplicar proyecto">
-                      {forkingId === (app.id || app._id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8 w-8 p-0" onClick={(e) => handleDeleteApp(e, app.id || app._id, app.title)} disabled={deletingId === (app.id || app._id)} title="Eliminar proyecto">
-                      <X className="h-3.5 w-3.5 text-red-400" />
-                    </Button>
-                  </CardFooter>
                 </Card>
               ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 bg-white/[0.02] rounded-3xl border border-dashed border-white/10">
+              <div className="h-16 w-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
+                <Box className="h-8 w-8 text-white/20" />
+              </div>
+              <h3 className="text-lg font-bold text-white">No hay proyectos</h3>
+              <p className="text-sm text-white/30 mt-1">Escribe tu idea arriba para empezar</p>
             </div>
           )}
         </div>
       </div>
+
+      {/* Diálogos */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="bg-[#0d0d12] border-white/10 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importar proyecto</DialogTitle>
+            <DialogDescription>Sube un archivo .zip de un proyecto exportado previamente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {!importLoading && !importResult && (
+              <div className="flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-xl p-10 hover:border-primary/30 transition-colors cursor-pointer" onClick={() => document.getElementById("zip-upload")?.click()}>
+                <FolderUp className="h-10 w-10 text-white/20 mb-3" />
+                <p className="text-sm font-medium text-white/60">Haz clic para seleccionar un archivo</p>
+                <p className="text-xs text-white/20 mt-1">Solo archivos .zip</p>
+                <input id="zip-upload" type="file" accept=".zip" className="hidden" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+              </div>
+            )}
+            {importFile && !importLoading && !importResult && (
+              <div className="flex items-center justify-between bg-white/5 p-3 rounded-lg border border-white/10">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <span className="text-sm text-white font-medium truncate max-w-[200px]">{importFile.name}</span>
+                </div>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setImportFile(null)}><X className="h-4 w-4" /></Button>
+              </div>
+            )}
+            {importLoading && (
+              <div className="flex flex-col items-center justify-center py-6 space-y-4">
+                <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                <p className="text-sm text-white font-medium text-center">{importStatusMessage}</p>
+              </div>
+            )}
+            {importResult && (
+              <div className="flex flex-col items-center justify-center py-6 space-y-3">
+                <div className="h-12 w-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                </div>
+                <h4 className="font-bold text-white text-center">¡Proyecto importado!</h4>
+                <p className="text-sm text-white/60 text-center">"{importResult.title}" ya está en tu lista.</p>
+              </div>
+            )}
+            {importErrorDetail && (
+              <div className="space-y-3">
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-xs text-destructive font-bold">Error: {importErrorDetail.reason}</p>
+                </div>
+                {(importErrorDetail.buildLog || importErrorDetail.installLog) && (
+                  <div className="max-h-40 overflow-y-auto p-3 bg-black rounded-lg border border-white/5 font-mono text-[10px] text-white/40 whitespace-pre-wrap">
+                    {importErrorDetail.buildLog || importErrorDetail.installLog}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setImportDialogOpen(false)} disabled={importLoading}>Cancelar</Button>
+            <Button onClick={handleImportProject} disabled={!importFile || importLoading || !!importResult}>
+              {importLoading ? "Importando..." : "Importar ahora"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
