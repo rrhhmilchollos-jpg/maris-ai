@@ -221,11 +221,11 @@ router.get("/google/callback", async (req: Request, res: Response) => {
         grant_type: "authorization_code",
         code: String(code),
       }),
-    }).then((r) => r.json());
+    }).then((r) => r.json() as Promise<any>);
 
     const profile = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { Authorization: `Bearer ${tokenRes.access_token}` },
-    }).then((r) => r.json());
+    }).then((r) => r.json() as Promise<any>);
 
     if (!profile.email) {
       res.redirect(`${APP_URL}/sign-in?error=oauth_no_email`);
@@ -285,13 +285,13 @@ router.get("/github/callback", async (req: Request, res: Response) => {
         redirect_uri: process.env.GITHUB_REDIRECT_URI,
         code,
       }),
-    }).then((r) => r.json());
+    }).then((r) => r.json() as Promise<any>);
 
     const ghHeaders = { Authorization: `Bearer ${tokenRes.access_token}`, "User-Agent": "MarisAI" };
-    const profile = await fetch("https://api.github.com/user", { headers: ghHeaders }).then((r) => r.json());
+    const profile = await fetch("https://api.github.com/user", { headers: ghHeaders }).then((r) => r.json() as Promise<any>);
     let email: string | undefined = profile.email;
     if (!email) {
-      const emails = await fetch("https://api.github.com/user/emails", { headers: ghHeaders }).then((r) => r.json());
+      const emails = await fetch("https://api.github.com/user/emails", { headers: ghHeaders }).then((r) => r.json() as Promise<any>);
       email = Array.isArray(emails) ? emails.find((e: any) => e.primary)?.email || emails[0]?.email : undefined;
     }
     if (!email) {

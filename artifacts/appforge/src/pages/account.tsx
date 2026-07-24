@@ -8,7 +8,7 @@
  * Es una pantalla de solo lectura + acciones que ya existían en otro
  * sitio (recargar créditos, cerrar sesión) reunidas en un solo lugar.
  */
-import { useUser, useClerk } from "@clerk/react";
+import { useUser, useClerk } from "@/lib/auth-context";
 import { useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { useGetMe } from "@/lib/api-client";
@@ -104,7 +104,7 @@ export default function AccountPage() {
             Facturación y créditos
           </button>
           <button
-            onClick={() => signOut(() => setLocation("/"))}
+            onClick={() => signOut()}
             className="w-full flex items-center gap-3 px-5 py-4 text-sm text-left text-red-400 hover:bg-red-500/5 transition-colors"
           >
             <LogOut className="h-4 w-4" />

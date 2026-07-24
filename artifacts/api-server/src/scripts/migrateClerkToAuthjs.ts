@@ -20,7 +20,6 @@
  *
  * Es seguro ejecutarlo más de una vez (es idempotente).
  */
-import "dotenv/config";
 import mongoose from "mongoose";
 import { connectDB } from "../lib/db";
 import { User } from "@workspace/db/schema";
@@ -72,7 +71,7 @@ async function unifyDuplicateUsers(email: string) {
   for (const u of users) {
     let total = 0;
     for (const coll of COLLECTIONS_WITH_USER_ID) {
-      total += await db.collection(coll).countDocuments({ userId: String(u._id) });
+      total += await db.collection<any>(coll).countDocuments({ userId: String(u._id) });
     }
     console.log(`  - _id=${u._id} → ${total} documentos referenciados`);
     if (total > best.count) best = { id: u._id, count: total };
@@ -100,7 +99,7 @@ async function unifyDuplicateUsers(email: string) {
         .updateOne({ _id: best.id }, { $inc: { credits: loserDoc.credits } });
       console.log(`  - Créditos del perdedor (${loserDoc.credits}) sumados al canónico`);
     }
-    await db.collection("users").deleteOne({ _id: loserId });
+    await db.collection<any>("users").deleteOne({ _id: loserId });
     console.log(`  - Documento de usuario duplicado ${loserId} eliminado`);
   }
 }

@@ -21,7 +21,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth-context";
 import { Construction, Loader2 } from "lucide-react";
 import { useGetMe, apiFetch } from "@/lib/api-client";
 import UnderConstructionPage from "@/pages/under-construction";

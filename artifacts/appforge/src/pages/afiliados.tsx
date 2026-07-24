@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth-context";
 import { Copy, Check, ArrowRight, Euro, Users, TrendingUp, Zap, Share2, Rocket, ChevronRight, ExternalLink } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";

@@ -2,9 +2,8 @@ import { Component, useEffect, useRef, useState, useCallback, lazy, Suspense, ty
 import { trackPageView } from "@/lib/analytics";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, ClerkLoaded, ClerkLoading } from "@clerk/react";
-import { shadcn } from "@clerk/themes";
-import { esES } from "@clerk/localizations";
+import { AuthProvider, useUser, useClerk } from "@/lib/auth-context";
+import { AuthCard } from "@/components/auth-card";
 
 import { Toaster } from "@/components/ui/toaster";
 import { CookieBanner } from "@/components/cookie-banner";
@@ -12,7 +11,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { MaintenanceGate } from "@/components/maintenance-gate";
 
 import { useGetMe, getGetMeQueryKey } from "@/lib/api-client";
-import { useUser } from "@clerk/react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
 import { setSentryUser } from "@/lib/sentry";
@@ -49,6 +47,8 @@ const DemoPage = lazy(() => import("@/pages/demo"));
 const AfiliadosPage = lazy(() => import("@/pages/afiliados"));
 const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
+const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
+const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
 
 function PageLoader() {
   return (
@@ -75,8 +75,6 @@ const queryClient = new QueryClient({
   },
 });
 
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBase(path: string): string {
@@ -85,186 +83,12 @@ function stripBase(path: string): string {
     : path;
 }
 
-if (!clerkPubKey) {
-  console.error("[Maris AI] VITE_CLERK_PUBLISHABLE_KEY no está definida.");
-}
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: "clerk",
-  options: {
-    logoPlacement: "inside" as const,
-    logoLinkUrl: basePath || "/",
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: "hsl(272 72% 55%)",
-    colorForeground: "hsl(0 0% 98%)",
-    colorMutedForeground: "hsl(240 5% 65%)",
-    colorBackground: "hsl(240 10% 6%)",
-    colorInput: "hsl(240 4% 16%)",
-    colorInputForeground: "hsl(0 0% 98%)",
-    colorDanger: "hsl(0 62.8% 30.6%)",
-    colorNeutral: "hsl(240 4% 16%)",
-    fontFamily: "'Space Grotesk', 'Inter', sans-serif",
-    borderRadius: "0.5rem",
-  },
-  elements: {
-    rootBox: "w-full flex justify-center",
-    cardBox: "bg-[#0f0f12] rounded-2xl w-[440px] max-w-full overflow-hidden border border-white/10 shadow-2xl",
-    card: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-white font-bold tracking-tight",
-    headerSubtitle: "text-[#a1a1aa]",
-    socialButtonsBlockButtonText: "text-white font-medium",
-    formFieldLabel: "text-white font-medium",
-    footerActionLink: "text-[#a855f7] hover:text-[#c084fc] transition-colors",
-    footerActionText: "text-[#a1a1aa]",
-    dividerText: "text-[#a1a1aa]",
-    identityPreviewEditButton: "text-[#a855f7]",
-    formFieldSuccessText: "text-green-400",
-    alertText: "text-white",
-    logoBox: "flex justify-center mb-6",
-    logoImage: "h-8 w-auto",
-    socialButtonsBlockButton: "bg-[#18181b] border border-[#27272a] hover:bg-[#27272a] transition-colors",
-    formButtonPrimary: "bg-[#a855f7] hover:bg-[#9333ea] text-white shadow-lg transition-colors font-medium",
-    formFieldInput: "bg-[#18181b] border border-[#27272a] text-white focus:ring-2 focus:ring-[#a855f7] focus:border-transparent transition-all",
-    footerAction: "bg-[#18181b]/50 py-4 mt-6 border-t border-[#27272a]",
-    dividerLine: "bg-[#27272a]",
-    alert: "bg-[#7f1d1d]/20 border border-[#7f1d1d]/50",
-    otpCodeFieldInput: "bg-[#18181b] border border-[#27272a] text-white focus:ring-2 focus:ring-[#a855f7]",
-    formFieldRow: "mb-4",
-    main: "p-8",
-  },
-};
-
-/**
- * ClerkLoadingFallback — Se muestra mientras Clerk está inicializándose.
- * Incluye un mecanismo de timeout: si Clerk no carga en 8 segundos,
- * ofrece al usuario la opción de recargar la página.
- */
-function ClerkLoadingFallback() {
-  const [showRetry, setShowRetry] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowRetry(true), 8000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#09090b] px-4">
-      <div className="flex flex-col items-center gap-4">
-        <img src={`${window.location.origin}${basePath}/logo.svg`} alt="Maris AI" className="h-10 w-auto" />
-        <Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" />
-        <p className="text-sm text-[#a1a1aa]">Cargando autenticación...</p>
-        {showRetry && (
-          <div className="mt-4 flex flex-col items-center gap-3 max-w-sm text-center">
-            <p className="text-sm font-medium text-white">
-              Estamos resolviendo una incidencia técnica temporal
-            </p>
-            <p className="text-xs text-[#a1a1aa]">
-              El inicio de sesión está tardando más de lo normal por un problema puntual
-              de nuestro proveedor de autenticación. Ya estamos trabajando en ello y
-              debería quedar resuelto en breve — no es necesario que hagas nada, tus
-              datos y tu cuenta están a salvo.
-            </p>
-            <div className="mt-1 flex flex-col items-center gap-2 sm:flex-row">
-              <button
-                onClick={() => window.location.reload()}
-                className="rounded-md bg-[#a855f7] px-4 py-2 text-sm font-medium text-white hover:bg-[#9333ea] transition-colors"
-              >
-                Reintentar
-              </button>
-              <a
-                href="mailto:soporte@marisai.es?subject=Incidencia%20de%20acceso%20a%20Maris%20AI"
-                className="rounded-md border border-[#27272a] px-4 py-2 text-sm font-medium text-[#e4e4e7] hover:bg-[#18181b] transition-colors"
-              >
-                Contactar con soporte
-              </a>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * ClerkRecoveryGuard — Detecta cuando Clerk se queda atascado en estado "loading"
- * y fuerza una recarga automática del componente o de la página.
- * 
- * El problema original: clerk.browser.js se carga desde clerk.marisai.es con una
- * redirección 307, lo que puede tardar >10s. Cuando hay una race condition entre
- * la carga del script y la inicialización de React, Clerk se queda en "loading"
- * permanentemente y el formulario de login nunca se renderiza.
- * 
- * Solución: Este componente monitoriza el estado de Clerk y si después de un
- * timeout razonable sigue en "loading", intenta forzar Clerk.load() manualmente.
- * Si eso también falla, recarga la página automáticamente.
- */
-function ClerkRecoveryGuard({ children }: { children: React.ReactNode }) {
-  const [recovered, setRecovered] = useState(false);
-  const attemptedRef = useRef(false);
-
-  useEffect(() => {
-    // Verificar periódicamente si Clerk está atascado
-    const checkInterval = setInterval(() => {
-      const clerk = (window as any).Clerk;
-      if (!clerk) return;
-
-      // Si Clerk ya está ready, no hacer nada
-      if (clerk.status === "ready" || clerk.loaded === true) {
-        clearInterval(checkInterval);
-        return;
-      }
-
-      // Si Clerk está en "loading" por más de 10 segundos, intentar recuperar
-      if (clerk.status === "loading" && !attemptedRef.current) {
-        attemptedRef.current = true;
-        console.warn("[Maris AI] Clerk atascado en 'loading'. Intentando recuperación...");
-
-        // Intentar forzar la carga
-        if (typeof clerk.load === "function") {
-          clerk.load().then(() => {
-            console.info("[Maris AI] Clerk recuperado exitosamente.");
-            setRecovered(true);
-            // Forzar re-render de toda la app
-            window.dispatchEvent(new Event("clerk-recovered"));
-          }).catch(() => {
-            console.error("[Maris AI] No se pudo recuperar Clerk. Recargando página...");
-            window.location.reload();
-          });
-        } else {
-          // Si no hay método load, recargar
-          window.location.reload();
-        }
-      }
-    }, 2000); // Verificar cada 2 segundos
-
-    // Timeout máximo: si después de 15 segundos Clerk no está listo, recargar
-    const maxTimeout = setTimeout(() => {
-      const clerk = (window as any).Clerk;
-      if (clerk && clerk.status !== "ready" && clerk.loaded !== true) {
-        console.error("[Maris AI] Timeout máximo alcanzado. Recargando página...");
-        window.location.reload();
-      }
-    }, 15000);
-
-    return () => {
-      clearInterval(checkInterval);
-      clearTimeout(maxTimeout);
-    };
-  }, []);
-
-  return <>{children}</>;
-}
-
 function SignInPage() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090b] px-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-background to-background"></div>
       <div className="relative z-10 w-full max-w-md">
-        <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+        <AuthCard mode="sign-in" />
       </div>
     </div>
   );
@@ -295,13 +119,7 @@ function SignUpPage() {
             <p className="mt-1 text-xs text-primary font-medium line-clamp-2">"{pendingPrompt}"</p>
           </div>
         )}
-        <SignUp
-          routing="path"
-          path={`${basePath}/sign-up`}
-          signInUrl={`${basePath}/sign-in`}
-          fallbackRedirectUrl={`${basePath}/onboarding`}
-          forceRedirectUrl={`${basePath}/onboarding`}
-        />
+        <AuthCard mode="sign-up" />
       </div>
     </div>
   );
@@ -349,7 +167,7 @@ function SafePresenceTracker() {
   );
 }
 
-function ClerkQueryClientCacheInvalidator() {
+function AuthQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
   const queryClient = useQueryClient();
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
@@ -409,14 +227,14 @@ function HomeRedirect() {
 }
 
 function Gated({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <Show when="signed-in">{children}</Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
-  );
+  const { isLoaded, isSignedIn } = useUser();
+  if (!isLoaded) {
+    return <div style={{ background: "hsl(240 10% 4%)", minHeight: "100vh" }} />;
+  }
+  if (!isSignedIn) {
+    return <Redirect to="/" />;
+  }
+  return <>{children}</>;
 }
 
 function AdminGuardInner({ children }: { children: React.ReactNode }) {
@@ -462,51 +280,19 @@ function AdminGated({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-
+function AppRoutes() {
   return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      appearance={clerkAppearance}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      localization={{
-        ...esES,
-        signIn: {
-          ...esES.signIn,
-          start: {
-            ...esES.signIn?.start,
-            title: "Bienvenido de nuevo",
-            subtitle: "Inicia sesión para entrar a tu espacio de Maris AI",
-          },
-        },
-        signUp: {
-          ...esES.signUp,
-          start: {
-            ...esES.signUp?.start,
-            title: "Crea tu cuenta",
-            subtitle: "Empieza a construir aplicaciones con IA hoy mismo",
-          },
-        },
-      }}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <ClerkRecoveryGuard>
-        <ClerkLoading>
-          <ClerkLoadingFallback />
-        </ClerkLoading>
-        <ClerkLoaded>
-          <QueryClientProvider client={queryClient}>
-            <ClerkQueryClientCacheInvalidator />
-            <SafePresenceTracker />
-            <MaintenanceGate>
-            <Suspense fallback={<PageLoader />}>
-              <Switch>
-                <Route path="/" component={HomeRedirect} />
-                <Route path="/sign-in/*?" component={SignInPage} />
-                <Route path="/sign-up/*?" component={SignUpPage} />
+    <QueryClientProvider client={queryClient}>
+      <AuthQueryClientCacheInvalidator />
+      <SafePresenceTracker />
+      <MaintenanceGate>
+      <Suspense fallback={<PageLoader />}>
+        <Switch>
+          <Route path="/" component={HomeRedirect} />
+          <Route path="/sign-in/*?" component={SignInPage} />
+          <Route path="/sign-up/*?" component={SignUpPage} />
+          <Route path="/forgot-password" component={ForgotPasswordPage} />
+          <Route path="/reset-password" component={ResetPasswordPage} />
 
                 <Route path="/onboarding">
                   <Gated><OnboardingPage /></Gated>
@@ -636,9 +422,6 @@ function ClerkProviderWithRoutes() {
             </Suspense>
             </MaintenanceGate>
           </QueryClientProvider>
-        </ClerkLoaded>
-      </ClerkRecoveryGuard>
-    </ClerkProvider>
   );
 }
 
@@ -657,9 +440,11 @@ function App() {
 
   return (
     <TooltipProvider>
-      <WouterRouter base={basePath}>
-        <ClerkProviderWithRoutes />
-      </WouterRouter>
+      <AuthProvider>
+        <WouterRouter base={basePath}>
+          <AppRoutes />
+        </WouterRouter>
+      </AuthProvider>
       <Toaster />
       <CookieBanner />
     </TooltipProvider>
