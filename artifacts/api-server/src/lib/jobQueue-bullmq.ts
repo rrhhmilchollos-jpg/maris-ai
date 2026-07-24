@@ -50,22 +50,45 @@ let isStarted = false;
 
 function getRedisConnection(): Redis {
   if (redisConnection) return redisConnection;
-  
+
   const redisUrl = process.env.REDIS_URL;
   if (!redisUrl) {
     throw new Error("REDIS_URL environment variable is required for BullMQ");
   }
-  
+  if (!/^rediss?:\/\//i.test(redisUrl)) {
+    // Diagnóstico explícito: si REDIS_URL no empieza por redis:// o
+    // rediss://, ioredis puede fallar en silencio y caer a 127.0.0.1:6379
+    // en vez de dar un error claro sobre la URL real. Mejor fallar aquí
+    // con un mensaje que diga exactamente qué está mal.
+    throw new Error(
+      `REDIS_URL tiene un formato inválido — debe empezar por "redis://" o "rediss://". ` +
+        `Valor recibido (primeros 15 caracteres): "${redisUrl.slice(0, 15)}..."`,
+    );
+  }
+
+  // Log de diagnóstico con host/puerto reales que ioredis va a usar,
+  // sin exponer la contraseña — así la próxima vez que algo falle se ve
+  // en los logs exactamente a qué host se está intentando conectar.
+  try {
+    const parsed = new URL(redisUrl);
+    logger.info(
+      { host: parsed.hostname, port: parsed.port || "6379 (por defecto)" },
+      "BullMQ: conectando a Redis",
+    );
+  } catch {
+    logger.warn("BullMQ: REDIS_URL no se pudo parsear como URL válida antes de pasarla a ioredis");
+  }
+
   redisConnection = new Redis(redisUrl, {
     maxRetriesPerRequest: null, // Required for BullMQ blocking commands
     enableReadyCheck: false,
     enableOfflineQueue: true,
   });
-  
+
   redisConnection.on("error", (err) => {
     logger.error({ err }, "Redis connection error");
   });
-  
+
   return redisConnection;
 }
 
