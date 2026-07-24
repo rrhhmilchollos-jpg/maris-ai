@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Show, useClerk, useUser } from "@clerk/react";
+import { useClerk, useUser } from "@/lib/auth-context";
 import { useGetMe, getGetMeQueryKey, getListAppsQueryKey, getGetMyStatsQueryKey } from "@/lib/api-client";
 import { apiFetch } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -118,7 +118,7 @@ function NotificationsBell() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const { signOut } = useClerk();
-  const { user } = useUser();
+  const { user, isSignedIn } = useUser();
   const { data: me } = useGetMe({ query: { enabled: !!user, queryKey: getGetMeQueryKey() } });
   const isOwner = user?.primaryEmailAddress?.emailAddress === "rrhh.milchollos@gmail.com";
   const isAdmin = me?.isAdmin || isOwner;
@@ -136,7 +136,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </Link>
 
             <div className="flex items-center space-x-4 w-full md:w-auto">
-              <Show when="signed-in">
+              {isSignedIn && (
+                <>
                 <nav className="flex items-center space-x-4 text-sm font-medium">
                   <Link href="/dashboard" className="transition-colors hover:text-foreground/80 text-foreground/60">
                     Panel
@@ -164,7 +165,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                       <Avatar className="h-8 w-8">
                         <AvatarImage src={user?.imageUrl} alt={user?.fullName || ""} />
-                        <AvatarFallback>{user?.firstName?.charAt(0) || "U"}</AvatarFallback>
+                        <AvatarFallback>{(user?.fullName || user?.email)?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
@@ -200,31 +201,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))}>
+                    <DropdownMenuItem onClick={() => { signOut(); setLocation("/"); }}>
                       <LogOut className="mr-2 h-4 w-4 text-muted-foreground" />
                       <span>Cerrar sesión</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </Show>
+                </>
+              )}
 
-              <Show when="signed-out">
+              {!isSignedIn && (
+                <>
                 <Link href="/sign-in" className="text-sm font-medium transition-colors hover:text-foreground/80 text-foreground/60">
                   Iniciar Sesión
                 </Link>
                 <Link href="/sign-up">
                   <Button size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">Empieza Gratis</Button>
                 </Link>
-              </Show>
+                </>
+              )}
             </div>
           </div>
         </div>
-        <Show when="signed-in">
-          {/* Mobile credit bar */}
+        {isSignedIn && (
           <div className="sm:hidden w-full px-4 pb-2">
             <CreditBar />
           </div>
-        </Show>
+        )}
       </header>
 
       <main className="flex-1">

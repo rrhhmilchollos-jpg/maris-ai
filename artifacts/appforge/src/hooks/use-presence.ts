@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useUser } from "@clerk/react";
+import { useUser } from "@/lib/auth-context";
 import { io, type Socket } from "socket.io-client";
 import { getApiBaseUrl } from "@/lib/api-client";
 

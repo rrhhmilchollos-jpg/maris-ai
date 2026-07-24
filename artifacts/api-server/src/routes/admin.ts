@@ -1163,86 +1163,8 @@ router.delete("/admin/memory/:id", async (req: any, res: any): Promise<void> => 
   res.json({ ok: true, id: req.params.id });
 });
 
-// GET /api/admin/clerk-users — recuento de usuarios en Clerk vs MongoDB
-router.get("/admin/clerk-users", async (_req, res): Promise<void> => {
-  try {
-    await connectDB();
-    const { clerkClient } = await import("@clerk/express");
-
-    // Usar getCount() — más rápido que paginar
-    const clerkTotal = await clerkClient.users.getCount();
-    const mongoTotal = await User.countDocuments();
-    const diff = Math.max(0, clerkTotal - mongoTotal);
-
-    res.json({
-      clerkTotal,
-      mongoTotal,
-      diff,
-      message: diff > 0
-        ? `Hay ${diff} usuario(s) en Clerk que aún no han interactuado con la app`
-        : "MongoDB está sincronizado con Clerk"
-    });
-  } catch (err) {
-    logger.error({ err }, "admin/clerk-users error");
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// POST /api/admin/sync-clerk-users — sincronizar todos los usuarios de Clerk a MongoDB
-router.post("/admin/sync-clerk-users", async (_req, res): Promise<void> => {
-  try {
-    await connectDB();
-    const { clerkClient } = await import("@clerk/express");
-
-    let synced = 0, skipped = 0, errors = 0;
-    let offset = 0;
-    const limit = 100;
-
-    while (true) {
-      const page = await clerkClient.users.getUserList({ limit, offset });
-      if (page.data.length === 0) break;
-
-      for (const cu of page.data) {
-        try {
-          const email = cu.emailAddresses?.[0]?.emailAddress ?? "";
-          if (!email) { skipped++; continue; }
-
-          const existing = await User.findOne({ $or: [{ _id: cu.id }, { email }] }).lean();
-          if (existing) { skipped++; continue; }
-
-          const isAdmin = isAdminEmail(email);
-          await User.create({
-            _id: cu.id,
-            email,
-            fullName: [cu.firstName, cu.lastName].filter(Boolean).join(" ") || undefined,
-            imageUrl: cu.imageUrl ?? undefined,
-            credits: isAdmin ? 999999999 : 65,
-            planCredits: isAdmin ? 0 : 65,
-            freeCreditsUsed: !isAdmin,
-            plan: "free",
-            createdAt: new Date(cu.createdAt),
-          });
-          synced++;
-        } catch (userErr: any) {
-          // Ignorar duplicados de email (índice único)
-          if (userErr?.code === 11000) { skipped++; }
-          else { errors++; logger.warn({ userErr, clerkId: cu.id }, "sync-clerk-users: error creando usuario"); }
-        }
-      }
-
-      if (page.data.length < limit) break;
-      offset += limit;
-      if (offset > 10000) break;
-    }
-
-    logger.info({ synced, skipped, errors }, "admin/sync-clerk-users: sync completado");
-    res.json({ ok: true, synced, skipped, errors,
-      message: `Sincronizados ${synced} usuarios nuevos. ${skipped} ya existían. ${errors} errores.` });
-  } catch (err) {
-    logger.error({ err }, "admin/sync-clerk-users error");
-    res.status(500).json({ error: String(err) });
-  }
-});
+// Los endpoints admin/clerk-users y admin/sync-clerk-users se han retirado
+// junto con Clerk: ya no hay un sistema externo con el que comparar/sincronizar.
 
 // ─── Presencia en tiempo real ──────────────────────────────────────────────
 // Qué usuarios tienen Maris AI abierto AHORA MISMO (no "última vez que

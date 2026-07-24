@@ -1,23 +1,11 @@
 import { useQuery, useMutation, type UseQueryOptions, type UseMutationOptions } from "@tanstack/react-query";
 
-declare global {
-  interface Window {
-    Clerk?: {
-      session?: {
-        getToken?: () => Promise<string | null>;
-      };
-    };
-  }
-}
-
 async function buildAuthHeaders(options?: RequestInit): Promise<Headers> {
   const headers = new Headers(options?.headers || {});
-  const hasAuthorization = headers.has("Authorization");
-  const token = await window.Clerk?.session?.getToken?.();
-
-  if (token && !hasAuthorization) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
+  // La sesión ahora viaja en una cookie httpOnly (ver lib/session.ts en el
+  // backend) que el navegador adjunta solo automáticamente gracias a
+  // `credentials: "include"` en apiFetch — ya no hace falta leer ningún
+  // token y añadirlo a mano como header Authorization.
 
   // ENCONTRADO en producción (confirmado con un servidor Express real y
   // fetch reales, reproduciendo el bug paso a paso): la mayoría de las

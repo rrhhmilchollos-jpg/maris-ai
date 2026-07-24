@@ -1,6 +1,6 @@
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
-import { verifyToken } from "@clerk/express";
+import { verifySessionToken } from "./lib/session";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
@@ -86,26 +86,16 @@ const io = new SocketIOServer(httpServer, {
 // reintentar) — da una segunda oportunidad real a la llamada antes de
 // rechazar la conexión.
 async function verifySocketToken(token: string): Promise<string | null> {
-  const MAX_ATTEMPTS = 3;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
-      return payload.sub || null;
-    } catch (err: any) {
-      // Un error de firma/expiración/formato es un rechazo LEGÍTIMO — no
-      // tiene sentido reintentar algo que va a fallar siempre igual.
-      const msg = String(err?.message || err?.reason || "");
-      const looksLikeRealRejection = /expired|invalid signature|malformed|not active yet/i.test(msg);
-      if (looksLikeRealRejection || attempt === MAX_ATTEMPTS) {
-        logger.warn({ err, attempt }, "Presence socket auth failed");
-        return null;
-      }
-      // Fallo probablemente transitorio (red/JWKS) — pequeño backoff antes
-      // de reintentar, sin bloquear el event loop más de lo necesario.
-      await new Promise((r) => setTimeout(r, 300 * attempt));
-    }
+  // Con la sesión propia (JWT firmado con AUTH_SECRET, ver lib/session.ts)
+  // la verificación es 100% local — no hay llamada de red a un proveedor
+  // externo, así que ya no aplica el reintento por fallos de red que sí
+  // hacía falta con Clerk (JWKS remoto).
+  const session = await verifySessionToken(token);
+  if (!session) {
+    logger.warn("Presence socket auth failed: invalid or expired session token");
+    return null;
   }
-  return null;
+  return session.userId;
 }
 
 io.use(async (socket, next) => {

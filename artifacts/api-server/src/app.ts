@@ -2,8 +2,9 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
+import cookieParser from "cookie-parser";
 import router from "./routes";
+import authRoutes from "./routes/authRoutes";
 import ticketsRouter from "./routes/tickets";
 import reviewsRouter from "./routes/reviews";
 import newsRouter from "./routes/news";
@@ -24,7 +25,6 @@ import adminRouter from "./routes/admin";
 import demoRouter from "./routes/demo";
 import affiliatesRouter from "./routes/affiliates";
 import { logger } from "./lib/logger";
-import clerkWebhookRouter from "./routes/clerkWebhook";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
 import {
@@ -278,16 +278,13 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
  
-if (process.env.CLERK_PUBLISHABLE_KEY || process.env.CLERK_SECRET_KEY) {
-  app.use(
-    clerkMiddleware({
-      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-      secretKey: process.env.CLERK_SECRET_KEY,
-    }),
-  );
-} else {
-  logger.warn("Clerk keys not set — Authentication will be disabled or fail.");
+// Sustituye al clerkMiddleware: parsea la cookie httpOnly de sesión propia
+// (ver lib/session.ts) que requireAuth() lee en cada ruta protegida.
+app.use(cookieParser());
+if (!process.env.AUTH_SECRET) {
+  logger.warn("AUTH_SECRET not set — session signing will fail.");
 }
+app.use("/api/auth", authRoutes);
  
 // Per-request Sentry breadcrumb
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -316,7 +313,6 @@ app.use("/api", codeExfiltrationMiddleware);
 app.use("/api", metricsMiddleware);
  
 // Clerk webhook — sin auth, con firma propia
-app.use("/api", clerkWebhookRouter);
 app.use("/api", router);
 app.use("/api", ticketsRouter);
 app.use("/api", reviewsRouter);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
-import { useClerk, useUser } from "@clerk/react";
+import { useClerk, useUser } from "@/lib/auth-context";
 import {
   apiFetch,
   getApiUrl,
@@ -1982,7 +1982,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                   <DropdownMenuItem onClick={handleOpenDocs} className="cursor-pointer focus:bg-white/8 focus:text-white mx-1 rounded-md">
                     <ExternalLink className="mr-2 h-4 w-4 text-white/45" />Documentación
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => signOut(() => setLocation("/"))} className="cursor-pointer focus:bg-red-500/10 focus:text-red-300 mx-1 rounded-md text-white/70">
+                  <DropdownMenuItem onClick={() => signOut()} className="cursor-pointer focus:bg-red-500/10 focus:text-red-300 mx-1 rounded-md text-white/70">
                     <LogOut className="mr-2 h-4 w-4" />Cerrar sesión
                   </DropdownMenuItem>
                 </div>

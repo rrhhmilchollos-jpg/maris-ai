@@ -90,6 +90,23 @@ export interface IUser {
   marisId?: string;
   adminPatchedAt?: Date;
   adminPatchNote?: string;
+
+  // ── Auth.js (post-Clerk) ──────────────────────────────────────────────
+  // Hash bcrypt de la contraseña. NULL/ausente para cuentas migradas desde
+  // Clerk que aún no han hecho el reset obligatorio (Clerk no permite
+  // exportar el hash original), y para cuentas creadas solo vía OAuth.
+  passwordHash?: string;
+  // Proveedores OAuth vinculados a esta cuenta (permite login con varios).
+  oauthProviders?: Array<{ provider: "google" | "github"; providerAccountId: string }>;
+  // true = cuenta migrada desde Clerk sin contraseña migrable; el login
+  // por contraseña debe redirigir a "olvidé mi contraseña" hasta que la
+  // reestablezca. Se pone a false en cuanto el usuario define un password.
+  needsPasswordReset?: boolean;
+  // Token de un solo uso para reset de contraseña (hash del token, no el
+  // token en claro) + expiración.
+  passwordResetTokenHash?: string;
+  passwordResetTokenExpiresAt?: Date;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -157,6 +174,16 @@ const UserSchema = new Schema<IUser>(
     // Correcciones de soporte admin — inmutables desde el cliente
     adminPatchedAt: { type: Date },
     adminPatchNote: { type: String }, // Descripción interna del parche
+
+    // Auth.js (post-Clerk)
+    passwordHash: { type: String },
+    oauthProviders: {
+      type: [{ provider: { type: String, enum: ["google", "github"] }, providerAccountId: String }],
+      default: [],
+    },
+    needsPasswordReset: { type: Boolean, default: false },
+    passwordResetTokenHash: { type: String },
+    passwordResetTokenExpiresAt: { type: Date },
   },
   { timestamps: true },
 );

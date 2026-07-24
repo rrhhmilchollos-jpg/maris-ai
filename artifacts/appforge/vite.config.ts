@@ -69,7 +69,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          "vendor-clerk": ["@clerk/react", "@clerk/themes", "@clerk/localizations"],
           "vendor-charts": ["recharts"],
           "vendor-query": ["@tanstack/react-query"],
         },
