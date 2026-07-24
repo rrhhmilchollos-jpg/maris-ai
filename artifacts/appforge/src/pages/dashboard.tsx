@@ -207,7 +207,7 @@ export default function DashboardPage() {
   // Distinto de isPaidPlan: isPaidPlan refleja el PLAN ACTUAL (puede ser
   // true para un admin sin ningún pago real). hasVerifiedPayment refleja
   // si el usuario ha completado alguna vez un pago de verdad (Stripe/Viva)
-  // -- el campo correcto para gatear el modo Ultra (Sonnet 4.7/Opus 4.8),
+  // -- el campo correcto para gatear el modo Ultra (Zoco Plus/Zoco Max),
   // a petición explícita del usuario: "solo clientes de pago verificados
   // que ya hayan realizado pagos".
   const hasVerifiedPayment = !!(stats as any)?.hasEverPaid;
@@ -216,18 +216,73 @@ export default function DashboardPage() {
     return isPaidPlan ? base * 10 : Math.min(base * 13, 50);
   };
 
-  const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
-    fullstack: { label: "App completa", icon: Layers, placeholder: "ej. Un marketplace estilo Wallapop con publicaciones, búsqueda, mensajes y perfil de usuario...", cost: computeRealCost("fullstack") },
-    mobile: { label: "App móvil", icon: Smartphone, placeholder: "ej. Un diario de hábitos para móvil con racha diaria, notificaciones de recordatorio y vista de calendario...", cost: computeRealCost("mobile") },
-    landing: { label: "Landing page", icon: Rocket, placeholder: "ej. Una landing page para una herramienta SaaS de productividad con hero, features, testimonios, pricing y CTA final...", cost: computeRealCost("landing") },
-    "game-2d": { label: "Juego 2D", icon: Gamepad2, placeholder: "ej. Un juego arcade tipo Snake con controles WASD, niveles de dificultad creciente y tabla de records local...", cost: computeRealCost("game-2d") },
-    "game-3d": { label: "Juego 3D", icon: Box, placeholder: "ej. Un juego 3D first-person de coleccionar monedas en un laberinto con física básica y temporizador...", cost: computeRealCost("game-3d") },
-    "hybrid-pwa": { label: "App híbrida (PWA)", icon: Globe, placeholder: "ej. Una app instalable de notas con sincronización offline, búsqueda y categorías por colores...", cost: computeRealCost("hybrid-pwa") },
-    vue: { label: "Vue 3", icon: Component, placeholder: "ej. Una app de tareas con Vue 3 Composition API, vue-router y Pinia, persistida en localStorage...", cost: computeRealCost("vue") },
-    svelte: { label: "SvelteKit", icon: Flame, placeholder: "ej. Un dashboard del tiempo con SvelteKit, Svelte 5 runes y datos desde Open-Meteo...", cost: computeRealCost("svelte") },
-    nextjs: { label: "Next.js", icon: Server, placeholder: "ej. Un blog full-stack con Next.js App Router, Server Components y API routes...", cost: computeRealCost("nextjs") },
-    "python-api": { label: "Python (FastAPI)", icon: Webhook, placeholder: "ej. Una API REST de tareas con FastAPI, validación pydantic, SQLAlchemy + SQLite y endpoints CRUD completos...", cost: computeRealCost("python-api") },
-    django: { label: "Django", icon: Library, placeholder: "ej. Un blog en Django 5 con modelos, vistas, plantillas, admin y SQLite...", cost: computeRealCost("django") },
+const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder: string; cost: number }> = {
+    fullstack: { 
+        label: "Micro-SaaS con IA", 
+        icon: Layers, 
+        placeholder: "ej. Un CRM automatizado que analiza correos entrantes, califica leads y genera respuestas personalizadas de forma autónoma...", 
+        cost: computeRealCost("fullstack") 
+    },
+    mobile: { 
+        label: "App Móvil Nativa", 
+        icon: Smartphone, 
+        placeholder: "ej. Una app de entrenamiento personal que usa la cámara del móvil para corregir la postura en tiempo real mediante visión por ordenador...", 
+        cost: computeRealCost("mobile") 
+    },
+    landing: { 
+        label: "Agente de Voz / Telefonía", 
+        icon: PhoneCall, // Cambia Rocket por PhoneCall importándolo de lucide-react si lo deseas
+        placeholder: "ej. Configuración de agente de voz IA integrado con Twilio para gestionar llamadas entrantes, agendar citas en Calendar y enviar confirmaciones...", 
+        cost: computeRealCost("landing") 
+    },
+    "game-2d": { 
+        label: "Agente de Automatización", 
+        icon: Cpu, // Cambia Gamepad2 por Cpu o Bot
+        placeholder: "ej. Un bot autónomo para WhatsApp y Telegram que atiende clientes, procesa pedidos, consulta stock y emite facturas automáticamente...", 
+        cost: computeRealCost("game-2d") 
+    },
+    "game-3d": { 
+        label: "Agente para RRSS", 
+        icon: Video, // Cambia Box por Video o Sparkles
+        placeholder: "ej. Un sistema que monitoriza tendencias de nicho, redacta guiones para TikTok/Reels, clona tu voz y genera vídeos listos para publicar...", 
+        cost: computeRealCost("game-3d") 
+    },
+    "hybrid-pwa": { 
+        label: "App de Negocio Automatizada", 
+        icon: Globe, 
+        placeholder: "ej. Una PWA instalable para clínicas que gestiona historiales médicos, predice citas fallidas y envía recordatorios inteligentes por WhatsApp...", 
+        cost: computeRealCost("hybrid-pwa") 
+    },
+    vue: { 
+        label: "Asistente Legal / Auditor", 
+        icon: FileText, // Cambia Component por FileText
+        placeholder: "ej. Una app que audita contratos en PDF, detecta cláusulas de riesgo ocultas y redacta anexos de enmienda basados en la ley vigente...", 
+        cost: computeRealCost("vue") 
+    },
+    svelte: { 
+        label: "Analista de Datos Financieros", 
+        icon: TrendingUp, // Cambia Flame por TrendingUp
+        placeholder: "ej. Un dashboard avanzado de finanzas que escanea facturas corporativas, concilia movimientos bancarios y predice el flujo de caja del trimestre...", 
+        cost: computeRealCost("svelte") 
+    },
+    nextjs: { 
+        label: "Plataforma Educativa IA", 
+        icon: GraduationCap, // Cambia Server por GraduationCap
+        placeholder: "ej. Un tutor interactivo con avatares de IA que simula entrevistas de trabajo reales, evalúa tus respuestas y te da feedback personalizado...", 
+        cost: computeRealCost("nextjs") 
+    },
+    "python-api": { 
+        label: "API de Agentes Multi-Modal", 
+        icon: Webhook, 
+        placeholder: "ej. Endpoints CRUD optimizados con FastAPI para conectar modelos de visión, transcripción de audio (Whisper) y procesamiento de texto en un solo flujo...", 
+        cost: computeRealCost("python-api") 
+    },
+    django: { 
+        label: "E-commerce Autónomo", 
+        icon: ShoppingBag, // Cambia Library por ShoppingBag
+        placeholder: "ej. Tienda online con un recomendador de productos hiper-personalizado basado en el comportamiento del usuario y chat interactivo de ventas...", 
+        cost: computeRealCost("django") 
+    }
     "video-ai": { label: "🎬 Vídeo con IA", icon: ImagePlay, placeholder: "ej. Un vídeo de 30 segundos mostrando un producto de lujo con escenas cinematográficas y transiciones suaves...", cost: 10 },
     "imagen-ai": { label: "🖼️ Imagen con IA", icon: ImagePlay, placeholder: "ej. Una imagen realista de un coche deportivo rojo en una montaña al atardecer con luz dorada...", cost: computeRealCost("imagen-ai") },
   };
@@ -857,27 +912,28 @@ export default function DashboardPage() {
                           // "Error en la generación" al usar el modo Ultra.
                           // Opus 4.8 sí existe y es ahora el único Ultra.
                           <>
-                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Opus 4.8 — Ultra</div></SelectItem>
+                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-amber-400" />Zoco-Max — Ultra</div></SelectItem>
                           </>
                         ) : (
                           <>
                             <SelectItem value="auto" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-yellow-400" />Auto (11 Agentes)</div></SelectItem>
-                            {/* Haiku 4.5 y GPT-5.4: disponibles para todos los
+                            {/* Zoco Flash y Zoco Lab: disponibles para todos los
                                 clientes (a petición explícita del usuario) --
                                 el sistema de hitos obliga a TODOS los modelos a
                                 trabajar módulo a módulo (ver generateApp en
                                 apps.ts), así que no hay restricción de plan
                                 para estos dos. */}
-                            <SelectItem value="zoco-flash" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Haiku 4.5 (rápido)</div></SelectItem>
-                            <SelectItem value="zoco-plus" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Sonnet 4.6</div></SelectItem>
-                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Opus 4.7 (máx. calidad)</div></SelectItem>
-                            {/* GPT-5.4: solo clientes con pago verificado
+                            <SelectItem value="zoco-flash" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-green-400" />Zoco Flash (rápido)</div></SelectItem>
+                            <SelectItem value="zoco-plus" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-purple-400" />Zoco Plus</div></SelectItem>
+                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Zoco Max (máx. calidad)</div></SelectItem>
+                            <SelectItem value="zoco-max" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Brain className="h-3 w-3 text-blue-400" />Zoco Lab (máx. calidad)</div></SelectItem>
+                            {/* Zoco Max: solo clientes con pago verificado
                                 (hasVerifiedPayment / hasEverPaid) o admin --
-                                a diferencia de Haiku 4.5, que sí está abierto
+                                a diferencia de flash, que sí está abierto
                                 a todos por ser económico. Aclarado
                                 explícitamente por el usuario tras dudarlo. */}
                             {(hasVerifiedPayment || isAdmin) && (
-                              <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />GPT-5.4</div></SelectItem>
+                              <SelectItem value="gpt-5.4" className="text-[11px] font-semibold"><div className="flex items-center gap-1.5"><Cpu className="h-3 w-3 text-cyan-400" />Zoco Plus</div></SelectItem>
                             )}
                           </>
                         )}
@@ -898,8 +954,8 @@ export default function DashboardPage() {
                             }
                             setUltraThinking(v => {
                               const next = !v;
-                              // Al entrar en Ultra, forzar Opus 4.8 (el único
-                              // modelo Ultra real — Sonnet 4.7 NO existe en la
+                              // Al entrar en Ultra, forzar Zoco Max (el único
+                              // modelo Ultra real — Zoco Max NO existe en la
                               // API de Anthropic, 404 verificado). Al salir de
                               // Ultra, volver a "auto" -- el modelo Ultra
                               // seleccionado ya no aparece en la lista normal
@@ -1017,12 +1073,13 @@ export default function DashboardPage() {
               <p className="text-[10px] text-white/20 uppercase tracking-widest font-bold mb-2">Sugerencias rápidas</p>
               <div className="flex flex-wrap gap-1.5">
                 {[
-                  "Marketplace tipo Wallapop con chat y pagos",
-                  "SaaS de gestión de proyectos con Kanban",
+                  "Agente de voz IA para atención telefónica y agendamiento automático de citas en tiempo real",
+                    "Creador autónomo de contenido y clonación de voz para Reels, TikTok y Shorts",
                   "App de reservas para restaurante con QR",
-                  "Dashboard de analytics con gráficas en tiempo real",
-                  "Juego 2D tipo Tetris con tabla de records",
-                  "Landing page para startup de IA con pricing",
+                  "Micro-SaaS financiero con IA para auditar facturas, escanear tickets y optimizar impuestos",
+                  "Asistente legal IA para redactar, analizar y firmar contratos inteligentes automáticamente",
+                  "Plataforma inmobiliaria con agente IA que califica leads por WhatsApp y genera maquetas 3D",
+                  "SaaS educativo con avatares de IA interactivos para simular conversaciones y entrevistas"
                 ].map((suggestion) => (
                   <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)} disabled={isWorking}
                     className="text-[11px] px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/40 hover:text-white/80 hover:bg-white/[0.08] hover:border-primary/30 transition-all">
