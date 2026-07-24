@@ -97,14 +97,134 @@ const PHASE_LABELS: Record<string, { label: string; icon: typeof Loader2 }> = {
   frontend:     { label: "⚡ Frontend Engineer escribiendo el código…",        icon: Code2 },
   backend:      { label: "🖥️ Backend Engineer creando la API…",                icon: Server },
   integrations: { label: "🔌 API Integrator conectando servicios externos…",    icon: Plug },
-  testing:      { label: "🧪 testing-agent analizando el bundle…",                 icon: Bug },
+  // ── FASES DEL testing-agent — SOLO SE MUESTRAN SI HAY ERRORES REALES ───
+  // Estas 4 fases (testing / patching / validating / fixing) NO forman parte
+  // del flujo normal de generación o edición. El testing-agent solo entra en
+  // acción cuando el pipeline detecta errores reales (sintaxis, archivos
+  // incompletos, bundle roto…). Si la generación/edición sale limpia, el
+  // proceso salta directamente de `integrations` a `parsing` y estas fases
+  // jamás se muestran al cliente. Ver ERROR_ONLY_PHASES + resolvePhaseInfo().
+  testing:      { label: "🧪 testing-agent analizando errores detectados…",       icon: Bug },
   patching:     { label: "🔧 testing-agent reparando errores…",                  icon: Wrench },
-  validating:   { label: "🔍 testing-agent validando el código…",                  icon: Bug },
+  validating:   { label: "🔍 testing-agent validando las correcciones…",           icon: Bug },
   fixing:       { label: "🛠️ testing-agent aplicando correcciones…",               icon: Wrench },
   parsing:      { label: "📦 Empaquetando archivos del proyecto…",             icon: FileCheck2 },
   ready:        { label: "¡Tu app está lista!",                                icon: FileCheck2 },
   failed:       { label: "La generación falló",                                icon: Loader2 },
 };
+
+// Fases que pertenecen exclusivamente al testing-agent. Solo se visualizan
+// si el job trae evidencia real de errores. Regla del producto:
+// "generación/edición limpia → se saltan los agentes de testing;
+//  errores detectados → entran en acción a corregir y solucionar".
+const ERROR_ONLY_PHASES = new Set(["testing", "patching", "validating", "fixing"]);
+
+// Detecta si el job actual tiene errores REALES reportados por el backend.
+// Se comprueban todas las señales conocidas del pipeline para máxima
+// compatibilidad con las distintas versiones del backend: contador de
+// errores, flag booleano, lista de errores del bundle o mensaje de error.
+const jobHasRealErrors = (job: any): boolean => {
+  if (!job) return false;
+  if (typeof job.errorCount === "number" && job.errorCount > 0) return true;
+  if (job.hasErrors === true) return true;
+  if (Array.isArray(job.errors) && job.errors.length > 0) return true;
+  if (Array.isArray(job.bundleErrors) && job.bundleErrors.length > 0) return true;
+  if (typeof job.errorMessage === "string" && job.errorMessage.trim() !== "" && job.status !== "succeeded") return true;
+  return false;
+};
+
+// Devuelve la información de fase a mostrar en la UI. Si el backend reporta
+// una fase de testing pero NO hay errores reales, se enmascara con la fase
+// neutra de empaquetado (`parsing`) para que el cliente perciba un flujo
+// limpio, sin agentes reparadores innecesarios en pantalla.
+const resolvePhaseInfo = (job: any): { label: string; icon: typeof Loader2 } => {
+  if (!job) return PHASE_LABELS.queued;
+  const phase: string = (job as any).phase;
+  if (ERROR_ONLY_PHASES.has(phase) && !jobHasRealErrors(job)) {
+    return PHASE_LABELS.parsing;
+  }
+  return PHASE_LABELS[phase] ?? PHASE_LABELS.queued;
+};
+
+// ── MEMORIA DE PROYECTO POR HITOS (prompts largos) ────────────────────────
+// Cuando el cliente envía un PRIMER prompt muy largo (con la intención de
+// generar el proyecto completo de una vez), el sistema:
+//   1. Guarda el prompt COMPLETO como memoria persistente del proyecto
+//      (localStorage + backend si está disponible), para que los agentes
+//      conserven el conocimiento de TODO lo que el cliente quiere construir.
+//   2. Genera SOLO el Hito 1: la landing page completa, hasta que compile
+//      sin errores y se visualice correctamente en la vista preview.
+//   3. El resto del prompt queda registrado como hitos pendientes que se
+//      irán construyendo en las siguientes iteraciones/ediciones, sin que
+//      el cliente tenga que volver a explicar nada.
+const LONG_PROMPT_THRESHOLD = 600; // caracteres: a partir de aquí se considera intención de "proyecto completo de una vez"
+const PROJECT_MEMORY_KEY = "appforge_project_memory";
+
+type ProjectMilestone = {
+  id: number;
+  title: string;
+  description: string;
+  status: "pending" | "in_progress" | "done";
+};
+
+type ProjectMemory = {
+  fullPrompt: string;        // el prompt original completo del cliente
+  createdAt: string;         // cuándo se registró la memoria
+  kind: string;              // tipo de app elegido
+  milestones: ProjectMilestone[];
+  currentMilestone: number;  // hito activo
+};
+
+// Divide el prompt largo en hitos: el Hito 1 SIEMPRE es la landing page
+// completa y visible en preview; el resto del contenido del prompt se
+// conserva íntegro como hito pendiente (memoria de los agentes).
+const buildProjectMemory = (fullPrompt: string, kind: string): ProjectMemory => ({
+  fullPrompt,
+  createdAt: new Date().toISOString(),
+  kind,
+  milestones: [
+    {
+      id: 1,
+      title: "Landing page completa",
+      description: "Generar la landing page completa del proyecto, sin errores de sintaxis, con todos los archivos completos, hasta que compile y se visualice correctamente en la vista preview.",
+      status: "in_progress",
+    },
+    {
+      id: 2,
+      title: "Resto del proyecto (memoria guardada del cliente)",
+      description: fullPrompt,
+      status: "pending",
+    },
+  ],
+  currentMilestone: 1,
+});
+
+const saveProjectMemory = (memory: ProjectMemory) => {
+  try { localStorage.setItem(PROJECT_MEMORY_KEY, JSON.stringify(memory)); } catch { /* localStorage no disponible */ }
+  // Persistencia también en backend (memoria indefinida de los agentes).
+  // Si el endpoint aún no existe, falla en silencio: localStorage cubre.
+  apiFetch("/api/apps/project-memory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(memory),
+  }).catch(() => {});
+};
+
+// Construye el prompt REAL que se envía al pipeline en el primer hito:
+// instrucción clara de generar SOLO la landing page completa, adjuntando el
+// prompt completo del cliente como contexto/memoria para los agentes.
+const buildFirstMilestonePrompt = (fullPrompt: string): string =>
+  [
+    "🎯 HITO 1 DE VARIOS — GENERAR SOLO LA LANDING PAGE COMPLETA.",
+    "Instrucciones para el equipo de agentes:",
+    "1. En esta generación construye ÚNICAMENTE la landing page completa del proyecto descrito abajo: hero, secciones, estilos, responsive y navegación básica.",
+    "2. Todos los archivos deben quedar COMPLETOS y sin errores de sintaxis, listos para compilar y visualizarse correctamente en la vista preview.",
+    "3. NO implementes todavía el resto de funcionalidades (backend completo, paneles, integraciones avanzadas…): quedan registradas en la memoria del proyecto como hitos pendientes y se construirán en las siguientes iteraciones.",
+    "4. Usa la descripción completa del cliente SOLO como contexto, para que la landing sea coherente con el proyecto final.",
+    "",
+    "--- DESCRIPCIÓN COMPLETA DEL PROYECTO (memoria del cliente, hitos futuros) ---",
+    fullPrompt,
+  ].join("\n");
 
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
@@ -400,6 +520,24 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
     setOnboardingAnswers(prev => ({ ...prev, [onboardingStep]: parts.join(", ") }));
   };
 
+  // Aplica la estrategia de hitos ANTES de enviar cualquier prompt al
+  // pipeline: si es un primer prompt largo (intención de proyecto completo),
+  // guarda TODO el prompt como memoria del proyecto y transforma el envío
+  // en el Hito 1 (solo la landing page completa). Si es un prompt normal,
+  // se envía tal cual, sin tocar nada.
+  const applyMilestoneStrategy = (rawPrompt: string): string => {
+    const isFirstGeneration = !apps || (apps as any[]).length === 0;
+    const isLongProjectPrompt = rawPrompt.trim().length >= LONG_PROMPT_THRESHOLD;
+    if (!isFirstGeneration || !isLongProjectPrompt) return rawPrompt;
+    const memory = buildProjectMemory(rawPrompt.trim(), kind);
+    saveProjectMemory(memory);
+    toast({
+      title: "💾 Proyecto guardado en memoria",
+      description: "Detectamos una descripción completa del proyecto. Empezaremos por la landing page (Hito 1) y el resto queda guardado para las siguientes iteraciones — no tendrás que repetir nada.",
+    });
+    return buildFirstMilestonePrompt(rawPrompt.trim());
+  };
+
   const handleOnboardingNext = () => {
     if (onboardingStep < onboardingQuestions.length - 1) {
       setOnboardingStep(prev => prev + 1);
@@ -419,14 +557,16 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
 
       setOnboardingOpen(false);
       localStorage.setItem("appforge_last_prompt", finalPrompt);
-      generateMutation.mutate({ data: { prompt: finalPrompt, model: coderModel, language, kind, ultraThinking, legacyMode, mcpConnectors, attachments: attachments.map((a: any) => a.id) } });
+      const milestonePrompt = applyMilestoneStrategy(finalPrompt);
+      generateMutation.mutate({ data: { prompt: milestonePrompt, model: coderModel, language, kind, ultraThinking, legacyMode, mcpConnectors, attachments: attachments.map((a: any) => a.id) } });
     }
   };
 
   const handleOnboardingSkip = () => {
     setOnboardingOpen(false);
     localStorage.setItem("appforge_last_prompt", prompt);
-    generateMutation.mutate({ data: { prompt, model: coderModel, language, kind, ultraThinking, legacyMode, mcpConnectors, attachments: attachments.map((a: any) => a.id) } });
+    const milestonePrompt = applyMilestoneStrategy(prompt);
+    generateMutation.mutate({ data: { prompt: milestonePrompt, model: coderModel, language, kind, ultraThinking, legacyMode, mcpConnectors, attachments: attachments.map((a: any) => a.id) } });
   };
 
   const openOnboarding = () => {
@@ -437,8 +577,9 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
   const handlePreGenConfirm = (enrichedPrompt: string) => {
     setPreGenChatGenerating(true);
     localStorage.setItem("appforge_last_prompt", enrichedPrompt);
+    const milestonePrompt = applyMilestoneStrategy(enrichedPrompt);
     generateMutation.mutate(
-      { data: { prompt: enrichedPrompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } },
+      { data: { prompt: milestonePrompt, model: coderModel, language, kind, attachments: attachments.map((a: any) => a.id) } },
       {
         onSettled: () => {
           setPreGenChatGenerating(false);
@@ -605,6 +746,23 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
       setPrompt("");
       attachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
       setAttachments([]);
+      // Si había memoria de proyecto por hitos, marcamos el Hito 1 (landing
+      // page) como completado: la app compiló y ya es visible en preview.
+      // El resto del prompt del cliente sigue guardado como hito pendiente
+      // para las próximas iteraciones/ediciones.
+      try {
+        const raw = localStorage.getItem(PROJECT_MEMORY_KEY);
+        if (raw) {
+          const memory = JSON.parse(raw) as ProjectMemory;
+          if (memory.currentMilestone === 1) {
+            memory.milestones = memory.milestones.map((m) =>
+              m.id === 1 ? { ...m, status: "done" as const } : m
+            );
+            memory.currentMilestone = 2;
+            saveProjectMemory(memory);
+          }
+        }
+      } catch { /* memoria no disponible — no bloquea nada */ }
       toast({ title: "¡App generada!", description: "Tu aplicación está lista para verla." });
       import("@/lib/analytics").then(({ trackAppSucceeded }) => { trackAppSucceeded(kind, 0); });
       setLocation(`/app/${appId}`);
@@ -717,7 +875,10 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
     return () => clearInterval(interval);
   }, [showNoCredits, isAdmin, queryClient, toast]);
 
-  const phaseInfo = job ? PHASE_LABELS[job.phase] ?? PHASE_LABELS.queued : PHASE_LABELS.queued;
+  // Fase visible en la UI: las fases del testing-agent se muestran SOLO si
+  // el job reporta errores reales; con una generación limpia se enmascaran
+  // y el flujo pasa directo al empaquetado (ver resolvePhaseInfo arriba).
+  const phaseInfo = resolvePhaseInfo(job);
   const PhaseIcon = phaseInfo.icon;
 
   if (preGenChatOpen) {
