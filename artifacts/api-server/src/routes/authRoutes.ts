@@ -159,7 +159,7 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
     // Responder igual exista o no el usuario, para no filtrar qué emails están registrados.
     if (user) {
       const resetUrl = `${APP_URL}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
-      await getResend().emails.send({
+      const { error: resendError } = await getResend().emails.send({
         from: FROM_EMAIL,
         to: user.email,
         subject: "Restablece tu contraseña de Maris AI",
@@ -167,6 +167,14 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
                <p><a href="${resetUrl}">${resetUrl}</a></p>
                <p>Este enlace caduca en 1 hora. Si no lo solicitaste, ignora este mensaje.</p>`,
       });
+      // El SDK de Resend NO lanza excepción si el envío falla — devuelve
+      // { data: null, error: {...} }. Sin este log, un fallo (dominio sin
+      // verificar, remitente rechazado, etc.) pasaba completamente
+      // desapercibido: el usuario nunca recibía el email y el backend
+      // respondía como si todo hubiera ido bien.
+      if (resendError) {
+        logger.error({ resendError, to: user.email }, "Resend rechazó el envío del email de reset de contraseña");
+      }
     }
     res.json({ ok: true });
   } catch (err) {
