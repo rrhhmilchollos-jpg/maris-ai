@@ -48,6 +48,18 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // ENCONTRADO: el SW volvía a hacer fetch() de recursos de terceros
+  // (ej. imágenes de Unsplash en la landing), y ese re-fetch desde dentro
+  // del Service Worker pasa a regirse por la directiva connect-src de la
+  // CSP en vez de img-src — y connect-src no tiene por qué listar cada CDN
+  // de imágenes que se use. Un Service Worker no debería interceptar nada
+  // fuera de su propio origen: se deja pasar tal cual, sin cachear, y el
+  // navegador lo gestiona con las reglas normales de img-src (que si
+  // admite https: en general).
+  if (new URL(request.url).origin !== self.location.origin) {
+    return;
+  }
+
   // Solo GET tiene sentido cachear (POST/PUT/DELETE nunca).
   if (request.method !== "GET") {
     return;
