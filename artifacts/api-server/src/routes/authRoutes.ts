@@ -380,6 +380,15 @@ router.get("/me", async (req: Request, res: Response) => {
   await connectDB();
   const user = await User.findById(session.userId).lean();
   if (!user) {
+    // DIAGNÓSTICO TEMPORAL: la sesión es válida (el JWT verifica bien),
+    // pero no existe ningún documento en `users` con este _id. Esto pasa
+    // si el _id que se firmó en el token (en login/register/reset-password)
+    // ya no corresponde a un usuario real — p. ej. cuenta duplicada de la
+    // época de Clerk que se borró o nunca se unificó correctamente.
+    logger.warn(
+      { sessionUserId: session.userId, sessionEmail: session.email },
+      "[DIAG sesión] JWT válido pero no existe ningún usuario con ese _id en MongoDB",
+    );
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
