@@ -34,7 +34,7 @@ function getGroq(): OpenAI | null {
 async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {
   const groq = getGroq();
   if (!groq) throw new Error('Motor local no configurado: añade ZOCOIA_API_URL + ZOCOIA_API_KEY (vía Zoco IA) o OLLAMA_BASE_URL (Ollama directo) a las variables de entorno');
-  const groqModel = process.env.OLLAMA_MODEL_PLUS || 'zoco-plus';
+  const groqModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco Max';
   logger.warn({ model: groqModel }, '⚡ Segundo intento no-streaming contra el mismo motor local (Ollama)');
 
   const systemMsg = params.system
@@ -73,7 +73,7 @@ async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
   }
 
   // Nombre EXACTO del modelo en el servidor de Ollama (ollama list).
-  const ollamaModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco-Plus';
+  const ollamaModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco Max';
   logger.warn({ role, model: ollamaModel }, '⚡ Último intento: llamada directa al API nativa de Ollama (/api/chat)');
 
   const messages = (params.messages || []).map((m: any) => ({
