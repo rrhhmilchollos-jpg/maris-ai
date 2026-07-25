@@ -140,14 +140,24 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
       return;
     }
     await connectDB();
-    const user = await User.findOne({ email: String(email).toLowerCase() });
+    // findOneAndUpdate en vez de findOne + user.save(): esto último provocaba
+    // un VersionError de Mongoose en producción cuando otro proceso (p. ej.
+    // ensureAdminCredits, que se ejecuta en cada request autenticada) tocaba
+    // el mismo documento de usuario entre la lectura y el guardado. Al ser
+    // una operación atómica de una sola escritura, no compite por versión.
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const user = await User.findOneAndUpdate(
+      { email: String(email).toLowerCase() },
+      {
+        $set: {
+          passwordResetTokenHash: hashToken(rawToken),
+          passwordResetTokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+        },
+      },
+      { new: true },
+    );
     // Responder igual exista o no el usuario, para no filtrar qué emails están registrados.
     if (user) {
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      user.passwordResetTokenHash = hashToken(rawToken);
-      user.passwordResetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-      await user.save();
-
       const resetUrl = `${APP_URL}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
       await getResend().emails.send({
         from: FROM_EMAIL,
@@ -174,20 +184,26 @@ router.post("/reset-password", async (req: Request, res: Response) => {
     }
     await connectDB();
     const tokenHash = hashToken(token);
-    const user = await User.findOne({
-      email: String(email).toLowerCase(),
-      passwordResetTokenHash: tokenHash,
-      passwordResetTokenExpiresAt: { $gt: new Date() },
-    });
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    // findOneAndUpdate atómico (ver el mismo comentario en /forgot-password):
+    // evita el VersionError de Mongoose por condiciones de carrera con otros
+    // procesos que tocan el mismo documento de usuario (p. ej. ensureAdminCredits).
+    const user = await User.findOneAndUpdate(
+      {
+        email: String(email).toLowerCase(),
+        passwordResetTokenHash: tokenHash,
+        passwordResetTokenExpiresAt: { $gt: new Date() },
+      },
+      {
+        $set: { passwordHash, needsPasswordReset: false },
+        $unset: { passwordResetTokenHash: "", passwordResetTokenExpiresAt: "" },
+      },
+      { new: true },
+    );
     if (!user) {
       res.status(400).json({ error: "Enlace inválido o caducado" });
       return;
     }
-    user.passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-    user.needsPasswordReset = false;
-    user.passwordResetTokenHash = undefined;
-    user.passwordResetTokenExpiresAt = undefined;
-    await user.save();
 
     const sessionToken = await createSessionToken({ userId: String(user._id), email: user.email });
     setSessionCookie(res, sessionToken);
