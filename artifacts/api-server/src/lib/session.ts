@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { Request, Response } from "express";
+import { logger } from "./logger";
 
 // AUTH_SECRET debe ser una cadena aleatoria larga (ej. `openssl rand -hex 32`)
 // configurada como variable de entorno en Coolify. Nunca hardcodear.
@@ -41,9 +42,20 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    if (!payload.sub || typeof payload.email !== "string") return null;
+    if (!payload.sub || typeof payload.email !== "string") {
+      logger.warn({ payload }, "[DIAG sesión] token válido pero payload incompleto (sin sub o email)");
+      return null;
+    }
     return { userId: payload.sub, email: payload.email };
-  } catch {
+  } catch (err) {
+    // DIAGNÓSTICO TEMPORAL: antes esto se tragaba el motivo en silencio.
+    // jose lanza tipos distintos según el problema exacto: token caducado,
+    // firma inválida (AUTH_SECRET distinto al que firmó el token, p. ej.
+    // tras un redeploy que regeneró el valor), formato corrupto, etc.
+    logger.warn(
+      { errName: (err as Error)?.name, errMessage: (err as Error)?.message },
+      "[DIAG sesión] verifySessionToken falló",
+    );
     return null;
   }
 }
@@ -73,6 +85,12 @@ export function clearSessionCookie(res: Response): void {
 
 export async function getSessionFromRequest(req: Request): Promise<SessionPayload | null> {
   const token = req.cookies?.[SESSION_COOKIE_NAME];
-  if (!token || typeof token !== "string") return null;
+  if (!token || typeof token !== "string") {
+    logger.warn(
+      { cookiesRecibidas: req.cookies ? Object.keys(req.cookies) : "ninguna" },
+      "[DIAG sesión] no llegó la cookie maris_session en la petición",
+    );
+    return null;
+  }
   return verifySessionToken(token);
 }
