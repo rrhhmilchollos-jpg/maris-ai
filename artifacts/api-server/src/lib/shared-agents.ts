@@ -17,7 +17,7 @@ import { recordApiUsage } from "./usageMeter";
 let _groq: OpenAI | null = null;
 function getGroq(): OpenAI | null {
   const zocoKey = process.env.ZOCOIA_API_KEY;
-  const zocoUrl = process.env.ZOCOIA_API_URL || "https://zocoia.es";
+  const zocoUrl = process.env.ZOCOIA_API_URL || "https://www.zocoia.es";
   const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
   if (!_groq) {
     if (zocoUrl && zocoKey && zocoKey.startsWith('sk-zoco-')) {
@@ -135,7 +135,7 @@ async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) {
-    const zocoUrl = process.env.ZOCOIA_API_URL || "https://zocoia.es";
+    const zocoUrl = process.env.ZOCOIA_API_URL || "https://www.zocoia.es";
     const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
     if (zocoUrl) {
       _openai = new OpenAI({
