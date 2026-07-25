@@ -130,12 +130,28 @@ httpServer.listen(finalPort, async (err?: Error) => {
     process.exit(1);
   }
  
-  // 1) Start the in-process job queue (MongoDB-backed polling loop).
-  // 2) Register the worker so this process picks up jobs.
+  // 1) Start the queue connection (needed to enqueue jobs from HTTP routes,
+  //    e.g. POST /api/apps).
+  // 2) Registering as a WORKER (picking up and running jobs) is intentionally
+  //    NOT done here anymore. worker.ts (deployed as its own Coolify service,
+  //    "maris-ai-worker") is the one dedicated process for that. This
+  //    api-server used to also self-register as a worker from back when
+  //    there was only one process — after the split, that line never got
+  //    removed, so both services were consuming the same BullMQ queue at
+  //    once (2x the intended concurrency, and generation work competing
+  //    with HTTP traffic for CPU on the api-server). Opt back in with
+  //    ENABLE_INPROCESS_WORKER=true only for local/single-process setups
+  //    that don't run a separate worker deployment.
   // 3) Reclaim orphaned jobs from previous boots.
   try {
     await startQueue();
-    await registerGenerateWorker(runJobById);
+    if (process.env.ENABLE_INPROCESS_WORKER === "true") {
+      logger.warn(
+        "ENABLE_INPROCESS_WORKER=true — este api-server también va a procesar jobs de generación. " +
+          "Si ya tienes el servicio maris-ai-worker corriendo aparte, quita esta env var.",
+      );
+      await registerGenerateWorker(runJobById);
+    }
   } catch (queueErr) {
     logger.error(
       { err: queueErr },
