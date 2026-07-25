@@ -10,6 +10,20 @@ import { MarisId, generateUserId } from "../lib/universalId";
 import { logger } from "../lib/logger";
 
 const router = Router();
+
+// IMPORTANTE: Vercel, para proyectos creados a partir de abril de 2026 (o con
+// la opción activada), respeta las cabeceras Cache-Control del origen en
+// rewrites externos y puede cachear la respuesta en su CDN. Sin esto, una
+// respuesta de /api/auth/login o /api/auth/me podría quedar cacheada sin su
+// Set-Cookie (o servirse cacheada a otro usuario), dejando el login roto de
+// forma intermitente y muy difícil de diagnosticar. Se fuerza no-store en
+// TODA la ruta de auth, sin excepción.
+router.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  next();
+});
+
 // IMPORTANTE: `new Resend(...)` lanza una excepción de inmediato si no hay
 // API key disponible (ni por parámetro ni por env var). Si esto se
 // instanciara aquí arriba a nivel de módulo, la falta de RESEND_API_KEY
