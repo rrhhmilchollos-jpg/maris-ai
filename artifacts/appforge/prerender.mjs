@@ -416,7 +416,7 @@ const ROUTES = [
 <dt>API REST</dt><dd>Interfaz de programación que permite la comunicación entre el frontend (lo que ve el usuario) y el backend (la lógica de negocio).</dd>
 <dt>Deploy / Despliegue</dt><dd>Proceso de publicar una aplicación en internet para que sea accesible desde cualquier dispositivo.</dd>
 <dt>Vercel</dt><dd>Plataforma de hosting preferida para desplegar el frontend de las apps generadas con Maris AI.</dd>
-<dt>Railway</dt><dd>Plataforma cloud para desplegar el backend y la base de datos de las apps de Maris AI.</dd>
+<dt>Coolify</dt><dd>Plataforma cloud para desplegar el backend y la base de datos de las apps de Maris AI.</dd>
 <dt>GitHub</dt><dd>Plataforma de control de versiones donde se guarda y comparte el código. Maris AI permite exportar directamente a GitHub.</dd>
 <dt>Frontend</dt><dd>La parte visual de una aplicación que ve y usa el usuario. Generado con React + TypeScript + Tailwind.</dd>
 <dt>Backend</dt><dd>La lógica de negocio y base de datos de una aplicación. Generado con Express + Node.js + MongoDB.</dd>
@@ -954,10 +954,10 @@ ${match}`
 console.log(`\n📊 Prerender: ${success}/${ROUTES.length} páginas generadas`);
 
 // ── Generar sitemap.xml estático ─────────────────────────────────────────────
-// Antes se proxeaba a Railway en runtime, pero Clerk (auth middleware del
+// Antes se proxeaba a Coolify en runtime, pero Clerk (auth middleware del
 // backend) interceptaba la petición y devolvía un error JSON. Al generarlo
 // aquí en build time: se sirve directamente desde la CDN de Vercel, sin
-// dependencia de Railway ni de Clerk, y se actualiza en cada deploy.
+// dependencia de Coolify ni de Clerk, y se actualiza en cada deploy.
 const today = new Date().toISOString().split("T")[0];
 const sitemapPages = [
   { url: "https://www.marisai.es/", priority: "1.0", changefreq: "daily" },

@@ -12,7 +12,7 @@
  * Default: soportemarisai@gmail.com, rrhh.milchollos@gmail.com
  *
  * Canal WhatsApp (opcional): si WHATSAPP_INSTANCE_ID y WHATSAPP_API_TOKEN
- * están configurados en Railway, las alertas críticas llegan también al
+ * están configurados en Coolify, las alertas críticas llegan también al
  * móvil via Ultramsg. Si no están, el sistema usa solo email como siempre.
  * Número destino: +34 611 946 289 (configurable via WHATSAPP_ADMIN_PHONE)
  */
@@ -30,7 +30,7 @@ function getAdminEmails(): string[] {
 }
 
 // ─── Canal WhatsApp via Ultramsg (opcional) ──────────────────────────────────
-// Si WHATSAPP_INSTANCE_ID y WHATSAPP_API_TOKEN están en Railway, las alertas
+// Si WHATSAPP_INSTANCE_ID y WHATSAPP_API_TOKEN están en Coolify, las alertas
 // críticas se envían también al móvil. Si no, se usa solo email.
 
 async function sendWhatsAppAlert(message: string): Promise<boolean> {
@@ -239,7 +239,7 @@ export async function notifyAdminMilestoneStuck(opts: {
     `Error:\n${lastError.slice(0, 300)}...\n\n` +
     `🔗 Panel: ${panelUrl}`;
 
-  // Canal 1 — WhatsApp (si hay credenciales Ultramsg en Railway)
+  // Canal 1 — WhatsApp (si hay credenciales Ultramsg en Coolify)
   const waSent = await sendWhatsAppAlert(whatsappMsg);
 
   // Canal 2 — Email (siempre, o como fallback si WhatsApp falló)

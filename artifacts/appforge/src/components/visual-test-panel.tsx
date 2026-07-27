@@ -98,7 +98,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
   // job y responde al instante con su id; el trabajo real (que puede tardar
   // varios minutos con Claude Vision + CoreOrchestrator) corre en segundo
   // plano. Sin esto, la conexión HTTP se mantenía abierta todo ese tiempo y
-  // cualquier proxy intermedio (confirmado: Railway corta a los 5 minutos)
+  // cualquier proxy intermedio (confirmado: Coolify corta a los 5 minutos)
   // podía cortarla a mitad, perdiendo el resultado del trabajo aunque el
   // servidor sí lo hubiera completado. Aquí se hace polling cada 4s hasta
   // que el job termine — igual de simple que el polling que ya existe para

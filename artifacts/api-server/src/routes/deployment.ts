@@ -424,7 +424,7 @@ router.post("/apps/:appId/code-review", requireAuth, async (req: Request, res: R
  * estaba completamente desconectado del sistema real — el usuario veía
  * "Sincronizado con GitHub correctamente" sin que ningún repo real se
  * hubiera creado nunca. Esto también bloqueaba el deploy de backend a
- * Railway, que depende de githubRepoFullName existiendo de verdad.
+ * Coolify, que depende de githubRepoFullName existiendo de verdad.
  * Redirige internamente a la lógica real en vez de mantener dos
  * implementaciones del mismo flujo.
  */
@@ -438,10 +438,10 @@ router.post("/apps/:appId/github", requireAuth, async (req: Request, res: Respon
  * Ejecuta el Visual Testing Agent
  */
 // ENCONTRADO en logs reales de producción (responseTime de hasta 300010ms,
-// abortado por el proxy de Railway a los 5 minutos): el ciclo de Testing
+// abortado por el proxy de Coolify a los 5 minutos): el ciclo de Testing
 // Visual + Autofix puede tardar varios minutos (Claude Vision + hasta 3
 // rondas de CoreOrchestrator). Mantener la conexión HTTP abierta durante
-// todo ese tiempo es frágil — cualquier proxy intermedio (Railway, el
+// todo ese tiempo es frágil — cualquier proxy intermedio (Coolify, el
 // navegador, una VPN) puede cortarla, perdiendo el resultado aunque el
 // servidor sí completara el trabajo. FIX: este endpoint ahora es
 // ASÍNCRONO — crea un VisualTestJob, responde AL INSTANTE con su id, y

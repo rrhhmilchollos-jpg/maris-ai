@@ -38,7 +38,7 @@ import { StressTestModal } from "@/components/stress-test-modal";
 import { AgentStatusPipeline } from "@/components/agent-status-pipeline";
 import { LoopProtectionModal } from "@/components/loop-protection-modal";
 import { GitHubButton } from "@/components/github-button";
-import { RailwayDeployButton } from "@/components/railway-deploy-button";
+import { CoolifyDeployButton } from "@/components/coolify-deploy-button";
 import { AdminCodeEditor } from "@/components/admin-code-editor";
 import { LivePreview } from "@/components/live-preview";
 import { parseBundle } from "@/lib/parseBundle";
@@ -2087,11 +2087,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
 
             {isAdmin && (app as any)?.architecture !== "serverless" && (
               <div className="hidden md:block">
-                <RailwayDeployButton
+                <CoolifyDeployButton
                   appId={id}
                   githubRepoFullName={(app as any)?.githubRepoFullName}
-                  railwayBackendUrl={(app as any)?.railwayBackendUrl}
-                  railwayDeploymentStatus={(app as any)?.railwayDeploymentStatus}
+                  coolifyBackendUrl={(app as any)?.coolifyBackendUrl}
+                  coolifyDeploymentStatus={(app as any)?.coolifyDeploymentStatus}
                 />
               </div>
             )}
@@ -2476,7 +2476,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                         {[
                           { label: "Créditos ilimitados", icon: Cpu },
                           { label: "Editor de código completo", icon: Code },
-                          { label: "Despliegue directo a Railway", icon: Rocket },
+                          { label: "Despliegue directo a Coolify", icon: Rocket },
                           { label: "Panel de administración", icon: LayoutDashboard },
                         ].map((perm) => (
                           <div key={perm.label} className="flex items-center gap-2.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">

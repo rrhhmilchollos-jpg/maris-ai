@@ -3,7 +3,7 @@
  *
  * Inicialización PEREZOSA (mismo patrón que ya usa el cliente de Gemini en
  * lib/integrations-gemini-ai/src/client.ts): el servidor arranca sin
- * problema aunque las credenciales todavía no estén puestas en Railway --
+ * problema aunque las credenciales todavía no estén puestas en Coolify --
  * el error solo aparece cuando de verdad se intenta usar el agente, con un
  * mensaje claro de qué variable falta, no un crash silencioso al arrancar.
  *
@@ -51,7 +51,7 @@ export function getGoogleAdsCustomer(): Customer {
   const missing = missingGoogleAdsEnvVars();
   if (missing.length > 0) {
     throw new Error(
-      `Faltan variables de entorno de Google Ads en Railway: ${missing.join(", ")}. ` +
+      `Faltan variables de entorno de Google Ads en Coolify: ${missing.join(", ")}. ` +
         `Configúralas en el servicio maris-ai-api-server → Variables.`,
     );
   }

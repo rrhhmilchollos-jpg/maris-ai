@@ -68,9 +68,9 @@ ${steps.join("\n")}
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
 const APP_URL = process.env.APP_URL ?? "https://www.marisai.es";
-// El callback de GitHub OAuth usa www.marisai.es por defecto (proxy Vercel → Railway).
-// api.marisai.es aún no tiene certificado TLS válido (Railway pendiente del registro TXT DNS).
-// Cuando api.marisai.es tenga TLS, configurar en Railway: GITHUB_CALLBACK_BASE_URL=https://api.marisai.es
+// El callback de GitHub OAuth usa www.marisai.es por defecto (proxy Vercel → Coolify).
+// api.marisai.es aún no tiene certificado TLS válido (Coolify pendiente del registro TXT DNS).
+// Cuando api.marisai.es tenga TLS, configurar en Coolify: GITHUB_CALLBACK_BASE_URL=https://api.marisai.es
 const DEFAULT_CALLBACK_BASE = "https://www.marisai.es";
 const configuredCallbackBase = process.env.GITHUB_CALLBACK_BASE_URL || process.env.PUBLIC_API_URL || process.env.API_URL || DEFAULT_CALLBACK_BASE;
 const GITHUB_CALLBACK_URL = `${configuredCallbackBase.replace(/\/$/, "")}/api/github/callback`;

@@ -176,12 +176,12 @@ ANTI-DESVIO ESPECIFICO: Genera EXACTAMENTE las paginas y componentes del plan. N
 
 CONEXION CON EL BACKEND REAL EN PRODUCCION (critico si backendNeeded=true):
 - En el preview/sandbox, frontend y backend comparten origen, asi que rutas relativas como fetch("/api/...") funcionan sin configuracion.
-- En produccion real con arquitectura "monolith" o "microservices", el frontend se despliega a Vercel y el backend a un dominio DISTINTO (Railway) — una ruta relativa fetch("/api/...") en produccion apuntaria al propio dominio de Vercel, donde no hay ningun backend escuchando, y fallaria silenciosamente con un error de red o un 404 de Vercel.
+- En produccion real con arquitectura "monolith" o "microservices", el frontend se despliega a Vercel y el backend a un dominio DISTINTO (Coolify) — una ruta relativa fetch("/api/...") en produccion apuntaria al propio dominio de Vercel, donde no hay ningun backend escuchando, y fallaria silenciosamente con un error de red o un 404 de Vercel.
 - EXCEPCION — arquitectura "serverless": en ese caso el backend (carpeta api/ en la raiz, ver SERVERLESS_BACKEND_GUIDANCE) se despliega en el MISMO proyecto y dominio de Vercel que el frontend — fetch("/api/...") con ruta relativa SI funciona correctamente en produccion sin ninguna configuracion adicional, porque no hay un segundo dominio distinto al que apuntar. No generes la convencion VITE_API_URL/apiUrl() en este caso, seria una complejidad innecesaria sin ningun beneficio real.
 - Por eso, para "monolith"/"microservices", TODA llamada del frontend a su propio backend debe construirse con una funcion helper centralizada en src/lib/api.ts:
   export const API_BASE_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) || (typeof window !== "undefined" ? window.location.origin : "");
   export function apiUrl(path: string) { return API_BASE_URL + path; }
-- Usa siempre fetch(apiUrl("/api/recurso")), nunca fetch("/api/recurso") directamente — esto hace que el mismo codigo funcione en el preview (VITE_API_URL vacio, rutas relativas) y en produccion (VITE_API_URL apuntando al dominio real de Railway una vez desplegado).
+- Usa siempre fetch(apiUrl("/api/recurso")), nunca fetch("/api/recurso") directamente — esto hace que el mismo codigo funcione en el preview (VITE_API_URL vacio, rutas relativas) y en produccion (VITE_API_URL apuntando al dominio real de Coolify una vez desplegado).
 - Vite expone automaticamente cualquier variable de entorno que empiece por VITE_ via import.meta.env — no necesitas configuracion adicional en vite.config.ts para esto, es el mecanismo nativo.
 
 You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like they came from a top product studio (Linear, Vercel, Stripe, Arc, Raycast). Generate a complete, production-quality React frontend as STRICT JSON only.
@@ -194,7 +194,7 @@ You are Maris AI's Senior Frontend Engineer. You ship interfaces that look like 
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live"
+            "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.vercel.app https://*.vercel.live"
           }
         ]
       }
@@ -290,7 +290,7 @@ SOCKET.IO — funciones en tiempo real / multijugador (chat en vivo, notificacio
 - \`import { io } from "socket.io-client"\` en el frontend, \`import { Server } from "socket.io"\` en el backend — ambos disponibles.
 - Backend: const io = new Server(httpServer, { cors: { origin: "*" } }); io.on("connection", (socket) => { socket.on("evento", (data) => { io.emit("otroEvento", data); }); });
 - Frontend: const socket = io(); useEffect(() => { socket.on("otroEvento", handler); return () => socket.off("otroEvento", handler); }, []);
-- IMPORTANTE — limitación real que hay que explicarle al usuario si el proyecto lo necesita: esto solo funciona de verdad una vez la app está DESPLEGADA de verdad (Railway, un proceso Node.js real y siempre encendido) — el preview rápido dentro del editor de Maris AI no mantiene conexiones persistentes de la misma forma. Avisa en el chat si el usuario pide algo en tiempo real que solo se podrá probar del todo tras desplegar.
+- IMPORTANTE — limitación real que hay que explicarle al usuario si el proyecto lo necesita: esto solo funciona de verdad una vez la app está DESPLEGADA de verdad (Coolify, un proceso Node.js real y siempre encendido) — el preview rápido dentro del editor de Maris AI no mantiene conexiones persistentes de la misma forma. Avisa en el chat si el usuario pide algo en tiempo real que solo se podrá probar del todo tras desplegar.
 
 TONE.JS — sonido y efectos de sonido SIN archivos de audio externos (coherente con la regla de "bundle autocontenido, sin URLs externas" — no hay forma de cargar .mp3/.wav reales sin romper esa regla, así que el sonido se GENERA por síntesis):
 - \`import * as Tone from "tone"\` disponible.
@@ -1053,7 +1053,7 @@ QUALITY BAR — obligatorio en TODOS los proyectos:
     - components.securitySchemes con bearerAuth (JWT) si el proyecto tiene autenticacion
     - Este archivo es lo que permite a un desarrollador o a otra IA conectar este backend con sistemas externos sin tener que leer el codigo fuente
 
-16. CONNECTION POOLING — crítico para soportar tráfico concurrente real sin agotar las conexiones a la base de datos (un servidor Postgres gestionado tipo Supabase/Railway/Neon suele limitar a 60-100 conexiones simultáneas; sin pooling, cada request abre su propia conexión y ese límite se agota rápido bajo carga):
+16. CONNECTION POOLING — crítico para soportar tráfico concurrente real sin agotar las conexiones a la base de datos (un servidor Postgres gestionado tipo Supabase/Neon suele limitar a 60-100 conexiones simultáneas; sin pooling, cada request abre su propia conexión y ese límite se agota rápido bajo carga):
     - En el connection string de DATABASE_URL en .env.example, añade el parámetro de pool: postgresql://user:pass@host:5432/db?connection_limit=10&pool_timeout=20 (Prisma respeta estos parámetros nativamente, sin necesitar un PgBouncer externo para la mayoría de cargas).
     - Si el plan describe explícitamente alta concurrencia esperada (miles de usuarios, picos de tráfico, "tiempo real", dashboards con muchos usuarios viendo a la vez), documenta en un comentario al inicio de prisma/schema.prisma que en producción real se recomienda añadir PgBouncer (o el pooler nativo del proveedor, ej. Supabase Pooler en modo transaction) entre la app y la base de datos, y usar DIRECT_URL aparte para las migraciones (que no pueden pasar por un pooler en modo transacción) — esto es exactamente el patrón que Prisma documenta oficialmente para este escenario.
     - PrismaClient debe instanciarse UNA SOLA VEZ como singleton (ya cubierto en src/lib/prisma.ts) — nunca crear una instancia nueva por request, eso es la causa más común de agotar conexiones bajo carga.
@@ -1527,7 +1527,7 @@ OUTGOING AUTOMATION WEBHOOKS (kind:"webhook", name:"Webhooks salientes (automati
 
 BACKGROUND JOB QUEUE (kind:"generic-rest", name:"Cola de procesamiento en segundo plano"):
 - Use this kind when the plan involves work that should NOT block the HTTP response — sending bulk/transactional emails, generating PDFs or reports, processing/resizing uploaded files or videos, reconciling large datasets, or any "procesar en segundo plano", "enviar miles de emails", "generar reporte pesado", "procesar archivo grande" requirement. Without this, the generated backend would await that work inline, risking request timeouts and a backend that blocks under load — exactly the kind of architecture gap that makes a generated app fragile under real traffic.
-- envVars must include "REDIS_URL" (BullMQ requires a real Redis instance — this is infrastructure the end user must provision, e.g. Railway/Upstash/Redis Cloud all have a free tier sufic iente for moderate load; this is NOT optional infra, be explicit about it in setupSteps).
+- envVars must include "REDIS_URL" (BullMQ requires a real Redis instance — this is infrastructure the end user must provision, e.g. Upstash/Redis Cloud all have a free tier sufic iente for moderate load; this is NOT optional infra, be explicit about it in setupSteps).
 - setupSteps must explain: (1) the user needs a real Redis instance and must set REDIS_URL to its connection string before the queue works, (2) which background tasks this app offloads to the queue and why (so the user understands what stops working if Redis is unreachable — see the honest degradation guidance in the backend prompt), (3) free-tier Redis providers they can use to get started without paying anything.
 
 Output ONLY the JSON object.`;
@@ -1540,7 +1540,7 @@ BACKGROUND JOB QUEUE — cuando el plan incluya un servicio con kind="generic-re
 - En los endpoints HTTP que disparan trabajo pesado: NUNCA hagas el trabajo inline. Usa await queue.add(jobName, payload, { attempts: 3, backoff: { type: "exponential", delay: 2000 } }) y responde inmediatamente con 202 Accepted + un id de job, no esperes a que termine.
 - Genera un endpoint GET /api/jobs/:id/status que consulte el estado real del job en BullMQ (job.getState()) — el frontend debe poder consultar el progreso, no asumir que ya terminó.
 - DEGRADACIÓN HONESTA si Redis no está configurado: al arrancar, comprueba si REDIS_URL existe y es una URL real (esquema redis:// o rediss://, no la URL REST de un proveedor pegada por error — error común documentado: confundir la REST API de un proveedor con su URL TCP real). Si no está configurada, loguea una advertencia clara explicando qué funcionalidades quedan deshabilitadas (qué endpoints fallarán y por qué) en vez de crashear el proceso entero al arrancar — el resto de la app (lo que no depende de la cola) debe seguir funcionando.
-- Documenta en .env.example: REDIS_URL=redis://default:password@host:6379 con un comentario indicando que Railway, Upstash y Redis Cloud ofrecen un tier gratuito suficiente para empezar.
+- Documenta en .env.example: REDIS_URL=redis://default:password@host:6379 con un comentario indicando que Upstash y Redis Cloud ofrecen un tier gratuito suficiente para empezar.
 `;
 
 const SERVERLESS_BACKEND_GUIDANCE = `
@@ -4403,7 +4403,7 @@ export async function generateApp(
     await log("system",
       "⚠️ El orquestador de hitos no produjo un bundle de frontend completo. " +
       "El job se marca como fallido para que puedas regenerarlo. " +
-      "Revisa los logs de Railway para ver qué hito falló.",
+      "Revisa los logs de Coolify para ver qué hito falló.",
       "error"
     );
     throw new Error(
@@ -5400,7 +5400,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
     techStack: plan.techStack,
     frontendCode: (finalFrontend.includes('// === FILE: vercel.json ===') 
       ? finalFrontend 
-      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
+      : finalFrontend + `\n\n// === FILE: vercel.json ===\n{\n  "headers": [\n    {\n      "source": "/(.*)",\n      "headers": [\n        {\n          "key": "Content-Security-Policy",\n          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.vercel.app https://*.vercel.live"\n        },\n        {\n          "key": "X-Frame-Options",\n          "value": "ALLOWALL"\n        }\n      ]\n    }\n  ]\n}`) + testsAppendix + setupNotes,
     backendCode: backendResult?.code || "No backend required for this app.",
     plannedPages: plan.pages.map((p) => ({ name: p.name, route: p.route, purpose: p.purpose })),
     architecture: plan.architecture,
@@ -6589,7 +6589,7 @@ router.get("/apps/:id/active-job", requireAuth, async (req: any, res: any) => {
 });
 
 // ── Contador de créditos en vivo (estilo Emergent.sh) ────────────────────────
-// Server-Sent Events en vez de WebSocket: Railway (y la mayoría de proxies)
+// Server-Sent Events en vez de WebSocket: Coolify (y la mayoría de proxies)
 // soportan SSE sin configuración especial, es una conexión HTTP normal de
 // solo lectura — más simple de desplegar que un servidor WS aparte, y es
 // exactamente lo que necesita este widget (el cliente nunca manda nada,
@@ -6607,7 +6607,7 @@ router.get("/apps/:id/credit-stream", requireAuth, async (req: any, res: any) =>
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
-    // Necesario para que Railway/algunos proxies no bufferen el stream
+    // Necesario para que Coolify/algunos proxies no bufferen el stream
     "X-Accel-Buffering": "no",
   });
   res.flushHeaders?.();

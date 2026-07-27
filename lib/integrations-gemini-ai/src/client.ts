@@ -18,7 +18,7 @@ function getAI(): GoogleGenAI {
 
   if (!apiKey || !apiKey.startsWith("sk-zoco-")) {
     throw new Error(
-      "Conexión multimodal no configurada: define ZOCOIA_API_KEY (sk-zoco-...) en Railway. " +
+      "Conexión multimodal no configurada: define ZOCOIA_API_KEY (sk-zoco-...) en Coolify. " +
         "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
     );
   }

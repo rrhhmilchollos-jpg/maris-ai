@@ -7,8 +7,8 @@ import { logger } from "./logger";
  * ya existía pero no responde a esa pregunta).
  *
  * DISEÑO: mapa en memoria de socket.io, no Redis. Esto es seguro y
- * suficiente PORQUE Railway está configurado con 1 sola réplica
- * (confirmado en el panel de Railway: "Number of replicas: 1") — si en el
+ * suficiente PORQUE Coolify está configurado con 1 sola réplica
+ * (confirmado en el panel de Coolify: "Number of replicas: 1") — si en el
  * futuro se escala a más de una réplica, este mapa en memoria dejaría de
  * ser correcto (cada réplica vería solo sus propias conexiones) y
  * necesitaría moverse al adaptador de socket.io para Redis

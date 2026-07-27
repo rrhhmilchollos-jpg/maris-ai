@@ -13,7 +13,7 @@ function sendHealth(res: Response) {
   const queueReady = isQueueReady();
   
   // Verificar si el Testing Agent está cargado y disponible
-  // En producción (Railway): el build de esbuild genera un único bundle index.mjs,
+  // En producción (Coolify): el build de esbuild genera un único bundle index.mjs,
   // por lo que el tester.ts queda embebido. Se verifica la existencia del bundle.
   // En desarrollo: se busca el archivo fuente src/lib/tester.ts
   const distBundle = path.join(process.cwd(), 'dist/index.mjs');
@@ -22,8 +22,9 @@ function sendHealth(res: Response) {
 
   const memUsage = process.memoryUsage();
   
-  // Scaling info — replica ID from Railway env
-  const instanceId = process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || "single-instance";
+  // Scaling info — Coolify no expone un env var de réplica dedicado,
+  // así que usamos el hostname del contenedor.
+  const instanceId = process.env.HOSTNAME || "single-instance";
   const concurrency = parseInt(process.env.JOB_CONCURRENCY || "10", 10);
   
   res.json({ 
@@ -41,8 +42,8 @@ function sendHealth(res: Response) {
       heapTotal: `${(memUsage.heapTotal / 1024 / 1024).toFixed(2)} MB`,
     },
     scaling: {
-      mode: process.env.RAILWAY_REPLICA_ID ? "multi-replica" : "single-instance",
-      hint: "Aumenta réplicas en Railway Dashboard → Settings → Replicas para escalar horizontalmente",
+      mode: "single-instance",
+      hint: "Aumenta réplicas desde el panel de Coolify → tu aplicación → General → Replicas para escalar horizontalmente",
       bullmq: queueReady ? "distributed-ready" : "in-process-fallback",
     }
   });

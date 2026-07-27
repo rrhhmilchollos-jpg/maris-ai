@@ -314,7 +314,7 @@ export class CoreOrchestrator {
    */
   async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {
     // ENCONTRADO en producción (cliente real atascado, error confirmado en
-    // el log exacto de Railway con stack trace completo): "Streaming is
+    // el log exacto de Coolify con stack trace completo): "Streaming is
     // required for operations that may take longer than 10 minutes" — un
     // rechazo duro del SDK de Anthropic en TypeScript (no del backend) para
     // llamadas NO-streaming cuando max_tokens es alto, porque ese tipo de
@@ -545,7 +545,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         // AbortController con timeout de 90s por hito.
-        // Sin este timeout, si Anthropic se congela o Railway pierde
+        // Sin este timeout, si Anthropic se congela o Coolify pierde
         // la conexión, el proceso espera indefinidamente — el watchdog
         // lo detecta como job muerto y lo reinicia desde cero (perdiendo
         // el progreso). Con el timeout, el intento falla limpiamente,

@@ -39,7 +39,7 @@ Lovable requiere Supabase externo. Bolt.new tiene limitaciones con WebContainers
 Los créditos de Maris AI duran 30 días desde la compra. Precios fijos predecibles en euros, sin sorpresas por tokens como en Bolt.new.
 
 ### 5. Código 100% exportable
-A diferencia de Base44 donde el código queda en su plataforma, Maris AI exporta directamente a GitHub y el usuario puede desplegar en Vercel, Railway, Netlify o cualquier hosting. Sin vendor lock-in.
+A diferencia de Base44 donde el código queda en su plataforma, Maris AI exporta directamente a GitHub y el usuario puede desplegar en Vercel, Coolify, Netlify o cualquier hosting. Sin vendor lock-in.
 
 ---
 

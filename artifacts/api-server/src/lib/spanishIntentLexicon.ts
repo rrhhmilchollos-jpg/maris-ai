@@ -106,7 +106,7 @@ const DOMAIN_TERMS: Record<SpanishDomain, string[]> = {
   frontend: ["frontend", "react", "tsx", "jsx", "html", "tailwind", "vite", "cliente", "navegador"],
   backend: ["backend", "server", "servidor", "node", "express", "fastapi", "api server", "worker", "cola", "job"],
   api: ["api", "endpoint", "ruta", "webhook", "request", "response", "integracion", "servicio externo"],
-  deployment: ["deploy", "despliegue", "vercel", "railway", "render", "dominio", "dns", "preview", "produccion", "hosting"],
+  deployment: ["deploy", "despliegue", "vercel", "coolify", "render", "dominio", "dns", "preview", "produccion", "hosting"],
   billing: ["credito", "creditos", "saldo", "limite", "facturacion", "billing", "pago", "stripe", "plan", "premium"],
   research: ["internet", "web", "url", "noticia", "competencia", "mercado", "investigacion", "fuente"],
   full_build: ["app completa", "aplicacion completa", "desde cero", "landing completa", "mvp", "saas", "marketplace", "red social", "clon de", "tipo instagram", "tipo tinder", "tipo wallapop", "tipo spotify"],

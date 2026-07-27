@@ -259,7 +259,7 @@ export async function autoRepairBundle(opts: {
   const log = opts.log || logger.child({ module: "auto-repair", appId });
 
   // ANTES: esta función solo escribía en el logger interno del servidor
-  // (logger.info/warn — visible en logs de Railway, INVISIBLE en el panel
+  // (logger.info/warn — visible en logs de Coolify, INVISIBLE en el panel
   // de Monitorización). El admin pulsaba "Reparar y continuar" y veía
   // "repairing" sin ningún log mientras la reparación trabajaba en segundo
   // plano varios minutos — exactamente el síntoma reportado de "no se ve lo

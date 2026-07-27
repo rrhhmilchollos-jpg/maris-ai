@@ -13,7 +13,7 @@
  * una feature que pide un paso de configuración.
  *
  * Generar una clave válida:  openssl rand -hex 32
- * Y añadirla como CONNECTOR_ENCRYPTION_KEY en Railway/Render (ver PENDIENTES.md).
+ * Y añadirla como CONNECTOR_ENCRYPTION_KEY en Coolify/Render (ver PENDIENTES.md).
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";

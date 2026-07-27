@@ -36,8 +36,8 @@ const httpServer = http.createServer(app);
 // Visual + Autofix (POST /apps/:id/visual-test) puede tardar varios
 // minutos (análisis con Claude Vision + reconstrucción por hitos con
 // CoreOrchestrator, repetido hasta 3 veces) — confirmado en logs de
-// Railway con responseTime de 292507ms y 300010ms (este último abortado).
-// Railway corta conexiones a los 5 minutos por defecto (su límite máximo
+// Coolify con responseTime de 292507ms y 300010ms (este último abortado).
+// Coolify corta conexiones a los 5 minutos por defecto (su límite máximo
 // de plataforma es 15 minutos, configurable a nivel de aplicación) — sin
 // subir esto, el trabajo del ciclo de autofix se pierde a mitad sin que
 // el cliente ni el servidor lo registren como un fallo real. Esto es una
@@ -76,7 +76,7 @@ const io = new SocketIOServer(httpServer, {
 // provided. Otherwise, performs a network call." Esa respuesta SÍ se
 // cachea en memoria del proceso (ver @clerk/backend/dist —
 // loadClerkJWKFromRemote + cacheHasExpired), pero la caché se vacía en
-// cada reinicio del proceso — justo después de cada deploy en Railway,
+// cada reinicio del proceso — justo después de cada deploy en Coolify,
 // las primeras conexiones de socket dependen de esa llamada de red real
 // a Clerk, y un fallo o lentitud puntual ahí (red, rate limit, hiccup del
 // lado de Clerk) tumba la conexión con un 400 sin que el código tenga
@@ -253,7 +253,7 @@ httpServer.listen(finalPort, async (err?: Error) => {
 
   // 6c) Emails de reactivación automática — una vez al día a las 10:00h España.
   // Envía emails personalizados a clientes inactivos (3, 7, 14 y 30 días).
-  // Activa con: REACTIVATION_EMAILS_ENABLED=true en Railway.
+  // Activa con: REACTIVATION_EMAILS_ENABLED=true en Coolify.
   try {
     const { runReactivationTick } = await import("./lib/reactivationEmails");
     const now = new Date();

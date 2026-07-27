@@ -626,7 +626,7 @@ const SEGUXAT_FRONTEND_CODE = `// === FILE: index.html ===
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.railway.app https://*.vercel.app https://*.vercel.live"
+          "value": "frame-ancestors * 'self' https://marisai.es https://www.marisai.es https://*.marisai.es https://api.marisai.es https://*.vercel.app https://*.vercel.live"
         },
         {
           "key": "X-Frame-Options",

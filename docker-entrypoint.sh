@@ -16,5 +16,5 @@ rm -f /run/dbus/pid
 dbus-daemon --system --fork || echo "aviso: dbus-daemon ya estaba corriendo o no pudo arrancar — Puppeteer podría fallar igualmente"
 
 # exec sustituye este script por el proceso real (node ...), preservando
-# señales (SIGTERM de Railway al reiniciar/parar) y el PID 1 correcto.
+# señales (SIGTERM de Coolify/Docker al reiniciar/parar) y el PID 1 correcto.
 exec "$@"

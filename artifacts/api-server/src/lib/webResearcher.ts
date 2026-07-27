@@ -2,7 +2,7 @@
 /**
  * webResearcher.ts
  * Búsqueda web silenciosa para el researcher de Maris AI.
- * Sin Puppeteer — funciona en Railway sin Chromium.
+ * Sin Puppeteer — funciona en Coolify sin Chromium.
  */
 
 import pino from "pino";
@@ -34,7 +34,7 @@ export interface WebResearchResult {
 
 /**
  * Extrae texto limpio de una URL usando fetch + regex simple.
- * Sin Puppeteer — funciona en Railway sin Chromium.
+ * Sin Puppeteer — funciona en Coolify sin Chromium.
  */
 async function scrapePageText(url: string, timeoutMs = 8_000): Promise<string> {
   try {
@@ -118,7 +118,7 @@ async function searchWithBrave(query: string, num = 5): Promise<SearchResult[]> 
 
 /**
  * DuckDuckGo sin API key — usa el endpoint HTML público de DDG.
- * No requiere Puppeteer, funciona en Railway.
+ * No requiere Puppeteer, funciona en Coolify.
  */
 async function searchWithDuckDuckGo(query: string, num = 5): Promise<SearchResult[]> {
   try {

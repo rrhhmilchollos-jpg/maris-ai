@@ -81,7 +81,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 
 // ───────────────────────────────────────────────────────────────────────────
 // FIX 2 (be7e130): el endpoint de Testing Visual es asíncrono (VisualTestJob),
-// no síncrono — sin esto, Railway corta la conexión a los 5 minutos y se
+// no síncrono — sin esto, Coolify corta la conexión a los 5 minutos y se
 // pierde el trabajo del ciclo de autofix aunque el servidor sí lo completara.
 // ───────────────────────────────────────────────────────────────────────────
 {
@@ -89,7 +89,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   check(
     "FIX 2: POST /visual-test crea un VisualTestJob y responde 202 (asíncrono)",
     /VisualTestJob.*\.create/.test(src) && /res\.status\(202\)/.test(src),
-    "Si el endpoint vuelve a ser síncrono, las generaciones complejas (varios ciclos de CoreOrchestrator) pueden perderse cuando Railway corta la conexión a los 5 minutos.",
+    "Si el endpoint vuelve a ser síncrono, las generaciones complejas (varios ciclos de CoreOrchestrator) pueden perderse cuando Coolify corta la conexión a los 5 minutos.",
   );
   check(
     "FIX 2: existe el endpoint GET de polling /visual-test/:jobId",

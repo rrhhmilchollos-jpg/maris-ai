@@ -17,7 +17,7 @@ import mcpIntegrationsRouter from "./routes/mcpIntegrations";
 import connectorsRouter from "./routes/connectors";
 import workflowsRouter from "./routes/workflows";
 import stressTestRouter from "./routes/stressTest";
-import railwayRouter from "./routes/railway";
+import coolifyDeployRouter from "./routes/coolifyDeploy";
 import { vivaWebhookRouter } from "./routes/vivaWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
@@ -125,7 +125,7 @@ app.use(
           "https://api.marisai.es",
           "https://www.marisai.es",
           "https://api.marisai.es",
-          "https://*.railway.app",
+          "https://*.marisai.es",
           "https://*.clerk.com",
           "https://*.clerk.accounts.dev",
           "https://clerk.marisai.es",
@@ -155,7 +155,6 @@ app.use(
           "https://hooks.stripe.com",
           "https://marisai.es",
           "https://*.marisai.es",
-          "https://*.railway.app",
           "https://*.vercel.app",
           "https://*.vercel.live",
           "https://*.webcontainer.io",
@@ -222,7 +221,6 @@ const ALLOWED_ORIGIN_PATTERNS: RegExp[] = [
   /^https?:\/\/(www\.)?marisai\.es$/,
   /^https?:\/\/[a-z0-9-]+\.marisai\.es$/,
   /^https?:\/\/([a-z0-9-]+\.)*vercel\.app$/,
-  /^https?:\/\/([a-z0-9-]+\.)*railway\.app$/,
   /^https?:\/\/localhost(:\d+)?$/,
   /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
 ];
@@ -331,7 +329,7 @@ app.use("/api", mcpIntegrationsRouter);
 app.use("/api", connectorsRouter);
 app.use("/api", workflowsRouter);
 app.use("/api", stressTestRouter);
-app.use("/api", railwayRouter);
+app.use("/api", coolifyDeployRouter);
 app.use("/api", vivaWebhookRouter);
 
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
@@ -341,7 +339,7 @@ app.use("/api", vivaWebhookRouter);
 // middleware intentaba cubrir (/, /pricing, /news, /vs-emergent...) NUNCA
 // llegan aquí: Vercel las sirve como archivos HTML estáticos generados en
 // build time por artifacts/appforge/prerender.mjs, directamente desde su
-// CDN, antes de que la petición pueda alcanzar Railway. Ese sistema es
+// CDN, antes de que la petición pueda alcanzar el servidor Coolify. Ese sistema es
 // además la mejor solución de las dos — no depende de mantener una lista
 // de User-Agents de bots, funciona igual para cualquier crawler (incluidos
 // los que no están en esa lista) y no añade latencia de red.

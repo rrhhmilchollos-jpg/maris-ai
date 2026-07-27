@@ -52,7 +52,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
   const [style, setStyle] = useState("cinematic");
   const [duration, setDuration] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ imageUrl?: string; videoUrl?: string; jobId?: string; fallback?: boolean } | null>(null);
+  const [result, setResult] = useState<{ imageUrl?: string; videoUrl?: string; jobId?: string; fallback?: boolean; segmentsTotal?: number; segmentsDone?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
@@ -361,7 +361,7 @@ export function MediaAIGenerator({ mode, token }: MediaAIGeneratorProps) {
       {/* Fallback video job queued */}
       {result?.jobId && !result?.videoUrl && isVideo && !polling && result.fallback && (
         <div className="text-[11px] text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-          ⚡ Vídeo IA real disponible configurando <code className="bg-white/10 px-1 rounded">LUMA_API_KEY</code> en Railway.
+          ⚡ Vídeo IA real disponible configurando <code className="bg-white/10 px-1 rounded">LUMA_API_KEY</code> en Coolify.
           Actualmente en modo storyboard con imágenes IA.
         </div>
       )}

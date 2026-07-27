@@ -79,12 +79,6 @@ export interface IUser {
   githubId?: string;
   githubAvatarUrl?: string;
   githubConnectedAt?: Date;
-  // Railway API token — propiedad del propio usuario, el backend de cada
-  // app se despliega en SU cuenta de Railway, no en una compartida de
-  // Maris AI. Se guarda igual que el resto de credenciales de servicios
-  // externos del usuario (ver githubAccessToken arriba).
-  railwayApiToken?: string;
-  railwayConnectedAt?: Date;
   // ID Universal Maris AI — formato USR-<timestamp_base36>-<random6>
   // Identifica al usuario de forma única en todo el ecosistema de Maris AI
   marisId?: string;
@@ -167,8 +161,6 @@ const UserSchema = new Schema<IUser>(
     githubId: { type: String },
     githubAvatarUrl: { type: String },
     githubConnectedAt: { type: Date },
-    railwayApiToken: { type: String },
-    railwayConnectedAt: { type: Date },
     // ID Universal Maris AI
     marisId: { type: String, unique: true, sparse: true, index: true },
     // Correcciones de soporte admin — inmutables desde el cliente
@@ -281,20 +273,19 @@ export interface IGeneratedApp {
   customDomainVerified?: boolean;
   lastDeployedAt?: Date;
   deploymentLogs?: string;
-  // Backend real desplegado en Railway (no solo el frontend a Vercel) —
-  // ver lib/railwayDeploy.ts. railwayBackendUrl es la URL pública real que
-  // el frontend usa para hacer fetch a su propio backend en producción.
-  railwayProjectId?: string;
-  railwayServiceId?: string;
-  railwayEnvironmentId?: string;
-  railwayBackendUrl?: string;
-  railwayDeploymentStatus?: "not_deployed" | "deploying" | "deployed" | "failed";
-  railwayDeploymentError?: string;
+  // Backend real desplegado en el servidor Coolify propio (no solo el
+  // frontend a Vercel) — ver lib/coolifyDeploy.ts (deployBackendToCoolify).
+  // coolifyBackendUrl es la URL pública real que el frontend usa para
+  // hacer fetch a su propio backend en producción.
+  coolifyApplicationUuid?: string;
+  coolifyBackendUrl?: string;
+  coolifyDeploymentStatus?: "not_deployed" | "deploying" | "deployed" | "failed";
+  coolifyDeploymentError?: string;
   // Arquitectura elegida por el Architect durante la generación — ENCONTRADO:
   // este campo solo vivía en el ProjectPlan en memoria, nunca se persistía,
   // así que tras la generación no había forma de saber si una app concreta
   // era "serverless" (backend ya viaja con el frontend a Vercel, nada que
-  // desplegar a Railway) sin volver a inspeccionar el código generado.
+  // desplegar a Coolify) sin volver a inspeccionar el código generado.
   architecture?: "monolith" | "microservices" | "serverless";
   // A petición explícita del usuario: el cliente introduce sus propias API
   // keys/secrets (OpenAI, WhatsApp, etc.) para que la app generada se
@@ -405,12 +396,10 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     customDomainVerified: { type: Boolean, default: false },
     lastDeployedAt: { type: Date },
     deploymentLogs: { type: String },
-    railwayProjectId: { type: String },
-    railwayServiceId: { type: String },
-    railwayEnvironmentId: { type: String },
-    railwayBackendUrl: { type: String },
-    railwayDeploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
-    railwayDeploymentError: { type: String },
+    coolifyApplicationUuid: { type: String },
+    coolifyBackendUrl: { type: String },
+    coolifyDeploymentStatus: { type: String, default: "not_deployed", enum: ["not_deployed", "deploying", "deployed", "failed"] },
+    coolifyDeploymentError: { type: String },
     architecture: { type: String, enum: ["monolith", "microservices", "serverless"] },
     requiredEnvVars: [
       {
@@ -706,7 +695,7 @@ export const GenerationJob: Model<IGenerationJob> =
 // el cliente esperaba con la conexión HTTP abierta mientras Claude Vision
 // analizaba y CoreOrchestrator reconstruía hasta 3 ciclos. Confirmado con
 // responseTime de hasta 300010ms (abortado) y 292507ms (al límite) en los
-// logs de Railway — su proxy corta conexiones a los 5 minutos por
+// logs de Coolify — su proxy corta conexiones a los 5 minutos por
 // defecto, perdiendo todo el trabajo en curso aunque el servidor sí
 // estuviera procesando bien. Este job, igual de simple que GenerationJob
 // pero sin necesidad de cola con concurrencia (cada visual-test es

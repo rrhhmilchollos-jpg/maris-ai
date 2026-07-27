@@ -475,7 +475,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
     setApps([]);
     const timer = setTimeout(() => {
       setLoading(false);
-      toast({ title: "Timeout", description: "Railway tardó demasiado. Espera 10s y reintenta.", variant: "destructive" });
+      toast({ title: "Timeout", description: "Coolify tardó demasiado. Espera 10s y reintenta.", variant: "destructive" });
     }, 20000);
     try {
       const userData = await apiFetch<any>(`/api/admin/users/search?email=${encodeURIComponent(target)}`);
@@ -4039,7 +4039,7 @@ export default function AdminDashboardPage() {
                             const d = await apiFetch<any>("/api/admin/test-email-alert", { method: "POST" });
                             toast({ title: "📧 Email de soporte enviado", description: d.message });
                           } catch (e: any) {
-                            toast({ title: "Error", description: e.message + " — ¿RESEND_API_KEY configurada en Railway?", variant: "destructive" });
+                            toast({ title: "Error", description: e.message + " — ¿RESEND_API_KEY configurada en Coolify?", variant: "destructive" });
                           }
                         }}
                       >

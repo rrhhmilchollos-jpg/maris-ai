@@ -38,7 +38,7 @@ type ConnectorId =
 // (SUPABASE_URL), a diferencia de verifyNotion/verifyAirtable (que
 // siempre llaman a un host fijo, el usuario solo aporta la clave). Sin
 // esta comprobación, un usuario malicioso podría poner una URL interna
-// (metadatos de AWS/GCP, localhost, red privada de Railway) y usar el
+// (metadatos de AWS/GCP, localhost, red privada de Coolify) y usar el
 // servidor de Maris AI como intermediario para sondear su propia
 // infraestructura interna (SSRF) -- el mensaje de resultado (ok/error)
 // ya filtra si ese host interno responde o no, aunque no se devuelva el

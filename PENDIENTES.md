@@ -18,7 +18,7 @@
   credenciales de conectores devuelve error 503 a propósito (nunca se guardan
   secretos en texto plano).
   1. Genera la clave: `openssl rand -hex 32`
-  2. Añádela como variable `CONNECTOR_ENCRYPTION_KEY` en Railway/Render
+  2. Añádela como variable `CONNECTOR_ENCRYPTION_KEY` en Coolify/Render
      (donde corre el api-server).
   3. NO la cambies después: si cambia, las credenciales ya guardadas quedan
      ilegibles y los usuarios tendrán que reconectar sus servicios.

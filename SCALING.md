@@ -9,7 +9,7 @@
                     └────────┬─────────┘
                              │ API calls
                     ┌────────▼─────────┐
-                    │  Railway Load    │
+                    │  Coolify Load    │
                     │  Balancer        │
                     └────────┬─────────┘
                     ┌────────▼─────────────────────────┐
@@ -27,8 +27,8 @@
 
 ## Cómo escalar
 
-### Opción 1: Más réplicas en Railway (horizontal)
-Railway Dashboard → tu servicio → Settings → Replicas → aumentar número
+### Opción 1: Más réplicas en Coolify (horizontal)
+Coolify Dashboard → tu servicio → Settings → Replicas → aumentar número
 
 Con BullMQ + Redis cada réplica toma jobs del queue automáticamente.
 No requiere cambios de código.
@@ -50,7 +50,7 @@ Separar el servidor HTTP de los workers de generación:
 
 ## Costes estimados
 
-| Carga | Instancias | Coste Railway/mes |
+| Carga | Instancias | Coste Coolify/mes |
 |-------|------------|-------------------|
 | Hasta 100 usuarios/día | 1 | ~$20 |
 | Hasta 500 usuarios/día | 2 | ~$40 |

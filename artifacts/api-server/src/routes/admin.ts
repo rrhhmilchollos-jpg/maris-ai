@@ -1365,7 +1365,7 @@ router.get("/admin/metrics", async (_req, res) => {
     redis: (() => {
       // ENCONTRADO A PETICIÓN DEL USUARIO (panel mostrando "Redis:
       // Desconectado" pese a que el usuario confirmó haber añadido
-      // REDIS_URL en Railway): getRedisStatus() devuelve el campo
+      // REDIS_URL en Coolify): getRedisStatus() devuelve el campo
       // "lastPingOk", pero el frontend (admin-dashboard.tsx) busca
       // "data.redis?.connected" -- un campo que nunca existía en la
       // respuesta, así que siempre caía en "Desconectado" sin importar
@@ -1608,7 +1608,7 @@ router.post("/admin/test-customer-email", async (req: any, res: any): Promise<vo
 
   if (!sent) {
     res.status(500).json({
-      error: "Email NO enviado. Verifica: 1) RESEND_API_KEY en Railway, 2) el dominio marisai.es verificado en resend.com, 3) que el email remitente alertas@marisai.es está autorizado.",
+      error: "Email NO enviado. Verifica: 1) RESEND_API_KEY en Coolify, 2) el dominio marisai.es verificado en resend.com, 3) que el email remitente alertas@marisai.es está autorizado.",
       targetEmail,
     });
     return;
@@ -2228,7 +2228,7 @@ router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<v
 
   if (!sent) {
     res.status(500).json({
-      error: "No se pudo enviar el correo. Comprueba que RESEND_API_KEY está configurada en Railway y que el dominio marisai.es está verificado en Resend.",
+      error: "No se pudo enviar el correo. Comprueba que RESEND_API_KEY está configurada en Coolify y que el dominio marisai.es está verificado en Resend.",
       userEmail,
     });
     return;

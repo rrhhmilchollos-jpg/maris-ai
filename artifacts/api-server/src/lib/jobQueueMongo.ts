@@ -160,7 +160,7 @@ export async function registerGenerateWorker(
         .lean();
 
       for (const job of jobs) {
-        // Per-user concurrency limit — check DB to survive Railway restarts
+        // Per-user concurrency limit — check DB to survive Coolify restarts
         const jobUserId = String(job.userId || "unknown");
         const userActive = activeJobsByUser.get(jobUserId) ?? 0;
         if (userActive >= 1) {

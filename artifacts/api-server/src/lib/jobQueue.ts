@@ -6,7 +6,7 @@
 // escalable con Redis/BullMQ (multi-instancia — ver jobQueue-bullmq.ts),
 // este archivo decide automáticamente cuál usar:
 //
-//   - Si REDIS_URL está configurada (Ivan la añade en Railway) → BullMQ.
+//   - Si REDIS_URL está configurada (Ivan la añade en Coolify) → BullMQ.
 //   - Si no está configurada → sigue exactamente como hasta ahora, Mongo.
 //
 // Esto es deliberadamente el camino MÁS SEGURO posible para esta migración:

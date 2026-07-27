@@ -1,9 +1,8 @@
 /**
  * coolifyDeploy.ts
  *
- * Lógica de despliegue para Coolify v4 API.
- * Sustituye la funcionalidad de Railway para aplicaciones independientes.
- * Ubicación: artifacts/api-server/src/lib/coolifyDeploy.ts
+ * Lógica de despliegue del backend de las apps generadas a tu servidor
+ * Coolify propio (self-hosted), vía la API v1 de Coolify.
  */
 import { logger } from "./logger";
 
