@@ -5745,14 +5745,13 @@ REGLAS:
 - "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
 - Devuelve ÚNICAMENTE el JSON. Nada más.`;
 
-    const response = await axios.post('http://clone-of-zocoia-backend-l6i75r1nagv09vv8203f1oci:8080/api/chat', {
-      message: `${PLAN_PREVIEW_SYSTEM}\n\nUser prompt: ${prompt}`,
-      model: "Zoco-Plus:latest"
+    const response = await createZocoMessageWithFallback("architect", "zoco-plus", {
+      max_tokens: 2000,
+      system: PLAN_PREVIEW_SYSTEM,
+      messages: [{ role: "user", content: `User prompt: ${prompt}` }]
     });
 
-    // Zoco IA suele devolver la respuesta en response.data.content o response.data.response
-    const rawContent = response.data?.content || response.data?.response || response.data || "";
-    const raw = typeof rawContent === "string" ? rawContent.trim() : JSON.stringify(rawContent);
+    const raw = response.content[0].text.trim();
 
     // Extraer JSON robustamente por si viene envuelto en markdown o texto extra
     const first = raw.indexOf("{");
