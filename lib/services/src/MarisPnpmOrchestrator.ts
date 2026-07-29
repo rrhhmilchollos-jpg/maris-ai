@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { Zoco IA } from "@workspace/integrations-Zoco IA-ai";
 
 // ─── System Prompts ──────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ export class MarisPnpmOrchestrator {
   async planPnpmProject(userPrompt: string): Promise<MonorepoMilestone[]> {
     console.log("🤖 Planificador pnpm analizando dependencias...");
 
-    const response = await anthropic.messages.create({
+    const response = await Zoco IA.messages.create({
       model: "zoco-plus",
       max_tokens: 4000,
       system: [{ type: "text", text: PNPM_PLANNER_SYSTEM, cache_control: { type: "ephemeral" } }] as any,
@@ -74,7 +74,7 @@ export class MarisPnpmOrchestrator {
     try {
       return JSON.parse(fullJson).milestones;
     } catch {
-      const fb = await anthropic.messages.create({
+      const fb = await Zoco IA.messages.create({
         model: "zoco-plus",
         max_tokens: 4000,
         system: [{ type: "text", text: PNPM_PLANNER_SYSTEM, cache_control: { type: "ephemeral" } }] as any,
@@ -95,7 +95,7 @@ export class MarisPnpmOrchestrator {
         progress: Math.round((milestone.id / milestones.length) * 90),
       });
 
-      const agentResponse = await anthropic.messages.create({
+      const agentResponse = await Zoco IA.messages.create({
         model: "zoco-plus",
         max_tokens: 16000, // suficiente para App.tsx completo con router y todos los módulos
         system: [

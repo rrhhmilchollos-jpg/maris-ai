@@ -1,4 +1,4 @@
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { appendAppNotes, appendUserPreferences } from "./agentMemoryContext";
 
@@ -66,7 +66,7 @@ ${input.appDescription.slice(0, 500)}
 Extrae lo que merezca recordarse.`;
 
   try {
-    const response = await createClaudeMessageWithFallback("memory", EXTRACTOR_MODEL, {
+    const response = await createZocoMessageWithFallback("memory", EXTRACTOR_MODEL, {
       max_tokens: 400,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],

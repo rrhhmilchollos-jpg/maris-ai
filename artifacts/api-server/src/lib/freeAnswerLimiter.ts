@@ -4,7 +4,7 @@
  * The chat-intent classifier lets us answer questions and run web research
  * without spending a credit. That's great for legitimate users — but a
  * malicious owner of a free trial account could spam questions to burn
- * Anthropic / web_search tokens for free, on us.
+ * Zoco IA / web_search tokens for free, on us.
  *
  * This module enforces a per-user hourly cap on free answers. Once the cap
  * is hit the route handler falls through to the normal generation pipeline

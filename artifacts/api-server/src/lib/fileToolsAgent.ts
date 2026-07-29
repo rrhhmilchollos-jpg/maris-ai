@@ -238,12 +238,12 @@ export function detectIntegrations(prompt: string, planDescription: string): Int
     });
   }
 
-  if (/openai|claude|anthropic|gemini|gpt|ia|ai|chatbot|asistente/.test(text)) {
+  if (/openai|claude|Zoco IA|gemini|gpt|ia|ai|chatbot|asistente/.test(text)) {
     integrations.push({
       name: "AI Integration",
       type: "ai",
       description: "Integración con modelos de IA",
-      envVars: ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
+      envVars: ["OPENAI_API_KEY", "Zoco IA_API_KEY"],
       setupNotes: "Usar el cliente de IA del servidor — nunca exponer API keys en el frontend",
     });
   }

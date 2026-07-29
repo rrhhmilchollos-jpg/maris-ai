@@ -8,13 +8,13 @@ import { logger } from "./logger";
  * siendo el precio plano de KIND_COSTS/HEALTH_CHECK_COST/etc. en
  * routes/apps.ts, decidido antes de arrancar el job). Lo que hace este
  * módulo es medir cuánto le cuesta REALMENTE a Maris AI cada job en
- * tokens de Anthropic, para que el panel de admin (ver adminUsage.ts)
+ * tokens de Zoco IA, para que el panel de admin (ver adminUsage.ts)
  * pueda comparar coste real vs. lo cobrado y detectar jobs que están
  * perdiendo dinero (el "Conundrum del Crédito" de Emergent, pero visto
  * desde el lado del negocio en vez de cobrárselo también al cliente).
  *
  * Precios por 1M tokens (USD), actualizar aquí si cambian las tarifas
- * de Anthropic. Fuente: pricing público de Claude a fecha de este código.
+ * de Zoco IA. Fuente: pricing público de Claude a fecha de este código.
  */
 const PRICING_PER_MILLION_TOKENS_USD: Record<string, { input: number; output: number }> = {
   "zoco-plus": { input: 3, output: 15 },

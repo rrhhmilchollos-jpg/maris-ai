@@ -28,7 +28,7 @@ import type { Logger } from "pino";
 import { GeneratedApp, User, AppMessage, JobLog, GenerationJob } from "@workspace/db/schema";
 import { CENTS_PER_CREDIT_BUDGET_ESTIMATE } from "./usageMeter";
 import { CoreOrchestrator } from "@workspace/services";
-import { patchBundle, createClaudeMessageWithFallback, type GenLanguage, type QAIssue } from "./shared-agents";
+import { patchBundle, createZocoMessageWithFallback, type GenLanguage, type QAIssue } from "./shared-agents";
 import { validateBundle } from "./validate";
 import {
   takeScreenshots,
@@ -273,17 +273,17 @@ Sé estricto pero JUSTO: el objetivo es decidir si esta app está lista para
 publicarse automáticamente. Si dudas, "fail" con una sugerencia clara.`,
   });
 
-  // ENCONTRADO: claude-haiku-4-5 con max_tokens:1500 era insuficiente para
+  // ENCONTRADO: zoco-flash con max_tokens:1500 era insuficiente para
   // analizar 3 screenshots completos (desktop+tablet+mobile) con contenido
   // complejo — el modelo a veces truncaba el JSON antes de cerrar el array
   // de issues, o listaba solo 1-2 issues cuando había 5-6 reales. Se sube
-  // a claude-sonnet-4-6 con más tokens para el análisis visual: la calidad
+  // a zoco-plus con más tokens para el análisis visual: la calidad
   // del diagnóstico determina si el autofix sabe qué arreglar, por lo que
   // usar el modelo más capaz aquí tiene impacto directo en la tasa de éxito
   // del loop de reparación. El coste adicional (una llamada de análisis más
   // cara) está justificado: es la diferencia entre un autofix que sabe qué
   // hacer y uno que genera un fix genérico que no resuelve el problema real.
-  const response = await createClaudeMessageWithFallback("visual-evaluator", "zoco-plus", {
+  const response = await createZocoMessageWithFallback("visual-evaluator", "zoco-plus", {
     max_tokens: 4000,
     messages: [{ role: "user", content }],
   }, { jobId });

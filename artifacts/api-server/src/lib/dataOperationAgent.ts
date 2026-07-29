@@ -15,7 +15,7 @@
  * Responde con confirmación clara de lo que hizo o por qué no pudo hacerlo.
  */
 
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 import { analyzeSpanishIntent, hasSpanishAction, hasSpanishDomain } from "./spanishIntentLexicon";
 import { connectDB } from "./db";
 import { GeneratedApp, User, AppMessage } from "@workspace/db/schema";
@@ -272,7 +272,7 @@ async function interpretDataRequest(
     `Devuelve SOLO el JSON de la operación. Usa el mapa del proyecto para identificar la colección/entidad exacta donde operar.`,
   ].filter(Boolean).join("\n");
 
-  const result = await createClaudeMessageWithFallback("data-ops", "zoco-flash", {
+  const result = await createZocoMessageWithFallback("data-ops", "zoco-flash", {
     max_tokens: 600,
     system: DATA_AGENT_SYSTEM,
     messages: [{ role: "user", content: userContent }],

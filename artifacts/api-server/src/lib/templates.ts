@@ -182,7 +182,7 @@ export const TEMPLATES: AppTemplate[] = [
   },
   // ─── IA / ML ────────────────────────────────────────────────────────────
   // Las apps generadas a partir de estas plantillas asumen que el usuario
-  // pondrá su propia API key (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) y
+  // pondrá su propia API key (OPENAI_API_KEY, Zoco IA_API_KEY, etc.) y
   // su DATABASE_URL como variables de entorno en Vercel tras el deploy.
   // El seed prompt deja claro al architect que TODAS las llamadas al LLM
   // van por una /api/* del backend generado para no exponer la key en el

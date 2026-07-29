@@ -14,7 +14,7 @@
  * `execute` bucket maps to ENGINE_EXEC.
  */
 
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 import type { Logger } from "pino";
 import { analyzeSpanishIntent, firstMatchedTerm, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
@@ -32,8 +32,8 @@ export type ClassifiedIntent = {
    * true SOLO cuando el cambio pedido es estrictamente cosmético/CSS: colores,
    * tipografía, espaciados, modo oscuro, tamaños visuales, imágenes decorativas.
    * Ninguna lógica nueva, ningún endpoint, ninguna validación, ningún estado.
-   * Cuando es true, el job de edición puede usar claude-haiku-4-5 en vez de
-   * claude-sonnet-4-6 — Haiku falla en generación de código complejo (confirmado
+   * Cuando es true, el job de edición puede usar zoco-flash en vez de
+   * zoco-plus — Haiku falla en generación de código complejo (confirmado
    * en producción, ver selectAgentModelPlan) pero resuelve ediciones CSS/Tailwind
    * de pocas líneas perfectamente y a ~¼ del precio de Sonnet.
    */
@@ -426,9 +426,9 @@ export async function classifyChatIntent(
   try {
     const userContent = buildUserMessage(ctx);
     // MODO OPENAI/DEEPSEEK: la llamada viaja por el cliente OpenAI de Zoco IA;
-    // createClaudeMessageWithFallback convierte el formato, inyecta la regla
+    // createZocoMessageWithFallback convierte el formato, inyecta la regla
     // de formato seguro y limpia el razonamiento <think> de DeepSeek-R1.
-    const result: any = await createClaudeMessageWithFallback("classifier", "zoco-plus", {
+    const result: any = await createZocoMessageWithFallback("classifier", "zoco-plus", {
       max_tokens: 400,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userContent }],

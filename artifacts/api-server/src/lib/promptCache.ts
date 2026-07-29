@@ -7,7 +7,7 @@
  * Solo añade cache_control: { type: "ephemeral" } a los system prompts
  * estáticos para reducir el coste de tokens de entrada en un ~90%.
  *
- * Anthropic Prompt Caching:
+ * Zoco IA Prompt Caching:
  *  - Los tokens leídos desde caché cuestan 0.1x del precio base.
  *  - El caché dura 5 minutos (se renueva en cada hit).
  *  - Solo se aplica a bloques estáticos (system prompts, instrucciones fijas).
@@ -39,7 +39,7 @@ export interface TextBlock {
 }
 
 /**
- * Envuelve un system prompt estático con cache_control para Anthropic.
+ * Envuelve un system prompt estático con cache_control para Zoco IA.
  * Úsalo cuando el system prompt NO cambia entre llamadas del mismo agente.
  *
  * @param text - El system prompt completo
@@ -125,7 +125,7 @@ export function assistantPrefillArchitect(): { role: "assistant"; content: strin
 
 /**
  * Helper: comprueba si un system prompt tiene suficientes tokens para
- * beneficiarse del caché (Anthropic requiere mínimo 1024 tokens ≈ ~3500 chars).
+ * beneficiarse del caché (Zoco IA requiere mínimo 1024 tokens ≈ ~3500 chars).
  */
 export function isWorthCaching(text: string): boolean {
   return text.length >= 3500;
@@ -133,7 +133,7 @@ export function isWorthCaching(text: string): boolean {
 
 /**
  * Aplica cache_control solo si el prompt es suficientemente largo.
- * Para prompts cortos (< 1024 tokens) el caché no aplica y Anthropic
+ * Para prompts cortos (< 1024 tokens) el caché no aplica y Zoco IA
  * simplemente lo ignora, pero es buena práctica no añadirlo innecesariamente.
  */
 export function smartCachedSystem(text: string): CachedTextBlock[] | string {

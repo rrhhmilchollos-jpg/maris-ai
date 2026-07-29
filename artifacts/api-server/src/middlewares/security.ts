@@ -194,7 +194,7 @@ const ALLOWED_BOT_UAS = [
   /googlebot/i, /bingbot/i, /yandexbot/i, /duckduckbot/i,
   /baiduspider/i, /facebookexternalhit/i, /twitterbot/i,
   /slackbot/i, /linkedinbot/i, /whatsapp/i,
-  /anthropic/i, /claude/i, // Anthropic crawlers
+  /Zoco IA/i, /claude/i, // Zoco IA crawlers
 ];
 
 export function antiScrapingMiddleware(req: Request, res: Response, next: NextFunction) {

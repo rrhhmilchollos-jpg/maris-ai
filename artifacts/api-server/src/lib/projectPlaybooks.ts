@@ -1,5 +1,5 @@
 import { ProjectPlaybook } from "@workspace/db/schema";
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 
 /**
@@ -92,7 +92,7 @@ export async function learnFromSuccessfulProject(opts: {
       .map((p) => `- ${p.name}${p.purpose ? `: ${p.purpose}` : ""}`)
       .join("\n");
 
-    const response = await createClaudeMessageWithFallback("memory", "zoco-flash", {
+    const response = await createZocoMessageWithFallback("memory", "zoco-flash", {
       max_tokens: 400,
       system:
         "Eres un analista que destila patrones reutilizables de proyectos de software exitosos. " +

@@ -1,4 +1,4 @@
-// MODO OPENAI/DEEPSEEK: SDK de Anthropic eliminado — todo viaja por el cliente OpenAI de Zoco IA.
+// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de Zoco IA.
 import OpenAI from "openai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
@@ -152,7 +152,7 @@ function getOpenAI(): OpenAI {
       throw new Error(
         "Motor local no configurado: define ZOCOIA_API_URL (+ ZOCOIA_API_KEY) para conectar vía Zoco IA, " +
           "o OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) para conectar directamente a Ollama. " +
-          "Las APIs en la nube (Groq/Anthropic/OpenAI) están deshabilitadas por decisión de infraestructura.",
+          "Las APIs en la nube (Groq/Zoco IA/OpenAI) están deshabilitadas por decisión de infraestructura.",
       );
     }
   }
@@ -161,8 +161,8 @@ function getOpenAI(): OpenAI {
 
 /* ------------- Compatibilidad DeepSeek-R1 / OpenAI (Zoco IA) --------------- */
 // El modelo real detrás de las API Keys de Zoco IA es DeepSeek-R1, que habla
-// el formato de OpenAI (chat.completions), NO el formato nativo de Anthropic.
-// Estas utilidades convierten los parámetros estilo Anthropic que usa todo el
+// el formato de OpenAI (chat.completions), NO el formato nativo de Zoco IA.
+// Estas utilidades convierten los parámetros estilo Zoco IA que usa todo el
 // pipeline al formato OpenAI, y las respuestas de vuelta, para que los 18+
 // consumidores existentes no necesiten cambios.
 
@@ -191,7 +191,7 @@ export function stripReasoning(text: string): string {
   return out.trim();
 }
 
-// Convierte system (string o bloques Anthropic) a texto plano y le añade la
+// Convierte system (string o bloques Zoco IA) a texto plano y le añade la
 // regla de formato seguro para DeepSeek.
 function systemToText(system: any): string {
   if (!system) return "";
@@ -201,10 +201,10 @@ function systemToText(system: any): string {
   return text.includes("DeepSeek-R1/OpenAI compatible endpoint") ? text : text + DEEPSEEK_SAFE_FORMAT_RULE;
 }
 
-// Convierte mensajes estilo Anthropic (content como string o array de bloques
+// Convierte mensajes estilo Zoco IA (content como string o array de bloques
 // text/tool_use/tool_result) a mensajes estilo OpenAI (content string, roles
 // assistant con tool_calls, y role "tool" para los resultados).
-function anthropicMessagesToOpenAI(messages: any[]): any[] {
+function zocoMessagesToOpenAI(messages: any[]): any[] {
   const out: any[] = [];
   for (const m of messages || []) {
     if (!m) continue;
@@ -244,9 +244,9 @@ function anthropicMessagesToOpenAI(messages: any[]): any[] {
   return out;
 }
 
-// Convierte definiciones de tools Anthropic ({name, description, input_schema})
+// Convierte definiciones de tools Zoco IA ({name, description, input_schema})
 // al formato OpenAI ({type:'function', function:{name, description, parameters}}).
-function anthropicToolsToOpenAI(tools: any[]): any[] {
+function zocoToolsToOpenAI(tools: any[]): any[] {
   return (tools || []).map((t: any) => ({
     type: "function",
     function: {
@@ -257,7 +257,7 @@ function anthropicToolsToOpenAI(tools: any[]): any[] {
   }));
 }
 
-// Modelos válidos del motor de Zoco IA. Cualquier id de Claude que llegue del
+// Modelos válidos del motor de Zoco IA. Cualquier id de Zoco IA que llegue del
 // código legado se remapea aquí — detrás siempre responde DeepSeek-R1.
 function zocoModelFor(model: string): string {
   const m = String(model || "");
@@ -412,35 +412,35 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
   ]);
 }
 
-// Modelos de Anthropic soportados, de más nuevo a más antiguo dentro de
+// Modelos de Zoco IA soportados, de más nuevo a más antiguo dentro de
 // cada familia. Opus 4.8 es la versión más reciente, disponible solo para
 // clientes de pago con Ultra activado (ver dashboard.tsx).
-// FIX (2026-07-09): "zoco-plus" NO existe en la API de Anthropic
-// — verificado contra https://api.anthropic.com/v1/models con la API key
-// real: devuelve 404 not_found_error ("model: claude-sonnet-4-7"). Estaba
+// FIX (2026-07-09): "zoco-plus" NO existe en la API de Zoco IA
+// — verificado contra https://api.Zoco IA.com/v1/models con la API key
+// real: devuelve 404 not_found_error ("model: Zoco IA-zoco-plus"). Estaba
 // como PRIMER candidato de la lista de fallback, así que muchas llamadas
 // empezaban con un 404 garantizado y, combinado con otros fallos, agotaba
 // candidatos y hacía fallar la generación con el cuadro rojo "Error en la
 // generación". Modelos verificados como disponibles con la key actual:
-// claude-sonnet-4-6, claude-opus-4-8, claude-opus-4-7,
-// claude-haiku-4-5(-20251001).
-const CLAUDE_MODELS = ["zoco-plus", "zoco-max", "zoco-max"];
+// zoco-plus, zoco-max, zoco-max,
+// zoco-flash(-20251001).
+const ZOCO_MODELS = ["zoco-plus", "zoco-max", "zoco-max"];
 
-function fallbackClaudeModels(model: string): string[] {
+function fallbackZocoModels(model: string): string[] {
   // Se usa el modelo EXACTO solicitado como primario si es uno de los
   // soportados, y solo se cae a detección por familia para strings no
   // reconocidos. FIX (2026-07-09): el ID legado "zoco-plus" (no
-  // existe en la API de Anthropic, 404 verificado) se remapea a
+  // existe en la API de Zoco IA, 404 verificado) se remapea a
   // "zoco-plus" en vez de intentarse tal cual.
   const remapped = model === "zoco-plus" ? "zoco-plus" : model;
-  const primary = CLAUDE_MODELS.includes(remapped)
+  const primary = ZOCO_MODELS.includes(remapped)
     ? remapped
     : (remapped.includes("opus") ? "zoco-max" : "zoco-plus");
-  return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
+  return [primary, ...ZOCO_MODELS.filter((m) => m !== primary)];
 }
 
 // Timeout duro para cualquier llamada a un proveedor de IA dentro de este
-// archivo. Sin esto, una llamada no-streaming (anthropic.messages.create,
+// archivo. Sin esto, una llamada no-streaming (Zoco IA.messages.create,
 // Gemini, OpenAI) puede colgarse minutos si el proveedor se degrada, sin
 // ningún chunk que activar un timeout de inactividad (eso solo aplica a
 // streams) — el job entero queda en silencio hasta que el watchdog global
@@ -458,7 +458,7 @@ export async function raceWithTimeout<T>(p: Promise<T>, ms: number, label: strin
 }
 export const AI_CALL_TIMEOUT_MS = 90_000;
 
-export async function createClaudeMessageWithFallback(
+export async function createZocoMessageWithFallback(
   role: AgentRole,
   model: string,
   params: any,
@@ -493,14 +493,14 @@ export async function createClaudeMessageWithFallback(
 
   // MODO OPENAI/DEEPSEEK: el motor detrás de las API Keys de Zoco IA es
   // DeepSeek-R1 (formato OpenAI). Se convierten los parámetros estilo
-  // Anthropic al formato chat.completions y se llama al cliente OpenAI de
+  // Zoco IA al formato chat.completions y se llama al cliente OpenAI de
   // Zoco IA con streaming — la firma y el formato de retorno
   // ({content:[{type:'text',text}]}) se mantienen idénticos para que los
   // 18+ consumidores del pipeline no necesiten ningún cambio.
   const zocoModel = zocoModelFor(model);
   const openaiMessages = [
     ...(params.system ? [{ role: "system" as const, content: systemToText(params.system) }] : []),
-    ...anthropicMessagesToOpenAI(params.messages || []),
+    ...zocoMessagesToOpenAI(params.messages || []),
   ];
 
   {
@@ -609,11 +609,11 @@ export async function createClaudeMessageWithFallback(
 }
 
 /**
- * Variante de createClaudeMessageWithFallback para llamadas con tool-calling
+ * Variante de createZoco IAMessageWithFallback para llamadas con tool-calling
  * (bucles agenticos como marisCrewAI.ts y agentTools.ts).
  *
- * ADAPTADOR BIDIRECCIONAL DeepSeek-R1/OpenAI ↔ Anthropic:
- * los bucles agenticos existentes hablan el protocolo tool_use de Anthropic
+ * ADAPTADOR BIDIRECCIONAL DeepSeek-R1/OpenAI ↔ Zoco IA:
+ * los bucles agenticos existentes hablan el protocolo tool_use de Zoco IA
  * (tools con input_schema, bloques tool_use/tool_result, stop_reason). Esta
  * función traduce la ida al formato estándar OpenAI `tools`/`tool_choice`
  * (type:function con parameters) y la vuelta de `tool_calls` a bloques
@@ -624,9 +624,9 @@ export async function createClaudeMessageWithFallback(
  * despliegues de DeepSeek-R1 no soportan function calling nativo), se
  * reintenta sin tools instruyendo al modelo para devolver un JSON puro
  * {"tool": "nombre", "input": {...}} que el backend parsea con
- * extractJsonObject — sin depender del SDK de Anthropic en ningún caso.
+ * extractJsonObject — sin depender del SDK de Zoco IA en ningún caso.
  */
-export async function createClaudeToolCallWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
+export async function createZocoToolCallWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
   let lastError: unknown;
   const MAX_RETRIES = 3;
   const zocoModel = zocoModelFor(model);
@@ -634,14 +634,14 @@ export async function createClaudeToolCallWithFallback(role: AgentRole, model: s
   const systemText = systemToText(params.system);
   const openaiMessages = [
     ...(systemText ? [{ role: "system" as const, content: systemText }] : []),
-    ...anthropicMessagesToOpenAI(params.messages || []),
+    ...zocoMessagesToOpenAI(params.messages || []),
   ];
   const hasTools = Array.isArray(params.tools) && params.tools.length > 0;
-  const openaiTools = hasTools ? anthropicToolsToOpenAI(params.tools) : undefined;
+  const openaiTools = hasTools ? zocoToolsToOpenAI(params.tools) : undefined;
 
-  // Convierte una respuesta chat.completions al formato Anthropic que
+  // Convierte una respuesta chat.completions al formato Zoco IA que
   // esperan los bucles agenticos (content blocks + stop_reason).
-  const toAnthropicShape = (resp: any): any => {
+  const toZocoShape = (resp: any): any => {
     const choice = resp?.choices?.[0];
     const msg = choice?.message || {};
     const usage = {
@@ -699,7 +699,7 @@ export async function createClaudeToolCallWithFallback(role: AgentRole, model: s
         AI_CALL_TIMEOUT_MS,
         `${role} tool call (modelo ${zocoModel})`,
       );
-      return toAnthropicShape(resp);
+      return toZocoShape(resp);
     } catch (err: any) {
       lastError = err;
       // Si el endpoint rechaza el parámetro tools (400 con mención a tools/
@@ -893,7 +893,7 @@ export async function patchBundle(
   return withTimeout(
     (async () => {
       try {
-        const response = await createClaudeMessageWithFallback("patcher", model, {
+        const response = await createZocoMessageWithFallback("patcher", model, {
           max_tokens: 24000,
           system: buildPatcherSystemPrompt(language) + "\nOutput JSON only.",
           messages: [
@@ -967,7 +967,7 @@ async function planMultiFileRepair(
   return withTimeout(
     (async () => {
       try {
-        const response = await createClaudeMessageWithFallback("planner", model, {
+        const response = await createZocoMessageWithFallback("planner", model, {
           max_tokens: 4000,
           system: `You are Maris AI's multi-file repair planner. Your task is to analyze a frontend bundle and a summary of errors, then propose a plan to fix them across multiple files.\nOutput STRICT XML only, using <file><path>...</path><action>...</action><reason>...</reason></file> tags. Actions can be 'rewrite', 'create', or 'delete'.\n\nERROR SUMMARY:\n${errorSummary}\n\nCURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nReturn ONLY the XML plan. No markdown, no backticks, no explanation.`, 
           messages: [
@@ -1005,7 +1005,7 @@ async function generateFilePatch(
   return withTimeout(
     (async () => {
       try {
-        const response = await createClaudeMessageWithFallback("patcher", model, {
+        const response = await createZocoMessageWithFallback("patcher", model, {
           max_tokens: 16000,
           system: buildPatcherSystemPrompt(language) + `\nYour current task is to ${action} the file ${path} because: ${reason}.\nOutput JSON only.`, 
           messages: [
@@ -1083,7 +1083,7 @@ export async function createFastPatch(
   return withTimeout(
     (async () => {
       try {
-        const response = await createClaudeMessageWithFallback("patcher", model, {
+        const response = await createZocoMessageWithFallback("patcher", model, {
           max_tokens: 16000,
           system: buildFastPatchPrompt(),
           messages: [
@@ -1119,10 +1119,10 @@ export async function createChatCompletion(
   params: any,
   meterOpts?: { jobId?: string },
 ): Promise<any> {
-  // Implementación similar a createClaudeMessageWithFallback pero para OpenAI/Gemini
-  // Por ahora, simplemente reenvía a createClaudeMessageWithFallback para simplificar
+  // Implementación similar a createZoco IAMessageWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createZoco IAMessageWithFallback para simplificar
   // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
-  return createClaudeMessageWithFallback(role, model, params, meterOpts);
+  return createZocoMessageWithFallback(role, model, params, meterOpts);
 }
 
 export async function createToolCallCompletion(
@@ -1131,10 +1131,10 @@ export async function createToolCallCompletion(
   params: any,
   meterOpts?: { jobId?: string },
 ): Promise<any> {
-  // Implementación similar a createClaudeToolCallWithFallback pero para OpenAI/Gemini
-  // Por ahora, simplemente reenvía a createClaudeToolCallWithFallback para simplificar
+  // Implementación similar a createZoco IAToolCallWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createZoco IAToolCallWithFallback para simplificar
   // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
-  return createClaudeToolCallWithFallback(role, model, params, meterOpts);
+  return createZocoToolCallWithFallback(role, model, params, meterOpts);
 }
 
 export async function createChatCompletionStream(
@@ -1143,10 +1143,10 @@ export async function createChatCompletionStream(
   params: any,
   meterOpts?: { jobId?: string },
 ): Promise<AsyncIterable<any>> {
-  // Implementación similar a createClaudeMessageWithFallback pero para OpenAI/Gemini
-  // Por ahora, simplemente reenvía a createClaudeMessageWithFallback para simplificar
+  // Implementación similar a createZoco IAMessageWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createZoco IAMessageWithFallback para simplificar
   // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
-  const response = await createClaudeMessageWithFallback(role, model, params, meterOpts);
+  const response = await createZocoMessageWithFallback(role, model, params, meterOpts);
   // Convertir la respuesta a un AsyncIterable simulado para compatibilidad
   return (async function* () {
     yield { type: 'content_block_delta', delta: { type: 'text_delta', text: response.content[0].text } };
@@ -1159,10 +1159,10 @@ export async function createToolCallCompletionStream(
   params: any,
   meterOpts?: { jobId?: string },
 ): Promise<AsyncIterable<any>> {
-  // Implementación similar a createClaudeToolCallWithFallback pero para OpenAI/Gemini
-  // Por ahora, simplemente reenvía a createClaudeToolCallWithFallback para simplificar
+  // Implementación similar a createZoco IAToolCallWithFallback pero para OpenAI/Gemini
+  // Por ahora, simplemente reenvía a createZoco IAToolCallWithFallback para simplificar
   // En un entorno real, esto debería tener su propia lógica de fallback para OpenAI/Gemini
-  const response = await createClaudeToolCallWithFallback(role, model, params, meterOpts);
+  const response = await createZocoToolCallWithFallback(role, model, params, meterOpts);
   // Convertir la respuesta a un AsyncIterable simulado para compatibilidad
   return (async function* () {
     yield { type: 'content_block_delta', delta: { type: 'text_delta', text: response.content[0].text } };

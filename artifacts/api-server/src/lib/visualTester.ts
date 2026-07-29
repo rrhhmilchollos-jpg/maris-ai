@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import { GeneratedApp } from "@workspace/db/schema";
 import { CoreOrchestrator } from "@workspace/services";
 import { validateBundle } from "./validate";
-import { compactBundleForPrompt, estimatePromptTokens, extractJsonObject, mergePatchIntoBundle, createClaudeMessageWithFallback } from "./shared-agents";
+import { compactBundleForPrompt, estimatePromptTokens, extractJsonObject, mergePatchIntoBundle, createZocoMessageWithFallback } from "./shared-agents";
 import { logger as rootLogger } from "./logger";
 
 /**
@@ -426,18 +426,18 @@ Devuelve EXCLUSIVAMENTE JSON valido (sin markdown, sin backticks):
 
   // Visual analysis uses Sonnet — tiene vision multimodal excelente.
   // ENCONTRADO: esta llamada era la única de los 11 agentes que NO pasaba
-  // por createClaudeMessageWithFallback — sin el timeout de inactividad,
+  // por createZocoMessageWithFallback — sin el timeout de inactividad,
   // sin reintentos en errores transitorios (red, 5xx) y sin fallback de
   // modelo (Sonnet→Opus) que sí tienen el resto de agentes. Un simple
   // parpadeo de red aquí tiraba abajo la única verificación visual real
   // de toda la generación. También tenía un fallback a Gemini Vision que
   // ya no puede funcionar (Gemini se quitó por completo del proyecto en
   // junio de 2026, sin API key configurada) — sustituido por el mismo
-  // mecanismo de reintento/fallback de Anthropic que usa el resto del
+  // mecanismo de reintento/fallback de Zoco IA que usa el resto del
   // pipeline, consistente con el resto de agentes.
   let text = "";
   try {
-    const response = await createClaudeMessageWithFallback("visual-evaluator", "zoco-plus", {
+    const response = await createZocoMessageWithFallback("visual-evaluator", "zoco-plus", {
       max_tokens: 4000,
       messages: [{ role: "user", content }],
     });
@@ -651,11 +651,11 @@ async function applyVisualFixes(opts: {
   );
 
   // Mismo motivo que en analyzeWithVision más arriba: sin
-  // createClaudeMessageWithFallback, este agente (el que aplica los
+  // createZocoMessageWithFallback, este agente (el que aplica los
   // parches reales tras detectar issues visuales) no tenía timeout de
   // inactividad ni reintento en fallos transitorios — un simple parpadeo
   // de red aquí dejaba la app sin reparar en ese ciclo.
-  const response = await createClaudeMessageWithFallback("visual-evaluator", "zoco-plus", {
+  const response = await createZocoMessageWithFallback("visual-evaluator", "zoco-plus", {
     max_tokens: 20000,
     messages: [{
       role: "user",

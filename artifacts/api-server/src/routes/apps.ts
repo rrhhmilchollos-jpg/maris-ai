@@ -1,4 +1,5 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
@@ -2199,7 +2200,7 @@ const ZOCO_MODELS: ZocoCoderModel[] = ["zoco-plus", "zoco-max", "zoco-max", "zoc
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   const normalized = normalizeCoderModel(coderModel);
   if (normalized === "gpt-5.4") return "gpt-5";
-  return "Zoco IA";
+  return "zoco";
 }
 
 function normalizeCoderModel(coderModel?: string): string {
@@ -2349,13 +2350,13 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
     : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveZocoCoderModel(normalized));
 
   // Modelos por rol según tier de usuario
-  const Zoco IA: ZocoCoderModel = "zoco-plus";
-  const Zoco IA: ZocoCoderModel = "zoco-flash";
+  const ZOCO_PLUS: ZocoCoderModel = "zoco-plus";
+  const ZOCO_FLASH: ZocoCoderModel = "zoco-flash";
 
-  const architectModel: ZocoCoderModel = Zoco IA; // SIEMPRE Zoco IA — plan = todo
-  const pmModel: ZocoCoderModel = Zoco IA;         // SIEMPRE Zoco IA — QA = calidad final
-  const patcherModel: ZocoCoderModel = Zoco IA;    // SIEMPRE Zoco IA — reparación crítica
-  const execModel: ZocoCoderModel = isFreeUser ? Zoco IA : Zoco IA; // Ejecutores: Zoco IA en free
+  const architectModel: ZocoCoderModel = ZOCO_PLUS; // SIEMPRE Zoco Plus — plan = todo
+  const pmModel: ZocoCoderModel = ZOCO_PLUS;         // SIEMPRE Zoco Plus — QA = calidad final
+  const patcherModel: ZocoCoderModel = ZOCO_PLUS;    // SIEMPRE Zoco Plus — reparación crítica
+  const execModel: ZocoCoderModel = isFreeUser ? ZOCO_FLASH : ZOCO_PLUS; // Ejecutores: Zoco Flash en free
 
   // ENCONTRADO A PETICIÓN DEL USUARIO (optimización real de coste de
   // tokens de Zoco IA, para proteger el margen): antes, CUALQUIER
@@ -2381,15 +2382,15 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // standard/robust/ultra, se mantiene Zoco IA como hasta ahora.
   const isBasicComplexity = complexity.tier === "basic";
   const lightExecModel: ZocoCoderModel = isFreeUser
-    ? Zoco IA
-    : (isBasicComplexity ? Zoco IA : Zoco IA);
+    ? ZOCO_FLASH
+    : (isBasicComplexity ? ZOCO_FLASH : ZOCO_PLUS);
 
   const agents: Record<AgentRole, AgentModelChoice> = {
     researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
     architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre Zoco IA — define el plan completo"),
     designer:   makeAgentChoice("designer",   "Designer",   lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
     frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:Zoco IA" : "paid:Zoco IA"})` : "selección manual"),
-    backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? Zoco IA : Zoco IA, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
+    backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? ZOCO_FLASH : ZOCO_PLUS, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
     database:   makeAgentChoice("database",   "Database",   lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
     integrator: makeAgentChoice("integrator", "Integrator", lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
     qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre Zoco IA — quality gate final"),
@@ -2400,14 +2401,14 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
 }
 
-function fallbackZoco IAModels(model: AgentModelChoice["model"]): ZocoCoderModel[] {
+function fallbackZocoModels(model: AgentModelChoice["model"]): ZocoCoderModel[] {
   const primary = model === "gpt-5.4" ? "zoco-plus" : model;
   return [primary, ...ZOCO_MODELS.filter((m) => m !== primary)];
 }
 
 
 
-async function streamZoco IATextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ZocoCoderModel }> {
+async function streamZocoTextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ZocoCoderModel }> {
   let lastError: unknown;
   // Misma conversión automática a prompt caching que createZocoMessageWithFallback
   // (shared-agents.ts) — algunos callers de esta función ya convertían el
@@ -2420,14 +2421,14 @@ async function streamZoco IATextWithFallback(role: AgentRole, model: AgentModelC
       system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
     };
   }
-  for (const candidate of fallbackZoco IAModels(model)) {
+  for (const candidate of fallbackZocoModels(model)) {
     const MAX_ATTEMPTS_PER_MODEL = 2;
     for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_MODEL; attempt++) {
       try {
         let accumulated = "";
         let lastReport = 0;
         let finishReason: string | undefined;
-        const stream = Zoco IA.messages.stream({ ...params, model: candidate });
+        const stream = anthropic.messages.stream({ ...params, model: candidate });
         // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createZocoMessageWithFallback
         // en shared-agents.ts (ver el comentario extenso ahí): esta función es la
         // que usan de verdad el Frontend Engineer y el Backend Engineer para
@@ -2580,7 +2581,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     truncated = finishReason === "MAX_TOKENS";
     } catch (err) {
       logger.warn({ err }, "GPT frontend agent failed; falling back to Zoco IA routing");
-      const streamed = await streamZoco IATextWithFallback("frontend", "zoco-plus", {
+      const streamed = await streamZocoTextWithFallback("frontend", "zoco-plus", {
         max_tokens: 40000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userContent }],
@@ -2594,7 +2595,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // motor (estrategia Lovable/Base44/Emergent: 1 app completa gratis, luego
     // créditos limitados para seguir iterando).
     const maxTokensFrontend = 64000; // máximo de Zoco IA-Zoco IA-4-6 — apps complejas necesitan espacio para generar todos los archivos sin truncar
-    const streamed = await streamZoco IATextWithFallback("frontend", frontendModel, {
+    const streamed = await streamZocoTextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userContent }],
@@ -2652,7 +2653,7 @@ Genera SOLO los archivos que faltan en el mismo formato // === FILE: path ===:
 ${missingFiles.slice(0, 10).join(", ")}
 
 Devuelve SOLO el código de los archivos faltantes, sin JSON wrapper, empezando directamente con // === FILE:`;
-            const cont = await streamZoco IATextWithFallback("frontend", frontendModel, {
+            const cont = await streamZocoTextWithFallback("frontend", frontendModel, {
               max_tokens: 16000,
               system: [{ type: "text", text: systemPrompt.slice(0, 2000) }] as any,
               messages: [
@@ -2782,7 +2783,7 @@ RULES — non-negotiable:
   // Con cache_control activa el 90% de descuento en tokens de entrada.
   // El contenido dinámico (prompt, design, research) va en el mensaje del usuario.
   try {
-    const streamed = await streamZoco IATextWithFallback(
+    const streamed = await streamZocoTextWithFallback(
       "frontend",
       "zoco-flash",
       {
@@ -3674,8 +3675,8 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         const fr = chunk.choices[0]?.finish_reason;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
-    } else if (provider === "Zoco IA") {
-      const stream = Zoco IA.messages.stream({
+    } else if (provider === "zoco") {
+      const stream = anthropic.messages.stream({
         model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
         system: systemPrompt,
@@ -3695,7 +3696,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
       }
     } else {
 // Zoco IA streaming según el modelo elegido en el selector.
-      const stream = await Zoco IA.messages.stream({
+      const stream = await anthropic.messages.stream({
         model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
         system: systemPrompt,
@@ -3866,7 +3867,7 @@ export type PhaseErrorReporter = (
 // pregunta al cliente algo que ya respondió él mismo en su propio prompt.
 async function generateGatingQuestions(clientPrompt: string): Promise<GatingQuestion[]> {
   try {
-    // ENCONTRADO: usaba Zoco IA.messages.stream(...).finalMessage() sin
+    // ENCONTRADO: usaba anthropic.messages.stream(...).finalMessage() sin
     // NINGÚN timeout — el catch de abajo da un fallback correcto (seguir
     // sin preguntas de clarificación), pero solo si la promesa llega a
     // rechazarse; un stream colgado a medias se habría quedado esperando

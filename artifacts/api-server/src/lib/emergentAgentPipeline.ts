@@ -21,7 +21,7 @@
  * @see agentMemory.ts para la memoria persistente
  */
 
-// MODO OPENAI/DEEPSEEK: SDK de Anthropic eliminado — todo viaja por el cliente OpenAI de Zoco IA.
+// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de Zoco IA.
 import { logger } from "./logger";
 import {
   detectIntegrations,
@@ -30,7 +30,7 @@ import {
   type PMValidationResult,
   type IntegrationSpec,
 } from "./fileToolsAgent";
-import { extractJsonObject, createClaudeMessageWithFallback, patchBundleMultiFile } from "./shared-agents";
+import { extractJsonObject, createZocoMessageWithFallback, patchBundleMultiFile } from "./shared-agents";
 
 // ─── Tipos del pipeline ───────────────────────────────────────────────────────
 
@@ -162,7 +162,7 @@ export async function runArchitectAgent(
 ): Promise<EmergentArchitectBlueprint> {
   log("🏗️ Architect Agent: analizando requisitos y creando blueprint técnico...");
 
-  const response = await createClaudeMessageWithFallback("architect", "zoco-plus", {
+  const response = await createZocoMessageWithFallback("architect", "zoco-plus", {
     model: "zoco-plus",
     max_tokens: 6000,
     system: ARCHITECT_SYSTEM,
@@ -265,7 +265,7 @@ export async function runDesignerAgent(
 ): Promise<EmergentDesignSystem> {
   log(`🎨 Designer Agent: creando sistema visual para "${blueprint.title}"...`);
 
-  const response = await createClaudeMessageWithFallback("designer", "zoco-plus", {
+  const response = await createZocoMessageWithFallback("designer", "zoco-plus", {
     model: "zoco-plus",
     max_tokens: 3000,
     system: DESIGNER_SYSTEM,
@@ -492,7 +492,7 @@ Realiza la inspeccion completa y devuelve SOLO el JSON.`;
   try {
     const pmModel = blueprint.complexity === "enterprise" ? "zoco-max" : "zoco-plus";
 
-    const response = await createClaudeMessageWithFallback("qa", pmModel, {
+    const response = await createZocoMessageWithFallback("qa", pmModel, {
       model: pmModel,
       max_tokens: 4096,
       system: PM_VALIDATION_SYSTEM,

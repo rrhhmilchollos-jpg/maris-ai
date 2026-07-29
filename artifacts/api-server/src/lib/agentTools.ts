@@ -1,7 +1,7 @@
 /**
- * agentTools.ts — Tool Calling nativo de Anthropic para los agentes de Maris AI
+ * agentTools.ts — Tool Calling nativo de Zoco IA para los agentes de Maris AI
  *
- * Implementa herramientas reales con el protocolo tool_use de Anthropic:
+ * Implementa herramientas reales con el protocolo tool_use de Zoco IA:
  *
  * HERRAMIENTAS DISPONIBLES:
  * 1. web_search          — búsqueda web en tiempo real (researcher agent)
@@ -20,7 +20,7 @@
  * - QA: run_quality_check + validate_typescript
  */
 
-import { createClaudeToolCallWithFallback } from "./shared-agents";
+import { createZocoToolCallWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { performWebResearch, formatWebResearchForLLM } from "./webResearcher";
 
@@ -274,7 +274,7 @@ export interface AgentWithToolsResult {
 }
 
 /**
- * Ejecuta un agente con tool calling real de Anthropic.
+ * Ejecuta un agente con tool calling real de Zoco IA.
  * El agente puede llamar herramientas múltiples veces hasta tener todo el contexto.
  */
 export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<AgentWithToolsResult> {
@@ -297,7 +297,7 @@ export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<Agent
   while (iterations < maxIterations) {
     iterations++;
 
-    const response = await createClaudeToolCallWithFallback("tools", model, {
+    const response = await createZocoToolCallWithFallback("tools", model, {
       max_tokens: 2048,
       system: systemPrompt,
       tools: tools.length > 0 ? tools : undefined,

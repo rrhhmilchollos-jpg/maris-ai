@@ -518,7 +518,7 @@ router.get("/admin/users/:id/credit-audit", async (req: any, res: any): Promise<
           status: j.status,
           phase: j.phase,
           creditsCost: j.creditsCost ?? 0,
-          // Coste real interno (Anthropic) — para comparar con creditsCost
+          // Coste real interno (Zoco IA) — para comparar con creditsCost
           // y ver el margen real de esta tarea concreta.
           internalApiCostCents: j.internalApiCostCents ?? 0,
           apiCallCount: j.apiCallCount ?? 0,

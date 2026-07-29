@@ -520,7 +520,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 // en proyectos ultra-complejos — limita hitos, ciclos de reparación PM Agent
 // y rondas del evaluador visual, sin afectar a usuarios que han pagado.
 // MOTIVACIÓN: cálculo real con datos de código confirmó que un proyecto
-// ultra (24 hitos) cuesta 3.24-5.64€ en tokens a Anthropic, y el 100%
+// ultra (24 hitos) cuesta 3.24-5.64€ en tokens a Zoco IA, y el 100%
 // de ese coste lo asume el dueño de la plataforma cuando el usuario es
 // gratuito (nunca ha comprado créditos reales) y no convierte a pago.
 // ───────────────────────────────────────────────────────────────────────────
@@ -556,7 +556,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 // El clasificador de intenciones ya existía (classifyChatIntent) pero no
 // tomaba ninguna decisión de modelo. Ahora devuelve isPurelyVisual:true
 // cuando el cambio es EXCLUSIVAMENTE CSS/cosmético, y el job de edición usa
-// claude-haiku-4-5 en ese caso (¼ del precio de Sonnet). Haiku falla en
+// zoco-flash en ese caso (¼ del precio de Sonnet). Haiku falla en
 // generación de código complejo (confirmado en producción con el comentario
 // "haiku generaba código incompleto" en selectAgentModelPlan), pero resuelve
 // ediciones de pocas líneas CSS/Tailwind perfectamente — es el único caso
@@ -575,8 +575,8 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   );
   const appsSrc = readSrc("routes/apps.ts");
   check(
-    "FIX 21c: el job de edición usa claude-haiku-4-5 cuando isPurelyVisual es true",
-    /classified\.isPurelyVisual.*claude-haiku-4-5/.test(appsSrc),
+    "FIX 21c: el job de edición usa zoco-flash cuando isPurelyVisual es true",
+    /classified\.isPurelyVisual.*zoco-flash/.test(appsSrc),
     "Sin esto, todos los cambios cosméticos siguen usando Sonnet al precio completo aunque Haiku los resuelva igual de bien.",
   );
 }
@@ -862,22 +862,22 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// FIX 32: el mensaje técnico CRUDO de Anthropic (ej. "Your credit balance
+// FIX 32: el mensaje técnico CRUDO de Zoco IA (ej. "Your credit balance
 // is too low...") NUNCA debe llegar a la pantalla del cliente — caso real
 // confirmado por el usuario con una captura mostrando ese mensaje exacto.
 // CAUSA RAÍZ: isCreditsError buscaba el marcador "API_CREDITS_EXHAUSTED",
 // que NINGÚN punto del código genera jamás (confirmado: aparece solo en
 // esa comprobación) — la detección NUNCA se activaba para el caso real,
-// dejando pasar el mensaje crudo de Anthropic directo al cliente Y
+// dejando pasar el mensaje crudo de Zoco IA directo al cliente Y
 // además saltándose el reembolso automático de créditos (el job se
 // marcaba "failed" en vez de "reviewing").
 // ───────────────────────────────────────────────────────────────────────────
 {
   const appsSrc5 = readSrc("routes/apps.ts");
   check(
-    "FIX 32a: isCreditsError usa los indicadores REALES del error de Anthropic (credit_balance), no un marcador inventado que nunca se genera",
+    "FIX 32a: isCreditsError usa los indicadores REALES del error de Zoco IA (credit_balance), no un marcador inventado que nunca se genera",
     !/isCreditsError = rawMessage\.includes\("API_CREDITS_EXHAUSTED"\)/.test(appsSrc5) && /credit_balance|insufficient_quota/.test(appsSrc5),
-    "Con el marcador inventado, isCreditsError SIEMPRE era false para el error real de Anthropic — el mensaje técnico crudo se filtraba directo a la pantalla del cliente, dañando la reputación de la plataforma, y el job se marcaba 'failed' saltándose el reembolso automático.",
+    "Con el marcador inventado, isCreditsError SIEMPRE era false para el error real de Zoco IA — el mensaje técnico crudo se filtraba directo a la pantalla del cliente, dañando la reputación de la plataforma, y el job se marcaba 'failed' saltándose el reembolso automático.",
   );
   check(
     "FIX 32b: el mensaje al cliente nunca es el texto crudo (rawMessage) — siempre un mensaje genérico con indicación de soporte",
@@ -919,7 +919,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 // (runJobById), pero había otros 21 puntos en el mismo archivo que
 // devolvían err?.message / err.message directamente al cliente con un
 // 500 — cualquiera de ellos podía filtrar un mensaje técnico crudo de
-// Anthropic, Vercel, MongoDB, etc. Centralizado en una única función
+// Zoco IA, Vercel, MongoDB, etc. Centralizado en una única función
 // safeErrorResponse, que SIEMPRE devuelve el mismo mensaje genérico de
 // soporte sin importar el error real subyacente (el error real se sigue
 // registrando en el log del servidor para diagnóstico interno).
@@ -943,7 +943,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   check(
     "FIX 34b: ya no quedan endpoints públicos devolviendo el error crudo directamente (excepto preview-debug, una herramienta de diagnóstico interno deliberadamente excluida)",
     rawErrorCount === 0,
-    `Se encontraron ${rawErrorCount} endpoint(s) devolviendo err.message/err?.message directamente — cualquiera de ellos podría filtrar un mensaje técnico crudo de un proveedor externo (Anthropic, Vercel, MongoDB) al cliente.`,
+    `Se encontraron ${rawErrorCount} endpoint(s) devolviendo err.message/err?.message directamente — cualquiera de ellos podría filtrar un mensaje técnico crudo de un proveedor externo (Zoco IA, Vercel, MongoDB) al cliente.`,
   );
 }
 

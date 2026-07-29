@@ -14,7 +14,7 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 
 const ANALYZER_MODEL = "zoco-flash";
 
@@ -248,7 +248,7 @@ REGLAS:
 - Sé específico y accionable. No sugerencias genéricas.
 - Responde SOLO con el JSON.`;
 
-    const response = await createClaudeMessageWithFallback("error-analysis", ANALYZER_MODEL, {
+    const response = await createZocoMessageWithFallback("error-analysis", ANALYZER_MODEL, {
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: "user", content: `Analiza este código:\n\`\`\`\n${codeSnippet}\n\`\`\`` }],

@@ -16,7 +16,7 @@
 import mongoose from "mongoose";
 import { connectDB } from "./db";
 import { logger } from "./logger";
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 import {
   GenerationJob,
   GeneratedApp,
@@ -37,7 +37,7 @@ const AI_MODEL_SMART = "zoco-plus";   // Para análisis complejos
 
 async function askAI(system: string, user: string, model = AI_MODEL): Promise<string> {
   try {
-    const res = await createClaudeMessageWithFallback("system", model, {
+    const res = await createZocoMessageWithFallback("system", model, {
       max_tokens: 1200,
       system,
       messages: [{ role: "user", content: user }],
@@ -180,7 +180,7 @@ fixStrategy="retry" si solo necesita reintentar, "edit" si hay código parcial q
       // grande"), y el ciclo se repetía indefinidamente sin que el usuario
       // viera ningún avance.
       // FIX: si el error que disparó esta reparación fue por memoria/tamaño
-      // de salida, forzamos el modelo de mayor capacidad (claude-opus-4-7)
+      // de salida, forzamos el modelo de mayor capacidad (zoco-max)
       // en el job de reparación — la misma acción que el sistema ya le
       // recomienda hacer manualmente al usuario, ahora aplicada de verdad de
       // forma automática. Para el resto de errorType (timeout, syntax,

@@ -1,4 +1,4 @@
-import { createClaudeMessageWithFallback } from "./shared-agents";
+import { createZocoMessageWithFallback } from "./shared-agents";
 import { logger } from "./logger";
 import { analyzeSpanishIntent, SPANISH_LEXICON_PROMPT_SUMMARY } from "./spanishIntentLexicon";
 
@@ -159,7 +159,7 @@ export async function planExecution(
   if (heuristic.scope === "fast-patch") return heuristic;
 
   // TOKEN CONTROL: si las reglas españolas o regex deterministas ya han decidido
-  // claramente, no llamamos a Anthropic solo para confirmar. Esta llamada era
+  // claramente, no llamamos a Zoco IA solo para confirmar. Esta llamada era
   // pequeña, pero se ejecuta en cada mensaje y suma muchos tokens al mes.
   const normalizedPrompt = prompt.trim();
   const spanish = analyzeSpanishIntent(normalizedPrompt);
@@ -169,7 +169,7 @@ export async function planExecution(
   // Mismo criterio que en heuristicPlan(): con proyecto existente, el regex de
   // "full build" solo se evalúa contra el inicio del mensaje, no contra un
   // texto largo completo (reporte de bugs pegado, etc.) — evita que esta
-  // bandera (usada solo para decidir si saltar la llamada a Anthropic) quede
+  // bandera (usada solo para decidir si saltar la llamada a Zoco IA) quede
   // desincronizada con la razón real ya decidida por heuristicPlan() arriba.
   const fullBuildSignal = options.hasExistingApp
     ? FULL_BUILD_RX.test(normalizedPrompt.slice(0, 80))
@@ -184,7 +184,7 @@ export async function planExecution(
     // MODO OPENAI/DEEPSEEK: viaja por el cliente OpenAI de Zoco IA (formato
     // convertido y razonamiento <think> limpiado automáticamente).
     const response = await Promise.race([
-      createClaudeMessageWithFallback("planner", "zoco-plus", {
+      createZocoMessageWithFallback("planner", "zoco-plus", {
         max_tokens: 200,
         system: PLANNER_SYSTEM,
         messages: [{ role: "user", content: `App existente: ${options.hasExistingApp ? "sí" : "no"}\nPetición: ${prompt.slice(0, 1500)}` }],

@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { Zoco IA } from "@workspace/integrations-Zoco IA-ai";
 const isUltraComplex = true;
 const projectTier = "ultra";
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@ const projectTier = "ultra";
 // - Número de hitos DINÁMICO según la complejidad real del proyecto, no fijo en 4.
 //   Un ERP necesita modelar cada módulo de negocio por separado (facturación,
 //   inventario, clientes, reporting...), no comprimirlo en un solo archivo.
-// - claude-sonnet-4-6 en planificación y generación de código, no Haiku — la
+// - zoco-plus en planificación y generación de código, no Haiku — la
 //   complejidad real de un sistema empresarial necesita el modelo capaz, no el
 //   más rápido.
 // - Contexto ACUMULATIVO real: cada hito recibe el código completo (no solo un
@@ -316,7 +316,7 @@ export class CoreOrchestrator {
     // ENCONTRADO en producción (cliente real atascado, error confirmado en
     // el log exacto de Coolify con stack trace completo): "Streaming is
     // required for operations that may take longer than 10 minutes" — un
-    // rechazo duro del SDK de Anthropic en TypeScript (no del backend) para
+    // rechazo duro del SDK de Zoco IA en TypeScript (no del backend) para
     // llamadas NO-streaming cuando max_tokens es alto, porque ese tipo de
     // llamada puede tardar más de los 10 minutos que soporta una conexión
     // HTTP normal sin streaming. Subir max_tokens (necesario para evitar el
@@ -371,7 +371,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
 
     // Timeout de 120s para la planificación inicial — es una llamada más larga
     // que las de generación de código (hasta 24K tokens de salida) pero igualmente
-    // vulnerable a congelarse si Anthropic tiene un pico de carga.
+    // vulnerable a congelarse si Zoco IA tiene un pico de carga.
     const planAbortController = new AbortController();
     const planTimeoutId = setTimeout(() => {
       planAbortController.abort();
@@ -379,7 +379,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     }, 120_000);
     let planResponse: any;
     try {
-    planResponse = await anthropic.messages.stream({
+    planResponse = await Zoco IA.messages.stream({
       model: this.options.model!,
       // ENCONTRADO en producción: 4000 tokens (luego subido a 8000) seguían
       // resultando insuficientes para planificar proyectos verdaderamente
@@ -391,7 +391,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       // de truncamiento aunque vuelva a ocurrir). A petición explícita del
       // usuario tras un incidente real con un cliente, se sube a un valor
       // con mucho más margen — confirmado contra la documentación oficial
-      // de Anthropic que claude-sonnet-4-6 soporta hasta 64.000 tokens de
+      // de Zoco IA que zoco-plus soporta hasta 64.000 tokens de
       // salida en la API síncrona; 24.000 da margen real de sobra para
       // listar decenas de hitos con sus dependencias sin acercarse al
       // límite absoluto del modelo (evitando coste/latencia innecesarios
@@ -545,7 +545,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         // AbortController con timeout de 90s por hito.
-        // Sin este timeout, si Anthropic se congela o Coolify pierde
+        // Sin este timeout, si Zoco IA se congela o Coolify pierde
         // la conexión, el proceso espera indefinidamente — el watchdog
         // lo detecta como job muerto y lo reinicia desde cero (perdiendo
         // el progreso). Con el timeout, el intento falla limpiamente,
@@ -557,7 +557,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         }, 90_000);
         let response: any;
         try {
-          response = await anthropic.messages.stream({
+          response = await Zoco IA.messages.stream({
             model: this.options.model!,
             max_tokens: 16000,
             system: [
@@ -865,7 +865,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       ...existingFilePaths.backend.map((p) => `- ${p} (backend)`),
     ].join("\n");
 
-    const response = await anthropic.messages.stream({
+    const response = await Zoco IA.messages.stream({
       model: this.options.model!,
       // Mismo límite que planMonorepoProject (24000) — el motivo es idéntico:
       // listas de hitos largas (proyectos importados grandes con muchos
@@ -959,7 +959,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         // Mismo motivo de .stream().finalMessage() que en generateMilestone:
         // evita el rechazo "Streaming is required..." del SDK para llamadas
         // que puedan tardar, sin cambiar el objeto Message devuelto.
-        const response = await anthropic.messages.stream({
+        const response = await Zoco IA.messages.stream({
           model: this.options.model!,
           // Mismo límite que generateMilestone (8192) — cada hito de edición
           // es, por diseño del planificador, UN archivo concreto, así que el
