@@ -5720,21 +5720,13 @@ router.post("/apps/feedback", requireAuth, async (req: any, res: any) => {
 // Devuelve un resumen del plan propuesto SIN generar código, para que el usuario
 // confirme qué quiere antes de gastar créditos
 router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
-   try {
-    await connectDB();
-    const { prompt, kind } = req.body ?? {};
+   router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
+  try {
+    const { prompt } = req.body ?? {};
     if (!prompt || typeof prompt !== "string") {
       res.status(400).json({ error: "prompt requerido" }); return;
     }
 
-    const cleanPrompt = prompt
-      .replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "")
-      .replace(/\[MARIS_ENGINE=[^\]]*\]/g, "")
-      .trim()
-      .slice(0, 3000); // Limitar para no saturar Haiku
-
-    // OPTIMIZACIÓN: cache_control en el system prompt estático del Arquitecto
-    // Este endpoint se llama en cada generación -> el ahorro acumulado es muy alto.
     const PLAN_PREVIEW_SYSTEM = `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
 {
   "title": "nombre corto del proyecto en español",
@@ -5743,7 +5735,21 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   "extras": [{"id": "id_unico", "label": "Nombre del extra", "why": "Por qué sería útil"}],
   "estimatedPages": 4,
   "backendNeeded": false
-}`
+}`;
+
+    // Usamos axios en lugar de fetch para que Express no se rompa
+    const { data } = await axios.post('http://clone-of-zocoia-backend-l6i75r1nagv09vv8203f1oci:8080/api/chat', {
+      message: `${PLAN_PREVIEW_SYSTEM}\n\nUser prompt: ${prompt}`,
+      model: "Zoco-Plus:latest"
+    });
+
+    return res.json(data);
+  } catch (err: any) {
+    logger.error({ err }, "plan-preview error");
+    return res.status(500).json({ error: "Error en el puente de los agentes de Zoco" });
+  }
+});
+
 
 
 REGLAS:
