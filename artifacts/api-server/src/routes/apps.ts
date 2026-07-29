@@ -5720,7 +5720,7 @@ router.post("/apps/feedback", requireAuth, async (req: any, res: any) => {
 // Devuelve un resumen del plan propuesto SIN generar código, para que el usuario
 // confirme qué quiere antes de gastar créditos
 router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
-  try {
+   try {
     await connectDB();
     const { prompt, kind } = req.body ?? {};
     if (!prompt || typeof prompt !== "string") {
@@ -5734,7 +5734,7 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
       .slice(0, 3000); // Limitar para no saturar Haiku
 
     // OPTIMIZACIÓN: cache_control en el system prompt estático del Arquitecto
-    // Este endpoint se llama en cada generación → el ahorro acumulado es muy alto.
+    // Este endpoint se llama en cada generación -> el ahorro acumulado es muy alto.
     const PLAN_PREVIEW_SYSTEM = `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
 {
   "title": "nombre corto del proyecto en español",
@@ -5743,7 +5743,8 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   "extras": [{"id": "id_unico", "label": "Nombre del extra", "why": "Por qué sería útil"}],
   "estimatedPages": 4,
   "backendNeeded": false
-}
+}`
+
 
 REGLAS:
 - Si el prompt menciona una URL o web de referencia (ej: "algo como dejalia.com", "al estilo airbnb"), úsala como inspiración para el title y summary. El title debe ser original, NO el nombre de la web de referencia.
