@@ -91,6 +91,7 @@ import { pushAppToGitHub } from "../lib/githubPush";
 import { executeDataOperation } from "../lib/dataOperationAgent";
 import { MarisId, generateAppId } from "../lib/universalId";
 import { connectDB } from "@workspace/db";
+import axios from "axios";
 // KIND_COSTS se define localmente abajo para evitar conflictos de importación cíclica
 
 interface RouteGenerationRequestContext {
@@ -5720,11 +5721,11 @@ router.post("/apps/feedback", requireAuth, async (req: any, res: any) => {
 // Devuelve un resumen del plan propuesto SIN generar código, para que el usuario
 // confirme qué quiere antes de gastar créditos
 router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
-   router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   try {
     const { prompt } = req.body ?? {};
     if (!prompt || typeof prompt !== "string") {
-      res.status(400).json({ error: "prompt requerido" }); return;
+      res.status(400).json({ error: "prompt requerido" });
+      return;
     }
 
     const PLAN_PREVIEW_SYSTEM = `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
@@ -5735,9 +5736,15 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   "extras": [{"id": "id_unico", "label": "Nombre del extra", "why": "Por qué sería útil"}],
   "estimatedPages": 4,
   "backendNeeded": false
-}`;
+}
 
-    // Usamos axios en lugar de fetch para que Express no se rompa
+REGLAS:
+- Si el prompt menciona una URL o web de referencia (ej: "algo como dejalia.com", "al estilo airbnb"), úsala como inspiración para el title y summary. El title debe ser original, NO el nombre de la web de referencia.
+- "included": las funcionalidades clave que el usuario pidió o que tiene la web de referencia. Máx 4 items.
+- "extras": funcionalidades útiles que NO mencionó. Máx 3. Si no hay extras claros, devuelve [].
+- "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
+- Devuelve ÚNICAMENTE el JSON. Nada más.`;
+
     const { data } = await axios.post('http://clone-of-zocoia-backend-l6i75r1nagv09vv8203f1oci:8080/api/chat', {
       message: `${PLAN_PREVIEW_SYSTEM}\n\nUser prompt: ${prompt}`,
       model: "Zoco-Plus:latest"
@@ -5747,55 +5754,6 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
   } catch (err: any) {
     logger.error({ err }, "plan-preview error");
     return res.status(500).json({ error: "Error en el puente de los agentes de Zoco" });
-  }
-});
-
-
-
-REGLAS:
-- Si el prompt menciona una URL o web de referencia (ej: "algo como dejalia.com", "al estilo airbnb"), úsala como inspiración para el title y summary. El title debe ser original, NO el nombre de la web de referencia.
-- "included": las funcionalidades clave que el usuario pidió o que tiene la web de referencia. Máx 4 items.
-- "extras": funcionalidades útiles que NO mencionó. Máx 3. Si no hay extras claros, devuelve [].
-- "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
-- Devuelve ÚNICAMENTE el JSON. Nada más.`;
-
-    const response = await createClaudeMessageWithFallback("planner", "zoco-flash", {
-      max_tokens: 1000,
-      system: [
-        {
-          type: "text",
-          text: PLAN_PREVIEW_SYSTEM,
-          cache_control: { type: "ephemeral" }, // ← 90% descuento en tokens de entrada
-        },
-      ] as any,
-      messages: [{ role: "user", content: `Prompt: "${cleanPrompt}"
-Tipo: ${kind || "fullstack"}` }],
-    });
-
-    const raw = (response.content[0] as any).text?.trim() ?? "";
-    // Extraer JSON aunque venga con markdown o texto extra
-    const first = raw.indexOf("{");
-    const last = raw.lastIndexOf("}");
-    if (first === -1 || last === -1) {
-      logger.warn({ raw: raw.slice(0, 200) }, "plan-preview: no JSON found in response");
-      res.status(500).json({ error: "No se pudo generar el plan" }); return;
-    }
-    let plan: any;
-    try {
-      plan = JSON.parse(raw.slice(first, last + 1));
-    } catch (parseErr) {
-      logger.warn({ raw: raw.slice(0, 200), parseErr }, "plan-preview: JSON parse failed");
-      res.status(500).json({ error: "Plan malformado" }); return;
-    }
-    // Garantizar estructura mínima
-    plan.title = plan.title || cleanPrompt.slice(0, 40);
-    plan.summary = plan.summary || `App de tipo ${kind || "web"} basada en: ${cleanPrompt.slice(0, 80)}`;
-    plan.included = Array.isArray(plan.included) ? plan.included : [];
-    plan.extras = Array.isArray(plan.extras) ? plan.extras : [];
-    res.json({ ok: true, plan });
-  } catch (err) {
-    logger.error({ err }, "plan-preview error");
-    res.status(500).json({ error: "Error generando preview del plan" });
   }
 });
 
