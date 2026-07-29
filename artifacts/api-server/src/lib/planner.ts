@@ -154,8 +154,7 @@ NUNCA pongas comentarios, prosa, ni markdown alrededor del JSON.`;
 export async function planExecution(
   prompt: string,
   options: { hasExistingApp: boolean } = { hasExistingApp: false },
-): Promise<ExecutionPlan> {
-  const heuristic = heuristicPlan(prompt, options.hasExistingApp);
+): Promise<ExecutionPlan> {const heuristic = heuristicPlan(prompt, options.hasExistingApp);
   if (heuristic.scope === "fast-patch") return heuristic;
 
   // TOKEN CONTROL: si las reglas españolas o regex deterministas ya han decidido
@@ -169,7 +168,7 @@ export async function planExecution(
   // Mismo criterio que en heuristicPlan(): con proyecto existente, el regex de
   // "full build" solo se evalúa contra el inicio del mensaje, no contra un
   // texto largo completo (reporte de bugs pegado, etc.) — evita que esta
-  // bandera (usada solo para decidir si saltar la llamada a Zoco IA) quede
+  // bandera (usada solo para decidir si saltar la llamada a anthropic as zocoia) quede
   // desincronizada con la razón real ya decidida por heuristicPlan() arriba.
   const fullBuildSignal = options.hasExistingApp
     ? FULL_BUILD_RX.test(normalizedPrompt.slice(0, 80))
@@ -180,8 +179,7 @@ export async function planExecution(
     return heuristic;
   }
 
-  try {
-    // MODO OPENAI/DEEPSEEK: viaja por el cliente OpenAI de Zoco IA (formato
+  try {// MODO OPENAI/DEEPSEEK: viaja por el cliente OpenAI de anthropic as zocoia (formato
     // convertido y razonamiento <think> limpiado automáticamente).
     const response = await Promise.race([
       createZocoMessageWithFallback("planner", "zoco-plus", {

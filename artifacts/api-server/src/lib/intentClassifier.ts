@@ -423,9 +423,8 @@ export async function classifyChatIntent(
 
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const userContent = buildUserMessage(ctx);
-    // MODO OPENAI/DEEPSEEK: la llamada viaja por el cliente OpenAI de Zoco IA;
+  try {const userContent = buildUserMessage(ctx);
+    // MODO OPENAI/DEEPSEEK: la llamada viaja por el cliente OpenAI de anthropic as zocoia;
     // createZocoMessageWithFallback convierte el formato, inyecta la regla
     // de formato seguro y limpia el razonamiento <think> de DeepSeek-R1.
     const result: any = await createZocoMessageWithFallback("classifier", "zoco-plus", {

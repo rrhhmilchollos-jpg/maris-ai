@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 /**
  * componentCache.ts — Maris AI Component Library Cache
  *

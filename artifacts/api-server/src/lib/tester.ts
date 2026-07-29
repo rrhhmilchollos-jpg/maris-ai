@@ -1,4 +1,5 @@
-// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de Zoco IA.
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
+// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de zocoia.
 import { validateBundle } from "./validate";
 import { patchBundle, patchBundleMultiFile, type GenLanguage, type BuildIssue, type ValidationReport } from "./shared-agents";
 import { logger } from "./logger";

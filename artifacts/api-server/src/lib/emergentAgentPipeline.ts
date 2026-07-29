@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 /**
  * emergentAgentPipeline.ts — Maris AI × Emergent.sh Agent Pipeline
  * ─────────────────────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@
  * @see agentMemory.ts para la memoria persistente
  */
 
-// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de Zoco IA.
+// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de zocoia.
 import { logger } from "./logger";
 import {
   detectIntegrations,

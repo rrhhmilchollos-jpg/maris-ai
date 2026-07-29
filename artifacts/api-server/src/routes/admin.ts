@@ -508,8 +508,7 @@ router.get("/admin/users/:id/credit-audit", async (req: any, res: any): Promise<
         plan: user.plan,
       },
       isGeneratingNow,
-      jobs: jobs.map((j: any) => {
-        const targetAppId = String(j.appId || j.editAppId || "");
+      jobs: jobs.map((j: any) => {const targetAppId = String(j.appId || j.editAppId || "");
         return {
           id: String(j._id),
           appId: targetAppId || null,
@@ -518,7 +517,7 @@ router.get("/admin/users/:id/credit-audit", async (req: any, res: any): Promise<
           status: j.status,
           phase: j.phase,
           creditsCost: j.creditsCost ?? 0,
-          // Coste real interno (Zoco IA) — para comparar con creditsCost
+          // Coste real interno (anthropic as zocoia) — para comparar con creditsCost
           // y ver el margen real de esta tarea concreta.
           internalApiCostCents: j.internalApiCostCents ?? 0,
           apiCallCount: j.apiCallCount ?? 0,

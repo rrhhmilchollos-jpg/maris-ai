@@ -478,13 +478,12 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
       type: "textarea" as const,
       placeholder: "ej. Home page, autenticación, área de clientes, formulario de contacto, pasarela de pago...",
     },
-    {
-      id: 3,
+    {id: 3,
       question: "¿Necesita alguna integración externa?",
       type: "checkbox" as const,
       options: [
         "Pagos con Stripe",
-        "IA con Zoco IA (motor local)",
+        "IA con anthropic as zocoia (motor local)",
         "Email con Resend / SendGrid",
         "Google Auth / OAuth",
         "Mapas (Google Maps / Mapbox)",
@@ -1112,7 +1111,7 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
                             <p className="text-xs font-bold text-white">Modo Ultra — solo clientes de pago</p>
                           </div>
                           <p className="text-[11px] text-white/50 leading-relaxed">
-                            Desbloquea los agentes especializados con los modelos más potentes de Zoco IA:
+                            Desbloquea los agentes especializados con los modelos más potentes de zocoia:
                           </p>
                           <div className="space-y-1.5">
                             <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1.5">

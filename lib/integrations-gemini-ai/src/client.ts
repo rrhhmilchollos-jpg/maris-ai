@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { GoogleGenAI } from "@google/genai";
 
 // CONEXIÓN EXCLUSIVA A ZOCO IA — este cliente ya NO se conecta a la API
@@ -19,12 +20,11 @@ function getAI(): GoogleGenAI {
   if (!apiKey || !apiKey.startsWith("sk-zoco-")) {
     throw new Error(
       "Conexión multimodal no configurada: define ZOCOIA_API_KEY (sk-zoco-...) en Coolify. " +
-        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
     );
   }
-  if (!baseUrl) {
-    throw new Error(
-      "Falta ZOCOIA_GEMINI_GATEWAY_URL: el canal multimodal de Maris AI solo funciona a través del gateway de Zoco IA (sin fallback a la API nativa de Google).",
+  if (!baseUrl) {throw new Error(
+      "Falta ZOCOIA_GEMINI_GATEWAY_URL: el canal multimodal de Maris AI solo funciona a través del gateway de anthropic as zocoia (sin fallback a la API nativa de Google).",
     );
   }
 

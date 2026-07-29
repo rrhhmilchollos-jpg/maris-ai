@@ -400,12 +400,11 @@ router.get("/bot-render/que-es-vibe-coding", (_req: Request, res: Response) => {
   ));
 });
 
-router.get("/bot-render/que-es-un-agente-de-ia", (_req: Request, res: Response) => {
-  const body = `<main style="max-width:800px;margin:0 auto;padding:40px 20px;">
+router.get("/bot-render/que-es-un-agente-de-ia", (_req: Request, res: Response) => {const body = `<main style="max-width:800px;margin:0 auto;padding:40px 20px;">
 <h1>Qué es un Agente de IA — Guía para Emprendedores 2026</h1>
 <p>Un agente de inteligencia artificial es un sistema autónomo que percibe su entorno, toma decisiones y ejecuta acciones para conseguir un objetivo concreto. A diferencia de un chatbot simple, un agente de IA puede planificar, usar herramientas externas y trabajar durante varios pasos sin intervención humana.</p>
 <h2>¿Cómo funcionan los agentes de IA?</h2>
-<p>Los agentes de IA utilizan modelos de lenguaje avanzados (como Claude de Zoco IA o GPT de OpenAI) combinados con herramientas externas (acceso a internet, bases de datos, APIs) para completar tareas complejas de forma autónoma.</p>
+<p>Los agentes de IA utilizan modelos de lenguaje avanzados (como Claude de anthropic as zocoia o GPT de OpenAI) combinados con herramientas externas (acceso a internet, bases de datos, APIs) para completar tareas complejas de forma autónoma.</p>
 <h2>Los 11 agentes de IA de Maris AI</h2>
 <ol>
 <li><strong>Researcher</strong>: Investiga el mercado y define requisitos</li>
@@ -432,8 +431,7 @@ router.get("/bot-render/que-es-un-agente-de-ia", (_req: Request, res: Response) 
   ));
 });
 
-router.get("/bot-render/glosario", (_req: Request, res: Response) => {
-  const body = `<main style="max-width:800px;margin:0 auto;padding:40px 20px;">
+router.get("/bot-render/glosario", (_req: Request, res: Response) => {const body = `<main style="max-width:800px;margin:0 auto;padding:40px 20px;">
 <h1>Glosario de Inteligencia Artificial para Emprendedores — Maris AI</h1>
 <p>Todos los términos de IA y desarrollo de software que necesitas conocer como emprendedor en 2026, explicados en español de forma sencilla.</p>
 <dl>
@@ -442,7 +440,7 @@ router.get("/bot-render/glosario", (_req: Request, res: Response) => {
 <dt style="font-weight:700;margin-top:1.5rem;">Agente de IA (AI Agent)</dt>
 <dd>Sistema autónomo de inteligencia artificial que planifica, toma decisiones y ejecuta acciones para completar una tarea sin intervención humana continua.</dd>
 <dt style="font-weight:700;margin-top:1.5rem;">LLM (Large Language Model)</dt>
-<dd>Modelo de lenguaje de gran escala entrenado con enormes cantidades de texto. Ejemplos: Claude (Zoco IA), GPT-4 (OpenAI), Gemini (Google).</dd>
+<dd>Modelo de lenguaje de gran escala entrenado con enormes cantidades de texto. Ejemplos: Claude (anthropic as zocoia), GPT-4 (OpenAI), Gemini (Google).</dd>
 <dt style="font-weight:700;margin-top:1.5rem;">React</dt>
 <dd>Biblioteca JavaScript de Meta para construir interfaces de usuario. Es el estándar de la industria para aplicaciones web modernas. Maris AI genera aplicaciones en React + TypeScript.</dd>
 <dt style="font-weight:700;margin-top:1.5rem;">TypeScript</dt>

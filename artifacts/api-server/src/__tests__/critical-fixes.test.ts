@@ -872,12 +872,11 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 // además saltándose el reembolso automático de créditos (el job se
 // marcaba "failed" en vez de "reviewing").
 // ───────────────────────────────────────────────────────────────────────────
-{
-  const appsSrc5 = readSrc("routes/apps.ts");
+{const appsSrc5 = readSrc("routes/apps.ts");
   check(
-    "FIX 32a: isCreditsError usa los indicadores REALES del error de Zoco IA (credit_balance), no un marcador inventado que nunca se genera",
+    "FIX 32a: isCreditsError usa los indicadores REALES del error de zocoia (credit_balance), no un marcador inventado que nunca se genera",
     !/isCreditsError = rawMessage\.includes\("API_CREDITS_EXHAUSTED"\)/.test(appsSrc5) && /credit_balance|insufficient_quota/.test(appsSrc5),
-    "Con el marcador inventado, isCreditsError SIEMPRE era false para el error real de Zoco IA — el mensaje técnico crudo se filtraba directo a la pantalla del cliente, dañando la reputación de la plataforma, y el job se marcaba 'failed' saltándose el reembolso automático.",
+    "Con el marcador inventado, isCreditsError SIEMPRE era false para el error real de anthropic as zocoia — el mensaje técnico crudo se filtraba directo a la pantalla del cliente, dañando la reputación de la plataforma, y el job se marcaba 'failed' saltándose el reembolso automático.",
   );
   check(
     "FIX 32b: el mensaje al cliente nunca es el texto crudo (rawMessage) — siempre un mensaje genérico con indicación de soporte",
@@ -943,7 +942,7 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   check(
     "FIX 34b: ya no quedan endpoints públicos devolviendo el error crudo directamente (excepto preview-debug, una herramienta de diagnóstico interno deliberadamente excluida)",
     rawErrorCount === 0,
-    `Se encontraron ${rawErrorCount} endpoint(s) devolviendo err.message/err?.message directamente — cualquiera de ellos podría filtrar un mensaje técnico crudo de un proveedor externo (Zoco IA, Vercel, MongoDB) al cliente.`,
+    `Se encontraron ${rawErrorCount} endpoint(s) devolviendo err.message/err?.message directamente — cualquiera de ellos podría filtrar un mensaje técnico crudo de un proveedor externo (zocoia, Vercel, MongoDB) al cliente.`,
   );
 }
 

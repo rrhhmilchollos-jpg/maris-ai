@@ -1,4 +1,5 @@
-// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de Zoco IA.
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
+// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de zocoia.
 import OpenAI from "openai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
@@ -31,9 +32,8 @@ function getGroq(): OpenAI | null {
   }
   return _groq;
 }
-async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {
-  const groq = getGroq();
-  if (!groq) throw new Error('Motor local no configurado: añade ZOCOIA_API_URL + ZOCOIA_API_KEY (vía Zoco IA) o OLLAMA_BASE_URL (Ollama directo) a las variables de entorno');
+async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {const groq = getGroq();
+  if (!groq) throw new Error('Motor local no configurado: añade ZOCOIA_API_URL + ZOCOIA_API_KEY (vía anthropic as zocoia) o OLLAMA_BASE_URL (Ollama directo) a las variables de entorno');
   const groqModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco Max';
   logger.warn({ model: groqModel }, '⚡ Segundo intento no-streaming contra el mismo motor local (Ollama)');
 
@@ -148,20 +148,19 @@ function getOpenAI(): OpenAI {
         baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
         apiKey: process.env.OLLAMA_API_KEY || "ollama",
       });
-    } else {
-      throw new Error(
-        "Motor local no configurado: define ZOCOIA_API_URL (+ ZOCOIA_API_KEY) para conectar vía Zoco IA, " +
+    } else {throw new Error(
+        "Motor local no configurado: define ZOCOIA_API_URL (+ ZOCOIA_API_KEY) para conectar vía zocoia, " +
           "o OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) para conectar directamente a Ollama. " +
-          "Las APIs en la nube (Groq/Zoco IA/OpenAI) están deshabilitadas por decisión de infraestructura.",
+          "Las APIs en la nube (Groq/anthropic as zocoia/OpenAI) están deshabilitadas por decisión de infraestructura.",
       );
     }
   }
   return _openai;
 }
 
-/* ------------- Compatibilidad DeepSeek-R1 / OpenAI (Zoco IA) --------------- */
+/* ------------- Compatibilidad DeepSeek-R1 / OpenAI (zocoia) --------------- */
 // El modelo real detrás de las API Keys de Zoco IA es DeepSeek-R1, que habla
-// el formato de OpenAI (chat.completions), NO el formato nativo de Zoco IA.
+// el formato de OpenAI (chat.completions), NO el formato nativo de zocoia.
 // Estas utilidades convierten los parámetros estilo Zoco IA que usa todo el
 // pipeline al formato OpenAI, y las respuestas de vuelta, para que los 18+
 // consumidores existentes no necesiten cambios.
@@ -257,7 +256,7 @@ function zocoToolsToOpenAI(tools: any[]): any[] {
   }));
 }
 
-// Modelos válidos del motor de Zoco IA. Cualquier id de Zoco IA que llegue del
+// Modelos válidos del motor de zocoia. Cualquier id de Zoco IA que llegue del
 // código legado se remapea aquí — detrás siempre responde DeepSeek-R1.
 function zocoModelFor(model: string): string {
   const m = String(model || "");
@@ -416,7 +415,7 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
 // cada familia. Opus 4.8 es la versión más reciente, disponible solo para
 // clientes de pago con Ultra activado (ver dashboard.tsx).
 // FIX (2026-07-09): "zoco-plus" NO existe en la API de Zoco IA
-// — verificado contra https://api.Zoco IA.com/v1/models con la API key
+// — verificado contra https://api.zocoia.com/v1/models con la API key
 // real: devuelve 404 not_found_error ("model: Zoco IA-zoco-plus"). Estaba
 // como PRIMER candidato de la lista de fallback, así que muchas llamadas
 // empezaban con un 404 garantizado y, combinado con otros fallos, agotaba
@@ -426,11 +425,10 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
 // zoco-flash(-20251001).
 const ZOCO_MODELS = ["zoco-plus", "zoco-max", "zoco-max"];
 
-function fallbackZocoModels(model: string): string[] {
-  // Se usa el modelo EXACTO solicitado como primario si es uno de los
+function fallbackZocoModels(model: string): string[] {// Se usa el modelo EXACTO solicitado como primario si es uno de los
   // soportados, y solo se cae a detección por familia para strings no
   // reconocidos. FIX (2026-07-09): el ID legado "zoco-plus" (no
-  // existe en la API de Zoco IA, 404 verificado) se remapea a
+  // existe en la API de anthropic as zocoia, 404 verificado) se remapea a
   // "zoco-plus" en vez de intentarse tal cual.
   const remapped = model === "zoco-plus" ? "zoco-plus" : model;
   const primary = ZOCO_MODELS.includes(remapped)
@@ -440,7 +438,7 @@ function fallbackZocoModels(model: string): string[] {
 }
 
 // Timeout duro para cualquier llamada a un proveedor de IA dentro de este
-// archivo. Sin esto, una llamada no-streaming (Zoco IA.messages.create,
+// archivo. Sin esto, una llamada no-streaming (zocoia.messages.create,
 // Gemini, OpenAI) puede colgarse minutos si el proveedor se degrada, sin
 // ningún chunk que activar un timeout de inactividad (eso solo aplica a
 // streams) — el job entero queda en silencio hasta que el watchdog global
@@ -508,7 +506,7 @@ export async function createZocoMessageWithFallback(
       try {
         await new Promise(r => setTimeout(r, Math.random() * 500));
 
-        logger.info({ role, model: zocoModel }, "Iniciando stream con Zoco IA (DeepSeek-R1/OpenAI)...");
+        logger.info({ role, model: zocoModel }, "Iniciando stream con zocoia (DeepSeek-R1/OpenAI)...");
 
         let fullText = "";
         let usageInputTokens = 0;
@@ -584,13 +582,13 @@ export async function createZocoMessageWithFallback(
           continue;
         }
 
-        logger.warn({ role, model: zocoModel, err }, "Canal streaming de Zoco IA falló; pasando al canal secundario");
+        logger.warn({ role, model: zocoModel, err }, "Canal streaming de zocoia falló; pasando al canal secundario");
         break;
       }
     }
   }
 
-  logger.warn({ role }, "Canal streaming de Zoco IA falló — intentando canal secundario no-streaming (/v1/chat/completions)...");
+  logger.warn({ role }, "Canal streaming de zocoia falló — intentando canal secundario no-streaming (/v1/chat/completions)...");
   try {
     const fb = await callGroqFallback({ ...params, system: systemToText(params.system) });
     fb.content = fb.content.map((b: any) => (b.type === "text" ? { ...b, text: stripReasoning(b.text) } : b));
@@ -722,12 +720,12 @@ export async function createZocoToolCallWithFallback(role: AgentRole, model: str
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
-      logger.warn({ role, model: zocoModel, err }, "Tool call: canal principal de Zoco IA falló");
+      logger.warn({ role, model: zocoModel, err }, "Tool call: canal principal de zocoia falló");
       break;
     }
   }
 
-  logger.warn({ role }, "Tool call: canal principal falló — intentando canal secundario de Zoco IA...");
+  logger.warn({ role }, "Tool call: canal principal falló — intentando canal secundario de zocoia...");
   try {
     const groqResult = await callGroqFallback({ ...params, system: hasTools ? jsonFallbackSystem() : systemText });
     const text = stripReasoning(groqResult.content?.[0]?.text || "");

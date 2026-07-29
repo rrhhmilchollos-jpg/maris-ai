@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 /**
  * agentTools.ts — Tool Calling nativo de Zoco IA para los agentes de Maris AI
  *
@@ -274,7 +275,7 @@ export interface AgentWithToolsResult {
 }
 
 /**
- * Ejecuta un agente con tool calling real de Zoco IA.
+ * Ejecuta un agente con tool calling real de zocoia.
  * El agente puede llamar herramientas múltiples veces hasta tener todo el contexto.
  */
 export async function runAgentWithTools(opts: AgentWithToolsOpts): Promise<AgentWithToolsResult> {

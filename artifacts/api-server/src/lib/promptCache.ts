@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 /**
  * ─────────────────────────────────────────────────────────────────────────────
  * Maris AI — Prompt Cache Manager
@@ -39,7 +40,7 @@ export interface TextBlock {
 }
 
 /**
- * Envuelve un system prompt estático con cache_control para Zoco IA.
+ * Envuelve un system prompt estático con cache_control para zocoia.
  * Úsalo cuando el system prompt NO cambia entre llamadas del mismo agente.
  *
  * @param text - El system prompt completo

@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { createHash } from "node:crypto";
 import OpenAI from "openai";
 import { connectDB } from "./db";

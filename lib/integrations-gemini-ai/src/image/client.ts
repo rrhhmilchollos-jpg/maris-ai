@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { GoogleGenAI, Modality } from "@google/genai";
 
 // CONEXIÓN EXCLUSIVA A ZOCO IA — el canal de imagen ya no usa claves nativas
@@ -13,7 +14,7 @@ function getAI(): GoogleGenAI {
   if (!apiKey || !apiKey.startsWith("sk-zoco-") || !baseUrl) {
     throw new Error(
       "Canal de imagen no configurado: define ZOCOIA_API_KEY (sk-zoco-...) y ZOCOIA_GEMINI_GATEWAY_URL. " +
-        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
     );
   }
   _ai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });

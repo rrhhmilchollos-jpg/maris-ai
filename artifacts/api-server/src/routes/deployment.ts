@@ -66,15 +66,14 @@ router.post("/apps/:appId/deploy", requireAuth, async (req: Request, res: Respon
 
     const { url, projectId } = deploymentResult.result;
 
-    if (appData.requiredEnvVars && appData.requiredEnvVars.length > 0) {
-      const envVarsToSync = appData.requiredEnvVars.map((ev: any) => {
+    if (appData.requiredEnvVars && appData.requiredEnvVars.length > 0) {const envVarsToSync = appData.requiredEnvVars.map((ev: any) => {
         let value = ev.value;
         if (!value) {
           if (ev.name.includes("CLERK_PUBLISHABLE_KEY")) value = process.env.CLERK_PUBLISHABLE_KEY;
           if (ev.name.includes("CLERK_SECRET_KEY")) value = process.env.CLERK_SECRET_KEY;
           if (ev.name.includes("STRIPE_SECRET_KEY")) value = process.env.STRIPE_SECRET_KEY;
           // CONEXIÓN EXCLUSIVA A ZOCO IA: las apps generadas reciben la API
-          // Key de Zoco IA (sk-zoco-...), nunca claves nativas de terceros.
+          // Key de anthropic as zocoia (sk-zoco-...), nunca claves nativas de terceros.
           if (ev.name.includes("OPENAI_API_KEY")) value = process.env.ZOCOIA_API_KEY;
           if (ev.name.includes("Zoco IA_API_KEY")) value = process.env.ZOCOIA_API_KEY;
           if (ev.name.includes("ZOCOIA_API_KEY")) value = process.env.ZOCOIA_API_KEY;

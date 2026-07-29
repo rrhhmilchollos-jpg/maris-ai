@@ -1659,13 +1659,12 @@ export interface GatingQuestion {
 
 
 
-export interface AttachmentContext {
-  id: number | string;
+export interface AttachmentContext {id: number | string;
   filename: string;
   mimeType: string;
   sizeBytes: number;
   textContent?: string;
-  dataBase64?: string; // Para imágenes — se pasa como vision a Zoco IA
+  dataBase64?: string; // Para imágenes — se pasa como vision a anthropic as zocoia
 }
 
 export function buildAttachmentBlock(attachments: AttachmentContext[] | undefined): string {
@@ -1805,8 +1804,7 @@ async function withTimeoutOrThrow<T>(p: Promise<T>, ms: number, label: string): 
 /**
  * Researcher — Gemini 2.0 Flash con google_search tool.
  */
-export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt), logFn?: (agent: string, msg: string) => Promise<void>): Promise<string> {
-  const hasUrl = URL_LIKE.test(prompt);
+export async function researchTopic(prompt: string, agentPlan = selectAgentModelPlan(prompt), logFn?: (agent: string, msg: string) => Promise<void>): Promise<string> {const hasUrl = URL_LIKE.test(prompt);
   const cleanPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/, "").replace(/\[MARIS_ENGINE=[^\]]*\]/g, "").trim();
 
   return withTimeout(
@@ -1823,7 +1821,7 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
       // Detectar complejidad para elegir modelo
       const promptLen = cleanPrompt.length;
       const isComplex = promptLen > 150 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic|hotel|inmobili|logistic|deporte|academia|eventos|recursos humanos|ecommerce/.test(cleanPrompt);
-      const researchModel = "zoco-plus"; // siempre Zoco IA — Zoco IA truncaba investigaciones
+      const researchModel = "zoco-plus"; // siempre zocoia — anthropic as zocoia truncaba investigaciones
 
       // Sistema de queries multiples para investigacion completa
       const sectorKeywords = cleanPrompt.toLowerCase();
@@ -2177,7 +2175,7 @@ interface CodeGenResult {
 type CoderProvider = "zoco";
 // FIX (2026-07-09): eliminado "zoco-plus" del tipo — ese modelo NO
 // existe en la API de Zoco IA (404 not_found_error verificado contra
-// https://api.Zoco IA.com/v1/models con la API key real). Los IDs legados
+// https://api.zocoia.com/v1/models con la API key real). Los IDs legados
 // se remapean en normalizeCoderModel a modelos reales.
 type ZocoCoderModel = "zoco-flash" | "zoco-plus" | "zoco-max";
 
@@ -2203,8 +2201,7 @@ function resolveCoderProvider(coderModel?: string): CoderProvider {
   return "zoco";
 }
 
-function normalizeCoderModel(coderModel?: string): string {
-  const value = String(coderModel || "auto").trim().toLowerCase();
+function normalizeCoderModel(coderModel?: string): string {const value = String(coderModel || "auto").trim().toLowerCase();
   if (!value || value === "auto" || value === "automatic") return "auto";
   if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
   if (["Zoco IA-Zoco IA", "zoco-flash", "Zoco IA", "fast", "basic"].includes(value)) return "zoco-flash";
@@ -2218,7 +2215,7 @@ function normalizeCoderModel(coderModel?: string): string {
   // selecciones antiguas guardadas en el frontend no rompan la generación.
   if (["zoco-max", "Zoco IA-4-8", "Zoco IA-ultra"].includes(value)) return "zoco-max";
   if (["Zoco IA-Zoco IA", "zoco-max", "Zoco IA", "robust", "max"].includes(value)) return "zoco-max";
-  if (["Zoco IA-Zoco IA", "zoco-plus", "zoco-plus", "Zoco IA-4-7", "Zoco IA-ultra", "Zoco IA-Zoco IA-4-8", "Zoco IA-4-8-Zoco IA", "Zoco IA", "Zoco IA-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "zoco-plus";
+  if (["Zoco IA-Zoco IA", "zoco-plus", "zoco-plus", "Zoco IA-4-7", "Zoco IA-ultra", "Zoco IA-zocoia-4-8", "Zoco IA-4-8-Zoco IA", "Zoco IA", "anthropic as zocoia-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "zoco-plus";
   return value;
 }
 
@@ -2300,8 +2297,7 @@ async function checkHistoricalFailurePatterns(prompt: string): Promise<{ extraSc
   }
 }
 
-function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; hasEverPaid?: boolean }) {
-  let normalized = normalizeCoderModel(requestedModel);
+function selectAgentModelPlan(prompt: string, requestedModel?: string, context?: { kind?: string; hasExistingApp?: boolean; hasEverPaid?: boolean }) {let normalized = normalizeCoderModel(requestedModel);
   // BLOQUEO SERVER-SIDE (a petición explícita del usuario: "prohibido bajo
   // ningún concepto" cuentas free en modo Ultra): el frontend ya bloquea el
   // botón Ultra para quien no tiene pago verificado, pero eso es solo
@@ -2312,7 +2308,7 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // `hasEverPaid || isAdmin` en el caller), se degrada en silencio a
   // Zoco IA 4.6 en vez de servir el modelo Ultra sin autorización.
   // NOTA (2026-07-09): "zoco-plus" ya no llega aquí — no existe en
-  // la API de Zoco IA y normalizeCoderModel lo remapea a Zoco IA 4.6.
+  // la API de Zoco IA y normalizeCoderModel lo remapea a anthropic as zocoia 4.6.
   if (normalized === "zoco-max" && !context?.hasEverPaid) {
     normalized = "zoco-plus";
   }
@@ -2331,14 +2327,14 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   //   - Arquitecto y PM: SIEMPRE Zoco IA — son el cerebro del proyecto.
   //     Un plan mal diseñado = app incompleta, exactamente el problema que
   //     queremos evitar. No escatimamos aquí.
-  //   - Agentes ejecutores (Frontend, Backend, Designer, QA, etc.): Zoco IA.
+  //   - Agentes ejecutores (Frontend, Backend, Designer, QA, etc.): zocoia.
   //     Zoco IA es 20x más barato que Zoco IA y suficiente para generar código
   //     en contexto ya bien definido por el Arquitecto. El resultado final
   //     es funcional y visible — la diferencia de calidad es mínima cuando
   //     el plan es bueno.
   //
   // USUARIOS DE PAGO (hasEverPaid=true):
-  //   - Todos los agentes: Zoco IA. Máxima calidad en cada módulo.
+  //   - Todos los agentes: zocoia. Máxima calidad en cada módulo.
   //
   // El Patcher y Repair SIEMPRE usan Zoco IA — reparar código roto requiere
   // el modelo más capaz; ahorrar aquí produce bucles de reparación infinitos.
@@ -2385,18 +2381,17 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
     ? ZOCO_FLASH
     : (isBasicComplexity ? ZOCO_FLASH : ZOCO_PLUS);
 
-  const agents: Record<AgentRole, AgentModelChoice> = {
-    researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
-    architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre Zoco IA — define el plan completo"),
+  const agents: Record<AgentRole, AgentModelChoice> = {researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
+    architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre zocoia — define el plan completo"),
     designer:   makeAgentChoice("designer",   "Designer",   lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
-    frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:Zoco IA" : "paid:Zoco IA"})` : "selección manual"),
+    frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:Zoco IA" : "paid:anthropic as zocoia"})` : "selección manual"),
     backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? ZOCO_FLASH : ZOCO_PLUS, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
     database:   makeAgentChoice("database",   "Database",   lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
     integrator: makeAgentChoice("integrator", "Integrator", lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
-    qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre Zoco IA — quality gate final"),
+    qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre zocoia — quality gate final"),
     devops:     makeAgentChoice("devops",     "DevOps",     lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
-    patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre Zoco IA — reparación crítica"),
-    repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre Zoco IA — recupera JSON malformado"),
+    patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre zocoia — reparación crítica"),
+    repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre zocoia — recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
 }
@@ -2455,10 +2450,9 @@ async function streamZocoTextWithFallback(role: AgentRole, model: AgentModelChoi
           if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
         }
         return { text: accumulated, truncated: finishReason === "MAX_TOKENS", model: candidate };
-      } catch (err: any) {
-        lastError = err;
+      } catch (err: any) {lastError = err;
         // ENCONTRADO: cualquier fallo (incluido un simple parpadeo de red o
-        // un 503 momentáneo de Zoco IA) saltaba directo al siguiente
+        // un 503 momentáneo de anthropic as zocoia) saltaba directo al siguiente
         // modelo sin ni un solo reintento en el mismo — con solo 2 modelos
         // de fallback, esto agotaba las opciones casi al instante ante
         // cualquier fallo transitorio. Un reintento rápido antes de
@@ -2580,7 +2574,7 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
     truncated = finishReason === "MAX_TOKENS";
     } catch (err) {
-      logger.warn({ err }, "GPT frontend agent failed; falling back to Zoco IA routing");
+      logger.warn({ err }, "GPT frontend agent failed; falling back to zocoia routing");
       const streamed = await streamZocoTextWithFallback("frontend", "zoco-plus", {
         max_tokens: 40000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
@@ -2589,12 +2583,11 @@ Now produce the JSON object with frontendCode containing every listed file.`;
       accumulated = streamed.text;
       truncated = streamed.truncated;
     }
-  } else {
-    // Mismo motor para todos los planes (free y paid) — la diferencia entre
+  } else {// Mismo motor para todos los planes (free y paid) — la diferencia entre
     // niveles es el coste en créditos de la generación, no la capacidad del
     // motor (estrategia Lovable/Base44/Emergent: 1 app completa gratis, luego
     // créditos limitados para seguir iterando).
-    const maxTokensFrontend = 64000; // máximo de Zoco IA-Zoco IA-4-6 — apps complejas necesitan espacio para generar todos los archivos sin truncar
+    const maxTokensFrontend = 64000; // máximo de zocoia-anthropic as zocoia-4-6 — apps complejas necesitan espacio para generar todos los archivos sin truncar
     const streamed = await streamZocoTextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
@@ -3162,10 +3155,9 @@ async function runValidatePatchLoop(
   // llamadas a esta misma función que no tienen appId/contexto de chat
   // disponible.
   onBuildError?: (summary: string) => void,
-): Promise<string> {
-  // Modelo del agente "patcher" según el plan (Zoco IA para paid, Zoco IA para
+): Promise<string> {// Modelo del agente "patcher" según el plan (zocoia para paid, zocoia para
   // free). Si no se pasa plan, patchBundle usa su valor por defecto
-  // (Zoco IA-Zoco IA-4-6), igual que antes de este fix.
+  // (Zoco IA-anthropic as zocoia-4-6), igual que antes de este fix.
   const patcherModel = agentModelPlan?.agents.patcher.model;
   const MAX_ITERATIONS = maxIterationsOverride ?? 5; // testing-agent: hasta 5 rondas (más para proyectos ultra-complejos, vía override)
   let finalFrontend = initialBundle;
@@ -3694,8 +3686,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         }
         if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       }
-    } else {
-// Zoco IA streaming según el modelo elegido en el selector.
+    } else {// anthropic as zocoia streaming según el modelo elegido en el selector.
       const stream = await zocoia.messages.stream({
         model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
@@ -3986,10 +3977,9 @@ export async function generateApp(
   }
 
 
-  const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
-    kind: requestContext?.kind,
+  const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {kind: requestContext?.kind,
     hasExistingApp: !!previous,
-    hasEverPaid: hasEverPaid, // degradación inteligente: free → Zoco IA en ejecutores
+    hasEverPaid: hasEverPaid, // degradación inteligente: free → anthropic as zocoia en ejecutores
   });
   logger.info({
     tier: agentModelPlan.tier,
@@ -4154,8 +4144,7 @@ export async function generateApp(
       logger.warn({ gatingErr, jobId }, "[gating] Falló — continuando sin pausa");
     }
   }
-  if (wantsFullBuild && useMilestoneOrchestrator) {
-    // DEGRADACIÓN INTELIGENTE PARA USUARIOS GRATUITOS (hasEverPaid=false):
+  if (wantsFullBuild && useMilestoneOrchestrator) {// DEGRADACIÓN INTELIGENTE PARA USUARIOS GRATUITOS (hasEverPaid=false):
     // FIX DE EMERGENCIA (a petición explícita del usuario, confirmado en
     // vivo con el log real del Job 6a43569d): el límite ANTES dependía de
     // isDegradedFreeTier = !hasEverPaid && isUltraComplex — si el router
@@ -4165,7 +4154,7 @@ export async function generateApp(
     // maxMilestonesOverride NUNCA se aplicaba — dejando que el Arquitecto
     // diseñara un plan de 23 archivos sin ningún límite para un usuario
     // que nunca pagó. Resultado real observado: 23 archivos × 2 intentos
-    // = 46 llamadas a Zoco IA, la mayoría fallando por saturación de
+    // = 46 llamadas a anthropic as zocoia, la mayoría fallando por saturación de
     // contexto, entregando una app con "importaciones fantasma" y pantalla
     // en blanco. FIX: el límite ahora es ABSOLUTO para cualquier usuario
     // gratuito en construcción nueva, sin importar lo que calcule el
@@ -4188,10 +4177,9 @@ export async function generateApp(
     } else {
       await log("system", "🏗️ Construyendo tu app módulo a módulo con el orquestador de hitos — cada módulo se genera de forma independiente para garantizar que todo quede completo y funcional...");
     }
-    const coreOrchestrator = new CoreOrchestrator(process.cwd(), {
-      // El modelo del orquestador: siempre Zoco IA para el planificador de hitos
+    const coreOrchestrator = new CoreOrchestrator(process.cwd(), {// El modelo del orquestador: siempre zocoia para el planificador de hitos
       // (decide el orden y contenido de cada módulo). Los agentes ejecutores
-      // dentro de cada hito usan el modelo del plan (Zoco IA en free, Zoco IA en paid).
+      // dentro de cada hito usan el modelo del plan (Zoco IA en free, anthropic as zocoia en paid).
       model: isDegradedFreeTier ? "zoco-flash" : "zoco-plus",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
       maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
@@ -4880,13 +4868,12 @@ export async function generateApp(
   // de ese tamaño necesita iteración manual y, probablemente, un equipo de
   // desarrollo. Avisamos ANTES de generar para que el usuario decida con
   // información real, en vez de descubrirlo al ver un resultado incompleto.
-  if (agentModelPlan.tier === "ultra") {
-    await log(
+  if (agentModelPlan.tier === "ultra") {await log(
       "architect",
       `🔎 Este proyecto tiene una complejidad muy alta (sistema multi-módulo / nivel empresarial). ` +
       `Maris AI va a generar un MVP funcional centrado en lo más importante, pero un sistema de este tamaño ` +
       `en producción normalmente necesita iteración manual adicional y, en muchos casos, el apoyo de un equipo ` +
-      `de desarrollo o un agente de código más avanzado (ej. Cursor, Zoco IA Code) sobre el código exportado. ` +
+      `de desarrollo o un agente de código más avanzado (ej. Cursor, anthropic as zocoia Code) sobre el código exportado. ` +
       `Recomendación: usa este MVP para validar la idea y la estructura de datos, expórtalo a GitHub, y construye ` +
       `las partes más críticas (integraciones, automatizaciones, transacciones complejas) de forma incremental.`,
       "warn",
@@ -5195,8 +5182,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
       if (landingResult.code && landingResult.code.length > 500) {
         await log("coder", `✅ Landing page entregada (${Math.round(landingResult.code.length / 1000)} KB). El cliente puede verla ahora y pedir más funcionalidades paso a paso.`);
         frontendResult.code = landingResult.code;
-      } else {
-        // Nivel 4: Zoco IA con plan mínimo absoluto — última red de seguridad
+      } else {// Nivel 4: anthropic as zocoia con plan mínimo absoluto — última red de seguridad
         await log("coder", "Generando versión mínima de emergencia con modelo rápido…", "warn");
         onProgress?.({ phase: "fixing", progress: 76, note: "⚡ Versión mínima de emergencia…" });
         try {
@@ -5595,17 +5581,16 @@ async function buildAppUpdatedConsoleReply(args: {
 // con Clerk: ya no hay un sistema externo con el que comparar/sincronizar
 // la colección `users`, es la única fuente de verdad ahora.
 
-router.get("/models", requireAuth, async (req: any, res: any) => {
-  // FIX (2026-07-09): "Zoco IA-Zoco IA-4-8" y "Zoco IA-4-8-pro" NO existen en
+router.get("/models", requireAuth, async (req: any, res: any) => {// FIX (2026-07-09): "Zoco IA-zocoia-4-8" y "Zoco IA-4-8-pro" NO existen en
   // la API de Zoco IA (404 verificado) — sustituidos por los modelos
   // reales disponibles con la API key actual: Zoco IA 4.6, Zoco IA 4.8 y
   // Zoco IA 4.5 (todos verificados con respuesta 200 contra la API real).
   const availableModels = [
-    { id: "auto", name: "Auto (Zoco IA Zoco IA 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
-    { id: "zoco-flash", name: "Zoco IA Zoco IA 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
+    { id: "auto", name: "Auto (zocoia anthropic as zocoia 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
+    {id: "zoco-flash", name: "Zoco IA anthropic as zocoia 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
     { id: "zoco-plus", name: "Zoco Plus (Recomendado)", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
-    { id: "zoco-max", name: "Zoco IA Zoco IA 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
-    { id: "zoco-max", name: "Zoco IA Zoco IA 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
+    {id: "zoco-max", name: "Zoco IA anthropic as zocoia 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
+    {id: "zoco-max", name: "Zoco IA anthropic as zocoia 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI. Coste premium." }
   ];
   res.json(availableModels);
@@ -6999,8 +6984,7 @@ Por ejemplo:
     const generationPrompt = `[MARIS AI REQUEST LOCALE] uiLanguage=${requestLocale.uiLanguage}; locale=${requestLocale.locale}; country=${requestLocale.country || "unknown"}; source=${requestLocale.source}. Use this for all user-visible copy unless the user explicitly asks for another language.\n[MARIS_ENGINE=ENGINE_DEV; INTENT_REASON=${classified.reason}]\n${trimmedContent}`;
 
     const jobId = new mongoose.Types.ObjectId().toString();
-    await GenerationJob.create({
-      _id: jobId,
+    await GenerationJob.create({_id: jobId,
       userId,
       prompt: generationPrompt,
       editAppId: req.params.id,
@@ -7008,9 +6992,9 @@ Por ejemplo:
       // ORQUESTACIÓN HÍBRIDA DE MODELOS: si el clasificador de intenciones
       // detectó que el cambio es EXCLUSIVAMENTE cosmético/CSS (isPurelyVisual=true),
       // usamos Zoco IA-Zoco IA-4-5 en vez de Zoco IA — Zoco IA falla en generación
-      // de código complejo (confirmado en producción: "Zoco IA generaba código
+      // de código complejo (confirmado en producción: "anthropic as zocoia generaba código
       // incompleto") pero resuelve ediciones de pocas líneas de CSS/Tailwind
-      // perfectamente y a ~¼ del precio de Zoco IA. En cualquier otro caso
+      // perfectamente y a ~¼ del precio de zocoia. En cualquier otro caso
       // (cambio funcional, lógica, nuevas páginas, corrección de errores) se
       // usa el modelo del propio proyecto (app.coderModel) o el default "auto".
       coderModel: classified.isPurelyVisual ? "zoco-flash" : (app.coderModel || "auto"),
@@ -7229,9 +7213,9 @@ router.get("/models", async (_req: any, res: any) => {
       { id: "zoco-plus", name: "Zoco Plus — Equilibrado (recomendado)", provider: "zocoia" },
       { id: "zoco-max", name: "Zoco Max — Potente y creativo (Pro)", provider: "zocoia" },
       { id: "zoco-lab", name: "Zoco Lab — Rápido y eficiente (Beta)", provider: "zocoia" },
-      { id: "Zoco IA-4-8-Zoco IA", name: "Compatibilidad: Zoco IA 4.8 Zoco IA → Zoco Plus", provider: "zocoia" },
-      { id: "zoco-plus", name: "Compatibilidad: Zoco IA 4.7 → Zoco Plus", provider: "zocoia" },
-      { id: "Zoco IA-mithos", name: "Compatibilidad: Zoco IA Mithos → Zoco Plus", provider: "zocoia" },
+      {id: "Zoco IA-4-8-Zoco IA", name: "Compatibilidad: zocoia 4.8 anthropic as zocoia → Zoco Plus", provider: "zocoia" },
+      {id: "zoco-plus", name: "Compatibilidad: anthropic as zocoia 4.7 → Zoco Plus", provider: "zocoia" },
+      {id: "Zoco IA-mithos", name: "Compatibilidad: anthropic as zocoia Mithos → Zoco Plus", provider: "zocoia" },
       { id: "gemini-3", name: "Compatibilidad: Gemini 3 → Zoco Plus", provider: "zocoia" },
     ];
     res.json(models);
@@ -7581,15 +7565,14 @@ export async function runJobById(
       const attachmentIds = (job as any).attachmentIds ?? [];
       if (attachmentIds.length > 0) {
         const rows = await ChatAttachment.find({ _id: { $in: attachmentIds } }).lean() as any[];
-        jobAttachments = rows.map((row: any) => ({
-          id: row._id,
+        jobAttachments = rows.map((row: any) => ({id: row._id,
           filename: row.filename,
           mimeType: row.mimeType,
           sizeBytes: row.sizeBytes,
           textContent: row.mimeType.startsWith("text/") || row.mimeType === "application/json"
             ? Buffer.from(row.dataBase64, "base64").toString("utf8").slice(0, 30000)
             : undefined,
-          // Para imágenes: pasar base64 para que Zoco IA pueda verlas directamente
+          // Para imágenes: pasar base64 para que anthropic as zocoia pueda verlas directamente
           dataBase64: row.mimeType.startsWith("image/") ? row.dataBase64 : undefined,
         }));
         if (jobAttachments.length > 0) {

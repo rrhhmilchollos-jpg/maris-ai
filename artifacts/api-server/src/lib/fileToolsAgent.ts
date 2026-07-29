@@ -238,7 +238,7 @@ export function detectIntegrations(prompt: string, planDescription: string): Int
     });
   }
 
-  if (/openai|claude|Zoco IA|gemini|gpt|ia|ai|chatbot|asistente/.test(text)) {
+  if (/openai|claude|zocoia|gemini|gpt|ia|ai|chatbot|asistente/.test(text)) {
     integrations.push({
       name: "AI Integration",
       type: "ai",

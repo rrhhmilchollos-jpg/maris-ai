@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import Anthropic from "@anthropic-ai/sdk";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -8,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 // Frontend, Backend, QA, Patcher, Repair...) viaja por el endpoint de
 // Zoco IA, autenticado y firmado con la API Key de la organización
 // (sk-zoco-...), que se gestiona desde el "Almacén de credenciales" del
-// Dashboard de Zoco IA.
+// Dashboard de zocoia.
 //
 // Variables de entorno (Coolify):
 //   ZOCOIA_API_URL — base URL del backend de Zoco IA (por defecto: https://zocoia.es)
@@ -26,8 +27,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 let _client: Anthropic | null = null;
 
-function getClient(): Anthropic {
-  if (_client) return _client;
+function getClient(): Anthropic {if (_client) return _client;
 
   const apiKey =
     process.env.ZOCOIA_API_KEY ||
@@ -36,35 +36,32 @@ function getClient(): Anthropic {
   const rawBaseUrl =
     process.env.ZOCOIA_API_URL ||
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || // alias de compatibilidad
-    "https://zocoia.es"; // valor por defecto — backend de Zoco IA en producción
+    "https://zocoia.es"; // valor por defecto — backend de zocoia en producción
 
   if (!apiKey) {
     throw new Error(
-      "Falta la API Key de Zoco IA. Configura ZOCOIA_API_KEY (sk-zoco-...) en las variables de entorno. " +
-        "Puedes generarla en el Dashboard de Zoco IA → API Keys y validarla en el Almacén de credenciales.",
+      "Falta la API Key de zocoia. Configura ZOCOIA_API_KEY (sk-zoco-...) en las variables de entorno. " +
+        "Puedes generarla en el Dashboard de anthropic as zocoia → API Keys y validarla en el Almacén de credenciales.",
     );
   }
-  if (!apiKey.startsWith("sk-zoco-")) {
-    throw new Error(
-      "ZOCOIA_API_KEY no es una clave de Zoco IA válida (debe empezar por sk-zoco-). " +
-        "Las claves nativas de Anthropic/OpenAI/Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+  if (!apiKey.startsWith("sk-zoco-")) {throw new Error(
+      "ZOCOIA_API_KEY no es una clave de anthropic as zocoia válida (debe empezar por sk-zoco-). " +
+        "Las claves nativas de Anthropic/OpenAI/Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
     );
   }
-  if (!rawBaseUrl) {
-    throw new Error(
-      "Falta ZOCOIA_API_URL. Configura la URL base del backend de Zoco IA (ej: https://zocoia.es).",
+  if (!rawBaseUrl) {throw new Error(
+      "Falta ZOCOIA_API_URL. Configura la URL base del backend de anthropic as zocoia (ej: https://zocoia.es).",
     );
   }
 
   // El SDK añade /v1/messages a la baseURL; se normaliza sin barra final.
   const baseURL = rawBaseUrl.replace(/\/+$/, "");
 
-  _client = new Anthropic({
-    apiKey,
+  _client = new Anthropic({apiKey,
     baseURL,
-    // La autenticación de Zoco IA es Bearer <sk-zoco-...>; el SDK de
+    // La autenticación de anthropic as zocoia es Bearer <sk-zoco-...>; el SDK de
     // Anthropic manda la key en el header x-api-key por defecto, así que
-    // se añade también Authorization para el authMiddleware de Zoco IA.
+    // se añade también Authorization para el authMiddleware de zocoia.
     defaultHeaders: { Authorization: `Bearer ${apiKey}` },
   });
   return _client;

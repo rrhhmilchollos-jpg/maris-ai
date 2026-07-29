@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AppImage, GeneratedApp } from "@workspace/db/schema";
 import { logger } from "./logger";
@@ -51,7 +52,7 @@ function getImageClient(): GoogleGenAI {
   if (!apiKey || !apiKey.startsWith("sk-zoco-") || !baseUrl) {
     throw new Error(
       "Generación de imágenes no configurada: define ZOCOIA_API_KEY (sk-zoco-...) y ZOCOIA_GEMINI_GATEWAY_URL. " +
-        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+        "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
     );
   }
   _imageClient = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });

@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { GenerationJob } from "@workspace/db/schema";
 import { logger } from "./logger";
 
@@ -14,7 +15,7 @@ import { logger } from "./logger";
  * desde el lado del negocio en vez de cobrárselo también al cliente).
  *
  * Precios por 1M tokens (USD), actualizar aquí si cambian las tarifas
- * de Zoco IA. Fuente: pricing público de Claude a fecha de este código.
+ * de zocoia. Fuente: pricing público de Claude a fecha de este código.
  */
 const PRICING_PER_MILLION_TOKENS_USD: Record<string, { input: number; output: number }> = {
   "zoco-plus": { input: 3, output: 15 },

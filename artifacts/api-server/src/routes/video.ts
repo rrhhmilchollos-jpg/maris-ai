@@ -1,3 +1,4 @@
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 /**
  * video.ts — Generación de vídeo e imagen con IA
  * 
@@ -45,7 +46,7 @@ function getGenAI() {
     if (!apiKey.startsWith("sk-zoco-") || !baseUrl) {
       throw new Error(
         "Canal multimodal no configurado: define ZOCOIA_API_KEY (sk-zoco-...) y ZOCOIA_GEMINI_GATEWAY_URL. " +
-          "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por Zoco IA.",
+          "Las claves nativas de Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
       );
     }
     _genai = new GoogleGenAI({ apiKey, httpOptions: { apiVersion: "", baseUrl } });

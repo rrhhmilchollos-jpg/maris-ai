@@ -1,6 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
-import { Zoco IA } from "@workspace/integrations-Zoco IA-ai";
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 const isUltraComplex = true;
 const projectTier = "ultra";
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,11 +312,10 @@ export class CoreOrchestrator {
    * FASE 1: PLANIFICACIÓN — divide el proyecto en hitos reales, en número
    * dinámico según la complejidad, agrupados por capas con dependencias.
    */
-  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {
-    // ENCONTRADO en producción (cliente real atascado, error confirmado en
+  async planMonorepoProject(userPrompt: string): Promise<{ database: "mongodb" | "postgresql"; platform: "web" | "mobile-native"; architecture: "monolith" | "microservices"; milestones: Milestone[] }> {// ENCONTRADO en producción (cliente real atascado, error confirmado en
     // el log exacto de Coolify con stack trace completo): "Streaming is
     // required for operations that may take longer than 10 minutes" — un
-    // rechazo duro del SDK de Zoco IA en TypeScript (no del backend) para
+    // rechazo duro del SDK de anthropic as zocoia en TypeScript (no del backend) para
     // llamadas NO-streaming cuando max_tokens es alto, porque ese tipo de
     // llamada puede tardar más de los 10 minutos que soporta una conexión
     // HTTP normal sin streaming. Subir max_tokens (necesario para evitar el
@@ -378,8 +377,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       console.warn("⏰ Timeout 120s en planMonorepoProject — abortando planificación");
     }, 120_000);
     let planResponse: any;
-    try {
-    planResponse = await Zoco IA.messages.stream({
+    try {planResponse = await zocoia.messages.stream({
       model: this.options.model!,
       // ENCONTRADO en producción: 4000 tokens (luego subido a 8000) seguían
       // resultando insuficientes para planificar proyectos verdaderamente
@@ -391,7 +389,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       // de truncamiento aunque vuelva a ocurrir). A petición explícita del
       // usuario tras un incidente real con un cliente, se sube a un valor
       // con mucho más margen — confirmado contra la documentación oficial
-      // de Zoco IA que zoco-plus soporta hasta 64.000 tokens de
+      // de anthropic as zocoia que zoco-plus soporta hasta 64.000 tokens de
       // salida en la API síncrona; 24.000 da margen real de sobra para
       // listar decenas de hitos con sus dependencias sin acercarse al
       // límite absoluto del modelo (evitando coste/latencia innecesarios
@@ -542,10 +540,9 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       ? `\n\nIMPORTANTE: este proyecto es una APP MÓVIL NATIVA, no web. Para este hito (capa ${milestone.layer}) usa React Native + Expo + TypeScript + React Navigation. NO uses Tailwind CSS, NO uses elementos HTML (div/span/button) — usa View/Text/Pressable de react-native con StyleSheet.create. NO generes vercel.json.`
       : "";
 
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {try {
         // AbortController con timeout de 90s por hito.
-        // Sin este timeout, si Zoco IA se congela o Coolify pierde
+        // Sin este timeout, si anthropic as zocoia se congela o Coolify pierde
         // la conexión, el proceso espera indefinidamente — el watchdog
         // lo detecta como job muerto y lo reinicia desde cero (perdiendo
         // el progreso). Con el timeout, el intento falla limpiamente,
@@ -557,7 +554,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         }, 90_000);
         let response: any;
         try {
-          response = await Zoco IA.messages.stream({
+          response = await zocoia.messages.stream({
             model: this.options.model!,
             max_tokens: 16000,
             system: [
@@ -865,7 +862,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       ...existingFilePaths.backend.map((p) => `- ${p} (backend)`),
     ].join("\n");
 
-    const response = await Zoco IA.messages.stream({
+    const response = await zocoia.messages.stream({
       model: this.options.model!,
       // Mismo límite que planMonorepoProject (24000) — el motivo es idéntico:
       // listas de hitos largas (proyectos importados grandes con muchos
@@ -959,7 +956,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         // Mismo motivo de .stream().finalMessage() que en generateMilestone:
         // evita el rechazo "Streaming is required..." del SDK para llamadas
         // que puedan tardar, sin cambiar el objeto Message devuelto.
-        const response = await Zoco IA.messages.stream({
+        const response = await zocoia.messages.stream({
           model: this.options.model!,
           // Mismo límite que generateMilestone (8192) — cada hito de edición
           // es, por diseño del planificador, UN archivo concreto, así que el
