@@ -1,5 +1,4 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
@@ -15,7 +14,7 @@ function getOpenAIApps(): OpenAI {
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
-import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createClaudeToolCallWithFallback } from "../lib/shared-agents";
+import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createZocoToolCallWithFallback } from "../lib/shared-agents";
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp } from "../lib/appRevisions";
 import * as esbuild from "esbuild";
@@ -69,7 +68,7 @@ import {
   type ComplexityTier,
   extractJsonObject,
   withTimeout,
-  createClaudeMessageWithFallback,
+  createZocoMessageWithFallback,
   buildPatcherSystemPrompt,
   patchBundle,
   buildFastPatchPrompt,
@@ -111,13 +110,13 @@ interface RouteGenerationRequestContext {
  * Maris AI multi-agent generation pipeline.
  *
  * Todos los agentes usan Zoco IA (motor local) para mayor privacidad y control:
- *   - Researcher    (Zoco Plus/Flash)  — referencia web
- *   - Architect     (Zoco Plus)        — plan / estructura
- *   - Designer      (Zoco Plus/Flash)  — design system
- *   - Frontend Eng  (Zoco Plus, streaming) — bundle frontend
- *   - Backend Eng   (Zoco Plus/Flash)  — bundle backend
- *   - QA Reviewer   (Zoco Plus/Flash)  — revisión
- *   - Patcher       (Zoco Plus)        — auto-fix
+ *   - Researcher    (Zoco Plus/Flash)  — referencia web (Zoco IA)
+ *   - Architect     (Zoco Plus)        — plan / estructura (Zoco IA)
+ *   - Designer      (Zoco Plus/Flash)  — design system (Zoco IA)
+ *   - Frontend Eng  (Zoco Plus, streaming) — bundle frontend (Zoco IA)
+ *   - Backend Eng   (Zoco Plus/Flash)  — bundle backend (Zoco IA)
+ *   - QA Reviewer   (Zoco Plus/Flash)  — revisión (Zoco IA)
+ *   - Patcher       (Zoco Plus)        — auto-fix (Zoco IA)
  * ========================================================================== */
 
 function buildFrontendSystemPrompt(language: GenLanguage, kind?: string): string {
@@ -1665,7 +1664,7 @@ export interface AttachmentContext {
   mimeType: string;
   sizeBytes: number;
   textContent?: string;
-  dataBase64?: string; // Para imágenes — se pasa como vision a Claude
+  dataBase64?: string; // Para imágenes — se pasa como vision a Zoco IA
 }
 
 export function buildAttachmentBlock(attachments: AttachmentContext[] | undefined): string {
@@ -1813,7 +1812,7 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
     (async () => {
       // ─── RESEARCHER AGENT 100% ────────────────────────────────────────────
       // Mejoras sobre version anterior:
-      // 1. Modelo escalado a Sonnet para prompts complejos
+      // 1. Modelo escalado a Zoco IA para prompts complejos
       // 2. Sistema de queries multiples (sector + competencia + tecnologia)
       // 3. Memoria por sector — reutiliza contexto de sesiones previas
       // 4. Salida estructurada con 7 secciones clave
@@ -1823,7 +1822,7 @@ export async function researchTopic(prompt: string, agentPlan = selectAgentModel
       // Detectar complejidad para elegir modelo
       const promptLen = cleanPrompt.length;
       const isComplex = promptLen > 150 || /empresa|negocio|startup|SaaS|plataforma|marketplace|fintech|clinic|hotel|inmobili|logistic|deporte|academia|eventos|recursos humanos|ecommerce/.test(cleanPrompt);
-      const researchModel = "zoco-plus"; // siempre sonnet — haiku truncaba investigaciones
+      const researchModel = "zoco-plus"; // siempre Zoco IA — Zoco IA truncaba investigaciones
 
       // Sistema de queries multiples para investigacion completa
       const sectorKeywords = cleanPrompt.toLowerCase();
@@ -1957,7 +1956,7 @@ Sin preambulos. Directo al contenido de cada seccion.`;
 
       // Fallback mejorado: llamada directa con contexto de sector
       try {
-        const response = await createClaudeMessageWithFallback("researcher", researchModel, {
+        const response = await createZocoMessageWithFallback("researcher", researchModel, {
           max_tokens: 6000,
           system: `Eres el Researcher Agent de Maris AI. Genera un brief de investigacion completo en espanol con las secciones: PRODUCTO, AUDIENCIA, PAGINAS CLAVE, REFERENCIAS VISUALES, INTEGRACIONES, CONTEXTO COMPETITIVO. Sector detectado: ${sectorContext}. Max 600 palabras.`,
           messages: [{ role: "user", content: `Brief completo para: "${cleanPrompt}"` }],
@@ -1992,7 +1991,7 @@ ${isFintech ? "Stripe, Clerk auth, MongoDB" : isSalud ? "Calendar API, Resend em
   );
 }
 /**
- * Architect — Anthropic Claude Sonnet 4.6.
+ * Architect — Zoco IA (Motor Local).
  */
 async function architectPlan(prompt: string, research: string, templateContext = "", agentPlan = selectAgentModelPlan(prompt)): Promise<ProjectPlan> {
   const templateNote = templateContext ? `\n\n${templateContext}` : "";
@@ -2023,10 +2022,10 @@ async function architectPlan(prompt: string, research: string, templateContext =
   // todo el pipeline) solo tenía un timeout de 90s vía withTimeoutOrThrow,
   // pero CERO reintentos y CERO fallback de modelo. Un solo 429 o parpadeo
   // de red mataba el Architect y con él la generación entera desde el
-  // principio. Sustituido por createClaudeMessageWithFallback, que además
+  // principio. Sustituido por createZocoMessageWithFallback, que además
   // del timeout ya trae reintento en fallos transitorios y fallback
-  // Sonnet↔Opus, igual que el resto de agentes del pipeline.
-  const response = await createClaudeMessageWithFallback("architect", "zoco-plus", {
+  // Zoco IA↔Zoco IA, igual que el resto de agentes del pipeline.
+  const response = await createZocoMessageWithFallback("architect", "zoco-plus", {
     max_tokens: 12000,
     system: ARCHITECT_SYSTEM_PROMPT + "\nOutput JSON only.",
     messages: [{ role: "user", content: userContent }],
@@ -2074,7 +2073,7 @@ async function architectPlan(prompt: string, research: string, templateContext =
 }
 
 /**
- * Designer — Anthropic Claude Sonnet 4.6.
+ * Designer — Zoco IA (Motor Local).
  */
 async function designSystem(plan: ProjectPlan, research: string, templateContext = "", agentPlan = selectAgentModelPlan(plan.description ?? plan.title), userPreferences?: string): Promise<DesignSystem> {
   const pages = plan.pages.map((p) => p.name).join(", ");
@@ -2092,7 +2091,7 @@ ${templateContext ? templateContext : ""}
 
 Crea el sistema visual completo. Detecta el sector, elige paleta, valida WCAG AA, genera tokens CSS y variantes Tailwind. Solo JSON.`;
 
-  // Sonnet minimo para diseno - decision critica que impacta toda la app
+  // Zoco IA minimo para diseno - decision critica que impacta toda la app
   const designerModel = (agentPlan.agents.designer.model === "zoco-flash" || agentPlan.agents.designer.model === "zoco-flash")
     ? "zoco-plus"
     : agentPlan.agents.designer.model;
@@ -2101,7 +2100,7 @@ Crea el sistema visual completo. Detecta el sector, elige paleta, valida WCAG AA
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const response = await withTimeoutOrThrow(
-        createClaudeMessageWithFallback("designer", designerModel, {
+        createZocoMessageWithFallback("designer", designerModel, {
           max_tokens: 10000,
           system: DESIGNER_SYSTEM_PROMPT,
           messages: [{ role: "user", content: userContent }],
@@ -2174,19 +2173,19 @@ interface CodeGenResult {
   error?: string;
 }
 
-type CoderProvider = "claude" | "gpt-5";
+type CoderProvider = "zoco";
 // FIX (2026-07-09): eliminado "zoco-plus" del tipo — ese modelo NO
-// existe en la API de Anthropic (404 not_found_error verificado contra
-// https://api.anthropic.com/v1/models con la API key real). Los IDs legados
+// existe en la API de Zoco IA (404 not_found_error verificado contra
+// https://api.Zoco IA.com/v1/models con la API key real). Los IDs legados
 // se remapean en normalizeCoderModel a modelos reales.
-type ClaudeCoderModel = "zoco-flash" | "zoco-flash" | "zoco-plus" | "zoco-max" | "zoco-max";
+type ZocoCoderModel = "zoco-flash" | "zoco-plus" | "zoco-max";
 
 type AgentRole = "researcher" | "architect" | "designer" | "frontend" | "backend" | "database" | "integrator" | "qa" | "devops" | "patcher" | "repair";
 
 interface AgentModelChoice {
   role: AgentRole;
   label: string;
-  model: ClaudeCoderModel | "gpt-5.4";
+  model: ZocoCoderModel | "gpt-5.4";
   reason: string;
 }
 
@@ -2195,34 +2194,34 @@ interface AgentModelChoice {
 // FIX (2026-07-09): quitado "zoco-plus" (inexistente, 404) que
 // encabezaba la lista de fallback — cada generación empezaba con un fallo
 // garantizado antes de llegar a un modelo real.
-const CLAUDE_MODELS: ClaudeCoderModel[] = ["zoco-plus", "zoco-max", "zoco-max", "zoco-flash"];
+const ZOCO_MODELS: ZocoCoderModel[] = ["zoco-plus", "zoco-max", "zoco-max", "zoco-flash"];
 
 function resolveCoderProvider(coderModel?: string): CoderProvider {
   const normalized = normalizeCoderModel(coderModel);
   if (normalized === "gpt-5.4") return "gpt-5";
-  return "claude";
+  return "Zoco IA";
 }
 
 function normalizeCoderModel(coderModel?: string): string {
   const value = String(coderModel || "auto").trim().toLowerCase();
   if (!value || value === "auto" || value === "automatic") return "auto";
   if (["gpt-5", "gpt-5-codex", "gpt-5.4", "openai", "openai-gpt-5"].includes(value)) return "gpt-5.4";
-  if (["claude-haiku", "zoco-flash", "haiku", "fast", "basic"].includes(value)) return "zoco-flash";
-  // Opus 4.8 (Ultra, solo pago) se reconoce explícitamente ANTES de las
-  // reglas genéricas de opus, para que no caiga en la rama de la versión
+  if (["Zoco IA-Zoco IA", "zoco-flash", "Zoco IA", "fast", "basic"].includes(value)) return "zoco-flash";
+  // Zoco IA 4.8 (Ultra, solo pago) se reconoce explícitamente ANTES de las
+  // reglas genéricas de Zoco IA, para que no caiga en la rama de la versión
   // anterior (4.7).
-  // FIX (2026-07-09): los IDs "zoco-plus"/"sonnet-4-7"/"sonnet-ultra"
-  // apuntaban a un modelo que NO existe en la API de Anthropic (404
-  // verificado). El tier Ultra de Sonnet se remapea a "zoco-plus"
-  // (el Sonnet real más reciente disponible con la key actual) para que las
+  // FIX (2026-07-09): los IDs "zoco-plus"/"Zoco IA-4-7"/"Zoco IA-ultra"
+  // apuntaban a un modelo que NO existe en la API de Zoco IA (404
+  // verificado). El tier Ultra de Zoco IA se remapea a "zoco-plus"
+  // (el Zoco IA real más reciente disponible con la key actual) para que las
   // selecciones antiguas guardadas en el frontend no rompan la generación.
-  if (["zoco-max", "opus-4-8", "opus-ultra"].includes(value)) return "zoco-max";
-  if (["claude-opus", "zoco-max", "opus", "robust", "max"].includes(value)) return "zoco-max";
-  if (["claude-sonnet", "zoco-plus", "zoco-plus", "sonnet-4-7", "sonnet-ultra", "claude-sonnet-4-8", "claude-4-8-sonnet", "sonnet", "claude-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "zoco-plus";
+  if (["zoco-max", "Zoco IA-4-8", "Zoco IA-ultra"].includes(value)) return "zoco-max";
+  if (["Zoco IA-Zoco IA", "zoco-max", "Zoco IA", "robust", "max"].includes(value)) return "zoco-max";
+  if (["Zoco IA-Zoco IA", "zoco-plus", "zoco-plus", "Zoco IA-4-7", "Zoco IA-ultra", "Zoco IA-Zoco IA-4-8", "Zoco IA-4-8-Zoco IA", "Zoco IA", "Zoco IA-mithos", "gemini-3", "gemini-2.5-flash", "auto", "default"].includes(value)) return "zoco-plus";
   return value;
 }
 
-function resolveClaudeCoderModel(coderModel?: string): ClaudeCoderModel {
+function resolveZocoCoderModel(coderModel?: string): ZocoCoderModel {
   const normalized = normalizeCoderModel(coderModel);
   if (normalized === "zoco-flash") return "zoco-flash";
   if (normalized === "zoco-max") return "zoco-max";
@@ -2310,14 +2309,14 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // de verdad se hace cumplir: si se pide el modelo Ultra y el usuario NO
   // tiene hasEverPaid=true (esto ya incluye a los admins vía
   // `hasEverPaid || isAdmin` en el caller), se degrada en silencio a
-  // Sonnet 4.6 en vez de servir el modelo Ultra sin autorización.
+  // Zoco IA 4.6 en vez de servir el modelo Ultra sin autorización.
   // NOTA (2026-07-09): "zoco-plus" ya no llega aquí — no existe en
-  // la API de Anthropic y normalizeCoderModel lo remapea a Sonnet 4.6.
+  // la API de Zoco IA y normalizeCoderModel lo remapea a Zoco IA 4.6.
   if (normalized === "zoco-max" && !context?.hasEverPaid) {
     normalized = "zoco-plus";
   }
-  // GPT-5.4: mismo criterio que Opus 4.8 -- solo pago verificado
-  // (aclarado explícitamente por el usuario). Haiku 4.5, en cambio, se deja
+  // GPT-5.4: mismo criterio que Zoco IA 4.8 -- solo pago verificado
+  // (aclarado explícitamente por el usuario). Zoco IA 4.5, en cambio, se deja
   // abierto para todos sin este bloqueo, por ser el modelo económico.
   if (normalized === "gpt-5.4" && !context?.hasEverPaid) {
     normalized = "zoco-plus";
@@ -2328,39 +2327,39 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // ── ESTRATEGIA DE MODELOS ─────────────────────────────────────────────────
   //
   // USUARIOS FREE (hasEverPaid=false, 65 créditos iniciales):
-  //   - Arquitecto y PM: SIEMPRE Sonnet — son el cerebro del proyecto.
+  //   - Arquitecto y PM: SIEMPRE Zoco IA — son el cerebro del proyecto.
   //     Un plan mal diseñado = app incompleta, exactamente el problema que
   //     queremos evitar. No escatimamos aquí.
-  //   - Agentes ejecutores (Frontend, Backend, Designer, QA, etc.): Haiku.
-  //     Haiku es 20x más barato que Sonnet y suficiente para generar código
+  //   - Agentes ejecutores (Frontend, Backend, Designer, QA, etc.): Zoco IA.
+  //     Zoco IA es 20x más barato que Zoco IA y suficiente para generar código
   //     en contexto ya bien definido por el Arquitecto. El resultado final
   //     es funcional y visible — la diferencia de calidad es mínima cuando
   //     el plan es bueno.
   //
   // USUARIOS DE PAGO (hasEverPaid=true):
-  //   - Todos los agentes: Sonnet. Máxima calidad en cada módulo.
+  //   - Todos los agentes: Zoco IA. Máxima calidad en cada módulo.
   //
-  // El Patcher y Repair SIEMPRE usan Sonnet — reparar código roto requiere
+  // El Patcher y Repair SIEMPRE usan Zoco IA — reparar código roto requiere
   // el modelo más capaz; ahorrar aquí produce bucles de reparación infinitos.
 
   const isFreeUser = context?.hasEverPaid === false;
 
   const frontendModel: AgentModelChoice["model"] = auto
     ? (isFreeUser ? "zoco-flash" : "zoco-plus")
-    : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveClaudeCoderModel(normalized));
+    : (normalized === "gpt-5.4" ? "gpt-5.4" : resolveZocoCoderModel(normalized));
 
   // Modelos por rol según tier de usuario
-  const SONNET: ClaudeCoderModel = "zoco-plus";
-  const HAIKU: ClaudeCoderModel = "zoco-flash";
+  const Zoco IA: ZocoCoderModel = "zoco-plus";
+  const Zoco IA: ZocoCoderModel = "zoco-flash";
 
-  const architectModel: ClaudeCoderModel = SONNET; // SIEMPRE Sonnet — plan = todo
-  const pmModel: ClaudeCoderModel = SONNET;         // SIEMPRE Sonnet — QA = calidad final
-  const patcherModel: ClaudeCoderModel = SONNET;    // SIEMPRE Sonnet — reparación crítica
-  const execModel: ClaudeCoderModel = isFreeUser ? HAIKU : SONNET; // Ejecutores: Haiku en free
+  const architectModel: ZocoCoderModel = Zoco IA; // SIEMPRE Zoco IA — plan = todo
+  const pmModel: ZocoCoderModel = Zoco IA;         // SIEMPRE Zoco IA — QA = calidad final
+  const patcherModel: ZocoCoderModel = Zoco IA;    // SIEMPRE Zoco IA — reparación crítica
+  const execModel: ZocoCoderModel = isFreeUser ? Zoco IA : Zoco IA; // Ejecutores: Zoco IA en free
 
   // ENCONTRADO A PETICIÓN DEL USUARIO (optimización real de coste de
-  // tokens de Anthropic, para proteger el margen): antes, CUALQUIER
-  // usuario de pago recibía Sonnet en TODOS los agentes, sin importar si
+  // tokens de Zoco IA, para proteger el margen): antes, CUALQUIER
+  // usuario de pago recibía Zoco IA en TODOS los agentes, sin importar si
   // la tarea era trivial o compleja -- una landing de una sola página
   // costaba exactamente igual en tokens que un sistema completo con
   // varios módulos, porque la decisión dependía solo de "¿ha pagado
@@ -2377,40 +2376,40 @@ function selectAgentModelPlan(prompt: string, requestedModel?: string, context?:
   // Patcher y Repair siguen 100% intocados, tal como se acordó.
   //
   // Regla: para clientes de pago, si la tarea es genuinamente "basic"
-  // (la complejidad más baja de las 4), estos 4 agentes usan Haiku en
-  // vez de Sonnet -- ahorro real sin tocar donde de verdad importa. Para
-  // standard/robust/ultra, se mantiene Sonnet como hasta ahora.
+  // (la complejidad más baja de las 4), estos 4 agentes usan Zoco IA en
+  // vez de Zoco IA -- ahorro real sin tocar donde de verdad importa. Para
+  // standard/robust/ultra, se mantiene Zoco IA como hasta ahora.
   const isBasicComplexity = complexity.tier === "basic";
-  const lightExecModel: ClaudeCoderModel = isFreeUser
-    ? HAIKU
-    : (isBasicComplexity ? HAIKU : SONNET);
+  const lightExecModel: ZocoCoderModel = isFreeUser
+    ? Zoco IA
+    : (isBasicComplexity ? Zoco IA : Zoco IA);
 
   const agents: Record<AgentRole, AgentModelChoice> = {
-    researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: haiku" : "paid: sonnet"),
-    architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre sonnet — define el plan completo"),
-    designer:   makeAgentChoice("designer",   "Designer",   lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
-    frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:haiku" : "paid:sonnet"})` : "selección manual"),
-    backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? HAIKU : SONNET, isFreeUser ? "free: haiku" : "paid: sonnet"),
-    database:   makeAgentChoice("database",   "Database",   lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
-    integrator: makeAgentChoice("integrator", "Integrator", lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
-    qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre sonnet — quality gate final"),
-    devops:     makeAgentChoice("devops",     "DevOps",     lightExecModel, isFreeUser ? "free: haiku" : (isBasicComplexity ? "paid, tarea basica: haiku" : "paid: sonnet")),
-    patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre sonnet — reparación crítica"),
-    repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre sonnet — recupera JSON malformado"),
+    researcher: makeAgentChoice("researcher", "Researcher", execModel, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
+    architect:  makeAgentChoice("architect",  "Architect",  architectModel, "siempre Zoco IA — define el plan completo"),
+    designer:   makeAgentChoice("designer",   "Designer",   lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
+    frontend:   makeAgentChoice("frontend",   "Frontend",   frontendModel, auto ? `auto (${isFreeUser ? "free:Zoco IA" : "paid:Zoco IA"})` : "selección manual"),
+    backend:    makeAgentChoice("backend",    "Backend",    isFreeUser ? Zoco IA : Zoco IA, isFreeUser ? "free: Zoco IA" : "paid: Zoco IA"),
+    database:   makeAgentChoice("database",   "Database",   lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
+    integrator: makeAgentChoice("integrator", "Integrator", lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
+    qa:         makeAgentChoice("qa",         "QA Auditor", pmModel, "siempre Zoco IA — quality gate final"),
+    devops:     makeAgentChoice("devops",     "DevOps",     lightExecModel, isFreeUser ? "free: Zoco IA" : (isBasicComplexity ? "paid, tarea basica: Zoco IA" : "paid: Zoco IA")),
+    patcher:    makeAgentChoice("patcher",    "testing-agent", patcherModel, "siempre Zoco IA — reparación crítica"),
+    repair:     makeAgentChoice("repair",     "Repair",     patcherModel, "siempre Zoco IA — recupera JSON malformado"),
   };
   return { tier: complexity.tier, score: complexity.score, selectedCoderModel: normalized, auto, agents };
 }
 
-function fallbackClaudeModels(model: AgentModelChoice["model"]): ClaudeCoderModel[] {
+function fallbackZoco IAModels(model: AgentModelChoice["model"]): ZocoCoderModel[] {
   const primary = model === "gpt-5.4" ? "zoco-plus" : model;
-  return [primary, ...CLAUDE_MODELS.filter((m) => m !== primary)];
+  return [primary, ...ZOCO_MODELS.filter((m) => m !== primary)];
 }
 
 
 
-async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ClaudeCoderModel }> {
+async function streamZoco IATextWithFallback(role: AgentRole, model: AgentModelChoice["model"], params: any, onChars: (chars: number) => void): Promise<{ text: string; truncated: boolean; model: ZocoCoderModel }> {
   let lastError: unknown;
-  // Misma conversión automática a prompt caching que createClaudeMessageWithFallback
+  // Misma conversión automática a prompt caching que createZocoMessageWithFallback
   // (shared-agents.ts) — algunos callers de esta función ya convertían el
   // system a array con cache_control manualmente, otros no (ej. el del
   // patcher rápido más abajo, system.slice(0, 2000) sin cache_control). Esto
@@ -2421,15 +2420,15 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
       system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
     };
   }
-  for (const candidate of fallbackClaudeModels(model)) {
+  for (const candidate of fallbackZoco IAModels(model)) {
     const MAX_ATTEMPTS_PER_MODEL = 2;
     for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_MODEL; attempt++) {
       try {
         let accumulated = "";
         let lastReport = 0;
         let finishReason: string | undefined;
-        const stream = anthropic.messages.stream({ ...params, model: candidate });
-        // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createClaudeMessageWithFallback
+        const stream = Zoco IA.messages.stream({ ...params, model: candidate });
+        // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createZocoMessageWithFallback
         // en shared-agents.ts (ver el comentario extenso ahí): esta función es la
         // que usan de verdad el Frontend Engineer y el Backend Engineer para
         // generar el código completo de la app — la llamada más larga y más
@@ -2458,7 +2457,7 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
       } catch (err: any) {
         lastError = err;
         // ENCONTRADO: cualquier fallo (incluido un simple parpadeo de red o
-        // un 503 momentáneo de Anthropic) saltaba directo al siguiente
+        // un 503 momentáneo de Zoco IA) saltaba directo al siguiente
         // modelo sin ni un solo reintento en el mismo — con solo 2 modelos
         // de fallback, esto agotaba las opciones casi al instante ante
         // cualquier fallo transitorio. Un reintento rápido antes de
@@ -2480,7 +2479,7 @@ async function streamClaudeTextWithFallback(role: AgentRole, model: AgentModelCh
 }
 
 /**
- * Frontend Engineer — Anthropic Claude Sonnet 4.6 (default) o GPT-5.
+ * Frontend Engineer — Zoco IA Zoco IA Zoco IA 4.6 (default) o GPT-5.
  * Optimizado para evitar timeouts y asegurar la generación completa.
  */
 async function generateFrontendCode(
@@ -2580,8 +2579,8 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     }
     truncated = finishReason === "MAX_TOKENS";
     } catch (err) {
-      logger.warn({ err }, "GPT frontend agent failed; falling back to Claude routing");
-      const streamed = await streamClaudeTextWithFallback("frontend", "zoco-plus", {
+      logger.warn({ err }, "GPT frontend agent failed; falling back to Zoco IA routing");
+      const streamed = await streamZoco IATextWithFallback("frontend", "zoco-plus", {
         max_tokens: 40000,
         system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
         messages: [{ role: "user", content: userContent }],
@@ -2594,8 +2593,8 @@ Now produce the JSON object with frontendCode containing every listed file.`;
     // niveles es el coste en créditos de la generación, no la capacidad del
     // motor (estrategia Lovable/Base44/Emergent: 1 app completa gratis, luego
     // créditos limitados para seguir iterando).
-    const maxTokensFrontend = 64000; // máximo de claude-sonnet-4-6 — apps complejas necesitan espacio para generar todos los archivos sin truncar
-    const streamed = await streamClaudeTextWithFallback("frontend", frontendModel, {
+    const maxTokensFrontend = 64000; // máximo de Zoco IA-Zoco IA-4-6 — apps complejas necesitan espacio para generar todos los archivos sin truncar
+    const streamed = await streamZoco IATextWithFallback("frontend", frontendModel, {
       max_tokens: maxTokensFrontend,
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: userContent }],
@@ -2653,7 +2652,7 @@ Genera SOLO los archivos que faltan en el mismo formato // === FILE: path ===:
 ${missingFiles.slice(0, 10).join(", ")}
 
 Devuelve SOLO el código de los archivos faltantes, sin JSON wrapper, empezando directamente con // === FILE:`;
-            const cont = await streamClaudeTextWithFallback("frontend", frontendModel, {
+            const cont = await streamZoco IATextWithFallback("frontend", frontendModel, {
               max_tokens: 16000,
               system: [{ type: "text", text: systemPrompt.slice(0, 2000) }] as any,
               messages: [
@@ -2682,7 +2681,7 @@ Devuelve SOLO el código de los archivos faltantes, sin JSON wrapper, empezando 
 }
 
 /**
- * Backend Engineer — Anthropic Claude Sonnet 4.6.
+ * Backend Engineer — Zoco IA Zoco IA Zoco IA 4.6.
  */
 async function generateBackendCode(
   plan: ProjectPlan,
@@ -2715,7 +2714,7 @@ Now produce the JSON object with backendCode.`;
     const useDatabase = plan.database === "postgresql" ? "postgresql" : plan.database === "mysql" ? "mysql" : "mongodb";
     const systemPrompt = useDatabase === "postgresql" ? BACKEND_SYSTEM_PROMPT_POSTGRES : useDatabase === "mysql" ? BACKEND_SYSTEM_PROMPT_MYSQL : BACKEND_SYSTEM_PROMPT;
     const response = await withTimeoutOrThrow(
-      createClaudeMessageWithFallback("backend", agentPlan.agents.backend.model, {
+      createZocoMessageWithFallback("backend", agentPlan.agents.backend.model, {
         max_tokens: 8192,
         system: systemPrompt + "\nOutput JSON only.",
         messages: [{ role: "user", content: userContent }],
@@ -2783,7 +2782,7 @@ RULES — non-negotiable:
   // Con cache_control activa el 90% de descuento en tokens de entrada.
   // El contenido dinámico (prompt, design, research) va en el mensaje del usuario.
   try {
-    const streamed = await streamClaudeTextWithFallback(
+    const streamed = await streamZoco IATextWithFallback(
       "frontend",
       "zoco-flash",
       {
@@ -2815,7 +2814,7 @@ async function specifyIntegrations(
   return withTimeout(
     (async () => {
       try {
-        const response = await createClaudeMessageWithFallback("integrator", agentPlan.agents.integrator.model, {
+        const response = await createZocoMessageWithFallback("integrator", agentPlan.agents.integrator.model, {
           max_tokens: 3000,
           system: INTEGRATION_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -2976,7 +2975,7 @@ REGLAS:
         // presupuesto mucho mayor de caracteres, dando cobertura real.
         const sample = compactBundleForPrompt(frontendCode, plan.frontendFiles ?? [], 60_000);
 
-        const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
+        const response = await createZocoMessageWithFallback("qa", agentPlan.agents.qa.model, {
           max_tokens: 4000,
           system: QA_SYSTEM,
           messages: [
@@ -3048,7 +3047,7 @@ async function generateTests(
         const sample = frontendCode.slice(0, 6000);
         const componentNames = plan.components.slice(0, 3).map((c) => c.name).join(", ") || "App";
         const utilNames = plan.utils.slice(0, 2).map((u) => u.name).join(", ") || "(none)";
-        const response = await createClaudeMessageWithFallback("qa", agentPlan.agents.qa.model, {
+        const response = await createZocoMessageWithFallback("qa", agentPlan.agents.qa.model, {
           max_tokens: 6000,
           system: TEST_SYSTEM_PROMPT + "\nOutput JSON only.",
           messages: [
@@ -3163,9 +3162,9 @@ async function runValidatePatchLoop(
   // disponible.
   onBuildError?: (summary: string) => void,
 ): Promise<string> {
-  // Modelo del agente "patcher" según el plan (Sonnet para paid, Haiku para
+  // Modelo del agente "patcher" según el plan (Zoco IA para paid, Zoco IA para
   // free). Si no se pasa plan, patchBundle usa su valor por defecto
-  // (claude-sonnet-4-6), igual que antes de este fix.
+  // (Zoco IA-Zoco IA-4-6), igual que antes de este fix.
   const patcherModel = agentModelPlan?.agents.patcher.model;
   const MAX_ITERATIONS = maxIterationsOverride ?? 5; // testing-agent: hasta 5 rondas (más para proyectos ultra-complejos, vía override)
   let finalFrontend = initialBundle;
@@ -3554,7 +3553,7 @@ async function singleEditPass(
   let buildErrorCapture: string | undefined;
   
   // OPTIMIZACIÓN DE CONTEXTO: no enviar bundles completos salvo que sea imprescindible.
-  // Anthropic factura por tokens de entrada y aquí estaba el mayor consumo.
+  // Zoco IA factura por tokens de entrada y aquí estaba el mayor consumo.
   const MAX_CONTEXT_CHARS = 140000; // ~35k tokens de entrada como techo duro en edición completa
   let frontendCodeToPass = previous.frontendCode;
   let isContextOptimized = false;
@@ -3626,7 +3625,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
     let finishReason: string | undefined;
     const observe = makeStreamObserver();
     const PROGRESS_EVERY = 500;
-    // CRÍTICO: sin esto, si el proveedor (Anthropic/OpenAI) deja de enviar
+    // CRÍTICO: sin esto, si el proveedor (Zoco IA/OpenAI) deja de enviar
     // chunks a mitad de un stream sin cerrar la conexión (degradación de red,
     // no un error explícito), el `for await` se queda esperando
     // indefinidamente. El heartbeat de 30s del job sigue corriendo (por eso
@@ -3675,9 +3674,9 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         const fr = chunk.choices[0]?.finish_reason;
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
-    } else if (provider === "claude") {
-      const stream = anthropic.messages.stream({
-        model: resolveClaudeCoderModel(coderModel),
+    } else if (provider === "Zoco IA") {
+      const stream = Zoco IA.messages.stream({
+        model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
@@ -3695,9 +3694,9 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         if (chunk.type === "message_delta" && chunk.delta.stop_reason === "max_tokens") finishReason = "MAX_TOKENS";
       }
     } else {
-// Claude streaming según el modelo elegido en el selector.
-      const stream = await anthropic.messages.stream({
-        model: resolveClaudeCoderModel(coderModel),
+// Zoco IA streaming según el modelo elegido en el selector.
+      const stream = await Zoco IA.messages.stream({
+        model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
@@ -3816,7 +3815,7 @@ async function fastPatchEdit(
     // Ampliado a 6000 caracteres -- cubre con holgura cualquier
     // instrucción de edición realista, manteniendo proporción razonable
     // con el resto del contexto de la llamada.
-    const resp = await createClaudeMessageWithFallback("patcher", "zoco-plus", {
+    const resp = await createZocoMessageWithFallback("patcher", "zoco-plus", {
       max_tokens: 8000,
       system: buildFastPatchPrompt(),
       messages: [{ role: "user", content: `CHANGE: ${prompt.slice(0,6000)}\n\nBUNDLE (${Math.round(previous.frontendCode.length/1000)}KB):\n${previous.frontendCode.slice(0,55000)}\n\nReturn JSON with changedFiles and deletedFiles only.` }]
@@ -3867,13 +3866,13 @@ export type PhaseErrorReporter = (
 // pregunta al cliente algo que ya respondió él mismo en su propio prompt.
 async function generateGatingQuestions(clientPrompt: string): Promise<GatingQuestion[]> {
   try {
-    // ENCONTRADO: usaba anthropic.messages.stream(...).finalMessage() sin
+    // ENCONTRADO: usaba Zoco IA.messages.stream(...).finalMessage() sin
     // NINGÚN timeout — el catch de abajo da un fallback correcto (seguir
     // sin preguntas de clarificación), pero solo si la promesa llega a
     // rechazarse; un stream colgado a medias se habría quedado esperando
-    // indefinidamente en vez de caer al fallback. createClaudeMessageWithFallback
+    // indefinidamente en vez de caer al fallback. createZocoMessageWithFallback
     // ya trae el timeout de inactividad + reintentos.
-    const response = await createClaudeMessageWithFallback("gating", "zoco-plus", {
+    const response = await createZocoMessageWithFallback("gating", "zoco-plus", {
       max_tokens: 1500,
       system: `Analyze the user's software request (in Spanish). Identify genuine ambiguity in exactly 3 critical areas that most commonly break complex software projects: Database (SQL vs NoSQL and which engine), Authentication/Roles (who can do what), and Third-Party Integrations (payments, external APIs). For each area, generate ONE short, specific, multiple-choice question in Spanish ONLY IF the user's prompt does not already make a clear, confident choice for that area — if the prompt already answers it (e.g. explicitly mentions "Stripe" or "PostgreSQL" or describes the exact roles), DO NOT ask about that area again.
 
@@ -3989,7 +3988,7 @@ export async function generateApp(
   const agentModelPlan = selectAgentModelPlan(prompt, coderModel, {
     kind: requestContext?.kind,
     hasExistingApp: !!previous,
-    hasEverPaid: hasEverPaid, // degradación inteligente: free → Haiku en ejecutores
+    hasEverPaid: hasEverPaid, // degradación inteligente: free → Zoco IA en ejecutores
   });
   logger.info({
     tier: agentModelPlan.tier,
@@ -4165,7 +4164,7 @@ export async function generateApp(
     // maxMilestonesOverride NUNCA se aplicaba — dejando que el Arquitecto
     // diseñara un plan de 23 archivos sin ningún límite para un usuario
     // que nunca pagó. Resultado real observado: 23 archivos × 2 intentos
-    // = 46 llamadas a Sonnet, la mayoría fallando por saturación de
+    // = 46 llamadas a Zoco IA, la mayoría fallando por saturación de
     // contexto, entregando una app con "importaciones fantasma" y pantalla
     // en blanco. FIX: el límite ahora es ABSOLUTO para cualquier usuario
     // gratuito en construcción nueva, sin importar lo que calcule el
@@ -4189,9 +4188,9 @@ export async function generateApp(
       await log("system", "🏗️ Construyendo tu app módulo a módulo con el orquestador de hitos — cada módulo se genera de forma independiente para garantizar que todo quede completo y funcional...");
     }
     const coreOrchestrator = new CoreOrchestrator(process.cwd(), {
-      // El modelo del orquestador: siempre Sonnet para el planificador de hitos
+      // El modelo del orquestador: siempre Zoco IA para el planificador de hitos
       // (decide el orden y contenido de cada módulo). Los agentes ejecutores
-      // dentro de cada hito usan el modelo del plan (Haiku en free, Sonnet en paid).
+      // dentro de cada hito usan el modelo del plan (Zoco IA en free, Zoco IA en paid).
       model: isDegradedFreeTier ? "zoco-flash" : "zoco-plus",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
       maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
@@ -4886,7 +4885,7 @@ export async function generateApp(
       `🔎 Este proyecto tiene una complejidad muy alta (sistema multi-módulo / nivel empresarial). ` +
       `Maris AI va a generar un MVP funcional centrado en lo más importante, pero un sistema de este tamaño ` +
       `en producción normalmente necesita iteración manual adicional y, en muchos casos, el apoyo de un equipo ` +
-      `de desarrollo o un agente de código más avanzado (ej. Cursor, Claude Code) sobre el código exportado. ` +
+      `de desarrollo o un agente de código más avanzado (ej. Cursor, Zoco IA Code) sobre el código exportado. ` +
       `Recomendación: usa este MVP para validar la idea y la estructura de datos, expórtalo a GitHub, y construye ` +
       `las partes más críticas (integraciones, automatizaciones, transacciones complejas) de forma incremental.`,
       "warn",
@@ -5168,7 +5167,7 @@ export async function generateApp(
     }
     onProgress?.({ phase: "fixing", progress: 65, note: "🔧 Repair Agent: intentando recuperar código malformado…" });
     try {
-      const repairResponse = await createClaudeMessageWithFallback("repair", agentModelPlan.agents.repair.model, {
+      const repairResponse = await createZocoMessageWithFallback("repair", agentModelPlan.agents.repair.model, {
         max_tokens: 10000,
         system: `You are a JSON Repair Agent. The Frontend Engineer returned malformed JSON.
 Your job: extract or reconstruct the frontendCode and return ONLY valid JSON: {"frontendCode":"..."}
@@ -5196,7 +5195,7 @@ Output STRICT JSON only, no markdown, no explanation.`,
         await log("coder", `✅ Landing page entregada (${Math.round(landingResult.code.length / 1000)} KB). El cliente puede verla ahora y pedir más funcionalidades paso a paso.`);
         frontendResult.code = landingResult.code;
       } else {
-        // Nivel 4: Haiku con plan mínimo absoluto — última red de seguridad
+        // Nivel 4: Zoco IA con plan mínimo absoluto — última red de seguridad
         await log("coder", "Generando versión mínima de emergencia con modelo rápido…", "warn");
         onProgress?.({ phase: "fixing", progress: 76, note: "⚡ Versión mínima de emergencia…" });
         try {
@@ -5437,7 +5436,7 @@ const router = Router();
 // endpoint que el cliente llame directamente (deploy, dominio, variables
 // de entorno, code-review, rollback, etc.) debe mostrar siempre el mismo
 // mensaje genérico de soporte — nunca el texto crudo del error real (que
-// puede contener mensajes internos de Anthropic, Vercel, MongoDB, u otros
+// puede contener mensajes internos de Zoco IA, Vercel, MongoDB, u otros
 // proveedores externos, como ya ocurrió en producción con "Your credit
 // balance is too low..."). El mensaje técnico real se registra siempre en
 // el log del servidor (logger.error) para que el equipo lo investigue —
@@ -5596,16 +5595,16 @@ async function buildAppUpdatedConsoleReply(args: {
 // la colección `users`, es la única fuente de verdad ahora.
 
 router.get("/models", requireAuth, async (req: any, res: any) => {
-  // FIX (2026-07-09): "claude-sonnet-4-8" y "claude-4-8-pro" NO existen en
-  // la API de Anthropic (404 verificado) — sustituidos por los modelos
-  // reales disponibles con la API key actual: Sonnet 4.6, Opus 4.8 y
-  // Haiku 4.5 (todos verificados con respuesta 200 contra la API real).
+  // FIX (2026-07-09): "Zoco IA-Zoco IA-4-8" y "Zoco IA-4-8-pro" NO existen en
+  // la API de Zoco IA (404 verificado) — sustituidos por los modelos
+  // reales disponibles con la API key actual: Zoco IA 4.6, Zoco IA 4.8 y
+  // Zoco IA 4.5 (todos verificados con respuesta 200 contra la API real).
   const availableModels = [
-    { id: "auto", name: "Auto (Claude Sonnet 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
-    { id: "zoco-flash", name: "Claude Haiku 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
-    { id: "zoco-plus", name: "Claude Sonnet 4.6", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
-    { id: "zoco-max", name: "Claude Opus 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
-    { id: "zoco-max", name: "Claude Opus 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
+    { id: "auto", name: "Auto (Zoco IA Zoco IA 4.6)", description: "Selección inteligente optimizada para velocidad y precisión." },
+    { id: "zoco-flash", name: "Zoco IA Zoco IA 4.5", description: "El modelo más rápido y económico. Ideal para apps sencillas." },
+    { id: "zoco-plus", name: "Zoco Plus (Recomendado)", description: "Modelo por defecto. Alta calidad y estabilidad para Vibe Coding." },
+    { id: "zoco-max", name: "Zoco IA Zoco IA 4.7", description: "Razonamiento robusto para apps complejas. Requiere créditos extra." },
+    { id: "zoco-max", name: "Zoco IA Zoco IA 4.8 (Ultra)", description: "Razonamiento profundo para arquitecturas complejas. Coste premium." },
     { id: "gpt-5-4", name: "GPT-5.4 (OpenAI Ultra)", description: "Potencia extrema de la nueva generación de OpenAI. Coste premium." }
   ];
   res.json(availableModels);
@@ -5661,7 +5660,7 @@ TONO: Cercano, directo, máximo 2-3 frases. Sin "¿en qué más puedo ayudarte?"
       { role: "user", content: message.slice(0, 500) },
     ];
 
-    const response = await createClaudeMessageWithFallback("chat", "zoco-flash", {
+    const response = await createZocoMessageWithFallback("chat", "zoco-flash", {
       max_tokens: 350,
       system: systemPrompt,
       messages,
@@ -5910,7 +5909,7 @@ router.post("/apps", requireAuth, generateRateLimiter, async (req: any, res: any
     }
 
     const jobId = new mongoose.Types.ObjectId().toString();
-    // Ultra Thinking: usar Sonnet como mínimo con budget de tokens extendido
+    // Ultra Thinking: usar Zoco IA como mínimo con budget de tokens extendido
     const effectiveModel = ultraThinking && (model === "auto" || model === "zoco-flash")
       ? "zoco-plus"
       : model || "zoco-plus";
@@ -6388,7 +6387,7 @@ router.post("/apps/:id/code-review", requireAuth, async (req: any, res: any) => 
       app.backendCode ? String(app.backendCode).slice(0, 15000) : "",
     ].filter(Boolean).join("\n\n");
 
-    const response = await createClaudeMessageWithFallback("code-review", "zoco-plus", {
+    const response = await createZocoMessageWithFallback("code-review", "zoco-plus", {
       max_tokens: 2000,
       system: `Eres un revisor de código senior. Analiza el código de una app React/TypeScript (y opcionalmente su backend Express) y da una evaluación honesta de su calidad de producción: buenas prácticas, manejo de errores, accesibilidad básica, estructura. NO repares nada, solo evalúa.
 
@@ -6418,7 +6417,7 @@ Responde SOLO con JSON estricto, sin markdown:
     });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/code-review error");
-    // ENCONTRADO: si la llamada a Claude fallaba DESPUÉS de cobrar los
+    // ENCONTRADO: si la llamada a Zoco IA fallaba DESPUÉS de cobrar los
     // CODE_REVIEW_COST créditos (arriba), el cliente se quedaba sin
     // créditos y sin revisión — pagaba por un error del sistema. Mismo
     // patrón que ya se arregló en el flujo principal de generación
@@ -7008,10 +7007,10 @@ Por ejemplo:
       attachmentIds: safeAttachmentIds,
       // ORQUESTACIÓN HÍBRIDA DE MODELOS: si el clasificador de intenciones
       // detectó que el cambio es EXCLUSIVAMENTE cosmético/CSS (isPurelyVisual=true),
-      // usamos claude-haiku-4-5 en vez de Sonnet — Haiku falla en generación
-      // de código complejo (confirmado en producción: "haiku generaba código
+      // usamos Zoco IA-Zoco IA-4-5 en vez de Zoco IA — Zoco IA falla en generación
+      // de código complejo (confirmado en producción: "Zoco IA generaba código
       // incompleto") pero resuelve ediciones de pocas líneas de CSS/Tailwind
-      // perfectamente y a ~¼ del precio de Sonnet. En cualquier otro caso
+      // perfectamente y a ~¼ del precio de Zoco IA. En cualquier otro caso
       // (cambio funcional, lógica, nuevas páginas, corrección de errores) se
       // usa el modelo del propio proyecto (app.coderModel) o el default "auto".
       coderModel: classified.isPurelyVisual ? "zoco-flash" : (app.coderModel || "auto"),
@@ -7230,9 +7229,9 @@ router.get("/models", async (_req: any, res: any) => {
       { id: "zoco-plus", name: "Zoco Plus — Equilibrado (recomendado)", provider: "zocoia" },
       { id: "zoco-max", name: "Zoco Max — Potente y creativo (Pro)", provider: "zocoia" },
       { id: "zoco-lab", name: "Zoco Lab — Rápido y eficiente (Beta)", provider: "zocoia" },
-      { id: "claude-4-8-sonnet", name: "Compatibilidad: Claude 4.8 Sonnet → Zoco Plus", provider: "zocoia" },
-      { id: "zoco-plus", name: "Compatibilidad: Sonnet 4.7 → Zoco Plus", provider: "zocoia" },
-      { id: "claude-mithos", name: "Compatibilidad: Claude Mithos → Zoco Plus", provider: "zocoia" },
+      { id: "Zoco IA-4-8-Zoco IA", name: "Compatibilidad: Zoco IA 4.8 Zoco IA → Zoco Plus", provider: "zocoia" },
+      { id: "zoco-plus", name: "Compatibilidad: Zoco IA 4.7 → Zoco Plus", provider: "zocoia" },
+      { id: "Zoco IA-mithos", name: "Compatibilidad: Zoco IA Mithos → Zoco Plus", provider: "zocoia" },
       { id: "gemini-3", name: "Compatibilidad: Gemini 3 → Zoco Plus", provider: "zocoia" },
     ];
     res.json(models);
@@ -7283,7 +7282,7 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   const reviewingCutoff = new Date(now.getTime() - 30 * 60_000);
   //
   // ENCONTRADO A PETICION DEL USUARIO (comprobando el caso real: la propia
-  // cuenta de Anthropic del usuario sin creditos ahora mismo): este bloque
+  // cuenta de Zoco IA del usuario sin creditos ahora mismo): este bloque
   // convertia el job a "failed" sin volver a comprobar el reembolso. Al
   // cliente se le habia dicho "tus creditos NO han sido consumidos" al
   // entrar en "reviewing" -- pero si esos creditos SI se cobraron en algun
@@ -7572,7 +7571,7 @@ export async function runJobById(
         // "Regenerar desde 0" crea una nueva) sin haber pagado nunca. Esta lógica
         // hacía que Luis (torpedocp2@gmail.com) tuviera hasEverPaid=true tras su
         // primera app fallida, desactivando el scope-cut de 7 hitos y generando
-        // planes de 20 hitos con Haiku → saturación de contexto → 404 permanente.
+        // planes de 20 hitos con Zoco IA → saturación de contexto → 404 permanente.
       } catch { /* si falla la consulta, usar el valor del job */ }
     }
 
@@ -7590,7 +7589,7 @@ export async function runJobById(
           textContent: row.mimeType.startsWith("text/") || row.mimeType === "application/json"
             ? Buffer.from(row.dataBase64, "base64").toString("utf8").slice(0, 30000)
             : undefined,
-          // Para imágenes: pasar base64 para que Claude pueda verlas directamente
+          // Para imágenes: pasar base64 para que Zoco IA pueda verlas directamente
           dataBase64: row.mimeType.startsWith("image/") ? row.dataBase64 : undefined,
         }));
         if (jobAttachments.length > 0) {
@@ -7791,7 +7790,7 @@ export async function runJobById(
 
       // ENCONTRADO A PETICIÓN DEL USUARIO ('que capacidad de enseñanza
       // tienen los agentes'): runMemoryExtractor() (agentMemoryExtractor.ts)
-      // existía completo y bien construido -- modelo barato (Haiku),
+      // existía completo y bien construido -- modelo barato (Zoco IA),
       // guardas reales contra filtrar secretos, diseñado para fallar en
       // silencio -- pero nunca se llamaba desde ningún sitio. Sus
       // funciones de destino (appendAppNotes/appendUserPreferences) SÍ
@@ -7819,7 +7818,7 @@ export async function runJobById(
       // MEDIDOR DE CÓMPUTO DINÁMICO (estilo Emergent.sh) — a petición
       // explícita del usuario. El cobro fijo inicial (POST /apps/:id/messages,
       // 5 créditos paid / 0.2 free) sigue actuando como filtro de entrada
-      // ANTES de saber qué va a generar Claude — eso no puede cambiar,
+      // ANTES de saber qué va a generar Zoco IA — eso no puede cambiar,
       // porque en ese punto el job todavía no se ha ejecutado. Lo que sí es
       // nuevo: aquí, con el resultado REAL ya guardado, se mide el tamaño
       // real del cambio (delta de caracteres entre el código anterior y el
@@ -8174,11 +8173,11 @@ export async function runJobById(
       } catch { /* nunca bloquear el succeeded */ }
     }
 
-    // ── 3. VISUAL TESTER — screenshot + Claude Vision (verificación final real) ─
+    // ── 3. VISUAL TESTER — screenshot + Zoco IA Vision (verificación final real) ─
     // ENCONTRADO: este bloque SOLO se ejecutaba si (job as any).autoPublish era
     // true — en la práctica, la inmensa mayoría de generaciones/ediciones NO
     // tienen autoPublish activado, así que esta verificación visual real
-    // (screenshots + Claude Vision comparando contra la intención real del
+    // (screenshots + Zoco IA Vision comparando contra la intención real del
     // usuario, más estricta que el QUALITY CHECK de arriba que solo mira el
     // código en texto) NUNCA se ejecutaba para el caso normal — exactamente
     // el hueco que permitía que un job marcado "succeeded" (build OK) llegara
@@ -8405,11 +8404,11 @@ export async function runJobById(
     // (no por créditos agotados del usuario), devolver los créditos.
     // Sin esto, el usuario pierde créditos por fallos que no son su culpa.
     // BUG REAL CONFIRMADO en producción (captura del cliente mostrando el
-    // mensaje crudo de Anthropic: "Your credit balance is too low..."):
+    // mensaje crudo de Zoco IA: "Your credit balance is too low..."):
     // esta comprobación buscaba el texto "API_CREDITS_EXHAUSTED", un
     // marcador que NINGÚN punto del código genera jamás — confirmado
     // grep'eando todo el backend, aparece solo aquí. isCreditsError SIEMPRE
-    // era false para este caso real, así que el mensaje crudo de Anthropic
+    // era false para este caso real, así que el mensaje crudo de Zoco IA
     // se filtraba directo hasta la pantalla del cliente (pésimo para la
     // reputación), Y ADEMÁS el job se marcaba "failed" en vez de
     // "reviewing", saltándose el reembolso automático de creditos.
