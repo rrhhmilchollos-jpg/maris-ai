@@ -5745,12 +5745,29 @@ REGLAS:
 - "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
 - Devuelve ÚNICAMENTE el JSON. Nada más.`;
 
-    const { data } = await axios.post('http://clone-of-zocoia-backend-l6i75r1nagv09vv8203f1oci:8080/api/chat', {
+    const response = await axios.post('http://clone-of-zocoia-backend-l6i75r1nagv09vv8203f1oci:8080/api/chat', {
       message: `${PLAN_PREVIEW_SYSTEM}\n\nUser prompt: ${prompt}`,
       model: "Zoco-Plus:latest"
     });
 
-    return res.json(data);
+    // Zoco IA suele devolver la respuesta en response.data.content o response.data.response
+    const rawContent = response.data?.content || response.data?.response || response.data || "";
+    const raw = typeof rawContent === "string" ? rawContent.trim() : JSON.stringify(rawContent);
+
+    // Extraer JSON robustamente por si viene envuelto en markdown o texto extra
+    const first = raw.indexOf("{");
+    const last = raw.lastIndexOf("}");
+    
+    if (first === -1 || last === -1) {
+      logger.error({ raw }, "plan-preview: No se encontró JSON en la respuesta de Zoco");
+      return res.status(500).json({ error: "Respuesta inválida de la IA" });
+    }
+
+    const planJson = raw.slice(first, last + 1);
+    const plan = JSON.parse(planJson);
+
+    // Formato esperado por el frontend de Maris AI
+    return res.json({ ok: true, plan });
   } catch (err: any) {
     logger.error({ err }, "plan-preview error");
     return res.status(500).json({ error: "Error en el puente de los agentes de Zoco" });
