@@ -1,5 +1,5 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
@@ -2428,7 +2428,7 @@ async function streamZocoTextWithFallback(role: AgentRole, model: AgentModelChoi
         let accumulated = "";
         let lastReport = 0;
         let finishReason: string | undefined;
-        const stream = anthropic.messages.stream({ ...params, model: candidate });
+        const stream = zocoia.messages.stream({ ...params, model: candidate });
         // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createZocoMessageWithFallback
         // en shared-agents.ts (ver el comentario extenso ahí): esta función es la
         // que usan de verdad el Frontend Engineer y el Backend Engineer para
@@ -3676,7 +3676,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
         if (fr === "length") finishReason = "MAX_TOKENS";
       }
     } else if (provider === "zoco") {
-      const stream = anthropic.messages.stream({
+      const stream = zocoia.messages.stream({
         model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
         system: systemPrompt,
@@ -3696,7 +3696,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
       }
     } else {
 // Zoco IA streaming según el modelo elegido en el selector.
-      const stream = await anthropic.messages.stream({
+      const stream = await zocoia.messages.stream({
         model: resolveZocoCoderModel(coderModel),
         max_tokens: 20000,
         system: systemPrompt,
@@ -3867,7 +3867,7 @@ export type PhaseErrorReporter = (
 // pregunta al cliente algo que ya respondió él mismo en su propio prompt.
 async function generateGatingQuestions(clientPrompt: string): Promise<GatingQuestion[]> {
   try {
-    // ENCONTRADO: usaba anthropic.messages.stream(...).finalMessage() sin
+    // ENCONTRADO: usaba zocoia.messages.stream(...).finalMessage() sin
     // NINGÚN timeout — el catch de abajo da un fallback correcto (seguir
     // sin preguntas de clarificación), pero solo si la promesa llega a
     // rechazarse; un stream colgado a medias se habría quedado esperando
