@@ -1,69 +1,96 @@
-import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 import Anthropic from "@anthropic-ai/sdk";
 
 // ─────────────────────────────────────────────────────────────────────────
-// CONEXIÓN EXCLUSIVA A ZOCO IA
+// CONEXIÓN NATIVA A CLAUDE (ANTHROPIC)
 //
-// Este cliente ya NO se conecta a la API nativa de Anthropic. Todo el
-// pipeline multi-agente de Maris AI (Researcher, Architect, Designer,
-// Frontend, Backend, QA, Patcher, Repair...) viaja por el endpoint de
-// Zoco IA, autenticado y firmado con la API Key de la organización
-// (sk-zoco-...), que se gestiona desde el "Almacén de credenciales" del
-// Dashboard de zocoia.
+// Este cliente se conecta directamente a la API oficial de Anthropic
+// (https://api.anthropic.com). Todo el pipeline multi-agente de Maris AI
+// (Researcher, Architect, Designer, Frontend, Backend, QA, Patcher,
+// Repair...) usa los modelos Claude de forma nativa.
 //
-// Variables de entorno (Coolify):
-//   ZOCOIA_API_URL — base URL del backend de Zoco IA (por defecto: https://zocoia.es)
-//   ZOCOIA_API_KEY — API Key de Zoco IA (sk-zoco-...)
+// Variables de entorno (Coolify / Render / Vercel):
+//   ANTHROPIC_API_KEY      — API Key de Anthropic (sk-ant-...)   [OBLIGATORIA]
+//   ANTHROPIC_BASE_URL     — opcional, por defecto https://api.anthropic.com
+//   ANTHROPIC_MODEL_FAST     — opcional, por defecto claude-haiku-4-5
+//   ANTHROPIC_MODEL_STANDARD — opcional, por defecto claude-sonnet-4-5
+//   ANTHROPIC_MODEL_MAX      — opcional, por defecto claude-opus-4-5
 //
-// Compatibilidad: el backend de Zoco IA expone POST /v1/messages con el
-// formato Messages API, por lo que el SDK de Anthropic funciona sin cambios
-// en los consumidores — solo cambia el destino y la credencial.
-//
-// Los nombres antiguos (AI_INTEGRATIONS_ANTHROPIC_*) se aceptan como alias
-// de compatibilidad, pero NO existe ningún fallback automático hacia
-// api.anthropic.com: si falta la configuración de Zoco IA, la llamada falla
-// con un error claro en vez de fugarse a un proveedor externo.
+// Compatibilidad: los alias internos de modelo (zoco-flash, zoco-plus,
+// zoco-max y variantes maris-*) se siguen aceptando en todo el código y se
+// traducen automáticamente al modelo Claude correspondiente mediante
+// resolveClaudeModel(), de modo que ningún consumidor necesita cambios.
 // ─────────────────────────────────────────────────────────────────────────
 
 let _client: Anthropic | null = null;
 
-function getClient(): Anthropic {if (_client) return _client;
+/** Modelos Claude por nivel de capacidad (sobreescribibles por entorno). */
+export const CLAUDE_MODELS = {
+  fast: process.env.ANTHROPIC_MODEL_FAST || "claude-haiku-4-5",
+  standard: process.env.ANTHROPIC_MODEL_STANDARD || "claude-sonnet-4-5",
+  max: process.env.ANTHROPIC_MODEL_MAX || "claude-opus-4-5",
+} as const;
+
+/**
+ * Traduce cualquier alias interno (zoco-*, maris-*, nombres antiguos de
+ * Ollama, etc.) al ID de modelo Claude real. Si ya recibe un ID de Claude
+ * (claude-*), lo devuelve tal cual.
+ */
+export function resolveClaudeModel(model?: string | null): string {
+  const m = (model || "").toLowerCase().trim();
+  if (m.startsWith("claude-")) return model as string;
+
+  // Nivel rápido / económico
+  if (
+    m.includes("flash") ||
+    m.includes("haiku") ||
+    m.includes("mini") ||
+    m.includes("qwen") ||
+    m.includes("llama3") ||
+    m.includes("gemma") ||
+    m.includes("phi")
+  ) {
+    return CLAUDE_MODELS.fast;
+  }
+
+  // Nivel máximo
+  if (
+    m.includes("max") ||
+    m.includes("opus") ||
+    m.includes("deepseek-r1") ||
+    m.includes("r1:") ||
+    m.includes("70b") ||
+    m.includes("405b")
+  ) {
+    return CLAUDE_MODELS.max;
+  }
+
+  // Nivel estándar (zoco-plus, sonnet, deepseek-v3, mixtral, …) y default
+  return CLAUDE_MODELS.standard;
+}
+
+function getClient(): Anthropic {
+  if (_client) return _client;
 
   const apiKey =
-    process.env.ZOCOIA_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
     process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY; // alias de compatibilidad
 
   const rawBaseUrl =
-    process.env.ZOCOIA_API_URL ||
+    process.env.ANTHROPIC_BASE_URL ||
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || // alias de compatibilidad
-    "https://zocoia.es"; // valor por defecto — backend de zocoia en producción
+    "https://api.anthropic.com";
 
   if (!apiKey) {
     throw new Error(
-      "Falta la API Key de zocoia. Configura ZOCOIA_API_KEY (sk-zoco-...) en las variables de entorno. " +
-        "Puedes generarla en el Dashboard de anthropic as zocoia → API Keys y validarla en el Almacén de credenciales.",
-    );
-  }
-  if (!apiKey.startsWith("sk-zoco-")) {throw new Error(
-      "ZOCOIA_API_KEY no es una clave de anthropic as zocoia válida (debe empezar por sk-zoco-). " +
-        "Las claves nativas de Anthropic/OpenAI/Gemini ya no se aceptan: todo el tráfico viaja por zocoia.",
-    );
-  }
-  if (!rawBaseUrl) {throw new Error(
-      "Falta ZOCOIA_API_URL. Configura la URL base del backend de anthropic as zocoia (ej: https://zocoia.es).",
+      "Falta la API Key de Anthropic. Configura ANTHROPIC_API_KEY (sk-ant-...) en las variables de entorno. " +
+        "Puedes generarla en https://console.anthropic.com/settings/keys",
     );
   }
 
-  // El SDK añade /v1/messages a la baseURL; se normaliza sin barra final.
+  // Normaliza la baseURL sin barra final (el SDK añade /v1/messages).
   const baseURL = rawBaseUrl.replace(/\/+$/, "");
 
-  _client = new Anthropic({apiKey,
-    baseURL,
-    // La autenticación de anthropic as zocoia es Bearer <sk-zoco-...>; el SDK de
-    // Anthropic manda la key en el header x-api-key por defecto, así que
-    // se añade también Authorization para el authMiddleware de zocoia.
-    defaultHeaders: { Authorization: `Bearer ${apiKey}` },
-  });
+  _client = new Anthropic({ apiKey, baseURL });
   return _client;
 }
 

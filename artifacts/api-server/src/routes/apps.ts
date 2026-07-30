@@ -1,5 +1,5 @@
 import { ai as gemini } from "@workspace/integrations-gemini-ai";
-import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
+import { anthropic as zocoia, resolveClaudeModel } from "@workspace/integrations-anthropic-ai";
 import { MarisPnpmOrchestrator, CoreOrchestrator } from "@workspace/services";
 import OpenAI from "openai";
 
@@ -2424,7 +2424,9 @@ async function streamZocoTextWithFallback(role: AgentRole, model: AgentModelChoi
         let accumulated = "";
         let lastReport = 0;
         let finishReason: string | undefined;
-        const stream = zocoia.messages.stream({ ...params, model: candidate });
+        // Los alias internos (zoco-flash/plus/max) se traducen aquí al ID real
+        // del modelo Claude de Anthropic antes de llamar a la API.
+        const stream = zocoia.messages.stream({ ...params, model: resolveClaudeModel(candidate) });
         // TIMEOUT DE INACTIVIDAD REAL — mismo fix que createZocoMessageWithFallback
         // en shared-agents.ts (ver el comentario extenso ahí): esta función es la
         // que usan de verdad el Frontend Engineer y el Backend Engineer para
@@ -3670,7 +3672,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
       }
     } else if (provider === "zoco") {
       const stream = zocoia.messages.stream({
-        model: resolveZocoCoderModel(coderModel),
+        model: resolveClaudeModel(resolveZocoCoderModel(coderModel)),
         max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],
@@ -3689,7 +3691,7 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
       }
     } else {// anthropic as zocoia streaming según el modelo elegido en el selector.
       const stream = await zocoia.messages.stream({
-        model: resolveZocoCoderModel(coderModel),
+        model: resolveClaudeModel(resolveZocoCoderModel(coderModel)),
         max_tokens: 20000,
         system: systemPrompt,
         messages: [{ role: "user", content: finalUserContent }],

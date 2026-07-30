@@ -19,34 +19,44 @@ import { connectDB } from "./db";
 import { logger } from "./logger";
 import OpenAI from "openai";
 
-// Cliente de embeddings — MOTOR 100% LOCAL (vía Zoco IA o directamente el
-// endpoint OpenAI-compatible de Ollama). JAMÁS apunta a api.openai.com.
+// Cliente de embeddings — VOYAGE AI (el proveedor de embeddings recomendado
+// por Anthropic; Claude no ofrece endpoint propio de embeddings). API
+// OpenAI-compatible en https://api.voyageai.com/v1/embeddings. Si no hay
+// VOYAGE_API_KEY, embedText cae automáticamente al hashing léxico local.
 // Lazy: evita crash al arrancar si la configuración no está puesta todavía.
 let _openaiCache: OpenAI | null = null;
 function getOpenAICache(): OpenAI {
   if (!_openaiCache) {
-    const zocoUrl = process.env.ZOCOIA_API_URL || "https://zocoia.es";
-    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
-    if (zocoUrl) {
-      _openaiCache = new OpenAI({
-        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
-        apiKey: process.env.ZOCOIA_API_KEY || "dummy",
-      });
-    } else if (ollamaUrl) {
-      _openaiCache = new OpenAI({
-        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
-        apiKey: process.env.OLLAMA_API_KEY || "ollama",
-      });
-    } else {
-      throw new Error("Motor local no configurado para embeddings: define ZOCOIA_API_URL u OLLAMA_BASE_URL");
+    const voyageKey = process.env.VOYAGE_API_KEY;
+    if (!voyageKey) {
+      throw new Error("Embeddings no configurados: define VOYAGE_API_KEY (https://voyageai.com)");
     }
+    _openaiCache = new OpenAI({
+      baseURL: process.env.VOYAGE_BASE_URL || "https://api.voyageai.com/v1",
+      apiKey: voyageKey,
+    });
   }
   return _openaiCache;
 }
 
-// Modelo de embeddings del servidor local (en Ollama: nomic-embed-text, etc.)
-const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text";
+// Modelo de embeddings de Voyage AI. Configurable sin tocar código.
+const EMBED_MODEL = process.env.VOYAGE_EMBED_MODEL || "voyage-3.5-lite";
 const EMBED_DIMS = 1536;
+
+// Normaliza el vector devuelto por Voyage a EMBED_DIMS (trunca o rellena con
+// ceros + re-normalización L2) para mantener compatibilidad con los vectores
+// ya guardados en MongoDB.
+function fitToDims(vec: number[]): number[] {
+  let out: number[];
+  if (vec.length === EMBED_DIMS) out = vec.slice();
+  else if (vec.length > EMBED_DIMS) out = vec.slice(0, EMBED_DIMS);
+  else out = [...vec, ...new Array<number>(EMBED_DIMS - vec.length).fill(0)];
+  let norm = 0;
+  for (const x of out) norm += x * x;
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < EMBED_DIMS; i++) out[i] = out[i] / norm;
+  return out;
+}
 const DEDUP_THRESHOLD = 0.93;
 const RECALL_THRESHOLD = 0.6;
 const MAX_COMPONENT_CHARS = 6000;
@@ -99,13 +109,13 @@ let embeddingsAvailable: boolean | null = null;
 
 async function embedText(text: string): Promise<number[]> {
   const trimmed = text.trim().slice(0, 4000);
-  if (embeddingsAvailable !== false) {
+  if (embeddingsAvailable !== false && process.env.VOYAGE_API_KEY) {
     try {
       const res = await getOpenAICache().embeddings.create({ model: EMBED_MODEL, input: trimmed });
-      const vec = res.data[0]?.embedding;
-      if (Array.isArray(vec) && vec.length === EMBED_DIMS) {
+      const raw = res.data[0]?.embedding;
+      if (Array.isArray(raw) && raw.length > 0) {
         embeddingsAvailable = true;
-        return vec;
+        return fitToDims(raw);
       }
     } catch {
       embeddingsAvailable = false;

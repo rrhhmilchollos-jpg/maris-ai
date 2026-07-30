@@ -7,35 +7,50 @@ import { logger } from "./logger";
 
 export type AgentMemoryEntry = IAgentMemory;
 
-// Cliente de embeddings — MOTOR 100% LOCAL (vía Zoco IA o directamente el
-// endpoint OpenAI-compatible de Ollama). JAMÁS apunta a api.openai.com.
+// Cliente de embeddings — VOYAGE AI (el proveedor de embeddings recomendado
+// por Anthropic; Claude no ofrece endpoint propio de embeddings). Expone una
+// API OpenAI-compatible en /v1/embeddings, así que se reutiliza el SDK de
+// OpenAI apuntando a api.voyageai.com. Si no hay VOYAGE_API_KEY configurada,
+// embedText cae automáticamente al hashing léxico local (sin red).
 // Lazy: evita crash al arrancar si la configuración no está puesta todavía.
 let _openaiMemory: OpenAI | null = null;
 function getOpenAIMemory(): OpenAI {
   if (!_openaiMemory) {
-    const zocoUrl = process.env.ZOCOIA_API_URL || "https://zocoia.es";
-    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
-    if (zocoUrl) {
-      _openaiMemory = new OpenAI({
-        apiKey: process.env.ZOCOIA_API_KEY ?? "sk-noop",
-        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
-      });
-    } else if (ollamaUrl) {
-      _openaiMemory = new OpenAI({
-        apiKey: process.env.OLLAMA_API_KEY || "ollama",
-        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
-      });
-    } else {
-      throw new Error("Motor local no configurado para embeddings: define ZOCOIA_API_URL u OLLAMA_BASE_URL");
+    const voyageKey = process.env.VOYAGE_API_KEY;
+    if (!voyageKey) {
+      throw new Error("Embeddings no configurados: define VOYAGE_API_KEY (https://voyageai.com)");
     }
+    _openaiMemory = new OpenAI({
+      apiKey: voyageKey,
+      baseURL: process.env.VOYAGE_BASE_URL || "https://api.voyageai.com/v1",
+    });
   }
   return _openaiMemory;
 }
 
 const EMBED_DIMS = 1536;
-// Modelo de embeddings del servidor local (en Ollama: nomic-embed-text,
-// mxbai-embed-large, etc.). Configurable sin tocar código.
-const EMBED_MODEL = process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text";
+// Modelo de embeddings de Voyage AI. Configurable sin tocar código.
+const EMBED_MODEL = process.env.VOYAGE_EMBED_MODEL || "voyage-3.5-lite";
+
+// Voyage puede devolver vectores de dimensión distinta a EMBED_DIMS (p. ej.
+// 1024). Para mantener compatibilidad con los embeddings ya almacenados en
+// la base de datos (1536 dims), el vector se normaliza: se trunca o se
+// rellena con ceros y se re-normaliza L2.
+function fitToDims(vec: number[]): number[] {
+  let out: number[];
+  if (vec.length === EMBED_DIMS) {
+    out = vec.slice();
+  } else if (vec.length > EMBED_DIMS) {
+    out = vec.slice(0, EMBED_DIMS);
+  } else {
+    out = [...vec, ...new Array<number>(EMBED_DIMS - vec.length).fill(0)];
+  }
+  let norm = 0;
+  for (const x of out) norm += x * x;
+  norm = Math.sqrt(norm) || 1;
+  for (let i = 0; i < EMBED_DIMS; i++) out[i] = out[i] / norm;
+  return out;
+}
 const MAX_INPUT_CHARS = 8_000;
 export const MAX_STORED_PATCH_CHARS = 800;
 
@@ -116,14 +131,15 @@ export async function embedText(text: string): Promise<number[]> {
   const cached = inMemoryCache.get(key);
   if (cached) return cached;
 
-  if (openAiEmbeddingsAvailable !== false) {
+  if (openAiEmbeddingsAvailable !== false && process.env.VOYAGE_API_KEY) {
     try {
       const response = await getOpenAIMemory().embeddings.create({
         model: EMBED_MODEL,
         input: trimmed,
       });
-      const vec = response.data[0]?.embedding;
-      if (Array.isArray(vec) && vec.length === EMBED_DIMS) {
+      const raw = response.data[0]?.embedding;
+      if (Array.isArray(raw) && raw.length > 0) {
+        const vec = fitToDims(raw);
         openAiEmbeddingsAvailable = true;
         rememberInCache(key, vec);
         return vec;
@@ -133,7 +149,7 @@ export async function embedText(text: string): Promise<number[]> {
         openAiEmbeddingsAvailable = false;
         logger.warn(
           { err: err instanceof Error ? err.message : String(err) },
-          "OpenAI embeddings unavailable; falling back to lexical hashing",
+          "Voyage AI embeddings unavailable; falling back to lexical hashing",
         );
       }
     }

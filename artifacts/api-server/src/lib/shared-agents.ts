@@ -1,174 +1,57 @@
 export { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
-// MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de zocoia.
-import OpenAI from "openai";
+// MOTOR DE IA: CLAUDE (ANTHROPIC) NATIVO — migrado desde Ollama (2026-07-30).
+// Todo el pipeline multi-agente (Researcher, Architect, Designer, Frontend,
+// Backend, QA, Patcher, Repair, chat...) viaja por la API oficial de
+// Anthropic (https://api.anthropic.com) usando el SDK nativo.
+// Config: ANTHROPIC_API_KEY (obligatoria) + overrides opcionales
+// ANTHROPIC_MODEL_FAST / ANTHROPIC_MODEL_STANDARD / ANTHROPIC_MODEL_MAX.
+import { anthropic as claude, resolveClaudeModel, CLAUDE_MODELS } from "@workspace/integrations-anthropic-ai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
 
-// ─── INFRAESTRUCTURA 100% LOCAL (OLLAMA) ─────────────────────────────────
-// DECISIÓN DE INFRAESTRUCTURA (orden expresa del propietario): NO se usa Groq
-// ni ninguna otra API en la nube. Todo el flujo multi-agente nace y muere en
-// el servidor local de Ollama. Hay dos formas de conectar, ambas locales:
-//   1) VÍA ZOCO IA (recomendada): ZOCOIA_API_URL + ZOCOIA_API_KEY — el backend
-//      de Zoco IA reenvía cada llamada a SU servidor de Ollama local (créditos,
-//      agentes y logs incluidos).
-//   2) OLLAMA DIRECTO: OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) con
-//      apiKey "ollama" — conexión directa al endpoint OpenAI-compatible.
-// El canal secundario ya NO es un proveedor distinto: es un SEGUNDO INTENTO
-// no-streaming contra el mismo motor local (útil cuando el streaming se corta).
-let _groq: OpenAI | null = null;
-function getGroq(): OpenAI | null {
-  const zocoKey = process.env.ZOCOIA_API_KEY;
-  const zocoUrl = process.env.ZOCOIA_API_URL || "https://www.zocoia.es";
-  const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
-  if (!_groq) {
-    if (zocoUrl && zocoKey && zocoKey.startsWith('sk-zoco-')) {
-      _groq = new OpenAI({ baseURL: `${zocoUrl.replace(/\/+$/, '')}/v1`, apiKey: zocoKey });
-    } else if (ollamaUrl) {
-      // Ollama acepta cualquier string como apiKey en su endpoint /v1.
-      _groq = new OpenAI({ baseURL: `${ollamaUrl.replace(/\/+$/, '')}/v1`, apiKey: process.env.OLLAMA_API_KEY || 'ollama' });
-    } else {
-      return null;
-    }
-  }
-  return _groq;
-}
-async function callGroqFallback(params: any): Promise<{ content: Array<{ type: string; text: string }> }> {const groq = getGroq();
-  if (!groq) throw new Error('Motor local no configurado: añade ZOCOIA_API_URL + ZOCOIA_API_KEY (vía anthropic as zocoia) o OLLAMA_BASE_URL (Ollama directo) a las variables de entorno');
-  const groqModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco Max';
-  logger.warn({ model: groqModel }, '⚡ Segundo intento no-streaming contra el mismo motor local (Ollama)');
+// ─── Canal secundario: intento NO-streaming contra la misma API de Claude ──
+// Útil cuando el streaming se corta a mitad (parpadeo de red, proxy, etc.):
+// una llamada messages.create simple suele completarse aunque el stream falle.
+async function callClaudeNonStreaming(role: AgentRole, params: any, modelHint?: string): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const model = resolveClaudeModel(modelHint || CLAUDE_MODELS.standard);
+  logger.warn({ role, model }, "⚡ Segundo intento no-streaming contra la API de Claude (messages.create)");
 
-  const systemMsg = params.system
-    ? [{ role: 'system' as const, content: typeof params.system === 'string' ? params.system : (params.system as any[]).map((b: any) => b.text || '').join('\n') }]
-    : [];
+  const response: any = await raceWithTimeout(
+    claude.messages.create({
+      model,
+      max_tokens: params.max_tokens || 4096,
+      temperature: params.temperature ?? 0.7,
+      ...(params.system ? { system: params.system } : {}),
+      messages: params.messages || [],
+    }) as unknown as Promise<any>,
+    AI_CALL_TIMEOUT_MS * 2,
+    `${role} claude non-streaming (modelo ${model})`,
+  );
 
-  const userMessages = (params.messages || []).map((m: any) => ({
-    role: m.role as 'user' | 'assistant',
-    content: Array.isArray(m.content) ? m.content.map((b: any) => b.text || '').join('') : String(m.content || ''),
-  }));
+  const text = (response?.content || [])
+    .filter((b: any) => b?.type === "text")
+    .map((b: any) => b.text || "")
+    .join("");
 
-  const response = await groq.chat.completions.create({
-    model: groqModel,
-    messages: [...systemMsg, ...userMessages],
-    max_tokens: params.max_tokens || 2048,
-    temperature: 0.7,
-  });
-
-  const text = response.choices[0]?.message?.content || '';
   recordApiUsage({
     jobId: undefined,
-    model: groqModel,
-    inputTokens: response.usage?.prompt_tokens || 0,
-    outputTokens: response.usage?.completion_tokens || 0,
-    agent: 'groq-fallback',
+    model,
+    inputTokens: response?.usage?.input_tokens || 0,
+    outputTokens: response?.usage?.output_tokens || 0,
+    agent: `${role}-fallback`,
   });
 
-  return { content: [{ type: 'text', text }] };
+  return { content: [{ type: "text", text }] };
 }
 
-// ─── Cliente Ollama directo (último intento, MISMO servidor local) ────────
-async function callOllamaFallback(role: AgentRole, params: any): Promise<any> {
-  const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
-  if (!ollamaUrl) {
-    throw new Error('Ollama URL no configurada: añade OLLAMA_BASE_URL a las variables de entorno');
-  }
-
-  // Nombre EXACTO del modelo en el servidor de Ollama (ollama list).
-  const ollamaModel = process.env.OLLAMA_MODEL_PLUS || 'Zoco Max';
-  logger.warn({ role, model: ollamaModel }, '⚡ Último intento: llamada directa al API nativa de Ollama (/api/chat)');
-
-  const messages = (params.messages || []).map((m: any) => ({
-    role: m.role,
-    content: Array.isArray(m.content) ? m.content.map((b: any) => b.text || '').join('') : String(m.content || ''),
-  }));
-
-  if (params.system) {
-    messages.unshift({
-      role: 'system',
-      content: typeof params.system === 'string' ? params.system : (params.system as any[]).map((b: any) => b.text || '').join('\n')
-    });
-  }
-
-  try {
-    const response = await fetch(`${ollamaUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: ollamaModel,
-        messages: messages,
-        options: {
-          temperature: params.temperature || 0.7,
-          num_predict: params.max_tokens || 2048,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Ollama API error: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    const text = data.message?.content || '';
-
-    recordApiUsage({
-      jobId: undefined,
-      model: ollamaModel,
-      inputTokens: 0, // Ollama no proporciona tokens de entrada/salida directamente en este endpoint
-      outputTokens: 0, // Se podría estimar o dejar en 0 si no es crítico para la facturación
-      agent: 'ollama-fallback',
-    });
-
-    return { content: [{ type: 'text', text }] };
-  } catch (ollamaErr) {
-    logger.error({ role, ollamaErr }, "Ollama también falló");
-    throw ollamaErr;
-  }
-}
-
-// Cliente OpenAI-compatible — CANAL PRINCIPAL, 100% LOCAL.
-// Conecta vía Zoco IA (que reenvía a su Ollama) o directamente al endpoint
-// OpenAI-compatible de Ollama. JAMÁS apunta a api.openai.com: si no hay
-// configuración local, el error se lanza en el primer uso (lazy) con un
-// mensaje claro en vez de fugar peticiones a la nube.
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    const zocoUrl = process.env.ZOCOIA_API_URL || "https://www.zocoia.es";
-    const ollamaUrl = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL;
-    if (zocoUrl) {
-      _openai = new OpenAI({
-        baseURL: `${zocoUrl.replace(/\/+$/, "")}/v1`,
-        apiKey: process.env.ZOCOIA_API_KEY || "dummy",
-      });
-    } else if (ollamaUrl) {
-      // Ollama acepta cualquier string como apiKey en su endpoint /v1.
-      _openai = new OpenAI({
-        baseURL: `${ollamaUrl.replace(/\/+$/, "")}/v1`,
-        apiKey: process.env.OLLAMA_API_KEY || "ollama",
-      });
-    } else {throw new Error(
-        "Motor local no configurado: define ZOCOIA_API_URL (+ ZOCOIA_API_KEY) para conectar vía zocoia, " +
-          "o OLLAMA_BASE_URL (p.ej. http://127.0.0.1:11434) para conectar directamente a Ollama. " +
-          "Las APIs en la nube (Groq/anthropic as zocoia/OpenAI) están deshabilitadas por decisión de infraestructura.",
-      );
-    }
-  }
-  return _openai;
-}
-
-/* ------------- Compatibilidad DeepSeek-R1 / OpenAI (zocoia) --------------- */
-// El modelo real detrás de las API Keys de Zoco IA es DeepSeek-R1, que habla
-// el formato de OpenAI (chat.completions), NO el formato nativo de zocoia.
-// Estas utilidades convierten los parámetros estilo Zoco IA que usa todo el
-// pipeline al formato OpenAI, y las respuestas de vuelta, para que los 18+
-// consumidores existentes no necesiten cambios.
+/* --------------- Compatibilidad de formato (legado DeepSeek) --------------- */
+// El pipeline se ejecutaba antes sobre DeepSeek-R1/Ollama. Claude no necesita
+// estas reglas, pero se mantiene una versión neutra de la constante y el
+// limpiador stripReasoning por compatibilidad con el código existente.
 
 // Regla de formato seguro que se inyecta al final de TODOS los system prompts.
 export const DEEPSEEK_SAFE_FORMAT_RULE =
-  "\n\nIMPORTANT: You are running on a DeepSeek-R1/OpenAI compatible endpoint. " +
-  "Return the absolute raw code inside the file contents. Do not wrap code blocks in metadata definitions. " +
+  "\n\nIMPORTANT: Return the absolute raw code inside the file contents. Do not wrap code blocks in metadata definitions. " +
   "Never output field descriptions, JSON schemas or placeholders instead of the real code — always emit the complete, working file content. " +
   "When asked for JSON, return a single pure JSON object with no markdown fences and no commentary.";
 
@@ -190,80 +73,19 @@ export function stripReasoning(text: string): string {
   return out.trim();
 }
 
-// Convierte system (string o bloques Zoco IA) a texto plano y le añade la
-// regla de formato seguro para DeepSeek.
+// Convierte system (string o bloques) a texto plano.
 function systemToText(system: any): string {
   if (!system) return "";
-  const text = typeof system === "string"
+  return typeof system === "string"
     ? system
     : (system as any[]).map((b: any) => b?.text || "").join("\n");
-  return text.includes("DeepSeek-R1/OpenAI compatible endpoint") ? text : text + DEEPSEEK_SAFE_FORMAT_RULE;
 }
 
-// Convierte mensajes estilo Zoco IA (content como string o array de bloques
-// text/tool_use/tool_result) a mensajes estilo OpenAI (content string, roles
-// assistant con tool_calls, y role "tool" para los resultados).
-function zocoMessagesToOpenAI(messages: any[]): any[] {
-  const out: any[] = [];
-  for (const m of messages || []) {
-    if (!m) continue;
-    if (typeof m.content === "string" || m.content == null) {
-      out.push({ role: m.role, content: String(m.content ?? "") });
-      continue;
-    }
-    const blocks = Array.isArray(m.content) ? m.content : [m.content];
-    const toolUses = blocks.filter((b: any) => b?.type === "tool_use");
-    const toolResults = blocks.filter((b: any) => b?.type === "tool_result");
-    const texts = blocks.filter((b: any) => b?.type === "text" || typeof b === "string").map((b: any) => (typeof b === "string" ? b : b.text || "")).join("");
-    if (m.role === "assistant" && toolUses.length > 0) {
-      out.push({
-        role: "assistant",
-        content: texts || null,
-        tool_calls: toolUses.map((tu: any) => ({
-          id: tu.id,
-          type: "function",
-          function: { name: tu.name, arguments: JSON.stringify(tu.input || {}) },
-        })),
-      });
-      continue;
-    }
-    if (toolResults.length > 0) {
-      for (const tr of toolResults) {
-        out.push({
-          role: "tool",
-          tool_call_id: tr.tool_use_id,
-          content: typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content ?? ""),
-        });
-      }
-      if (texts) out.push({ role: "user", content: texts });
-      continue;
-    }
-    out.push({ role: m.role, content: texts });
-  }
-  return out;
-}
 
-// Convierte definiciones de tools Zoco IA ({name, description, input_schema})
-// al formato OpenAI ({type:'function', function:{name, description, parameters}}).
-function zocoToolsToOpenAI(tools: any[]): any[] {
-  return (tools || []).map((t: any) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description || "",
-      parameters: t.input_schema || { type: "object", properties: {} },
-    },
-  }));
-}
-
-// Modelos válidos del motor de zocoia. Cualquier id de Zoco IA que llegue del
-// código legado se remapea aquí — detrás siempre responde DeepSeek-R1.
-function zocoModelFor(model: string): string {
-  const m = String(model || "");
-  if (/^zoco-/.test(m)) return m;
-  if (/haiku|flash/i.test(m)) return "zoco-flash";
-  if (/opus|max/i.test(m)) return "zoco-max";
-  return "zoco-plus";
+// Traducción de alias internos (zoco-*, legado Ollama/DeepSeek) al modelo
+// Claude real — delega en resolveClaudeModel del paquete de integración.
+export function zocoModelFor(model: string): string {
+  return resolveClaudeModel(model);
 }
 
 /* ----------------------------- types -------------------------------------- */
@@ -411,29 +233,14 @@ export async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Pr
   ]);
 }
 
-// Modelos de Zoco IA soportados, de más nuevo a más antiguo dentro de
-// cada familia. Opus 4.8 es la versión más reciente, disponible solo para
-// clientes de pago con Ultra activado (ver dashboard.tsx).
-// FIX (2026-07-09): "zoco-plus" NO existe en la API de Zoco IA
-// — verificado contra https://api.zocoia.com/v1/models con la API key
-// real: devuelve 404 not_found_error ("model: Zoco IA-zoco-plus"). Estaba
-// como PRIMER candidato de la lista de fallback, así que muchas llamadas
-// empezaban con un 404 garantizado y, combinado con otros fallos, agotaba
-// candidatos y hacía fallar la generación con el cuadro rojo "Error en la
-// generación". Modelos verificados como disponibles con la key actual:
-// zoco-plus, zoco-max, zoco-max,
-// zoco-flash(-20251001).
-const ZOCO_MODELS = ["zoco-plus", "zoco-max", "zoco-max"];
+// Modelos Claude disponibles como cadena de fallback: si el primario falla,
+// se intenta con el resto en este orden (estándar → máximo → rápido).
+const ZOCO_MODELS = [CLAUDE_MODELS.standard, CLAUDE_MODELS.max, CLAUDE_MODELS.fast];
 
-function fallbackZocoModels(model: string): string[] {// Se usa el modelo EXACTO solicitado como primario si es uno de los
-  // soportados, y solo se cae a detección por familia para strings no
-  // reconocidos. FIX (2026-07-09): el ID legado "zoco-plus" (no
-  // existe en la API de anthropic as zocoia, 404 verificado) se remapea a
-  // "zoco-plus" en vez de intentarse tal cual.
-  const remapped = model === "zoco-plus" ? "zoco-plus" : model;
-  const primary = ZOCO_MODELS.includes(remapped)
-    ? remapped
-    : (remapped.includes("opus") ? "zoco-max" : "zoco-plus");
+function fallbackZocoModels(model: string): string[] {
+  // El modelo solicitado (traducido a su ID Claude real) actúa de primario;
+  // el resto de la familia Claude queda como respaldo.
+  const primary = resolveClaudeModel(model);
   return [primary, ...ZOCO_MODELS.filter((m) => m !== primary)];
 }
 
@@ -489,77 +296,61 @@ export async function createZocoMessageWithFallback(
     ].filter(Boolean);
   }
 
-  // MODO OPENAI/DEEPSEEK: el motor detrás de las API Keys de Zoco IA es
-  // DeepSeek-R1 (formato OpenAI). Se convierten los parámetros estilo
-  // Zoco IA al formato chat.completions y se llama al cliente OpenAI de
-  // Zoco IA con streaming — la firma y el formato de retorno
-  // ({content:[{type:'text',text}]}) se mantienen idénticos para que los
-  // 18+ consumidores del pipeline no necesiten ningún cambio.
-  const zocoModel = zocoModelFor(model);
-  const openaiMessages = [
-    ...(params.system ? [{ role: "system" as const, content: systemToText(params.system) }] : []),
-    ...zocoMessagesToOpenAI(params.messages || []),
-  ];
+  // MOTOR CLAUDE NATIVO: se llama a la API de Anthropic con streaming usando
+  // el formato Messages nativo (system + messages con bloques). La firma y el
+  // formato de retorno ({content:[{type:'text',text}]}) se mantienen idénticos
+  // para que los 18+ consumidores del pipeline no necesiten cambios. Si el
+  // modelo primario falla, se recorre la cadena de fallback de Claude.
+  const candidates = fallbackZocoModels(model);
 
-  {
+  for (const claudeModel of candidates) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         await new Promise(r => setTimeout(r, Math.random() * 500));
 
-        logger.info({ role, model: zocoModel }, "Iniciando stream con zocoia (DeepSeek-R1/OpenAI)...");
+        logger.info({ role, model: claudeModel }, "Iniciando stream con Claude (Anthropic)...");
 
         let fullText = "";
         let usageInputTokens = 0;
         let usageOutputTokens = 0;
-        const stream = (await getOpenAI().chat.completions.create({
-          model: zocoModel,
-          messages: openaiMessages,
+        const stream = claude.messages.stream({
+          model: claudeModel,
           max_tokens: params.max_tokens || 4096,
           temperature: params.temperature ?? 0.7,
-          stream: true,
-        })) as unknown as AsyncIterable<any>;
+          ...(params.system ? { system: params.system } : {}),
+          messages: params.messages || [],
+        });
 
-        // TIMEOUT DE INACTIVIDAD REAL: antes este bucle no tenía ningún
-        // límite de tiempo propio — si el stream se quedaba a medias
-        // (conectado pero sin más eventos, sin cerrar la conexión), no
-        // había nada que lo detectara aquí dentro; el job entero se
-        // quedaba colgado hasta el watchdog global (12 min), perdiendo
-        // TODO el trabajo ya hecho en vez de solo reintentar esta llamada.
-        // raceWithTimeout/AI_CALL_TIMEOUT_MS ya existían en este archivo
-        // mismo pero nunca se conectaban a ningún sitio — código muerto.
-        // Aquí se aplica por CHUNK (no al stream entero, que puede tardar
-        // legítimamente varios minutos en archivos grandes): si pasan
-        // AI_CALL_TIMEOUT_MS sin recibir ni un solo evento nuevo, se
+        // TIMEOUT DE INACTIVIDAD REAL por CHUNK (no al stream entero, que
+        // puede tardar legítimamente varios minutos en archivos grandes): si
+        // pasan AI_CALL_TIMEOUT_MS sin recibir ni un solo evento nuevo, se
         // considera colgado y se pasa al siguiente intento/modelo.
-        const iterator = stream[Symbol.asyncIterator]();
+        const iterator = (stream as any)[Symbol.asyncIterator]();
         while (true) {
           const { value: chunk, done } = await raceWithTimeout(
             iterator.next(),
             AI_CALL_TIMEOUT_MS,
-            `${role} stream chunk (modelo ${zocoModel})`,
-          );
+            `${role} stream chunk (modelo ${claudeModel})`,
+          ) as { value: any; done: boolean };
           if (done) break;
-          // Formato de chunk OpenAI/DeepSeek: choices[0].delta.content lleva el
-          // texto; delta.reasoning_content (razonamiento de DeepSeek-R1) se
-          // IGNORA deliberadamente para que nunca contamine el código generado.
-          const delta = chunk?.choices?.[0]?.delta;
-          if (delta?.content) fullText += delta.content;
-          // Algunos servidores OpenAI-compatibles adjuntan usage en el último
-          // chunk (stream_options) — nos quedamos con el último valor visto.
-          if (chunk?.usage) {
-            usageInputTokens = chunk.usage.prompt_tokens ?? usageInputTokens;
-            usageOutputTokens = chunk.usage.completion_tokens ?? usageOutputTokens;
+          // Formato de eventos nativo de Anthropic.
+          if (chunk?.type === "content_block_delta" && chunk.delta?.type === "text_delta") {
+            fullText += chunk.delta.text;
+          }
+          if (chunk?.type === "message_start" && chunk.message?.usage) {
+            usageInputTokens = chunk.message.usage.input_tokens ?? usageInputTokens;
+          }
+          if (chunk?.type === "message_delta" && chunk.usage) {
+            usageOutputTokens = chunk.usage.output_tokens ?? usageOutputTokens;
           }
         }
 
-        // Limpieza del razonamiento <think>...</think> típico de DeepSeek-R1
-        // por si el servidor lo incrusta en el propio content.
         fullText = stripReasoning(fullText);
         if (!fullText) throw new Error("Stream vacío");
 
         recordApiUsage({
           jobId: meterOpts?.jobId,
-          model: zocoModel,
+          model: claudeModel,
           inputTokens: usageInputTokens,
           outputTokens: usageOutputTokens,
           agent: role,
@@ -570,166 +361,136 @@ export async function createZocoMessageWithFallback(
       } catch (err: any) {
         lastError = err;
         const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
-        const isQuotaError = err?.status === 400 && String(err).includes("quota"); // Error 400 con mensaje de cuota
-        const isTransient = isRateLimit || isQuotaError
+        const isOverloaded = err?.status === 529 || String(err).includes("overloaded_error");
+        const isTransient = isRateLimit || isOverloaded
           || err?.status >= 500
           || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed|Stream vacío/i.test(String(err?.message || err));
 
         if (isTransient && attempt < MAX_RETRIES - 1) {
           const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-          logger.warn({ role, model: zocoModel, attempt, delay, isRateLimit, isQuotaError }, "Fallo transitorio; reintentando...");
+          logger.warn({ role, model: claudeModel, attempt, delay, isRateLimit, isOverloaded }, "Fallo transitorio; reintentando...");
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
 
-        logger.warn({ role, model: zocoModel, err }, "Canal streaming de zocoia falló; pasando al canal secundario");
+        logger.warn({ role, model: claudeModel, err }, "Streaming de Claude falló con este modelo; probando siguiente candidato");
         break;
       }
     }
   }
 
-  logger.warn({ role }, "Canal streaming de zocoia falló — intentando canal secundario no-streaming (/v1/chat/completions)...");
+  logger.warn({ role }, "Canal streaming de Claude falló — intentando canal secundario no-streaming (messages.create)...");
   try {
-    const fb = await callGroqFallback({ ...params, system: systemToText(params.system) });
+    const fb = await callClaudeNonStreaming(role, params, model);
     fb.content = fb.content.map((b: any) => (b.type === "text" ? { ...b, text: stripReasoning(b.text) } : b));
-    return fb;
-  } catch (groqErr) {
-    logger.error({ role, groqErr }, "Canal secundario también falló — intentando con Ollama...");
-    try {
-      const ol = await callOllamaFallback(role, params);
-      ol.content = ol.content.map((b: any) => (b.type === "text" ? { ...b, text: stripReasoning(b.text) } : b));
-      return ol;
-    } catch (ollamaErr) {
-      logger.error({ role, ollamaErr }, "Ollama también falló");
-      throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    if (!fb.content.some((b: any) => b.type === "text" && b.text)) {
+      throw new Error("Respuesta vacía del canal secundario");
     }
+    return fb;
+  } catch (fallbackErr) {
+    logger.error({ role, fallbackErr }, "Canal secundario no-streaming de Claude también falló");
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 }
 
 /**
- * Variante de createZoco IAMessageWithFallback para llamadas con tool-calling
+ * Variante de createZocoMessageWithFallback para llamadas con tool-calling
  * (bucles agenticos como marisCrewAI.ts y agentTools.ts).
  *
- * ADAPTADOR BIDIRECCIONAL DeepSeek-R1/OpenAI ↔ Zoco IA:
- * los bucles agenticos existentes hablan el protocolo tool_use de Zoco IA
- * (tools con input_schema, bloques tool_use/tool_result, stop_reason). Esta
- * función traduce la ida al formato estándar OpenAI `tools`/`tool_choice`
- * (type:function con parameters) y la vuelta de `tool_calls` a bloques
- * tool_use — así agentTools.ts y marisCrewAI.ts siguen funcionando SIN
- * ningún cambio aunque detrás responda DeepSeek-R1.
+ * MOTOR CLAUDE NATIVO: Claude soporta tool calling de primera clase con el
+ * MISMO protocolo que ya hablan los bucles agenticos existentes (tools con
+ * input_schema, bloques tool_use/tool_result, stop_reason, tool_choice) —
+ * los parámetros se pasan prácticamente tal cual a messages.create y la
+ * respuesta nativa se devuelve sin transformación, así agentTools.ts y
+ * marisCrewAI.ts siguen funcionando SIN ningún cambio.
  *
- * RESPALDO JSON PURO: si el endpoint rechaza el parámetro tools (algunos
- * despliegues de DeepSeek-R1 no soportan function calling nativo), se
+ * RESPALDO JSON PURO: se mantiene como última red de seguridad — si por
+ * cualquier motivo la llamada con tools falla de forma persistente, se
  * reintenta sin tools instruyendo al modelo para devolver un JSON puro
  * {"tool": "nombre", "input": {...}} que el backend parsea con
- * extractJsonObject — sin depender del SDK de Zoco IA en ningún caso.
+ * extractJsonObject.
  */
-export async function createZocoToolCallWithFallback(role: AgentRole, model: string, params: any): Promise<any> {
+export async function createZocoToolCallWithFallback(role: AgentRole, model: string, params: any, meterOpts?: { jobId?: string }): Promise<any> {
   let lastError: unknown;
   const MAX_RETRIES = 3;
-  const zocoModel = zocoModelFor(model);
 
   const systemText = systemToText(params.system);
-  const openaiMessages = [
-    ...(systemText ? [{ role: "system" as const, content: systemText }] : []),
-    ...zocoMessagesToOpenAI(params.messages || []),
-  ];
   const hasTools = Array.isArray(params.tools) && params.tools.length > 0;
-  const openaiTools = hasTools ? zocoToolsToOpenAI(params.tools) : undefined;
 
-  // Convierte una respuesta chat.completions al formato Zoco IA que
-  // esperan los bucles agenticos (content blocks + stop_reason).
-  const toZocoShape = (resp: any): any => {
-    const choice = resp?.choices?.[0];
-    const msg = choice?.message || {};
-    const usage = {
-      input_tokens: resp?.usage?.prompt_tokens ?? 0,
-      output_tokens: resp?.usage?.completion_tokens ?? 0,
-    };
-    const content: any[] = [];
-    const text = stripReasoning(msg.content || "");
-    if (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
-      if (text) content.push({ type: "text", text });
-      for (const tc of msg.tool_calls) {
-        let input: any = {};
-        try { input = JSON.parse(tc.function?.arguments || "{}"); } catch { input = extractJsonObject(tc.function?.arguments || "") || {}; }
-        content.push({ type: "tool_use", id: tc.id || `toolu_${Math.random().toString(36).slice(2, 14)}`, name: tc.function?.name, input });
-      }
-      return { content, stop_reason: "tool_use", usage };
-    }
-    // Respaldo JSON puro: el modelo puede haber emitido {"tool":..., "input":...}
-    // como texto si el function calling nativo no estaba disponible.
-    if (hasTools) {
-      const parsed = extractJsonObject<{ tool?: string; input?: any }>(text);
-      if (parsed && typeof parsed.tool === "string" && (params.tools as any[]).some((t: any) => t.name === parsed.tool)) {
-        return {
-          content: [{ type: "tool_use", id: `toolu_${Math.random().toString(36).slice(2, 14)}`, name: parsed.tool, input: parsed.input || {} }],
-          stop_reason: "tool_use",
-          usage,
-        };
-      }
-    }
-    return { content: [{ type: "text", text }], stop_reason: "end_turn", usage };
-  };
-
-  // Instrucción de respaldo cuando el endpoint no soporta el parámetro tools.
+  // Instrucción de respaldo (JSON puro) para el último intento sin tools.
   const jsonFallbackSystem = () => {
     const toolList = (params.tools as any[]).map((t: any) => `- ${t.name}: ${t.description || ""}\n  input schema: ${JSON.stringify(t.input_schema || {})}`).join("\n");
     return `${systemText}\n\nAVAILABLE TOOLS:\n${toolList}\n\nTo call a tool, respond with ONLY a pure JSON object (no markdown fences, no commentary): {"tool": "<tool_name>", "input": { ...arguments... }}. If no tool is needed, respond with your final answer as plain text.`;
   };
 
-  let toolsRejected = false;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      const useNativeTools = hasTools && !toolsRejected;
-      const request: any = {
-        model: zocoModel,
-        messages: useNativeTools || !hasTools ? openaiMessages : [{ role: "system", content: jsonFallbackSystem() }, ...openaiMessages.filter((m: any) => m.role !== "system")],
-        max_tokens: params.max_tokens || 2048,
-        temperature: params.temperature ?? 0.7,
-      };
-      if (useNativeTools) {
-        request.tools = openaiTools;
-        request.tool_choice = params.tool_choice?.type === "any" ? "required" : "auto";
-      }
-      const resp = await raceWithTimeout(
-        getOpenAI().chat.completions.create(request) as unknown as Promise<any>,
-        AI_CALL_TIMEOUT_MS,
-        `${role} tool call (modelo ${zocoModel})`,
-      );
-      return toZocoShape(resp);
-    } catch (err: any) {
-      lastError = err;
-      // Si el endpoint rechaza el parámetro tools (400 con mención a tools/
-      // functions), activar el respaldo de JSON puro y reintentar YA.
-      const toolsUnsupported = hasTools && !toolsRejected && err?.status === 400 && /tool|function/i.test(String(err?.message || err));
-      if (toolsUnsupported) {
-        toolsRejected = true;
-        logger.warn({ role, model: zocoModel }, "Tool call: el endpoint no soporta tools nativas — cambiando a respaldo de JSON puro");
-        continue;
-      }
-      const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
-      const isQuotaError = (err?.status === 400 || err?.status === 402) && /quota|crédito|credit/i.test(String(err));
-      const isTransient = isRateLimit || isQuotaError
-        || err?.status >= 500
-        || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed/i.test(String(err?.message || err));
+  const candidates = fallbackZocoModels(model);
+  for (const claudeModel of candidates) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const request: any = {
+          model: claudeModel,
+          max_tokens: params.max_tokens || 2048,
+          temperature: params.temperature ?? 0.7,
+          ...(params.system ? { system: params.system } : {}),
+          messages: params.messages || [],
+        };
+        if (hasTools) {
+          request.tools = params.tools;
+          if (params.tool_choice) request.tool_choice = params.tool_choice;
+        }
+        const resp: any = await raceWithTimeout(
+          claude.messages.create(request) as unknown as Promise<any>,
+          AI_CALL_TIMEOUT_MS,
+          `${role} tool call (modelo ${claudeModel})`,
+        );
+        // La respuesta nativa de Claude ya trae content blocks (text/tool_use),
+        // stop_reason y usage {input_tokens, output_tokens} — formato idéntico
+        // al que esperan los bucles agenticos. Solo se normaliza usage.
+        recordApiUsage({
+          jobId: meterOpts?.jobId,
+          model: claudeModel,
+          inputTokens: resp?.usage?.input_tokens || 0,
+          outputTokens: resp?.usage?.output_tokens || 0,
+          agent: role,
+        });
+        return {
+          content: resp?.content || [],
+          stop_reason: resp?.stop_reason || "end_turn",
+          usage: {
+            input_tokens: resp?.usage?.input_tokens ?? 0,
+            output_tokens: resp?.usage?.output_tokens ?? 0,
+          },
+        };
+      } catch (err: any) {
+        lastError = err;
+        const isRateLimit = err?.status === 429 || String(err).includes("rate_limit_exceeded");
+        const isOverloaded = err?.status === 529 || String(err).includes("overloaded_error");
+        const isTransient = isRateLimit || isOverloaded
+          || err?.status >= 500
+          || /timed out|timeout|ECONNRESET|ETIMEDOUT|ECONNREFUSED|network|fetch failed/i.test(String(err?.message || err));
 
-      if (isTransient && attempt < MAX_RETRIES - 1) {
-        const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
-        logger.warn({ role, model: zocoModel, attempt, delay, isRateLimit, isQuotaError }, "Tool call: fallo transitorio; reintentando...");
-        await new Promise(r => setTimeout(r, delay));
-        continue;
+        if (isTransient && attempt < MAX_RETRIES - 1) {
+          const delay = Math.pow(2, attempt) * 1500 + Math.random() * 1000;
+          logger.warn({ role, model: claudeModel, attempt, delay, isRateLimit, isOverloaded }, "Tool call: fallo transitorio; reintentando...");
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        logger.warn({ role, model: claudeModel, err }, "Tool call: fallo con este modelo; probando siguiente candidato");
+        break;
       }
-      logger.warn({ role, model: zocoModel, err }, "Tool call: canal principal de zocoia falló");
-      break;
     }
   }
 
-  logger.warn({ role }, "Tool call: canal principal falló — intentando canal secundario de zocoia...");
+  logger.warn({ role }, "Tool call: canal principal falló — intentando respaldo de JSON puro sin tools...");
   try {
-    const groqResult = await callGroqFallback({ ...params, system: hasTools ? jsonFallbackSystem() : systemText });
-    const text = stripReasoning(groqResult.content?.[0]?.text || "");
-    // También en el canal secundario se intenta detectar una tool call JSON pura.
+    const fbResult = await callClaudeNonStreaming(role, {
+      ...params,
+      tools: undefined,
+      tool_choice: undefined,
+      system: hasTools ? jsonFallbackSystem() : systemText,
+    }, model);
+    const text = stripReasoning(fbResult.content?.[0]?.text || "");
+    // También en el respaldo se intenta detectar una tool call JSON pura.
     if (hasTools) {
       const parsed = extractJsonObject<{ tool?: string; input?: any }>(text);
       if (parsed && typeof parsed.tool === "string" && (params.tools as any[]).some((t: any) => t.name === parsed.tool)) {
@@ -741,16 +502,9 @@ export async function createZocoToolCallWithFallback(role: AgentRole, model: str
       }
     }
     return { content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 0, output_tokens: 0 } };
-  } catch (groqErr) {
-    logger.error({ role, groqErr }, "Canal secundario también falló (tool call) — intentando con Ollama...");
-    try {
-      const ollamaResult = await callOllamaFallback(role, { ...params, system: hasTools ? jsonFallbackSystem() : systemText });
-      const text = stripReasoning(ollamaResult.content?.[0]?.text || "");
-      return { content: [{ type: "text", text }], stop_reason: "end_turn", usage: { input_tokens: 0, output_tokens: 0 } };
-    } catch (ollamaErr) {
-      logger.error({ role, ollamaErr }, "Ollama también falló (tool call)");
-      throw lastError instanceof Error ? lastError : new Error(String(lastError));
-    }
+  } catch (fallbackErr) {
+    logger.error({ role, fallbackErr }, "Respaldo de JSON puro también falló (tool call)");
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 }
 

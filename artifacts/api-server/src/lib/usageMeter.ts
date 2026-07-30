@@ -14,10 +14,18 @@ import { logger } from "./logger";
  * perdiendo dinero (el "Conundrum del Crédito" de Emergent, pero visto
  * desde el lado del negocio en vez de cobrárselo también al cliente).
  *
- * Precios por 1M tokens (USD), actualizar aquí si cambian las tarifas
- * de zocoia. Fuente: pricing público de Claude a fecha de este código.
+ * Precios por 1M tokens (USD), actualizar aquí si cambian las tarifas.
+ * Fuente: pricing público de la API de Anthropic (Claude) a fecha de este código.
  */
 const PRICING_PER_MILLION_TOKENS_USD: Record<string, { input: number; output: number }> = {
+  // Modelos Claude (Anthropic) — IDs reales de la API
+  "claude-haiku-4-5": { input: 1, output: 5 },
+  "claude-sonnet-4-5": { input: 3, output: 15 },
+  "claude-sonnet-5": { input: 3, output: 15 },
+  "claude-opus-4-5": { input: 5, output: 25 },
+  "claude-opus-5": { input: 15, output: 75 },
+  // Alias internos legados (por si algún caller registra el alias sin traducir)
+  "zoco-flash": { input: 1, output: 5 },
   "zoco-plus": { input: 3, output: 15 },
   "zoco-max": { input: 15, output: 75 },
   default: { input: 3, output: 15 },
