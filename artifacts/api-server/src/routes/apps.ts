@@ -70,6 +70,7 @@ import {
   extractJsonObject,
   withTimeout,
   createZocoMessageWithFallback,
+  zocoia,
   buildPatcherSystemPrompt,
   patchBundle,
   buildFastPatchPrompt,

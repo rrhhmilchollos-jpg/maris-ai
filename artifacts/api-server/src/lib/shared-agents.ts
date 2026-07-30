@@ -1,4 +1,4 @@
-import { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
+export { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
 // MODO OPENAI/DEEPSEEK: SDK de Zoco IA eliminado — todo viaja por el cliente OpenAI de zocoia.
 import OpenAI from "openai";
 import { logger } from "./logger";
