@@ -35,25 +35,16 @@ const ACTIVIDAD_EQUIPO = [
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function UnderConstructionPage() {
-  const [fraseIndex, setFraseIndex] = useState(0);
-  const [actividadIndex, setActividadIndex] = useState(0);
-
   useEffect(() => {
-    document.title = "Maris AI — Muy pronto";
-    const timer = setInterval(() => {
-      setFraseIndex((i) => (i + 1) % FRASES.length);
-    }, 6000);
-    // La actividad del equipo rota a otro ritmo (4.5s) para que la pantalla
-    // se sienta viva y no sincronizada de forma mecánica.
-    const timerActividad = setInterval(() => {
-      setActividadIndex((i) => (i + 1) % ACTIVIDAD_EQUIPO.length);
-    }, 4500);
-    return () => {
-      clearInterval(timer);
-      clearInterval(timerActividad);
-    };
+    // Si esta página se llega a renderizar por error, redirigir a la home
+    window.location.href = "/";
   }, []);
 
+  return null;
+  // El código original se mantiene abajo comentado o se elimina para evitar renderizado
+  /*
+  const [fraseIndex, setFraseIndex] = useState(0);
+  ...
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[#09090b] px-6 text-center">
       {/* Orbes de gradiente violeta — el "latido" de la marca */}

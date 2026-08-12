@@ -285,7 +285,6 @@ function AppRoutes() {
     <QueryClientProvider client={queryClient}>
       <AuthQueryClientCacheInvalidator />
       <SafePresenceTracker />
-      <MaintenanceGate>
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/" component={HomeRedirect} />
@@ -418,9 +417,8 @@ function AppRoutes() {
                 </Route>
 
                 <Route component={NotFound} />
-              </Switch>
-            </Suspense>
-            </MaintenanceGate>
+        </Switch>
+      </Suspense>
           </QueryClientProvider>
   );
 }
