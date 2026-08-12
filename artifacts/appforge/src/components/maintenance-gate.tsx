@@ -76,19 +76,9 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   })();
 
   useEffect(() => {
-    let cancelled = false;
-    apiFetch<{ maintenance?: boolean }>("/api/site-status")
-      .then((d) => {
-        const value = Boolean(d?.maintenance);
-        if (!cancelled) setMaintenance(value);
-        try { localStorage.setItem("marisMaintenanceCache", String(value)); } catch { /* silencioso */ }
-      })
-      .catch(() => {
-        if (!cancelled) setMaintenance(false); // fail-open
-      });
-    return () => {
-      cancelled = true;
-    };
+    // DESACTIVADO A PETICIÓN DEL USUARIO: Forzar modo mantenimiento a OFF
+    setMaintenance(false);
+    try { localStorage.setItem("marisMaintenanceCache", "false"); } catch { /* silencioso */ }
   }, []);
 
   async function toggle(enabled: boolean) {

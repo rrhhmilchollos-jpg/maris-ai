@@ -101,16 +101,8 @@ router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 // para decidir si muestra la página "En construcción" a los visitantes.
 // El interruptor POST /api/admin/maintenance sí exige admin.
 router.get("/site-status", async (_req, res) => {
-  try {
-    await connectDB();
-    const { SiteSetting } = await import("@workspace/db/schema");
-    const doc = await SiteSetting.findOne({ key: "maintenance_mode" }).lean();
-    res.json({ maintenance: doc?.value === "on" });
-  } catch {
-    // Fail-open: si la BD no responde, el sitio se muestra con normalidad —
-    // un fallo de infraestructura nunca debe dejar fuera a los clientes.
-    res.json({ maintenance: false });
-  }
+  // DESACTIVADO A PETICIÓN DEL USUARIO: El sitio debe estar siempre visible al público.
+  res.json({ maintenance: false });
 });
 
 router.post("/admin/maintenance", async (req: any, res: any): Promise<void> => {
