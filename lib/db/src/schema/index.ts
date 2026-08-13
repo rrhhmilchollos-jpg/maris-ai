@@ -190,6 +190,20 @@ export interface IGeneratedApp {
   title: string;
   prompt: string;
   description: string;
+  seoMetadata?: {
+    title: string;
+    description: string;
+    keywords: string[];
+    canonicalPath: string;
+    locale: string;
+    alternates: Array<{ locale: string; path: string }>;
+    openGraph: { type: string; title: string; description: string; siteName: string };
+    robots: { index: boolean; follow: boolean; maxSnippet: number };
+    jsonLd: Record<string, unknown>;
+    aiSummary: string;
+    generatedAt: string;
+  };
+  geoTargeting?: { country: string; region: string; city: string; language: string; audience: string };
   techStack: string[];
   frontendCode: string;
   backendCode: string;
@@ -335,6 +349,20 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     title: { type: String, required: true },
     prompt: { type: String, required: true },
     description: { type: String, required: true },
+    seoMetadata: {
+      title: String,
+      description: String,
+      keywords: { type: [String], default: [] },
+      canonicalPath: String,
+      locale: String,
+      alternates: { type: [{ locale: String, path: String }], default: [] },
+      openGraph: { type: Object },
+      robots: { type: Object },
+      jsonLd: { type: Object },
+      aiSummary: String,
+      generatedAt: String,
+    },
+    geoTargeting: { type: Object },
     techStack: { type: [String], default: [] },
     frontendCode: { type: String, required: true },
     backendCode: { type: String, required: true },

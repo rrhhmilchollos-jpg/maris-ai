@@ -2,6 +2,7 @@ import express, { Router, type IRouter, type Request, type Response } from "expr
 import { connectDB } from "../lib/db";
 import { GeneratedApp } from "@workspace/db/schema";
 import { buildDeployHtml, SLUG_PATTERN } from "../lib/deployBundle";
+import { buildSeoGeoMetadata, seoHeadTags } from "../lib/seoGeoOptimizer";
 
 const router: IRouter = Router();
 
@@ -145,6 +146,12 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
     return;
   }
   try {
+    const seo = buildSeoGeoMetadata({
+      title: row.title,
+      description: row.description,
+      techStack: row.techStack,
+      publicSlug: slug,
+    });
     const innerHtml = await buildDeployHtml({
       bundle: row.frontendCode,
       title: row.title,
@@ -178,7 +185,8 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
-    res.send(innerHtml);
+    const htmlWithSeo = innerHtml.replace(/<head([^>]*)>/i, (_match, attrs) => `<head${attrs}>\n  ${seoHeadTags(seo)}`);
+    res.send(htmlWithSeo);
   } catch (err) {
     req.log?.error({ err, slug }, "inner build failed");
     res.status(500).type("text/plain").send(String(err));
@@ -199,6 +207,12 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
     return;
   }
   try {
+    const seo = buildSeoGeoMetadata({
+      title: row.title,
+      description: row.description,
+      techStack: row.techStack,
+      publicSlug: slug,
+    });
     const safeTitle = (row.title || "Maris AI App").replace(/[<&>]/g, "");
     const innerUrl = `/p/${encodeURIComponent(slug)}/_inner`;
     const wrapper = `<!DOCTYPE html>
@@ -206,7 +220,7 @@ router.get("/p/:slug", async (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${safeTitle}</title>
+  ${seoHeadTags(seo)}
   <style>html,body{margin:0;padding:0;height:100%;background:#fff;}iframe{border:0;width:100vw;height:100vh;display:block;}</style>
 </head>
 <body>
