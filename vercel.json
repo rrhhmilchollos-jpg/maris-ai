@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "_comment": "Triggering new build with corrected git identity",
   "outputDirectory": "artifacts/appforge/dist",
   "buildCommand": "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/appforge build",
   "headers": [
