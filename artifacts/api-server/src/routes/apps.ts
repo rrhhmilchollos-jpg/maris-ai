@@ -5990,6 +5990,10 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
     // Serializar fechas para evitar problemas de serialización
     const serializedApps = apps.map((app: any) => ({
       ...app,
+      // El frontend abre /app/:id usando `app.id`; los documentos lean()
+      // solo traen `_id`. Exponer ambos evita URLs /app/undefined en apps
+      // importadas desde MongoDB, como Neobanco ES.
+      id: String(app._id),
       createdAt: app.createdAt ? (typeof app.createdAt === 'string' ? app.createdAt : app.createdAt.toISOString()) : new Date().toISOString(),
       updatedAt: app.updatedAt ? (typeof app.updatedAt === 'string' ? app.updatedAt : app.updatedAt.toISOString()) : new Date().toISOString(),
       isGenerating: generatingAppIds.has(String(app._id)),
