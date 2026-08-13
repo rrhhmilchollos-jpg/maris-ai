@@ -1,20 +1,18 @@
 export { anthropic as zocoia } from "@workspace/integrations-anthropic-ai";
-// MOTOR DE IA: CLAUDE (ANTHROPIC) NATIVO — migrado desde Ollama (2026-07-30).
+// MOTOR DE IA: Ollama local a través del gateway interno de Zoco IA.
 // Todo el pipeline multi-agente (Researcher, Architect, Designer, Frontend,
-// Backend, QA, Patcher, Repair, chat...) viaja por la API oficial de
-// Anthropic (https://api.anthropic.com) usando el SDK nativo.
-// Config: ANTHROPIC_API_KEY (obligatoria) + overrides opcionales
-// ANTHROPIC_MODEL_FAST / ANTHROPIC_MODEL_STANDARD / ANTHROPIC_MODEL_MAX.
+// Backend, QA, Patcher, Repair y chat) utiliza los modelos instalados en Hetzner.
+// Configuración: ZOCOIA_API_URL + ZOCOIA_API_KEY.
 import { anthropic as claude, resolveClaudeModel, CLAUDE_MODELS } from "@workspace/integrations-anthropic-ai";
 import { logger } from "./logger";
 import { recordApiUsage } from "./usageMeter";
 
-// ─── Canal secundario: intento NO-streaming contra la misma API de Claude ──
+// ─── Canal secundario: intento NO-streaming contra el gateway local ─────────
 // Útil cuando el streaming se corta a mitad (parpadeo de red, proxy, etc.):
 // una llamada messages.create simple suele completarse aunque el stream falle.
 async function callClaudeNonStreaming(role: AgentRole, params: any, modelHint?: string): Promise<{ content: Array<{ type: string; text: string }> }> {
   const model = resolveClaudeModel(modelHint || CLAUDE_MODELS.standard);
-  logger.warn({ role, model }, "⚡ Segundo intento no-streaming contra la API de Claude (messages.create)");
+  logger.warn({ role, model }, "⚡ Segundo intento no-streaming contra Ollama (messages.create)");
 
   const response: any = await raceWithTimeout(
     claude.messages.create({
@@ -25,7 +23,7 @@ async function callClaudeNonStreaming(role: AgentRole, params: any, modelHint?: 
       messages: params.messages || [],
     }) as unknown as Promise<any>,
     AI_CALL_TIMEOUT_MS * 2,
-    `${role} claude non-streaming (modelo ${model})`,
+    `${role} Ollama non-streaming (modelo ${model})`,
   );
 
   const text = (response?.content || [])
@@ -296,7 +294,7 @@ export async function createZocoMessageWithFallback(
     ].filter(Boolean);
   }
 
-  // MOTOR CLAUDE NATIVO: se llama a la API de Anthropic con streaming usando
+  // MOTOR OLLAMA LOCAL: se llama al gateway de Zoco IA con streaming usando
   // el formato Messages nativo (system + messages con bloques). La firma y el
   // formato de retorno ({content:[{type:'text',text}]}) se mantienen idénticos
   // para que los 18+ consumidores del pipeline no necesiten cambios. Si el
@@ -308,7 +306,7 @@ export async function createZocoMessageWithFallback(
       try {
         await new Promise(r => setTimeout(r, Math.random() * 500));
 
-        logger.info({ role, model: claudeModel }, "Iniciando stream con Claude (Anthropic)...");
+        logger.info({ role, model: claudeModel }, "Iniciando stream con Ollama local...");
 
         let fullText = "";
         let usageInputTokens = 0;
@@ -333,7 +331,7 @@ export async function createZocoMessageWithFallback(
             `${role} stream chunk (modelo ${claudeModel})`,
           ) as { value: any; done: boolean };
           if (done) break;
-          // Formato de eventos nativo de Anthropic.
+          // Formato de eventos compatible expuesto por el gateway local.
           if (chunk?.type === "content_block_delta" && chunk.delta?.type === "text_delta") {
             fullText += chunk.delta.text;
           }
