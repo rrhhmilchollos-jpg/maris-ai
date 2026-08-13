@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, type ClipboardEvent } from "react";
 import { Plus, X, Loader2, Image as ImageIcon, FileText, FileJson, File as FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,126 @@ export interface UploadedAttachment {
 
 // Acepta todo — el antivirus del servidor filtra lo malicioso
 const ACCEPT_ATTR = "*/*";
+
+type AttachmentToast = (options: {
+  title: string;
+  description?: string;
+  variant?: "destructive";
+}) => void;
+
+/**
+ * Sube archivos al endpoint común de adjuntos y devuelve la lista actualizada.
+ * Se comparte entre el selector de archivos y el pegado desde el portapapeles
+ * para que ambas rutas tengan exactamente los mismos límites y validaciones.
+ */
+export async function uploadAttachmentFiles(
+  files: FileList | File[] | null,
+  attachments: UploadedAttachment[],
+  toast: AttachmentToast,
+): Promise<UploadedAttachment[]> {
+  if (!files || files.length === 0) return attachments;
+
+  // Hard cap: 10 attachments per message (matches the server-side cap).
+  const room = Math.max(0, 10 - attachments.length);
+  const list = Array.from(files).slice(0, room);
+  if (list.length === 0) {
+    toast({
+      title: "Demasiados archivos",
+      description: "Máximo 10 archivos por mensaje.",
+      variant: "destructive",
+    });
+    return attachments;
+  }
+
+  const next = [...attachments];
+  for (const file of list) {
+    try {
+      const fd = new FormData();
+      // Algunas capturas del sistema operativo llegan sin nombre.
+      // Asignar uno estable evita que el backend rechace el multipart.
+      const filename = file.name || `captura-${Date.now()}.png`;
+      fd.append("file", file, filename);
+      const res = await fetch("/api/uploads", {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let msg = "No pude subir el archivo.";
+        try {
+          const body = await res.json();
+          if (body?.error) msg = String(body.error);
+        } catch {
+          /* ignore */
+        }
+        toast({
+          title: `Error con ${filename}`,
+          description: msg,
+          variant: "destructive",
+        });
+        continue;
+      }
+      const body = (await res.json()) as {
+        id: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        isImage: boolean;
+        isVideo?: boolean;
+      };
+      // Build a local preview URL for images/videos so the chip shows the
+      // screenshot instantly without a round-trip to /api/uploads/:id.
+      const previewUrl = (body.isImage || body.isVideo) ? URL.createObjectURL(file) : undefined;
+      next.push({ ...body, previewUrl });
+    } catch (err) {
+      toast({
+        title: `Error con ${file.name || "la captura"}`,
+        description: err instanceof Error ? err.message : "Fallo de red.",
+        variant: "destructive",
+      });
+    }
+  }
+  return next;
+}
+
+/**
+ * Permite pegar una captura de pantalla directamente sobre un textarea.
+ * Los pegados de texto siguen comportándose de forma nativa; solo se
+ * intercepta el evento cuando el portapapeles contiene una imagen.
+ */
+export function useAttachmentPaste({
+  attachments,
+  onChange,
+  disabled = false,
+}: {
+  attachments: UploadedAttachment[];
+  onChange: (next: UploadedAttachment[]) => void;
+  disabled?: boolean;
+}) {
+  const { toast } = useToast();
+  const [uploadingPaste, setUploadingPaste] = useState(false);
+
+  return useCallback(
+    async (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      if (disabled || uploadingPaste) return;
+      const pastedImages = Array.from(event.clipboardData?.items ?? [])
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file));
+      if (pastedImages.length === 0) return;
+
+      event.preventDefault();
+      setUploadingPaste(true);
+      try {
+        const next = await uploadAttachmentFiles(pastedImages, attachments, toast);
+        onChange(next);
+      } finally {
+        setUploadingPaste(false);
+      }
+    },
+    [attachments, disabled, onChange, toast, uploadingPaste],
+  );
+}
 
 const isVideoMime = (mime: string) => mime.startsWith("video/");
 const isImageMime = (mime: string) => mime.startsWith("image/");
@@ -59,64 +179,13 @@ export function AttachmentPicker({
   const handleFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
-      // Hard cap: 10 attachments per message (matches the server-side cap).
-      const room = Math.max(0, 10 - attachments.length);
-      const list = Array.from(files).slice(0, room);
-      if (list.length === 0) {
-        toast({
-          title: "Demasiados archivos",
-          description: "Máximo 10 archivos por mensaje.",
-          variant: "destructive",
-        });
-        return;
-      }
       setUploading(true);
-      const next = [...attachments];
-      for (const file of list) {
-        try {
-          const fd = new FormData();
-          fd.append("file", file);
-          const res = await fetch("/api/uploads", {
-            method: "POST",
-            body: fd,
-            credentials: "include",
-          });
-          if (!res.ok) {
-            let msg = "No pude subir el archivo.";
-            try {
-              const body = await res.json();
-              if (body?.error) msg = String(body.error);
-            } catch {
-              /* ignore */
-            }
-            toast({
-              title: `Error con ${file.name}`,
-              description: msg,
-              variant: "destructive",
-            });
-            continue;
-          }
-          const body = (await res.json()) as {
-            id: string;
-            filename: string;
-            mimeType: string;
-            sizeBytes: number;
-            isImage: boolean;
-          };
-          // Build a local preview URL for images so the chip can show the
-          // thumbnail instantly without a round-trip to /api/uploads/:id.
-          const previewUrl = (body.isImage || (body as any).isVideo) ? URL.createObjectURL(file) : undefined;
-          next.push({ ...body, previewUrl });
-        } catch (err) {
-          toast({
-            title: `Error con ${file.name}`,
-            description: err instanceof Error ? err.message : "Fallo de red.",
-            variant: "destructive",
-          });
-        }
+      try {
+        const next = await uploadAttachmentFiles(files, attachments, toast);
+        onChange(next);
+      } finally {
+        setUploading(false);
       }
-      setUploading(false);
-      onChange(next);
       // Reset the input so re-selecting the same file fires `change` again.
       if (inputRef.current) inputRef.current.value = "";
     },
@@ -149,7 +218,7 @@ export function AttachmentPicker({
         size={size}
         onClick={openPicker}
         disabled={disabled || uploading}
-        title="Adjuntar archivo o foto"
+        title="Adjuntar archivo o foto — también puedes pegar una captura con Ctrl/Cmd+V"
         aria-label="Adjuntar archivo o foto"
         className="text-muted-foreground hover:text-foreground"
         data-testid={`${testIdPrefix}-button`}

@@ -28,6 +28,7 @@ import { PreGenerationChat } from "@/components/pre-generation-chat";
 import {
   AttachmentPicker,
   AttachmentChips,
+  useAttachmentPaste,
   type UploadedAttachment,
 } from "@/components/attachment-picker";
 import { Button } from "@/components/ui/button";
@@ -858,6 +859,11 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
   };
 
   const isWorking = activeJobId !== null;
+  const handlePasteAttachment = useAttachmentPaste({
+    attachments,
+    onChange: setAttachments,
+    disabled: isWorking,
+  });
 
   useEffect(() => {
     if (!showNoCredits || isAdmin) return;
@@ -1027,8 +1033,18 @@ const KIND_META: Record<Kind, { label: string; icon: typeof Layers; placeholder:
           <form onSubmit={handleGenerate} className={kind === "video-ai" || kind === "imagen-ai" ? "hidden" : ""}>
             <div className="px-6 pb-3">
               <div className="relative bg-[#0a0a10] border border-white/[0.07] rounded-xl focus-within:border-primary/40 transition-all">
+                <AttachmentChips
+                  attachments={attachments}
+                  onRemove={(attachmentId) => setAttachments((items) => {
+                    const removed = items.find((item) => item.id === attachmentId);
+                    if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+                    return items.filter((item) => item.id !== attachmentId);
+                  })}
+                  testIdPrefix="new-app-attachment"
+                />
                 <Textarea
-                  placeholder={kindMeta.placeholder}
+                  placeholder={`${kindMeta.placeholder} También puedes pegar una captura (Ctrl/Cmd+V)`}
+                  onPaste={handlePasteAttachment}
                   className="min-h-[100px] sm:min-h-[140px] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 resize-none text-base md:text-sm text-white placeholder:text-white/20 p-3 sm:p-4 pb-14"
                   value={prompt}
                   onChange={(e) => { setPrompt(e.target.value); if (inlineHint) setInlineHint(null); }}

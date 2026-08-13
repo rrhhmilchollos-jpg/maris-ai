@@ -46,6 +46,7 @@ import { Layout } from "@/components/layout";
 import {
   AttachmentPicker,
   AttachmentChips,
+  useAttachmentPaste,
   type UploadedAttachment,
 } from "@/components/attachment-picker";
 import { Button } from "@/components/ui/button";
@@ -770,6 +771,11 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     : [];
   const isActivelyProcessing = effectiveJobId !== null && !isAwaitingApproval;
   const isWorking = isActivelyProcessing || isAwaitingApproval;
+  const handlePasteAttachment = useAttachmentPaste({
+    attachments: chatAttachments,
+    onChange: setChatAttachments,
+    disabled: outOfCredits || sendMutation.isPending || isWorking,
+  });
   const firstName = me?.name?.split(" ")?.[0] || me?.firstName || user?.firstName || "Ivan";
   const visibleMessages = ((messages ?? []) as ChatMessage[]).filter((msg) => !isTechnicalAssistantMessage(msg));
   const assistantMessages = visibleMessages.filter((msg) => msg.role !== "user");
@@ -1712,6 +1718,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <AttachmentChips attachments={chatAttachments} onRemove={(attachmentId) => setChatAttachments((items) => items.filter((item) => item.id !== attachmentId))} />
               <Textarea
                 value={draft}
+                onPaste={handlePasteAttachment}
                 onChange={(event) => { if (!outOfCredits) setDraft(event.target.value); }}
                 onKeyDown={(e) => {
                   if (outOfCredits) { e.preventDefault(); return; }
@@ -1721,7 +1728,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
                     if (draft.trim().length >= 2 && !sendMutation.isPending && !isActivelyProcessing) handleSend();
                   }
                 }}
-                placeholder={outOfCredits ? "Sin créditos — compra más para continuar..." : "Escribe un mensaje al agente..."}
+                placeholder={outOfCredits ? "Sin créditos — compra más para continuar..." : "Escribe un mensaje al agente... También puedes pegar una captura (Ctrl/Cmd+V)"}
                 disabled={outOfCredits}
                 className={`min-h-[64px] md:min-h-[72px] resize-none border-0 bg-transparent text-[14px] text-white placeholder:text-white/30 focus-visible:ring-0 px-4 pt-3 pb-2 ${outOfCredits ? "opacity-40 cursor-not-allowed" : ""}`}
               />
