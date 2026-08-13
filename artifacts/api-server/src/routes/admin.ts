@@ -100,9 +100,21 @@ router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 // middleware de arriba no le aplica): el frontend lo consulta al arrancar
 // para decidir si muestra la página "En construcción" a los visitantes.
 // El interruptor POST /api/admin/maintenance sí exige admin.
-router.get("/site-status", async (_req, res) => {
-  // DESACTIVADO A PETICIÓN DEL USUARIO: El sitio debe estar siempre visible al público.
-  res.json({ maintenance: false });
+router.get("/site-status", async (req: any, res) => {
+  try {
+    await connectDB();
+    const { SiteSetting } = await import("@workspace/db/schema");
+    const [modeSetting, ipSetting] = await Promise.all([
+      SiteSetting.findOne({ key: "maintenance_mode" }),
+      SiteSetting.findOne({ key: "maintenance_admin_ip" }),
+    ]);
+    const maintenance = modeSetting?.value === "on";
+    const clientIp = String(req.ip || "").replace(/^::ffff:/, "");
+    const trustedIp = String(ipSetting?.value || "").replace(/^::ffff:/, "");
+    res.json({ maintenance, adminByIp: Boolean(clientIp && trustedIp && clientIp === trustedIp) });
+  } catch {
+    res.json({ maintenance: false, adminByIp: false });
+  }
 });
 
 router.post("/admin/maintenance", async (req: any, res: any): Promise<void> => {
@@ -118,7 +130,15 @@ router.post("/admin/maintenance", async (req: any, res: any): Promise<void> => {
     { $set: { value: enabled ? "on" : "off", updatedBy: String(req.userId ?? "") } },
     { upsert: true },
   );
-  res.json({ ok: true, maintenance: enabled });
+  if (enabled) {
+    const clientIp = String(req.ip || "").replace(/^::ffff:/, "");
+    await SiteSetting.updateOne(
+      { key: "maintenance_admin_ip" },
+      { $set: { value: clientIp, updatedBy: String(req.userId ?? "") } },
+      { upsert: true },
+    );
+  }
+  res.json({ ok: true, maintenance: enabled, adminByIp: true });
 });
 
 router.get("/admin/overview", async (_req, res) => {

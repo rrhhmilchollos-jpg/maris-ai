@@ -52,11 +52,13 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
     return null;
   });
   const [toggling, setToggling] = useState(false);
+  const [adminByIp, setAdminByIp] = useState(false);
   const [location] = useLocation();
   const { isSignedIn } = useUser();
   // useGetMe 401ea sin sesión — enabled evita ruido en consola de visitantes.
   const { data: me } = useGetMe({ query: { enabled: Boolean(isSignedIn) } });
   const isAdmin = Boolean((me as { isAdmin?: boolean } | undefined)?.isAdmin);
+  const canBypassMaintenance = isAdmin || adminByIp;
   // ENCONTRADO A PETICIÓN DEL USUARIO (SEO real: marisai.es no aparecía en
   // resultados de Google -- causa raíz confirmada, no una suposición: el
   // modo mantenimiento no tenía NINGUNA excepción para rastreadores de
@@ -76,15 +78,27 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   })();
 
   useEffect(() => {
-    // DESACTIVADO A PETICIÓN DEL USUARIO: Forzar modo mantenimiento a OFF
-    setMaintenance(false);
-    try { localStorage.setItem("marisMaintenanceCache", "false"); } catch { /* silencioso */ }
+    let mounted = true;
+    apiFetch<{ maintenance?: boolean; adminByIp?: boolean }>("/api/site-status")
+      .then((res) => {
+        if (mounted && typeof res?.maintenance === "boolean") {
+          setMaintenance(res.maintenance);
+          setAdminByIp(Boolean(res?.adminByIp));
+          try {
+            localStorage.setItem("marisMaintenanceCache", String(res.maintenance));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function toggle(enabled: boolean) {
     setToggling(true);
     try {
-      const data = await apiFetch<{ ok?: boolean; maintenance?: boolean }>(
+      const data = await apiFetch<{ ok?: boolean; maintenance?: boolean; adminByIp?: boolean }>(
         "/api/admin/maintenance",
         {
           method: "POST",
@@ -92,7 +106,11 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
           body: JSON.stringify({ enabled }),
         },
       );
-      if (data?.ok) setMaintenance(Boolean(data.maintenance));
+      if (data?.ok) {
+        setMaintenance(Boolean(data.maintenance));
+        setAdminByIp(Boolean(data.adminByIp));
+        try { localStorage.setItem("marisMaintenanceCache", String(Boolean(data.maintenance))); } catch {}
+      }
     } catch {
       /* si falla, el estado visible no cambia — reintentar es un clic */
     } finally {
@@ -124,7 +142,7 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
   // Rutas de autenticación siempre accesibles (puerta de entrada del equipo).
   const isAuthRoute = location.startsWith("/sign-in") || location.startsWith("/sign-up");
 
-  if (maintenance && !isAdmin && !isAuthRoute && !isSearchCrawler) {
+  if (maintenance && !canBypassMaintenance && !isAuthRoute && !isSearchCrawler) {
     return <UnderConstructionPage />;
   }
 
@@ -132,7 +150,7 @@ export function MaintenanceGate({ children }: { children: ReactNode }) {
     <>
       {children}
       {/* Pastilla flotante de control — SOLO admins */}
-      {isAdmin && (
+      {canBypassMaintenance && (
         <div
           className={`fixed z-[9999] flex items-center gap-3 rounded-full border px-4 py-2 text-xs shadow-2xl backdrop-blur-md transition-colors ${
             maintenance
