@@ -67,23 +67,23 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://api.marisai.es/api/:path*"
+      "destination": "http://5.78.101.207:3000/api/:path*"
     },
     {
       "source": "/news-sitemap.xml",
-      "destination": "https://api.marisai.es/api/news-sitemap.xml"
+      "destination": "http://5.78.101.207:3000/api/news-sitemap.xml"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "https://api.marisai.es/api/sitemap.xml"
+      "destination": "http://5.78.101.207:3000/api/sitemap.xml"
     },
     {
       "source": "/rss",
-      "destination": "https://api.marisai.es/rss"
+      "destination": "http://5.78.101.207:3000/rss"
     },
     {
       "source": "/rss/:path*",
-      "destination": "https://api.marisai.es/rss/:path*"
+      "destination": "http://5.78.101.207:3000/rss/:path*"
     },
     {
       "source": "/robots.txt",
@@ -102,14 +102,14 @@
       "has": [
         { "type": "header", "key": "user-agent", "value": ".*(Googlebot|bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Discordbot|TelegramBot|Applebot).*" }
       ],
-      "destination": "https://api.marisai.es/bot-render/news/:slug"
+      "destination": "http://5.78.101.207:3000/bot-render/news/:slug"
     },
     {
       "source": "/news",
       "has": [
         { "type": "header", "key": "user-agent", "value": ".*(Googlebot|bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot|facebookexternalhit|Twitterbot|LinkedInBot|WhatsApp|Discordbot|TelegramBot|Applebot).*" }
       ],
-      "destination": "https://api.marisai.es/bot-render/news"
+      "destination": "http://5.78.101.207:3000/bot-render/news"
     },
     {
       "source": "/((?!assets|api|favicon|manifest|robots|sitemap|rss|llms|opengraph|logo|apple-touch|.well-known|pricing|showcase(?!/)|news|vs-emergent|vs-lovable|vs-bolt|vs-base44|que-es-vibe-coding|que-es-un-agente-de-ia|glosario|desarrollo-no-code-guia|landings|blog|en|legal|demo|afiliados|sign-up(?!/)|sign-in(?!/)|crear).*)",
