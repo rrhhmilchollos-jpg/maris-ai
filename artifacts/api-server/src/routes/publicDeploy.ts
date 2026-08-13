@@ -157,12 +157,8 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
       title: row.title,
       slug,
       kind: row.kind,
-      // ENCONTRADO: el sistema de watermark.ts existía completo (CSS, HTML,
-      // lógica de cuándo mostrarlo) pero nunca se conectaba aquí — ninguna
-      // app pública mostraba realmente la marca de agua "Hecho con Maris
-      // AI" ni generaba el backlink real a marisai.es. shouldHaveWatermark
-      // ya decide correctamente: oculta para apps que ya pagaron por
-      // quitarla (row.hasWatermark === false tras el pago).
+      seoMetadata: seo,
+      // La marca de agua se conserva para apps que no han pagado por retirarla.
       hasWatermark: (row as any).hasWatermark !== false,
       removeWatermarkUrl: `https://www.marisai.es/dashboard?app=${String((row as any)._id)}`,
     });
@@ -185,8 +181,7 @@ router.get("/p/:slug/_inner", async (req: Request, res: Response) => {
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
-    const htmlWithSeo = innerHtml.replace(/<head([^>]*)>/i, (_match, attrs) => `<head${attrs}>\n  ${seoHeadTags(seo)}`);
-    res.send(htmlWithSeo);
+    res.send(innerHtml);
   } catch (err) {
     req.log?.error({ err, slug }, "inner build failed");
     res.status(500).type("text/plain").send(String(err));

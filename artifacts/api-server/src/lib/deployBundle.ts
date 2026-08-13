@@ -5,6 +5,7 @@ import { isStaticHtmlBundle } from "@workspace/bundle-format";
 import { injectWatermarkToHTML } from "./watermark";
 import { resolveDynamicPins } from "./dynamicPinning";
 import { logger } from "./logger";
+import { buildSeoGeoMetadata, seoHeadTags, type SeoGeoMetadata } from "./seoGeoOptimizer";
 
 /**
  * Bundles the generated frontend into a single self-contained HTML page that
@@ -49,6 +50,8 @@ export async function buildDeployHtml(opts: {
   hasWatermark?: boolean;
   /** URL a la que apunta el botón "Eliminar" del watermark (página de pago). */
   removeWatermarkUrl?: string;
+  /** SEO+GEO calculado automáticamente para la página final. */
+  seoMetadata?: SeoGeoMetadata;
 }): Promise<string> {
   if (isNonJsKindLocal(opts.kind)) {
     return buildNonJsLandingHtml({
@@ -80,7 +83,9 @@ export async function buildDeployHtml(opts: {
     const htmlContent = rawVfs["index.html"];
     if (/^\s*<!DOCTYPE html>|^\s*<html[\s>]/i.test(htmlContent)) {
       logger.info({ title: opts.title }, "buildDeployHtml: bundle es un proyecto HTML estático -- sirviendo index.html directamente sin esbuild");
-      return opts.hasWatermark ? injectWatermarkToHTML(htmlContent, undefined, opts.removeWatermarkUrl) : htmlContent;
+      const seo = opts.seoMetadata || buildSeoGeoMetadata({ title: opts.title, publicSlug: opts.slug });
+      const withSeo = htmlContent.replace(/<head([^>]*)>/i, (_match, attrs) => `<head${attrs}>\n  ${seoHeadTags(seo)}`);
+      return opts.hasWatermark ? injectWatermarkToHTML(withSeo, undefined, opts.removeWatermarkUrl) : withSeo;
     }
   }
 
@@ -208,6 +213,7 @@ export async function buildDeployHtml(opts: {
   }
 
   const safeTitle = (opts.title || "Maris AI App").replace(/[<&>]/g, "");
+  const seo = opts.seoMetadata || buildSeoGeoMetadata({ title: opts.title, publicSlug: opts.slug });
 
   // Inline the user-authored CSS captured during bundling. We escape any
   // `</style>` sequences inside the CSS so they can't terminate the parent
@@ -468,7 +474,7 @@ export async function buildDeployHtml(opts: {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${safeTitle}</title>
+  ${seoHeadTags(seo)}
   <style>html,body,#root{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}</style>${userStyleTag}
   <script src="https://cdn.tailwindcss.com"></script>
   <script type="importmap">${JSON.stringify({ imports })}</script>
