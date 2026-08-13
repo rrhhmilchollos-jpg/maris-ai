@@ -204,10 +204,10 @@ export function antiScrapingMiddleware(req: Request, res: Response, next: NextFu
   // Allow known good bots
   if (ALLOWED_BOT_UAS.some(p => p.test(ua))) return next();
 
-  // Detect suspicious user agents
+  // Detect suspicious user agents (permitir /preview para diagnósticos y iframes)
   if (SCRAPING_PATTERNS.some(p => p.test(ua))) {
     // Only block if they're hitting API routes
-    if (req.path.startsWith("/api/") && !req.path.includes("/health")) {
+    if (req.path.startsWith("/api/") && !req.path.includes("/health") && !req.path.includes("/preview")) {
       recordSuspicious(ip, `Scraping UA detectado: ${ua.slice(0, 80)}`, req);
       return res.status(403).json({ error: "forbidden", message: "Access denied." });
     }
@@ -227,8 +227,12 @@ export function securityHeadersMiddleware(_req: Request, res: Response, next: Ne
   res.removeHeader("X-Powered-By");
   res.removeHeader("Server");
 
-  // Anti-embedding
-  res.setHeader("X-Frame-Options", "DENY");
+  // Anti-embedding (permitir embedding en iframes de preview y dominios propios)
+  if (!_req.path.includes("/preview")) {
+    res.setHeader("X-Frame-Options", "DENY");
+  } else {
+    res.setHeader("X-Frame-Options", "ALLOWALL");
+  }
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");

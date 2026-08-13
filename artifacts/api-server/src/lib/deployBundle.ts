@@ -483,7 +483,10 @@ export async function buildDeployHtml(opts: {
 <body>
   <div id="root"></div>
   <script>
-  // Lucide-react icon polyfill
+  // Polyfill CRA/Vite: el frontend real usa process.env en utils/api.js.
+  // La preview se ejecuta como módulo ESM en navegador, sin Node.js.
+  if (typeof globalThis.process === 'undefined') globalThis.process = { env: {} };
+  if (!globalThis.process.env) globalThis.process.env = {};
   if (typeof window !== 'undefined') window.__LUCIDE_SAFE_MODE = true;
   // import.meta.env polyfill — evita "Cannot read properties of undefined (reading 'VITE_API_URL')"
   // cuando el bundle generado por el agente accede a import.meta.env en el preview inline
@@ -518,7 +521,7 @@ ${code}
 }
 
 function pickEntry(vfs: Record<string, string>): string | null {
-  const candidates = ["src/main.tsx", "src/main.ts", "src/index.tsx", "src/index.ts", "src/App.tsx"];
+  const candidates = ["src/main.tsx", "src/main.ts", "src/index.tsx", "src/index.ts", "src/App.tsx", "src/App.jsx", "src/App.js", "frontend/src/main.tsx", "frontend/src/main.ts", "frontend/src/index.tsx", "frontend/src/index.ts", "frontend/src/index.jsx", "frontend/src/index.js", "frontend/src/App.tsx", "frontend/src/App.jsx", "frontend/src/App.js"];
   for (const c of candidates) {
     if (vfs[c]) return c;
   }
@@ -678,6 +681,14 @@ function virtualFsPlugin(
           // Should never happen since pickEntry confirmed this exists, but
           // fail loudly if it does — silent success is the bug we're avoiding.
           return { errors: [{ text: `Entry not found in VFS: ${args.path}` }] };
+        }
+        // Vite/CRA alias '@/...' apunta a frontend/src (o src en bundles planos).
+        // Debe resolverse dentro del VFS; si se marca como external, el navegador
+        // intenta pedir un módulo literal '@/App' y la preview queda en blanco.
+        if (args.path.startsWith("@/")) {
+          const resolvedAlias = resolveInVfs(vfs, args.path, args.importer);
+          if (resolvedAlias) return { path: resolvedAlias, namespace: "vfs" };
+          return { errors: [{ text: `Alias no encontrado en VFS: ${args.path}` }] };
         }
         // Bare import → external; record so we can add to the import map.
         if (!args.path.startsWith(".") && !args.path.startsWith("/")) {
@@ -930,6 +941,41 @@ export const PanelTop = _IconStub;
 export const PanelBottom = _IconStub;
 export const SplitSquareHorizontal = _IconStub;
 export const SplitSquareVertical = _IconStub;
+export const Apple = _IconStub;
+export const ArrowDownLeft = _IconStub;
+export const ArrowUpRight = _IconStub;
+export const Banknote = _IconStub;
+export const Bot = _IconStub;
+export const Briefcase = _IconStub;
+export const Building2 = _IconStub;
+export const CheckCircle2 = _IconStub;
+export const Chrome = _IconStub;
+export const CircleDollarSign = _IconStub;
+export const Coffee = _IconStub;
+export const Edit2 = _IconStub;
+export const Euro = _IconStub;
+export const Gamepad2 = _IconStub;
+export const Gift = _IconStub;
+export const GraduationCap = _IconStub;
+export const GripVertical = _IconStub;
+export const Hash = _IconStub;
+export const HelpCircle = _IconStub;
+export const History = _IconStub;
+export const IdCard = _IconStub;
+export const KeyRound = _IconStub;
+export const Landmark = _IconStub;
+export const MicOff = _IconStub;
+export const MoreHorizontal = _IconStub;
+export const MoreVertical = _IconStub;
+export const Percent = _IconStub;
+export const PhoneOff = _IconStub;
+export const PiggyBank = _IconStub;
+export const Save = _IconStub;
+export const Share2 = _IconStub;
+export const ShoppingBag = _IconStub;
+export const VideoOff = _IconStub;
+export const Wallet = _IconStub;
+
 `;
             }
             return { path: "__lucide_shim__.tsx", namespace: "vfs" };
@@ -971,6 +1017,7 @@ export const ${stubName}Page = ${stubName};
           ext === "tsx" ? "tsx"
           : ext === "ts" ? "ts"
           : ext === "jsx" ? "jsx"
+          : ext === "js" ? "jsx"
           : ext === "json" ? "json"
           : "js";
         return { contents, loader };
@@ -994,6 +1041,15 @@ function resolveInVfs(
     target = normalize(`${dir}/${clean}`);
   } else if (clean.startsWith("/")) {
     target = clean.slice(1);
+  } else if (clean.startsWith("@/")) {
+    const aliasPath = clean.slice(2);
+    // Prefer the nested frontend layout when the target exists with any
+    // supported source extension; support flat src/ bundles too.
+    const hasTarget = (base: string) =>
+      Boolean(vfs[base]) || [".tsx", ".ts", ".jsx", ".js", ".css"].some((ext) => Boolean(vfs[base + ext]));
+    target = hasTarget(`frontend/src/${aliasPath}`)
+      ? `frontend/src/${aliasPath}`
+      : `src/${aliasPath}`;
   } else {
     target = clean;
   }

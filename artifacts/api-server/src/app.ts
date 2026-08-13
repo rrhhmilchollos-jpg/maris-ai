@@ -183,7 +183,7 @@ app.use(
     },
     referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     xContentTypeOptions: true,
-    xFrameOptions: { action: "sameorigin" }, // ✅ FIX: era `false`, ahora bloquea clickjacking
+    xFrameOptions: false, // Permitir iframes (protegido por frameAncestors en CSP)
     xXssProtection: true,
     hidePoweredBy: true,
   })

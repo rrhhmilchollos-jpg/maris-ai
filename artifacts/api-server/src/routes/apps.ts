@@ -9427,7 +9427,7 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
       const errMsg = esbuildErr?.message || String(esbuildErr);
       logger.warn({ err: errMsg, appId: req.params.id }, "esbuild failed, using Babel fallback");
       res.setHeader("X-Preview-Mode", "babel-fallback");
-      res.setHeader("X-Preview-Error", errMsg.slice(0, 200));
+      // res.setHeader("X-Preview-Error", errMsg.slice(0, 200));
       // Si el error es de CSS import, intentar de nuevo sin CSS
       if (errMsg.includes("CSS") || errMsg.includes("css")) {
         try {
@@ -9457,7 +9457,7 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     if (rawHtml && rawHtml.includes("<html")) return res.send(rawHtml);
 
     // Fallback con Babel — renderiza TSX en navegador limpiando imports externos
-    const appCode = files["src/App.tsx"] || files["src/App.jsx"] || files["src/App.js"] || "";
+    const appCode = files["frontend/src/App.jsx"] || files["frontend/src/App.js"] || files["frontend/src/App.tsx"] || files["src/App.tsx"] || files["src/App.jsx"] || files["src/App.js"] || "";
     const mainCode = files["src/main.tsx"] || files["src/main.jsx"] || "";
     const cssCode = files["src/index.css"] || files["src/App.css"] || "";
     const appSizeKb = Math.round((app.frontendCode as string).length / 1024);
@@ -9474,7 +9474,7 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
       .replace(/^export\s+(const|let|var|function|class|type|interface)\s+/gm, "$1 ");
 
     const cleanApp = cleanForBabel(appCode);
-    const componentName = (appCode.match(/(?:function|class|const)\s+(App\w*)/)?.[1]) || "App";
+    const componentName = (appCode.match(/(?:function|class|const)\s+(App\w*)/)?.[1]) || (appCode.includes("export default") ? "__DefaultExport" : "App");
 
     const fallback = `<!DOCTYPE html>
 <html lang="es">
@@ -9615,6 +9615,8 @@ try {
   document.getElementById('root').innerHTML = '<div style="padding:2rem;font-family:Inter,sans-serif"><h2 style="color:#E63946">Error renderizando preview</h2><pre style="margin-top:1rem;font-size:12px;color:#666;white-space:pre-wrap">'+e.message+'</pre><p style="margin-top:1rem;color:#666">La app se generó correctamente. Despliégala para verla completa.</p></div>';
 }
 </script>
+
+
 </body>
 </html>`;
 
