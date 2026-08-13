@@ -487,6 +487,7 @@ export async function buildDeployHtml(opts: {
   // La preview se ejecuta como módulo ESM en navegador, sin Node.js.
   if (typeof globalThis.process === 'undefined') globalThis.process = { env: {} };
   if (!globalThis.process.env) globalThis.process.env = {};
+  globalThis.process.env.REACT_APP_BACKEND_URL = '';
   if (typeof window !== 'undefined') window.__LUCIDE_SAFE_MODE = true;
   // import.meta.env polyfill — evita "Cannot read properties of undefined (reading 'VITE_API_URL')"
   // cuando el bundle generado por el agente accede a import.meta.env en el preview inline
