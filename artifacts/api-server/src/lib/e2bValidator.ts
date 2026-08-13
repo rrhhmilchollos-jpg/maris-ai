@@ -101,6 +101,35 @@ export function isE2BEnabled(): boolean {
   return Boolean(process.env.E2B_API_KEY);
 }
 
+type SandboxCommands = { install?: string; build: string; projectDir: string };
+
+function detectSandboxCommands(files: Record<string, string>): SandboxCommands {
+  const nodeManifest = Object.keys(files).find((name) => name === "package.json" || (name.endsWith("/package.json") && name.split("/").length <= 3));
+  const pythonRequirements = Object.keys(files).find((name) => name === "requirements.txt" || name.endsWith("/requirements.txt"));
+  const pyproject = Object.keys(files).find((name) => name === "pyproject.toml" || name.endsWith("/pyproject.toml"));
+  const staticHtml = Object.keys(files).find((name) => name === "index.html" || name === "public/index.html");
+  if (nodeManifest) {
+    const projectDir = nodeManifest.includes("/") ? nodeManifest.slice(0, nodeManifest.lastIndexOf("/")) : ".";
+    const prefix = projectDir === "." ? `cd ${APP_DIR}` : `cd ${APP_DIR}/${projectDir}`;
+    const packageJson = JSON.parse(files[nodeManifest] || "{}");
+    const packageManager = files[`${projectDir === "." ? "" : `${projectDir}/`}pnpm-lock.yaml`] ? "pnpm" : files[`${projectDir === "." ? "" : `${projectDir}/`}yarn.lock`] ? "yarn" : "npm";
+    const install = packageManager === "npm"
+      ? `${prefix} && npm install --no-audit --no-fund --prefer-offline --loglevel=error`
+      : `${prefix} && corepack enable && ${packageManager} install`;
+    const build = packageJson?.scripts?.build ? `${prefix} && ${packageManager} run build` : `${prefix} && node -e \"JSON.parse(require('fs').readFileSync('package.json','utf8'))\"`;
+    return { install, build, projectDir };
+  }
+  if (pythonRequirements || pyproject) {
+    const manifest = pythonRequirements || pyproject || "";
+    const projectDir = manifest.includes("/") ? manifest.slice(0, manifest.lastIndexOf("/")) : ".";
+    const prefix = projectDir === "." ? `cd ${APP_DIR}` : `cd ${APP_DIR}/${projectDir}`;
+    const install = pythonRequirements ? `${prefix} && python3 -m venv .venv && . .venv/bin/activate && pip install --no-cache-dir -r requirements.txt` : `${prefix} && python3 -m venv .venv && . .venv/bin/activate && pip install --no-cache-dir .`;
+    return { install, build: `${prefix} && python3 -m compileall -q .`, projectDir };
+  }
+  if (staticHtml) return { build: `cd ${APP_DIR} && test -f ${staticHtml}`, projectDir: "." };
+  return { build: `cd ${APP_DIR} && find . -maxdepth 2 -type f | head -20`, projectDir: "." };
+}
+
 /**
  * Spin up an E2B microVM, write the generated frontend bundle as files, run
  * `npm install && npm run build`, capture stdout+stderr and return a
@@ -146,7 +175,7 @@ export async function validateBundleInE2B(opts: {
       reason: "empty bundle",
     };
   }
-  if (!files["package.json"]) {
+  if (!files["package.json"] && !Object.keys(files).some((name) => name.endsWith("/package.json") || name.endsWith("/requirements.txt") || name.endsWith("/pyproject.toml") || name === "index.html")) {
     return {
       ok: false,
       ranInstall: false,
@@ -156,7 +185,7 @@ export async function validateBundleInE2B(opts: {
       installStderr: "",
       buildStdout: "",
       buildStderr: "",
-      reason: "bundle has no package.json",
+      reason: "unsupported bundle: no Node, Python or static entrypoint",
     };
   }
 
@@ -174,10 +203,11 @@ export async function validateBundleInE2B(opts: {
     }));
     await sandbox.files.write(writeEntries);
 
-    const install = await sandbox.commands.run(
-      `cd ${APP_DIR} && npm install --no-audit --no-fund --prefer-offline --loglevel=error`,
-      { timeoutMs: INSTALL_TIMEOUT_MS },
-    );
+    const commands = detectSandboxCommands(files);
+    const emptyCommand = { exitCode: 0, stdout: "", stderr: "" };
+    const install = commands.install
+      ? await sandbox.commands.run(commands.install, { timeoutMs: INSTALL_TIMEOUT_MS })
+      : emptyCommand;
 
     if (install.exitCode !== 0) {
       return {
@@ -194,10 +224,7 @@ export async function validateBundleInE2B(opts: {
       };
     }
 
-    const build = await sandbox.commands.run(
-      `cd ${APP_DIR} && npm run build`,
-      { timeoutMs: BUILD_TIMEOUT_MS },
-    );
+    const build = await sandbox.commands.run(commands.build, { timeoutMs: BUILD_TIMEOUT_MS });
 
     if (build.exitCode !== 0) {
       return {

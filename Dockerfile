@@ -59,6 +59,18 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     libxshmfence1 \
     wget \
+    curl \
+    git \
+    jq \
+    unzip \
+    zip \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-venv \
+    build-essential \
+    pkg-config \
+    libssl-dev \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
