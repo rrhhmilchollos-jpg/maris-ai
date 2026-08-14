@@ -136,8 +136,23 @@ export function useUpdateMyPreferences(opts?: { mutation?: Partial<UseMutationOp
 export function useListApps(opts?: { query?: Partial<UseQueryOptions> }) {
   return useQuery<any>({ queryKey: getListAppsQueryKey(), queryFn: () => apiFetch("/api/apps"), ...(opts?.query as any) });
 }
+async function fetchAppDetail(id: string): Promise<any> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 20_000);
+  try {
+    return await apiFetch(`/api/apps/${id}`, { signal: controller.signal });
+  } catch (error: any) {
+    if (controller.signal.aborted) {
+      throw new Error("La carga de la aplicación ha superado el tiempo de espera. Reintenta la consulta.");
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
 export function useGetApp(id: string, opts?: { query?: Partial<UseQueryOptions> }) {
-  return useQuery<any>({ queryKey: getGetAppQueryKey(id), queryFn: () => apiFetch(`/api/apps/${id}`), ...(opts?.query as any) });
+  return useQuery<any>({ queryKey: getGetAppQueryKey(id), queryFn: () => fetchAppDetail(id), ...(opts?.query as any) });
 }
 export function useDeleteApp(opts?: { mutation?: Partial<UseMutationOptions<any, any, any>> }) {
   return useMutation<any, any, any>({ mutationFn: ({ id }: any) => apiFetch(`/api/apps/${id}`, { method: "DELETE" }), ...(opts?.mutation as any) });

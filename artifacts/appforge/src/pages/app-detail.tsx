@@ -433,7 +433,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const lastPreviewRefreshSignatureRef = useRef<string>("");
 
-  const { data: app, isLoading } = useGetApp(id, {
+  const { data: app, isLoading, isError, error: appLoadError, refetch: refetchApp } = useGetApp(id, {
     query: {
       enabled: !!id,
       queryKey: getGetAppQueryKey(id),
@@ -1835,6 +1835,23 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           <div className="space-y-4 w-full max-w-md px-6">
             <Skeleton className="h-8 w-2/3 mx-auto bg-white/5" />
             <Skeleton className="h-[400px] w-full bg-white/5 rounded-xl" />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (isError) {
+    const message = appLoadError instanceof Error ? appLoadError.message : "No se ha podido cargar la aplicación.";
+    return (
+      <Layout>
+        <div className="h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center bg-[#0d0d12] text-white px-6 text-center">
+          <AlertTriangle className="h-8 w-8 text-amber-400 mb-3" />
+          <h2 className="text-2xl font-bold text-gray-100">No se ha podido cargar este espacio</h2>
+          <p className="mt-2 max-w-md text-sm text-gray-400">{message}</p>
+          <div className="mt-5 flex gap-3">
+            <Button className="bg-violet-600 hover:bg-violet-500" onClick={() => refetchApp()}>Reintentar</Button>
+            <Button variant="outline" className="border-white/10 hover:bg-white/5" onClick={() => setLocation("/dashboard")}>Volver al panel</Button>
           </div>
         </div>
       </Layout>
