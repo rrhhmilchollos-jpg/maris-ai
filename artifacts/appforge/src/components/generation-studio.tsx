@@ -22,6 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetGenerationJobQueryKey, getGenerationJobLogs, getGetGenerationJobLogsQueryKey } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { JOB_POLLING, pollingInterval, pollingRetryDelay, retryPollingRequest } from "@/lib/job-polling";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,11 +306,12 @@ function ChatLogStream({ jobId, isActive }: { jobId: string | null; isActive: bo
       }
     },
     enabled,
-    refetchInterval: isActive ? 400 : false,
+    refetchInterval: (query) => pollingInterval(query, isActive, JOB_POLLING.logs),
     refetchOnWindowFocus: false,
     staleTime: 0,
     gcTime: 60_000,
-    retry: 1,
+    retry: retryPollingRequest,
+    retryDelay: pollingRetryDelay,
   });
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import {
   getGetGenerationJobLogsQueryKey,
   type JobLogEntry,
 } from "@/lib/api-client";
+import { JOB_POLLING, pollingInterval, pollingRetryDelay, retryPollingRequest } from "@/lib/job-polling";
 import {
   Bot, Code2, Search, Sparkles, Server, Zap, CheckCircle2,
   Terminal, ShieldCheck, Wrench, Bug, Eye, FolderOpen, ChevronDown, ChevronRight,
@@ -238,11 +239,15 @@ export function AgentLogStream({ jobId, isActive }: AgentLogStreamProps) {
       }
     },
     enabled,
-    refetchInterval: isActive ? 400 : false,
+    // Un stream a 400 ms multiplica las solicitudes por cada pestaña abierta
+    // y activa el limitador global. Se consulta cada 8 s y se aplica backoff
+    // exponencial ante errores, especialmente HTTP 429.
+    refetchInterval: (query) => pollingInterval(query, isActive, JOB_POLLING.logs),
     refetchOnWindowFocus: false,
     staleTime: 0,
     gcTime: 60_000,
-    retry: 1,
+    retry: retryPollingRequest,
+    retryDelay: pollingRetryDelay,
   });
 
   useEffect(() => {

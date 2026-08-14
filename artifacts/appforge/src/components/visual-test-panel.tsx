@@ -40,6 +40,8 @@ interface VisualTestResult {
   screenshots: Screenshot[];
   fixesApplied: number;
   usingPreviewFallback?: boolean;
+  skipped?: boolean;
+  code?: string;
   note?: string;
 }
 
@@ -185,9 +187,15 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
     try {
       const data = await submitVisualTestJob(autoFix);
 
-      // Chromium no disponible en este entorno
+      // Chromium no disponible es una degradación de infraestructura, no un
+      // fallo de la aplicación. Guardamos el resultado omitido y no lanzamos
+      // Autofix para evitar un ciclo de generación basado en un falso positivo.
       if (data.code === "NO_CHROMIUM") {
-        setError("Testing visual con screenshots no disponible en este entorno. El análisis de código sigue activo.");
+        setResult({
+          ...data,
+          skipped: true,
+          note: data.note || "Testing visual omitido: Chromium no está disponible en el entorno de validación.",
+        });
         return;
       }
 
@@ -266,7 +274,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
-          {result && !result.visuallyCorrect && (
+          {result && !result.skipped && !result.visuallyCorrect && (
             <Button
               variant="outline"
               size="sm"
@@ -283,7 +291,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
           <Button
             size="sm"
             onClick={() => runTest(true)}
-            disabled={running || autoFixing}
+            disabled={running || autoFixing || !!result?.skipped}
             title="Escanea la app, detecta errores y los repara automáticamente"
             className="h-7 text-[16px] bg-cyan-600 hover:bg-cyan-700 text-white px-2"
           >
@@ -350,8 +358,15 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
       {/* Results */}
       {result && !running && (
         <div className="flex-1 overflow-y-auto">
-          {/* Nota de preview fallback */}
-          {result.usingPreviewFallback && result.note && (
+          {/* Las dependencias de infraestructura ausentes se muestran como
+              estado degradado y nunca como un defecto de la app del cliente. */}
+          {result.skipped && result.note && (
+            <div className="mx-4 mt-3 flex items-start gap-2 text-[16px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              {result.note}
+            </div>
+          )}
+          {result.usingPreviewFallback && !result.skipped && result.note && (
             <div className="mx-4 mt-3 flex items-start gap-2 text-[16px] text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
               <Eye className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               {result.note}

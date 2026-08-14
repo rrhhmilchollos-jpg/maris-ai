@@ -123,6 +123,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { AgentLogStream } from "@/components/agent-log-stream";
 import { VisualTestPanel } from "@/components/visual-test-panel";
+import { JOB_POLLING, pollingInterval, pollingRetryDelay, retryPollingRequest } from "@/lib/job-polling";
 
 // Coste fijo de la "Revisión profunda de errores" (Testing Agent bajo
 // demanda) — debe coincidir con DEEP_TEST_COST en apps.ts.
@@ -436,13 +437,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     query: {
       enabled: !!id,
       queryKey: getGetAppQueryKey(id),
-      refetchInterval: (data: any) => {
-        if (!activeJobId) return false;
-        if (!data) return 3000;
-        const code = String(data?.frontendCode ?? "").trim();
-        const hasCode = code.length >= 20 && !code.includes("El código ha sido consolidado en disco por hitos");
-        return hasCode ? 5000 : 2000;
-      },
+      refetchInterval: (query: any) => pollingInterval(query, !!activeJobId, JOB_POLLING.app),
+      retry: retryPollingRequest,
+      retryDelay: pollingRetryDelay,
     },
   });
   const { data: me } = useGetMe();
@@ -479,18 +476,22 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const { data: creditsHistory } = useGetCreditsHistory();
 
   const { data: messages } = useListAppMessages(id, {
-    query: { enabled: !!id, queryKey: getListAppMessagesQueryKey(id), refetchInterval: activeJobId ? 3000 : false },
+    query: {
+      enabled: !!id,
+      queryKey: getListAppMessagesQueryKey(id),
+      refetchInterval: (query: any) => pollingInterval(query, !!activeJobId, JOB_POLLING.messages),
+      retry: retryPollingRequest,
+      retryDelay: pollingRetryDelay,
+    },
   });
 
   const { data: activeAppJob } = useGetActiveAppJob(id, {
     query: {
       enabled: !!id,
       queryKey: getGetActiveAppJobQueryKey(id),
-      refetchInterval: (data: any) => {
-        const status = data?.status;
-        if (status && status !== "succeeded" && status !== "failed") return 2000;
-        return activeJobId ? 3000 : 15000;
-      },
+      refetchInterval: (query: any) => pollingInterval(query, !!activeJobId, JOB_POLLING.activeJob),
+      retry: retryPollingRequest,
+      retryDelay: pollingRetryDelay,
     },
   });
 
@@ -508,7 +509,9 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     queryKey: [...getGetGenerationJobLogsQueryKey(effectiveJobId ?? ""), "inline"],
     queryFn: () => getGenerationJobLogs(effectiveJobId!, { }),
     enabled: !!effectiveJobId,
-    refetchInterval: effectiveJobId ? 2000 : false,
+    refetchInterval: (query: any) => pollingInterval(query, !!effectiveJobId, JOB_POLLING.logs),
+    retry: retryPollingRequest,
+    retryDelay: pollingRetryDelay,
     select: (d) => d.logs ?? [],
   });
   const jobLogs = jobLogsData ?? [];
@@ -517,8 +520,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
     query: {
       enabled: !!effectiveJobId,
       queryKey: getGetGenerationJobQueryKey(effectiveJobId ?? ""),
-      refetchInterval: (data: any) =>
-        data?.status === "succeeded" || data?.status === "failed" ? false : 1000,
+      refetchInterval: (query: any) => pollingInterval(
+        query,
+        !!effectiveJobId && query?.state?.data?.status !== "succeeded" && query?.state?.data?.status !== "failed",
+        JOB_POLLING.job,
+      ),
+      retry: retryPollingRequest,
+      retryDelay: pollingRetryDelay,
     },
   });
 

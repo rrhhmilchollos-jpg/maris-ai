@@ -23,8 +23,14 @@ export interface TestingAgentOptions {
   isEdit?: boolean;
 }
 
-const MAX_FIX_CYCLES = 5;
-const MAX_EDIT_FIX_CYCLES = 2; // ediciones: tocan pocos archivos — 2 ciclos bastan y la edición termina minutos antes
+// El Testing Agent es un guardrail, no un segundo generador de proyectos.
+// Dos pasadas bastan para reparar errores reproducibles; más ciclos aumentaban
+// coste, latencia y el riesgo de reescribir una app correcta a partir de una
+// heurística ambigua. Las ediciones reciben una única pasada segura.
+const MAX_FIX_CYCLES = 2;
+const MAX_EDIT_FIX_CYCLES = 1;
+const MAX_ISSUES_PER_AUTOFIX = 3;
+const MAX_TESTING_RUNTIME_MS = 120_000;
 
 /**
  * Testing Agent — systematic validation and repair loop.
@@ -39,6 +45,8 @@ export async function runTestingAgent(
   let currentBundle = bundle;
   let allPassing = false;
   let cycle = 0;
+  const startedAt = Date.now();
+  let stoppedForSafety = false;
   // FIX VELOCIDAD: si dos ciclos consecutivos detectan EXACTAMENTE los mismos
   // issues, el parche no está convergiendo — seguir quemando ciclos (y
   // llamadas LLM de minutos cada una) producirá el mismo resultado. Cortar ya.
@@ -77,6 +85,12 @@ export async function runTestingAgent(
   };
 
   while (!allPassing && cycle < maxCycles) {
+    if (Date.now() - startedAt >= MAX_TESTING_RUNTIME_MS) {
+      stoppedForSafety = true;
+      log("testing", "⚠️ El Testing Agent alcanzó su presupuesto de tiempo y detuvo reparaciones automáticas. La app se conserva sin sobrescrituras adicionales.", "warn");
+      onProgress?.({ phase: "testing", progress: 88, note: "Validación acotada por seguridad; no se aplicarán más parches automáticos." });
+      break;
+    }
     cycle++;
 
     // 1. RUN VALIDATION
@@ -197,6 +211,16 @@ export async function runTestingAgent(
       if (quarantinedIssues.size > 0) {
         log("testing", `✓ Validación completada — ${quarantinedIssues.size} aviso(s) heurístico(s) descartado(s) por no ser reproducibles como errores reales.`);
       }
+      break;
+    }
+    // Un arreglo que afecta a más de tres problemas no es seguro para un
+    // patcher automático: antes caía al modo multiarchivo y reescribía hasta
+    // ocho archivos por una sola validación. Se conserva la app y se deja un
+    // diagnóstico para revisión explícita.
+    if (activeIssues.length > MAX_ISSUES_PER_AUTOFIX) {
+      stoppedForSafety = true;
+      log("testing", `⚠️ Se detectaron ${activeIssues.length} problemas; exceden el máximo seguro de ${MAX_ISSUES_PER_AUTOFIX} para auto-reparación. Se detiene el parcheo automático sin sobrescribir la app.`, "warn");
+      onProgress?.({ phase: "testing", progress: 88, note: "Se requiere revisión: demasiados cambios para un parche automático seguro." });
       break;
     }
     const issuesSignature = activeIssues
@@ -341,42 +365,26 @@ export async function runTestingAgent(
     );
 
     if (!patched) {
-      // ENCONTRADO en producción (mismo patrón EXACTO ya documentado y
-      // corregido en autoRepairAgent.ts para el caso real "MesaYa"):
-      // patchBundle estándar (16K tokens, una sola respuesta JSON) puede
-      // fallar silenciosamente cuando hay que reparar varios archivos a la
-      // vez (confirmado en logs reales: "Reparando 6 error(es):
-      // appforge-vfs:src/components/ui/index.ts, ...") — el modelo se
-      // queda sin presupuesto de tokens y produce JSON truncado/inválido,
-      // devolviendo null sin ninguna pista real de qué pasó. Este Testing
-      // Agent (tester.ts) seguía usando SOLO el patcher simple, sin la
-      // solución multi-archivo que ya existe en shared-agents.ts y que ya
-      // se usa en autoRepairAgent.ts — conectado aquí también, mismo
-      // patrón probado: una llamada de planificación + una llamada
-      // completa por archivo, cada una con su propio presupuesto de 16K
-      // tokens, eliminando el riesgo de truncamiento por acumular todo en
-      // una sola respuesta.
-      log("testing", "⚠️ El reparador estándar no consiguió generar un cambio — probando con el modo multi-archivo (para reparaciones grandes)…", "warn");
+      // El respaldo multiarchivo se reserva para diagnósticos pequeños. Su
+      // propio límite de tres archivos evita la antigua reescritura masiva y
+      // mantiene una segunda oportunidad cuando un parche JSON único se corta.
       const errorSummary = report.issues.map((issue) => `[${issue.file}] ${issue.message}`).join("\n");
-      const multiFileResult = await patchBundleMultiFile(
+      const multiFilePatched = await patchBundleMultiFile(
         currentBundle,
         errorSummary,
         language,
         "zoco-plus",
-        (msg) => log("testing", msg),
+        options.jobId,
       );
-      if (multiFileResult.result) {
-        currentBundle = multiFileResult.result;
+      if (multiFilePatched && multiFilePatched !== currentBundle) {
+        currentBundle = multiFilePatched;
         lastPatchedBundle = currentBundle;
-        log("testing", `✅ Modo multi-archivo completado: ${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) generados correctamente. Re-validando en el siguiente ciclo...`);
-        await new Promise(r => setTimeout(r, 1000));
+        log("testing", "✅ Respaldo multiarchivo acotado completado; revalidando una última vez.");
         continue;
       }
-      log("testing", `⚠️ El modo multi-archivo tampoco pudo generar una solución en este ciclo (${multiFileResult.filesSucceeded}/${multiFileResult.filesAttempted} archivo(s) completados).`, "warn");
-      // FIX 3+5: 0 archivos completados = el parche no converge.
-      // Romper el bucle inmediatamente para no gastar tokens en ciclos
-      // idénticos que producirán el mismo resultado. Sin este break, el
-      // testing agent agota todos los MAX_FIX_CYCLES intentando lo mismo.
+      stoppedForSafety = true;
+      log("testing", "⚠️ El reparador no produjo un cambio verificable. Se detiene el auto-fix para preservar la app y evitar una reescritura masiva.", "warn");
+      onProgress?.({ phase: "testing", progress: 88, note: "Auto-reparación detenida: no hubo un parche verificable." });
       break;
     }
 
@@ -428,7 +436,9 @@ export async function runTestingAgent(
     }
   }
   if (!allPassing) {
-    log("testing", "⚠️ Algunos problemas persisten pero se ha alcanzado el límite de ciclos o el parche no convergió.", "warn");
+    log("testing", stoppedForSafety
+      ? "⚠️ La validación quedó pendiente de revisión manual; la aplicación se preservó sin auto-fixes adicionales."
+      : "⚠️ Algunos problemas persisten pero se ha alcanzado el límite de ciclos o el parche no convergió.", "warn");
     // ENCONTRADO A PETICIÓN DEL USUARIO (auditoría de calidad de la
     // primera generación): antes esta información se perdía por completo
     // al devolver solo el bundle -- el cliente recibía su app sin ningún

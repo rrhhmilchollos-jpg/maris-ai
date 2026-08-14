@@ -695,6 +695,11 @@ export async function patchBundle(
  * no toda la reparación — más barato y más fiable que repetir el ciclo
  * completo.
  */
+// Límite absoluto por ciclo: un reparador de calidad no debe convertirse en
+// un regenerador de proyectos. Las reparaciones adicionales requieren una
+// nueva ejecución explícita y una revisión del diagnóstico anterior.
+export const MAX_FILES_PER_REPAIR_CYCLE = 3;
+
 export interface MultiFilePlanItem {
   path: string;
   action: "rewrite" | "create" | "delete";
@@ -728,7 +733,8 @@ async function planMultiFileRepair(
           ],
         });
         const raw = (response.content[0] as any).text ?? "";
-        return extractResilientFilePlan(raw);
+        const plan = extractResilientFilePlan(raw);
+        return plan;
       } catch (err) {
         logger.error({ err }, "Error planning multi-file repair");
         return null;
@@ -739,7 +745,7 @@ async function planMultiFileRepair(
   );
 }
 
-async function generateFilePatch(
+async function generateSingleFileContent(
   bundle: string,
   planItem: MultiFilePlanItem,
   errorSummary: string,
@@ -757,17 +763,20 @@ async function generateFilePatch(
       try {
         const response = await createZocoMessageWithFallback("patcher", model, {
           max_tokens: 16000,
-          system: buildPatcherSystemPrompt(language) + `\nYour current task is to ${action} the file ${path} because: ${reason}.\nOutput JSON only.`, 
+          system: `You are Maris AI's single-file repair agent. ${language === "typescript" ? "Return valid TypeScript/TSX." : "Return valid JavaScript/JSX without TypeScript syntax."}\n\nYour current task is to ${action} the file ${path} because: ${reason}.\n\nCRITICAL ROUTING RULE — CATCH-ALL ORDER: if you edit a router using wouter or react-router, the catch-all/NotFound route MUST ALWAYS be the last child of <Switch> or <Routes>. Never place it before real routes.\n\nOutput EXCLUSIVELY the raw file content. Do not wrap it in JSON, Markdown fences, explanations or prose.`,
           messages: [
             {
               role: "user",
-              content: `CURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to this issue and must NOT be referenced as missing):\n${compactedBundle}\n\nGenerate the full content for the file ${path} based on the plan. Return ONLY the changed/added files as JSON: {\"changedFiles\":{\"${path}\":\"full content\"},\"deletedFiles\":[]}.`,
+              content: `CURRENT FRONTEND BUNDLE (only the most relevant files are shown — files NOT shown here are unrelated to these issues and must NOT be referenced as missing):\n${compactedBundle}\n\nGenerate the complete raw content for ${path}. Return only that file's content.`,
             },
           ],
         });
-        const raw = (response.content[0] as any).text ?? "";
-        const parsed = extractJsonObject<{ changedFiles?: Record<string, string> }>(raw);
-        return parsed?.changedFiles?.[path] || null;
+        const raw = ((response.content[0] as any).text ?? "")
+          .trim()
+          .replace(/^```(?:[a-zA-Z]+)?\s*/, "")
+          .replace(/\s*```$/, "")
+          .trim();
+        return raw.length >= 20 ? raw : null;
       } catch (err) {
         logger.error({ err, path }, "Error generating file patch");
         return null;
@@ -787,22 +796,29 @@ export async function patchBundleMultiFile(
 ): Promise<string | null> {
   const plan = await planMultiFileRepair(frontendCode, errorSummary, language, model);
   if (!plan || plan.length === 0) return null;
+  const boundedPlan = plan.slice(0, MAX_FILES_PER_REPAIR_CYCLE);
+  if (plan.length > boundedPlan.length) {
+    logger.warn(
+      { plannedFiles: plan.length, maxFiles: MAX_FILES_PER_REPAIR_CYCLE, jobId },
+      "Multi-file repair limitado por seguridad; los archivos restantes requieren una ejecución posterior",
+    );
+  }
 
   let currentBundle = frontendCode;
   const changedFiles: Record<string, string> = {};
   const deletedFiles: string[] = [];
 
-  for (const planItem of plan) {
+  for (const planItem of boundedPlan) {
     if (planItem.action === "delete") {
       deletedFiles.push(planItem.path);
       continue;
     }
 
     // Generar el parche para cada archivo, con un reintento si falla
-    let fileContent = await generateFilePatch(currentBundle, planItem, errorSummary, language, model);
+    let fileContent = await generateSingleFileContent(currentBundle, planItem, errorSummary, language, model);
     if (!fileContent) {
       logger.warn({ path: planItem.path }, "Primer intento de generación de archivo fallido, reintentando...");
-      fileContent = await generateFilePatch(currentBundle, planItem, errorSummary, language, model);
+      fileContent = await generateSingleFileContent(currentBundle, planItem, errorSummary, language, model);
     }
 
     if (fileContent) {

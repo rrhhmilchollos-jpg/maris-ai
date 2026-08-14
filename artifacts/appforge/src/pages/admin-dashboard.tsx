@@ -69,6 +69,7 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { apiFetch, getApiBaseUrl, useListAdminJobs, getListAdminJobsQueryKey, getGenerationJobLogs, useRetryAdminJob } from "@/lib/api-client";
+import { JOB_POLLING } from "@/lib/job-polling";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { useLocation } from "wouter";
@@ -1600,14 +1601,16 @@ function LiveMonitorPanel() {
 
   useEffect(() => {
     fetchJobs();
-    pollRef.current = setInterval(fetchJobs, 3000);
+    // El panel ya consulta métricas y logs por otras vías. A 3 s, varias
+    // pestañas exceden el límite compartido por usuario y producen 429.
+    pollRef.current = setInterval(fetchJobs, JOB_POLLING.adminJobs);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   useEffect(() => {
     if (expandedJob) {
       fetchLogs(expandedJob);
-      const t = setInterval(() => fetchLogs(expandedJob), 4000);
+      const t = setInterval(() => fetchLogs(expandedJob), JOB_POLLING.adminLogs);
       return () => clearInterval(t);
     }
   }, [expandedJob]);

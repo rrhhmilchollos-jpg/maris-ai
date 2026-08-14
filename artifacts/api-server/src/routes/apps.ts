@@ -4170,12 +4170,13 @@ export async function generateApp(
     // expandirla comprando más créditos.
     // Usuarios de pago: sin límite, plan completo siempre.
     const FREE_USER_MAX_MILESTONES = 7;
-    // isDegradedFreeTier: true si el usuario no ha pagado nunca O si el admin
-    // forzó generación básica (forceBasicGeneration) para garantizar un MVP
-    // funcional aunque el job tenga hasEverPaid:true. Esto resuelve el caso
-    // de admin regenerando app de cliente free con 20 hitos → saturación.
-    const isDegradedFreeTier = !hasEverPaid || !!requestContext?.forceBasicGeneration;
-    if (isDegradedFreeTier) {
+    // El límite del plan gratuito es absoluto y no depende de la complejidad
+    // clasificada. La anulación administrativa se mantiene separada para no
+    // diluir esta garantía ni reintroducir el caso de 23 hitos para un free.
+    const isDegradedFreeTier = !hasEverPaid;
+    const forceBasicMilestones = !!requestContext?.forceBasicGeneration;
+    const useBasicMilestones = isDegradedFreeTier || forceBasicMilestones;
+    if (useBasicMilestones) {
       await log("system", `✨ Construyendo tu app módulo a módulo (${FREE_USER_MAX_MILESTONES} módulos esenciales). Resultado garantizado y funcional — podrás añadir más módulos después.`);
     } else {
       await log("system", "🏗️ Construyendo tu app módulo a módulo con el orquestador de hitos — cada módulo se genera de forma independiente para garantizar que todo quede completo y funcional...");
@@ -4183,9 +4184,9 @@ export async function generateApp(
     const coreOrchestrator = new CoreOrchestrator(process.cwd(), {// El modelo del orquestador: siempre zocoia para el planificador de hitos
       // (decide el orden y contenido de cada módulo). Los agentes ejecutores
       // dentro de cada hito usan el modelo del plan (Zoco IA en free, anthropic as zocoia en paid).
-      model: isDegradedFreeTier ? "zoco-flash" : "zoco-plus",
+      model: useBasicMilestones ? "zoco-flash" : "zoco-plus",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
-      maxMilestonesOverride: isDegradedFreeTier ? FREE_USER_MAX_MILESTONES : undefined,
+      maxMilestonesOverride: (isDegradedFreeTier || forceBasicMilestones) ? FREE_USER_MAX_MILESTONES : undefined,
       // Pasar el validador esbuild para que el orquestador detecte y regenere
       // hitos de frontend con errores de compilación al terminar cada capa,
       // antes de pasar a la siguiente. Reutiliza el mismo validador del pipeline.

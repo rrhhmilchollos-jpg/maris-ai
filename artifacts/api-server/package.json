@@ -14,7 +14,8 @@
     "test:agent-memory": "tsx ./src/__tests__/agent-memory.test.ts",
     "test:evaluator": "tsx ./src/__tests__/evaluator.test.ts",
     "test:critical-fixes": "tsx ./src/__tests__/critical-fixes.test.ts",
-    "test": "pnpm run test:spanish-intent && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator && pnpm run test:critical-fixes",
+    "test:testing-agent-safety": "tsx ./src/__tests__/testing-agent-safety.test.ts",
+    "test": "pnpm run test:spanish-intent && pnpm run test:agent-memory && pnpm run test:queue && pnpm run test:evaluator && pnpm run test:critical-fixes && pnpm run test:testing-agent-safety",
     "test:spanish-intent": "tsx ./src/__tests__/spanish-intent-lexicon.test.ts"
   },
   "dependencies": {

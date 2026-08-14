@@ -625,12 +625,28 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
         const isChromiumIssue = prevMsg.includes("chromium") || prevMsg.includes("puppeteer") ||
           prevMsg.includes("executable") || prevMsg.includes("ENOENT") || prevMsg.includes("spawn") ||
           prevMsg.includes("Cannot find") || prevMsg.includes("Failed to launch") || prevMsg.includes("browser process");
-        await (VisualTestJob as any).findByIdAndUpdate(jobId, {
-          status: "failed",
-          errorMessage: isChromiumIssue
-            ? `Testing visual con screenshots no disponible en este entorno. Error real: ${prevMsg.slice(0, 200)}`
-            : "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
-        });
+        if (isChromiumIssue) {
+          // La falta de navegador es un estado de infraestructura, no un
+          // defecto de la app. Marcarlo como prueba omitida impide que el
+          // panel o un autofix posterior interpreten el error como una
+          // pantalla rota y disparen nuevas generaciones.
+          await finish({
+            success: true,
+            skipped: true,
+            code: "NO_CHROMIUM",
+            visuallyCorrect: null,
+            overallScore: null,
+            issues: [],
+            screenshots: [],
+            fixesApplied: 0,
+            note: "Testing visual omitido: Chromium no está disponible en el entorno de validación. La generación y la validación estática continúan normalmente.",
+          });
+        } else {
+          await (VisualTestJob as any).findByIdAndUpdate(jobId, {
+            status: "failed",
+            errorMessage: "La app debe estar desplegada públicamente para el test visual completo. Usa el botón 'Deploy' primero.",
+          });
+        }
         return;
       }
     }
@@ -676,14 +692,15 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
       msg.includes("Failed to launch") || msg.includes("browser process")
     ) {
       await finish({
-        success: false,
+        success: true,
+        skipped: true,
         visuallyCorrect: null,
         overallScore: null,
         issues: [],
         screenshots: [],
         fixesApplied: 0,
-        error: `Testing visual no disponible. Error: ${msg.slice(0, 200)}`,
         code: "NO_CHROMIUM",
+        note: "Testing visual omitido: Chromium no está disponible en el entorno de validación. La app no se ha modificado.",
       });
       return;
     }
