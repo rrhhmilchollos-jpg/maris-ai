@@ -474,6 +474,13 @@ export async function buildDeployHtml(opts: {
   }, 12000);
 })();`;
 
+  // Algunas aplicaciones usan CSS propio y no necesitan cargar Tailwind en
+  // tiempo de ejecución. La directiva evita la advertencia de producción sin
+  // romper las previews que todavía dependen de clases utilitarias.
+  const tailwindRuntimeTag = opts.bundle.includes("maris:no-tailwind-cdn")
+    ? ""
+    : '<script src="https://cdn.tailwindcss.com"></script>';
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -481,7 +488,7 @@ export async function buildDeployHtml(opts: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   ${seoHeadTags(seo)}
   <style>html,body,#root{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}</style>${userStyleTag}
-  <script src="https://cdn.tailwindcss.com"></script>
+  ${tailwindRuntimeTag}
   <script type="importmap">${JSON.stringify({ imports })}</script>
   <script>${routerShim}</script>
 </head>

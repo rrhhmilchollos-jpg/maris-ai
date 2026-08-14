@@ -5456,7 +5456,7 @@ const AUREVIA_APP_IDS = new Set([
   "6a7e7b998c2ddda0ecd1f219",
 ]);
 const AUREVIA_UPSTREAM = process.env.AUREVIA_INTERNAL_API_URL || "http://neobanco-preview:8000";
-const AUREVIA_ALLOWED_PATH = /^(?:auth\/login-dni-password|auth\/login|neobanco\/dashboard|kyc\/handoffs(?:\/[^/?]+)?|inbound-activation\/status)$/;
+const AUREVIA_ALLOWED_PATH = /^(?:auth\/(?:login-dni-password|login|recover-password|reset-password)|neobanco\/dashboard|kyc\/handoffs(?:\/[^/?]+(?:\/(?:mobile-start|provider-completion))?)?|inbound-activation\/status|operations\/requests(?:\/[^/?]+)?|support\/conversations(?:\/[^/?]+(?:\/messages)?)?)$/;
 
 router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   const appId = String(req.params.appId || "");
@@ -5474,6 +5474,7 @@ router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   };
   if (req.headers.cookie) headers.cookie = String(req.headers.cookie);
   if (req.headers["content-type"]) headers["content-type"] = String(req.headers["content-type"]);
+  if (req.headers["idempotency-key"]) headers["Idempotency-Key"] = String(req.headers["idempotency-key"]).slice(0, 128);
 
   try {
     const hasBody = !["GET", "HEAD"].includes(String(req.method).toUpperCase());
