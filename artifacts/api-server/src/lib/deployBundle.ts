@@ -522,11 +522,30 @@ ${code}
 }
 
 function pickEntry(vfs: Record<string, string>): string | null {
-  const candidates = ["src/main.tsx", "src/main.ts", "src/index.tsx", "src/index.ts", "src/App.tsx", "src/App.jsx", "src/App.js", "frontend/src/main.tsx", "frontend/src/main.ts", "frontend/src/index.tsx", "frontend/src/index.ts", "frontend/src/index.jsx", "frontend/src/index.js", "frontend/src/App.tsx", "frontend/src/App.jsx", "frontend/src/App.js"];
-  for (const c of candidates) {
-    if (vfs[c]) return c;
-  }
-  return null;
+  // Un proyecto CRA encapsulado en `frontend/` debe ganar a fragmentos Vite
+  // sueltos en la raíz. La importación de proyectos reales puede conservar
+  // ambos árboles; priorizar `src/App.tsx` raíz seleccionaba un stub roto y
+  // producía un preview en blanco aunque el frontend completo existiera.
+  const hasEncapsulatedFrontend = Boolean(
+    vfs["frontend/src/index.js"]
+      || vfs["frontend/src/index.jsx"]
+      || vfs["frontend/src/index.tsx"]
+      || vfs["frontend/src/main.tsx"],
+  );
+  const encapsulatedEntries = [
+    "frontend/src/main.tsx", "frontend/src/main.ts", "frontend/src/main.jsx", "frontend/src/main.js",
+    "frontend/src/index.tsx", "frontend/src/index.ts", "frontend/src/index.jsx", "frontend/src/index.js",
+    "frontend/src/App.tsx", "frontend/src/App.jsx", "frontend/src/App.js",
+  ];
+  const rootEntries = [
+    "src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js",
+    "src/index.tsx", "src/index.ts", "src/index.jsx", "src/index.js",
+    "src/App.tsx", "src/App.jsx", "src/App.js",
+  ];
+  const candidates = hasEncapsulatedFrontend
+    ? [...encapsulatedEntries, ...rootEntries]
+    : [...rootEntries, ...encapsulatedEntries];
+  return candidates.find((candidate) => Boolean(vfs[candidate])) ?? null;
 }
 
 /**
