@@ -5,6 +5,7 @@ import { patchBundle, patchBundleMultiFile, type GenLanguage, type BuildIssue, t
 import { logger } from "./logger";
 import { rememberPatch, extractFixHint, redactSecrets } from "./agentMemory";
 import { GenerationJob } from "@workspace/db/schema";
+import { AUTOMATED_REPAIR_ENABLED, logAutomationDisabled } from "./automationPolicy";
 
 export interface TestResult {
   test: string;
@@ -40,6 +41,14 @@ export async function runTestingAgent(
   bundle: string,
   options: TestingAgentOptions
 ): Promise<string> {
+  // El Testing Agent queda fuera del flujo de producción hasta que un operador
+  // lo habilite explícitamente en un entorno controlado. La generación mantiene
+  // la validación determinista previa, pero nunca reescribe código del cliente.
+  if (!AUTOMATED_REPAIR_ENABLED) {
+    logAutomationDisabled("testing-agent", { jobId: options.jobId, isEdit: !!options.isEdit });
+    return bundle;
+  }
+
   const { log, onProgress, language, prompt, plan } = options;
   const maxCycles = options.isEdit ? MAX_EDIT_FIX_CYCLES : MAX_FIX_CYCLES;
   let currentBundle = bundle;

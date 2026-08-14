@@ -378,6 +378,11 @@ Mensaje: ${message}`
 
 let lastAppCheck = 0;
 export async function autoFixBrokenApps(): Promise<void> {
+  const { AUTOMATED_REPAIR_ENABLED, logAutomationDisabled } = await import("./automationPolicy");
+  if (!AUTOMATED_REPAIR_ENABLED) {
+    logAutomationDisabled("autopilot-repair");
+    return;
+  }
   if (Date.now() - lastAppCheck < 10 * 60 * 1000) return;
   lastAppCheck = Date.now();
 

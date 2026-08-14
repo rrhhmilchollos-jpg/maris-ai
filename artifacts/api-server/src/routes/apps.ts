@@ -56,6 +56,7 @@ function detectTruncatedFiles(bundle: string): string[] {
   return truncated;
 }
 import { runTestingAgent } from "../lib/tester";
+import { AUTOMATED_REPAIR_ENABLED, logAutomationDisabled } from "../lib/automationPolicy";
 import { runPMAgent, type EmergentArchitectBlueprint } from "../lib/emergentAgentPipeline";
 import { detectIntegrations } from "../lib/fileToolsAgent";
 import { 
@@ -4563,8 +4564,11 @@ export async function generateApp(
     // pipeline pesado que una feature nueva. Ahora el QA+Testing Agent solo
     // corre si el scope NO es "fast-patch"; fast-patch sigue pasando
     // siempre por runValidatePatchLoop (comprobación de build) más abajo.
-    const runsHeavyQaAndTesting = execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
-    if (runsHeavyQaAndTesting) {
+    const runsHeavyQaAndTesting = AUTOMATED_REPAIR_ENABLED && execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
+    if (!AUTOMATED_REPAIR_ENABLED) {
+      logAutomationDisabled("testing-agent", { jobId, appId: previous._id?.toString() });
+      await log("system", "Validación automática de reparaciones desactivada por seguridad. Se conserva el código y se ejecuta solo la comprobación determinista de build.", "info");
+    } else if (runsHeavyQaAndTesting) {
       const editAsPlan: ProjectPlan = {
         title: previous.title,
         description: previous.description,

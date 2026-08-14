@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { requireAuth, isAdminEmail } from "../lib/auth";
 import { GeneratedApp, User } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
+import { VISUAL_AUTOFIX_ENABLED, logAutomationDisabled } from "../lib/automationPolicy";
 import { chargeCredits } from "../lib/credits";
 import {
   redeployVercelProject,
@@ -453,7 +454,11 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
     const appId = String(req.params.appId);
     const userId = getAuthenticatedUserId(req);
     if (!userId) return res.status(401).json({ error: "No autenticado" });
-    const { autoFix = false } = req.body || {};
+    const { autoFix: requestedAutoFix = false } = req.body || {};
+    const autoFix = Boolean(requestedAutoFix && VISUAL_AUTOFIX_ENABLED);
+    if (requestedAutoFix && !autoFix) {
+      logAutomationDisabled("visual-autofix", { appId, userId });
+    }
 
     const { GeneratedApp, VisualTestJob } = await import("@workspace/db/schema");
     const app = await (GeneratedApp as any).findOne({ _id: appId, userId })
@@ -461,13 +466,13 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
       .lean();
     if (!app) return res.status(404).json({ error: "App no encontrada" });
 
-    const job = await (VisualTestJob as any).create({ appId, userId, autoFix: !!autoFix, status: "running" });
+    const job = await (VisualTestJob as any).create({ appId, userId, autoFix, status: "running" });
     const jobId = String(job._id);
 
     // Lanzado en segundo plano — NO se espera (sin await) para que la
     // respuesta HTTP salga al instante. Cualquier error se captura y se
     // persiste en el propio job, nunca se propaga a un proceso sin manejar.
-    runVisualTestWork(appId, userId, !!autoFix, jobId).catch(async (err) => {
+    runVisualTestWork(appId, userId, autoFix, jobId).catch(async (err) => {
       const { logger } = await import("../lib/logger");
       logger.error({ err, appId, jobId }, "[visual-test] runVisualTestWork failed unexpectedly");
       try {

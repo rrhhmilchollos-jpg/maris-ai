@@ -24,12 +24,20 @@ function check(name: string, passed: boolean): void {
 }
 
 const tester = read("lib/tester.ts");
+const automationPolicy = read("lib/automationPolicy.ts");
 const sharedAgents = read("lib/shared-agents.ts");
 const deployment = read("routes/deployment.ts");
 const appDetail = readAppforge("pages/app-detail.tsx");
 const agentLogStream = readAppforge("components/agent-log-stream.tsx");
 const generationStudio = readAppforge("components/generation-studio.tsx");
 const polling = readAppforge("lib/job-polling.ts");
+
+check(
+  "Los agentes de reparación y autofix visual están desactivados por defecto",
+  /AUTOMATED_REPAIR_ENABLED\s*=\s*process\.env\.MARIS_AUTOMATED_REPAIR_ENABLED\s*===\s*\"true\"/.test(automationPolicy)
+    && /VISUAL_AUTOFIX_ENABLED\s*=\s*process\.env\.MARIS_VISUAL_AUTOFIX_ENABLED\s*===\s*\"true\"/.test(automationPolicy)
+    && /if \(!AUTOMATED_REPAIR_ENABLED\)/.test(tester),
+);
 
 check(
   "Testing Agent limita automáticamente los ciclos y el tiempo de ejecución",
