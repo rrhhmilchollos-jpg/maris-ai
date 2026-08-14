@@ -6063,7 +6063,13 @@ router.get("/apps", requireAuth, async (req: any, res: any) => {
 router.get("/apps/:id", requireAuth, async (req: any, res: any) => {
   try {
     const userId = req.userId as string;
-    const app = await GeneratedApp.findOne({ _id: req.params.id, userId });
+    // El editor necesita el código generado, pero no el archivo de importación
+    // original ni los registros completos. Esos campos pueden superar varios MB
+    // y retrasan el primer render del detalle, bloqueando el iframe de preview.
+    // Las rutas de importación/SSR los obtienen directamente cuando hacen falta.
+    const app = await GeneratedApp.findOne({ _id: req.params.id, userId })
+      .select("-importedSourceFilesJson -importBuildLog -deploymentLogs")
+      .lean();
     if (!app) return res.status(404).json({ error: "App no encontrada" });
     if ((app as any).pendingAdminApproval) {
       return res.status(404).json({ error: "App no encontrada" });
