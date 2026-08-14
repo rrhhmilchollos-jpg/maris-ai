@@ -367,7 +367,12 @@ export async function buildDeployHtml(opts: {
     try {
       var p0 = window.location.pathname || "";
       if (p0 !== "/") {
-        try { origReplace(null, "", "/"); } catch (e) {}
+        // La ruta interna de preview se oculta, pero la consulta se conserva:
+        // los flujos externos (por ejemplo, KYC escritorio→móvil) transportan
+        // sus identificadores efímeros en query string.
+        var preservedQuery = window.location.search || "";
+        var preservedHash = window.location.hash || "";
+        try { origReplace(null, "", "/" + preservedQuery + preservedHash); } catch (e) {}
         virtualPath = "/";
         rewroteOk = (window.location.pathname === "/");
       } else {
