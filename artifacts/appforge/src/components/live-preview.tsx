@@ -44,6 +44,17 @@ export function LivePreview({
     || externalPreviewUrl
     || (appId ? getApiUrl(`/api/apps/${appId}/preview`) : "");
 
+  // La versión es local al bundle actual. Permite cachear brevemente el HTML
+  // en el borde sin mostrar una versión anterior tras editar una aplicación.
+  let previewHash = 2166136261;
+  for (let index = 0; index < frontendCode.length; index += 1) {
+    previewHash = Math.imul(previewHash ^ frontendCode.charCodeAt(index), 16777619);
+  }
+  const previewVersion = `${frontendCode.length.toString(36)}-${(previewHash >>> 0).toString(36)}`;
+  const iframeSrc = src && !vercelUrl && !externalPreviewUrl
+    ? `${src}${src.includes("?") ? "&" : "?"}pv=${previewVersion}`
+    : src;
+
   // Escuchar mensajes del iframe (root vacío = error fatal)
   useEffect(() => {
     function onMessage(e: MessageEvent) {
@@ -82,7 +93,7 @@ export function LivePreview({
     <div className="relative flex h-full flex-col bg-[#0a0a0f]">
       {/* Toolbar mínimo */}
       <div className="flex shrink-0 items-center gap-1 border-b border-white/[0.06] px-2 py-1">
-        <span className="min-w-0 flex-1 truncate text-[11px] text-white/30">{src}</span>
+        <span className="min-w-0 flex-1 truncate text-[11px] text-white/30">{iframeSrc}</span>
         <button
           onClick={handleRefresh}
           title="Recargar preview"
@@ -116,7 +127,7 @@ export function LivePreview({
       {/* iframe de preview */}
       <iframe
         ref={iframeRef}
-        src={src}
+        src={iframeSrc}
         title={`Preview — ${appName}`}
         className="h-full w-full flex-1 border-0 bg-white"
         sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"

@@ -19,6 +19,26 @@ import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createZocoToolCallWithFallback } f
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp } from "../lib/appRevisions";
 import * as esbuild from "esbuild";
+import { createHash } from "node:crypto";
+
+// La preview se sirve siempre con no-store al navegador para reflejar las
+// ediciones inmediatamente. Esta caché solo evita recompilar el mismo bundle
+// dentro del proceso de API en cada recarga del iframe.
+const previewHtmlCache = new Map<string, string>();
+const PREVIEW_HTML_CACHE_LIMIT = 24;
+
+function previewHtmlCacheKey(bundle: string, title: string): string {
+  return createHash("sha256").update(title).update("\u0000").update(bundle).digest("hex");
+}
+
+function storePreviewHtml(cacheKey: string, html: string): void {
+  previewHtmlCache.set(cacheKey, html);
+  while (previewHtmlCache.size > PREVIEW_HTML_CACHE_LIMIT) {
+    const oldest = previewHtmlCache.keys().next().value;
+    if (!oldest) break;
+    previewHtmlCache.delete(oldest);
+  }
+}
 
 // ── Validación de integridad del bundle ──────────────────────────────────────
 // Detecta archivos TSX/TS truncados que pasan el QA pero fallan en el preview.
@@ -9456,28 +9476,39 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
       : "";
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    // ENCONTRADO A PETICION DEL USUARIO: este endpoint no fijaba NINGUNA
-    // cabecera de control de caché -- un navegador puede (y en la
-    // practica lo hizo, causando confusion real) seguir sirviendo una
-    // respuesta antigua cacheada dentro del iframe de preview, incluso
-    // despues de refrescar la pagina entera (F5 no siempre fuerza a un
-    // <iframe> a volver a pedir su src si el navegador cree que la copia
-    // que tiene sigue siendo valida). Un preview NUNCA debe cachearse --
-    // siempre tiene que reflejar el estado real y actual de la app.
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-    res.setHeader("Pragma", "no-cache");
+    // Las rutas de onboarding, activación y KYC llevan identificadores
+    // efímeros: nunca se almacenan fuera del proceso. El preview ordinario
+    // recibe una caché de borde muy breve; el iframe añade una versión basada
+    // en el bundle al editar, así que una nueva versión invalida al instante.
+    const hasSensitivePreviewQuery = Boolean(
+      req.query?.kyc_handoff || req.query?.mobile_token || req.query?.reset,
+    );
+    if (hasSensitivePreviewQuery) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      res.setHeader("Pragma", "no-cache");
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=10, stale-while-revalidate=20");
+      res.setHeader("CDN-Cache-Control", "s-maxage=10, stale-while-revalidate=20");
+    }
     res.setHeader("Content-Security-Policy", "frame-ancestors *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; connect-src *; img-src * data: blob:; font-src *");
     res.setHeader("X-Frame-Options", "ALLOWALL");
     res.setHeader("Access-Control-Allow-Origin", "*");
 
-    // Intentar buildDeployHtml con esbuild (mejor calidad)
+    // Compilar una sola vez cada versión de bundle en este proceso. El cliente
+    // sigue recibiendo no-store, por lo que una edición cambia la clave y se ve
+    // al instante, sin recompilar con esbuild cada vez que se abre el iframe.
     try {
-      const { buildDeployHtml } = await import("../lib/deployBundle");
-      const html = await buildDeployHtml({ bundle: app.frontendCode, title: app.title || "Preview" });
-      // Parchear la CSP del HTML generado para permitir esm.sh en iframe
-      const patched = html.replace(
-        /Content-Security-Policy[^<]*/g, ""
-      );
+      const previewTitle = app.title || "Preview";
+      const cacheKey = previewHtmlCacheKey(app.frontendCode, previewTitle);
+      let patched = previewHtmlCache.get(cacheKey);
+      res.setHeader("X-Maris-Preview-Cache", patched ? "HIT" : "MISS");
+      if (!patched) {
+        const { buildDeployHtml } = await import("../lib/deployBundle");
+        const html = await buildDeployHtml({ bundle: app.frontendCode, title: previewTitle });
+        // Parchear la CSP del HTML generado para permitir esm.sh en iframe.
+        patched = html.replace(/Content-Security-Policy[^<]*/g, "");
+        storePreviewHtml(cacheKey, patched);
+      }
       const withBanner = buildErrorBanner
         ? patched.replace(/<body[^>]*>/i, (m) => `${m}${buildErrorBanner}`)
         : patched;
