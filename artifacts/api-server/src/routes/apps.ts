@@ -5427,6 +5427,54 @@ import mongoose from "mongoose";
 
 const router = Router();
 
+// Proxy interno y acotado de Aurevia. Las previews se sirven desde el mismo
+// origen de Maris AI, mientras que el backend de Aurevia permanece sin puerto
+// público en la red Docker. Solo las dos apps de Aurevia y un conjunto mínimo
+// de rutas pueden atravesar este puente.
+const AUREVIA_APP_IDS = new Set([
+  "6a7d14f8bc6ca3bf2c88fdf6",
+  "6a7e7b998c2ddda0ecd1f219",
+]);
+const AUREVIA_UPSTREAM = process.env.AUREVIA_INTERNAL_API_URL || "http://neobanco-preview:8000";
+const AUREVIA_ALLOWED_PATH = /^(?:auth\/login-dni-password|auth\/login|neobanco\/dashboard|kyc\/handoffs(?:\/[^/?]+)?|inbound-activation\/status)$/;
+
+router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
+  const appId = String(req.params.appId || "");
+  const upstreamPath = (Array.isArray(req.params.path) ? req.params.path.join("/") : String(req.params.path || "")).replace(/^\/+/, "");
+  if (!AUREVIA_APP_IDS.has(appId) || !AUREVIA_ALLOWED_PATH.test(upstreamPath)) {
+    return res.status(404).json({ detail: "Recurso no disponible" });
+  }
+
+  const queryIndex = String(req.originalUrl || "").indexOf("?");
+  const query = queryIndex >= 0 ? String(req.originalUrl).slice(queryIndex) : "";
+  const headers: Record<string, string> = {
+    "x-aurevia-proxy": "1",
+    "x-forwarded-for": String(req.ip || req.socket?.remoteAddress || "unknown").slice(0, 128),
+    "accept": String(req.headers.accept || "application/json"),
+  };
+  if (req.headers.cookie) headers.cookie = String(req.headers.cookie);
+  if (req.headers["content-type"]) headers["content-type"] = String(req.headers["content-type"]);
+
+  try {
+    const hasBody = !["GET", "HEAD"].includes(String(req.method).toUpperCase());
+    const upstream = await fetch(`${AUREVIA_UPSTREAM}/api/${upstreamPath}${query}`, {
+      method: req.method,
+      headers,
+      body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
+    });
+    const setCookies = typeof (upstream.headers as any).getSetCookie === "function"
+      ? (upstream.headers as any).getSetCookie()
+      : (upstream.headers.get("set-cookie") ? [upstream.headers.get("set-cookie")] : []);
+    if (setCookies.length) res.setHeader("Set-Cookie", setCookies);
+    const contentType = upstream.headers.get("content-type");
+    if (contentType) res.setHeader("Content-Type", contentType);
+    return res.status(upstream.status).send(Buffer.from(await upstream.arrayBuffer()));
+  } catch (err) {
+    logger.error({ err, appId, upstreamPath }, "Aurevia internal API proxy unavailable");
+    return res.status(503).json({ detail: "El acceso de Aurevia no está disponible temporalmente." });
+  }
+});
+
 // A petición explícita del usuario: CUALQUIER error técnico en CUALQUIER
 // endpoint que el cliente llame directamente (deploy, dominio, variables
 // de entorno, code-review, rollback, etc.) debe mostrar siempre el mismo
