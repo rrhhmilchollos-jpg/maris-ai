@@ -368,14 +368,17 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
 
     const enrichedPrompt = FREE_TIER_ARCHITECT_DIRECTIVE + userPrompt;
 
-    // Timeout de 120s para la planificación inicial — es una llamada más larga
-    // que las de generación de código (hasta 24K tokens de salida) pero igualmente
-    // vulnerable a congelarse si Zoco IA tiene un pico de carga.
+    // Los planes compactos (inicio rápido / máximo 8 hitos) no necesitan la
+    // reserva de 24K tokens ni una espera de dos minutos propia de arquitecturas
+    // distribuidas. Mantener límites adaptativos evita bloqueos innecesarios.
+    const compactPlan = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
+    const planTimeoutMs = compactPlan ? 45_000 : 120_000;
+    const planMaxTokens = compactPlan ? 6_000 : 24_000;
     const planAbortController = new AbortController();
     const planTimeoutId = setTimeout(() => {
       planAbortController.abort();
-      console.warn("⏰ Timeout 120s en planMonorepoProject — abortando planificación");
-    }, 120_000);
+      console.warn(`⏰ Timeout ${planTimeoutMs / 1000}s en planMonorepoProject — abortando planificación`);
+    }, planTimeoutMs);
     let planResponse: any;
     try {planResponse = await zocoia.messages.stream({
       model: this.options.model!,
@@ -394,10 +397,30 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       // listar decenas de hitos con sus dependencias sin acercarse al
       // límite absoluto del modelo (evitando coste/latencia innecesarios
       // de pedir el máximo posible cuando no hace falta).
-      max_tokens: 24000,
+      max_tokens: planMaxTokens,
       system: [{ type: "text", text: PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
       messages: [{ role: "user", content: enrichedPrompt }],
     }, { signal: planAbortController.signal as any }).finalMessage();
+    } catch (error) {
+      if (!compactPlan) throw error;
+      // Si el proveedor se congestiona, un proyecto estándar no debe quedarse
+      // bloqueado. Generamos un plan monolítico determinista y dejamos que los
+      // agentes de código apliquen el encargo original en cada hito.
+      console.warn("⚡ Planificador compacto agotado; usando plan determinista de respaldo.");
+      const nativeAppRequested = /\b(app nativa|ios|android|react native|app store|google play)\b/i.test(userPrompt);
+      return {
+        database: "mongodb",
+        platform: nativeAppRequested ? "mobile-native" : "web",
+        architecture: "monolith",
+        milestones: [
+          { id: 1, layer: "data", name: "Datos de dominio", targetWorkspace: "apps/web", description: "Crea datos de ejemplo realistas, tipos y estado inicial para el producto solicitado. No dependas de servicios externos.", filePath: "src/mockData.ts", dependsOn: [] },
+          { id: 2, layer: "backend-core", name: "Núcleo del servidor", targetWorkspace: "apps/api", description: "Crea un servidor monolítico mínimo con validación y rutas esenciales para el flujo principal.", filePath: "src/index.ts", dependsOn: [] },
+          { id: 3, layer: "frontend-core", name: "Aplicación principal", targetWorkspace: "apps/web", description: "Crea src/App.tsx con export default function App(), navegación y estructura visual principal. Debe ser una aplicación funcional y responsive.", filePath: "src/App.tsx", dependsOn: [1] },
+          { id: 4, layer: "frontend-module", name: "Experiencia de entrada", targetWorkspace: "apps/web", description: "Crea la pantalla principal y el primer flujo de valor del encargo con datos realistas y llamadas al estado local.", filePath: "src/pages/Home.tsx", dependsOn: [1, 3] },
+          { id: 5, layer: "frontend-module", name: "Panel operativo", targetWorkspace: "apps/web", description: "Crea una segunda experiencia operativa, listado o detalle coherente con el producto solicitado.", filePath: "src/pages/Dashboard.tsx", dependsOn: [1, 3, 4] },
+          { id: 6, layer: "docs", name: "Documentación de arranque", targetWorkspace: "apps/api", description: "Documenta los endpoints esenciales y cómo ejecutar el monolito generado.", filePath: "README.md", dependsOn: [2, 3] },
+        ],
+      };
     } finally {
       clearTimeout(planTimeoutId);
     }
@@ -529,7 +552,12 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
   }
 
   private async generateMilestone(milestone: Milestone, database: "mongodb" | "postgresql", platform: "web" | "mobile-native" = "web"): Promise<GeneratedMilestone> {
-    const MAX_ATTEMPTS = 3;
+    // El modo compacto prioriza una primera versión visible: un intento breve y
+    // el fallback existente son preferibles a tres esperas de 90 segundos.
+    const compactMilestone = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
+    const MAX_ATTEMPTS = compactMilestone ? 1 : 3;
+    const milestoneTimeoutMs = compactMilestone ? 30_000 : 90_000;
+    const milestoneMaxTokens = compactMilestone ? 4_000 : 16_000;
     let lastError: unknown;
 
     const dependencyContext = this.buildDependencyContext(milestone);
@@ -541,22 +569,19 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       : "";
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {try {
-        // AbortController con timeout de 90s por hito.
-        // Sin este timeout, si anthropic as zocoia se congela o Coolify pierde
-        // la conexión, el proceso espera indefinidamente — el watchdog
-        // lo detecta como job muerto y lo reinicia desde cero (perdiendo
-        // el progreso). Con el timeout, el intento falla limpiamente,
-        // el bucle espera 2s y reintenta con una conexión nueva.
+        // El timeout es adaptativo: el modo compacto cae al fallback después
+        // de una espera corta, mientras que las arquitecturas avanzadas conservan
+        // la tolerancia necesaria para archivos grandes.
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => {
           abortController.abort();
-          console.warn(`⏰ Timeout 90s en hito ${milestone.id} (${milestone.name}) — abortando y reintentando`);
-        }, 90_000);
+          console.warn(`⏰ Timeout ${milestoneTimeoutMs / 1000}s en hito ${milestone.id} (${milestone.name}) — abortando y reintentando`);
+        }, milestoneTimeoutMs);
         let response: any;
         try {
           response = await zocoia.messages.stream({
             model: this.options.model!,
-            max_tokens: 16000,
+            max_tokens: milestoneMaxTokens,
             system: [
               { type: "text", text: CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
               { type: "text", text: `Base de datos del proyecto: ${database}.${qualityBlock}${platformBlock}` },
@@ -862,18 +887,29 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       ...existingFilePaths.backend.map((p) => `- ${p} (backend)`),
     ].join("\n");
 
-    const response = await zocoia.messages.stream({
-      model: this.options.model!,
-      // Mismo límite que planMonorepoProject (24000) — el motivo es idéntico:
-      // listas de hitos largas (proyectos importados grandes con muchos
-      // archivos a tocar) no deben truncarse antes de cerrar el JSON.
-      max_tokens: 24000,
-      system: [{ type: "text", text: EDIT_PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
-      messages: [{
-        role: "user",
-        content: `ARCHIVOS QUE YA EXISTEN EN EL PROYECTO:\n${fileList || "(proyecto sin archivos detectados — trata todo como create_file)"}\n\nPETICIÓN DEL USUARIO:\n${userPrompt}`,
-      }],
-    }).finalMessage();
+    const complexEdit = existingFilePaths.frontend.length + existingFilePaths.backend.length > 80
+      || /\b(reescribe todo|reescribir toda|migraci[oó]n completa|refactor(?:izaci[oó]n)? completa|microservicios?|todo el proyecto)\b/i.test(userPrompt);
+    const editMaxTokens = complexEdit ? 24_000 : 6_000;
+    const editTimeoutMs = complexEdit ? 120_000 : 45_000;
+    const editAbortController = new AbortController();
+    const editTimeoutId = setTimeout(() => {
+      editAbortController.abort();
+      console.warn(`⏰ Timeout ${editTimeoutMs / 1000}s en planProjectEdit — abortando planificación`);
+    }, editTimeoutMs);
+    let response: any;
+    try {
+      response = await zocoia.messages.stream({
+        model: this.options.model!,
+        max_tokens: editMaxTokens,
+        system: [{ type: "text", text: EDIT_PLANNER_SYSTEM_STATIC, cache_control: { type: "ephemeral" } }] as any,
+        messages: [{
+          role: "user",
+          content: `ARCHIVOS QUE YA EXISTEN EN EL PROYECTO:\n${fileList || "(proyecto sin archivos detectados — trata todo como create_file)"}\n\nPETICIÓN DEL USUARIO:\n${userPrompt}\n\n${complexEdit ? "" : "[MARIS EDIT FAST] Máximo 5 archivos/hitos. Modifica solo lo necesario; no propongas una reconstrucción completa."}`,
+        }],
+      }, { signal: editAbortController.signal as any }).finalMessage();
+    } finally {
+      clearTimeout(editTimeoutId);
+    }
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : '{}';
     const cleanedJson = this.cleanJsonResponse(rawText);
@@ -887,7 +923,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         description: String(m.description || ""),
         dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
       })).filter((m: EditMilestone) => m.filePath);
-      return { milestones };
+      return { milestones: complexEdit ? milestones : milestones.slice(0, 5) };
     } catch (error) {
       // Misma red de seguridad que planMonorepoProject: si el modelo añadió
       // texto conversacional alrededor del JSON, lo recuperamos buscando el
@@ -904,7 +940,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
             dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
           })).filter((m: EditMilestone) => m.filePath);
           console.warn("⚠️ El planificador de edición devolvió texto junto al JSON — se recuperó el objeto JSON embebido correctamente.");
-          return { milestones };
+          return { milestones: complexEdit ? milestones : milestones.slice(0, 5) };
         } catch {
           /* el bloque extraído tampoco era JSON válido — cae al error final de abajo */
         }

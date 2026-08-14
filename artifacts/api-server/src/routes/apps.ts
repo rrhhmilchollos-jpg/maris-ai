@@ -3946,6 +3946,10 @@ export async function generateApp(
     }
   };
 
+  // Conservamos la petición original para decisiones de complejidad. La memoria
+  // y los adjuntos enriquecen el trabajo, pero no deben convertir por accidente
+  // un marketplace normal en una arquitectura de microservicios.
+  const originalUserPrompt = prompt;
   const memoryBlock = formatMemoryBlock(agentMemory);
   if (memoryBlock) prompt = `${memoryBlock}\n${prompt}`;
 
@@ -4053,6 +4057,13 @@ export async function generateApp(
   const wantsFullBuild = !previous;
   const isUltraComplex = agentModelPlan.tier === "ultra";
   const isRobustOrUltra = agentModelPlan.tier === "ultra" || agentModelPlan.tier === "robust";
+  // Ruta rápida: los productos nuevos siguen usando hitos y validación, pero
+  // un producto estándar no debe empezar con una arquitectura distribuida ni
+  // un plan de quince módulos salvo que el usuario lo solicite explícitamente.
+  const explicitlyRequestsDistributedArchitecture = /\b(microservicios?|microservices?|arquitectura distribuida|servicios independientes|escalar cada servicio|event[- ]driven)\b/i.test(originalUserPrompt);
+  const fastStartEnabled = process.env.MARIS_FAST_START_DEFAULT !== "false";
+  const useFastStart = wantsFullBuild && fastStartEnabled && !explicitlyRequestsDistributedArchitecture;
+  const FAST_START_MAX_MILESTONES = 8;
 
   // Feedback loop: si el tipo de app ha fallado 2+ veces recientemente,
   // forzar hitos aunque el tier no lo requiera.
@@ -4102,6 +4113,8 @@ export async function generateApp(
     isFreeUser: !hasEverPaid,
     wantsFullBuild,
     useMilestoneOrchestrator,
+    useFastStart,
+    explicitlyRequestsDistributedArchitecture,
   }, "Milestone: decisión de orquestador");
 
   // ── GATING QUESTION BLOCK (estilo Emergent.sh) ──────────────────────────
@@ -4199,15 +4212,19 @@ export async function generateApp(
     const useBasicMilestones = isDegradedFreeTier || forceBasicMilestones;
     if (useBasicMilestones) {
       await log("system", `✨ Construyendo tu app módulo a módulo (${FREE_USER_MAX_MILESTONES} módulos esenciales). Resultado garantizado y funcional — podrás añadir más módulos después.`);
+    } else if (useFastStart) {
+      await log("system", `⚡ Inicio rápido: ${FAST_START_MAX_MILESTONES} hitos esenciales, arquitectura monolítica y ampliaciones incrementales cuando la base esté lista.`);
     } else {
       await log("system", "🏗️ Construyendo tu app módulo a módulo con el orquestador de hitos — cada módulo se genera de forma independiente para garantizar que todo quede completo y funcional...");
     }
     const coreOrchestrator = new CoreOrchestrator(process.cwd(), {// El modelo del orquestador: siempre zocoia para el planificador de hitos
       // (decide el orden y contenido de cada módulo). Los agentes ejecutores
       // dentro de cada hito usan el modelo del plan (Zoco IA en free, anthropic as zocoia en paid).
-      model: useBasicMilestones ? "zoco-flash" : "zoco-plus",
+      model: (useBasicMilestones || useFastStart) ? "zoco-flash" : "zoco-plus",
       backendQualityPrompt: `${BACKEND_SYSTEM_PROMPT}\n\n---\n\nSI EL PROYECTO USA POSTGRESQL, aplica estas reglas en su lugar:\n${BACKEND_SYSTEM_PROMPT_POSTGRES}`,
-      maxMilestonesOverride: (isDegradedFreeTier || forceBasicMilestones) ? FREE_USER_MAX_MILESTONES : undefined,
+      maxMilestonesOverride: (isDegradedFreeTier || forceBasicMilestones)
+        ? FREE_USER_MAX_MILESTONES
+        : (useFastStart ? FAST_START_MAX_MILESTONES : undefined),
       // Pasar el validador esbuild para que el orquestador detecte y regenere
       // hitos de frontend con errores de compilación al terminar cada capa,
       // antes de pasar a la siguiente. Reutiliza el mismo validador del pipeline.
@@ -4240,7 +4257,10 @@ export async function generateApp(
     });
     await log("system", "📋 Analizando arquitectura y planificando hitos por capas (datos → backend core → módulos → integraciones → frontend)...");
 
-    const milestoneResult = await coreOrchestrator.buildProjectIncremental(prompt, async (update: any) => {
+    const planningPrompt = useFastStart
+      ? `${prompt}\n\n[MARIS FAST START — instrucción de plataforma]\nConstruye una primera versión funcional en arquitectura monolítica. No propongas microservicios, servicios separados ni más de ${FAST_START_MAX_MILESTONES} hitos salvo que el usuario lo haya pedido de forma explícita. Prioriza un flujo vertical completo y aplaza integraciones no imprescindibles como ampliaciones incrementales.`
+      : prompt;
+    const milestoneResult = await coreOrchestrator.buildProjectIncremental(planningPrompt, async (update: any) => {
       onProgress?.({
         phase: "generating",
         progress: update.progress,
