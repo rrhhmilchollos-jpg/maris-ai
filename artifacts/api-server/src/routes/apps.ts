@@ -5476,7 +5476,7 @@ const AUREVIA_APP_IDS = new Set([
   "6a7e7b998c2ddda0ecd1f219",
 ]);
 const AUREVIA_UPSTREAM = process.env.AUREVIA_INTERNAL_API_URL || "http://neobanco-preview:8000";
-const AUREVIA_ALLOWED_PATH = /^(?:auth\/(?:login-dni-password|login|recover-password|reset-password)|neobanco\/dashboard|kyc\/handoffs(?:\/[^/?]+(?:\/(?:mobile-start|provider-completion))?)?|inbound-activation\/status|operations\/requests(?:\/[^/?]+)?|support\/conversations(?:\/[^/?]+(?:\/messages)?)?)$/;
+const AUREVIA_ALLOWED_PATH = /^(?:auth\/(?:login-dni-password|login|recover-password|reset-password)|neobanco\/dashboard|kyc\/(?:identity\/start|handoffs(?:\/[^/?]+(?:\/(?:mobile-start|provider-completion))?)?)|inbound-activation\/status|operations\/requests(?:\/[^/?]+)?|application-review\/submissions(?:\/[^/?]+(?:\/information-response|\/provider-decision)?)?|support\/conversations(?:\/[^/?]+(?:\/messages)?)?)$/;
 
 router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   const appId = String(req.params.appId || "");
@@ -5495,6 +5495,8 @@ router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   if (req.headers.cookie) headers.cookie = String(req.headers.cookie);
   if (req.headers["content-type"]) headers["content-type"] = String(req.headers["content-type"]);
   if (req.headers["idempotency-key"]) headers["Idempotency-Key"] = String(req.headers["idempotency-key"]).slice(0, 128);
+  if (req.headers["x-review-token"]) headers["X-Review-Token"] = String(req.headers["x-review-token"]).slice(0, 256);
+  if (req.headers["x-application-review-signature"]) headers["X-Application-Review-Signature"] = String(req.headers["x-application-review-signature"]).slice(0, 256);
 
   try {
     const hasBody = !["GET", "HEAD"].includes(String(req.method).toUpperCase());
@@ -5810,44 +5812,32 @@ router.post("/apps/plan-preview", requireAuth, async (req: any, res: any) => {
       return;
     }
 
-    const PLAN_PREVIEW_SYSTEM = `Eres el Arquitecto de Maris AI. Analiza el prompt y devuelve SOLO JSON válido, sin texto adicional, sin markdown, sin explicaciones:
-{
-  "title": "nombre corto del proyecto en español",
-  "summary": "1-2 frases de qué vas a construir exactamente",
-  "included": ["funcionalidad que SÍ pidió el usuario (máx 4)"],
-  "extras": [{"id": "id_unico", "label": "Nombre del extra", "why": "Por qué sería útil"}],
-  "estimatedPages": 4,
-  "backendNeeded": false
-}
-
-REGLAS:
-- Si el prompt menciona una URL o web de referencia (ej: "algo como dejalia.com", "al estilo airbnb"), úsala como inspiración para el title y summary. El title debe ser original, NO el nombre de la web de referencia.
-- "included": las funcionalidades clave que el usuario pidió o que tiene la web de referencia. Máx 4 items.
-- "extras": funcionalidades útiles que NO mencionó. Máx 3. Si no hay extras claros, devuelve [].
-- "backendNeeded": true si el prompt pide auth, pagos, BD real, API propia, o si la web de referencia claramente los necesita.
-- Devuelve ÚNICAMENTE el JSON. Nada más.`;
-
-    const response = await createZocoMessageWithFallback("architect", "zoco-plus", {
-      max_tokens: 2000,
-      system: PLAN_PREVIEW_SYSTEM,
-      messages: [{ role: "user", content: `User prompt: ${prompt}` }]
-    });
-
-    const raw = response.content[0].text.trim();
-
-    // Extraer JSON robustamente por si viene envuelto en markdown o texto extra
-    const first = raw.indexOf("{");
-    const last = raw.lastIndexOf("}");
-    
-    if (first === -1 || last === -1) {
-      logger.error({ raw }, "plan-preview: No se encontró JSON en la respuesta de Zoco");
-      return res.status(500).json({ error: "Respuesta inválida de la IA" });
-    }
-
-    const planJson = raw.slice(first, last + 1);
-    const plan = JSON.parse(planJson);
-
-    // Formato esperado por el frontend de Maris AI
+    // La vista previa solo orienta al usuario: no debe bloquear la creación
+    // durante minutos esperando a un modelo. Usamos un resumen determinista;
+    // el generador real conserva el análisis de IA al iniciar el trabajo.
+    const normalizedPrompt = prompt.replace(/\s+/g, " ").trim();
+    const reservationIntent = /\b(booking|hotel|alojamiento|reserva|viaje|marketplace)\b/i.test(normalizedPrompt);
+    const backendNeeded = /\b(auth|login|usuario|pago|stripe|base de datos|\bbd\b|api|reserva|booking|panel)\b/i.test(normalizedPrompt);
+    const title = reservationIntent ? "Marketplace de reservas" : "Nueva aplicación digital";
+    const included = reservationIntent
+      ? ["Búsqueda y filtros", "Fichas de alojamiento", "Flujo de reserva", "Panel de gestión"]
+      : ["Experiencia principal", "Navegación responsive", "Datos de ejemplo", "Panel operativo"];
+    const extras = reservationIntent
+      ? [
+          { id: "favoritos", label: "Favoritos", why: "Permite guardar opciones para compararlas después." },
+          { id: "mensajeria", label: "Mensajería", why: "Facilita la comunicación entre clientes y proveedores." },
+        ]
+      : [{ id: "analitica", label: "Analítica básica", why: "Ayuda a entender el uso de la aplicación." }];
+    const plan = {
+      title,
+      summary: reservationIntent
+        ? "Una primera versión funcional de marketplace de reservas, inspirada en el tipo de flujo solicitado y con identidad propia."
+        : `Una primera versión funcional basada en: ${normalizedPrompt.slice(0, 180)}${normalizedPrompt.length > 180 ? "…" : ""}`,
+      included,
+      extras,
+      estimatedPages: reservationIntent ? 5 : 4,
+      backendNeeded,
+    };
     return res.json({ ok: true, plan });
   } catch (err: any) {
     logger.error({ err }, "plan-preview error");
