@@ -5521,12 +5521,28 @@ router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   if (req.headers["x-swan-secret"]) headers["x-swan-secret"] = String(req.headers["x-swan-secret"]).slice(0, 512);
 
   try {
-    const hasBody = !["GET", "HEAD"].includes(String(req.method).toUpperCase());
-    const upstream = await fetch(`${AUREVIA_UPSTREAM}/api/${upstreamPath}${query}`, {
-      method: req.method,
+    const method = String(req.method).toUpperCase();
+    const hasBody = !["GET", "HEAD"].includes(method);
+    const requestUpstream = () => fetch(`${AUREVIA_UPSTREAM}/api/${upstreamPath}${query}`, {
+      method,
       headers,
       body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
     });
+    let upstream: Response | undefined;
+    let lastNetworkError: unknown;
+    // Las lecturas pueden coincidir con un reinicio controlado del backend Veya.
+    // Reintentamos solo GET/HEAD para no duplicar una operación con efectos.
+    const attempts = hasBody ? 1 : 3;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        upstream = await requestUpstream();
+        break;
+      } catch (error) {
+        lastNetworkError = error;
+        if (attempt + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+    }
+    if (!upstream) throw lastNetworkError || new Error("Veya upstream unavailable");
     const setCookies = typeof (upstream.headers as any).getSetCookie === "function"
       ? (upstream.headers as any).getSetCookie()
       : (upstream.headers.get("set-cookie") ? [upstream.headers.get("set-cookie")] : []);
