@@ -227,30 +227,94 @@ function VeyaEmployeePortalPage() {
   );
 }
 
-/**
- * Public Veya client entry point. The customer interface continues using the
- * independently versioned bundle through the same-origin Maris proxy.
- */
+type VeyaClient = { name?: string; first_name?: string; full_name?: string; email?: string };
+type VeyaAccount = { balance?: number; available_balance?: number; currency?: string; iban?: string; status?: string };
+type VeyaRequest = { request_id?: string; reference?: string; request_type?: string; status?: string; created_at?: string };
+
+const VEYA_CLIENT_API = `/api/apps/${VEYA_APP_ID}/aurevia`;
+
+async function clientApi(path: string, options: ApiOptions = {}) {
+  const response = await fetch(`${VEYA_CLIENT_API}${path}`, {
+    credentials: "include",
+    ...options,
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+  });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(readableError(value.detail, "No se ha podido completar la operación."));
+  return value;
+}
+
+function money(value: unknown, currency = "EUR") {
+  const number = typeof value === "number" ? value : Number(value || 0);
+  return new Intl.NumberFormat("es-ES", { style: "currency", currency }).format(Number.isFinite(number) ? number : 0);
+}
+
+function VeyaNativeClientPage() {
+  const [stage, setStage] = useState<"welcome" | "login" | "dashboard">("welcome");
+  const [dni, setDni] = useState("");
+  const [password, setPassword] = useState("");
+  const [client, setClient] = useState<VeyaClient | null>(null);
+  const [account, setAccount] = useState<VeyaAccount | null>(null);
+  const [requests, setRequests] = useState<VeyaRequest[]>([]);
+  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const loadWorkspace = async () => {
+    const [accountsResult, requestsResult] = await Promise.allSettled([
+      clientApi("/veya/banking/accounts"),
+      clientApi("/operations/requests"),
+    ]);
+    if (accountsResult.status === "fulfilled") {
+      const result = accountsResult.value;
+      const list = Array.isArray(result) ? result : result.accounts || [];
+      setAccount(list[0] || result.account || null);
+    }
+    if (requestsResult.status === "fulfilled") {
+      const result = requestsResult.value;
+      setRequests(Array.isArray(result) ? result : result.requests || []);
+    }
+  };
+
+  const login = async (event: FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    setNotice("");
+    try {
+      const result = await clientApi("/auth/login-dni-password", {
+        method: "POST",
+        body: JSON.stringify({ dni: dni.trim().toUpperCase(), password }),
+      });
+      setClient(result.customer || result.user || result.client || { name: result.name });
+      setPassword("");
+      setStage("dashboard");
+      await loadWorkspace();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se ha podido validar el acceso.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const displayName = client?.first_name || client?.name || client?.full_name || "cliente";
+  const balance = account?.available_balance ?? account?.balance ?? 0;
+  const currency = account?.currency || "EUR";
+
+  if (stage === "welcome") {
+    return <main className="min-h-[100dvh] bg-[#f7f6ff] text-[#1c1539]">
+      <header className="flex items-center justify-between border-b border-[#e7e1f7] bg-[#181231] px-5 py-4 text-white md:px-10"><a href="/" className="flex items-center gap-2 text-sm font-semibold text-white/85"><span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#9b7cff] to-[#34d4b6] font-black">V</span>Veya</a><a href="/veya/empleados" className="text-xs text-white/70 hover:text-white">Portal de empleados</a></header>
+      <section className="mx-auto grid min-h-[calc(100dvh-65px)] max-w-6xl items-center gap-10 px-5 py-14 md:grid-cols-[1.15fr_.85fr] md:px-10"><div><span className="inline-flex rounded-full bg-[#eee9ff] px-3 py-1 text-xs font-bold tracking-wide text-[#5134ba]">VEYA · ESPACIO DE CLIENTE</span><h1 className="mt-5 max-w-xl font-serif text-5xl font-semibold leading-[.98] tracking-tight md:text-7xl">Tu trabajo mueve.<br />Tu banca acompaña.</h1><p className="mt-6 max-w-xl text-lg leading-8 text-[#706989]">Una experiencia financiera clara para autónomos y microempresas. Consulta tu actividad, registra gestiones y prepara tus productos desde un único espacio protegido.</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => setStage("login")} className="rounded-xl bg-[#6544d9] px-5 py-3 font-bold text-white shadow-lg shadow-[#6544d9]/20">Acceder a Veya</button><button onClick={() => setNotice("El alta se completa con verificación de identidad y revisión de elegibilidad.")} className="rounded-xl border border-[#d8d0ee] bg-white px-5 py-3 font-bold text-[#3d2a7c]">Solicitar acceso</button></div>{notice && <p className="mt-5 max-w-xl rounded-xl bg-white p-4 text-sm text-[#5f5873] shadow-sm">{notice}</p>}</div><aside className="rounded-[2rem] bg-[#181231] p-7 text-white shadow-2xl shadow-[#1a123f]/20"><div className="flex items-center justify-between text-sm text-white/70"><span>Veya Account</span><ShieldCheck className="h-5 w-5 text-[#71e0c5]" /></div><div className="mt-16 rounded-3xl bg-gradient-to-br from-[#765be5] to-[#30205f] p-6"><p className="text-sm text-white/70">Visibilidad de cuenta</p><p className="mt-3 text-3xl font-bold">Datos confirmados</p><p className="mt-3 text-sm leading-6 text-white/75">Los saldos y movimientos se muestran únicamente cuando el proveedor autorizado los confirma.</p></div><div className="mt-6 grid grid-cols-2 gap-3 text-sm"><div className="rounded-2xl bg-white/10 p-4"><b>Gestiones</b><p className="mt-1 text-white/60">Trazables</p></div><div className="rounded-2xl bg-white/10 p-4"><b>Soporte</b><p className="mt-1 text-white/60">Seguro</p></div></div></aside></section>
+    </main>;
+  }
+
+  if (stage === "login") {
+    return <main className="min-h-[100dvh] bg-[#f7f6ff] text-[#1c1539]"><header className="flex items-center justify-between border-b border-[#e7e1f7] bg-[#181231] px-5 py-4 text-white md:px-10"><button onClick={() => setStage("welcome")} className="text-sm font-semibold text-white/80 hover:text-white">← Veya</button><span className="inline-flex items-center gap-2 text-sm text-white/75"><ShieldCheck className="h-4 w-4 text-[#71e0c5]" /> Espacio protegido</span></header><section className="mx-auto flex min-h-[calc(100dvh-65px)] max-w-lg items-center p-5"><div className="w-full rounded-3xl bg-white p-8 shadow-xl shadow-[#3d2a7c]/10"><span className="text-xs font-bold tracking-[.16em] text-[#6544d9]">ACCESO DE CLIENTE</span><h1 className="mt-2 font-serif text-4xl font-semibold">Entra en Veya.</h1><p className="mt-3 text-sm leading-6 text-[#726b87]">Identifícate con tu DNI o NIE y tu contraseña personal.</p>{notice && <div className="mt-5 rounded-xl bg-[#f4f0ff] p-4 text-sm text-[#4b337d]">{notice}</div>}<form className="mt-6 grid gap-4" onSubmit={login}><label className="grid gap-2 text-sm font-semibold">DNI / NIE<input autoComplete="username" required value={dni} onChange={(e) => setDni(e.target.value.toUpperCase())} placeholder="Ejemplo: 12345678Z" className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" /></label><label className="grid gap-2 text-sm font-semibold">Contraseña<input autoComplete="current-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" /></label><button disabled={loading} className="rounded-xl bg-[#6544d9] px-4 py-3 font-bold text-white disabled:opacity-60">{loading ? "Comprobando…" : "Acceder"}</button></form><button onClick={() => setNotice("La recuperación de contraseña requiere un correo de contacto verificado.")} className="mt-5 text-sm font-semibold text-[#5134ba]">¿Has olvidado tu contraseña?</button></div></section></main>;
+  }
+
+  return <main className="min-h-[100dvh] bg-[#f7f6ff] text-[#1c1539]"><header className="flex items-center justify-between border-b border-[#e7e1f7] bg-[#181231] px-5 py-4 text-white md:px-10"><a href="/veya" className="flex items-center gap-2 font-semibold"><span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#9b7cff] to-[#34d4b6] font-black">V</span>Veya</a><span className="inline-flex items-center gap-2 text-sm text-white/75"><ShieldCheck className="h-4 w-4 text-[#71e0c5]" /> Espacio protegido</span></header><section className="mx-auto grid max-w-7xl gap-6 px-5 py-8 md:grid-cols-[220px_1fr] md:px-10"><aside className="rounded-3xl bg-white p-4 shadow-sm"><p className="px-3 py-2 text-xs font-bold tracking-[.14em] text-[#726b87]">TU ESPACIO VEYA</p>{["Inicio", "Huchas", "Transferencias", "Mis gestiones", "Veya Pro", "Ayuda", "Mi cuenta"].map((item) => <button key={item} onClick={() => setNotice(item === "Transferencias" ? "La solicitud de transferencia se registra para revisión y permanece bloqueada hasta la habilitación del proveedor." : `${item} estará disponible desde este espacio de cliente.`)} className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm font-semibold hover:bg-[#f4f0ff]">{item}</button>)}<button onClick={() => setStage("welcome")} className="mt-6 w-full rounded-xl border border-[#e0d9ee] px-3 py-2 text-sm font-semibold">Salir</button></aside><div className="grid gap-6"><div><span className="text-xs font-bold tracking-[.14em] text-[#6544d9]">TU ESPACIO VEYA</span><h1 className="mt-2 font-serif text-4xl font-semibold">Hola de nuevo, {displayName}.</h1><p className="mt-2 text-[#726b87]">Organiza tu actividad desde una sola experiencia.</p></div>{notice && <div className="rounded-2xl bg-[#f0edff] px-5 py-4 text-sm text-[#4b337d]">{notice}</div>}<div className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><section className="rounded-3xl bg-[#181231] p-7 text-white shadow-xl shadow-[#21194d]/10"><div className="flex items-center justify-between"><span className="text-sm text-white/65">Veya Account</span><ShieldCheck className="h-5 w-5 text-[#71e0c5]" /></div><p className="mt-12 text-sm text-white/65">Saldo disponible confirmado</p><p className="mt-2 text-4xl font-bold">{account ? money(balance, currency) : "Pendiente de proveedor"}</p><p className="mt-4 text-sm text-white/65">{account?.iban ? `IBAN ${String(account.iban).slice(0, 4)} •••• ${String(account.iban).slice(-4)}` : "Los datos de cuenta aparecerán cuando el proveedor los confirme."}</p><div className="mt-8 flex flex-wrap gap-3"><button onClick={() => setNotice("La transferencia se registra como expediente protegido hasta que se habilite la operativa autorizada.")} className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-[#2c2057]">Transferir</button><button onClick={() => setNotice("La vinculación de cuentas externas se prepara mediante consentimiento PSD2 y proveedor autorizado.")} className="rounded-xl border border-white/25 px-4 py-2 text-sm font-bold">Vincular cuenta</button></div></section><section className="rounded-3xl bg-white p-6 shadow-sm"><p className="text-sm font-bold">Mis gestiones</p><p className="mt-2 text-sm leading-6 text-[#726b87]">Solicitudes registradas desde tu espacio.</p><div className="mt-5 grid gap-3">{requests.length ? requests.slice(0, 4).map((request, index) => <div key={request.request_id || request.reference || index} className="rounded-xl bg-[#f7f6ff] p-3 text-sm"><b>{request.request_type || "Gestión Veya"}</b><p className="mt-1 text-xs text-[#726b87]">{request.status || "En revisión"} · {request.reference || request.request_id || "Referencia protegida"}</p></div>) : <div className="rounded-xl bg-[#f7f6ff] p-4 text-sm text-[#726b87]">Aún no tienes solicitudes registradas.</div>}</div></section></div></div></section></main>;
+}
+
 export default function VeyaPage() {
   const [location] = useLocation();
-  const employeePortal = location === "/veya/empleados";
-  const previewSource = `${VEYA_PREVIEW_PATH}?portal=customer`;
-  const [previewLoaded, setPreviewLoaded] = useState(false);
-  useEffect(() => { setPreviewLoaded(false); }, [previewSource]);
-
-  if (employeePortal) return <VeyaEmployeePortalPage />;
-
-  return (
-    <main className="min-h-[100dvh] bg-[#110d25] text-white">
-      <header className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#181231]/95 px-4 py-3 backdrop-blur md:px-8">
-        <a href="/" className="flex items-center gap-2 text-sm font-semibold text-white/80 transition hover:text-white"><span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-[#9b7cff] to-[#34d4b6] font-black text-white">M</span>Maris AI</a>
-        <div className="hidden items-center gap-2 text-sm text-white/70 sm:flex"><ShieldCheck className="h-4 w-4 text-[#71e0c5]" /> Espacio Veya protegido</div>
-        <a href="/veya" className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#23184d] transition hover:bg-[#f0edff]">Espacio Veya <ExternalLink className="h-3.5 w-3.5" /></a>
-      </header>
-      <section className="relative h-[calc(100dvh-57px)] min-h-[680px] overflow-hidden bg-[#f7f6ff]">
-        {!previewLoaded && <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-center bg-gradient-to-b from-[#110d25]/25 to-transparent" aria-live="polite"><div className="flex items-center gap-2 rounded-full border border-white/20 bg-[#17112d]/70 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur"><Loader2 className="h-3.5 w-3.5 animate-spin" />Cargando interfaz Veya…</div></div>}
-        <iframe title="Veya" src={previewSource} className="h-full w-full border-0 bg-[#f7f6ff]" allow="camera; clipboard-write" referrerPolicy="strict-origin-when-cross-origin" onLoad={() => setPreviewLoaded(true)} />
-      </section>
-    </main>
-  );
+  if (location === "/veya/empleados") return <VeyaEmployeePortalPage />;
+  return <VeyaNativeClientPage />;
 }
