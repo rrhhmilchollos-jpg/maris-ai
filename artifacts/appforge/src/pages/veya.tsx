@@ -1,4 +1,5 @@
 import { ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import { useLocation } from "wouter";
 
 const VEYA_APP_ID = "6a7e7b998c2ddda0ecd1f219";
 const VEYA_PREVIEW_PATH = `/api/apps/${VEYA_APP_ID}/preview`;
@@ -10,6 +11,9 @@ const VEYA_PREVIEW_PATH = `/api/apps/${VEYA_APP_ID}/preview`;
  * requests and browser security policies keep working as in app previews.
  */
 export default function VeyaPage() {
+  const [location] = useLocation();
+  const employeePortal = location === "/veya/empleados";
+  const previewSource = employeePortal ? `${VEYA_PREVIEW_PATH}#/empleados` : VEYA_PREVIEW_PATH;
   return (
     <main className="min-h-[100dvh] bg-[#110d25] text-white">
       <header className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#181231]/95 px-4 py-3 backdrop-blur md:px-8">
@@ -19,10 +23,10 @@ export default function VeyaPage() {
         </a>
         <div className="hidden items-center gap-2 text-sm text-white/70 sm:flex">
           <ShieldCheck className="h-4 w-4 text-[#71e0c5]" />
-          Espacio Veya protegido
+          {employeePortal ? "Portal de empleados Veya" : "Espacio Veya protegido"}
         </div>
-        <a href={VEYA_PREVIEW_PATH} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#23184d] transition hover:bg-[#f0edff]">
-          Abrir Veya <ExternalLink className="h-3.5 w-3.5" />
+        <a href={previewSource} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#23184d] transition hover:bg-[#f0edff]">
+          {employeePortal ? "Abrir portal" : "Abrir Veya"} <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </header>
       <section className="relative h-[calc(100dvh-57px)] min-h-[680px] overflow-hidden bg-[#f7f6ff]">
@@ -34,7 +38,7 @@ export default function VeyaPage() {
         </div>
         <iframe
           title="Veya"
-          src={VEYA_PREVIEW_PATH}
+          src={previewSource}
           className="h-full w-full border-0 bg-[#f7f6ff]"
           allow="camera; clipboard-write"
           referrerPolicy="strict-origin-when-cross-origin"

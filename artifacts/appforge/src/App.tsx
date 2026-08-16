@@ -293,6 +293,7 @@ function AppRoutes() {
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/forgot-password" component={ForgotPasswordPage} />
           <Route path="/reset-password" component={ResetPasswordPage} />
+          <Route path="/veya/empleados"><VeyaPage /></Route>
           <Route path="/veya"><VeyaPage /></Route>
 
                 <Route path="/onboarding">
