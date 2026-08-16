@@ -20,6 +20,16 @@ type Employee = {
   department?: string;
 };
 
+type EmployeeProductRequest = {
+  request_id?: string;
+  request_type?: string;
+  product_code?: string;
+  status?: string;
+  internal_status?: string;
+  created_at?: string;
+  summary?: Record<string, string>;
+};
+
 function readableError(detail: unknown, fallback: string): string {
   if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail)) {
@@ -51,6 +61,7 @@ function VeyaEmployeePortalPage() {
   const [pendingToken, setPendingToken] = useState("");
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [productRequests, setProductRequests] = useState<EmployeeProductRequest[]>([]);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -58,6 +69,8 @@ function VeyaEmployeePortalPage() {
     try {
       const me = await employeeApi("me");
       setEmployee(me);
+      const inbox = await employeeApi("operations/product-requests").catch(() => ({ items: [] }));
+      setProductRequests(Array.isArray(inbox.items) ? inbox.items : []);
       setStage("portal");
     } catch {
       setStage("login");
@@ -221,7 +234,7 @@ function VeyaEmployeePortalPage() {
           <form className="mt-6 grid gap-4" onSubmit={verifyTotp}><input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))} className="rounded-xl border border-[#ddd7eb] px-4 py-3 outline-none focus:border-[#6544d9]" /><button disabled={loading} className="rounded-xl bg-[#6544d9] px-4 py-3 font-bold text-white disabled:opacity-60">{loading ? "Validando…" : "Abrir portal interno"}</button></form>
         </section>}
 
-        {stage === "portal" && <section className="w-full max-w-4xl rounded-3xl bg-white p-7 shadow-xl shadow-[#3d2a7c]/10 md:p-9"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="text-xs font-bold tracking-[0.16em] text-[#6544d9]">OPERACIONES VEYA · RESTRINGIDO</span><h1 className="mt-2 font-serif text-3xl font-semibold">Hola, {employee?.name || "empleado"}.</h1><p className="mt-2 text-sm text-[#726b87]">{employee?.role || "Perfil autorizado"} · {employee?.department || "Veya"}</p></div><button onClick={logout} className="rounded-xl border border-[#ddd7eb] px-4 py-2 text-sm font-bold">Cerrar sesión</button></div><div className="mt-8 grid gap-4 md:grid-cols-3"><article className="rounded-2xl bg-[#f7f6ff] p-5"><b className="text-2xl">✓</b><p className="mt-2 font-semibold">Sesión interna activa</p><small className="text-[#726b87]">TOTP validado</small></article><article className="rounded-2xl bg-[#f7f6ff] p-5"><b className="text-2xl">CRM</b><p className="mt-2 font-semibold">Datos minimizados</p><small className="text-[#726b87]">Acceso por rol</small></article><article className="rounded-2xl bg-[#f7f6ff] p-5"><b className="text-2xl">Audit</b><p className="mt-2 font-semibold">Trazabilidad activa</p><small className="text-[#726b87]">Sin facultades financieras</small></article></div><p className="mt-7 rounded-xl border border-[#eeeaf6] p-4 text-sm leading-6 text-[#726b87]">Este portal permite revisar expedientes internos según tu rol. No activa IBAN, tarjetas, pagos, movimientos ni productos financieros.</p></section>}
+        {stage === "portal" && <section className="w-full max-w-4xl rounded-3xl bg-white p-7 shadow-xl shadow-[#3d2a7c]/10 md:p-9"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="text-xs font-bold tracking-[0.16em] text-[#6544d9]">OPERACIONES VEYA · RESTRINGIDO</span><h1 className="mt-2 font-serif text-3xl font-semibold">Hola, {employee?.name || "empleado"}.</h1><p className="mt-2 text-sm text-[#726b87]">{employee?.role || "Perfil autorizado"} · {employee?.department || "Veya"}</p></div><button onClick={logout} className="rounded-xl border border-[#ddd7eb] px-4 py-2 text-sm font-bold">Cerrar sesión</button></div><div className="mt-8 grid gap-4 md:grid-cols-3"><article className="rounded-2xl bg-[#f7f6ff] p-5"><b className="text-2xl">✓</b><p className="mt-2 font-semibold">Sesión interna activa</p><small className="text-[#726b87]">TOTP validado</small></article><article className="rounded-2xl bg-[#f7f6ff] p-5"><b className="text-2xl">CRM</b><p className="mt-2 font-semibold">Datos minimizados</p><small className="text-[#726b87]">Acceso por rol</small></article><article className="rounded-2xl bg-[#f7f6ff] p-5"><b className="text-2xl">Audit</b><p className="mt-2 font-semibold">Trazabilidad activa</p><small className="text-[#726b87]">Sin facultades financieras</small></article></div><section className="mt-7 rounded-2xl border border-[#e8e3f5] bg-[#fcfbff] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-xs font-bold tracking-[0.13em] text-[#6544d9]">BANDEJA DE MARKETPLACE</span><h2 className="mt-1 text-xl font-semibold">Expedientes pendientes</h2></div><span className="rounded-full bg-[#ede7ff] px-3 py-1 text-xs font-bold text-[#5635bd]">{productRequests.length} en bandeja</span></div><div className="mt-4 space-y-2">{productRequests.length ? productRequests.slice(0, 12).map((request, index) => <article key={request.request_id || index} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eeeaf6] bg-white p-3"><div><b className="block text-sm">{request.request_type?.replace(/_/g, " ") || "Expediente de servicio"}</b><span className="mt-1 block text-xs text-[#726b87]">{request.product_code || "Selección Veya"} · {request.request_id || "Referencia protegida"}</span></div><span className="rounded-full bg-[#eefbf7] px-3 py-1 text-xs font-bold text-[#2e846c]">{request.internal_status || request.status || "submitted"}</span></article>) : <p className="rounded-xl bg-white p-4 text-sm text-[#726b87]">No hay expedientes de renting o seguro pendientes.</p>}</div></section><p className="mt-7 rounded-xl border border-[#eeeaf6] p-4 text-sm leading-6 text-[#726b87]">Este portal permite revisar expedientes internos según tu rol. No activa IBAN, tarjetas, pagos, movimientos ni productos financieros.</p></section>}
       </section>
     </main>
   );
