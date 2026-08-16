@@ -1,4 +1,5 @@
 import { ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 
 const VEYA_APP_ID = "6a7e7b998c2ddda0ecd1f219";
@@ -14,6 +15,8 @@ export default function VeyaPage() {
   const [location] = useLocation();
   const employeePortal = location === "/veya/empleados";
   const previewSource = employeePortal ? `${VEYA_PREVIEW_PATH}?portal=employees` : `${VEYA_PREVIEW_PATH}?portal=customer`;
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  useEffect(() => { setPreviewLoaded(false); }, [previewSource]);
   return (
     <main className="min-h-[100dvh] bg-[#110d25] text-white">
       <header className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#181231]/95 px-4 py-3 backdrop-blur md:px-8">
@@ -30,18 +33,19 @@ export default function VeyaPage() {
         </a>
       </header>
       <section className="relative h-[calc(100dvh-57px)] min-h-[680px] overflow-hidden bg-[#f7f6ff]">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-center bg-gradient-to-b from-[#110d25]/25 to-transparent">
+        {!previewLoaded && <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex h-16 items-center justify-center bg-gradient-to-b from-[#110d25]/25 to-transparent" aria-live="polite">
           <div className="flex items-center gap-2 rounded-full border border-white/20 bg-[#17112d]/70 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Cargando interfaz Veya…
           </div>
-        </div>
+        </div>}
         <iframe
           title="Veya"
           src={previewSource}
           className="h-full w-full border-0 bg-[#f7f6ff]"
           allow="camera; clipboard-write"
           referrerPolicy="strict-origin-when-cross-origin"
+          onLoad={() => setPreviewLoaded(true)}
         />
       </section>
     </main>
