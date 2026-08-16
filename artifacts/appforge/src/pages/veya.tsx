@@ -64,6 +64,7 @@ function VeyaEmployeePortalPage() {
   const [productRequests, setProductRequests] = useState<EmployeeProductRequest[]>([]);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showTemporaryTotpSecret, setShowTemporaryTotpSecret] = useState(false);
 
   const loadPortal = async () => {
     try {
@@ -131,6 +132,7 @@ function VeyaEmployeePortalPage() {
   const startBootstrap = async () => {
     setLoading(true);
     setNotice("");
+    setShowTemporaryTotpSecret(false);
     try {
       const value = await employeeApi("bootstrap/start", { method: "POST", body: JSON.stringify({}) });
       setBootstrap(value);
@@ -165,6 +167,7 @@ function VeyaEmployeePortalPage() {
       setPassword("");
       setPasswordConfirmation("");
       setTotp("");
+      setShowTemporaryTotpSecret(false);
       setBootstrap(null);
       setStage("login");
       setNotice("Acceso activado. Introduce tu código, contraseña y continúa con TOTP.");
@@ -173,6 +176,17 @@ function VeyaEmployeePortalPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const cancelBootstrap = () => {
+    setBootstrap(null);
+    setCode("");
+    setPassword("");
+    setPasswordConfirmation("");
+    setTotp("");
+    setShowTemporaryTotpSecret(false);
+    setNotice("La activación temporal se ha descartado. Genera una nueva clave desde la cuenta Veya autorizada.");
+    setStage("login");
   };
 
   const logout = async () => {
@@ -217,14 +231,14 @@ function VeyaEmployeePortalPage() {
         {stage === "bootstrap" && <section className="w-full max-w-lg rounded-3xl bg-white p-7 shadow-xl shadow-[#3d2a7c]/10 md:p-9">
           <span className="text-xs font-bold tracking-[0.16em] text-[#6544d9]">ACTIVACIÓN SEGURA</span>
           <h1 className="mt-2 font-serif text-3xl font-semibold">Configura tu acceso interno</h1>
-          <p className="mt-3 text-sm leading-6 text-[#726b87]">Crea una contraseña propia y añade la clave temporal en Google Authenticator, Microsoft Authenticator, 1Password u otra aplicación TOTP.</p>
+          <p className="mt-3 text-sm leading-6 text-[#726b87]">Primero registra la clave temporal en Google Authenticator, Microsoft Authenticator, 1Password u otra aplicación TOTP. Después introduce el código que genere esa aplicación.</p>
           {notice && <div className="mt-4 rounded-xl bg-[#f4f0ff] px-4 py-3 text-sm text-[#4b337d]">{notice}</div>}
-          <div className="mt-5 grid gap-2 rounded-2xl bg-[#f4f0ff] p-4 text-sm"><b>Tu código de empleado</b><code className="rounded-lg bg-[#17112f] p-2 text-white">{bootstrap?.employee_code}</code><b className="mt-2">Clave temporal TOTP</b><code className="break-all rounded-lg bg-[#17112f] p-2 text-white">{bootstrap?.totp_secret}</code></div>
+          <div className="mt-5 grid gap-3 rounded-2xl bg-[#f4f0ff] p-4 text-sm"><div><b className="block">Tu código de empleado</b><code className="mt-2 block rounded-lg bg-[#17112f] p-2 text-white">{bootstrap?.employee_code}</code></div><div className="rounded-xl border border-[#d9cff9] bg-white/70 p-3 text-xs leading-5 text-[#594d76]"><b className="block text-[#3d2a7c]">Paso 1 · Registra la clave en tu autenticador</b>La clave temporal está oculta para reducir exposiciones accidentales. No hagas capturas ni la compartas.</div><div><div className="flex flex-wrap items-center justify-between gap-2"><b>Clave temporal TOTP</b><button type="button" onClick={() => setShowTemporaryTotpSecret((value) => !value)} className="rounded-lg border border-[#cfc2ff] px-3 py-1.5 text-xs font-bold text-[#5134ba]">{showTemporaryTotpSecret ? "Ocultar clave" : "Mostrar temporalmente"}</button></div>{showTemporaryTotpSecret ? <code className="mt-2 block break-all rounded-lg bg-[#17112f] p-2 text-white">{bootstrap?.totp_secret}</code> : <p className="mt-2 rounded-lg border border-dashed border-[#cfc2ff] bg-white p-2 text-xs text-[#726b87]">La clave permanece oculta hasta que pulses «Mostrar temporalmente».</p>}</div></div>
           <form className="mt-6 grid gap-4" onSubmit={completeBootstrap}>
             <label className="grid gap-2 text-sm font-semibold">Contraseña nueva<input autoComplete="new-password" type="password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Al menos 12 caracteres" className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" /></label>
             <label className="grid gap-2 text-sm font-semibold">Repite la contraseña<input autoComplete="new-password" type="password" required minLength={12} value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" /></label>
-            <label className="grid gap-2 text-sm font-semibold">Código de 6 dígitos<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" /></label>
-            <button disabled={loading} className="rounded-xl bg-[#6544d9] px-4 py-3 font-bold text-white disabled:opacity-60">{loading ? "Activando…" : "Activar acceso de empleado"}</button>
+            <label className="grid gap-2 text-sm font-semibold">Paso 2 · Código de tu aplicación Authenticator (6 dígitos)<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" required maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))} placeholder="No es el código de empleado" className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" /><span className="text-xs font-normal leading-5 text-[#726b87]">Introduce el número cambiante que muestra tu autenticador; no copies el código interno de empleado.</span></label>
+            <div className="flex flex-wrap gap-3"><button disabled={loading} className="rounded-xl bg-[#6544d9] px-4 py-3 font-bold text-white disabled:opacity-60">{loading ? "Activando…" : "Activar acceso de empleado"}</button><button type="button" onClick={cancelBootstrap} disabled={loading} className="rounded-xl border border-[#cfc2ff] px-4 py-3 text-sm font-bold text-[#5134ba] disabled:opacity-60">Cancelar y generar una nueva clave</button></div>
           </form>
         </section>}
 
