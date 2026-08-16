@@ -13,7 +13,7 @@ const VEYA_PREVIEW_PATH = `/api/apps/${VEYA_APP_ID}/preview`;
 export default function VeyaPage() {
   const [location] = useLocation();
   const employeePortal = location === "/veya/empleados";
-  const previewSource = employeePortal ? `${VEYA_PREVIEW_PATH}#/empleados` : VEYA_PREVIEW_PATH;
+  const previewSource = employeePortal ? `${VEYA_PREVIEW_PATH}?portal=employees` : `${VEYA_PREVIEW_PATH}?portal=customer`;
   return (
     <main className="min-h-[100dvh] bg-[#110d25] text-white">
       <header className="relative z-10 flex items-center justify-between gap-4 border-b border-white/10 bg-[#181231]/95 px-4 py-3 backdrop-blur md:px-8">
