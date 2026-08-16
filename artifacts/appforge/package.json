@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "build": "node scripts/verify-veya-marketplace-assets.mjs && rm -rf dist && vite build --config vite.config.ts && node prerender.mjs && echo \"BUILD COMPLETE $(date)\"",
+    "build": "node scripts/verify-veya-marketplace-assets.mjs && tsc -p tsconfig.json --noEmit && rm -rf dist && vite build --config vite.config.ts && node prerender.mjs && echo \"BUILD COMPLETE $(date)\"",
+    "verify:veya": "node scripts/verify-veya-marketplace-assets.mjs && tsc -p tsconfig.json --noEmit",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prerender": "node prerender.mjs",
