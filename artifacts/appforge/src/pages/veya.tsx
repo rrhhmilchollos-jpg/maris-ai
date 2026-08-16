@@ -66,6 +66,20 @@ function VeyaEmployeePortalPage() {
 
   useEffect(() => { void loadPortal(); }, []);
 
+  useEffect(() => {
+    if (stage !== "login") return;
+    const clearAutofill = () => {
+      setCode("");
+      setPassword("");
+      document.querySelectorAll<HTMLInputElement>('input[data-veya-employee-login="true"]').forEach((input) => {
+        input.value = "";
+      });
+    };
+    clearAutofill();
+    const timer = window.setTimeout(clearAutofill, 350);
+    return () => window.clearTimeout(timer);
+  }, [stage]);
+
   const startLogin = async (event: FormEvent) => {
     event.preventDefault();
     setLoading(true);
@@ -174,10 +188,10 @@ function VeyaEmployeePortalPage() {
           {notice && <div className="mt-4 rounded-xl bg-[#f4f0ff] px-4 py-3 text-sm text-[#4b337d]">{notice}</div>}
           <form className="mt-6 grid gap-4" onSubmit={startLogin}>
             <label className="grid gap-2 text-sm font-semibold">Código de empleado
-              <input name="veya_employee_code" autoComplete="off" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Ejemplo: VEYA-RRHH-001" className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
+              <input name="veya_employee_code_9c2d" autoComplete="new-password" data-veya-employee-login="true" data-lpignore="true" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Ejemplo: VEYA-RRHH-001" className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
             </label>
             <label className="grid gap-2 text-sm font-semibold">Contraseña
-              <input name="veya_employee_password" autoComplete="off" required type="password" minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
+              <input name="veya_employee_password_9c2d" autoComplete="new-password" data-veya-employee-login="true" data-lpignore="true" required type="password" minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
             </label>
             <button disabled={loading} className="rounded-xl bg-[#6544d9] px-4 py-3 font-bold text-white disabled:opacity-60">{loading ? "Verificando…" : "Continuar con TOTP"}</button>
           </form>
