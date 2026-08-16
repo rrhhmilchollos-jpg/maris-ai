@@ -184,11 +184,11 @@ function VeyaEmployeePortalPage() {
         {stage === "login" && <section className="w-full max-w-md rounded-3xl bg-white p-7 shadow-xl shadow-[#3d2a7c]/10 md:p-9">
           <span className="text-xs font-bold tracking-[0.16em] text-[#6544d9]">PORTAL INTERNO VEYA</span>
           <h1 className="mt-2 font-serif text-3xl font-semibold">Acceso de personal</h1>
-          <p className="mt-3 text-sm leading-6 text-[#726b87]">Entorno separado para personal autorizado. Usa tu código de empleado, contraseña y autenticador TOTP.</p>
+          <p className="mt-3 text-sm leading-6 text-[#726b87]">Entorno separado para personal autorizado. Usa tu código interno de seis dígitos, contraseña y autenticador TOTP.</p>
           {notice && <div className="mt-4 rounded-xl bg-[#f4f0ff] px-4 py-3 text-sm text-[#4b337d]">{notice}</div>}
           <form className="mt-6 grid gap-4" onSubmit={startLogin}>
             <label className="grid gap-2 text-sm font-semibold">Código de empleado
-              <input name="veya_employee_code_9c2d" autoComplete="new-password" data-veya-employee-login="true" data-lpignore="true" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Ejemplo: VEYA-RRHH-001" className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
+              <input name="veya_employee_code_9c2d" autoComplete="new-password" data-veya-employee-login="true" data-lpignore="true" required value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Ejemplo: 482913" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
             </label>
             <label className="grid gap-2 text-sm font-semibold">Contraseña
               <input name="veya_employee_password_9c2d" autoComplete="new-password" data-veya-employee-login="true" data-lpignore="true" required type="password" minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-xl border border-[#ddd7eb] px-4 py-3 font-normal outline-none focus:border-[#6544d9]" />
@@ -228,7 +228,7 @@ function VeyaEmployeePortalPage() {
 }
 
 type VeyaClient = { name?: string; first_name?: string; full_name?: string; email?: string };
-type VeyaAccount = { balance?: number; available_balance?: number; currency?: string; iban?: string; status?: string };
+type VeyaAccount = { balance?: number; available_balance?: number; available_cents?: number; booked_cents?: number; currency?: string; iban?: string; status?: string; provider_confirmed_at?: string };
 type VeyaRequest = { request_id?: string; reference?: string; request_type?: string; status?: string; created_at?: string };
 
 const VEYA_CLIENT_API = `/api/apps/${VEYA_APP_ID}/aurevia`;
@@ -279,7 +279,7 @@ function VeyaNativeClientPage() {
     ]);
     if (accountsResult.status === "fulfilled") {
       const result = accountsResult.value;
-      const list = Array.isArray(result) ? result : result.accounts || [];
+      const list = Array.isArray(result) ? result : result.items || result.accounts || [];
       setAccount(list[0] || result.account || null);
     }
     if (requestsResult.status === "fulfilled") {
@@ -309,9 +309,9 @@ function VeyaNativeClientPage() {
   };
 
   const displayName = client?.first_name || client?.name || client?.full_name || "cliente";
-  const balance = account?.available_balance ?? account?.balance ?? 0;
+  const balance = account?.available_cents !== undefined ? account.available_cents / 100 : account?.available_balance ?? account?.balance ?? 0;
   const currency = account?.currency || "EUR";
-  const hasConfirmedBalance = Boolean(account && (account.status || account.iban || account.balance !== undefined));
+  const hasConfirmedBalance = Boolean(account && (account.status === "provider_confirmed" || account.provider_confirmed_at));
   const nav = [
     ["inicio", "Inicio", "◉"],
     ["huchas", "Huchas", "◌"],

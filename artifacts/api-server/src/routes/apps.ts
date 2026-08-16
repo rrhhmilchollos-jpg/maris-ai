@@ -5489,6 +5489,7 @@ const AUREVIA_ALLOWED_PATTERNS: RegExp[] = [
   /^veya\/admin\/(?:me|dashboard|requests(?:\/[^/?]+\/review)?|support\/conversations(?:\/[^/?]+(?:\/(?:messages|resolve))?)?)$/,
   /^veya\/ledger\/(?:summary|events|reconciliations\/run|exceptions(?:\/[^/?]+\/resolve)?)$/,
   /^veya\/employee-portal\/(?:bootstrap\/(?:start|complete)|login\/start|login\/verify-totp|logout|me|crm\/customers|kyc\/cases(?:\/[^/?]+\/decisions)?|operations\/product-requests(?:\/[^/?]+\/assignment)?)$/,
+  /^veya\/provider-events\/swan\/events$/,
   /^veya\/hr\/(?:dashboard|users|staff|role-change-requests(?:\/[^/?]+\/approve)?|provider-actions(?:\/[^/?]+\/decision)?)$/,
   /^veya\/(?:pockets(?:\/[^/?]+)?|joint-accounts\/requests)$/,
   /^veya\/pro\/[A-Za-z0-9_./-]+$/,
@@ -5517,6 +5518,7 @@ router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   if (req.headers["idempotency-key"]) headers["Idempotency-Key"] = String(req.headers["idempotency-key"]).slice(0, 128);
   if (req.headers["x-review-token"]) headers["X-Review-Token"] = String(req.headers["x-review-token"]).slice(0, 256);
   if (req.headers["x-application-review-signature"]) headers["X-Application-Review-Signature"] = String(req.headers["x-application-review-signature"]).slice(0, 256);
+  if (req.headers["x-swan-secret"]) headers["x-swan-secret"] = String(req.headers["x-swan-secret"]).slice(0, 512);
 
   try {
     const hasBody = !["GET", "HEAD"].includes(String(req.method).toUpperCase());
