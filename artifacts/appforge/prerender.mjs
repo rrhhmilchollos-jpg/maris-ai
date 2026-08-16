@@ -633,7 +633,7 @@ const HIDE_SCRIPT = `<script>
     // Estas rutas están protegidas por Clerk: Google nunca ve su contenido
     // real de todos modos, así que no necesitan la comprobación estricta de
     // <main> — basta con que #root tenga cualquier hijo para ocultar ya.
-    var isPrivateAppRoute = /^\\/(admin|dashboard|billing|app|onboarding|sign-in|sign-up)(\\/|$)/.test(window.location.pathname);
+    var isPrivateAppRoute = /^\\/(admin|dashboard|billing|app|onboarding|sign-in|sign-up|veya)(\\/|$)/.test(window.location.pathname);
     if (isPrivateAppRoute) {
       if (root.children.length > 0) {
         // .remove() en vez de display:none — así el texto SEO desaparece
