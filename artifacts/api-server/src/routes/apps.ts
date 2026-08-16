@@ -5476,12 +5476,32 @@ const AUREVIA_APP_IDS = new Set([
   "6a7e7b998c2ddda0ecd1f219",
 ]);
 const AUREVIA_UPSTREAM = process.env.AUREVIA_INTERNAL_API_URL || "http://neobanco-preview:8000";
-const AUREVIA_ALLOWED_PATH = /^(?:auth\/(?:login-dni-password|login|recover-password|reset-password)|neobanco\/dashboard|kyc\/(?:identity\/start|handoffs(?:\/[^/?]+(?:\/(?:mobile-start|provider-completion))?)?)|inbound-activation\/status|operations\/requests(?:\/[^/?]+)?|product-requests\/(?:status|requests(?:\/[^/?]+(?:\/attachments)?)?)|application-review\/submissions(?:\/[^/?]+(?:\/information-response|\/provider-decision)?)?|veya\/banking\/(?:status|profile|accounts|movements|sandbox\/sync)|veya\/admin\/(?:me|dashboard|requests(?:\/[^/?]+\/review)?|support\/conversations(?:\/[^/?]+(?:\/(?:messages|resolve))?)?)|veya\/ledger\/(?:summary|events|reconciliations\/run|exceptions(?:\/[^/?]+\/resolve)?)|veya\/employee-portal\/(?:login\/start|login\/verify-totp|logout|me|crm\/customers|kyc\/cases(?:\/[^/?]+\/decisions)?|operations\/product-requests(?:\/[^/?]+\/assignment)?)|veya\/hr\/(?:dashboard|users|staff|role-change-requests(?:\/[^/?]+\/approve)?|provider-actions(?:\/[^/?]+\/decision)?)|veya\/(?:pockets(?:\/[^/?]+)?|joint-accounts\/requests)|veya\/pro\/(?:organisations(?:\/[^/?]+(?:\/(?:members(?:\/accept)?|kyb|approval-policies|expenses|bills|reimbursements|mileage|accounting\/categories|reconciliations\/run|developer\/(?:clients(?:\/[^/?]+\/rotate)?|webhooks|integrations))?)?|approval-workflows\/[^/?]+\/decisions)|support\/conversations(?:\/[^/?]+(?:\/messages)?)?)$/;
+const AUREVIA_ALLOWED_PATTERNS: RegExp[] = [
+  /^auth\/(?:login-dni-password|login|recover-password|reset-password)$/,
+  /^neobanco\/dashboard$/,
+  /^kyc\/(?:identity\/start|handoffs(?:\/[^/?]+(?:\/(?:mobile-start|provider-completion))?)?)$/,
+  /^inbound-activation\/status$/,
+  /^operations\/requests(?:\/[^/?]+)?$/,
+  /^product-requests\/(?:status|requests(?:\/[^/?]+(?:\/attachments)?)?|transfers)$/,
+  /^application-review\/submissions(?:\/[^/?]+(?:\/information-response|\/provider-decision)?)?$/,
+  /^support\/conversations(?:\/[^/?]+(?:\/messages)?)?$/,
+  /^veya\/banking\/(?:status|profile|accounts|movements|sandbox\/sync)$/,
+  /^veya\/admin\/(?:me|dashboard|requests(?:\/[^/?]+\/review)?|support\/conversations(?:\/[^/?]+(?:\/(?:messages|resolve))?)?)$/,
+  /^veya\/ledger\/(?:summary|events|reconciliations\/run|exceptions(?:\/[^/?]+\/resolve)?)$/,
+  /^veya\/employee-portal\/(?:login\/start|login\/verify-totp|logout|me|crm\/customers|kyc\/cases(?:\/[^/?]+\/decisions)?|operations\/product-requests(?:\/[^/?]+\/assignment)?)$/,
+  /^veya\/hr\/(?:dashboard|users|staff|role-change-requests(?:\/[^/?]+\/approve)?|provider-actions(?:\/[^/?]+\/decision)?)$/,
+  /^veya\/(?:pockets(?:\/[^/?]+)?|joint-accounts\/requests)$/,
+  /^veya\/pro\/[A-Za-z0-9_./-]+$/,
+];
+
+function isAureviaAllowedPath(path: string): boolean {
+  return AUREVIA_ALLOWED_PATTERNS.some((pattern) => pattern.test(path));
+}
 
 router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
   const appId = String(req.params.appId || "");
   const upstreamPath = (Array.isArray(req.params.path) ? req.params.path.join("/") : String(req.params.path || "")).replace(/^\/+/, "");
-  if (!AUREVIA_APP_IDS.has(appId) || !AUREVIA_ALLOWED_PATH.test(upstreamPath)) {
+  if (!AUREVIA_APP_IDS.has(appId) || !isAureviaAllowedPath(upstreamPath)) {
     return res.status(404).json({ detail: "Recurso no disponible" });
   }
 
