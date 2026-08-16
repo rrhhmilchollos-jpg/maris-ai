@@ -257,6 +257,8 @@ function VeyaEmployeePortalPage() {
 type VeyaClient = { name?: string; first_name?: string; full_name?: string; email?: string };
 type VeyaAccount = { balance?: number; available_balance?: number; available_cents?: number; booked_cents?: number; currency?: string; iban?: string; status?: string; provider_confirmed_at?: string };
 type VeyaRequest = { request_id?: string; reference?: string; request_type?: string; status?: string; created_at?: string };
+type SecurityDevice = { device_id: string; label: string; created_at?: string; last_activity_at?: string; current?: boolean; login_method?: string };
+type VeyaSecurityOverview = { privacy_mode?: boolean; devices?: SecurityDevice[]; open_security_reports?: number; controls?: { id: string; label: string; state: string; detail: string }[] };
 type MarketplaceItem = { code: string; title: string; category: string; monthlyFrom: number; image: string; tag: string; detail: string };
 
 const VEHICLE_CATALOG: MarketplaceItem[] = [
@@ -293,7 +295,7 @@ function money(value: unknown, currency = "EUR") {
 
 function VeyaNativeClientPage() {
   const [stage, setStage] = useState<"welcome" | "login" | "dashboard">("welcome");
-  const [activeTab, setActiveTab] = useState<"inicio" | "marketplace" | "huchas" | "movimientos" | "pro">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "marketplace" | "huchas" | "movimientos" | "security" | "pro">("inicio");
   const [dni, setDni] = useState("");
   const [password, setPassword] = useState("");
   const [client, setClient] = useState<VeyaClient | null>(null);
@@ -301,6 +303,12 @@ function VeyaNativeClientPage() {
   const [requests, setRequests] = useState<VeyaRequest[]>([]);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [security, setSecurity] = useState<VeyaSecurityOverview | null>(null);
+  const [privacyMode, setPrivacyMode] = useState(false);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [securityReportCategory, setSecurityReportCategory] = useState<"phishing" | "lost_device" | "unauthorized_access" | "other">("phishing");
+  const [securityReportSummary, setSecurityReportSummary] = useState("");
+  const [securityReportReference, setSecurityReportReference] = useState("");
   const [marketSection, setMarketSection] = useState<"vehicles" | "devices" | "insurance">("vehicles");
   const [vehicleAudience, setVehicleAudience] = useState<"individual" | "business">("individual");
   const [selectedMarketplaceItem, setSelectedMarketplaceItem] = useState<MarketplaceItem | null>(null);
@@ -325,9 +333,10 @@ function VeyaNativeClientPage() {
   }, [stage]);
 
   const loadWorkspace = async () => {
-    const [accountsResult, requestsResult] = await Promise.allSettled([
+    const [accountsResult, requestsResult, securityResult] = await Promise.allSettled([
       clientApi("/veya/banking/accounts"),
       clientApi("/operations/requests"),
+      clientApi("/veya/security/overview"),
     ]);
     if (accountsResult.status === "fulfilled") {
       const result = accountsResult.value;
@@ -337,6 +346,63 @@ function VeyaNativeClientPage() {
     if (requestsResult.status === "fulfilled") {
       const result = requestsResult.value;
       setRequests(Array.isArray(result) ? result : result.requests || []);
+    }
+    if (securityResult.status === "fulfilled") {
+      setSecurity(securityResult.value);
+      setPrivacyMode(Boolean(securityResult.value.privacy_mode));
+    }
+  };
+
+  const refreshSecurity = async () => {
+    const result = await clientApi("/veya/security/overview");
+    setSecurity(result);
+    setPrivacyMode(Boolean(result.privacy_mode));
+  };
+
+  const updatePrivacyMode = async () => {
+    setSecurityLoading(true);
+    setNotice("");
+    try {
+      const result = await clientApi("/veya/security/privacy-mode", { method: "POST", body: JSON.stringify({ enabled: !privacyMode }) });
+      setPrivacyMode(Boolean(result.privacy_mode));
+      setNotice(result.privacy_mode ? "Modo privado activado. Los importes se ocultan en este espacio." : "Modo privado desactivado.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se ha podido actualizar el modo privado.");
+    } finally {
+      setSecurityLoading(false);
+    }
+  };
+
+  const revokeDevice = async (device: SecurityDevice) => {
+    if (!window.confirm(`¿Cerrar la sesión de «${device.label}»? Esta acción no afecta a tu sesión actual.`)) return;
+    setSecurityLoading(true);
+    setNotice("");
+    try {
+      await clientApi(`/veya/security/devices/${encodeURIComponent(device.device_id)}/revoke`, { method: "POST", body: JSON.stringify({}) });
+      await refreshSecurity();
+      setNotice("Sesión cerrada correctamente en el otro dispositivo.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se ha podido cerrar esa sesión.");
+    } finally {
+      setSecurityLoading(false);
+    }
+  };
+
+  const submitSecurityReport = async (event: FormEvent) => {
+    event.preventDefault();
+    setSecurityLoading(true);
+    setSecurityReportReference("");
+    setNotice("");
+    try {
+      const result = await clientApi("/veya/security/reports", { method: "POST", body: JSON.stringify({ category: securityReportCategory, summary: securityReportSummary }) });
+      setSecurityReportSummary("");
+      setSecurityReportReference(result.report_id || "Caso registrado");
+      await refreshSecurity();
+      setNotice("Hemos registrado tu incidencia de seguridad. No compartas contraseñas, códigos ni datos completos de tarjeta.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se ha podido registrar la incidencia.");
+    } finally {
+      setSecurityLoading(false);
     }
   };
 
@@ -393,12 +459,14 @@ function VeyaNativeClientPage() {
   const displayName = client?.first_name || client?.name || client?.full_name || "cliente";
   const balance = account?.available_cents !== undefined ? account.available_cents / 100 : account?.available_balance ?? account?.balance ?? 0;
   const currency = account?.currency || "EUR";
+  const visibleBalance = privacyMode ? "••••••" : money(balance, currency);
   const hasConfirmedBalance = Boolean(account && (account.status === "provider_confirmed" || account.provider_confirmed_at));
   const nav = [
     ["inicio", "Inicio", "◉"],
     ["marketplace", "Servicios", "◇"],
     ["huchas", "Huchas", "◌"],
     ["movimientos", "Actividad", "↗"],
+    ["security", "Seguridad", "◈"],
     ["pro", "Veya Pro", "✦"],
   ] as const;
   const samples = [
@@ -428,11 +496,25 @@ function VeyaNativeClientPage() {
   }
 
   const overview = <>
-    <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#18275f] via-[#101733] to-[#090a0e] p-6 shadow-[0_25px_80px_rgba(0,0,0,.3)] md:p-8"><div className="pointer-events-none absolute -right-10 -top-14 h-48 w-48 rounded-full bg-[#5274ff]/30 blur-3xl" /><div className="relative flex items-start justify-between"><div><p className="text-sm text-white/55">Saldo disponible</p><p className="mt-2 text-5xl font-semibold tracking-[-.07em] md:text-6xl">{hasConfirmedBalance ? money(balance, currency) : "0,00 €"}</p><p className="mt-3 flex items-center gap-2 text-sm text-[#b7c7ff]"><span className="h-2 w-2 animate-pulse rounded-full bg-[#ffb54d] shadow-[0_0_12px_#ffb54d]" />{hasConfirmedBalance ? "Saldo confirmado por proveedor" : "Vista inicial · esperando confirmación de proveedor"}</p></div><button className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:bg-white/10">◉</button></div><div className="relative mt-8 grid grid-cols-3 gap-3"><button onClick={() => setNotice("La entrada de fondos se habilitará cuando exista una vía autorizada.")} className="rounded-2xl border border-white/10 bg-white/[.08] p-3 text-left transition hover:-translate-y-0.5 hover:bg-white/[.14]"><b className="block text-xl">＋</b><span className="mt-2 block text-xs font-semibold">Añadir dinero</span></button><button onClick={() => setActiveTab("movimientos")} className="rounded-2xl border border-white/10 bg-white/[.08] p-3 text-left transition hover:-translate-y-0.5 hover:bg-white/[.14]"><b className="block text-xl">⇄</b><span className="mt-2 block text-xs font-semibold">Transferir</span></button><button onClick={() => setNotice("Las tarjetas se gestionan mediante expedientes y proveedor autorizado.")} className="rounded-2xl border border-white/10 bg-white/[.08] p-3 text-left transition hover:-translate-y-0.5 hover:bg-white/[.14]"><b className="block text-xl">▣</b><span className="mt-2 block text-xs font-semibold">Tarjetas</span></button></div></section>
+    <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#18275f] via-[#101733] to-[#090a0e] p-6 shadow-[0_25px_80px_rgba(0,0,0,.3)] md:p-8"><div className="pointer-events-none absolute -right-10 -top-14 h-48 w-48 rounded-full bg-[#5274ff]/30 blur-3xl" /><div className="relative flex items-start justify-between"><div><p className="text-sm text-white/55">Saldo disponible</p><p className="mt-2 text-5xl font-semibold tracking-[-.07em] md:text-6xl">{hasConfirmedBalance ? visibleBalance : (privacyMode ? "••••••" : "0,00 €")}</p><p className="mt-3 flex items-center gap-2 text-sm text-[#b7c7ff]"><span className="h-2 w-2 animate-pulse rounded-full bg-[#ffb54d] shadow-[0_0_12px_#ffb54d]" />{hasConfirmedBalance ? "Saldo confirmado por proveedor" : "Vista inicial · esperando confirmación de proveedor"}</p></div><button className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:bg-white/10">◉</button></div><div className="relative mt-8 grid grid-cols-3 gap-3"><button onClick={() => setNotice("La entrada de fondos se habilitará cuando exista una vía autorizada.")} className="rounded-2xl border border-white/10 bg-white/[.08] p-3 text-left transition hover:-translate-y-0.5 hover:bg-white/[.14]"><b className="block text-xl">＋</b><span className="mt-2 block text-xs font-semibold">Añadir dinero</span></button><button onClick={() => setActiveTab("movimientos")} className="rounded-2xl border border-white/10 bg-white/[.08] p-3 text-left transition hover:-translate-y-0.5 hover:bg-white/[.14]"><b className="block text-xl">⇄</b><span className="mt-2 block text-xs font-semibold">Transferir</span></button><button onClick={() => setNotice("Las tarjetas se gestionan mediante expedientes y proveedor autorizado.")} className="rounded-2xl border border-white/10 bg-white/[.08] p-3 text-left transition hover:-translate-y-0.5 hover:bg-white/[.14]"><b className="block text-xl">▣</b><span className="mt-2 block text-xs font-semibold">Tarjetas</span></button></div></section>
     <section className="rounded-[2rem] border border-white/8 bg-white/[.045] p-5 backdrop-blur-xl"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold">Actividad reciente</p><p className="mt-1 text-xs text-white/45">Actividad disponible según confirmación del proveedor</p></div><button onClick={() => setActiveTab("movimientos")} className="rounded-full bg-white/8 px-3 py-2 text-xs font-bold text-white/75 hover:bg-white/12">Ver todo</button></div><div className="mt-4 max-h-[290px] space-y-2 overflow-y-auto pr-1">{requests.length ? requests.slice(0, 6).map((request, index) => <div key={request.request_id || request.reference || index} className="flex items-center justify-between rounded-2xl bg-black/20 p-3"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-[#5274ff]/20 text-[#b8c7ff]">{["⌁","⇄","▣","●"][index % 4]}</span><div><b className="block text-sm">{request.request_type || "Gestión Veya"}</b><span className="text-xs text-white/45">{request.status || "En revisión"}</span></div></div><span className="text-xs font-semibold text-white/60">{request.reference || request.request_id || "Protegido"}</span></div>) : samples.map(([name, detail, icon, state]) => <div key={name} className="flex items-center justify-between rounded-2xl bg-black/20 p-3"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-[#5274ff]/20 text-[#b8c7ff]">{icon}</span><div><b className="block text-sm">{name}</b><span className="text-xs text-white/45">{detail}</span></div></div><span className="text-xs font-semibold text-[#8fe5d1]">{state}</span></div>)}</div></section>
   </>;
 
   const huchas = <section className="grid gap-4 md:grid-cols-2"><div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#273e87] to-[#11162c] p-6"><p className="text-sm text-white/60">Huchas Veya</p><h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Objetivos que sí ves avanzar.</h2><p className="mt-4 max-w-md text-sm leading-6 text-white/60">Crea objetivos y guarda el avance de cada uno. Los fondos solo se separan cuando el proveedor lo confirme.</p><button onClick={() => setNotice("La creación de huchas se registra como objetivo protegido.")} className="mt-7 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-black">Crear hucha</button></div><div className="rounded-[2rem] border border-white/10 bg-white/[.05] p-6"><p className="text-sm font-semibold">Progreso de objetivos</p><div className="mt-7 space-y-5">{[["Impuestos",38,"#7691ff"],["Equipo",12,"#72d9c2"],["Viaje",0,"#ffb54d"]].map(([label, amount, color]) => <div key={label as string}><div className="mb-2 flex justify-between text-sm"><span>{label}</span><span className="text-white/45">{amount}%</span></div><div className="h-2 rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${amount}%`, background: color as string }} /></div></div>)}</div></div></section>;
+
+  const securityCenter = <section className="space-y-5">
+    <div className="relative overflow-hidden rounded-[2rem] border border-[#70ddc5]/20 bg-[radial-gradient(circle_at_85%_0%,rgba(87,215,186,.18),transparent_35%),linear-gradient(135deg,#102a2b,#090a0e_62%)] p-6 md:p-8">
+      <span className="rounded-full border border-[#84ead7]/20 bg-[#70ddc5]/10 px-3 py-1 text-xs font-bold tracking-wide text-[#a4f0df]">CENTRO DE SEGURIDAD VEYA</span>
+      <h2 className="mt-4 text-4xl font-semibold tracking-[-.06em] md:text-5xl">Controla tu acceso, sin perder el contexto.</h2>
+      <p className="mt-4 max-w-2xl text-sm leading-7 text-white/60">Gestiona tus sesiones, decide cómo mostrar tus importes y comunica una incidencia. Estas herramientas no ejecutan pagos, cambios de cuenta ni productos financieros.</p>
+      <div className="mt-7 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><p className="text-xs text-white/45">Sesiones activas</p><p className="mt-2 text-2xl font-semibold">{security?.devices?.length ?? "—"}</p></div><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><p className="text-xs text-white/45">Casos abiertos</p><p className="mt-2 text-2xl font-semibold">{security?.open_security_reports ?? "—"}</p></div><div className="rounded-2xl border border-white/10 bg-black/20 p-4"><p className="text-xs text-white/45">Estado financiero</p><p className="mt-2 text-sm font-semibold text-[#a4f0df]">Proveedor pendiente</p></div></div>
+    </div>
+    <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
+      <section className="rounded-[2rem] border border-white/10 bg-white/[.045] p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold">Sesiones y dispositivos</p><p className="mt-1 text-xs leading-5 text-white/45">Cierra cualquier sesión que no reconozcas. Tu sesión actual permanece protegida.</p></div><button disabled={securityLoading} onClick={() => { void refreshSecurity().catch((error) => setNotice(error instanceof Error ? error.message : "No se ha podido actualizar el estado.")); }} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white/70 hover:bg-white/10 disabled:opacity-50">Actualizar</button></div><div className="mt-5 space-y-3">{security?.devices?.length ? security.devices.map((device) => <article key={device.device_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 p-4"><div><b className="block text-sm">{device.label}</b><span className="mt-1 block text-xs text-white/45">{device.current ? "Este dispositivo" : "Sesión activa"} · {device.login_method || "acceso web"}</span></div>{device.current ? <span className="rounded-full bg-[#70ddc5]/10 px-3 py-1 text-xs font-bold text-[#9ce9d8]">Actual</span> : <button disabled={securityLoading} onClick={() => { void revokeDevice(device); }} className="rounded-xl border border-[#ffb9b9]/25 px-3 py-2 text-xs font-bold text-[#ffc6c6] hover:bg-[#ffb9b9]/10 disabled:opacity-50">Cerrar sesión</button>}</article>) : <p className="rounded-2xl bg-black/20 p-4 text-sm text-white/50">Accede para consultar los dispositivos vinculados.</p>}</div></section>
+      <section className="rounded-[2rem] border border-white/10 bg-white/[.045] p-6"><p className="text-sm font-semibold">Privacidad del espacio</p><p className="mt-2 text-sm leading-6 text-white/50">Oculta importes en la interfaz de Veya. La preferencia queda guardada en tu cuenta.</p><div className="mt-6 flex items-center justify-between rounded-2xl border border-white/8 bg-black/20 p-4"><div><b className="block text-sm">Modo privado</b><span className="mt-1 block text-xs text-white/45">{privacyMode ? "Los importes se muestran ocultos" : "Los importes se muestran normalmente"}</span></div><button disabled={securityLoading} onClick={() => { void updatePrivacyMode(); }} className={`rounded-xl px-4 py-2 text-xs font-bold transition disabled:opacity-50 ${privacyMode ? "bg-[#70ddc5] text-[#06211d]" : "bg-white text-black"}`}>{privacyMode ? "Activo" : "Activar"}</button></div><div className="mt-5 rounded-2xl border border-[#ffcf83]/15 bg-[#ffbd62]/[.06] p-4 text-xs leading-5 text-[#ffe1af]">Veya nunca te pedirá contraseñas, códigos SMS o claves TOTP mediante llamadas, chat o correo.</div></section>
+    </div>
+    <section className="rounded-[2rem] border border-white/10 bg-white/[.045] p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold">Comunicar una incidencia</p><p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">Registra phishing, pérdida de dispositivo o un acceso no reconocido. El caso queda trazado para seguimiento; no bloquea ni mueve dinero desde esta pantalla.</p></div>{securityReportReference && <span className="rounded-full bg-[#70ddc5]/10 px-3 py-1 text-xs font-bold text-[#9ce9d8]">Caso {securityReportReference}</span>}</div><form onSubmit={submitSecurityReport} className="mt-5 grid gap-4 md:grid-cols-[.32fr_.68fr_auto]"><select value={securityReportCategory} onChange={(event) => setSecurityReportCategory(event.target.value as typeof securityReportCategory)} className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm outline-none focus:border-[#8cebd9]"><option value="phishing">Phishing o suplantación</option><option value="lost_device">Dispositivo perdido</option><option value="unauthorized_access">Acceso no reconocido</option><option value="other">Otro caso de seguridad</option></select><input required minLength={12} maxLength={800} value={securityReportSummary} onChange={(event) => setSecurityReportSummary(event.target.value)} placeholder="Describe lo ocurrido sin incluir contraseñas, códigos ni números completos de tarjeta" className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm outline-none placeholder:text-white/25 focus:border-[#8cebd9]" /><button disabled={securityLoading} className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black disabled:opacity-50">Registrar caso</button></form></section>
+  </section>;
 
   const movements = <section className="rounded-[2rem] border border-white/10 bg-white/[.045] p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm text-white/55">Transferencias y actividad</p><h2 className="mt-1 text-3xl font-semibold tracking-[-.04em]">Todo, sin perder el contexto.</h2></div><button onClick={() => setNotice("La solicitud de transferencia se registra como expediente y permanece bloqueada hasta que exista raíl autorizado.")} className="rounded-2xl bg-[#6e8cff] px-4 py-3 text-sm font-bold text-[#061038]">Nueva transferencia</button></div><div className="mt-7 grid gap-3">{samples.map(([name, detail, icon, state]) => <div key={name} className="flex items-center justify-between rounded-2xl border border-white/8 bg-black/20 p-4"><div className="flex items-center gap-4"><span className="grid h-11 w-11 place-items-center rounded-full bg-white/7 text-lg">{icon}</span><div><b>{name}</b><p className="mt-1 text-sm text-white/45">{detail}</p></div></div><span className="rounded-full bg-[#6dd9c1]/10 px-3 py-1 text-xs font-bold text-[#8fe5d1]">{state}</span></div>)}</div></section>;
 
@@ -451,9 +533,9 @@ una visión.</h2><p className="mt-4 max-w-lg text-sm leading-7 text-white/60">Or
 
     <section className="rounded-[1.8rem] border border-white/10 bg-white/[.035] p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-semibold">Opciones externas</p><p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">Los siguientes enlaces abren los sitios oficiales de terceros. No son una contratación dentro de Veya ni transfieren la información de tu expediente.</p></div><span className="text-xs text-white/35">Imágenes de catálogo: Unsplash</span></div><div className="mt-4 flex flex-wrap gap-3">{(marketSection === "vehicles" ? vehicleAudience === "individual" ? [["Renting Finders · Particulares","https://rentingfinders.com/renting-particulares/"],["Idoneo · Renting","https://idoneo.com/renting/ofertas"]] : [["Renting Finders · Empresas","https://rentingfinders.com/renting-empresas/"],["Idoneo · Renting","https://idoneo.com/renting/ofertas"]] : marketSection === "devices" ? [["Grover España","https://www.grover.com/es-es"],["Rentik","https://rentik.com/"]] : [["Rastreator · Seguro de coche","https://www.rastreator.com/seguros-de-coche/"],["Balumba","https://www.balumba.es/"]]).map(([label, href]) => <a key={label} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/12 bg-white/[.05] px-4 py-3 text-sm font-bold text-white/80 transition hover:bg-white/10">{label}<ExternalLink className="h-3.5 w-3.5" /></a>)}</div></section></section>;
 
-  const view = activeTab === "inicio" ? overview : activeTab === "marketplace" ? marketplace : activeTab === "huchas" ? huchas : activeTab === "movimientos" ? movements : pro;
+  const view = activeTab === "inicio" ? overview : activeTab === "marketplace" ? marketplace : activeTab === "huchas" ? huchas : activeTab === "movimientos" ? movements : activeTab === "security" ? securityCenter : pro;
 
-  return <main className="min-h-[100dvh] bg-[#050506] text-white"><div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(56,80,194,.16),transparent_25%),radial-gradient(circle_at_85%_90%,rgba(74,213,184,.08),transparent_25%)]" /><header className="sticky top-0 z-20 border-b border-white/8 bg-[#050506]/75 backdrop-blur-2xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8"><a href="/veya" className="flex items-center gap-2 font-semibold"><span className="grid h-8 w-8 place-items-center rounded-xl bg-white text-sm font-black text-black">V</span> Veya</a><nav className="hidden items-center gap-1 rounded-full border border-white/8 bg-white/[.045] p-1 md:flex">{nav.map(([id,label,icon]) => <button key={id} onClick={() => setActiveTab(id)} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === id ? "bg-white text-black shadow-lg" : "text-white/55 hover:text-white"}`}><span className="mr-1.5">{icon}</span>{label}</button>)}</nav><div className="flex items-center gap-3"><span className="hidden items-center gap-2 text-xs font-semibold text-white/50 sm:flex"><span className="h-2 w-2 rounded-full bg-[#6dd9c1] shadow-[0_0_10px_#6dd9c1]" />Protegido</span><button onClick={() => setNotice("Las notificaciones operativas aparecerán aquí.")} className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[.05] text-white/70 transition hover:bg-white/10">◌</button></div></div></header><section className="relative mx-auto max-w-7xl px-5 py-7 pb-28 md:px-8 md:py-10"><div className="mb-7 flex items-end justify-between gap-4"><div><p className="text-xs font-bold tracking-[.16em] text-[#9eafff]">ESPACIO VEYA</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.05em] md:text-4xl">Hola, {displayName}.</h1></div><button onClick={() => setNotice("Modo privado activado: los importes se ocultan al cerrar la sesión.")} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-2 text-xs font-semibold text-white/55 hover:bg-white/[.08]">Modo privado</button></div>{notice && <div className="mb-5 rounded-2xl border border-[#7991ff]/20 bg-[#5274ff]/10 px-5 py-4 text-sm text-[#dce4ff]">{notice}</div>}<div className="grid gap-5 xl:grid-cols-[1.16fr_.84fr]">{view}</div></section><nav className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-around rounded-2xl border border-white/10 bg-[#17171c]/90 p-2 shadow-2xl backdrop-blur-2xl md:hidden">{nav.map(([id,label,icon]) => <button key={id} onClick={() => setActiveTab(id)} className={`grid place-items-center gap-0.5 rounded-xl px-3 py-2 text-[10px] font-semibold ${activeTab === id ? "bg-white text-black" : "text-white/55"}`}><b className="text-base">{icon}</b>{label}</button>)}</nav></main>;
+  return <main className="min-h-[100dvh] bg-[#050506] text-white"><div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(56,80,194,.16),transparent_25%),radial-gradient(circle_at_85%_90%,rgba(74,213,184,.08),transparent_25%)]" /><header className="sticky top-0 z-20 border-b border-white/8 bg-[#050506]/75 backdrop-blur-2xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8"><a href="/veya" className="flex items-center gap-2 font-semibold"><span className="grid h-8 w-8 place-items-center rounded-xl bg-white text-sm font-black text-black">V</span> Veya</a><nav className="hidden items-center gap-1 rounded-full border border-white/8 bg-white/[.045] p-1 md:flex">{nav.map(([id,label,icon]) => <button key={id} onClick={() => setActiveTab(id)} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === id ? "bg-white text-black shadow-lg" : "text-white/55 hover:text-white"}`}><span className="mr-1.5">{icon}</span>{label}</button>)}</nav><div className="flex items-center gap-3"><span className="hidden items-center gap-2 text-xs font-semibold text-white/50 sm:flex"><span className="h-2 w-2 rounded-full bg-[#6dd9c1] shadow-[0_0_10px_#6dd9c1]" />Protegido</span><button onClick={() => setNotice("Las notificaciones operativas aparecerán aquí.")} className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[.05] text-white/70 transition hover:bg-white/10">◌</button></div></div></header><section className="relative mx-auto max-w-7xl px-5 py-7 pb-28 md:px-8 md:py-10"><div className="mb-7 flex items-end justify-between gap-4"><div><p className="text-xs font-bold tracking-[.16em] text-[#9eafff]">ESPACIO VEYA</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.05em] md:text-4xl">Hola, {displayName}.</h1></div><button disabled={securityLoading} onClick={() => { void updatePrivacyMode(); }} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-2 text-xs font-semibold text-white/55 hover:bg-white/[.08] disabled:opacity-50">{privacyMode ? "Modo privado activo" : "Modo privado"}</button></div>{notice && <div className="mb-5 rounded-2xl border border-[#7991ff]/20 bg-[#5274ff]/10 px-5 py-4 text-sm text-[#dce4ff]">{notice}</div>}<div className="grid gap-5 xl:grid-cols-[1.16fr_.84fr]">{view}</div></section><nav className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-around rounded-2xl border border-white/10 bg-[#17171c]/90 p-2 shadow-2xl backdrop-blur-2xl md:hidden">{nav.map(([id,label,icon]) => <button key={id} onClick={() => setActiveTab(id)} className={`grid place-items-center gap-0.5 rounded-xl px-3 py-2 text-[10px] font-semibold ${activeTab === id ? "bg-white text-black" : "text-white/55"}`}><b className="text-base">{icon}</b>{label}</button>)}</nav></main>;
 }
 
 export default function VeyaPage() {

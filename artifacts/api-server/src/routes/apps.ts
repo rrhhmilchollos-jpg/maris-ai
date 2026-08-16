@@ -5486,6 +5486,7 @@ const AUREVIA_ALLOWED_PATTERNS: RegExp[] = [
   /^application-review\/submissions(?:\/[^/?]+(?:\/information-response|\/provider-decision)?)?$/,
   /^support\/conversations(?:\/[^/?]+(?:\/messages)?)?$/,
   /^veya\/banking\/(?:status|profile|accounts|movements|sandbox\/sync)$/,
+  /^veya\/security\/(?:overview|privacy-mode|reports|devices\/[^/?]+\/revoke)$/,
   /^veya\/admin\/(?:me|dashboard|requests(?:\/[^/?]+\/review)?|support\/conversations(?:\/[^/?]+(?:\/(?:messages|resolve))?)?)$/,
   /^veya\/ledger\/(?:summary|events|reconciliations\/run|exceptions(?:\/[^/?]+\/resolve)?)$/,
   /^veya\/employee-portal\/(?:bootstrap\/(?:start|complete)|login\/start|login\/verify-totp|logout|me|crm\/customers|kyc\/cases(?:\/[^/?]+\/decisions)?|operations\/product-requests(?:\/[^/?]+\/assignment)?)$/,
