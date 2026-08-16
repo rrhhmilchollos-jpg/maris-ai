@@ -28,8 +28,8 @@ export default function VeyaPage() {
           <ShieldCheck className="h-4 w-4 text-[#71e0c5]" />
           {employeePortal ? "Portal de empleados Veya" : "Espacio Veya protegido"}
         </div>
-        <a href={previewSource} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#23184d] transition hover:bg-[#f0edff]">
-          {employeePortal ? "Abrir portal" : "Abrir Veya"} <ExternalLink className="h-3.5 w-3.5" />
+        <a href={employeePortal ? "/veya/empleados" : "/veya"} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#23184d] transition hover:bg-[#f0edff]">
+          {employeePortal ? "Portal de empleados" : "Espacio Veya"} <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </header>
       <section className="relative h-[calc(100dvh-57px)] min-h-[680px] overflow-hidden bg-[#f7f6ff]">
