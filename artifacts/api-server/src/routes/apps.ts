@@ -5488,7 +5488,7 @@ const AUREVIA_ALLOWED_PATTERNS: RegExp[] = [
   /^veya\/banking\/(?:status|profile|accounts|movements|sandbox\/sync)$/,
   /^veya\/admin\/(?:me|dashboard|requests(?:\/[^/?]+\/review)?|support\/conversations(?:\/[^/?]+(?:\/(?:messages|resolve))?)?)$/,
   /^veya\/ledger\/(?:summary|events|reconciliations\/run|exceptions(?:\/[^/?]+\/resolve)?)$/,
-  /^veya\/employee-portal\/(?:login\/start|login\/verify-totp|logout|me|crm\/customers|kyc\/cases(?:\/[^/?]+\/decisions)?|operations\/product-requests(?:\/[^/?]+\/assignment)?)$/,
+  /^veya\/employee-portal\/(?:bootstrap\/(?:start|complete)|login\/start|login\/verify-totp|logout|me|crm\/customers|kyc\/cases(?:\/[^/?]+\/decisions)?|operations\/product-requests(?:\/[^/?]+\/assignment)?)$/,
   /^veya\/hr\/(?:dashboard|users|staff|role-change-requests(?:\/[^/?]+\/approve)?|provider-actions(?:\/[^/?]+\/decision)?)$/,
   /^veya\/(?:pockets(?:\/[^/?]+)?|joint-accounts\/requests)$/,
   /^veya\/pro\/[A-Za-z0-9_./-]+$/,
