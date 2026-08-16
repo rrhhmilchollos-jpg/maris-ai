@@ -259,6 +259,7 @@ type VeyaAccount = { balance?: number; available_balance?: number; available_cen
 type VeyaRequest = { request_id?: string; reference?: string; request_type?: string; status?: string; created_at?: string };
 type SecurityDevice = { device_id: string; label: string; created_at?: string; last_activity_at?: string; current?: boolean; login_method?: string };
 type VeyaSecurityOverview = { privacy_mode?: boolean; devices?: SecurityDevice[]; open_security_reports?: number; controls?: { id: string; label: string; state: string; detail: string }[] };
+type VeyaPocket = { pocket_id: string; name: string; target_cents: number; allocated_cents?: number; currency?: string; target_date?: string; color?: string; status?: string };
 type MarketplaceItem = { code: string; title: string; category: string; monthlyFrom: number; image: string; tag: string; detail: string };
 
 const VEHICLE_CATALOG: MarketplaceItem[] = [
@@ -309,6 +310,11 @@ function VeyaNativeClientPage() {
   const [securityReportCategory, setSecurityReportCategory] = useState<"phishing" | "lost_device" | "unauthorized_access" | "other">("phishing");
   const [securityReportSummary, setSecurityReportSummary] = useState("");
   const [securityReportReference, setSecurityReportReference] = useState("");
+  const [pockets, setPockets] = useState<VeyaPocket[]>([]);
+  const [showPocketForm, setShowPocketForm] = useState(false);
+  const [pocketName, setPocketName] = useState("");
+  const [pocketTarget, setPocketTarget] = useState("");
+  const [pocketSubmitting, setPocketSubmitting] = useState(false);
   const [marketSection, setMarketSection] = useState<"vehicles" | "devices" | "insurance">("vehicles");
   const [vehicleAudience, setVehicleAudience] = useState<"individual" | "business">("individual");
   const [selectedMarketplaceItem, setSelectedMarketplaceItem] = useState<MarketplaceItem | null>(null);
@@ -333,10 +339,11 @@ function VeyaNativeClientPage() {
   }, [stage]);
 
   const loadWorkspace = async () => {
-    const [accountsResult, requestsResult, securityResult] = await Promise.allSettled([
+    const [accountsResult, requestsResult, securityResult, pocketsResult] = await Promise.allSettled([
       clientApi("/veya/banking/accounts"),
       clientApi("/operations/requests"),
       clientApi("/veya/security/overview"),
+      clientApi("/veya/pockets"),
     ]);
     if (accountsResult.status === "fulfilled") {
       const result = accountsResult.value;
@@ -350,6 +357,9 @@ function VeyaNativeClientPage() {
     if (securityResult.status === "fulfilled") {
       setSecurity(securityResult.value);
       setPrivacyMode(Boolean(securityResult.value.privacy_mode));
+    }
+    if (pocketsResult.status === "fulfilled") {
+      setPockets(Array.isArray(pocketsResult.value) ? pocketsResult.value : pocketsResult.value.items || []);
     }
   };
 
@@ -428,6 +438,24 @@ function VeyaNativeClientPage() {
 
   const updateMarketData = (key: string, value: string | boolean) => setMarketData((current) => ({ ...current, [key]: value }));
 
+  const createPocket = async (event: FormEvent) => {
+    event.preventDefault();
+    setPocketSubmitting(true);
+    setNotice("");
+    try {
+      const result = await clientApi("/veya/pockets", { method: "POST", body: JSON.stringify({ name: pocketName, target_amount: pocketTarget, color: "blue" }) });
+      setPockets((current) => [{ pocket_id: result.pocket_id, name: pocketName.trim(), target_cents: Math.round(Number(pocketTarget.replace(",", ".")) * 100), allocated_cents: 0, currency: "EUR", status: result.status }, ...current]);
+      setPocketName("");
+      setPocketTarget("");
+      setShowPocketForm(false);
+      setNotice("Hucha creada como objetivo protegido. Los fondos solo se separarán cuando el proveedor lo confirme.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se ha podido crear la hucha.");
+    } finally {
+      setPocketSubmitting(false);
+    }
+  };
+
   const submitMarketplaceRequest = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedMarketplaceItem) return;
@@ -502,6 +530,13 @@ function VeyaNativeClientPage() {
 
   const huchas = <section className="grid gap-4 md:grid-cols-2"><div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#273e87] to-[#11162c] p-6"><p className="text-sm text-white/60">Huchas Veya</p><h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Objetivos que sí ves avanzar.</h2><p className="mt-4 max-w-md text-sm leading-6 text-white/60">Crea objetivos y guarda el avance de cada uno. Los fondos solo se separan cuando el proveedor lo confirme.</p><button onClick={() => setNotice("La creación de huchas se registra como objetivo protegido.")} className="mt-7 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-black">Crear hucha</button></div><div className="rounded-[2rem] border border-white/10 bg-white/[.05] p-6"><p className="text-sm font-semibold">Progreso de objetivos</p><div className="mt-7 space-y-5">{[["Impuestos",38,"#7691ff"],["Equipo",12,"#72d9c2"],["Viaje",0,"#ffb54d"]].map(([label, amount, color]) => <div key={label as string}><div className="mb-2 flex justify-between text-sm"><span>{label}</span><span className="text-white/45">{amount}%</span></div><div className="h-2 rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${amount}%`, background: color as string }} /></div></div>)}</div></div></section>;
 
+  const pocketsView = <section className="space-y-5">
+    <div className="relative overflow-hidden rounded-[2rem] border border-[#7991ff]/25 bg-[radial-gradient(circle_at_80%_0%,rgba(100,130,255,.22),transparent_35%),linear-gradient(135deg,#14205a,#090a0e_62%)] p-6 md:p-8"><span className="rounded-full border border-[#a9b7ff]/20 bg-[#7991ff]/10 px-3 py-1 text-xs font-bold tracking-wide text-[#c2ccff]">HUCHAS VEYA</span><h2 className="mt-4 text-4xl font-semibold tracking-[-.06em] md:text-5xl">Objetivos que puedes ver avanzar.</h2><p className="mt-4 max-w-2xl text-sm leading-7 text-white/60">Crea objetivos personales o de actividad. Mientras el proveedor no confirme separación de fondos, cada Hucha permanece como una planificación protegida y trazable.</p><button onClick={() => setShowPocketForm((current) => !current)} className="mt-7 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-black">{showPocketForm ? "Cerrar" : "Crear Hucha"}</button></div>
+    {showPocketForm && <form onSubmit={createPocket} className="grid gap-4 rounded-[2rem] border border-white/10 bg-white/[.045] p-6 md:grid-cols-[1fr_.55fr_auto]"><label className="grid gap-2 text-sm font-semibold">Nombre del objetivo<input required minLength={2} maxLength={80} value={pocketName} onChange={(event) => setPocketName(event.target.value)} placeholder="Ejemplo: Impuestos trimestrales" className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none placeholder:text-white/25 focus:border-[#8fa4ff]" /></label><label className="grid gap-2 text-sm font-semibold">Objetivo (€)<input required inputMode="decimal" value={pocketTarget} onChange={(event) => setPocketTarget(event.target.value.replace(/[^0-9,.]/g, ""))} placeholder="1.000,00" className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none placeholder:text-white/25 focus:border-[#8fa4ff]" /></label><button disabled={pocketSubmitting} className="self-end rounded-xl bg-white px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{pocketSubmitting ? "Creando…" : "Guardar objetivo"}</button></form>}
+    <section className="rounded-[2rem] border border-white/10 bg-white/[.045] p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold">Tus Huchas</p><p className="mt-1 text-xs text-white/45">Los importes asignados permanecen en 0 € hasta que un proveedor autorizado confirme la operación.</p></div><span className="rounded-full bg-[#7991ff]/10 px-3 py-1 text-xs font-bold text-[#bec9ff]">{pockets.length} objetivo{pockets.length === 1 ? "" : "s"}</span></div><div className="mt-5 grid gap-3 md:grid-cols-2">{pockets.length ? pockets.map((pocket) => { const target = (pocket.target_cents || 0) / 100; const assigned = (pocket.allocated_cents || 0) / 100; const progress = target > 0 ? Math.min(100, Math.round((assigned / target) * 100)) : 0; return <article key={pocket.pocket_id} className="rounded-2xl border border-white/8 bg-black/20 p-5"><div className="flex items-start justify-between gap-3"><div><b className="block text-lg">{pocket.name}</b><span className="mt-1 block text-xs text-white/45">Objetivo {money(target, pocket.currency || "EUR")}</span></div><span className="rounded-full bg-[#70ddc5]/10 px-2 py-1 text-[10px] font-bold text-[#9ce9d8]">Planificación</span></div><div className="mt-6 h-2 rounded-full bg-white/10"><div className="h-full rounded-full bg-[#7991ff]" style={{ width: `${progress}%` }} /></div><div className="mt-3 flex justify-between text-xs text-white/45"><span>{money(assigned, pocket.currency || "EUR")} confirmado</span><span>{progress}%</span></div></article>; }) : <p className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm text-white/50 md:col-span-2">Aún no tienes objetivos. Crea una Hucha para mantener un plan trazable, sin mover fondos.</p>}</div></section>
+    <section className="rounded-[2rem] border border-[#ffbd62]/20 bg-[#ffbd62]/[.055] p-6"><p className="text-sm font-semibold text-[#ffe0a8]">Patrimonio y productos regulados</p><p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">Veya preparará ahorro, inversión, FX y cuentas conjuntas como productos separados, con proveedor y documentación específica. Ningún saldo, rendimiento, inversión ni cambio de divisa se simula ni ejecuta aquí hasta contar con la autorización aplicable.</p></section>
+  </section>;
+
   const securityCenter = <section className="space-y-5">
     <div className="relative overflow-hidden rounded-[2rem] border border-[#70ddc5]/20 bg-[radial-gradient(circle_at_85%_0%,rgba(87,215,186,.18),transparent_35%),linear-gradient(135deg,#102a2b,#090a0e_62%)] p-6 md:p-8">
       <span className="rounded-full border border-[#84ead7]/20 bg-[#70ddc5]/10 px-3 py-1 text-xs font-bold tracking-wide text-[#a4f0df]">CENTRO DE SEGURIDAD VEYA</span>
@@ -533,7 +568,7 @@ una visión.</h2><p className="mt-4 max-w-lg text-sm leading-7 text-white/60">Or
 
     <section className="rounded-[1.8rem] border border-white/10 bg-white/[.035] p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-semibold">Opciones externas</p><p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">Los siguientes enlaces abren los sitios oficiales de terceros. No son una contratación dentro de Veya ni transfieren la información de tu expediente.</p></div><span className="text-xs text-white/35">Imágenes de catálogo: Unsplash</span></div><div className="mt-4 flex flex-wrap gap-3">{(marketSection === "vehicles" ? vehicleAudience === "individual" ? [["Renting Finders · Particulares","https://rentingfinders.com/renting-particulares/"],["Idoneo · Renting","https://idoneo.com/renting/ofertas"]] : [["Renting Finders · Empresas","https://rentingfinders.com/renting-empresas/"],["Idoneo · Renting","https://idoneo.com/renting/ofertas"]] : marketSection === "devices" ? [["Grover España","https://www.grover.com/es-es"],["Rentik","https://rentik.com/"]] : [["Rastreator · Seguro de coche","https://www.rastreator.com/seguros-de-coche/"],["Balumba","https://www.balumba.es/"]]).map(([label, href]) => <a key={label} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/12 bg-white/[.05] px-4 py-3 text-sm font-bold text-white/80 transition hover:bg-white/10">{label}<ExternalLink className="h-3.5 w-3.5" /></a>)}</div></section></section>;
 
-  const view = activeTab === "inicio" ? overview : activeTab === "marketplace" ? marketplace : activeTab === "huchas" ? huchas : activeTab === "movimientos" ? movements : activeTab === "security" ? securityCenter : pro;
+  const view = activeTab === "inicio" ? overview : activeTab === "marketplace" ? marketplace : activeTab === "huchas" ? pocketsView : activeTab === "movimientos" ? movements : activeTab === "security" ? securityCenter : pro;
 
   return <main className="min-h-[100dvh] bg-[#050506] text-white"><div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(56,80,194,.16),transparent_25%),radial-gradient(circle_at_85%_90%,rgba(74,213,184,.08),transparent_25%)]" /><header className="sticky top-0 z-20 border-b border-white/8 bg-[#050506]/75 backdrop-blur-2xl"><div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8"><a href="/veya" className="flex items-center gap-2 font-semibold"><span className="grid h-8 w-8 place-items-center rounded-xl bg-white text-sm font-black text-black">V</span> Veya</a><nav className="hidden items-center gap-1 rounded-full border border-white/8 bg-white/[.045] p-1 md:flex">{nav.map(([id,label,icon]) => <button key={id} onClick={() => setActiveTab(id)} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === id ? "bg-white text-black shadow-lg" : "text-white/55 hover:text-white"}`}><span className="mr-1.5">{icon}</span>{label}</button>)}</nav><div className="flex items-center gap-3"><span className="hidden items-center gap-2 text-xs font-semibold text-white/50 sm:flex"><span className="h-2 w-2 rounded-full bg-[#6dd9c1] shadow-[0_0_10px_#6dd9c1]" />Protegido</span><button onClick={() => setNotice("Las notificaciones operativas aparecerán aquí.")} className="grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/[.05] text-white/70 transition hover:bg-white/10">◌</button></div></div></header><section className="relative mx-auto max-w-7xl px-5 py-7 pb-28 md:px-8 md:py-10"><div className="mb-7 flex items-end justify-between gap-4"><div><p className="text-xs font-bold tracking-[.16em] text-[#9eafff]">ESPACIO VEYA</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.05em] md:text-4xl">Hola, {displayName}.</h1></div><button disabled={securityLoading} onClick={() => { void updatePrivacyMode(); }} className="rounded-full border border-white/10 bg-white/[.04] px-3 py-2 text-xs font-semibold text-white/55 hover:bg-white/[.08] disabled:opacity-50">{privacyMode ? "Modo privado activo" : "Modo privado"}</button></div>{notice && <div className="mb-5 rounded-2xl border border-[#7991ff]/20 bg-[#5274ff]/10 px-5 py-4 text-sm text-[#dce4ff]">{notice}</div>}<div className="grid gap-5 xl:grid-cols-[1.16fr_.84fr]">{view}</div></section><nav className="fixed inset-x-4 bottom-4 z-30 flex items-center justify-around rounded-2xl border border-white/10 bg-[#17171c]/90 p-2 shadow-2xl backdrop-blur-2xl md:hidden">{nav.map(([id,label,icon]) => <button key={id} onClick={() => setActiveTab(id)} className={`grid place-items-center gap-0.5 rounded-xl px-3 py-2 text-[10px] font-semibold ${activeTab === id ? "bg-white text-black" : "text-white/55"}`}><b className="text-base">{icon}</b>{label}</button>)}</nav></main>;
 }
