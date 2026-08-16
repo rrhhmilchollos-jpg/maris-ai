@@ -49,6 +49,7 @@ const FisioterapeutaCRM = lazy(() => import("@/pages/crm/fisioterapeuta"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password"));
+const VeyaPage = lazy(() => import("@/pages/veya"));
 
 function PageLoader() {
   return (
@@ -292,6 +293,7 @@ function AppRoutes() {
           <Route path="/sign-up/*?" component={SignUpPage} />
           <Route path="/forgot-password" component={ForgotPasswordPage} />
           <Route path="/reset-password" component={ResetPasswordPage} />
+          <Route path="/veya"><VeyaPage /></Route>
 
                 <Route path="/onboarding">
                   <Gated><OnboardingPage /></Gated>
