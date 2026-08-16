@@ -315,6 +315,13 @@ function VeyaNativeClientPage() {
   const [pocketName, setPocketName] = useState("");
   const [pocketTarget, setPocketTarget] = useState("");
   const [pocketSubmitting, setPocketSubmitting] = useState(false);
+  const [showJointForm, setShowJointForm] = useState(false);
+  const [jointName, setJointName] = useState("");
+  const [jointEmail, setJointEmail] = useState("");
+  const [jointRelationship, setJointRelationship] = useState<"pareja" | "familiar" | "socio" | "otro">("pareja");
+  const [jointPurpose, setJointPurpose] = useState("");
+  const [jointSubmitting, setJointSubmitting] = useState(false);
+  const [jointReference, setJointReference] = useState("");
   const [marketSection, setMarketSection] = useState<"vehicles" | "devices" | "insurance">("vehicles");
   const [vehicleAudience, setVehicleAudience] = useState<"individual" | "business">("individual");
   const [selectedMarketplaceItem, setSelectedMarketplaceItem] = useState<MarketplaceItem | null>(null);
@@ -456,6 +463,26 @@ function VeyaNativeClientPage() {
     }
   };
 
+  const submitJointRequest = async (event: FormEvent) => {
+    event.preventDefault();
+    setJointSubmitting(true);
+    setJointReference("");
+    setNotice("");
+    try {
+      const result = await clientApi("/veya/joint-accounts/requests", { method: "POST", body: JSON.stringify({ coholder_name: jointName, coholder_email: jointEmail, relationship: jointRelationship, purpose: jointPurpose, consent: true }) });
+      setJointReference(result.joint_request_id || "Solicitud registrada");
+      setJointName("");
+      setJointEmail("");
+      setJointPurpose("");
+      setShowJointForm(false);
+      setNotice("Solicitud de cuenta conjunta registrada. La otra persona deberá consentir y el proveedor deberá revisar el alta antes de crear cualquier cuenta.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se ha podido registrar la solicitud conjunta.");
+    } finally {
+      setJointSubmitting(false);
+    }
+  };
+
   const submitMarketplaceRequest = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedMarketplaceItem) return;
@@ -530,11 +557,14 @@ function VeyaNativeClientPage() {
 
   const huchas = <section className="grid gap-4 md:grid-cols-2"><div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#273e87] to-[#11162c] p-6"><p className="text-sm text-white/60">Huchas Veya</p><h2 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Objetivos que sí ves avanzar.</h2><p className="mt-4 max-w-md text-sm leading-6 text-white/60">Crea objetivos y guarda el avance de cada uno. Los fondos solo se separan cuando el proveedor lo confirme.</p><button onClick={() => setNotice("La creación de huchas se registra como objetivo protegido.")} className="mt-7 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-black">Crear hucha</button></div><div className="rounded-[2rem] border border-white/10 bg-white/[.05] p-6"><p className="text-sm font-semibold">Progreso de objetivos</p><div className="mt-7 space-y-5">{[["Impuestos",38,"#7691ff"],["Equipo",12,"#72d9c2"],["Viaje",0,"#ffb54d"]].map(([label, amount, color]) => <div key={label as string}><div className="mb-2 flex justify-between text-sm"><span>{label}</span><span className="text-white/45">{amount}%</span></div><div className="h-2 rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${amount}%`, background: color as string }} /></div></div>)}</div></div></section>;
 
+  const jointAccountPanel = <section className="rounded-[2rem] border border-[#7991ff]/20 bg-white/[.045] p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="rounded-full bg-[#7991ff]/12 px-3 py-1 text-xs font-bold text-[#c2ccff]">CUENTA CONJUNTA</span><h3 className="mt-3 text-2xl font-semibold tracking-[-.04em]">Comparte un objetivo, no tus credenciales.</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Inicia un expediente de cotitularidad. La cuenta no se crea, no concede acceso a fondos y no invita a nadie hasta que ambas personas consientan y el proveedor autorizado lo apruebe.</p></div><button onClick={() => setShowJointForm((current) => !current)} className="rounded-xl border border-white/12 px-4 py-3 text-sm font-bold text-white/80 hover:bg-white/10">{showJointForm ? "Cerrar" : "Iniciar solicitud"}</button></div>{showJointForm && <form onSubmit={submitJointRequest} className="mt-6 grid gap-4 md:grid-cols-2"><label className="grid gap-2 text-sm font-semibold">Nombre de la otra persona<input required minLength={3} maxLength={160} value={jointName} onChange={(event) => setJointName(event.target.value)} className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none focus:border-[#8fa4ff]" /></label><label className="grid gap-2 text-sm font-semibold">Correo de contacto<input required type="email" value={jointEmail} onChange={(event) => setJointEmail(event.target.value)} className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none focus:border-[#8fa4ff]" /></label><label className="grid gap-2 text-sm font-semibold">Relación<select value={jointRelationship} onChange={(event) => setJointRelationship(event.target.value as typeof jointRelationship)} className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none focus:border-[#8fa4ff]"><option value="pareja">Pareja</option><option value="familiar">Familiar</option><option value="socio">Socio/a</option><option value="otro">Otro</option></select></label><label className="grid gap-2 text-sm font-semibold">Finalidad<textarea required minLength={3} maxLength={500} value={jointPurpose} onChange={(event) => setJointPurpose(event.target.value)} placeholder="Describe la finalidad de la cuenta conjunta" className="min-h-24 rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none placeholder:text-white/25 focus:border-[#8fa4ff]" /></label><div className="md:col-span-2 flex flex-wrap items-center gap-3"><button disabled={jointSubmitting} className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{jointSubmitting ? "Registrando…" : "Registrar solicitud"}</button>{jointReference && <span className="text-xs font-bold text-[#9ce9d8]">Solicitud {jointReference}</span>}<span className="text-xs text-white/45">La otra persona no recibe datos ni acceso hasta su consentimiento verificable.</span></div></form>}</section>;
+
   const pocketsView = <section className="space-y-5">
     <div className="relative overflow-hidden rounded-[2rem] border border-[#7991ff]/25 bg-[radial-gradient(circle_at_80%_0%,rgba(100,130,255,.22),transparent_35%),linear-gradient(135deg,#14205a,#090a0e_62%)] p-6 md:p-8"><span className="rounded-full border border-[#a9b7ff]/20 bg-[#7991ff]/10 px-3 py-1 text-xs font-bold tracking-wide text-[#c2ccff]">HUCHAS VEYA</span><h2 className="mt-4 text-4xl font-semibold tracking-[-.06em] md:text-5xl">Objetivos que puedes ver avanzar.</h2><p className="mt-4 max-w-2xl text-sm leading-7 text-white/60">Crea objetivos personales o de actividad. Mientras el proveedor no confirme separación de fondos, cada Hucha permanece como una planificación protegida y trazable.</p><button onClick={() => setShowPocketForm((current) => !current)} className="mt-7 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-black">{showPocketForm ? "Cerrar" : "Crear Hucha"}</button></div>
     {showPocketForm && <form onSubmit={createPocket} className="grid gap-4 rounded-[2rem] border border-white/10 bg-white/[.045] p-6 md:grid-cols-[1fr_.55fr_auto]"><label className="grid gap-2 text-sm font-semibold">Nombre del objetivo<input required minLength={2} maxLength={80} value={pocketName} onChange={(event) => setPocketName(event.target.value)} placeholder="Ejemplo: Impuestos trimestrales" className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none placeholder:text-white/25 focus:border-[#8fa4ff]" /></label><label className="grid gap-2 text-sm font-semibold">Objetivo (€)<input required inputMode="decimal" value={pocketTarget} onChange={(event) => setPocketTarget(event.target.value.replace(/[^0-9,.]/g, ""))} placeholder="1.000,00" className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 font-normal outline-none placeholder:text-white/25 focus:border-[#8fa4ff]" /></label><button disabled={pocketSubmitting} className="self-end rounded-xl bg-white px-4 py-3 text-sm font-bold text-black disabled:opacity-50">{pocketSubmitting ? "Creando…" : "Guardar objetivo"}</button></form>}
     <section className="rounded-[2rem] border border-white/10 bg-white/[.045] p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-semibold">Tus Huchas</p><p className="mt-1 text-xs text-white/45">Los importes asignados permanecen en 0 € hasta que un proveedor autorizado confirme la operación.</p></div><span className="rounded-full bg-[#7991ff]/10 px-3 py-1 text-xs font-bold text-[#bec9ff]">{pockets.length} objetivo{pockets.length === 1 ? "" : "s"}</span></div><div className="mt-5 grid gap-3 md:grid-cols-2">{pockets.length ? pockets.map((pocket) => { const target = (pocket.target_cents || 0) / 100; const assigned = (pocket.allocated_cents || 0) / 100; const progress = target > 0 ? Math.min(100, Math.round((assigned / target) * 100)) : 0; return <article key={pocket.pocket_id} className="rounded-2xl border border-white/8 bg-black/20 p-5"><div className="flex items-start justify-between gap-3"><div><b className="block text-lg">{pocket.name}</b><span className="mt-1 block text-xs text-white/45">Objetivo {money(target, pocket.currency || "EUR")}</span></div><span className="rounded-full bg-[#70ddc5]/10 px-2 py-1 text-[10px] font-bold text-[#9ce9d8]">Planificación</span></div><div className="mt-6 h-2 rounded-full bg-white/10"><div className="h-full rounded-full bg-[#7991ff]" style={{ width: `${progress}%` }} /></div><div className="mt-3 flex justify-between text-xs text-white/45"><span>{money(assigned, pocket.currency || "EUR")} confirmado</span><span>{progress}%</span></div></article>; }) : <p className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm text-white/50 md:col-span-2">Aún no tienes objetivos. Crea una Hucha para mantener un plan trazable, sin mover fondos.</p>}</div></section>
     <section className="rounded-[2rem] border border-[#ffbd62]/20 bg-[#ffbd62]/[.055] p-6"><p className="text-sm font-semibold text-[#ffe0a8]">Patrimonio y productos regulados</p><p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">Veya preparará ahorro, inversión, FX y cuentas conjuntas como productos separados, con proveedor y documentación específica. Ningún saldo, rendimiento, inversión ni cambio de divisa se simula ni ejecuta aquí hasta contar con la autorización aplicable.</p></section>
+    {jointAccountPanel}
   </section>;
 
   const securityCenter = <section className="space-y-5">
