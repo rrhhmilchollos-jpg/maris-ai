@@ -8008,34 +8008,13 @@ export async function runJobById(
           appId: String(job.editAppId),
           appTitle,
           type: "support_patch",
-          message: `✅ Tu app **${appTitle}** ha sido actualizada por el equipo de soporte y ya está lista. Puedes verla y continuar editándola desde tu panel. Como compensación por las molestias, hemos añadido **10 créditos** a tu cuenta. Si encuentras algún problema adicional o tienes algún error más complejo, no dudes en contactarnos abriendo un **ticket de soporte** — estaremos encantados de ayudarte. 💜`,
+          message: `✅ Tu app **${appTitle}** ha sido actualizada por el equipo de soporte y ya está lista. Puedes verla y continuar editándola desde tu panel. Si deseas solicitar una compensación por esta incidencia, abre un **ticket de soporte** para su revisión manual.`,
           read: false,
         });
-        // Compensación: 10 créditos + email de disculpas al cliente
-        try {
-          await User.findByIdAndUpdate(job.userId, { $inc: { credits: 10 } });
-          await CreditTransaction.create({
-            userId: job.userId,
-            kind: "refund",
-            amount: 10,
-            description: "Compensación por incidencia — corrección aplicada por el equipo de soporte",
-          });
-          await log("system", "🎁 10 créditos de compensación añadidos al cliente.");
-
-          // Email de disculpas automático
-          const dbUser = await User.findById(job.userId).lean() as any;
-          if (dbUser?.email) {
-            const { sendApologyEmail } = await import("../lib/notify");
-            await sendApologyEmail({
-              userEmail: dbUser.email,
-              userName: dbUser.fullName || undefined,
-              appTitle,
-              dashboardUrl: "https://www.marisai.es/dashboard",
-            });
-            await log("system", `📧 Email de disculpas enviado a ${dbUser.email}`);
-          }
-        } catch (e) { logger.warn({ e }, "Error en compensación/email post-corrección"); }
-        await log("system", `✅ Corrección de soporte aplicada correctamente. El cliente ha sido notificado.`);
+        // Política comercial: una corrección técnica nunca abona créditos ni
+        // envía compensaciones por sí sola. El cliente puede abrir un ticket y
+        // solo un administrador podrá aprobar allí el abono con trazabilidad.
+        await log("system", "✅ Corrección de soporte aplicada correctamente. No se han abonado créditos automáticamente; cualquier compensación requiere ticket aprobado.");
       }
 
       // GitHub push eliminado — solo se sube a GitHub cuando el usuario lo solicita explícitamente

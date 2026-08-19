@@ -2078,11 +2078,11 @@ router.post("/admin/apps/:id/patch-code", async (req: any, res: any): Promise<vo
 });
 
 // POST /api/admin/users/:id/regenerate-and-apologize
-// Regenera la última app fallida del usuario, envía email de disculpas y añade créditos de compensación
+// Regenera la última app fallida sin otorgar créditos ni compensaciones automáticas.
 router.post("/admin/users/:id/regenerate-and-apologize", async (req: any, res: any): Promise<void> => {
   await connectDB();
   const { id } = req.params;
-  const { compensationCredits = 10, customPrompt } = req.body ?? {};
+  const { customPrompt } = req.body ?? {};
 
   const user = await User.findById(id).lean() as any;
   if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
@@ -2121,39 +2121,14 @@ router.post("/admin/users/:id/regenerate-and-apologize", async (req: any, res: a
   await enqueueGenerateJob(jobId);
   runJobById(jobId).catch((err: any) => logger.error({ err, jobId }, "Admin regen job error"));
 
-  // Añadir créditos de compensación
-  if (compensationCredits > 0) {
-    await User.findByIdAndUpdate(id, { $inc: { credits: compensationCredits } });
-    await CreditTransaction.create({
-      userId: id,
-      kind: "bonus",
-      amount: compensationCredits,
-      description: `Compensación por inconveniences — ${compensationCredits} créditos de disculpa`,
-    });
-  }
-
-  // Enviar email de disculpas
-  let emailSent = false;
-  try {
-    const { sendApologyEmail } = await import("../lib/notify");
-    emailSent = await sendApologyEmail({
-      userEmail: user.email,
-      userName: user.fullName || user.firstName,
-      appTitle: lastJob?.prompt?.slice(0, 50) || "tu app",
-      dashboardUrl: "https://www.marisai.es/dashboard",
-    });
-  } catch (emailErr) {
-    logger.warn({ emailErr }, "Admin regen: email de disculpas falló");
-  }
-
-  logger.info({ userId: id, jobId, compensationCredits, emailSent }, "Admin: regenerate-and-apologize completado");
+  logger.info({ userId: id, jobId }, "Admin: regeneración creada sin compensación automática");
   res.json({
     ok: true,
     jobId,
-    compensationCredits,
-    emailSent,
+    compensationCredits: 0,
+    emailSent: false,
     prompt: promptToUse.slice(0, 100),
-    message: `Job ${jobId} creado. ${compensationCredits} créditos añadidos. Email ${emailSent ? "enviado ✅" : "falló ❌"}.`
+    message: `Job ${jobId} creado. No se han añadido créditos automáticamente; cualquier compensación requiere un ticket de soporte aprobado.`
   });
 });
 

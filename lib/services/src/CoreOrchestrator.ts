@@ -287,6 +287,8 @@ export class CoreOrchestrator {
       concurrencyPerLayer: options.concurrencyPerLayer ?? 8,
       backendQualityPrompt: options.backendQualityPrompt ?? "",
       maxMilestonesOverride: options.maxMilestonesOverride,
+      onMilestoneStuck: options.onMilestoneStuck,
+      validateFrontendBundle: options.validateFrontendBundle,
     };
   }
 
@@ -578,7 +580,11 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     // el fallback existente son preferibles a tres esperas de 90 segundos.
     const compactMilestone = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
     const MAX_ATTEMPTS = compactMilestone ? 1 : 3;
-    const milestoneTimeoutMs = compactMilestone ? 30_000 : 90_000;
+    // Los modelos rápidos pueden tardar más de 30 s en emitir el primer token
+    // durante picos de carga. Con latidos visibles cada 15 s no hay motivo para
+    // degradar a placeholders a los 30 s: damos margen real y seguimos siendo
+    // recuperables mucho antes que el watchdog global.
+    const milestoneTimeoutMs = compactMilestone ? 90_000 : 120_000;
     const milestoneMaxTokens = compactMilestone ? 4_000 : 16_000;
     let lastError: unknown;
 
@@ -601,7 +607,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         }, milestoneTimeoutMs);
         let response: any;
         try {
-          response = await zocoia.messages.stream({
+          const streamPromise = zocoia.messages.stream({
             model: this.options.model!,
             max_tokens: milestoneMaxTokens,
             system: [
@@ -613,6 +619,18 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
               content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
             }],
           }, { signal: abortController.signal as any }).finalMessage();
+          // Algunos clientes de streaming ignoran AbortSignal mientras esperan
+          // la primera respuesta. Race obliga a liberar el hito incluso en ese
+          // caso, antes de que el watchdog global pueda reiniciar todo el job.
+          let hardTimeoutId: NodeJS.Timeout | undefined;
+          const hardTimeout = new Promise<never>((_, reject) => {
+            hardTimeoutId = setTimeout(() => reject(new Error(`Timeout duro de ${milestoneTimeoutMs / 1000}s en hito ${milestone.id} (${milestone.name})`)), milestoneTimeoutMs + 1_000);
+          });
+          try {
+            response = await Promise.race([streamPromise, hardTimeout]);
+          } finally {
+            if (hardTimeoutId) clearTimeout(hardTimeoutId);
+          }
         } finally {
           clearTimeout(timeoutId);
         }
@@ -691,7 +709,26 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       const concurrency = this.options.concurrencyPerLayer!;
       for (let i = 0; i < layerMilestones.length; i += concurrency) {
         const batch = layerMilestones.slice(i, i + concurrency);
-        const results = await Promise.all(batch.map((m) => this.generateMilestone(m, database, platform)));
+        const results = await Promise.all(batch.map(async (m) => {
+          const currentProgress = 8 + Math.round((completed / total) * 90);
+          const emitHeartbeat = () => {
+            try {
+              const output = wsNotificationCallback({
+                status: `🧠 Generando ${m.name} (${m.filePath})…`,
+                progress: currentProgress,
+                step: m.id,
+              });
+              if (output && typeof output.catch === "function") void output.catch(() => undefined);
+            } catch { /* el latido nunca debe interrumpir el hito */ }
+          };
+          emitHeartbeat();
+          const heartbeatId = setInterval(emitHeartbeat, 15_000);
+          try {
+            return await this.generateMilestone(m, database, platform);
+          } finally {
+            clearInterval(heartbeatId);
+          }
+        }));
         for (const generated of results) {
           this.generatedByMilestoneId.set(generated.id, generated);
           await this.writeCodeToWorkspace(generated.targetWorkspace, generated.filePath, generated.code);
@@ -1002,7 +1039,9 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     currentFiles: Map<string, string>,
     generatedByMilestoneId: Map<number, GeneratedEditMilestone>,
   ): Promise<GeneratedEditMilestone> {
-    const MAX_ATTEMPTS = 3;
+    const compactEdit = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
+    const MAX_ATTEMPTS = compactEdit ? 1 : 3;
+    const milestoneTimeoutMs = compactEdit ? 90_000 : 120_000;
     let lastError: unknown;
     const editContext = this.buildEditContext(milestone, currentFiles, generatedByMilestoneId);
     const qualityBlock = this.options.backendQualityPrompt && !milestone.filePath.startsWith("src/") && !milestone.filePath.includes("apps/web")
@@ -1011,25 +1050,37 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        // Mismo motivo de .stream().finalMessage() que en generateMilestone:
-        // evita el rechazo "Streaming is required..." del SDK para llamadas
-        // que puedan tardar, sin cambiar el objeto Message devuelto.
-        const response = await zocoia.messages.stream({
-          model: this.options.model!,
-          // Mismo límite que generateMilestone (8192) — cada hito de edición
-          // es, por diseño del planificador, UN archivo concreto, así que el
-          // mismo techo que ya demostró ser suficiente para un archivo de
-          // construcción nueva lo es también aquí.
-          max_tokens: 16000,
-          system: [
-            { type: "text", text: EDIT_CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
-            { type: "text", text: qualityBlock || "Sin reglas de calidad adicionales para este archivo." },
-          ] as any,
-          messages: [{
-            role: "user",
-            content: `Acción: ${milestone.action === "create_file" ? "CREAR archivo nuevo" : "MODIFICAR archivo existente"}.\nArchivo: ${milestone.filePath}\n\nCambio a aplicar: ${milestone.description}\n\n${editContext}\n\nDevuelve SOLO el código COMPLETO y final del archivo, sin explicaciones ni markdown.`,
-          }],
-        }).finalMessage();
+        // El SDK puede ignorar el AbortSignal mientras espera su primer chunk.
+        // Race garantiza que una edición no deje el job en silencio hasta que
+        // el watchdog global lo reinicie desde cero.
+        const abortController = new AbortController();
+        const abortId = setTimeout(() => abortController.abort(), milestoneTimeoutMs);
+        let response: any;
+        try {
+          const streamPromise = zocoia.messages.stream({
+            model: this.options.model!,
+            max_tokens: 16000,
+            system: [
+              { type: "text", text: EDIT_CODE_AGENT_STATIC, cache_control: { type: "ephemeral" } },
+              { type: "text", text: qualityBlock || "Sin reglas de calidad adicionales para este archivo." },
+            ] as any,
+            messages: [{
+              role: "user",
+              content: `Acción: ${milestone.action === "create_file" ? "CREAR archivo nuevo" : "MODIFICAR archivo existente"}.\nArchivo: ${milestone.filePath}\n\nCambio a aplicar: ${milestone.description}\n\n${editContext}\n\nDevuelve SOLO el código COMPLETO y final del archivo, sin explicaciones ni markdown.`,
+            }],
+          }, { signal: abortController.signal as any }).finalMessage();
+          let hardTimeoutId: NodeJS.Timeout | undefined;
+          const hardTimeout = new Promise<never>((_, reject) => {
+            hardTimeoutId = setTimeout(() => reject(new Error(`Timeout duro de ${milestoneTimeoutMs / 1000}s en hito de edición ${milestone.id} (${milestone.filePath})`)), milestoneTimeoutMs + 1_000);
+          });
+          try {
+            response = await Promise.race([streamPromise, hardTimeout]);
+          } finally {
+            if (hardTimeoutId) clearTimeout(hardTimeoutId);
+          }
+        } finally {
+          clearTimeout(abortId);
+        }
         let code = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
         // Limpiar fences de markdown que el modelo a veces añade a pesar de la instrucción
         code = code.replace(/^```(?:tsx?|jsx?|typescript|javascript)?\n?/, "").replace(/\n?```$/, "").trim();
@@ -1136,7 +1187,26 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       const batchSource = ready.length > 0 ? ready : remaining;
       const batch = batchSource.slice(0, concurrency);
 
-      const results = await Promise.all(batch.map((m) => this.generateEditMilestone(m, allCurrentFiles, generatedByMilestoneId)));
+      const results = await Promise.all(batch.map(async (m) => {
+        const currentProgress = 8 + Math.round((completed / total) * 90);
+        const emitHeartbeat = () => {
+          try {
+            const output = wsNotificationCallback({
+              status: `🧠 Editando ${m.filePath}…`,
+              progress: currentProgress,
+              step: m.id,
+            });
+            if (output && typeof output.catch === "function") void output.catch(() => undefined);
+          } catch { /* el latido no debe impedir la edición */ }
+        };
+        emitHeartbeat();
+        const heartbeatId = setInterval(emitHeartbeat, 15_000);
+        try {
+          return await this.generateEditMilestone(m, allCurrentFiles, generatedByMilestoneId);
+        } finally {
+          clearInterval(heartbeatId);
+        }
+      }));
       for (const generated of results) {
         generatedByMilestoneId.set(generated.id, generated);
         // El archivo recién editado/creado pasa a estar disponible como
