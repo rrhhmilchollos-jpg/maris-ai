@@ -38,6 +38,7 @@ import { makeSlug } from "../lib/deployBundle";
 import { MarisId, generateAppId } from "../lib/universalId";
 import { autoRepairBundle } from "../lib/autoRepairAgent";
 import { getSeoGeoOverview, runSeoGeoAutopilot } from "../lib/seoGeoAutopilot";
+import { listCommercialCatalog, seedCommercialCatalog } from "../lib/commercialCatalog";
 
 const router: IRouter = Router();
 
@@ -95,6 +96,60 @@ router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> 
 
 
 router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
+
+// ─── Catálogo comercial privado ──────────────────────────────────────────────
+// Solo administradores pueden ver o cambiar estas ofertas. Nunca se publican,
+// cobran ni se ofertan a terceros automáticamente.
+router.get("/admin/commercial-catalog", async (_req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    let offers = await listCommercialCatalog();
+    let initialized = false;
+    if (offers.length === 0) {
+      await seedCommercialCatalog(String(_req.userId || "admin"));
+      offers = await listCommercialCatalog();
+      initialized = true;
+    }
+    res.json({ ok: true, offers, initialized });
+  } catch (error: any) {
+    logger.error({ error }, "Commercial catalog list failed");
+    res.status(500).json({ ok: false, error: "No se pudo cargar el catálogo comercial" });
+  }
+});
+
+router.post("/admin/commercial-catalog/seed", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const result = await seedCommercialCatalog(String(req.userId || "admin"));
+    const offers = await listCommercialCatalog();
+    res.status(201).json({ ok: true, result, offers, note: "El catálogo se creó como inventario privado y no se ha publicado ni ofrecido a terceros." });
+  } catch (error: any) {
+    logger.error({ error }, "Commercial catalog seed failed");
+    res.status(500).json({ ok: false, error: "No se pudo preparar el catálogo comercial" });
+  }
+});
+
+router.patch("/admin/commercial-catalog/:id/status", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const allowed = ["draft", "ready_to_generate", "generated", "ready_to_sell", "sold", "archived"];
+    const commercialStatus = String(req.body?.commercialStatus || "");
+    if (!allowed.includes(commercialStatus) || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ ok: false, error: "Estado o identificador inválido" }); return;
+    }
+    const { CommercialCatalogOffer } = await import("@workspace/db/schema");
+    const offer = await (CommercialCatalogOffer as any).findByIdAndUpdate(
+      req.params.id,
+      { $set: { commercialStatus } },
+      { new: true },
+    ).lean();
+    if (!offer) { res.status(404).json({ ok: false, error: "Oferta no encontrada" }); return; }
+    res.json({ ok: true, offer });
+  } catch (error: any) {
+    logger.error({ error }, "Commercial catalog status update failed");
+    res.status(500).json({ ok: false, error: "No se pudo actualizar el estado comercial" });
+  }
+});
 
 // ─── Modo construcción ────────────────────────────────────────────────────────
 // GET /api/site-status es PÚBLICO (está antes del prefijo /admin, el

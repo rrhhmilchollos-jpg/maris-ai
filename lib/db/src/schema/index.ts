@@ -1638,6 +1638,56 @@ export const AdCampaignProposal: Model<IAdCampaignProposal> =
   mongoose.models.AdCampaignProposal ||
   mongoose.model<IAdCampaignProposal>("AdCampaignProposal", AdCampaignProposalSchema);
 
+// ─── Catálogo comercial privado ─────────────────────────────────────────────
+// Ofertas de producto de alto valor visibles únicamente a administradores. No son
+// anuncios públicos ni crean cargos, clientes o publicaciones automáticas.
+export interface ICommercialCatalogOffer extends Document {
+  createdByUserId: string;
+  slug: string;
+  title: string;
+  vertical: string;
+  deliveryModel: string;
+  summary: string;
+  buyer: string;
+  differentiator: string;
+  modules: string[];
+  integrations: string[];
+  pricing: { implementationMinEur: number; implementationMaxEur: number; enterpriseProgramMaxEur?: number; recurringFromEur?: number };
+  regulatoryNotes?: string;
+  commercialStatus: "draft" | "ready_to_generate" | "generated" | "ready_to_sell" | "sold" | "archived";
+  sourceAppId?: string;
+  researchSources: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+const CommercialCatalogOfferSchema = new Schema<ICommercialCatalogOffer>(
+  {
+    createdByUserId: { type: String, required: true, index: true },
+    slug: { type: String, required: true, unique: true, index: true },
+    title: { type: String, required: true },
+    vertical: { type: String, required: true, index: true },
+    deliveryModel: { type: String, required: true },
+    summary: { type: String, required: true },
+    buyer: { type: String, required: true },
+    differentiator: { type: String, required: true },
+    modules: { type: [String], default: [] },
+    integrations: { type: [String], default: [] },
+    pricing: {
+      implementationMinEur: { type: Number, required: true, min: 10000 },
+      implementationMaxEur: { type: Number, required: true, min: 10000 },
+      enterpriseProgramMaxEur: { type: Number },
+      recurringFromEur: { type: Number },
+    },
+    regulatoryNotes: { type: String },
+    commercialStatus: { type: String, enum: ["draft", "ready_to_generate", "generated", "ready_to_sell", "sold", "archived"], default: "ready_to_generate", index: true },
+    sourceAppId: { type: String, index: true },
+    researchSources: { type: [String], default: [] },
+  },
+  { timestamps: true },
+);
+export const CommercialCatalogOffer: Model<ICommercialCatalogOffer> =
+  mongoose.models.CommercialCatalogOffer || mongoose.model<ICommercialCatalogOffer>("CommercialCatalogOffer", CommercialCatalogOfferSchema);
+
 // ─── Video Job (Kling AI — encadenado de segmentos para 1-3 min) ────────────
 // Cada llamada real a Kling genera como máximo ~10s. Para vídeos más largos
 // (60/120/180s) se encadenan varios segmentos (el último frame de cada uno

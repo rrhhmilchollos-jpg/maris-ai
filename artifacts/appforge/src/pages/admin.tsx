@@ -33,6 +33,7 @@ import { ErrorFrequencyDiagnostic } from "@/components/error-frequency-diagnosti
 import { ProjectPlaybooksCard } from "@/components/project-playbooks-card";
 import { AdminNewsEditor } from "@/components/admin-news-editor";
 import { AdminPresencePanel } from "@/components/admin-presence-panel";
+import { CommercialCatalogPanel } from "@/components/commercial-catalog-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,10 +63,10 @@ import {
   ChevronDown, ChevronUp, History, DollarSign, Lock, Unlock, Loader2,
   StickyNote, Send, ExternalLink, Wallet, ArrowUpRight, ArrowDownRight,
   Globe, Mail, Calendar, Hash, Cpu, ChevronRight, AlertCircle, CheckCircle,
-  Zap, TrendingUp, TrendingDown, Star, Wifi, Paperclip,
+  Zap, TrendingUp, TrendingDown, Star, Wifi, Paperclip, BriefcaseBusiness,
 } from "lucide-react";
 
-type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news" | "presence" | "payments";
+type AdminTab = "users" | "apps" | "queue" | "memory" | "tickets" | "news" | "presence" | "payments" | "catalog";
 
 interface MemoryEntry {
   id: string;
@@ -422,6 +423,7 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
             <TabsTrigger value="users"><Users className="h-4 w-4 mr-2" /> Usuarios</TabsTrigger>
             <TabsTrigger value="presence"><Wifi className="h-4 w-4 mr-2" /> En vivo</TabsTrigger>
             <TabsTrigger value="apps"><Code2 className="h-4 w-4 mr-2" /> Apps</TabsTrigger>
+            <TabsTrigger value="catalog"><BriefcaseBusiness className="h-4 w-4 mr-2" /> Catálogo privado</TabsTrigger>
             <TabsTrigger value="memory" onClick={() => { if (!memory) void loadMemory(); }}>
               <Sparkles className="h-4 w-4 mr-2" /> Memoria
               {memory && memory.total > 0 && (
@@ -630,6 +632,11 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── CATÁLOGO COMERCIAL PRIVADO ── */}
+          <TabsContent value="catalog" className="mt-4">
+            <CommercialCatalogPanel />
           </TabsContent>
 
           {/* ── MEMORY TAB ── */}
