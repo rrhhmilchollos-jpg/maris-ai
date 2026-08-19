@@ -51,6 +51,14 @@ function storePreviewHtml(cacheKey: string, html: string): void {
 // Detecta archivos TSX/TS truncados que pasan el QA pero fallan en el preview.
 // Un archivo está truncado si: el JSX tiene tags abiertos sin cerrar al final,
 // o si termina en mitad de una expresión (sin punto y coma, sin })
+// Rechaza placeholders visibles en componentes entregados. Un archivo de
+// datos puede contener una nota temporal, pero una pantalla final con
+// "Módulo en construcción" no es una app funcional y no debe sobrescribir
+// ni darse por completada.
+function hasVisibleDeliveryPlaceholder(bundle: string): boolean {
+  return /(?:<p[^>]*>\s*(?:Módulo en construcción|Este módulo se está generando)\.?\s*<\/p>|<h1[^>]*>\s*(?:App|Home|Component)\s*<\/h1>\s*<p[^>]*>\s*Módulo en construcción)/i.test(bundle);
+}
+
 function detectTruncatedFiles(bundle: string): string[] {
   const truncated: string[] = [];
   if (!bundle || !bundle.trim()) return truncated;
@@ -7835,8 +7843,9 @@ export async function runJobById(
       // páginas ausentes y pasar el umbral de longitud, dejando #root vacío.
       // Validamos su VFS e imports locales antes de tocar la versión cliente.
       const editBundleValidation = hasBundleShape ? await validateBundle(fc) : null;
-      const validFrontend = hasBundleShape && !!editBundleValidation?.ok;
-      const validationSummary = editBundleValidation?.issues?.[0]?.message || null;
+      const containsVisiblePlaceholder = hasBundleShape && hasVisibleDeliveryPlaceholder(fc);
+      const validFrontend = hasBundleShape && !containsVisiblePlaceholder && !!editBundleValidation?.ok;
+      const validationSummary = containsVisiblePlaceholder ? "El resultado contiene una pantalla placeholder sin interfaz funcional" : editBundleValidation?.issues?.[0]?.message || null;
 
       if (hasError || !validFrontend) {
         logger.warn(
@@ -8036,10 +8045,11 @@ export async function runJobById(
       const newAppFc = finalResult.frontendCode;
       const newAppHasBundleShape = typeof newAppFc === "string" && newAppFc.includes("// === FILE:") && newAppFc.length > 200;
       const newAppBundleValidation = newAppHasBundleShape ? await validateBundle(newAppFc) : null;
-      const newAppValid = newAppHasBundleShape && !!newAppBundleValidation?.ok;
+      const newAppContainsVisiblePlaceholder = newAppHasBundleShape && hasVisibleDeliveryPlaceholder(newAppFc);
+      const newAppValid = newAppHasBundleShape && !newAppContainsVisiblePlaceholder && !!newAppBundleValidation?.ok;
       if (!newAppValid) {
         logger.error(
-          { jobId, userId: job.userId, fcLen: typeof newAppFc === "string" ? newAppFc.length : -1, validationIssue: newAppBundleValidation?.issues?.[0]?.message || null, title: finalResult.title },
+          { jobId, userId: job.userId, fcLen: typeof newAppFc === "string" ? newAppFc.length : -1, validationIssue: newAppContainsVisiblePlaceholder ? "El resultado contiene una pantalla placeholder sin interfaz funcional" : newAppBundleValidation?.issues?.[0]?.message || null, title: finalResult.title },
           "Generación nueva produjo un resultado inválido/incompleto — NO se crea la app; la compensación requiere ticket de soporte",
         );
         await GenerationJob.findByIdAndUpdate(jobId, {
