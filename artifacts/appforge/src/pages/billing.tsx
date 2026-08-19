@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiFetch, useGetMe, useListCreditPackages, useCreateCheckoutSession, useListTransactions } from "@/lib/api-client";
+import { useGetMe, useListCreditPackages, useCreateCheckoutSession, useListTransactions } from "@/lib/api-client";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,7 +24,6 @@ export default function BillingPage() {
   
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [cancelNotice, setCancelNotice] = useState<string | null>(null);
-  const [customAmount, setCustomAmount] = useState<string>("");
   const [loadingPackageId, setLoadingPackageId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,7 +45,7 @@ export default function BillingPage() {
       },
       onError: (err: any) => {
         const raw = (err?.message || "").toString();
-        if (raw.includes("503") || raw.toLowerCase().includes("viva")) {
+        if (raw.includes("503") || raw.toLowerCase().includes("stripe")) {
           setCheckoutError(
             "Los pagos aún se están configurando. Vuelve a intentarlo en unos minutos.",
           );
@@ -65,30 +64,6 @@ export default function BillingPage() {
     setCancelNotice(null);
     setLoadingPackageId(packageId);
     checkoutMutation.mutate({ packageId });
-  };
-
-  const handleCustomBuy = async () => {
-    const amount = parseFloat(customAmount);
-    if (!customAmount || amount < 20) {
-      setCheckoutError("El monto mínimo es 20 €.");
-      return;
-    }
-
-    setCheckoutError(null);
-    setCancelNotice(null);
-    setLoadingPackageId("custom");
-
-    try {
-      const data = await apiFetch<any>("/api/billing/custom-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountEur: amount }),
-      });
-      if (data.url) window.location.href = data.url;
-    } catch (err: any) {
-      setCheckoutError("Error de conexión. Intenta de nuevo.");
-      setLoadingPackageId(null);
-    }
   };
 
   const formatPrice = (amountCents: number) => {
@@ -191,45 +166,8 @@ export default function BillingPage() {
                   })}
                 </div>
 
-                {/* Divider */}
-                <div className="border-t border-slate-700 my-10 pt-10">
-                  
-                  {/* Monto Personalizado */}
-                  <div>
-                    <label className="text-sm font-bold text-slate-300 block mb-4 uppercase tracking-wider">
-                      Monto personalizado
-                    </label>
-                    <div className="flex gap-3">
-                      {/* ✅ Input con texto negro visible y mínimo 20€ */}
-                      <div className="flex-1 relative">
-                        <input
-                          type="number"
-                          placeholder="Mínimo 20 €"
-                          value={customAmount}
-                          onChange={(e) => {
-                            setCustomAmount(e.target.value);
-                            setCheckoutError(null);
-                          }}
-                          className="w-full pl-4 pr-10 py-3 border-2 border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all text-base font-semibold text-slate-100 bg-slate-800 placeholder-slate-500"
-                          min="20"
-                          step="1"
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-lg z-10">€</span>
-                      </div>
-                      {/* ✅ Botón solo dice "Comprar ahora" */}
-                      <Button
-                        onClick={handleCustomBuy}
-                        disabled={!customAmount || parseFloat(customAmount) < 20 || loadingPackageId === "custom"}
-                        className="bg-green-600 hover:bg-green-700 text-white font-bold px-8 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-wider"
-                      >
-                        {loadingPackageId === "custom" ? (
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                        ) : (
-                          "Comprar ahora"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                <div className="border-t border-slate-700 my-10 pt-8 text-center text-sm text-slate-400">
+                  Los créditos se añaden exclusivamente cuando Stripe confirma el pago mediante una notificación firmada. No se admiten importes personalizados ni acreditaciones manuales automáticas.
                 </div>
 
                 {/* Alertas */}

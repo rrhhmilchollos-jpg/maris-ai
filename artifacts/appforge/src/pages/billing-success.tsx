@@ -13,12 +13,9 @@ export default function BillingSuccessPage() {
   const queryClient = useQueryClient();
   
   const searchParams = new URLSearchParams(window.location.search);
-  // Viva.com Smart Checkout añade "t" (transactionId) y "s" (orderCode) a
-  // la URL de retorno configurada en su panel — confirmado contra la
-  // documentación oficial. session_id se mantiene como fallback por si
-  // queda algún enlace antiguo de Stripe en correos ya enviados.
-  const transactionId = searchParams.get("t") ?? searchParams.get("session_id");
-  const orderCode = searchParams.get("s");
+  // Stripe Checkout vuelve con session_id. Los créditos no se conceden aquí:
+  // el navegador solo consulta el estado tras el webhook firmado del servidor.
+  const sessionId = searchParams.get("session_id");
 
   const confirmMutation = useConfirmCheckout({
     mutation: {
@@ -47,10 +44,10 @@ export default function BillingSuccessPage() {
   });
 
   useEffect(() => {
-    if (transactionId && !confirmMutation.isPending && !confirmMutation.isSuccess && !confirmMutation.isError) {
-      confirmMutation.mutate({ data: { transactionId, orderCode } });
+    if (sessionId && !confirmMutation.isPending && !confirmMutation.isSuccess && !confirmMutation.isError) {
+      confirmMutation.mutate({ data: { sessionId } });
     }
-  }, [transactionId, orderCode, confirmMutation]);
+  }, [sessionId, confirmMutation]);
 
   return (
     <Layout>
@@ -59,7 +56,7 @@ export default function BillingSuccessPage() {
           
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
 
-          {confirmMutation.isPending || (!transactionId) ? (
+          {confirmMutation.isPending || (!sessionId) ? (
             <CardContent className="pt-12 pb-8 flex flex-col items-center text-center">
               <Loader2 className="h-16 w-16 text-primary animate-spin mb-6" />
               <CardTitle className="text-2xl mb-2">Confirmando pago</CardTitle>
@@ -84,7 +81,7 @@ export default function BillingSuccessPage() {
                 </div>
                 <CardTitle className="text-3xl text-white mb-2">¡Pago exitoso!</CardTitle>
                 <CardDescription className="text-base">
-                  Tus créditos ya están disponibles en tu cuenta.
+                  {confirmMutation.data?.credited ? "Tus créditos ya están disponibles en tu cuenta." : "Tu pago se ha recibido. Estamos esperando la confirmación segura de Stripe."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center pb-2">

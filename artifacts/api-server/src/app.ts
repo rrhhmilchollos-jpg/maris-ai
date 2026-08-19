@@ -18,7 +18,7 @@ import connectorsRouter from "./routes/connectors";
 import workflowsRouter from "./routes/workflows";
 import stressTestRouter from "./routes/stressTest";
 import coolifyDeployRouter from "./routes/coolifyDeploy";
-import { vivaWebhookRouter } from "./routes/vivaWebhook";
+import { stripeCreditsWebhookHandler } from "./routes/stripeCreditsWebhook";
 import publicDeployRouter from "./routes/publicDeploy";
 import botRenderRouter from "./routes/botRender";
 import adminRouter from "./routes/admin";
@@ -248,6 +248,9 @@ app.use((_req, res, next) => {
   next();
 });
 
+// Stripe exige el cuerpo crudo exacto para validar la firma del webhook.
+// Debe ejecutarse antes del parser JSON y nunca acredita créditos desde el navegador.
+app.post("/api/webhooks/stripe", express.raw({ type: "application/json", limit: "1mb" }), stripeCreditsWebhookHandler);
 app.use(express.json({ limit: "2mb" }));
 // 5. Detección de inyección NoSQL/XSS en body/query (necesita body parseado)
 app.use(injectionDetectionMiddleware);
@@ -330,7 +333,7 @@ app.use("/api", connectorsRouter);
 app.use("/api", workflowsRouter);
 app.use("/api", stressTestRouter);
 app.use("/api", coolifyDeployRouter);
-app.use("/api", vivaWebhookRouter);
+// Viva está desactivado: Stripe Checkout y su webhook firmado son la única vía de pago de créditos.
 
 // Dynamic rendering for search engine bots (Googlebot, Bingbot, etc.)
 // NOTA — este sistema (mapeo de User-Agent → /bot-render/...) se ha retirado

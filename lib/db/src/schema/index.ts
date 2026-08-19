@@ -537,6 +537,12 @@ const CreditTransactionSchema = new Schema<ICreditTransaction>(
   },
   { timestamps: true },
 );
+// La sesión de Stripe es el identificador de negocio de un pago completado.
+// Un índice único parcial convierte la idempotencia de webhook en garantía de base de datos.
+CreditTransactionSchema.index(
+  { stripeSessionId: 1 },
+  { unique: true, partialFilterExpression: { stripeSessionId: { $type: "string" } } },
+);
 
 export const CreditTransaction: Model<ICreditTransaction> =
   mongoose.models.CreditTransaction ||
@@ -827,6 +833,9 @@ const UserNotificationSchema = new Schema<IUserNotification>(
   },
   { timestamps: true },
 );
+// La interfaz consulta los últimos avisos con alta frecuencia; este índice evita
+// escaneos por usuario y mantiene el orden solicitado por createdAt.
+UserNotificationSchema.index({ userId: 1, createdAt: -1 });
 
 export const UserNotification: Model<IUserNotification> =
   mongoose.models.UserNotification ||

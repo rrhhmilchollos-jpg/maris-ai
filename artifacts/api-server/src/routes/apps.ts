@@ -9124,18 +9124,33 @@ router.put("/apps/:id/code", requireAuth, async (req: any, res: any) => {
 
 
 // ── NOTIFICACIONES DE SOPORTE — el cliente lee sus avisos de corrección ──────
-// GET /api/notifications — devuelve notificaciones no leídas del usuario autenticado
+// Este endpoint se consulta desde la barra global: cache breve para evitar cargar
+// MongoDB por cada pestaña, con invalidación inmediata al cambiar estado.
+const notificationResponseCache = new Map<string, { expiresAt: number; payload: { notifications: unknown[]; unreadCount: number } }>();
+const NOTIFICATION_CACHE_MS = 15_000;
+const invalidateNotificationCache = (userId: string) => notificationResponseCache.delete(userId);
+
+// GET /api/notifications — últimos avisos y contador no leído del usuario autenticado
 router.get("/notifications", requireAuth, async (req: any, res: any) => {
   try {
-    await connectDB();
     const userId = req.userId as string;
-    const notifs = await UserNotification.find({ userId })
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .lean();
-    res.json({ notifications: notifs });
+    const cached = notificationResponseCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) return res.json({ ...cached.payload, cached: true });
+    await connectDB();
+    const [notifs, unreadCount] = await Promise.all([
+      UserNotification.find({ userId })
+        .select("_id appId appTitle type message read createdAt")
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean()
+        .maxTimeMS(1_500),
+      UserNotification.countDocuments({ userId, read: false }).maxTimeMS(1_500),
+    ]);
+    const payload = { notifications: notifs, unreadCount };
+    notificationResponseCache.set(userId, { payload, expiresAt: Date.now() + NOTIFICATION_CACHE_MS });
+    res.json(payload);
   } catch (err) {
-    res.status(500).json({ error: "Error cargando notificaciones" });
+    res.status(503).json({ error: "Notificaciones temporalmente no disponibles" });
   }
 });
 
@@ -9148,6 +9163,7 @@ router.patch("/notifications/:id/read", requireAuth, async (req: any, res: any) 
       { _id: req.params.id, userId },
       { $set: { read: true } }
     );
+    invalidateNotificationCache(userId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: "Error actualizando notificación" });
@@ -9160,6 +9176,7 @@ router.patch("/notifications/read-all", requireAuth, async (req: any, res: any) 
     await connectDB();
     const userId = req.userId as string;
     await UserNotification.updateMany({ userId, read: false }, { $set: { read: true } });
+    invalidateNotificationCache(userId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: "Error actualizando notificaciones" });

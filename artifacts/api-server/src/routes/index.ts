@@ -4,6 +4,7 @@ import meRouter from "./me";
 import appsRouter from "./apps";
 import imagesRouter from "./images";
 import billingRouter from "./billing";
+import stripeBillingRouter from "./stripeBilling";
 import billingLiveRouter from "./billing-live";
 import adminRouter from "./admin";
 import debugBundleRouter from "./debugBundle";
@@ -29,6 +30,8 @@ router.use(showcaseRouter);
 router.use(appsRouter);
 router.use(uploadsRouter);
 router.use(jobsRouter);
+// Stripe-only para operaciones de compra; billingRouter conserva únicamente lecturas compatibles.
+router.use(stripeBillingRouter);
 router.use(billingRouter);
 router.use(billingLiveRouter);
 router.use(watermarkRouter);
