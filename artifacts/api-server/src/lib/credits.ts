@@ -187,18 +187,25 @@ export async function refundCredits(opts: {
   isAdmin: boolean;
   amount: number;
   description: string;
+  /** Ticket de soporte de categoría refund, aprobado manualmente. */
+  supportTicketId: string;
+  /** Identificador del miembro de soporte que aprobó el ticket. */
+  approvedBy: string;
 }): Promise<void> {
   await connectDB();
-  const { userId, isAdmin, amount, description } = opts;
+  const { userId, isAdmin, amount, description, supportTicketId, approvedBy } = opts;
   if (isAdmin || amount <= 0) return;
- 
+  if (!supportTicketId || !approvedBy) {
+    throw new Error("POLÍTICA DE CRÉDITOS: toda compensación requiere un ticket de soporte aprobado manualmente.");
+  }
+
   await CreditTransaction.create({
     userId,
     kind: "refund",
     amount: Math.abs(amount),
-    description,
+    description: `${description} [ticket:${supportTicketId}; approvedBy:${approvedBy}]`,
   });
- 
+
   await User.findByIdAndUpdate(userId, { $inc: { credits: amount } });
 }
  

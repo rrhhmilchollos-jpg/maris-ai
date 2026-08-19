@@ -304,6 +304,8 @@ router.post("/admin/tickets/:id/approve-refund", async (req: any, res: any): Pro
         isAdmin: isAdminEmail(targetUser.email),
         amount: Number(creditsAmount),
         description: note || `Reembolso aprobado desde ticket ${ticketId}`,
+        supportTicketId: String(ticket._id),
+        approvedBy: String(adminId),
       });
       const updated = await User.findById(ticket.userId).select("credits").lean();
       creditsResult = { newBalance: (updated as any)?.credits ?? null };

@@ -5576,7 +5576,7 @@ router.all("/apps/:appId/aurevia/*path", async (req: any, res: any) => {
 function safeErrorResponse(res: any, err: unknown, context: string) {
   logger.error({ err, context }, `[safeErrorResponse] ${context}`);
   res.status(500).json({
-    error: "Ha ocurrido un problema técnico. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Si tus créditos fueron descontados, se reembolsarán automáticamente.",
+    error: "Ha ocurrido un problema técnico. Puedes abrir un ticket de soporte para solicitar una revisión y, si procede, una compensación manual.",
   });
 }
 
@@ -6545,34 +6545,10 @@ Responde SOLO con JSON estricto, sin markdown:
     });
   } catch (err) {
     logger.error({ err }, "POST /api/apps/:id/code-review error");
-    // ENCONTRADO: si la llamada a Zoco IA fallaba DESPUÉS de cobrar los
-    // CODE_REVIEW_COST créditos (arriba), el cliente se quedaba sin
-    // créditos y sin revisión — pagaba por un error del sistema. Mismo
-    // patrón que ya se arregló en el flujo principal de generación
-    // (creditsCost + reembolso automático). Solo se reembolsa si
-    // codeReviewChargeApplied es true (el cobro llegó a completarse de
-    // verdad) — si el fallo ocurrió ANTES del cobro, no hay nada que
-    // reembolsar y hacerlo daría créditos gratis no ganados.
-    if (codeReviewChargeApplied) {
-      try {
-        const userId = req.userId as string;
-        // Corregido para usar refundCredits() en vez de chargeCredits con
-        // importe negativo -- este último categoriza SIEMPRE como
-        // kind:"usage" sin importar el signo, corrompiendo los informes
-        // financieros que distinguen gastado de reembolsado (mismo
-        // hallazgo ya corregido en la limpieza de jobs "reviewing").
-        const { refundCredits } = await import("../lib/credits");
-        await refundCredits({
-          userId,
-          isAdmin: false,
-          amount: CODE_REVIEW_COST,
-          description: "Reembolso automático — fallo en revisión de código",
-        });
-      } catch (refundErr) {
-        logger.warn({ refundErr }, "No se pudo reembolsar tras fallo en revisión de código");
-      }
-    }
-    res.status(500).json({ error: codeReviewChargeApplied ? "Error al ejecutar la revisión de código. Se han reembolsado los créditos." : "Error al ejecutar la revisión de código." });
+    // Política comercial: un fallo de revisión no genera créditos ni
+    // reembolsos automáticos. Cualquier compensación debe solicitarse por
+    // ticket y aprobarse manualmente por soporte.
+    res.status(500).json({ error: codeReviewChargeApplied ? "Error al ejecutar la revisión de código. Puedes solicitar una compensación mediante un ticket de soporte." : "Error al ejecutar la revisión de código." });
   }
 });
 
@@ -7420,38 +7396,11 @@ export async function reclaimOrphanedJobs(opts: { userId?: string } = {}): Promi
   // reintento nunca llegaba a completarse. Reembolso defensivo aqui,
   // idempotente: chargeCredits ya usa Math.round y no rompe nada si el
   // importe fuera 0 o ya se hubiera reembolsado antes.
-  const stuckReviewingJobs = await GenerationJob.find(
-    { status: "reviewing", updatedAt: { $lt: reviewingCutoff } },
-    { _id: 1, userId: 1, creditsCost: 1 },
-  ).lean();
-  for (const stuckJob of stuckReviewingJobs) {
-    const refundAmount = Math.round((stuckJob as any).creditsCost ?? 0);
-    if (refundAmount > 0) {
-      try {
-        // ENCONTRADO CON DATOS REALES (auditoria de codigo, mismo dia):
-        // este reembolso usaba chargeCredits() con un importe negativo --
-        // la aritmetica cuadraba bien (el saldo se restauraba
-        // correctamente), pero la transaccion quedaba mal categorizada:
-        // chargeCredits() SIEMPRE crea kind:"usage", incluso con importe
-        // negativo, en vez de kind:"refund" -- corromperia cualquier
-        // informe financiero que distinga gastado de reembolsado. Existe
-        // una funcion dedicada refundCredits() que categoriza bien esto;
-        // se usa aqui en su lugar.
-        const { refundCredits } = await import("../lib/credits");
-        await refundCredits({
-          userId: String((stuckJob as any).userId),
-          isAdmin: false,
-          amount: refundAmount,
-          description: "Reembolso de seguridad: generación pausada por mantenimiento del sistema, nunca se completó",
-        });
-      } catch (refundErr) {
-        logger.warn({ refundErr, jobId: stuckJob._id }, "Fallo al aplicar el reembolso de seguridad en limpieza de jobs 'reviewing'");
-      }
-    }
-  }
+  // Política comercial: los trabajos pausados se cierran sin compensación
+  // automática. El cliente puede solicitar revisión mediante un ticket.
   await GenerationJob.updateMany(
     { status: "reviewing", updatedAt: { $lt: reviewingCutoff } },
-    { $set: { status: "failed", errorMessage: "No hemos podido completar tu generación por una incidencia técnica. Si se habían descontado créditos, ya se han reembolsado — puedes hacer una nueva generación cuando quieras." } },
+    { $set: { status: "failed", errorMessage: "No hemos podido completar tu generación por una incidencia técnica. Puedes solicitar una revisión o compensación mediante un ticket de soporte." } },
   );
 
   const orphanedRunningJobs = await GenerationJob.find({
@@ -7669,25 +7618,11 @@ export async function runJobById(
       await GenerationJob.findByIdAndUpdate(jobId, {
         $set: {
           status: "failed",
-          errorMessage: "Ha ocurrido un problema técnico al revisar tu app. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Tus créditos se reembolsarán automáticamente.",
+          errorMessage: "Ha ocurrido un problema técnico al revisar tu app. Puedes abrir un ticket de soporte para solicitar una revisión y, si procede, una compensación manual.",
           internalErrorMessage: String(deepTestErr?.message || deepTestErr),
           updatedAt: new Date(),
         },
       });
-      // Reembolso automático — el cliente no debe pagar 30 créditos por
-      // una revisión que no pudo completarse por un fallo del sistema.
-      try {
-        const { refundCredits } = await import("../lib/credits");
-        const dbUserForRefund = await User.findById(job.userId).select("isAdmin email").lean() as any;
-        await refundCredits({
-          userId: job.userId,
-          isAdmin: isAdminEmail(dbUserForRefund?.email),
-          amount: DEEP_TEST_COST,
-          description: "Reembolso: revisión profunda de errores falló por un problema técnico",
-        });
-      } catch (refundErr) {
-        logger.warn({ refundErr, jobId }, "[deep_test] Falló el reembolso automático tras un error técnico");
-      }
     } finally {
       if (activeMutationLease && (job as any).editAppId) {
         await releaseAppMutationLease({ appId: String((job as any).editAppId), jobId });
@@ -8090,7 +8025,6 @@ export async function runJobById(
               userName: dbUser.fullName || undefined,
               appTitle,
               dashboardUrl: "https://www.marisai.es/dashboard",
-              creditsCompensation: 10,
             });
             await log("system", `📧 Email de disculpas enviado a ${dbUser.email}`);
           }
@@ -8119,31 +8053,17 @@ export async function runJobById(
       if (!newAppValid) {
         logger.error(
           { jobId, userId: job.userId, fcLen: typeof newAppFc === "string" ? newAppFc.length : -1, title: finalResult.title },
-          "Generación nueva produjo un resultado inválido/incompleto — NO se crea la app, créditos reembolsados",
+          "Generación nueva produjo un resultado inválido/incompleto — NO se crea la app; la compensación requiere ticket de soporte",
         );
-        const refundAmount = Math.round(job.creditsCost ?? 0);
-        if (refundAmount > 0) {
-          try {
-            const { refundCredits } = await import("../lib/credits");
-            await refundCredits({
-              userId: job.userId,
-              isAdmin: false,
-              amount: refundAmount,
-              description: "Reembolso automático — la generación no produjo un resultado válido",
-            });
-          } catch (refundErr) {
-            logger.warn({ refundErr, jobId }, "Fallo al reembolsar tras generación inválida");
-          }
-        }
         await GenerationJob.findByIdAndUpdate(jobId, {
           $set: {
             status: "failed",
             phase: "failed",
-            errorMessage: "La generación no produjo un resultado válido (respuesta del modelo mal formada). Tus créditos han sido reembolsados — intenta de nuevo, quizá reformulando la petición.",
+            errorMessage: "La generación no produjo un resultado válido y no se ha creado ninguna app. Si deseas solicitar una revisión o compensación, abre un ticket de soporte.",
             updatedAt: new Date(),
           },
         });
-        await log("system", "⚠️ La generación no produjo un resultado válido — no se ha creado ninguna app rota. Tus créditos han sido reembolsados. Intenta de nuevo.", "error");
+        await log("system", "⚠️ La generación no produjo un resultado válido — no se ha creado ninguna app rota. Puedes solicitar revisión o compensación mediante un ticket de soporte.", "error");
         return;
       }
 
@@ -8477,16 +8397,6 @@ export async function runJobById(
               { _id: savedAppId },
               { $set: { pendingAdminApproval: true, pendingApprovalSince: new Date() } },
             );
-            const failedCost = Math.round((job as any).creditsCost ?? 0);
-            if (failedCost > 0) {
-              const { refundCredits } = await import("../lib/credits");
-              await refundCredits({
-                userId: job.userId,
-                isAdmin: false,
-                amount: failedCost,
-                description: "Reembolso automático — garantía de primera app (no se logró app funcional tras reparación completa)",
-              });
-            }
             const dbUserForEscalation = await User.findById(job.userId).lean() as any;
             const { notifyAdminJobFailed, sendNeedsReviewEmail } = await import("../lib/notify");
             await notifyAdminJobFailed({
@@ -8502,7 +8412,7 @@ export async function runJobById(
               to: dbUserForEscalation?.email || null,
               recipientName: dbUserForEscalation?.fullName || null,
               appTitle: finalResult?.title || "tu app",
-              summary: "Nuestro sistema detectó un problema técnico al preparar tu app y la está revisando un especialista en persona. Te avisaremos en cuanto esté lista — no se te han cobrado créditos por este intento.",
+              summary: "Nuestro sistema detectó un problema técnico al preparar tu app y la está revisando un especialista en persona. Te avisaremos en cuanto esté lista. Si deseas solicitar una compensación, abre un ticket de soporte para su revisión manual.",
               log: logger as any,
             }).catch(() => {});
           } catch (escalationErr) {
@@ -8582,40 +8492,12 @@ export async function runJobById(
     }, "runJobById: Generation failed");
     const rawMessage = err instanceof Error ? err.message : "Error desconocido";
 
-    // REEMBOLSO AUTOMÁTICO: si la generación falla por error del sistema
-    // (no por créditos agotados del usuario), devolver los créditos.
-    // Sin esto, el usuario pierde créditos por fallos que no son su culpa.
-    // BUG REAL CONFIRMADO en producción (captura del cliente mostrando el
-    // mensaje crudo de Zoco IA: "Your credit balance is too low..."):
-    // esta comprobación buscaba el texto "API_CREDITS_EXHAUSTED", un
-    // marcador que NINGÚN punto del código genera jamás — confirmado
-    // grep'eando todo el backend, aparece solo aquí. isCreditsError SIEMPRE
-    // era false para este caso real, así que el mensaje crudo de Zoco IA
-    // se filtraba directo hasta la pantalla del cliente (pésimo para la
-    // reputación), Y ADEMÁS el job se marcaba "failed" en vez de
-    // "reviewing", saltándose el reembolso automático de creditos.
-    // FIX: se usan los MISMOS indicadores reales que ya funcionan en
-    // shared-agents.ts (isOutOfCredits) para detectar este caso de verdad.
+    // Política comercial: una incidencia no crea devoluciones ni créditos de
+    // forma automática. El diagnóstico técnico queda registrado para soporte;
+    // el cliente puede iniciar un ticket y un administrador decide cualquier
+    // compensación manualmente desde ese expediente.
     const isCreditsError = /credit_balance|insufficient_quota/i.test(rawMessage) || /credit/i.test(rawMessage) && /low|balance|exhaust/i.test(rawMessage);
-    // Reembolso: usar Math.round para evitar floats (ej. 0.6000000000000014)
-    // y verificar que creditsCost sea un entero positivo válido
-    const creditsCostToRefund = Math.round(job.creditsCost ?? 0);
-    if (!isCreditsError && creditsCostToRefund > 0) {
-      try {
-        const { chargeCredits } = await import("../lib/credits");
-        const { refundCredits } = await import("../lib/credits");
-        await refundCredits({
-          userId: job.userId,
-          isAdmin: false,
-          amount: creditsCostToRefund,
-          description: `Reembolso automático por fallo del sistema en generación de app`,
-        });
-        logger.info({ jobId, refunded: job.creditsCost }, "Credits refunded after generation failure");
-      } catch (refundErr) {
-        logger.warn({ refundErr, jobId }, "Failed to refund credits after generation failure");
-      }
-    }
-    
+
     // Mensaje amigable para el usuario — NUNCA se muestra el error técnico
     // crudo (statusCode, stack traces, mensajes internos de proveedores de
     // IA como "Your credit balance is too low...") porque daña la
@@ -8623,8 +8505,8 @@ export async function runJobById(
     // guardado en el log interno (logger.error de arriba) para que el
     // equipo lo revise — solo se oculta de la vista del cliente.
     const errorMessage = isCreditsError
-      ? "Hemos detectado una incidencia técnica temporal en el sistema. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Tus créditos NO han sido consumidos — no necesitas hacer nada, te avisaremos en cuanto esté listo."
-      : "Ha ocurrido un problema técnico al generar tu app. Hemos enviado un ticket automático a nuestro equipo de soporte y lo resolveremos en menos de 2 horas. Si tus créditos fueron descontados, se reembolsarán automáticamente.";
+      ? "Hemos detectado una incidencia temporal en el sistema. Puedes abrir un ticket de soporte para que el equipo la revise y, si procede, evalúe una compensación manualmente."
+      : "Ha ocurrido un problema técnico al generar tu app. Puedes abrir un ticket de soporte para solicitar una revisión y, si procede, una compensación manual.";
     
     await GenerationJob.findByIdAndUpdate(jobId, {
       $set: {
@@ -9162,18 +9044,14 @@ router.post("/apps/:id/rollback", requireAuth, async (req: any, res: any) => {
     const result = await restoreAppRevision({ appId: req.params.id, revisionId, userId });
 
     if (!result.ok) {
-      // Best-effort: si la restauración falla, el crédito ya cobrado se
-      // devuelve con refundCredits (la función real para esto, no
-      // chargeCredits con un valor negativo) — el cliente no debe pagar
-      // por un rollback que no ocurrió.
-      const { refundCredits } = await import("../lib/credits");
-      await refundCredits({ userId, isAdmin, amount: ROLLBACK_COST, description: "Reembolso: rollback fallido" }).catch(() => {});
+      // Política comercial: no se restituye crédito automáticamente si el
+      // rollback falla. El cliente puede solicitar revisión mediante ticket.
       const messages: Record<string, string> = {
         not_found: "La versión que intentas restaurar ya no existe.",
         forbidden: "App no encontrada.",
         job_in_flight: "Hay una generación en curso para esta app — espera a que termine antes de restaurar una versión anterior.",
       };
-      return res.status(422).json({ error: messages[result.reason] || "No se pudo restaurar la versión." });
+      return res.status(422).json({ error: `${messages[result.reason] || "No se pudo restaurar la versión."} Si deseas solicitar una compensación, abre un ticket de soporte.` });
     }
 
     // Disparar el deploy asíncrono real (mismo flujo de 6 fases ya

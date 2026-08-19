@@ -279,13 +279,6 @@ async function processVideoJob(jobId: string, opts: { prompt: string; style: str
     logger.info({ jobId, segments: opts.segmentsTotal }, "VideoJob (Kling AI) completado");
   } catch (error: any) {
     logger.error({ jobId, error: error?.message }, "VideoJob (Kling AI) falló");
-    try {
-      const job = await VideoJob.findById(jobId).lean();
-      if (job) {
-        const { refundCredits } = await import("../lib/credits");
-        await refundCredits({ userId: job.userId, isAdmin: false, amount: job.creditsCharged, description: "Reembolso: fallo generando vídeo con Kling AI" });
-      }
-    } catch { /* no bloquear el marcado de error por un fallo en el reembolso */ }
     await VideoJob.findByIdAndUpdate(jobId, { $set: { status: "failed", errorMessage: error?.message } }).catch(() => {});
   } finally {
     if (tempDir) {
@@ -460,7 +453,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
   const { model, creditCost } = VEO_TIERS[selectedTier];
 
   try {
-    const { chargeCredits, refundCredits } = await import("../lib/credits");
+    const { chargeCredits } = await import("../lib/credits");
     const charge = await chargeCredits({
       userId,
       isAdmin,
@@ -493,9 +486,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     while (!operation.done) {
       if (Date.now() > deadline) {
         logger.error({ userId }, "Veo: timeout esperando la generación del videoclip");
-        // Reembolsar -- el cliente no debe pagar por un intento que nunca terminó.
-        await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: timeout generando videoclip musical" });
-        return res.status(504).json({ error: "La generación del videoclip está tardando demasiado. Se te han reembolsado los créditos." });
+        return res.status(504).json({ error: "La generación del videoclip está tardando demasiado. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual." });
       }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       operation = await (genai as any).operations.getVideosOperation({ operation });
@@ -504,8 +495,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     const generatedVideo = operation.response?.generatedVideos?.[0];
     if (!generatedVideo?.video?.uri) {
       logger.error({ userId, operation }, "Veo: la operación terminó sin devolver ningún vídeo");
-      await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
-      return res.status(502).json({ error: "No se pudo generar el videoclip. Se te han reembolsado los créditos." });
+      return res.status(502).json({ error: "No se pudo generar el videoclip. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual." });
     }
 
     // IMPORTANTE (encontrado revisando la documentacion oficial antes de dar
@@ -526,8 +516,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     const videoResp = await fetch(downloadUrl);
     if (!videoResp.ok) {
       logger.error({ userId, status: videoResp.status }, "Veo: no se pudo descargar el vídeo generado desde Google");
-      await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
-      return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Se te han reembolsado los créditos." });
+      return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual." });
     }
     const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
     const videoBase64 = videoBuffer.toString("base64");
@@ -542,12 +531,7 @@ router.post("/video/music-video-from-photo", requireAuth, async (req: Request, r
     });
   } catch (error: any) {
     logger.error({ error: error?.message, userId }, "Veo: error generando videoclip musical");
-    // Intentar reembolsar si el cobro llegó a completarse antes del fallo.
-    try {
-      const { chargeCredits, refundCredits } = await import("../lib/credits");
-      await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: error generando videoclip musical" });
-    } catch { /* no bloquear la respuesta de error por un fallo en el reembolso */ }
-    return res.status(500).json({ error: "Error generando el videoclip. Se han intentado reembolsar los créditos.", details: error?.message });
+    return res.status(500).json({ error: "Error generando el videoclip. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual.", details: error?.message });
   }
 });
 
@@ -598,7 +582,7 @@ router.post(
     let tempDir: string | null = null;
 
     try {
-      const { chargeCredits, refundCredits } = await import("../lib/credits");
+      const { chargeCredits } = await import("../lib/credits");
       const charge = await chargeCredits({
         userId,
         isAdmin,
@@ -628,8 +612,7 @@ router.post(
       const deadline = Date.now() + MAX_WAIT_MS;
       while (!operation.done) {
         if (Date.now() > deadline) {
-          await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: timeout generando el vídeo base" });
-          return res.status(504).json({ error: "La generación está tardando demasiado. Se te han reembolsado los créditos." });
+          return res.status(504).json({ error: "La generación está tardando demasiado. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual." });
         }
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         operation = await (genai as any).operations.getVideosOperation({ operation });
@@ -637,16 +620,14 @@ router.post(
 
       const generatedVideo = operation.response?.generatedVideos?.[0];
       if (!generatedVideo?.video?.uri) {
-        await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: Veo no devolvió ningún vídeo" });
-        return res.status(502).json({ error: "No se pudo generar el vídeo base. Se te han reembolsado los créditos." });
+        return res.status(502).json({ error: "No se pudo generar el vídeo base. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual." });
       }
 
       const apiKey = process.env.ZOCOIA_API_KEY || ""; // CONEXIÓN EXCLUSIVA A ZOCO IA
       const downloadUrl = `${generatedVideo.video.uri}${generatedVideo.video.uri.includes("?") ? "&" : "?"}key=${apiKey}`;
       const videoResp = await fetch(downloadUrl);
       if (!videoResp.ok) {
-        await refundCredits({ userId, isAdmin, amount: creditCost, description: "Reembolso: fallo al descargar el vídeo generado" });
-        return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Se te han reembolsado los créditos." });
+        return res.status(502).json({ error: "El vídeo se generó pero no se pudo descargar. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual." });
       }
       const videoBuffer = Buffer.from(await videoResp.arrayBuffer());
 
@@ -702,12 +683,7 @@ router.post(
       });
     } catch (error: any) {
       logger.error({ error: error?.message, userId }, "Error generando videoclip con canción real");
-      try {
-        const { chargeCredits, refundCredits } = await import("../lib/credits");
-        const { creditCost: baseCostRefund } = VEO_TIERS[tier] ? VEO_TIERS[tier] : VEO_TIERS.lite;
-        await refundCredits({ userId, isAdmin, amount: (baseCostRefund + 10), description: "Reembolso: error generando videoclip con canción real" });
-      } catch { /* no bloquear la respuesta de error por un fallo en el reembolso */ }
-      return res.status(500).json({ error: "Error generando el videoclip. Se han intentado reembolsar los créditos.", details: error?.message });
+      return res.status(500).json({ error: "Error generando el videoclip. Si deseas solicitar una compensación, abre un ticket de soporte para revisión manual.", details: error?.message });
     } finally {
       // Limpieza de archivos temporales — siempre, haya ido bien o mal.
       if (tempDir) {

@@ -894,19 +894,14 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
                   >
                     <CreditCard className="h-3.5 w-3.5" /> Ajustar créditos
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                    onClick={() => setRefundDialog({ user: selectedUser, amount: 0, reason: "" })}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" /> Reembolso créditos
-                  </Button>
+                  <span className="inline-flex items-center rounded-md border border-amber-500/30 px-3 py-1.5 text-xs text-amber-200">
+                    Compensaciones: solo mediante ticket de soporte
+                  </span>
                   <Button
                     size="sm"
                     variant="outline"
                     className="gap-1.5 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                    onClick={() => setEmailDialog({ user: selectedUser, subject: `Compensación por el inconveniente — Maris AI`, message: `Hemos detectado un error en tu generación reciente y lo hemos solucionado. Sentimos las molestias causadas.`, creditsAdded: 20 })}
+                    onClick={() => setEmailDialog({ user: selectedUser, subject: `Actualización sobre tu incidencia — Maris AI`, message: `Hemos revisado tu incidencia. Si deseas solicitar una compensación, abre un ticket de soporte para que el equipo pueda evaluarla manualmente.`, creditsAdded: 0 })}
                   >
                     <Mail className="h-3.5 w-3.5" /> Email compensación
                   </Button>
@@ -1374,72 +1369,6 @@ export default function AdminPage({ initialTab = "users" }: { initialTab?: Admin
           </DialogContent>
         </Dialog>
 
-        {/* ── DIALOG: Refund Credits ── */}
-        <Dialog open={!!refundDialog} onOpenChange={(open) => !open && setRefundDialog(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <RotateCcw className="h-5 w-5 text-emerald-400" />
-                Reembolso de créditos
-              </DialogTitle>
-              <DialogDescription>
-                Reembolso para <span className="font-mono text-primary">{refundDialog?.user.email}</span>
-              </DialogDescription>
-            </DialogHeader>
-            {refundDialog && (
-              <div className="space-y-4 py-2">
-                <div className="rounded-lg border border-white/5 bg-card/30 p-3 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div className="text-muted-foreground text-xs">Créditos actuales</div>
-                    <div className="font-mono font-bold text-primary">{refundDialog.user.credits}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground text-xs">Total gastado</div>
-                    <div className="font-mono font-bold text-white">${((refundDialog.user.totalSpent ?? 0) / 100).toFixed(2)}</div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Créditos a reembolsar</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={refundDialog.amount || ""}
-                    onChange={e => setRefundDialog({ ...refundDialog, amount: parseInt(e.target.value) || 0 })}
-                    placeholder="ej. 10"
-                    className="bg-black/20 border-white/10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Motivo del reembolso</Label>
-                  <Textarea
-                    placeholder="ej. Error en la generación, problema técnico..."
-                    value={refundDialog.reason}
-                    onChange={e => setRefundDialog({ ...refundDialog, reason: e.target.value })}
-                    className="bg-black/20 border-white/10 resize-none"
-                    rows={3}
-                  />
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setRefundDialog(null)}>Cancelar</Button>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                disabled={!refundDialog?.amount || refundMutation.isPending}
-                onClick={() => {
-                  if (!refundDialog) return;
-                  refundMutation.mutate({
-                    id: refundDialog.user.id,
-                    data: { amount: refundDialog.amount, reason: refundDialog.reason || undefined }
-                  });
-                }}
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Confirmar reembolso ({refundDialog?.amount ?? 0} créditos)
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* ── DIALOG: Stripe Card Refund ── */}
         <Dialog open={!!stripeRefundDialog} onOpenChange={(open) => !open && setStripeRefundDialog(null)}>

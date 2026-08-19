@@ -781,36 +781,10 @@ router.post("/admin/users/:id/notes", async (req: any, res: any): Promise<void> 
   }
 });
 
-router.post("/admin/users/:id/refund", async (req: any, res: any): Promise<void> => {
-  await connectDB();
-  const targetId = req.params.id;
-  const { amount, reason } = req.body;
-
-  if (!amount || amount <= 0) {
-    res.status(400).json({ error: "Cantidad de reembolso inválida" });
-    return;
-  }
-
-  try {
-    const targetUser = await User.findById(targetId).lean();
-    if (!targetUser) {
-      res.status(404).json({ error: "Usuario no encontrado" });
-      return;
-    }
-
-    await refundCredits({
-      userId: targetId,
-      isAdmin: isAdminEmail(targetUser.email),
-      amount,
-      description: reason || "Reembolso administrativo",
-    });
-
-    const updated = await User.findById(targetId).select("credits").lean();
-    res.json({ ok: true, newBalance: updated?.credits ?? null });
-  } catch (err) {
-    logger.error({ err, userId: targetId }, "Error processing refund");
-    res.status(500).json({ error: "Error al procesar el reembolso" });
-  }
+router.post("/admin/users/:id/refund", async (_req: any, res: any): Promise<void> => {
+  // Política comercial: toda devolución se inicia por solicitud del cliente
+  // y se aprueba desde un ticket de soporte de categoría refund.
+  res.status(410).json({ error: "Los reembolsos directos están deshabilitados. El cliente debe solicitar un ticket de soporte y un administrador aprobarlo desde dicho expediente." });
 });
 
 router.get("/admin/apps", async (_req, res) => {
@@ -2222,6 +2196,9 @@ router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<v
   if (!subject || !body) {
     res.status(400).json({ error: "subject y body son requeridos" }); return;
   }
+  if (Number(creditsCompensation) > 0) {
+    res.status(422).json({ error: "Las compensaciones de créditos solo se aprueban desde un ticket de soporte de tipo reembolso." }); return;
+  }
   const dbUser = await User.findById(req.params.id).lean() as any;
   const userEmail = recipientEmail || dbUser?.email;
   if (!userEmail) { res.status(400).json({ error: "Usuario sin email" }); return; }
@@ -2232,7 +2209,7 @@ router.post("/admin/users/:id/send-email", async (req: any, res: any): Promise<v
     userName: dbUser?.fullName,
     subject,
     body,
-    creditsCompensation: typeof creditsCompensation === "number" ? creditsCompensation : 0,
+    creditsCompensation: 0,
   });
 
   logger.info({ userId: req.params.id, userEmail, sent, subject }, "Admin: sent custom templated email");
@@ -2262,6 +2239,9 @@ router.post("/admin/broadcast", async (req: any, res: any): Promise<void> => {
   if (!subject?.trim() || !body?.trim()) {
     res.status(400).json({ error: "subject y body son requeridos" }); return;
   }
+  if (Number(creditsCompensation) > 0) {
+    res.status(422).json({ error: "Una campaña no puede otorgar créditos. Toda compensación requiere una solicitud de soporte y aprobación manual por ticket." }); return;
+  }
 
   // Buscar todos los usuarios que han generado al menos 1 job
   const { GenerationJob } = await import("@workspace/db/schema");
@@ -2288,13 +2268,10 @@ router.post("/admin/broadcast", async (req: any, res: any): Promise<void> => {
           userName: user.fullName,
           subject,
           body,
-          creditsCompensation,
+          creditsCompensation: 0,
         });
         if (ok) {
           sent++;
-          if (creditsCompensation > 0) {
-            await User.findByIdAndUpdate(user._id, { $inc: { credits: creditsCompensation } });
-          }
         } else {
           failed++;
         }
@@ -3463,6 +3440,10 @@ router.get("/admin/payments/all", async (req: any, res: any): Promise<void> => {
 
 router.post("/admin/payments/refund", async (req: any, res: any): Promise<void> => {
   await connectDB();
+  // Política comercial: no se admiten devoluciones directas desde pagos.
+  // El cliente debe abrir un ticket; soporte documenta y aprueba el caso.
+  res.status(410).json({ error: "Los reembolsos directos están deshabilitados. Solicita o tramita un ticket de soporte de tipo reembolso para revisión y aprobación manual." });
+  return;
   try {
     const { transactionId, reason } = req.body;
     if (!transactionId) {
