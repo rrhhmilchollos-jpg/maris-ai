@@ -1,4 +1,5 @@
 import { CommercialCatalogOffer } from "@workspace/db/schema";
+import { PLAYBOOKS_BY_SLUG } from "./commercialCatalogPlaybooks";
 
 // Catálogo privado, curado para venta consultiva. Los importes son rangos de
 // implantación orientativos, no garantías de facturación ni precios publicados.
@@ -177,7 +178,10 @@ export async function seedCommercialCatalog(createdByUserId: string) {
   const operations = CATALOG.map((offer) => ({
     updateOne: {
       filter: { slug: offer.slug },
-      update: { $setOnInsert: { ...offer, createdByUserId, commercialStatus: "ready_to_generate" } },
+      update: {
+        $set: { playbook: PLAYBOOKS_BY_SLUG[offer.slug] },
+        $setOnInsert: { ...offer, createdByUserId, commercialStatus: "ready_to_generate" },
+      },
       upsert: true,
     },
   }));

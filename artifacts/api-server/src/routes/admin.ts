@@ -103,14 +103,11 @@ router.use("/admin", requireAuth, requireAdmin, adminRateLimiter);
 router.get("/admin/commercial-catalog", async (_req: any, res: any): Promise<void> => {
   try {
     await connectDB();
-    let offers = await listCommercialCatalog();
-    let initialized = false;
-    if (offers.length === 0) {
-      await seedCommercialCatalog(String(_req.userId || "admin"));
-      offers = await listCommercialCatalog();
-      initialized = true;
-    }
-    res.json({ ok: true, offers, initialized });
+    // Si el catálogo ya existía, el seed idempotente refresca sus playbooks sin
+    // alterar estados comerciales ni crear publicaciones externas.
+    const seedResult = await seedCommercialCatalog(String(_req.userId || "admin"));
+    const offers = await listCommercialCatalog();
+    res.json({ ok: true, offers, initialized: seedResult.inserted > 0, refreshed: true });
   } catch (error: any) {
     logger.error({ error }, "Commercial catalog list failed");
     res.status(500).json({ ok: false, error: "No se pudo cargar el catálogo comercial" });

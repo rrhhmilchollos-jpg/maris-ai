@@ -1657,6 +1657,7 @@ export interface ICommercialCatalogOffer extends Document {
   commercialStatus: "draft" | "ready_to_generate" | "generated" | "ready_to_sell" | "sold" | "archived";
   sourceAppId?: string;
   researchSources: string[];
+  playbook?: Record<string, string>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1682,6 +1683,7 @@ const CommercialCatalogOfferSchema = new Schema<ICommercialCatalogOffer>(
     commercialStatus: { type: String, enum: ["draft", "ready_to_generate", "generated", "ready_to_sell", "sold", "archived"], default: "ready_to_generate", index: true },
     sourceAppId: { type: String, index: true },
     researchSources: { type: [String], default: [] },
+    playbook: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true },
 );

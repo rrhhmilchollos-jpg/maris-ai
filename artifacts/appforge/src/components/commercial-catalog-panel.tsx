@@ -18,6 +18,17 @@ type Offer = {
   pricing: { implementationMinEur: number; implementationMaxEur: number; enterpriseProgramMaxEur?: number; recurringFromEur?: number };
   commercialStatus: "draft" | "ready_to_generate" | "generated" | "ready_to_sell" | "sold" | "archived";
   regulatoryNotes?: string;
+  playbook?: {
+    businessOutcome?: string;
+    discoveryQuestions?: string;
+    generationBrief?: string;
+    implementationPhases?: string;
+    demoData?: string;
+    integrations?: string;
+    acceptanceCriteria?: string;
+    salesDelivery?: string;
+    riskLimits?: string;
+  };
 };
 
 const STATUS_LABELS: Record<Offer["commercialStatus"], string> = {
@@ -119,6 +130,18 @@ export function CommercialCatalogPanel() {
           <div className="grid sm:grid-cols-2 gap-3 text-sm"><div className="rounded-md bg-black/20 p-3"><p className="text-xs text-muted-foreground">Implantación orientativa</p><p className="font-semibold text-emerald-300">{money(offer.pricing.implementationMinEur)}–{money(offer.pricing.implementationMaxEur)}</p>{offer.pricing.enterpriseProgramMaxEur && <p className="mt-1 text-xs text-muted-foreground">Programa enterprise hasta {money(offer.pricing.enterpriseProgramMaxEur)}</p>}</div><div className="rounded-md bg-black/20 p-3"><p className="text-xs text-muted-foreground">Comprador objetivo</p><p className="text-sm">{offer.buyer}</p></div></div>
           <div><p className="text-xs font-medium mb-1">Diferenciación</p><p className="text-sm text-muted-foreground">{offer.differentiator}</p></div>
           <div className="flex flex-wrap gap-1">{offer.modules.slice(0, 5).map((module) => <Badge key={module} variant="secondary" className="text-[11px]">{module}</Badge>)}</div>
+          {offer.playbook && <details className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3 text-sm">
+            <summary className="cursor-pointer font-medium text-violet-200">Guía completa · de descubrimiento a operación</summary>
+            <div className="mt-4 space-y-4 text-muted-foreground">
+              <section><p className="font-medium text-foreground">Resultado y encaje</p><p className="whitespace-pre-line">{offer.playbook.businessOutcome}</p></section>
+              <section><p className="font-medium text-foreground">Preguntas de descubrimiento</p><p className="whitespace-pre-line">{offer.playbook.discoveryQuestions}</p></section>
+              <section><p className="font-medium text-foreground">Brief automático para generar</p><p className="whitespace-pre-line">{offer.playbook.generationBrief}</p></section>
+              <section><p className="font-medium text-foreground">Paso a paso de implantación</p><p className="whitespace-pre-line">{offer.playbook.implementationPhases}</p></section>
+              <section><p className="font-medium text-foreground">Datos demo e integraciones</p><p className="whitespace-pre-line">{offer.playbook.demoData}\n\n{offer.playbook.integrations}</p></section>
+              <section><p className="font-medium text-foreground">Validación y entrega comercial</p><p className="whitespace-pre-line">{offer.playbook.acceptanceCriteria}\n\n{offer.playbook.salesDelivery}</p></section>
+              <section><p className="font-medium text-amber-200">Límites y riesgos</p><p className="whitespace-pre-line">{offer.playbook.riskLimits}</p></section>
+            </div>
+          </details>}
           <div className="flex flex-wrap gap-2 pt-1"><Button size="sm" variant="secondary" onClick={() => startGeneration(offer)}><Sparkles className="h-4 w-4 mr-1" />Crear con Maris AI</Button><Button size="sm" variant="outline" disabled={updatingId === offer._id} onClick={() => void setStatus(offer._id, "generated")}>Marcar generada</Button><Button size="sm" disabled={updatingId === offer._id} onClick={() => void setStatus(offer._id, "ready_to_sell")}><CheckCircle2 className="h-4 w-4 mr-1" />Lista para vender</Button></div>
         </CardContent>
       </Card>)}
