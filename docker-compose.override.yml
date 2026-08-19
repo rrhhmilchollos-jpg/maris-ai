@@ -1,0 +1,36 @@
+services:
+  api:
+    environment:
+      MARIS_LLM_URL: http://maris-ollama:11434/v1
+      MARIS_LLM_MODEL: qwen2.5-coder:1.5b
+      MARIS_LLM_API_KEY: ""
+      MARIS_ALLOW_LEGACY_ZOCO_FALLBACK: "false"
+    depends_on:
+      maris-ollama:
+        condition: service_started
+
+  worker:
+    environment:
+      MARIS_LLM_URL: http://maris-ollama:11434/v1
+      MARIS_LLM_MODEL: qwen2.5-coder:1.5b
+      MARIS_LLM_API_KEY: ""
+      MARIS_ALLOW_LEGACY_ZOCO_FALLBACK: "false"
+      JOB_CONCURRENCY: "1"
+    depends_on:
+      maris-ollama:
+        condition: service_started
+
+  maris-ollama:
+    image: ollama/ollama:0.6.8
+    restart: always
+    volumes:
+      - maris_ai_ollama_data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 15m
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    # Sin publicación de puertos: solo api y worker de Maris AI pueden usarlo
+    # dentro de la red Docker propia de este proyecto.
+
+volumes:
+  maris_ai_ollama_data:

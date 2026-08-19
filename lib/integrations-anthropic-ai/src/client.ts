@@ -1,8 +1,7 @@
-// Cliente de modelo local para Maris AI.
-//
-// El nombre histórico del paquete se conserva por compatibilidad del monorepo,
-// pero no se importa ni se llama al SDK de Anthropic. Todas las peticiones van
-// al gateway interno de Zoco IA, cuyo proveedor real es Ollama en Hetzner.
+// Cliente histórico compatible con la interfaz messages de Anthropic.
+// Maris AI usa ahora un motor Ollama PROPIO configurado por MARIS_LLM_URL.
+// La antigua pasarela de Zoco solo puede activarse de forma explícita para una
+// migración controlada; nunca es el valor por defecto.
 
 export type LocalMessageParams = {
   model?: string;
@@ -27,22 +26,24 @@ type LocalMessageResponse = {
   usage?: { input_tokens?: number; output_tokens?: number; [key: string]: unknown };
 };
 
-const OLLAMA_MODELS = {
-  fast: process.env.OLLAMA_MODEL_FLASH || "qwen2.5-coder:3b",
-  standard: process.env.OLLAMA_MODEL_PLUS || "qwen2.5-coder:3b",
-  max: process.env.OLLAMA_MODEL_MAX || "qwen2.5-coder:3b",
+type LlmConfig = { baseUrl: string; apiKey: string; mode: "maris" | "legacy" };
+
+const MARIS_MODELS = {
+  fast: process.env.MARIS_LLM_MODEL_FAST || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
+  standard: process.env.MARIS_LLM_MODEL_STANDARD || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
+  max: process.env.MARIS_LLM_MODEL_MAX || process.env.MARIS_LLM_MODEL || "qwen2.5-coder:1.5b",
 } as const;
 
-// Export histórico para que los consumidores existentes no necesiten cambios.
-export const CLAUDE_MODELS = OLLAMA_MODELS;
+// Export histórico para los consumidores existentes del monorepo.
+export const CLAUDE_MODELS = MARIS_MODELS;
 
 export function resolveClaudeModel(model?: string | null): string {
-  const requested = String(model || "zoco-plus").trim();
+  const requested = String(model || "maris-standard").trim();
   const lower = requested.toLowerCase();
   if (requested.includes(":") || requested.includes("/")) return requested;
-  if (lower.includes("flash") || lower.includes("haiku") || lower.includes("mini")) return OLLAMA_MODELS.fast;
-  if (lower.includes("max") || lower.includes("opus") || lower.includes("70b") || lower.includes("405b")) return OLLAMA_MODELS.max;
-  return OLLAMA_MODELS.standard;
+  if (lower.includes("flash") || lower.includes("haiku") || lower.includes("mini")) return MARIS_MODELS.fast;
+  if (lower.includes("max") || lower.includes("opus") || lower.includes("70b") || lower.includes("405b")) return MARIS_MODELS.max;
+  return MARIS_MODELS.standard;
 }
 
 function normalizeContent(value: unknown): string {
@@ -57,11 +58,29 @@ function normalizeContent(value: unknown): string {
   return value == null ? "" : JSON.stringify(value);
 }
 
-function normalizeParams(params: LocalMessageParams): Record<string, unknown> {
-  const normalizedMessages = (params.messages || []).map((message) => ({
-    ...message,
-    content: normalizeContent(message.content),
-  }));
+function getConfig(): LlmConfig {
+  const ownUrl = String(process.env.MARIS_LLM_URL || "").trim();
+  if (ownUrl) {
+    return {
+      baseUrl: ownUrl.replace(/\/+$/, ""),
+      apiKey: String(process.env.MARIS_LLM_API_KEY || "").trim(),
+      mode: "maris",
+    };
+  }
+
+  // Migración excepcional, expresamente opt-in. Así Maris no vuelve a
+  // depender silenciosamente de Zoco ni de sus límites de inferencia.
+  if (process.env.MARIS_ALLOW_LEGACY_ZOCO_FALLBACK === "true") {
+    const apiKey = process.env.ZOCOIA_API_KEY || process.env.LOCAL_LLM_API_KEY || "";
+    const baseUrl = process.env.ZOCOIA_API_URL || process.env.LOCAL_LLM_BASE_URL || "";
+    if (apiKey && baseUrl) return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey, mode: "legacy" };
+  }
+
+  throw new Error("El motor propio de Maris AI no está configurado. Define MARIS_LLM_URL y MARIS_LLM_MODEL.");
+}
+
+function normalizeLegacyParams(params: LocalMessageParams): Record<string, unknown> {
+  const normalizedMessages = (params.messages || []).map((message) => ({ ...message, content: normalizeContent(message.content) }));
   const system = params.system == null ? undefined : normalizeContent(params.system);
   return {
     model: resolveClaudeModel(params.model),
@@ -69,39 +88,69 @@ function normalizeParams(params: LocalMessageParams): Record<string, unknown> {
     ...(params.temperature == null ? {} : { temperature: params.temperature }),
     ...(system ? { system } : {}),
     messages: normalizedMessages,
-    ...(params.metadata ? { metadata: params.metadata } : {}),
-    ...(params.tools ? { tools: params.tools } : {}),
-    ...(params.tool_choice ? { tool_choice: params.tool_choice } : {}),
     stream: false,
   };
 }
 
-function getConfig(): { baseUrl: string; apiKey: string } {
-  const apiKey = process.env.ZOCOIA_API_KEY || process.env.LOCAL_LLM_API_KEY || "";
-  const baseUrl = process.env.ZOCOIA_API_URL || process.env.LOCAL_LLM_BASE_URL || "";
-  if (!apiKey || !baseUrl) {
-    throw new Error(
-      "El motor local no está configurado. Define ZOCOIA_API_URL y ZOCOIA_API_KEY para usar Ollama a través de Zoco IA.",
-    );
+function normalizeMarisMessages(params: LocalMessageParams) {
+  const messages: Array<{ role: string; content: string }> = [];
+  const system = params.system == null ? "" : normalizeContent(params.system);
+  if (system) messages.push({ role: "system", content: system });
+  for (const message of params.messages || []) {
+    messages.push({ role: String(message.role || "user"), content: normalizeContent(message.content) });
   }
-  return { apiKey, baseUrl: baseUrl.replace(/\/+$/, "") };
+  return messages;
 }
 
 async function requestLocalModel(params: LocalMessageParams, signal?: AbortSignal): Promise<LocalMessageResponse> {
-  const { baseUrl, apiKey } = getConfig();
-  const response = await fetch(`${baseUrl}/v1/messages`, {
+  const config = getConfig();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+
+  if (config.mode === "maris") {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: resolveClaudeModel(params.model),
+        messages: normalizeMarisMessages(params),
+        max_tokens: params.max_tokens || 4096,
+        temperature: params.temperature ?? 0.2,
+        stream: false,
+      }),
+      signal,
+    });
+    const body: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(body?.error?.message || body?.error || `El motor propio de Maris respondió HTTP ${response.status}`) as Error & { status?: number };
+      error.status = response.status;
+      throw error;
+    }
+    const text = String(body?.choices?.[0]?.message?.content || "").trim();
+    if (!text) throw new Error("El motor propio de Maris devolvió una respuesta vacía.");
+    return {
+      id: body?.id,
+      type: "message",
+      role: "assistant",
+      model: body?.model || resolveClaudeModel(params.model),
+      content: [{ type: "text", text }],
+      stop_reason: body?.choices?.[0]?.finish_reason || "end_turn",
+      usage: {
+        input_tokens: Number(body?.usage?.prompt_tokens || 0),
+        output_tokens: Number(body?.usage?.completion_tokens || 0),
+      },
+    };
+  }
+
+  const response = await fetch(`${config.baseUrl}/v1/messages`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(normalizeParams(params)),
+    headers,
+    body: JSON.stringify(normalizeLegacyParams(params)),
     signal,
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = (body as any)?.error?.message || `El gateway local respondió HTTP ${response.status}`;
-    const error = new Error(message) as Error & { status?: number };
+    const error = new Error((body as any)?.error?.message || `La pasarela heredada respondió HTTP ${response.status}`) as Error & { status?: number };
     error.status = response.status;
     throw error;
   }
@@ -128,49 +177,24 @@ class LocalMessageStream {
     return this;
   }
 
-  once(event: string, listener: (...args: any[]) => void): this {
-    return this.on(event, listener);
-  }
-
-  finalMessage(): Promise<LocalMessageResponse> {
-    return this.promise;
-  }
+  once(event: string, listener: (...args: any[]) => void): this { return this.on(event, listener); }
+  finalMessage(): Promise<LocalMessageResponse> { return this.promise; }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<Record<string, unknown>> {
     const message = await this.promise;
     const text = message.content?.filter((block) => block.type === "text").map((block) => block.text || "").join("") || "";
-    yield {
-      type: "message_start",
-      message: {
-        id: message.id,
-        role: "assistant",
-        model: message.model,
-        usage: { input_tokens: message.usage?.input_tokens || 0, output_tokens: 0 },
-      },
-    };
+    yield { type: "message_start", message: { id: message.id, role: "assistant", model: message.model, usage: { input_tokens: message.usage?.input_tokens || 0, output_tokens: 0 } } };
     yield { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } };
-    if (text) {
-      yield {
-        type: "content_block_delta",
-        index: 0,
-        delta: { type: "text_delta", text },
-      };
-    }
+    if (text) yield { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } };
     yield { type: "content_block_stop", index: 0 };
-    yield {
-      type: "message_delta",
-      delta: { stop_reason: message.stop_reason || "end_turn" },
-      usage: { output_tokens: message.usage?.output_tokens || 0 },
-    };
+    yield { type: "message_delta", delta: { stop_reason: message.stop_reason || "end_turn" }, usage: { output_tokens: message.usage?.output_tokens || 0 } };
     yield { type: "message_stop" };
   }
 }
 
 export const anthropic = {
   messages: {
-    create: (params: LocalMessageParams, options?: { signal?: AbortSignal }) =>
-      requestLocalModel(params, options?.signal),
-    stream: (params: LocalMessageParams, options?: { signal?: AbortSignal }) =>
-      new LocalMessageStream(params, options?.signal),
+    create: (params: LocalMessageParams, options?: { signal?: AbortSignal }) => requestLocalModel(params, options?.signal),
+    stream: (params: LocalMessageParams, options?: { signal?: AbortSignal }) => new LocalMessageStream(params, options?.signal),
   },
 } as any;

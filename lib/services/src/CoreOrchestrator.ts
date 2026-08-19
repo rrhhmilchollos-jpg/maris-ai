@@ -579,12 +579,12 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
     // El modo compacto prioriza una primera versión visible: un intento breve y
     // el fallback existente son preferibles a tres esperas de 90 segundos.
     const compactMilestone = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
-    const MAX_ATTEMPTS = compactMilestone ? 1 : 3;
-    // Los modelos rápidos pueden tardar más de 30 s en emitir el primer token
-    // durante picos de carga. Con latidos visibles cada 15 s no hay motivo para
-    // degradar a placeholders a los 30 s: damos margen real y seguimos siendo
-    // recuperables mucho antes que el watchdog global.
-    const milestoneTimeoutMs = compactMilestone ? 90_000 : 120_000;
+    const usesOwnMarisModel = Boolean(process.env.MARIS_LLM_URL);
+    // El motor propio trabaja en CPU y no se comparte con Zoco. Damos un margen
+    // realista a la primera inferencia y un segundo intento local; los latidos
+    // mantienen la tarea viva y nunca se escribe código parcial.
+    const MAX_ATTEMPTS = compactMilestone ? (usesOwnMarisModel ? 2 : 1) : 3;
+    const milestoneTimeoutMs = usesOwnMarisModel ? 180_000 : (compactMilestone ? 90_000 : 120_000);
     const milestoneMaxTokens = compactMilestone ? 4_000 : 16_000;
     let lastError: unknown;
 
@@ -756,7 +756,13 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
           .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
           .join("\n");
 
-        if (frontendSoFar.length > 200) {
+        // Las primeras capas pueden contener únicamente datos, tipos o servicios
+        // de frontend. Es normal que todavía no exista App/main; esbuild no debe
+        // tratar esa fase preparatoria como un error de producto. Desde que se
+        // genera una entrada React, toda validación pasa a ser obligatoria.
+        const hasFrontendEntry = Array.from(this.generatedByMilestoneId.values())
+          .some((item) => item.targetWorkspace === "apps/web" && /(^|\/)(App|main|index)\.(tsx|jsx)$/.test(item.filePath));
+        if (frontendSoFar.length > 200 && hasFrontendEntry) {
           try {
             wsNotificationCallback({
               status: `🔍 Verificando compilación de capa frontend (${layerMilestones.length} hito(s))...`,
