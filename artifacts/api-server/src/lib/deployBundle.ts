@@ -501,6 +501,7 @@ export async function buildDeployHtml(opts: {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c5cff'/%3E%3Cpath d='M19 32h26M32 19v26' stroke='white' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E" />
   ${seoHeadTags(seo)}
   <style>html,body,#root{margin:0;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}</style>${userStyleTag}
   ${tailwindRuntimeTag}
