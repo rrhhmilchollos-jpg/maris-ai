@@ -59,6 +59,21 @@ export function CommercialCatalogPanel() {
     finally { setSeeding(false); }
   };
 
+  const startGeneration = (offer: Offer) => {
+    const brief = [
+      `Construye ${offer.title}, una ${offer.deliveryModel.toLowerCase()} para ${offer.vertical.toLowerCase()}.`,
+      `Resumen: ${offer.summary}`,
+      `Comprador: ${offer.buyer}`,
+      `Diferenciación: ${offer.differentiator}`,
+      `Módulos obligatorios: ${offer.modules.join(", ")}.`,
+      `Integraciones previstas: ${offer.integrations.join(", ")}.`,
+      "Genera una aplicación completa, funcional, con interfaz profesional en español, datos de demostración explícitamente etiquetados, control de roles, auditoría y sin pantallas placeholder.",
+      "No actives pagos, llamadas, integraciones reguladas ni acciones externas sin credenciales y autorización explícita.",
+    ].join("\n\n");
+    try { localStorage.setItem("appforge_pending_prompt", brief); } catch { /* la navegación sigue disponible */ }
+    window.location.assign("/dashboard");
+  };
+
   const setStatus = async (id: string, commercialStatus: Offer["commercialStatus"]) => {
     setUpdatingId(id);
     try {
@@ -104,7 +119,7 @@ export function CommercialCatalogPanel() {
           <div className="grid sm:grid-cols-2 gap-3 text-sm"><div className="rounded-md bg-black/20 p-3"><p className="text-xs text-muted-foreground">Implantación orientativa</p><p className="font-semibold text-emerald-300">{money(offer.pricing.implementationMinEur)}–{money(offer.pricing.implementationMaxEur)}</p>{offer.pricing.enterpriseProgramMaxEur && <p className="mt-1 text-xs text-muted-foreground">Programa enterprise hasta {money(offer.pricing.enterpriseProgramMaxEur)}</p>}</div><div className="rounded-md bg-black/20 p-3"><p className="text-xs text-muted-foreground">Comprador objetivo</p><p className="text-sm">{offer.buyer}</p></div></div>
           <div><p className="text-xs font-medium mb-1">Diferenciación</p><p className="text-sm text-muted-foreground">{offer.differentiator}</p></div>
           <div className="flex flex-wrap gap-1">{offer.modules.slice(0, 5).map((module) => <Badge key={module} variant="secondary" className="text-[11px]">{module}</Badge>)}</div>
-          <div className="flex flex-wrap gap-2 pt-1"><Button size="sm" variant="outline" disabled={updatingId === offer._id} onClick={() => void setStatus(offer._id, "generated")}>Marcar generada</Button><Button size="sm" disabled={updatingId === offer._id} onClick={() => void setStatus(offer._id, "ready_to_sell")}><CheckCircle2 className="h-4 w-4 mr-1" />Lista para vender</Button></div>
+          <div className="flex flex-wrap gap-2 pt-1"><Button size="sm" variant="secondary" onClick={() => startGeneration(offer)}><Sparkles className="h-4 w-4 mr-1" />Crear con Maris AI</Button><Button size="sm" variant="outline" disabled={updatingId === offer._id} onClick={() => void setStatus(offer._id, "generated")}>Marcar generada</Button><Button size="sm" disabled={updatingId === offer._id} onClick={() => void setStatus(offer._id, "ready_to_sell")}><CheckCircle2 className="h-4 w-4 mr-1" />Lista para vender</Button></div>
         </CardContent>
       </Card>)}
     </div>}
