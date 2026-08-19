@@ -2,7 +2,7 @@ services:
   api:
     environment:
       MARIS_LLM_URL: http://maris-ollama:11434/v1
-      MARIS_LLM_MODEL: qwen2.5-coder:1.5b
+      MARIS_LLM_MODEL: qwen2.5-coder:3b
       MARIS_LLM_API_KEY: ""
       MARIS_ALLOW_LEGACY_ZOCO_FALLBACK: "false"
     depends_on:
@@ -12,7 +12,7 @@ services:
   worker:
     environment:
       MARIS_LLM_URL: http://maris-ollama:11434/v1
-      MARIS_LLM_MODEL: qwen2.5-coder:1.5b
+      MARIS_LLM_MODEL: qwen2.5-coder:3b
       MARIS_LLM_API_KEY: ""
       MARIS_ALLOW_LEGACY_ZOCO_FALLBACK: "false"
       JOB_CONCURRENCY: "1"

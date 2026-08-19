@@ -8236,7 +8236,11 @@ export async function runJobById(
     // ── 2. QUALITY CHECK — evaluación de calidad con IA ──────────────────────
     // NUNCA ejecutar en jobs de reparación automática — evita bucle infinito
     const isAutoRepairJob = (job.prompt || "").includes("[ADMIN REPAIR]") || (job as any).autoFixedFromJobId;
-    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000 && !isAutoRepairJob && !editResultInvalid) {
+    // La calidad se puede analizar únicamente con autorización manual trazable.
+    // Un resultado bajo informa al administrador, pero nunca crea un segundo job
+    // ni modifica código sin petición expresa del propietario.
+    const hasManualQualityApproval = Boolean((job as any).manualQualityCheckId && (job as any).manualQualityApprovedBy);
+    if (savedAppId && finalResult?.frontendCode && finalResult.frontendCode.length > 1000 && !isAutoRepairJob && !editResultInvalid && hasManualQualityApproval) {
       try {
         const { evaluateJobQuality } = await import("../lib/aiAutopilot");
         const qeval = await evaluateJobQuality(jobId, String(savedAppId), finalResult.frontendCode, job.prompt || "");
@@ -8244,18 +8248,7 @@ export async function runJobById(
         // bundles ya aprobados (FIX 2 en el bloque de integridad del bundle)
         (finalResult as any)._testingScore = qeval.score;
         if (!qeval.pass) {
-          await log("system", `⚠️ Calidad insuficiente (score: ${qeval.score}/100). Lanzando corrección automática…`);
-          const patchPrompt = `[ADMIN REPAIR] La app generada tiene problemas de calidad: ${qeval.issues.slice(0, 3).join(", ")}. Corrígelos sin modificar lo que ya funciona. Prompt original: ${(job.prompt || "").slice(0, 200)}`;
-          const patchJobId = new (await import("mongoose")).default.Types.ObjectId().toString();
-          await GenerationJob.create({
-            _id: patchJobId, userId: job.userId,
-            prompt: `[MARIS AI REQUEST LOCALE] uiLanguage=es; locale=es-ES; country=ES; source=autopilot-quality. ${patchPrompt}`,
-            editAppId: String(savedAppId), coderModel: "zoco-plus",
-            language: job.language || "typescript", kind: "edit",
-            status: "queued", phase: "queued", progress: 0,
-            isAdmin: true, hasEverPaid: true, autoFixedFromJobId: jobId,
-          });
-          await enqueueGenerateJob(patchJobId);
+          await log("system", `⚠️ Calidad a revisar (score: ${qeval.score}/100). No se aplicó ninguna corrección automática; solicita una edición manual si deseas cambios.`);
         } else {
           await log("system", `✅ Calidad aprobada (score: ${qeval.score}/100)`);
           // Sistema de aprendizaje de patrones de proyecto (a peticion

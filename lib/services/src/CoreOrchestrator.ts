@@ -278,6 +278,7 @@ const LAYER_ORDER = ["data", "backend-core", "backend-module", "integration", "f
 export class CoreOrchestrator {
   private projectRoot: string;
   private generatedByMilestoneId: Map<number, GeneratedMilestone> = new Map();
+  private activeProjectIntent = "";
   private options: CoreOrchestratorOptions;
 
   constructor(projectRoot: string, options: CoreOrchestratorOptions = {}) {
@@ -616,7 +617,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
             ] as any,
             messages: [{
               role: "user",
-              content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
+              content: `Genera el archivo ${milestone.filePath} para el workspace ${milestone.targetWorkspace}.\n\nPRODUCTO QUE DEBES ENTREGAR (mantén este dominio, nombres y flujos en TODOS los archivos):\n${this.activeProjectIntent.slice(0, 5000)}\n\nObjetivo del hito: ${milestone.description}\n\n${dependencyContext}\n\nREGLAS OBLIGATORIAS DE ENTREGA:\n- No generes placeholders, pantallas de construcción ni componentes vacíos.\n- No uses example.com, api.example.com, URLs ficticias ni fetch a servicios externos; usa estado y datos locales realistas hasta que exista una integración configurada.\n- Todo hook React usado directamente (useEffect, useState, useMemo, etc.) debe importarse de react en ese archivo.\n- Conserva el modelo de negocio, términos y entidades del producto solicitado; nunca lo sustituyas por una tienda o lista genérica.\n\nDevuelve SOLO el código del archivo, sin explicaciones ni markdown.`,
             }],
           }, { signal: abortController.signal as any }).finalMessage();
           // Algunos clientes de streaming ignoran AbortSignal mientras esperan
@@ -679,6 +680,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
    * la versión anterior (paralelismo total sin dependencias).
    */
   async buildProjectIncremental(userPrompt: string, wsNotificationCallback: Function) {
+    this.activeProjectIntent = userPrompt;
     const { database, platform, architecture, milestones } = await this.planMonorepoProject(userPrompt);
 
     const serviceNames = Array.from(new Set(milestones.map((m) => m.serviceName).filter(Boolean))) as string[];

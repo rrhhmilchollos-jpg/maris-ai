@@ -137,6 +137,30 @@ const KNOWN_BAD_PACKAGE_IMPORTS: Array<{ pattern: RegExp; message: string }> = [
   },
 ];
 
+/**
+ * esbuild no considera error que JSX use una variable global inexistente. En
+ * producción eso dejó previews en blanco, por ejemplo `useEffect(...)` sin
+ * `import { useEffect } from "react"`. Detectamos cada hook estándar llamado
+ * de forma directa y exigimos su import nombrado antes de entregar el bundle.
+ */
+function detectMissingReactHookImports(vfs: Record<string, string>): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  const hooks = ["useState", "useEffect", "useMemo", "useCallback", "useRef", "useContext", "useReducer", "useLayoutEffect"];
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx$/.test(file)) continue;
+    const reactImports = Array.from(contents.matchAll(/import\s*(?:[\w$*]+\s*,?\s*)?\{([\s\S]*?)\}\s*from\s*["']react["']/g))
+      .flatMap((match) => match[1].split(",").map((part) => part.trim().split(/\s+as\s+/)[0].trim()));
+    for (const hook of hooks) {
+      const directCall = new RegExp(`(?<![.$\\w])${hook}\\s*\\(`).exec(contents);
+      if (directCall && !reactImports.includes(hook)) {
+        const line = contents.slice(0, directCall.index).split("\n").length;
+        issues.push({ file, line, message: `${hook} is called but is not imported from "react". Add it to the named React import, for example: import { ${hook} } from "react";.` });
+      }
+    }
+  }
+  return issues;
+}
+
 function detectKnownBadPackageImports(
   vfs: Record<string, string>,
 ): BuildIssue[] {
@@ -624,6 +648,7 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // never resolves real exports, so this slips through silently and only
     // surfaces as a runtime crash in the real browser.
     issues.push(...detectKnownBadPackageImports(vfs));
+    issues.push(...detectMissingReactHookImports(vfs));
     // Validaciones estructurales de router — detectan 404/blank page ANTES
     // de que el evaluador visual tenga que hacerlo (ahorra un ciclo completo
     // de evaluación + auto-fix que antes era necesario para cada app con
