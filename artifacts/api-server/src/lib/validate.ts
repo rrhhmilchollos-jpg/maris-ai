@@ -73,6 +73,13 @@ function detectWouterAnchorNesting(
  */
 const KNOWN_BAD_PACKAGE_IMPORTS: Array<{ pattern: RegExp; message: string }> = [
   {
+    // wouter v3 only exposes named exports. esbuild treats packages as
+    // external during VFS validation, so it otherwise cannot see this until
+    // the browser throws: "module does not provide an export named default".
+    pattern: /import\s+(?!type\b)[A-Za-z_$][\w$]*\s*(?:,\s*\{[^}]*\})?\s+from\s*["']wouter["']/,
+    message: "wouter does not provide a default export. Replace the default import with the named symbols used by this file, for example: import { Link, Route, Switch, useLocation } from \"wouter\";.",
+  },
+  {
     pattern: /import\s*\{[^}]*\buseNavigate\b[^}]*\}\s*from\s*["']wouter["']/,
     message: "useNavigate does not exist in \"wouter\" (it's from react-router-dom). Use: const [, setLocation] = useLocation(); then setLocation(\"/path\") instead of navigate(\"/path\").",
   },

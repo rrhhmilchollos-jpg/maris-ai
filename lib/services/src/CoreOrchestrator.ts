@@ -99,6 +99,8 @@ WOUTER v3 — \`<Link>\` ITSELF renders as the anchor tag. NEVER nest \`<a>\` (o
 - RIGHT: \`<Link href="/x" className="btn">Ir</Link>\`
 The same applies to \`<Route>\` — render children directly, never wrap in \`<a>\`.
 PROGRAMMATIC NAVIGATION — wouter has NO \`useNavigate\` or \`useHistory\` (those are react-router-dom). Importing either from "wouter" crashes the ENTIRE app at load with "module does not provide an export named...", before any component renders. Use \`const [, setLocation] = useLocation();\` then \`setLocation("/path")\`.
+IMPORTS DE WOUTER — wouter NO tiene exportación por defecto. NUNCA escribas \`import Link from "wouter"\`, \`import Router from "wouter"\` ni ningún otro import por defecto. Importa TODOS los símbolos usados con llaves en una sola línea, por ejemplo: \`import { Link, Route, Switch, useLocation } from "wouter";\`. Si renderizas \`<Link>\`, \`<Route>\` o \`<Switch>\`, esos símbolos deben estar importados explícitamente desde "wouter" en ese archivo.
+FRONTERA FRONTEND — los archivos de \`apps/web\` no pueden importar Prisma, Mongoose, \`fs\`, \`path\`, módulos de servidor ni secretos. La UI usa estado local o llamadas HTTP tipadas a \`apps/api\`.
 ROUTER ORDER — REGLA CRÍTICA (produce página en blanco/404 si se incumple): en el \`<Switch>\`, el catch-all que renderiza NotFound/404 DEBE ser SIEMPRE el ÚLTIMO elemento. Si lo colocas antes de las rutas reales, wouter lo evalúa primero y TODAS las rutas muestran 404:
   \`<Switch>
     <Route path="/" component={Home} />

@@ -1,5 +1,6 @@
 import * as esbuild from "esbuild";
 import { randomInt } from "node:crypto";
+import path from "node:path";
 import { bundleToFiles } from "./exportZip";
 import { isStaticHtmlBundle } from "@workspace/bundle-format";
 import { injectWatermarkToHTML } from "./watermark";
@@ -90,11 +91,25 @@ export async function buildDeployHtml(opts: {
   }
 
   const vfs = bundleToFiles(opts.bundle);
-  const entry = pickEntry(vfs);
+  let entry = pickEntry(vfs);
   if (!entry) {
     throw new Error(
       "El bundle no contiene un punto de entrada (src/main.tsx, src/index.tsx o src/App.tsx).",
     );
+  }
+
+  // Los bundles generados por hitos a veces aportan correctamente App.tsx
+  // pero omiten main.tsx/index.tsx. Compilar App.tsx como entrada es válido
+  // para esbuild, pero no monta React y deja #root vacío sin error. Creamos
+  // un entrypoint virtual mínimo que importa el App por defecto y lo monta.
+  const isAppOnlyEntry = /(?:^|\/)src\/App\.(?:t|j)sx?$/.test(entry);
+  if (isAppOnlyEntry) {
+    const appDirectory = path.posix.dirname(entry);
+    const appFilename = path.posix.basename(entry);
+    const previewEntry = path.posix.join(appDirectory, "__maris_preview_entry__.tsx");
+    vfs[previewEntry] = `import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "./${appFilename}";\n\nconst rootElement = document.getElementById("root");\nif (!rootElement) throw new Error("No se encontró el elemento raíz de la vista previa.");\ncreateRoot(rootElement).render(<App />);\n`;
+    entry = previewEntry;
+    logger.info({ originalEntry: appFilename, previewEntry }, "buildDeployHtml: entrada App.tsx sin main/index — montando React con entrypoint virtual");
   }
 
   // Collect bare-import package names so we can build an import map. Tailwind
