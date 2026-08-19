@@ -455,9 +455,12 @@ router.post("/apps/:appId/visual-test", requireAuth, async (req: Request, res: R
     const userId = getAuthenticatedUserId(req);
     if (!userId) return res.status(401).json({ error: "No autenticado" });
     const { autoFix: requestedAutoFix = false } = req.body || {};
-    const autoFix = Boolean(requestedAutoFix && VISUAL_AUTOFIX_ENABLED);
-    if (requestedAutoFix && !autoFix) {
-      logAutomationDisabled("visual-autofix", { appId, userId });
+    // Política de seguridad: el análisis visual nunca modifica el código de
+    // clientes. Incluso una interfaz heredada que pida autofix recibe solo un
+    // diagnóstico; las correcciones requieren una edición explícita.
+    const autoFix = false;
+    if (requestedAutoFix) {
+      logAutomationDisabled("visual-autofix-read-only", { appId, userId });
     }
 
     const { GeneratedApp, VisualTestJob } = await import("@workspace/db/schema");
@@ -613,9 +616,7 @@ async function runVisualTestWork(appId: string, userId: string, autoFix: boolean
           fixesApplied,
           cycles,
           usingPreviewFallback: true,
-          note: fixesApplied > 0
-            ? `Autofix aplicó ${fixesApplied} corrección(es) automáticamente.`
-            : "Analizado desde preview interno. Usa Autofix IA para corregir los problemas detectados."
+          note: "Analizado desde preview interno. Este diagnóstico es de solo lectura y no modifica el código automáticamente."
         });
         return;
       } catch (previewErr: any) {

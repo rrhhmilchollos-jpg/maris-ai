@@ -9,7 +9,7 @@
  * tiene visual testing nativo con screenshots en la consola de chat.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import {
   Camera, Loader2, CheckCircle2, AlertTriangle, XCircle,
   Wand2, Monitor, Tablet, Smartphone, ChevronDown, ChevronUp,
@@ -49,13 +49,9 @@ interface VisualTestPanelProps {
   appId: string;
   appSlug?: string;
   className?: string;
-  /** Si true, arranca automáticamente análisis + autofix al montarse — usado
-   *  para la verificación final automática tras una generación exitosa, sin
-   *  que el usuario tenga que pulsar nada. */
+  /** Compatibilidad con el llamador anterior. El análisis ya no se inicia automáticamente. */
   autoRunOnMount?: boolean;
-  /** Se llama cuando el ciclo automático termina SIN daño grave (visuallyCorrect
-   *  true, o solo quedan issues menores) — el padre usa esto para cerrar el
-   *  panel y mostrar el mensaje de éxito + oferta de seguir editando. */
+  /** Compatibilidad con el llamador anterior. */
   onResolved?: () => void;
 }
 
@@ -82,19 +78,6 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
   const [compareMode, setCompareMode] = useState(false);
 
   const [fixProgress, setFixProgress] = useState<string | null>(null);
-  const hasAutoRun = useRef(false);
-
-  // Auto-arranque: análisis + autofix automático en cuanto el panel aparece
-  // (tras un job exitoso) — sin esto, el panel se mostraba vacío esperando
-  // que el usuario pulsara "Analizar" manualmente. useRef evita doble disparo
-  // si el componente re-renderiza antes de que termine el ciclo.
-  useEffect(() => {
-    if (autoRunOnMount && !hasAutoRun.current) {
-      hasAutoRun.current = true;
-      runTest(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // El backend ahora es ASÍNCRONO (ver routes/deployment.ts): POST crea un
   // job y responde al instante con su id; el trabajo real (que puede tardar
@@ -108,7 +91,9 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
   async function submitVisualTestJob(autoFix: boolean): Promise<any> {
     const created = await apiFetch<{ jobId: string; status: string }>(`/api/apps/${appId}/visual-test`, {
       method: "POST",
-      body: JSON.stringify({ autoFix }),
+      // Política de seguridad: un análisis visual nunca modifica código.
+      // Las correcciones se realizan mediante una edición explícita del usuario.
+      body: JSON.stringify({ autoFix: false }),
     });
     const jobId = created.jobId;
     const POLL_INTERVAL_MS = 4000;
@@ -247,9 +232,9 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
         </div>
         <div className="flex-1">
           <div className="text-sm font-bold text-white flex items-center gap-2">
-            Testing Visual IA
+            Comprobación visual opcional
             <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[15px] py-0">
-              Claude Vision
+              Solo lectura
             </Badge>
             {result && result.overallScore != null && (
               <Badge className={cn(
@@ -270,36 +255,22 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
             )}
           </div>
           <p className="text-[16px] text-white/40">
-            Screenshots reales · Detección IA de errores · Autofix integrado
+Capturas de preview · Diagnóstico no destructivo · Sin cambios automáticos
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
-          {result && !result.skipped && !result.visuallyCorrect && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => runTest(true)}
-              disabled={autoFixing}
-              className="h-7 text-[16px] border-violet-500/30 text-violet-400 hover:bg-violet-500/10 px-2"
-            >
-              {autoFixing
-                ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Reparando ({fixProgress ? fixProgress.split(" ")[0] : "..."})</>
-                : <><Wand2 className="h-3 w-3 mr-1" />Autofix IA</>
-              }
-            </Button>
-          )}
           <Button
             size="sm"
-            onClick={() => runTest(true)}
-            disabled={running || autoFixing || !!result?.skipped}
-            title="Escanea la app, detecta errores y los repara automáticamente"
+            onClick={() => runTest(false)}
+            disabled={running || !!result?.skipped}
+            title="Analiza la vista previa sin modificar código"
             className="h-7 text-[16px] bg-cyan-600 hover:bg-cyan-700 text-white px-2"
           >
-            {(running || autoFixing)
-              ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{autoFixing ? "Reparando..." : "Escaneando..."}</>
+            {running
+              ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Analizando...</>
               : result
-              ? <><RefreshCw className="h-3 w-3 mr-1" />Re-escanear y reparar</>
-              : <><Zap className="h-3 w-3 mr-1" />Escanear y reparar</>
+              ? <><RefreshCw className="h-3 w-3 mr-1" />Re-escanear vista</>
+              : <><Zap className="h-3 w-3 mr-1" />Analizar vista</>
             }
           </Button>
         </div>
@@ -318,7 +289,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-2">
           <Loader2 className="h-8 w-8 text-cyan-400 animate-spin mx-auto" />
           <p className="text-sm text-white/60 font-medium">Capturando screenshots...</p>
-          <p className="text-[16px] text-white/30">Claude Vision está analizando el diseño en 3 viewports</p>
+          <p className="text-[16px] text-white/30">El validador está revisando la vista previa en varios tamaños</p>
           <div className="flex justify-center gap-3 mt-3">
             {["desktop", "tablet", "mobile"].map(v => (
               <div key={v} className="flex items-center gap-1 text-[16px] text-white/30">
@@ -604,7 +575,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
           <Camera className="h-8 w-8 text-white/15 mx-auto mb-2" />
           <p className="text-[16px] text-white/40">
-            Captura screenshots reales de tu app y detecta errores visuales con Claude Vision.
+            Captura la vista previa y detecta incidencias visuales sin modificar tu código.
           </p>
           <p className="text-[16px] text-white/25">
             Analiza diseño responsivo en desktop, tablet y móvil simultáneamente.
@@ -622,7 +593,7 @@ export function VisualTestPanel({ appId, appSlug, className, autoRunOnMount, onR
             <p className="text-[16px] font-medium text-violet-300 mb-1">Cómo usarlo</p>
             <ol className="text-[16px] text-white/45 space-y-1 list-decimal list-inside">
               <li>Pulsa <span className="text-white/65 font-medium">Analizar</span> para detectar los problemas.</li>
-              <li>Si hay errores críticos o mayores, el <span className="text-white/65 font-medium">Autofix IA</span> se activa automáticamente — no hace falta pulsar nada más.</li>
+              <li>Si se detecta una incidencia, recibirás un diagnóstico. Ninguna comprobación visual modifica el código automáticamente.</li>
             </ol>
           </div>
         </div>

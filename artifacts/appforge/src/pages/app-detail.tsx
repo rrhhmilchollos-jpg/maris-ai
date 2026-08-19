@@ -652,8 +652,7 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
         setPreviewKey((value) => value + 1);
       });
       setActiveJobId(null);
-      // Auto-show visual test panel in chat after generation completes
-      setShowVisualTestInline(true);
+      // La comprobación visual es opcional y de solo lectura: no se abre ni se ejecuta automáticamente al terminar una generación.
       toast({ title: "¡Cambios aplicados!", description: "La previsualización se ha recargado automáticamente con la actualización." });
     } else if (job?.status === "failed") {
       queryClient.invalidateQueries({ queryKey: getGetActiveAppJobQueryKey(id) });
@@ -1625,13 +1624,13 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
           )}
           <div ref={messagesEndRef} />
 
-          {/* ─── Visual Test Inline — aparece automáticamente tras generar ─── */}
+          {/* ─── Comprobación visual manual y no destructiva ─── */}
           {showVisualTestInline && (
             <div className="mx-2 md:mx-6 mb-4 animate-in slide-in-from-bottom-2">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-[11px] text-cyan-400 font-medium">
                   <Eye className="h-3.5 w-3.5" />
-                  Testing visual automático — anthropic as zocoia verifica tu app
+Comprobación visual manual · diagnóstico sin cambios automáticos
                 </div>
                 <button onClick={() => setShowVisualTestInline(false)}
                   className="text-white/25 hover:text-white/60 transition-colors">
@@ -1641,7 +1640,6 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
               <VisualTestPanel
                 appId={app?._id || app?.id || ""}
                 appSlug={app?.publicSlug || undefined}
-                autoRunOnMount
                 onResolved={() => {
                   setShowVisualTestInline(false);
                   setShowVisualSuccessCard(true);
