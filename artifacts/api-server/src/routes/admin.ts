@@ -37,6 +37,7 @@ import mongoose from "mongoose";
 import { makeSlug } from "../lib/deployBundle";
 import { MarisId, generateAppId } from "../lib/universalId";
 import { autoRepairBundle } from "../lib/autoRepairAgent";
+import { getSeoGeoOverview, runSeoGeoAutopilot } from "../lib/seoGeoAutopilot";
 
 const router: IRouter = Router();
 
@@ -114,6 +115,63 @@ router.get("/site-status", async (req: any, res) => {
     res.json({ maintenance, adminByIp: Boolean(clientIp && trustedIp && clientIp === trustedIp) });
   } catch {
     res.json({ maintenance: false, adminByIp: false });
+  }
+});
+
+// ─── SEO + GEO editorial automation ─────────────────────────────────────────
+// Estas rutas administran borradores. La automatización nunca publica contenido
+// ni datos estructurados por sí sola: la aprobación queda auditada con el admin.
+router.get("/admin/seo-geo/overview", async (_req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    res.json({ ok: true, ...(await getSeoGeoOverview()) });
+  } catch (error: any) {
+    logger.error({ error }, "SEO/GEO overview failed");
+    res.status(500).json({ ok: false, error: "No se pudo cargar el resumen SEO/GEO" });
+  }
+});
+
+router.get("/admin/seo-geo/content", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const { SeoGeoContent } = await import("@workspace/db/schema");
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    const entries = await (SeoGeoContent as any).find(status ? { status } : {}).sort({ createdAt: -1 }).limit(100).lean();
+    res.json({ ok: true, entries });
+  } catch (error: any) {
+    logger.error({ error }, "SEO/GEO content list failed");
+    res.status(500).json({ ok: false, error: "No se pudo cargar la cola editorial" });
+  }
+});
+
+router.post("/admin/seo-geo/run", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    const result = await runSeoGeoAutopilot({ force: Boolean(req.body?.force), source: "manual" });
+    res.status(201).json({ ok: true, result });
+  } catch (error: any) {
+    logger.error({ error }, "SEO/GEO manual run failed");
+    res.status(500).json({ ok: false, error: "No se pudo ejecutar la automatización SEO/GEO" });
+  }
+});
+
+router.post("/admin/seo-geo/content/:id/approve", async (req: any, res: any): Promise<void> => {
+  try {
+    await connectDB();
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      res.status(400).json({ ok: false, error: "Identificador de borrador inválido" }); return;
+    }
+    const { SeoGeoContent } = await import("@workspace/db/schema");
+    const entry = await (SeoGeoContent as any).findOneAndUpdate(
+      { _id: req.params.id, status: "draft" },
+      { $set: { status: "approved", reviewedBy: String(req.userId || "admin"), reviewedAt: new Date() } },
+      { new: true },
+    ).lean();
+    if (!entry) { res.status(404).json({ ok: false, error: "Borrador no encontrado o ya revisado" }); return; }
+    res.json({ ok: true, entry, note: "Borrador aprobado. La publicación sigue requiriendo una acción editorial explícita." });
+  } catch (error: any) {
+    logger.error({ error }, "SEO/GEO approval failed");
+    res.status(500).json({ ok: false, error: "No se pudo aprobar el borrador" });
   }
 });
 

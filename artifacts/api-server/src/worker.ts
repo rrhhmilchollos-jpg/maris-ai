@@ -16,6 +16,7 @@ import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { connectDB } from "./lib/db";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
+import { startSeoGeoAutopilot } from "./lib/seoGeoAutopilot";
 
 const RECLAIM_SWEEP_MS = Number(process.env.RECLAIM_SWEEP_MS) || 2 * 60 * 1000;
 
@@ -61,13 +62,19 @@ async function main() {
     logger.info("Redis not configured — using in-process queue");
   }
 
-  // 5) Periodic orphan sweep
+  // 5) SEO + GEO editorial autopilot. Crea borradores diarios y nunca publica
+  // ni modifica contenido existente sin una aprobación editorial explícita.
+  const stopSeoGeoAutopilot = startSeoGeoAutopilot();
+
+  // 6) Periodic orphan sweep
   const sweep = setInterval(() => {
     reclaimOrphanedJobs().catch((err) => {
       logger.warn({ err }, "Periodic orphan reclaim failed");
     });
   }, RECLAIM_SWEEP_MS);
   sweep.unref();
+  process.once("SIGTERM", stopSeoGeoAutopilot);
+  process.once("SIGINT", stopSeoGeoAutopilot);
 
   logger.info("Worker ready — processing jobs");
 }

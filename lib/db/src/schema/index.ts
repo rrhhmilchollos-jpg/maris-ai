@@ -1281,6 +1281,91 @@ const NewsArticleSchema = new Schema<INewsArticle>(
 export const NewsArticle: Model<INewsArticle> =
   mongoose.models.NewsArticle || mongoose.model<INewsArticle>("NewsArticle", NewsArticleSchema);
 
+// ─── SEO + GEO editorial automation ─────────────────────────────────────────
+// El motor crea propuestas verificables y nunca publica texto inventado de forma
+// directa. La publicación requiere una aprobación editorial, para que los datos
+// estructurados describan siempre contenido visible y exacto.
+export interface ISeoGeoContent extends Document {
+  dateKey: string;
+  title: string;
+  slug: string;
+  primaryQuery: string;
+  locale: string;
+  country: string;
+  cities: string[];
+  audience: string;
+  intent: "informational" | "commercial" | "comparison";
+  outline: string[];
+  faq: Array<{ question: string; answer: string }>;
+  metaTitle: string;
+  metaDescription: string;
+  aiSummary: string;
+  schemaType: "Article" | "FAQPage" | "HowTo";
+  qualityScore: number;
+  status: "draft" | "approved" | "published" | "rejected";
+  generationSource: "automation" | "manual" | "llm";
+  reviewedBy?: string;
+  reviewedAt?: Date;
+  publishedUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const SeoGeoContentSchema = new Schema<ISeoGeoContent>(
+  {
+    dateKey: { type: String, required: true, index: true },
+    title: { type: String, required: true },
+    slug: { type: String, required: true, unique: true },
+    primaryQuery: { type: String, required: true, index: true },
+    locale: { type: String, default: "es-ES" },
+    country: { type: String, default: "ES" },
+    cities: { type: [String], default: [] },
+    audience: { type: String, required: true },
+    intent: { type: String, enum: ["informational", "commercial", "comparison"], required: true },
+    outline: { type: [String], default: [] },
+    faq: { type: [{ question: String, answer: String }], default: [] },
+    metaTitle: { type: String, required: true },
+    metaDescription: { type: String, required: true },
+    aiSummary: { type: String, required: true },
+    schemaType: { type: String, enum: ["Article", "FAQPage", "HowTo"], default: "Article" },
+    qualityScore: { type: Number, min: 0, max: 100, default: 0 },
+    status: { type: String, enum: ["draft", "approved", "published", "rejected"], default: "draft", index: true },
+    generationSource: { type: String, enum: ["automation", "manual", "llm"], default: "automation" },
+    reviewedBy: { type: String },
+    reviewedAt: { type: Date },
+    publishedUrl: { type: String },
+  },
+  { timestamps: true },
+);
+SeoGeoContentSchema.index({ status: 1, createdAt: -1 });
+export const SeoGeoContent: Model<ISeoGeoContent> =
+  mongoose.models.SeoGeoContent || mongoose.model<ISeoGeoContent>("SeoGeoContent", SeoGeoContentSchema);
+
+export interface ISeoGeoRun extends Document {
+  dateKey: string;
+  status: "running" | "completed" | "failed";
+  generated: number;
+  skipped: number;
+  notes: string[];
+  startedAt: Date;
+  finishedAt?: Date;
+}
+
+const SeoGeoRunSchema = new Schema<ISeoGeoRun>(
+  {
+    dateKey: { type: String, required: true, unique: true },
+    status: { type: String, enum: ["running", "completed", "failed"], default: "running", index: true },
+    generated: { type: Number, default: 0 },
+    skipped: { type: Number, default: 0 },
+    notes: { type: [String], default: [] },
+    startedAt: { type: Date, default: Date.now },
+    finishedAt: { type: Date },
+  },
+  { timestamps: true },
+);
+export const SeoGeoRun: Model<ISeoGeoRun> =
+  mongoose.models.SeoGeoRun || mongoose.model<ISeoGeoRun>("SeoGeoRun", SeoGeoRunSchema);
+
 // ─── Workflows (motor de automatización visual, tipo n8n, por app) ──────────
 // Cada app generada puede tener sus propios flujos privados — disparador
 // (evento de negocio o webhook entrante) → nodos de acción/condición/bucle/

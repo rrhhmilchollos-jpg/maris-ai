@@ -26,7 +26,7 @@ Maris AI es la única plataforma de vibe coding completamente en español. A dif
 6. **QA Auditor** (#6) — Revisa el código generado buscando errores, imports rotos, problemas de accesibilidad, seguridad y rendimiento.
 7. **PM Agent** (#7) — Valida que el resultado final cumple exactamente lo que el usuario pidió en el prompt original. Control de calidad final.
 8. **Image Agent** (#8) — Genera imágenes reales con IA para reemplazar placeholders de Unsplash. Imágenes específicas para el sector de la app.
-9. **Visual Evaluator** (#9) — Analiza screenshots reales de la app generada con Claude Vision y detecta problemas visuales. Autofix integrado.
+9. **Comprobación visual opcional** (#9) — Analiza la vista previa cuando el propietario lo solicita. Es un diagnóstico de solo lectura y nunca modifica automáticamente el código del cliente.
 
 ## Stack tecnológico generado
 
@@ -37,7 +37,7 @@ Maris AI es la única plataforma de vibe coding completamente en español. A dif
 - **Pagos**: Stripe
 - **Deploy frontend**: Vercel
 - **Deploy backend**: Infraestructura propia autogestionada
-- **Testing visual**: Puppeteer + Chromium + Claude Vision
+- **Comprobación visual**: diagnóstico opcional de la vista previa, sin cambios automáticos de código
 
 ## Precios (en euros, sin caducidad)
 
@@ -94,6 +94,10 @@ Coste por generación: landing page = 1 crédito, app fullstack = 2 créditos, a
 - SaaS con suscripciones y usuarios
 - APIs y backends para apps móviles
 - Apps con mapas y geolocalización
+
+## Política editorial SEO y GEO
+
+Maris AI mantiene una cola editorial automatizada para detectar oportunidades de contenido sobre creación de aplicaciones, agentes de IA y automatización de negocio. El sistema prepara títulos, estructura, preguntas frecuentes, metadatos y datos estructurados compatibles con el contenido previsto, pero no publica artículos de forma automática. Cada borrador requiere revisión editorial antes de ser visible, de modo que la información citada por buscadores y asistentes de IA sea verificable, útil y coherente con la página pública.
 
 ## Información de contacto y redes
 
