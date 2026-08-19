@@ -7830,18 +7830,24 @@ export async function runJobById(
       // sigue funcionando con la versión anterior — y avisamos honestamente.
       const fc = finalResult.frontendCode;
       const hasError = !!finalResult.error;
-      const validFrontend = typeof fc === "string" && fc.includes("// === FILE:") && fc.length > 200;
+      const hasBundleShape = typeof fc === "string" && fc.includes("// === FILE:") && fc.length > 200;
+      // La forma mínima no basta: un bundle con solo App.tsx puede importar
+      // páginas ausentes y pasar el umbral de longitud, dejando #root vacío.
+      // Validamos su VFS e imports locales antes de tocar la versión cliente.
+      const editBundleValidation = hasBundleShape ? await validateBundle(fc) : null;
+      const validFrontend = hasBundleShape && !!editBundleValidation?.ok;
+      const validationSummary = editBundleValidation?.issues?.[0]?.message || null;
 
       if (hasError || !validFrontend) {
         logger.warn(
-          { jobId, editAppId: job.editAppId, error: finalResult.error, fcLen: typeof fc === "string" ? fc.length : -1 },
+          { jobId, editAppId: job.editAppId, error: finalResult.error, validationSummary, fcLen: typeof fc === "string" ? fc.length : -1 },
           "Edit job produjo un resultado inválido/incompleto — se preserva la app anterior sin sobrescribir",
         );
         await GeneratedApp.findByIdAndUpdate(job.editAppId, { $set: { status: "ready" } });
         await AppMessage.create({
           appId: job.editAppId,
           role: "assistant",
-          content: `⚠️ No pude completar este cambio correctamente${finalResult.error ? ` (${String(finalResult.error).slice(0, 200)})` : " (la respuesta del modelo no tenía el formato esperado)"}. Para proteger tu trabajo, NO he sobrescrito tu app — sigue funcionando con la versión anterior, sin cambios perdidos ni créditos descontados de más. Intenta de nuevo, quizá reformulando la petición o dividiéndola en pasos más pequeños.`,
+          content: `⚠️ No pude completar este cambio correctamente${finalResult.error ? ` (${String(finalResult.error).slice(0, 200)})` : validationSummary ? ` (${validationSummary.slice(0, 200)})` : " (la respuesta del modelo no tenía el formato esperado)"}. Para proteger tu trabajo, NO he sobrescrito tu app — sigue funcionando con la versión anterior, sin cambios perdidos ni créditos descontados de más. Intenta de nuevo, quizá reformulando la petición o dividiéndola en pasos más pequeños.`,
         });
         editResultInvalid = true;
       } else {
@@ -8049,10 +8055,12 @@ export async function runJobById(
       // real), se guardaba igualmente como si fuera un éxito, sin ningún
       // filtro. Mismo criterio exacto que ya protege las ediciones.
       const newAppFc = finalResult.frontendCode;
-      const newAppValid = typeof newAppFc === "string" && newAppFc.includes("// === FILE:") && newAppFc.length > 200;
+      const newAppHasBundleShape = typeof newAppFc === "string" && newAppFc.includes("// === FILE:") && newAppFc.length > 200;
+      const newAppBundleValidation = newAppHasBundleShape ? await validateBundle(newAppFc) : null;
+      const newAppValid = newAppHasBundleShape && !!newAppBundleValidation?.ok;
       if (!newAppValid) {
         logger.error(
-          { jobId, userId: job.userId, fcLen: typeof newAppFc === "string" ? newAppFc.length : -1, title: finalResult.title },
+          { jobId, userId: job.userId, fcLen: typeof newAppFc === "string" ? newAppFc.length : -1, validationIssue: newAppBundleValidation?.issues?.[0]?.message || null, title: finalResult.title },
           "Generación nueva produjo un resultado inválido/incompleto — NO se crea la app; la compensación requiere ticket de soporte",
         );
         await GenerationJob.findByIdAndUpdate(jobId, {
