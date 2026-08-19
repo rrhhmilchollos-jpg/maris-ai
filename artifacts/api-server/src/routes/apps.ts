@@ -17,7 +17,14 @@ function getOpenAIApps(): OpenAI {
 import { makeSlug } from "../lib/deployBundle";
 import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createZocoToolCallWithFallback } from "../lib/shared-agents";
 import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
-import { snapshotCurrentApp } from "../lib/appRevisions";
+import { snapshotCurrentApp, insertAppRevisionFromRow } from "../lib/appRevisions";
+import {
+  acquireAppMutationLease,
+  commitAppMutation,
+  releaseAppMutationLease,
+  renewAppMutationLease,
+  type MutationLease,
+} from "../lib/appMutationGuard";
 import * as esbuild from "esbuild";
 import { createHash } from "node:crypto";
 
@@ -7562,8 +7569,15 @@ export async function runJobById(
   const heartbeatInterval = setInterval(async () => {
     try {
       await GenerationJob.findByIdAndUpdate(jobId, { $set: { updatedAt: new Date() } });
+      if (activeMutationLease && (job as any).editAppId) {
+        await renewAppMutationLease({ appId: String((job as any).editAppId), jobId });
+      }
     } catch { /* swallow — never crash the pipeline */ }
   }, 30_000);
+
+  // Se adquiere antes de generar una edición y se libera en finally. Así dos
+  // workers distintos nunca producen bundles sobre la misma versión del cliente.
+  let activeMutationLease: MutationLease | null = null;
 
   const onProgress = async (p: GenerateProgress) => {
     await GenerationJob.findByIdAndUpdate(jobId, {
@@ -7587,13 +7601,26 @@ export async function runJobById(
   // EXISTENTE de la app y aplica los mismos ciclos de reparación.
   if ((job as any).jobKind === "deep_test") {
     try {
-      const targetAppId = job.editAppId;
-      const targetApp = targetAppId ? await GeneratedApp.findById(targetAppId) : null;
-      if (!targetApp) {
+      const targetAppId = job.editAppId ? String(job.editAppId) : "";
+      if (!targetAppId) {
         await log("system", "❌ No se encontró la app a revisar.", "error");
         await GenerationJob.findByIdAndUpdate(jobId, { $set: { status: "failed", errorMessage: "App no encontrada", updatedAt: new Date() } });
         return;
       }
+      const leaseResult = await acquireAppMutationLease({ appId: targetAppId, jobId });
+      if (!leaseResult.ok) {
+        const reason = leaseResult.reason === "busy"
+          ? "Hay otra edición o reparación en curso para esta app. La revisión profunda se ha detenido para no sobrescribir cambios."
+          : "App no encontrada";
+        await log("testing", `⏸️ ${reason}`, "warn");
+        await GenerationJob.findByIdAndUpdate(jobId, {
+          $set: { status: "reviewing", phase: "reviewing", errorMessage: reason, updatedAt: new Date() },
+        });
+        return;
+      }
+      activeMutationLease = leaseResult.lease;
+      const targetApp = activeMutationLease.app;
+      await log("testing", `🔒 Revisión profunda protegida: versión ${activeMutationLease.expectedContentVersion} bloqueada para este trabajo.`);
       await log("testing", "🔬 Revisión profunda de errores solicitada por el usuario. Analizando el código completo de la app...");
       const { runTestingAgent } = await import("../lib/tester");
       const reviewedFrontend = await runTestingAgent((targetApp as any).frontendCode || "", {
@@ -7604,27 +7631,30 @@ export async function runJobById(
         log,
         onProgress,
       });
-      // ENCONTRADO A PETICIÓN DEL USUARIO (investigación de riesgos reales
-      // para clientes): este camino sobrescribía frontendCode DIRECTAMENTE
-      // con el resultado del Testing Agent, sin tomar ninguna instantánea
-      // antes -- a diferencia del flujo principal de edición (línea ~7525),
-      // que sí protege exactamente este caso. Si el diagnóstico del Testing
-      // Agent es erróneo (caso real ya visto: el evaluador visual viendo el
-      // marketing de Maris AI en vez de la app del cliente por una URL
-      // rota, ya corregida), esto podía sobrescribir en silencio una app
-      // que funcionaba con una "reparación" de un problema que no existía
-      // de verdad -- sin ninguna vía de recuperación. Se añade el mismo
-      // snapshotCurrentApp() ya usado y probado en el flujo principal.
-      const { snapshotCurrentApp } = await import("../lib/appRevisions");
-      await snapshotCurrentApp({
-        appId: String(targetAppId),
+      // La copia previa es obligatoria y el commit es condicional: si el
+      // agente concluye sobre una versión que ya cambió, se conserva el
+      // proyecto actual íntegro y el job pasa a revisión humana/reintento.
+      await insertAppRevisionFromRow({
+        row: targetApp,
         source: "edit",
-        summary: "Snapshot automático antes de revisión profunda del Testing Agent",
+        summary: "Copia automática antes de revisión profunda del Testing Agent",
         jobId: String(jobId),
       });
-      await GeneratedApp.findByIdAndUpdate(targetAppId, {
-        $set: { frontendCode: reviewedFrontend, updatedAt: new Date() },
+      const commit = await commitAppMutation({
+        appId: targetAppId,
+        jobId,
+        expectedContentVersion: activeMutationLease.expectedContentVersion,
+        update: { frontendCode: reviewedFrontend },
       });
+      if (!commit.ok) {
+        const conflictMessage = "La app cambió durante la revisión profunda. No se aplicó ningún parche sobre una versión desactualizada.";
+        await log("testing", `⏸️ ${conflictMessage}`, "warn");
+        await GenerationJob.findByIdAndUpdate(jobId, {
+          $set: { status: "reviewing", phase: "reviewing", errorMessage: conflictMessage, updatedAt: new Date() },
+        });
+        return;
+      }
+      activeMutationLease = null;
       await log("testing", "✅ Revisión profunda completada. Cualquier problema detectado ha sido reparado automáticamente.");
       await GenerationJob.findByIdAndUpdate(jobId, {
         $set: { status: "succeeded", phase: "done", progress: 100, updatedAt: new Date() },
@@ -7659,6 +7689,9 @@ export async function runJobById(
         logger.warn({ refundErr, jobId }, "[deep_test] Falló el reembolso automático tras un error técnico");
       }
     } finally {
+      if (activeMutationLease && (job as any).editAppId) {
+        await releaseAppMutationLease({ appId: String((job as any).editAppId), jobId });
+      }
       clearInterval(heartbeatInterval);
     }
     return;
@@ -7667,7 +7700,27 @@ export async function runJobById(
   try {
     let previousApp: any = undefined;
     if (job.editAppId) {
-      previousApp = await GeneratedApp.findById(job.editAppId).lean();
+      const leaseResult = await acquireAppMutationLease({ appId: String(job.editAppId), jobId });
+      if (!leaseResult.ok) {
+        const reason = leaseResult.reason === "busy"
+          ? "Hay otra edición o reparación en curso para esta app. La tuya queda en revisión para no sobrescribir cambios."
+          : "No se encontró la app que intentabas editar.";
+        await GenerationJob.findByIdAndUpdate(jobId, {
+          $set: { status: "reviewing", phase: "reviewing", errorMessage: reason, updatedAt: new Date() },
+        });
+        await log("system", `⏸️ ${reason}`, "warn");
+        if (leaseResult.reason === "busy") {
+          await AppMessage.create({
+            appId: String(job.editAppId),
+            role: "assistant",
+            content: "He detectado otra edición activa para proteger tu proyecto. No he aplicado ningún cambio sobre una versión que pudiera estar desactualizada.",
+          });
+        }
+        return;
+      }
+      activeMutationLease = leaseResult.lease;
+      previousApp = activeMutationLease.app;
+      await log("system", `🔒 Edición protegida: versión ${activeMutationLease.expectedContentVersion} bloqueada para este trabajo.`);
     }
 
     // Determinar si el usuario es FREE o PAID de forma robusta
@@ -7868,31 +7921,41 @@ export async function runJobById(
         // Con el snapshot del estado anterior guardado, ese caso sí tiene
         // una vía de recuperación real (restoreAppRevision), aunque pase
         // todas las validaciones automáticas.
-        await snapshotCurrentApp({
-          appId: String(job.editAppId),
+        // La revisión previa es obligatoria: si Mongo no puede guardar la
+        // copia, se aborta la edición antes de tocar el código del cliente.
+        await insertAppRevisionFromRow({
+          row: previousApp,
           source: "edit",
           summary: (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").replace(/\[ADMIN (REPAIR|RECOVERY)\]/i, "").trim().slice(0, 200) || "Edición",
           jobId: String(jobId),
         });
-        await GeneratedApp.findByIdAndUpdate(job.editAppId, {
-        $set: {
-          title: finalResult.title,
-          description: finalResult.description,
-          techStack: finalResult.techStack,
-          frontendCode: finalResult.frontendCode,
-          backendCode: finalResult.backendCode,
-          plannedPages: finalResult.plannedPages || [],
-          requiredEnvVars: finalResult.requiredEnvVars || [],
-          // ENCONTRADO A PETICIÓN DEL USUARIO: se guarda (o se limpia, si
-          // esta edición sí compiló bien) el resumen del último error de
-          // build real -- lo usa el preview para mostrar la banda roja.
-          lastBuildErrorSummary: finalResult.buildErrorSummary || null,
-          status: "ready",
-          // Limpiar pendingAdminApproval: si el admin regeneró esta app,
-          // ahora que está lista debe ser visible para el cliente.
-          pendingAdminApproval: false,
-        },
-      });
+        const commit = await commitAppMutation({
+          appId: String(job.editAppId),
+          jobId,
+          expectedContentVersion: activeMutationLease?.expectedContentVersion ?? Number(previousApp.contentVersion || 0),
+          update: {
+            title: finalResult.title,
+            description: finalResult.description,
+            techStack: finalResult.techStack,
+            frontendCode: finalResult.frontendCode,
+            backendCode: finalResult.backendCode,
+            plannedPages: finalResult.plannedPages || [],
+            requiredEnvVars: finalResult.requiredEnvVars || [],
+            lastBuildErrorSummary: finalResult.buildErrorSummary || null,
+            status: "ready",
+            pendingAdminApproval: false,
+          },
+        });
+        if (!commit.ok) {
+          const conflictMessage = "La app cambió mientras esta edición se preparaba. Para proteger el trabajo más reciente, no he sobrescrito ningún archivo; revisaremos o reintentaremos esta edición sobre la versión actual.";
+          await GenerationJob.findByIdAndUpdate(jobId, {
+            $set: { status: "reviewing", phase: "reviewing", errorMessage: conflictMessage, updatedAt: new Date() },
+          });
+          await log("system", `⏸️ ${conflictMessage}`, "warn");
+          await AppMessage.create({ appId: String(job.editAppId), role: "assistant", content: `⚠️ ${conflictMessage}` });
+          return;
+        }
+        activeMutationLease = null;
 
       // ENCONTRADO A PETICIÓN DEL USUARIO: aviso honesto al cliente cuando
       // el build real en E2B falló y la reparación automática no lo
@@ -8607,6 +8670,10 @@ export async function runJobById(
         retryCount,
       });
     } catch { /* nunca crashear el pipeline por un fallo en la notificación */ }
+  } finally {
+    if (activeMutationLease && (job as any).editAppId) {
+      await releaseAppMutationLease({ appId: String((job as any).editAppId), jobId });
+    }
   }
 }
 

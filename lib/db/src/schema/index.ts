@@ -339,6 +339,12 @@ export interface IGeneratedApp {
   // hay margen para pagar el error de Maris AI. Se marca true la primera
   // vez que se usa para que no se pueda reclamar más de una vez por app.
   freeSafetyNetRetryUsed?: boolean;
+  /** Incremented only after a verified bundle mutation succeeds. */
+  contentVersion?: number;
+  /** Lease fields used to prevent competing generation or edit jobs from replacing the same app. */
+  mutationLockJobId?: string;
+  mutationLockExpiresAt?: Date;
+  mutationLockedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -460,6 +466,11 @@ const GeneratedAppSchema = new Schema<IGeneratedApp>(
     pendingApprovalSince: { type: Date },
     approvedByAdminAt: { type: Date },
     freeSafetyNetRetryUsed: { type: Boolean, default: false },
+    // Optimistic concurrency for generated bundles. Existing apps start at 0.
+    contentVersion: { type: Number, default: 0, index: true },
+    mutationLockJobId: { type: String, index: true },
+    mutationLockExpiresAt: { type: Date, index: true },
+    mutationLockedAt: { type: Date },
   },
   { timestamps: true },
 );
