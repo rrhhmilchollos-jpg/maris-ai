@@ -410,5 +410,16 @@ export function useGetCreditsHistory(opts?: { query?: Partial<UseQueryOptions> }
 // FIX: reducido el intervalo de 30s a 5s para que el banner aparezca casi inmediatamente.
 export const getGetNotificationsQueryKey = () => ["notifications"];
 export function useGetNotifications(opts?: { query?: Partial<UseQueryOptions> }) {
-  return useQuery<any>({ queryKey: getGetNotificationsQueryKey(), queryFn: () => apiFetch("/api/notifications"), refetchInterval: 5_000, ...(opts?.query as any) });
+  return useQuery<any>({
+    queryKey: getGetNotificationsQueryKey(),
+    queryFn: () => apiFetch("/api/notifications"),
+    // Un reinicio breve de API/proxy no debe convertirse en un error visible
+    // ni competir con una generación: reintenta con espera exponencial y evita
+    // sondeos agresivos mientras la pestaña permanece en segundo plano.
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    retry: 4,
+    retryDelay: (attempt) => Math.min(1_000 * (2 ** attempt), 12_000),
+    ...(opts?.query as any),
+  });
 }

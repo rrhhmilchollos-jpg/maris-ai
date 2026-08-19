@@ -651,28 +651,24 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * attempt));
       }
     }
-    // FALLBACK: en vez de lanzar error fatal, generar un placeholder mínimo
-    // para que el bundle no quede incompleto.
-    console.warn(`⚠️ Hito ${milestone.id} (${milestone.name}) — usando placeholder tras ${MAX_ATTEMPTS} intentos fallidos.`);
-
-    // Disparar alerta al admin (WhatsApp + email) si está configurado
+    // Un hito incompleto NO puede transformarse en un placeholder silencioso.
+    // Hacerlo permitía que el proyecto siguiera hasta "completado" con una
+    // pantalla "Módulo en construcción" o con imports que no se podían resolver.
+    // Se aborta antes de escribir el archivo: el flujo superior conserva la versión
+    // anterior y puede activar una recuperación explícita y trazable.
+    const failureMessage = `No se pudo generar de forma válida el hito ${milestone.id} (${milestone.name}) tras ${MAX_ATTEMPTS} intento(s): ${String(lastError instanceof Error ? lastError.message : lastError).slice(0, 500)}`;
+    console.error(`⛔ ${failureMessage}`);
     if (this.options.onMilestoneStuck) {
       try {
         await this.options.onMilestoneStuck({
           milestoneName: milestone.name,
           layer: milestone.layer,
           attempts: MAX_ATTEMPTS,
-          lastError: String(lastError instanceof Error ? lastError.message : lastError).slice(0, 500),
+          lastError: failureMessage,
         });
-      } catch { /* no bloquear la generación por un fallo de alerta */ }
+      } catch { /* las alertas no cambian el resultado de generación */ }
     }
-
-    const isReactComp = /\.(t|j)sx$/.test(milestone.filePath);
-    const compName = milestone.filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || "Component";
-    const placeholder = isReactComp
-      ? `import React from "react";\n\nexport default function ${compName}() {\n  return (\n    <div className="p-8">\n      <h1 className="text-2xl font-bold">${compName}</h1>\n      <p className="text-gray-500 mt-2">Módulo en construcción.</p>\n    </div>\n  );\n}\n`
-      : `// ${milestone.filePath} — placeholder\nexport {};\n`;
-    return { ...milestone, code: placeholder };
+    throw new Error(failureMessage);
   }
 
   /**
@@ -778,9 +774,13 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
                 .filter(Boolean) as string[];
 
               const uniqueFailingFiles = [...new Set(failingFiles)];
-              // Solo regenerar si son pocos archivos (<=5) — si hay más, el problema
-              // es estructural y regenerar hito a hito no lo va a resolver
-              if (uniqueFailingFiles.length > 0 && uniqueFailingFiles.length <= 5) {
+              // Solo regenerar si son pocos archivos (<=5). Los errores sin ruta
+              // resoluble o con demasiados archivos son estructurales: continuar
+              // dejaría una app incompleta y queda prohibido.
+              if (uniqueFailingFiles.length === 0 || uniqueFailingFiles.length > 5) {
+                throw new Error(`Validación frontend no recuperable: ${validation.issues.slice(0, 3).map((issue) => issue.message).join(" | ")}`);
+              }
+              if (uniqueFailingFiles.length <= 5) {
                 wsNotificationCallback({
                   status: `⚠️ ${uniqueFailingFiles.length} archivo(s) con errores — regenerando solo los afectados...`,
                   progress: 8 + Math.round((completed / total) * 90),
@@ -790,6 +790,9 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
                   const affectedMilestone = layerMilestones.find(
                     (m) => m.filePath === filePath || m.filePath.endsWith(`/${filePath}`)
                   );
+                  if (!affectedMilestone) {
+                    throw new Error(`El archivo inválido ${filePath} no corresponde a un hito recuperable.`);
+                  }
                   if (affectedMilestone) {
                     const errorContext = validation.issues
                       .filter((i) => i.file.includes(filePath))
@@ -812,6 +815,19 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
                     });
                   }
                 }
+                const revalidatedFrontend = Array.from(this.generatedByMilestoneId.values())
+                  .filter((item) => item.targetWorkspace === "apps/web")
+                  .sort((a, b) => a.id - b.id)
+                  .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
+                  .join("\n");
+                const revalidation = await this.options.validateFrontendBundle(revalidatedFrontend);
+                if (!revalidation.ok) {
+                  throw new Error(`La regeneración no dejó el frontend compilable: ${revalidation.issues.slice(0, 3).map((issue) => issue.message).join(" | ")}`);
+                }
+                wsNotificationCallback({
+                  status: "✅ Frontend regenerado y compilado correctamente.",
+                  progress: 8 + Math.round((completed / total) * 90),
+                });
               }
             } else if (validation.ok) {
               wsNotificationCallback({
@@ -819,8 +835,11 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
                 progress: 8 + Math.round((completed / total) * 90),
               });
             }
-          } catch {
-            // La validación es best-effort — si falla, continuamos sin bloquear
+          } catch (validationError) {
+            // Nunca se entrega ni se sigue construyendo sobre un frontend que no
+            // puede compilarse. El job falla de forma segura sin sobrescribir una
+            // aplicación existente.
+            throw validationError;
           }
         }
       }

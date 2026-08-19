@@ -8309,10 +8309,12 @@ export async function runJobById(
       isFirstFreeApp = priorAppsCount <= 1; // esta generación ya se guardó como savedAppId, por eso <=1 y no ===0
     }
 
-    // La revisión visual se ejecuta únicamente mediante la acción manual de
-    // comprobación de la interfaz. No se inicia al completar una app ni puede
-    // modificar una vista previa que ya está disponible.
-    if (savedAppId && (job as any).requestVisualEvaluation === true) {
+    // La revisión visual se ejecuta únicamente desde el endpoint manual de
+    // comprobación. Un flag heredado del job no es autorización suficiente:
+    // exige trazabilidad de aprobación humana para impedir que una generación
+    // normal active Testing Agent o cambie una app visible.
+    const hasManualVisualApproval = Boolean((job as any).manualVisualCheckId && (job as any).manualVisualApprovedBy);
+    if (savedAppId && hasManualVisualApproval) {
       try {
         const freshApp = await GeneratedApp.findById(savedAppId).select("publicSlug userId").lean() as any;
         const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
@@ -8370,7 +8372,8 @@ export async function runJobById(
     // entregar una app. Los cambios de código requieren una petición explícita
     // del usuario, así se evita que un detector secundario sobrescriba una
     // versión funcional.
-    if (savedAppId && finalResult?.frontendCode && !isAutoRepairJob && !editResultInvalid && (job as any).allowAutomatedPostGenerationRepair === true) {
+    const hasManualRepairApproval = Boolean((job as any).manualRepairTicketId && (job as any).manualRepairApprovedBy);
+    if (savedAppId && finalResult?.frontendCode && !isAutoRepairJob && !editResultInvalid && hasManualRepairApproval) {
       const _truncatedFiles = (finalResult as any)._truncatedFiles as string[] | undefined;
       const repairUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 4000);
 
