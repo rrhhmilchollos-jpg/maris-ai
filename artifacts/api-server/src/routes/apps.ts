@@ -3667,7 +3667,10 @@ Return the FULL updated app as JSON. ${isContextOptimized ? "IMPORTANTE: Aunque 
     // 60s sin recibir NINGÚN chunk nuevo, mucho antes de llegar al watchdog,
     // y permite recuperar el contenido acumulado hasta ese punto en vez de
     // perderlo todo.
-    const CHUNK_IDLE_TIMEOUT_MS = 60_000;
+    // Los modelos pueden pasar más de un minuto razonando antes de emitir el
+    // siguiente token. El job conserva su heartbeat; este límite corta solo un
+    // stream realmente abandonado y se puede ajustar por entorno.
+    const CHUNK_IDLE_TIMEOUT_MS = Number(process.env.GENERATION_STREAM_IDLE_TIMEOUT_MS) || 120_000;
     const raceChunk = <T>(iterPromise: Promise<T>): Promise<T> => {
       return new Promise<T>((resolve, reject) => {
         const t = setTimeout(() => {
@@ -7618,7 +7621,7 @@ export async function runJobById(
       });
     } catch (deepTestErr: any) {
       logger.error({ deepTestErr, jobId }, "[deep_test] Falló la revisión profunda de errores");
-      await log("testing", "❌ La revisión profunda no pudo completarse. Hemos enviado un ticket automático a soporte.", "error");
+      await log("testing", "❌ La revisión profunda no pudo completarse. No se ha creado ningún ticket ni se ha modificado tu app. Si quieres una revisión humana, puedes abrir un ticket desde soporte.", "error");
       // A petición explícita del usuario: cualquier error técnico en
       // CUALQUIER generación (no solo la principal) debe mostrar siempre
       // el mismo mensaje genérico al cliente — nunca el texto crudo del
@@ -8525,7 +8528,7 @@ export async function runJobById(
     });
     await log("system", isCreditsError 
       ? "⏸️ Generación pausada temporalmente por mantenimiento del sistema. Tus créditos están seguros. Reintentaremos automáticamente." 
-      : "❌ Ha ocurrido un problema técnico. Se ha enviado un ticket automático a soporte — lo resolveremos en menos de 2 horas.", "error");
+      : "❌ Ha ocurrido un problema técnico. No se ha creado ningún ticket ni se han aplicado cambios sobre tu app. Puedes abrir un ticket de soporte si deseas una revisión humana.", "error");
 
     if ((job as any).isAutoRepair && job.editAppId && !isCreditsError) {
       await AppMessage.create({
