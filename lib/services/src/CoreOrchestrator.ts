@@ -309,6 +309,28 @@ export class CoreOrchestrator {
   }
 
   /**
+   * Plan mínimo y determinista para los modos compactos. El modelo puede
+   * devolver una respuesta vacía, texto libre o JSON truncado bajo carga; en
+   * ese caso una app nueva no debe fallar antes de generar su primer archivo.
+   */
+  private buildCompactFallbackPlan(userPrompt: string): { database: "mongodb"; platform: "web" | "mobile-native"; architecture: "monolith"; milestones: Milestone[] } {
+    const nativeAppRequested = /\b(app nativa|ios|android|react native|app store|google play)\b/i.test(userPrompt);
+    return {
+      database: "mongodb",
+      platform: nativeAppRequested ? "mobile-native" : "web",
+      architecture: "monolith",
+      milestones: [
+        { id: 1, layer: "data", name: "Datos de dominio", targetWorkspace: "apps/web", description: "Crea datos de ejemplo realistas, tipos y estado inicial para el producto solicitado. No dependas de servicios externos.", filePath: "src/mockData.ts", dependsOn: [] },
+        { id: 2, layer: "backend-core", name: "Núcleo del servidor", targetWorkspace: "apps/api", description: "Crea un servidor monolítico mínimo con validación y rutas esenciales para el flujo principal.", filePath: "src/index.ts", dependsOn: [] },
+        { id: 3, layer: "frontend-core", name: "Aplicación principal", targetWorkspace: "apps/web", description: "Crea src/App.tsx con export default function App(), navegación y estructura visual principal. Debe ser una aplicación funcional y responsive.", filePath: "src/App.tsx", dependsOn: [1] },
+        { id: 4, layer: "frontend-module", name: "Experiencia de entrada", targetWorkspace: "apps/web", description: "Crea la pantalla principal y el primer flujo de valor del encargo con datos realistas y llamadas al estado local.", filePath: "src/pages/Home.tsx", dependsOn: [1, 3] },
+        { id: 5, layer: "frontend-module", name: "Panel operativo", targetWorkspace: "apps/web", description: "Crea una segunda experiencia operativa, listado o detalle coherente con el producto solicitado.", filePath: "src/pages/Dashboard.tsx", dependsOn: [1, 3, 4] },
+        { id: 6, layer: "docs", name: "Documentación de arranque", targetWorkspace: "apps/api", description: "Documenta los endpoints esenciales y cómo ejecutar el monolito generado.", filePath: "README.md", dependsOn: [2, 3] },
+      ],
+    };
+  }
+
+  /**
    * FASE 1: PLANIFICACIÓN — divide el proyecto en hitos reales, en número
    * dinámico según la complejidad, agrupados por capas con dependencias.
    */
@@ -407,20 +429,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       // bloqueado. Generamos un plan monolítico determinista y dejamos que los
       // agentes de código apliquen el encargo original en cada hito.
       console.warn("⚡ Planificador compacto agotado; usando plan determinista de respaldo.");
-      const nativeAppRequested = /\b(app nativa|ios|android|react native|app store|google play)\b/i.test(userPrompt);
-      return {
-        database: "mongodb",
-        platform: nativeAppRequested ? "mobile-native" : "web",
-        architecture: "monolith",
-        milestones: [
-          { id: 1, layer: "data", name: "Datos de dominio", targetWorkspace: "apps/web", description: "Crea datos de ejemplo realistas, tipos y estado inicial para el producto solicitado. No dependas de servicios externos.", filePath: "src/mockData.ts", dependsOn: [] },
-          { id: 2, layer: "backend-core", name: "Núcleo del servidor", targetWorkspace: "apps/api", description: "Crea un servidor monolítico mínimo con validación y rutas esenciales para el flujo principal.", filePath: "src/index.ts", dependsOn: [] },
-          { id: 3, layer: "frontend-core", name: "Aplicación principal", targetWorkspace: "apps/web", description: "Crea src/App.tsx con export default function App(), navegación y estructura visual principal. Debe ser una aplicación funcional y responsive.", filePath: "src/App.tsx", dependsOn: [1] },
-          { id: 4, layer: "frontend-module", name: "Experiencia de entrada", targetWorkspace: "apps/web", description: "Crea la pantalla principal y el primer flujo de valor del encargo con datos realistas y llamadas al estado local.", filePath: "src/pages/Home.tsx", dependsOn: [1, 3] },
-          { id: 5, layer: "frontend-module", name: "Panel operativo", targetWorkspace: "apps/web", description: "Crea una segunda experiencia operativa, listado o detalle coherente con el producto solicitado.", filePath: "src/pages/Dashboard.tsx", dependsOn: [1, 3, 4] },
-          { id: 6, layer: "docs", name: "Documentación de arranque", targetWorkspace: "apps/api", description: "Documenta los endpoints esenciales y cómo ejecutar el monolito generado.", filePath: "README.md", dependsOn: [2, 3] },
-        ],
-      };
+      return this.buildCompactFallbackPlan(userPrompt);
     } finally {
       clearTimeout(planTimeoutId);
     }
@@ -436,6 +445,13 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         targetWorkspace: typeof m.targetWorkspace === "string" ? m.targetWorkspace : "apps/api",
         dependsOn: Array.isArray(m.dependsOn) ? m.dependsOn : [],
       }));
+      if (milestones.length === 0) {
+        if (compactPlan) {
+          console.warn("⚡ El planificador compacto devolvió JSON sin hitos; usando plan determinista de respaldo.");
+          return this.buildCompactFallbackPlan(userPrompt);
+        }
+        throw new Error("La respuesta del planificador no contiene hitos.");
+      }
       // DEGRADACIÓN PARA USUARIOS GRATUITOS: si maxMilestonesOverride está
       // activo (viene de apps.ts cuando hasEverPaid=false en un proyecto
       // ultra-complejo), truncar la lista de hitos al máximo permitido.
@@ -496,6 +512,10 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         } catch {
           // El bloque extraído tampoco era JSON válido — cae al error final de abajo.
         }
+      }
+      if (compactPlan) {
+        console.warn("⚡ El planificador compacto devolvió JSON inválido; usando plan determinista de respaldo.");
+        return this.buildCompactFallbackPlan(userPrompt);
       }
       console.error("❌ Error parseando JSON de la planificación de hitos:", error);
       throw new Error("No se pudo generar el plan de hitos — respuesta del planificador inválida.");
