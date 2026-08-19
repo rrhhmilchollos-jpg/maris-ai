@@ -8306,7 +8306,10 @@ export async function runJobById(
       isFirstFreeApp = priorAppsCount <= 1; // esta generación ya se guardó como savedAppId, por eso <=1 y no ===0
     }
 
-    if (savedAppId) {
+    // La revisión visual se ejecuta únicamente mediante la acción manual de
+    // comprobación de la interfaz. No se inicia al completar una app ni puede
+    // modificar una vista previa que ya está disponible.
+    if (savedAppId && (job as any).requestVisualEvaluation === true) {
       try {
         const freshApp = await GeneratedApp.findById(savedAppId).select("publicSlug userId").lean() as any;
         const baseUrl = process.env.MARIS_AI_PUBLIC_URL || "https://www.marisai.es";
@@ -8360,7 +8363,11 @@ export async function runJobById(
     // avisa al admin YA (no cuando el cliente se queje) y se le avisa al
     // cliente con un mensaje honesto en vez de dejarle ver una app rota.
     let firstAppGuaranteeEscalated = false;
-    if (savedAppId && finalResult?.frontendCode && !isAutoRepairJob && !editResultInvalid) {
+    // Política de seguridad: no lanzar reparaciones automáticas después de
+    // entregar una app. Los cambios de código requieren una petición explícita
+    // del usuario, así se evita que un detector secundario sobrescriba una
+    // versión funcional.
+    if (savedAppId && finalResult?.frontendCode && !isAutoRepairJob && !editResultInvalid && (job as any).allowAutomatedPostGenerationRepair === true) {
       const _truncatedFiles = (finalResult as any)._truncatedFiles as string[] | undefined;
       const repairUserIntent = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim().slice(0, 4000);
 
