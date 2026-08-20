@@ -39,7 +39,11 @@ function detectEmptySourceFiles(vfs: Record<string, string>): BuildIssue[] {
   return issues;
 }
 
-function detectNonRenderableReactEntry(entry: string, vfs: Record<string, string>): BuildIssue[] {
+function detectNonRenderableReactEntry(
+  entry: string,
+  vfs: Record<string, string>,
+  recoveredRootSource?: string,
+): BuildIssue[] {
   const entrySource = vfs[entry] || "";
   if (!/\.(t|j)sx?$/.test(entry)) return [];
   // React permite compilar `return null` y fragmentos vacíos, pero ambos dejan
@@ -50,6 +54,9 @@ function detectNonRenderableReactEntry(entry: string, vfs: Record<string, string
     ...Object.entries(vfs)
       .filter(([file]) => /(^|\/)App\.(t|j)sx?$/.test(file) && file !== entry)
       .map(([file, source]) => ({ file, source })),
+    ...(recoveredRootSource && recoveredRootSource !== entry && vfs[recoveredRootSource]
+      ? [{ file: recoveredRootSource, source: vfs[recoveredRootSource] }]
+      : []),
   ];
   for (const candidate of rootCandidates) {
     const returnsNull = /return\s*(?:\([^)]*\)\s*)?null\s*;?/.test(candidate.source);
@@ -61,10 +68,17 @@ function detectNonRenderableReactEntry(entry: string, vfs: Record<string, string
       }];
     }
   }
-  const rendersJsx = /return\s*\(\s*<[A-Za-z]|return\s+<[A-Za-z]|=>\s*\(\s*<[A-Za-z]|=>\s*<[A-Za-z]/.test(entrySource);
+  // Un wrapper técnico de recuperación puede limitarse a reexportar el
+  // componente. En ese caso la interfaz verificable está en la fuente raíz
+  // recuperada, no en el wrapper; se validan ambas sin relajar el control.
+  const rendersJsx = rootCandidates.some(({ source }) =>
+    /return\s*\(\s*<[A-Za-z]|return\s+<[A-Za-z]|=>\s*\(\s*<[A-Za-z]|=>\s*<[A-Za-z]/.test(source),
+  );
   // `src/main.tsx` de Vite no retorna JSX: monta <App /> con createRoot.
   // Es una entrada válida y no debe confundirse con una pantalla en blanco.
-  const mountsReactTree = /createRoot[\s\S]{0,240}?\.render\s*\(\s*<|ReactDOM\.render\s*\(\s*</.test(entrySource);
+  const mountsReactTree = rootCandidates.some(({ source }) =>
+    /createRoot[\s\S]{0,240}?\.render\s*\(\s*<|ReactDOM\.render\s*\(\s*</.test(source),
+  );
   if (!rendersJsx && !mountsReactTree) {
     return [{
       file: entry,
@@ -721,7 +735,7 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // Barreras de entrega: esbuild no falla por un archivo no importado vacío ni
     // por `return null`, pero ambos producen una app incompleta para el cliente.
     issues.push(...detectEmptySourceFiles(vfs));
-    issues.push(...detectNonRenderableReactEntry(entry!, vfs));
+    issues.push(...detectNonRenderableReactEntry(entry, vfs, entrypoint.source));
     if (hasVisibleDeliveryPlaceholder(bundle)) {
       issues.push({ file: "(bundle)", message: "Visible internal placeholder detected. Deliver a functional UI, never a temporary screen." });
     }
