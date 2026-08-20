@@ -180,6 +180,16 @@ export const TEMPLATES: AppTemplate[] = [
     seedPrompt:
       "Un blog full-stack con Next.js 14+ App Router (NO Pages Router) y TypeScript. Estructura: app/layout.tsx con header (logo + nav Inicio/Admin) y footer; app/page.tsx (Server Component) lista los posts publicados con título, extracto y fecha; app/posts/[slug]/page.tsx renderiza un post completo (Server Component, getPost(slug) async); app/admin/page.tsx (Client Component, 'use client') con formulario para crear/editar/eliminar posts. API routes en app/api/posts/route.ts (GET lista, POST crea) y app/api/posts/[slug]/route.ts (GET uno, PUT edita, DELETE borra). Persistencia en un array module-level (con disclaimer en el README de que se reinicia al redeploy — para producción enchufar Postgres/SQLite). Tailwind para estilos, tipografía serif para los posts, paleta crema y burdeos.",
   },
+  {
+    id: "marketplace-alojamientos",
+    name: "Marketplace de alojamientos",
+    description:
+      "Portal de reservas con buscador, fichas, favoritos, disponibilidad demo y panel de anfitrión. Parte de una estructura preparada, no de una pantalla vacía.",
+    kind: "fullstack",
+    icon: "BedDouble",
+    seedPrompt:
+      "Crea un marketplace de alojamientos con marca propia y diseño original. Incluye buscador por destino, fechas, huéspedes y habitaciones; resultados con filtros por precio, valoración y servicios; fichas de alojamiento con galería, tipos de habitación, políticas, servicios y reseñas ficticias; favoritos; selección de fechas con validación; resumen y solicitud de reserva; área de cliente con reservas y panel de anfitrión para gestionar alojamientos, disponibilidad y solicitudes. Usa exclusivamente datos ficticios y marca cualquier disponibilidad, precio o reserva como DEMO mientras no exista un PMS o proveedor conectado. No copies marcas, logotipos, textos, imágenes ni identidad visual de Booking.com u otros portales. Implementa estado vacío, carga, error, responsive móvil/escritorio y un flujo navegable completo de búsqueda a confirmación.",
+  },
   // ─── IA / ML ────────────────────────────────────────────────────────────
   // Las apps generadas a partir de estas plantillas asumen que el usuario
   // pondrá su propia API key (OPENAI_API_KEY, Zoco IA_API_KEY, etc.) y
@@ -528,6 +538,17 @@ export const AGENT_GENERATION_BLUEPRINTS: AgentGenerationBlueprint[] = [
     qualityChecklist: ["contenido mock no genérico", "empty states", "perfiles completos", "acciones con feedback"]
   },
   {
+    id: "accommodation-marketplace",
+    name: "Marketplace de alojamientos y reservas",
+    appliesToKinds: ["fullstack", "nextjs", "hybrid-pwa"],
+    detectionKeywords: ["booking", "booking.com", "marketplace de alojamientos", "reserva de hotel", "reservas de hoteles", "alojamiento", "hostal", "apartamento turístico", "buscador de hoteles"],
+    productPattern: "Plataforma de descubrimiento y solicitud de reserva con buscador por destino y fechas, fichas completas, disponibilidad de demostración, favoritos, flujo de reserva y panel de anfitrión u operador.",
+    recommendedStructure: ["Buscador por destino, fechas y huéspedes", "Resultados con filtros", "Ficha de alojamiento", "Selección de habitación y solicitud de reserva", "Confirmación y mis reservas", "Favoritos", "Panel de anfitrión/operador", "Datos demo y reglas de disponibilidad"],
+    starterFeatures: ["selector de fechas", "huéspedes y habitaciones", "filtros por precio, valoración y servicios", "galería accesible", "resumen de reserva", "favoritos persistentes", "estados disponible/agotado", "panel de gestión con reservas demo"],
+    editableByClient: ["marca propia", "destinos", "tipos de alojamiento", "comisiones", "políticas", "campos de reserva", "reglas de disponibilidad", "idiomas", "integraciones futuras"],
+    qualityChecklist: ["no usar marca, logotipos ni textos de Booking.com", "flujo completo de búsqueda a confirmación", "precios y disponibilidad claramente marcados como demo si no existe proveedor", "validar fechas y huéspedes", "filtros funcionales", "estados vacío, carga y error", "panel de operador navegable", "móvil y escritorio"],
+  },
+  {
     id: "finance-operations",
     name: "Finanzas / operaciones",
     appliesToKinds: ["fullstack", "nextjs"],
@@ -561,6 +582,13 @@ function normalizeForTemplateSearch(value: string): string {
 export function selectAgentGenerationBlueprint(prompt: string, kind?: string): AgentGenerationBlueprint {
   const normalizedPrompt = normalizeForTemplateSearch(prompt);
   const normalizedKind = (kind || "fullstack") as TemplateKind;
+  // Las palabras Booking/reserva de hotel son señales de dominio muy
+  // específicas. Sin esta prioridad, el término genérico "marketplace" podía
+  // empatar con una plantilla de comercio y ocultar la ruta de alojamientos.
+  if (/booking|reserva de hotel|alojamiento|apartamento turistico|hostal/.test(normalizedPrompt)) {
+    const accommodation = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "accommodation-marketplace");
+    if (accommodation && accommodation.appliesToKinds.includes(normalizedKind)) return accommodation;
+  }
   const scored = AGENT_GENERATION_BLUEPRINTS.map((blueprint) => {
     const keywordScore = blueprint.detectionKeywords.reduce((score, keyword) => {
       return score + (normalizedPrompt.includes(normalizeForTemplateSearch(keyword)) ? 3 : 0);

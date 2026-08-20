@@ -7804,6 +7804,24 @@ export async function runJobById(
       }
     }
 
+    // ── PLAYBOOKS VERIFICADOS — patrones sin código ni datos de clientes ─────
+    // Se recuperan solo para generaciones nuevas. Son resúmenes estructurales
+    // aprobados tras un build válido; nunca contienen bundles, secretos ni
+    // conversaciones de otro cliente.
+    let learnedPlaybookContextBlock = "";
+    if (!job.editAppId) {
+      try {
+        const { recallPlaybooks } = await import("../lib/projectPlaybooks");
+        const cleanForPlaybooks = (job.prompt || "").replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
+        learnedPlaybookContextBlock = await recallPlaybooks(cleanForPlaybooks, job.kind || "fullstack");
+        if (learnedPlaybookContextBlock) {
+          await log("system", "📚 Patrón verificado de una plantilla similar cargado — adaptando la estructura sin partir de cero.");
+        }
+      } catch (playbookErr) {
+        logger.warn({ playbookErr, jobId }, "Project playbook recall failed — continuing without learned pattern");
+      }
+    }
+
     // ── A/B TESTING — seleccionar variante de system prompt óptima ───────────
     let abVariantId = "default";
     let abPromptModifier = "";
@@ -7841,6 +7859,7 @@ export async function runJobById(
     // Enriquecer el prompt con RAG + A/B modifier + runtime errors
     const enrichedJobPrompt = job.prompt +
       (ragContextBlock ? `\n\n${ragContextBlock}` : "") +
+      (learnedPlaybookContextBlock ? `\n\n${learnedPlaybookContextBlock}` : "") +
       abPromptModifier +
       runtimeErrorContextBlock;
 
@@ -8275,6 +8294,26 @@ export async function runJobById(
     // POST-GENERACIÓN: Image Agent + Visual Tester + Quality Check
     // ════════════════════════════════════════════════════════════════
     const savedAppId = job.editAppId || (await GenerationJob.findById(jobId).select("appId").lean() as any)?.appId;
+
+    // ── MEMORIA PRIVADA POST-GENERACIÓN ──────────────────────────────────────
+    // Las nuevas apps también deben recordar decisiones del propietario para
+    // futuras ediciones y proyectos. El extractor escribe solo notas de esta
+    // app y preferencias del mismo usuario, nunca aprendizaje compartido.
+    if (savedAppId && !job.editAppId && finalResult?.frontendCode && !editResultInvalid && !finalResult.buildErrorSummary) {
+      void (async () => {
+        try {
+          const { runMemoryExtractor } = await import("../lib/agentMemoryExtractor");
+          await runMemoryExtractor({
+            userId: job.userId,
+            appId: String(savedAppId),
+            userPrompt: job.prompt || "",
+            appDescription: finalResult.description || "",
+          });
+        } catch (memErr) {
+          logger.warn({ memErr, jobId }, "runMemoryExtractor falló tras generación nueva (no crítico)");
+        }
+      })();
+    }
 
     // ── 1. IMAGE AGENT — reemplaza placeholders Unsplash con imágenes reales ─
     if (savedAppId && finalResult?.frontendCode && !editResultInvalid && process.env.AI_INTEGRATIONS_GEMINI_API_KEY) {

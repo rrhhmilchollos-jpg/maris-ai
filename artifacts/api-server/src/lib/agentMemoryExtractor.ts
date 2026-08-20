@@ -65,41 +65,44 @@ ${input.appDescription.slice(0, 500)}
 
 Extrae lo que merezca recordarse.`;
 
+  let parsed: ExtractorOutput | null = null;
+  let usedDeterministicFallback = false;
   try {
     const response = await createZocoMessageWithFallback("memory", EXTRACTOR_MODEL, {
       max_tokens: 400,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     });
-
     const text = (response.content?.[0] as any)?.text ?? "";
-    const parsed = parseExtractorOutput(text);
-    if (!parsed) {
-      logger.debug({ appId: input.appId }, "Memory extractor returned no usable JSON");
-      return;
-    }
+    parsed = parseExtractorOutput(text);
+  } catch (err) {
+    logger.warn({ err, appId: input.appId }, "Memory extractor model failed; using deterministic private memory");
+  }
 
-    const appBullets = sanitizeBullets(parsed.appNotes, 3);
-    const userBullets = sanitizeBullets(parsed.userPreferences, 2);
+  // La memoria no puede depender de otra inferencia lenta. Si el modelo falla
+  // o devuelve texto no estructurado, preservamos una nota conservadora sobre
+  // el proyecto y preferencias explícitas, siempre dentro del mismo usuario.
+  if (!parsed) {
+    parsed = buildDeterministicMemory(cleanPrompt, input.appDescription);
+    usedDeterministicFallback = true;
+  }
 
+  const appBullets = sanitizeBullets(parsed.appNotes, 3);
+  const userBullets = sanitizeBullets(parsed.userPreferences, 2);
+
+  try {
     if (appBullets.length > 0) {
       await appendAppNotes(String(input.appId), appBullets.join("\n"));
     }
     if (userBullets.length > 0) {
       await appendUserPreferences(input.userId, userBullets.join("\n"));
     }
-
     logger.info(
-      {
-        appId: input.appId,
-        userId: input.userId,
-        appBullets: appBullets.length,
-        userBullets: userBullets.length,
-      },
+      { appId: input.appId, userId: input.userId, appBullets: appBullets.length, userBullets: userBullets.length, usedDeterministicFallback },
       "Memory extractor completed",
     );
   } catch (err) {
-    logger.warn({ err, appId: input.appId }, "Memory extractor call failed (non-fatal)");
+    logger.warn({ err, appId: input.appId }, "Memory extractor persistence failed (non-fatal)");
   }
 }
 
@@ -132,6 +135,22 @@ function parseExtractorOutput(raw: string): ExtractorOutput | null {
   } catch {
     return null;
   }
+}
+
+export function buildDeterministicMemory(prompt: string, description: string): ExtractorOutput {
+  const normalized = `${prompt} ${description}`.toLowerCase();
+  const appNotes: string[] = ["Conservar la arquitectura y los flujos que ya han superado la validación de compilación."];
+  const userPreferences: string[] = [];
+  if (/booking|alojamiento|hotel|reserva|hostal|apartamento/.test(normalized)) {
+    appNotes.unshift("Mantener el flujo de búsqueda, favoritos y solicitud de reserva con datos claramente identificados como demo.");
+  }
+  if (/español|castellano|es-es|\bés\b/.test(normalized)) {
+    userPreferences.push("Priorizar la interfaz y los mensajes en español.");
+  }
+  if (/móvil|mobile|responsive/.test(normalized)) {
+    userPreferences.push("Priorizar una experiencia responsive y accesible en móvil.");
+  }
+  return { appNotes: appNotes.slice(0, 3), userPreferences: userPreferences.slice(0, 2) };
 }
 
 const SECRET_LIKE = /(sk-[A-Za-z0-9_-]{16,}|gh[ps]_[A-Za-z0-9]{20,}|password|api[_-]?key|secret|token)/i;

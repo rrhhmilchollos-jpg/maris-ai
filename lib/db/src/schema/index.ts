@@ -950,6 +950,9 @@ const AgentMemorySchema = new Schema<IAgentMemory>(
   },
   { timestamps: true },
 );
+// Recall ordena por calidad y antigüedad; este índice evita escanear la
+// colección completa conforme aumentan las reparaciones verificadas.
+AgentMemorySchema.index({ language: 1, successCount: -1, createdAt: -1 });
 
 export const AgentMemory: Model<IAgentMemory> =
   mongoose.models.AgentMemory ||
@@ -988,6 +991,8 @@ const ProjectPlaybookSchema = new Schema<IProjectPlaybook>(
   },
   { timestamps: true },
 );
+// El recuperador filtra por vertical/tipo y prioriza calidad y reutilización.
+ProjectPlaybookSchema.index({ businessVertical: 1, kind: 1, qualityScore: -1, timesReused: -1 });
 
 export const ProjectPlaybook: Model<IProjectPlaybook> =
   mongoose.models.ProjectPlaybook ||
