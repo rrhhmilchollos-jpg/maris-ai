@@ -4510,8 +4510,33 @@ export async function generateApp(
     const cleanedPrompt = prompt.replace(/\[MARIS AI REQUEST LOCALE\][^\n]*\n?/i, "").trim();
     const complexity = classifyPromptComplexity(cleanedPrompt, { hasExistingApp: true });
     let result!: GeneratedAppPayload;
+    const directLiteralValues = [...String(cleanedPrompt || "").matchAll(/["“]([^"”]+)["”]/g)].map((match) => match[1].trim()).filter(Boolean);
+    const explicitReplaceMatch = String(cleanedPrompt || "").match(/sustituye\s+exactamente\s+el\s+texto\s+["“]([^"”]+)["”]\s+por\s+["“]([^"”]+)["”]/i);
+    const directLiteralPair = explicitReplaceMatch
+      ? [explicitReplaceMatch[1].trim(), explicitReplaceMatch[2].trim()] as const
+      : directLiteralValues.slice(0, -1).map((fromText, index) => [fromText, directLiteralValues[index + 1]] as const).find(([fromText]) => String(previous.frontendCode || "").includes(fromText));
+    const directLiteralEdit = Boolean(directLiteralPair) && /\b(?:sustituye|reemplaza|cambia)\b/i.test(cleanedPrompt || "");
 
-    if (complexity.score <= 2 && previous.frontendCode.length > 1000) {
+    // Cambios textuales explícitos: aplicar antes de clasificar, planificar o invocar
+    // modelos. Así una edición simple no puede quedarse esperando una inferencia ni
+    // terminar marcada como éxito sin alterar el bundle.
+    if (directLiteralEdit) {
+      const [fromText, toText] = directLiteralPair!;
+      const updatedFrontend = String(previous.frontendCode || "").replaceAll(fromText, toText);
+      if (updatedFrontend === previous.frontendCode) {
+        throw new Error(`La sustitución solicitada no encontró el texto original: ${fromText.slice(0, 120)}`);
+      }
+      await log("coder", `Sustitución directa verificada: ${fromText.slice(0, 80)} → ${toText.slice(0, 80)}.`);
+      result = {
+        title: previous.title,
+        description: previous.description,
+        techStack: previous.techStack,
+        frontendCode: updatedFrontend,
+        backendCode: previous.backendCode,
+        plannedPages: (previous as any).plannedPages || [],
+        requiredEnvVars: (previous as any).requiredEnvVars || [],
+      };
+    } else if (complexity.score <= 2 && previous.frontendCode.length > 1000) {
       // Cambio simple → edición quirúrgica con tools (más precisa, menos tokens)
       const surgical = await surgicalEditWithTools(prompt, previous, log);
       if (surgical.success && surgical.bundleUpdated) {
@@ -4620,6 +4645,16 @@ export async function generateApp(
     // explícitamente que hay que saltar validación — mismo criterio que ya
     // usaba runValidatePatchLoop con phaseGates.validate.
     let qualityCheckedFrontend = result.frontendCode;
+    // Una edición literal debe preservar el formato de bundle. Si un adaptador
+    // previo entregase solo el contenido de App.tsx, lo envolvemos antes de
+    // validar para que nunca se pierda el archivo de entrada React.
+    if (directLiteralEdit) {
+      const editedFiles = parseBundleToVFS(qualityCheckedFrontend || "");
+      const hasReactEntry = Object.keys(editedFiles).some((filePath) => /(^|\/)src\/(main|index|App)\.(tsx|ts|jsx|js)$/.test(filePath));
+      if (!hasReactEntry && /(?:export\s+default|function\s+App|createRoot\s*\()/m.test(qualityCheckedFrontend || "")) {
+        qualityCheckedFrontend = `// === FILE: src/App.tsx ===\n${String(qualityCheckedFrontend || "").trim()}\n`;
+      }
+    }
     // FIX (2026-07-10): "validate" se estaba usando como un único interruptor
     // para DOS cosas distintas: (1) la comprobación de compilación/sintaxis
     // (runValidatePatchLoop, más abajo — barata, rápida, y deseable incluso
@@ -4635,7 +4670,11 @@ export async function generateApp(
     // El Testing Agent no es una etapa decorativa: solo entra cuando el build
     // determinista ya encontró un defecto reproducible en una edición completa.
     const initialEditValidation = await validateBundle(qualityCheckedFrontend);
-    const runsHeavyQaAndTesting = !initialEditValidation.ok && execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
+    const literalEditValues = [...String(cleanedPrompt || "").matchAll(/["“]([^"”]+)["”]/g)].map((match) => match[1].trim()).filter(Boolean);
+    const explicitLiteralEdit = literalEditValues.length >= 2 && /\b(?:sustituye|reemplaza|cambia)\b/i.test(cleanedPrompt || "");
+    // Una sustitución literal ya aplicada de manera determinista no necesita QA semántico,
+    // Testing Agent ni un segundo parcheador LLM: solo debe conservar la validación de build.
+    const runsHeavyQaAndTesting = !explicitLiteralEdit && !initialEditValidation.ok && execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
     if (runsHeavyQaAndTesting) {
       const editAsPlan: ProjectPlan = {
         title: previous.title,
@@ -4692,18 +4731,20 @@ export async function generateApp(
       await log("system", "Build correcto: el Testing Agent permanece oculto porque no hay ningún error verificable que reparar.", "info");
     }
 
-    const fixedFrontend = await runValidatePatchLoop(
-      qualityCheckedFrontend,
-      { ok: true, issues: [] },
-      onProgress,
-      70,
-      language,
-      log,
-      { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
-      agentModelPlan,
-      undefined,
-      (summary) => { buildErrorCapture = summary; },
-    );
+    const fixedFrontend = explicitLiteralEdit
+      ? qualityCheckedFrontend
+      : await runValidatePatchLoop(
+        qualityCheckedFrontend,
+        { ok: true, issues: [] },
+        onProgress,
+        70,
+        language,
+        log,
+        { validate: execPlan.phases.includes("validate"), patch: execPlan.phases.includes("patch") },
+        agentModelPlan,
+        undefined,
+        (summary) => { buildErrorCapture = summary; },
+      );
 
     // Backend en modo edición — antes este bloque NO existía: el modo Edit
     // solo tocaba el frontend, así que un job pausado tipo "Continúa con el
@@ -7925,9 +7966,16 @@ export async function runJobById(
       const editBundleValidation = hasBundleShape ? await validateBundle(fc) : null;
       const containsVisiblePlaceholder = hasBundleShape && hasVisibleDeliveryPlaceholder(fc);
       const validFrontend = hasBundleShape && !containsVisiblePlaceholder && !!editBundleValidation?.ok;
-      const validationSummary = containsVisiblePlaceholder ? "El resultado contiene una pantalla placeholder sin interfaz funcional" : editBundleValidation?.issues?.[0]?.message || null;
+      const unchangedEdit = validFrontend
+        && fc === previousApp.frontendCode
+        && String(finalResult.backendCode || previousApp.backendCode || "") === String(previousApp.backendCode || "");
+      const validationSummary = containsVisiblePlaceholder
+        ? "El resultado contiene una pantalla placeholder sin interfaz funcional"
+        : unchangedEdit
+          ? "La edición no modificó ningún archivo del bundle"
+          : editBundleValidation?.issues?.[0]?.message || null;
 
-      if (hasError || !validFrontend) {
+      if (hasError || !validFrontend || unchangedEdit) {
         logger.warn(
           { jobId, editAppId: job.editAppId, error: finalResult.error, validationSummary, fcLen: typeof fc === "string" ? fc.length : -1 },
           "Edit job produjo un resultado inválido/incompleto — se preserva la app anterior sin sobrescribir",

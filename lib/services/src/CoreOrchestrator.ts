@@ -1081,6 +1081,12 @@ type HomeProps = { items: Accommodation[]; saved: Accommodation[]; onToggleSaved
     userPrompt: string,
     existingFilePaths: { frontend: string[]; backend: string[] },
   ): Promise<{ milestones: EditMilestone[] }> {
+    const literalValues = [...String(userPrompt || "").matchAll(/["“]([^"”]+)["”]/g)].map((match) => match[1].trim()).filter(Boolean);
+    const explicitLiteralChange = literalValues.length >= 2 && /\b(?:sustituye|reemplaza|cambia)\b/i.test(userPrompt);
+    if (explicitLiteralChange) {
+      console.info("⚡ Planificador determinista: sustitución textual explícita detectada; se omite la inferencia del modelo.");
+      return this.buildDeterministicEditPlan(userPrompt, existingFilePaths);
+    }
     if (/booking|alojamiento|anfitri[oó]n|tour|actividad|traslado|viaje|travel|vuelo|autob[uú]s|coche/i.test(userPrompt)) {
       return this.buildDeterministicEditPlan(userPrompt, existingFilePaths);
     }
@@ -1204,6 +1210,25 @@ export default function App(){ const [type,setType]=useState("Alojamientos"); co
 `;
   }
 
+  private deterministicLiteralEdit(milestone: EditMilestone, currentFiles: Map<string, string>): string | null {
+    if (milestone.action !== "modify_file") return null;
+    const original = currentFiles.get(milestone.filePath);
+    if (!original || original.trim().length === 0) return null;
+    const description = String(milestone.description || "");
+    // Recuperación segura para cambios literales explícitos. Evita invocar al modelo
+    // por una sustitución concreta y nunca crea archivos ni reescribe código ajeno.
+    const quoted = [...description.matchAll(/["“]([^"”]+)["”]/g)].map((match) => match[1].trim()).filter(Boolean);
+    const replacementCue = /\b(?:por|a|con)\b/i.test(description);
+    if (quoted.length >= 2 && replacementCue && original.includes(quoted[0])) {
+      const updated = original.replaceAll(quoted[0], quoted[1]);
+      if (updated !== original) {
+        console.info(`✓ Edición literal determinista aplicada en ${milestone.filePath}: ${quoted[0].slice(0, 80)} → ${quoted[1].slice(0, 80)}`);
+        return updated;
+      }
+    }
+    return null;
+  }
+
   private async generateEditMilestone(
     milestone: EditMilestone,
     currentFiles: Map<string, string>,
@@ -1211,6 +1236,8 @@ export default function App(){ const [type,setType]=useState("Alojamientos"); co
   ): Promise<GeneratedEditMilestone> {
     const deterministicTravel = this.deterministicTravelMarketplaceEdit(milestone);
     if (deterministicTravel) return { ...milestone, code: deterministicTravel };
+    const deterministicLiteral = this.deterministicLiteralEdit(milestone, currentFiles);
+    if (deterministicLiteral) return { ...milestone, code: deterministicLiteral };
     const compactEdit = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
     const MAX_ATTEMPTS = compactEdit ? 1 : 3;
     const milestoneTimeoutMs = compactEdit ? 90_000 : 120_000;
@@ -1311,6 +1338,35 @@ export default function App(){ const [type,setType]=useState("Alojamientos"); co
     const frontendFiles = this.parseBundleToMap(previousFrontendCode || "");
     const backendFiles = this.parseBundleToMap(previousBackendCode || "");
     const allCurrentFiles = new Map<string, string>([...frontendFiles, ...backendFiles]);
+
+    // Ruta inmediata y verificable para sustituciones textuales explícitas. Evita
+    // que un cambio literal dependa del planificador o del modelo local y permite
+    // conservar intactos todos los demás archivos del proyecto.
+    const literalValues = [...String(userPrompt || "").matchAll(/["“]([^"”]+)["”]/g)].map((match) => match[1].trim()).filter(Boolean);
+    const explicitReplaceMatch = String(userPrompt || "").match(/sustituye\s+exactamente\s+el\s+texto\s+["“]([^"”]+)["”]\s+por\s+["“]([^"”]+)["”]/i);
+    const literalPairs = literalValues.slice(0, -1).map((fromText, index) => [fromText, literalValues[index + 1]] as const);
+    const literalPair = explicitReplaceMatch
+      ? [explicitReplaceMatch[1].trim(), explicitReplaceMatch[2].trim()] as const
+      : literalPairs.find(([fromText]) => Array.from(frontendFiles.values()).some((contents) => contents.includes(fromText)));
+    const explicitLiteralChange = Boolean(literalPair) && /\b(?:sustituye|reemplaza|cambia)\b/i.test(userPrompt);
+    if (explicitLiteralChange) {
+      const [fromText, toText] = literalPair!;
+      const targetEntry = Array.from(frontendFiles.entries()).find(([, contents]) => contents.includes(fromText));
+      if (targetEntry) {
+        const [filePath, original] = targetEntry;
+        const updated = original.replaceAll(fromText, toText);
+        if (updated !== original) {
+          wsNotificationCallback({ status: `🔨 Aplicando sustitución verificada en ${filePath}…`, progress: 72, step: 1 });
+          frontendFiles.set(filePath, updated);
+          wsNotificationCallback({ status: `✅ Sustitución aplicada: ${fromText.slice(0, 60)} → ${toText.slice(0, 60)}.`, progress: 100, step: 1, previewAvailable: true });
+          return {
+            frontendCode: this.mapToBundle(frontendFiles),
+            backendCode: this.mapToBundle(backendFiles),
+            milestones: [{ id: 1, action: "modify_file", filePath, description: "Sustitución literal determinista", dependsOn: [], code: updated }],
+          };
+        }
+      }
+    }
 
     const { milestones } = await this.planProjectEdit(userPrompt, {
       frontend: Array.from(frontendFiles.keys()),
