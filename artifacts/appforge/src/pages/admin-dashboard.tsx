@@ -979,7 +979,7 @@ function AppsClientesPanel({ apiBase }: { apiBase: string }) {
                     className="w-full border-0"
                     style={{ height: "600px", background: "#0a0a0f" }}
                     title={`Preview ${appId}`}
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                    sandbox="allow-scripts allow-forms allow-popups allow-modals"
                     allow="clipboard-read; clipboard-write"
                   />
                 </div>
@@ -1343,7 +1343,7 @@ function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAp
                               className="w-full border-0"
                               style={{ height: "600px", background: "#0a0a0f" }}
                               title={`Preview job ${jid}`}
-                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                              sandbox="allow-scripts allow-forms allow-popups allow-modals"
                               allow="clipboard-read; clipboard-write"
                             />
                           </div>
@@ -1524,7 +1524,7 @@ function RemoteDashboardPanel({ apiBase, onAppsChange }: { apiBase: string; onAp
                               className="w-full border-0"
                               style={{ height: "600px", background: "#0a0a0f" }}
                               title={`Preview ${appId}`}
-                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                              sandbox="allow-scripts allow-forms allow-popups allow-modals"
                               allow="clipboard-read; clipboard-write"
                             />
                           </div>

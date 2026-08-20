@@ -96,7 +96,6 @@ app.use(
           "https://*.clerk.com",
           "https://js.stripe.com",
           "https://cdn.jsdelivr.net",
-          "https://cdn.tailwindcss.com",
           "https://fonts.googleapis.com",
           // Google Analytics & Ads
           "https://www.googletagmanager.com",

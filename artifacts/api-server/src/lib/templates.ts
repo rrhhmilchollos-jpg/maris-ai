@@ -181,6 +181,16 @@ export const TEMPLATES: AppTemplate[] = [
       "Un blog full-stack con Next.js 14+ App Router (NO Pages Router) y TypeScript. Estructura: app/layout.tsx con header (logo + nav Inicio/Admin) y footer; app/page.tsx (Server Component) lista los posts publicados con título, extracto y fecha; app/posts/[slug]/page.tsx renderiza un post completo (Server Component, getPost(slug) async); app/admin/page.tsx (Client Component, 'use client') con formulario para crear/editar/eliminar posts. API routes en app/api/posts/route.ts (GET lista, POST crea) y app/api/posts/[slug]/route.ts (GET uno, PUT edita, DELETE borra). Persistencia en un array module-level (con disclaimer en el README de que se reinicia al redeploy — para producción enchufar Postgres/SQLite). Tailwind para estilos, tipografía serif para los posts, paleta crema y burdeos.",
   },
   {
+    id: "delivery-local",
+    name: "Delivery local",
+    description:
+      "Marketplace de comida a domicilio con restaurantes, carrito, seguimiento de pedido demo y panel de operación.",
+    kind: "fullstack",
+    icon: "Bike",
+    seedPrompt:
+      "Crea una plataforma de delivery local con marca propia y diseño original. Incluye inicio con buscador por dirección o zona, categorías de comida, restaurantes ficticios con tiempos estimados claramente etiquetados como DEMO, menú con personalización de productos, carrito persistente, checkout como solicitud sin pedir ni procesar datos reales de pago, confirmación con línea de estado del pedido y panel de cliente con pedidos y favoritos. Añade un panel de restaurante para gestionar menú, disponibilidad y pedidos demo, y un panel de reparto para actualizar estados simulados. Diseña móvil primero, con estados de carga, vacío y error, accesibilidad básica y textos en español. No copies marca, logo, textos, identidad visual, datos ni imágenes de Uber Eats, Glovo, Just Eat u otros servicios.",
+  },
+  {
     id: "marketplace-alojamientos",
     name: "Marketplace de alojamientos",
     description:
@@ -516,6 +526,17 @@ export const AGENT_GENERATION_BLUEPRINTS: AgentGenerationBlueprint[] = [
     qualityChecklist: ["no permitir reservar sin servicio y horario", "calendario usable en móvil", "confirmación clara", "datos mock suficientes"]
   },
   {
+    id: "local-delivery",
+    name: "Delivery local y reparto",
+    appliesToKinds: ["fullstack", "mobile", "hybrid-pwa"],
+    detectionKeywords: ["delivery", "reparto", "comida a domicilio", "uber eats", "ubereats", "glovo", "restaurantes", "pedido de comida", "rider"],
+    productPattern: "Marketplace local de comida con descubrimiento de restaurantes, menús, personalización, carrito, solicitud de pedido, estado de reparto y paneles operativos simulados.",
+    recommendedStructure: ["Inicio y dirección/zona", "Categorías y restaurantes", "Menú y personalización", "Carrito", "Solicitud y confirmación", "Seguimiento demo", "Cuenta y favoritos", "Panel restaurante", "Panel reparto"],
+    starterFeatures: ["filtros por categoría y tiempo demo", "menú con modificadores", "carrito persistente", "resumen de pedido", "estado recibido/preparando/en reparto/entregado demo", "favoritos", "feedback de acción"],
+    editableByClient: ["marca propia", "zonas", "categorías", "restaurantes", "comisiones", "métodos de pago futuros", "reglas de reparto", "roles operativos"],
+    qualityChecklist: ["no usar marca, logo ni activos de Uber Eats, Glovo o Just Eat", "no pedir ni procesar pago real sin proveedor autorizado", "precios, disponibilidad y tiempos indicados como demo si no hay integración", "flujo navegable de restaurante a confirmación", "carrito y estados vacíos funcionales", "móvil y escritorio", "paneles de restaurante y reparto diferenciados"],
+  },
+  {
     id: "learning-platform",
     name: "Academia / cursos online",
     appliesToKinds: ["fullstack", "mobile", "nextjs"],
@@ -588,6 +609,10 @@ export function selectAgentGenerationBlueprint(prompt: string, kind?: string): A
   if (/booking|reserva de hotel|alojamiento|apartamento turistico|hostal/.test(normalizedPrompt)) {
     const accommodation = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "accommodation-marketplace");
     if (accommodation && accommodation.appliesToKinds.includes(normalizedKind)) return accommodation;
+  }
+  if (/delivery|reparto|comida a domicilio|uber eats|ubereats|glovo|pedido de comida|rider/.test(normalizedPrompt)) {
+    const delivery = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "local-delivery");
+    if (delivery && delivery.appliesToKinds.includes(normalizedKind)) return delivery;
   }
   const scored = AGENT_GENERATION_BLUEPRINTS.map((blueprint) => {
     const keywordScore = blueprint.detectionKeywords.reduce((score, keyword) => {

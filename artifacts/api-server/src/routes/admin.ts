@@ -140,8 +140,7 @@ router.get("/admin/apps/:id/preview", async (req: any, res: any): Promise<void> 
   res.send(`<!DOCTYPE html><html lang="es"><head>
     <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
     <title>${(app.title || "Preview").replace(/[<>]/g, "")}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>${cssContent}</style>
+    <style>*,::before,::after{box-sizing:border-box}html,body{margin:0;min-height:100%}${cssContent}</style>
   </head><body style="background:#0a0a0f;color:white;font-family:system-ui;padding:32px">
     <h1 style="color:#7c3aed;font-size:24px;margin-bottom:8px">📦 ${(app.title || "App").replace(/[<>]/g, "")}</h1>
     <p style="color:#9ca3af;margin-bottom:20px">${Math.round(app.frontendCode.length / 1024)} KB generados — ${Object.keys(files).length} archivos</p>

@@ -40,16 +40,14 @@ export function serializeBundle(files: Record<string, string>): string {
 
 // IMPORTANT: Sandpack's `vite-react-ts` template reads /index.html from the
 // project root. The script tag must point at /index.tsx as a module so the
-// React entry runs. Without injecting Tailwind via CDN here, every utility
-// class (flex, grid, w-full, p-4, …) silently no-ops and the preview looks
-// like raw browser defaults — links underlined in purple, blocks stacked, no layout.
+// React entry runs. La vista previa usa una base local de utilidades comunes
+// y no carga el compilador Tailwind desde un CDN remoto.
 const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
       html, body, #root { margin: 0; min-height: 100%; width: 100%; }
       body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -61,11 +59,9 @@ const PREVIEW_INDEX_HTML = `<!DOCTYPE html>
   </body>
 </html>`;
 
-// The vite-react-ts template uses /index.html at the root. We inject Tailwind
-// CDN at runtime via the index.tsx entry so the app fills the viewport and all
-// utility classes work. Without this every utility class is a no-op and the
-// preview renders with default browser styles (links underlined in purple,
-// blocks stacked, no layout).
+// The vite-react-ts template uses /index.html at the root. La entrada propia
+// garantiza que la app llena el viewport y aplica los estilos locales incluidos
+// en la vista previa, sin cargar compiladores CSS de terceros en tiempo real.
 // __EXTRA_CSS_IMPORTS__ is a placeholder we substitute at runtime with one
 // `import "./styles/<file>.css";` line per custom CSS file the model emitted.
 // Without this, files like src/styles/animations.css are silently dropped (the
@@ -107,12 +103,6 @@ if (typeof document !== "undefined") {
     body.style.width = "100%";
     body.style.fontFamily = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
   }
-  if (!document.querySelector('script[data-tw-cdn]')) {
-    const s = document.createElement("script");
-    s.src = "https://cdn.tailwindcss.com";
-    s.setAttribute("data-tw-cdn", "1");
-    document.head.appendChild(s);
-  }
   let root = document.getElementById("root");
   if (!root) {
     root = document.createElement("div");
@@ -136,7 +126,8 @@ if (container) {
 }
 `;
 
-const PREVIEW_INDEX_CSS = `/* Tailwind injected via CDN in index.html for preview. */
+const PREVIEW_INDEX_CSS = `/* Base local para previews: no descarga Tailwind CDN ni ejecuta compilación remota. */
+*,::before,::after{box-sizing:border-box}html,body,#root{min-height:100%;width:100%;margin:0}body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0f172a;background:#fff}button,input,select,textarea{font:inherit}.min-h-screen{min-height:100vh}.h-full{height:100%}.w-full{width:100%}.max-w-7xl{max-width:80rem}.max-w-4xl{max-width:56rem}.mx-auto{margin-left:auto;margin-right:auto}.flex{display:flex}.grid{display:grid}.block{display:block}.hidden{display:none}.flex-1{flex:1 1 0%}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.items-end{align-items:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1{gap:.25rem}.gap-2{gap:.5rem}.gap-3{gap:.75rem}.gap-4{gap:1rem}.gap-5{gap:1.25rem}.gap-6{gap:1.5rem}.gap-8{gap:2rem}.p-3{padding:.75rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-6{padding:1.5rem}.p-7{padding:1.75rem}.p-8{padding:2rem}.px-3{padding-left:.75rem;padding-right:.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.py-1{padding-top:.25rem;padding-bottom:.25rem}.py-2{padding-top:.5rem;padding-bottom:.5rem}.py-3{padding-top:.75rem;padding-bottom:.75rem}.py-4{padding-top:1rem;padding-bottom:1rem}.mt-1{margin-top:.25rem}.mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.mt-8{margin-top:2rem}.mb-2{margin-bottom:.5rem}.mb-4{margin-bottom:1rem}.rounded-lg{border-radius:.5rem}.rounded-xl{border-radius:.75rem}.rounded-2xl{border-radius:1rem}.rounded-3xl{border-radius:1.5rem}.rounded-full{border-radius:9999px}.border{border:1px solid #e2e8f0}.border-b{border-bottom:1px solid #e2e8f0}.border-slate-200{border-color:#e2e8f0}.bg-white{background:#fff}.bg-slate-50{background:#f8fafc}.bg-slate-100{background:#f1f5f9}.bg-slate-950{background:#020617}.bg-blue-600{background:#2563eb}.bg-emerald-50{background:#ecfdf5}.text-white{color:#fff}.text-slate-500{color:#64748b}.text-slate-600{color:#475569}.text-slate-900{color:#0f172a}.text-blue-600{color:#2563eb}.text-emerald-700{color:#047857}.text-sm{font-size:.875rem}.text-xs{font-size:.75rem}.text-xl{font-size:1.25rem}.text-2xl{font-size:1.5rem}.text-3xl{font-size:1.875rem}.text-4xl{font-size:2.25rem}.font-medium{font-weight:500}.font-semibold{font-weight:600}.font-bold{font-weight:700}.font-black{font-weight:900}.shadow-sm{box-shadow:0 1px 2px rgba(15,23,42,.08)}.shadow-xl{box-shadow:0 20px 25px -5px rgba(15,23,42,.15)}.overflow-hidden{overflow:hidden}.object-cover{object-fit:cover}.sticky{position:sticky}.top-0{top:0}.z-20{z-index:20}.transition{transition:all .2s ease}.hover\\:bg-blue-700:hover{background:#1d4ed8}.hover\\:shadow-lg:hover{box-shadow:0 10px 15px -3px rgba(15,23,42,.14)}@media(min-width:768px){.md\\:grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.md\\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(min-width:1024px){.lg\\:grid-cols-\\[220px_1fr\\]{grid-template-columns:220px minmax(0,1fr)}.lg\\:grid-cols-\\[260px_1fr\\]{grid-template-columns:260px minmax(0,1fr)}}
 `;
 
 const FALLBACK_APP = `export default function App() {
@@ -349,9 +340,9 @@ export function buildSandpackFiles(parsed: Record<string, string>): SandpackFile
     files["/index.css"] = PREVIEW_INDEX_CSS;
   }
 
-  // Always inject the tailwind CDN via our preview index.html (Sandpack cannot
-  // run a real postcss/tailwind build pipeline). The vite-react-ts template
-  // uses /index.html at the root. We also write /public/index.html defensively.
+  // Inyectamos el HTML y la base CSS locales. El preview no descarga Tailwind
+  // ni otro compilador CSS remoto; las apps desplegadas conservan su pipeline
+  // de estilos de producción propio.
   files["/index.html"] = PREVIEW_INDEX_HTML;
   files["/public/index.html"] = PREVIEW_INDEX_HTML;
   // Ensure vite.config.ts is NOT included (it was already in SKIP_PATHS but

@@ -2282,7 +2282,7 @@ Comprobación visual manual · diagnóstico sin cambios automáticos
                       key={`deployed-${previewKey}`}
                       src={deployedUrl}
                       title="App Preview"
-                      sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
+                      sandbox="allow-scripts allow-forms allow-modals allow-popups"
                       className={`border-0 bg-white ${
                         previewSize === "mobile" ? "w-[380px] h-[calc(100%-2rem)] rounded-2xl shadow-2xl" :
                         previewSize === "tablet" ? "w-[768px] h-[calc(100%-2rem)] rounded-xl shadow-xl" :

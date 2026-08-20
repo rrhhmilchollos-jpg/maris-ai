@@ -134,11 +134,11 @@ function bundleToPreviewHtml(code: string | null | undefined): string | null {
   const fileCount = files.length;
 
   return `<!DOCTYPE html><html><head>
-    <script src="https://cdn.tailwindcss.com"></script>
     ${css}
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
-      body { font-family: 'Inter', sans-serif; }
+      body { margin:0; font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; background:#0a0a0f; color:#fff; }
+      .bg-\\[\\#0a0a0f\\]{background:#0a0a0f}.text-white{color:#fff}.flex{display:flex}.flex-col{flex-direction:column}.items-center{align-items:center}.justify-center{justify-content:center}.min-h-screen{min-height:100vh}.p-8{padding:2rem}.max-w-sm{max-width:24rem}.w-full{width:100%}.text-center{text-align:center}.inline-flex{display:inline-flex}.relative{position:relative}.absolute{position:absolute}.rounded-full{border-radius:9999px}.rounded-3xl{border-radius:1.5rem}.mx-auto{margin-left:auto;margin-right:auto}.h-24{height:6rem}.w-24{width:6rem}.h-12{height:3rem}.w-12{width:3rem}.h-5{height:1.25rem}.w-5{width:1.25rem}.h-2{height:.5rem}.w-2{width:.5rem}.bg-white{background:#fff}.bg-emerald-500{background:#10b981}.border-2{border-width:2px}.border-\\[\\#0a0a0f\\]{border-color:#0a0a0f}
+      body { font-family: ui-sans-serif, system-ui, sans-serif; }
       @keyframes pulse-ring { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
       @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
       @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
@@ -506,7 +506,7 @@ function PreviewPane({
             ref={iframeRef}
             srcDoc={html}
             title="App Preview"
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts"
             className="w-full h-full border-0"
           />
         )}

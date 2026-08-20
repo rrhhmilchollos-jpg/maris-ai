@@ -130,7 +130,7 @@ export function LivePreview({
         src={iframeSrc}
         title={`Preview — ${appName}`}
         className="h-full w-full flex-1 border-0 bg-white"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-scripts allow-forms allow-modals allow-popups"
         allow="clipboard-read; clipboard-write"
       />
     </div>

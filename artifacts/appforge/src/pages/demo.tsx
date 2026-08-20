@@ -294,7 +294,7 @@ export default function DemoPage() {
                     src={`${API}/preview/${jobId}`}
                     className="w-full h-full border-0"
                     title="Preview de la app generada"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts"
                   />
                   {/* Overlay "Crea la tuya" */}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#06060f] via-[#06060f]/80 to-transparent pt-16 pb-6 px-6 flex flex-col items-center gap-3">
