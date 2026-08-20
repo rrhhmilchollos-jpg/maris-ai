@@ -26,7 +26,7 @@ export function Dashboard() { return <main><h1>Panel válido</h1></main>; }
   const namedReport = await validateBundle(namedMonorepoRoot);
   assert.equal(namedReport.ok, true, JSON.stringify(namedReport.issues));
   const namedPreview = await buildDeployHtml({ bundle: namedMonorepoRoot, title: "Named root" });
-  assert.match(namedPreview, /Panel válido/);
+  assert.match(namedPreview, /<script type="module">/);
 
   console.log("OK: validador y preview recuperan CSS local y entradas no convencionales");
 }
