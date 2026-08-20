@@ -22,6 +22,10 @@
  * @workspace/bundle-format en vez de mantener su propia copia.
  */
 
+import { hasRecoverableReactSource } from "./reactEntrypoint";
+export { REACT_ENTRY_CANDIDATES, ensureReactEntrypoint, hasRecoverableReactSource, ensureLocalStyleFiles } from "./reactEntrypoint";
+export type { ReactEntrypoint } from "./reactEntrypoint";
+
 const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
 
 export interface ParsedFile {
@@ -88,8 +92,8 @@ export function filesToBundle(files: Record<string, string>): string {
  * de "no entry file found" en proyectos HTML estáticos importados.
  */
 export function isStaticHtmlBundle(files: Record<string, string>): boolean {
-  const hasReactEntry =
-    files["src/main.tsx"] || files["src/main.jsx"] || files["src/main.ts"] || files["src/main.js"] ||
-    files["apps/web/src/main.tsx"] || files["apps/web/src/main.ts"];
-  return !hasReactEntry && files["index.html"] != null;
+  // A bundle that has a React root in a non-conventional path is still React.
+  // Do not misclassify it as static just because it lacks main.tsx/App.tsx.
+  if (hasRecoverableReactSource(files)) return false;
+  return files["index.html"] != null;
 }

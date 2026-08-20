@@ -15,6 +15,7 @@ function getOpenAIApps(): OpenAI {
   return _openaiApps;
 }
 import { makeSlug } from "../lib/deployBundle";
+import { parseFileMarkers, filesToBundle, ensureLocalStyleFiles, ensureReactEntrypoint } from "@workspace/bundle-format";
 import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createZocoToolCallWithFallback } from "../lib/shared-agents";
 import { validateBundle, parseBundleToVFS, hasVisibleDeliveryPlaceholder, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp, insertAppRevisionFromRow } from "../lib/appRevisions";
@@ -45,6 +46,20 @@ function storePreviewHtml(cacheKey: string, html: string): void {
     if (!oldest) break;
     previewHtmlCache.delete(oldest);
   }
+}
+
+/**
+ * Conserva apps válidas ante dos omisiones habituales del modelo: un import CSS
+ * local cuya hoja ya no está en el bundle y un componente raíz bajo una ruta no
+ * convencional. Solo añade archivos técnicos mínimos; nunca reescribe la UI.
+ */
+function normalizeGeneratedFrontendBundle(bundle: string): string {
+  const files = parseFileMarkers(bundle || "");
+  if (Object.keys(files).length === 0) return bundle;
+  const addedStyles = ensureLocalStyleFiles(files);
+  const entrypoint = ensureReactEntrypoint(files);
+  if (addedStyles.length === 0 && !entrypoint?.recovered) return bundle;
+  return filesToBundle(files);
 }
 
 // ── Validación de integridad del bundle ──────────────────────────────────────
@@ -3192,7 +3207,7 @@ async function runValidatePatchLoop(
   // (Zoco IA-anthropic as zocoia-4-6), igual que antes de este fix.
   const patcherModel = agentModelPlan?.agents.patcher.model;
   const MAX_ITERATIONS = maxIterationsOverride ?? 5; // testing-agent: hasta 5 rondas (más para proyectos ultra-complejos, vía override)
-  let finalFrontend = initialBundle;
+  let finalFrontend = normalizeGeneratedFrontendBundle(initialBundle);
   const noop: AgentLog = () => {};
   const emit = log ?? noop;
 
@@ -4280,7 +4295,7 @@ export async function generateApp(
       await log("coder", update.status);
     });
 
-    const milestoneFrontend = String(milestoneResult.frontendCode || "").trim();
+    const milestoneFrontend = normalizeGeneratedFrontendBundle(String(milestoneResult.frontendCode || "").trim());
     // ENCONTRADO en producción (cliente real, "FootballValue" — 21 hitos
     // generados CON ÉXITO, incluidos 5 hitos de frontend distintos, pero el
     // proyecto entero se descartó y cayó al pipeline robusto de fallback de
@@ -4644,7 +4659,7 @@ export async function generateApp(
     // plan reducido (fast-patch original o cambio simple promovido) dice
     // explícitamente que hay que saltar validación — mismo criterio que ya
     // usaba runValidatePatchLoop con phaseGates.validate.
-    let qualityCheckedFrontend = result.frontendCode;
+    let qualityCheckedFrontend = normalizeGeneratedFrontendBundle(result.frontendCode);
     // Una edición literal debe preservar el formato de bundle. Si un adaptador
     // previo entregase solo el contenido de App.tsx, lo envolvemos antes de
     // validar para que nunca se pierda el archivo de entrada React.

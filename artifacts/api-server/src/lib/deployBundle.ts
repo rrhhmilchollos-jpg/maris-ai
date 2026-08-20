@@ -2,7 +2,7 @@ import * as esbuild from "esbuild";
 import { randomInt } from "node:crypto";
 import path from "node:path";
 import { bundleToFiles } from "./exportZip";
-import { isStaticHtmlBundle } from "@workspace/bundle-format";
+import { isStaticHtmlBundle, ensureReactEntrypoint, ensureLocalStyleFiles } from "@workspace/bundle-format";
 import { injectWatermarkToHTML } from "./watermark";
 import { resolveDynamicPins } from "./dynamicPinning";
 import { logger } from "./logger";
@@ -91,11 +91,19 @@ export async function buildDeployHtml(opts: {
   }
 
   const vfs = bundleToFiles(opts.bundle);
-  let entry = pickEntry(vfs);
+  const restoredStyleFiles = ensureLocalStyleFiles(vfs);
+  if (restoredStyleFiles.length > 0) {
+    logger.info({ files: restoredStyleFiles }, "buildDeployHtml: imports CSS locales recuperados en memoria");
+  }
+  // Misma recuperación de entrada que el validador: nunca se descarta una
+  // interfaz React válida solo por residir en una ruta no convencional.
+  const entrypoint = ensureReactEntrypoint(vfs);
+  let entry = entrypoint?.entry;
   if (!entry) {
-    throw new Error(
-      "El bundle no contiene un punto de entrada (src/main.tsx, src/index.tsx o src/App.tsx).",
-    );
+    throw new Error("El bundle no contiene una entrada React ni un componente raíz recuperable.");
+  }
+  if (entrypoint.recovered) {
+    logger.info({ entry, source: entrypoint.source }, "buildDeployHtml: entrada React recuperada en memoria");
   }
 
   // Los bundles generados por hitos a veces aportan correctamente App.tsx

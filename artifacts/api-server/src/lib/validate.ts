@@ -1,7 +1,7 @@
 import * as esbuild from "esbuild";
 import path from "node:path";
 
-import { parseFileMarkers, isStaticHtmlBundle } from "@workspace/bundle-format";
+import { parseFileMarkers, isStaticHtmlBundle, ensureReactEntrypoint, ensureLocalStyleFiles, REACT_ENTRY_CANDIDATES } from "@workspace/bundle-format";
 import { logger } from "./logger";
 
 export interface BuildIssue {
@@ -548,6 +548,14 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     return { ok: true, issues: [], filesAnalyzed, durationMs: Date.now() - started };
   }
 
+  // Los modelos pueden mantener un import local de CSS después de que una
+  // edición haya consolidado estilos en index.css. Materializamos un CSS vacío
+  // en memoria: el componente sigue compilando y el bundle original no se toca.
+  const restoredStyleFiles = ensureLocalStyleFiles(vfs);
+  if (restoredStyleFiles.length > 0) {
+    logger.info({ files: restoredStyleFiles }, "VALIDATOR: imports CSS locales recuperados en memoria");
+  }
+
   if (filesAnalyzed === 0) {
     // Mensaje mejorado que ayuda al usuario a entender qué salió mal
     const diagnosticMsg = bundle.length === 0
@@ -577,42 +585,24 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     };
   }
 
-  // Find a sensible entry: prefer src/main.{tsx,ts}, then src/App.{tsx,ts}.
-  // Candidatos de entrada para apps SPA estándar Y monorepos (apps/web/src/...)
-  const ENTRY_CANDIDATES = [
-    "src/main.tsx", "src/main.ts", "src/main.jsx", "src/main.js",
-    "src/index.tsx", "src/index.ts",
-    "src/App.tsx", "src/App.ts", "src/App.jsx", "src/App.js",
-    // Monorepo paths (CoreOrchestrator milestone apps)
-    "apps/web/src/main.tsx", "apps/web/src/main.ts",
-    "apps/web/src/App.tsx", "apps/web/src/App.ts",
-    "apps/web/src/index.tsx", "apps/web/src/index.ts",
-  ];
-  let entry = ENTRY_CANDIDATES.find((p) => vfs[p]);
-  if (!entry) {
-    // Para monorepos con rutas no estándar, usar el primer archivo .tsx/.ts
-    // que contenga "export default function" como fallback en vez de rechazar
-    const fallbackEntry = Object.keys(vfs).find(p =>
-      (p.endsWith('.tsx') || p.endsWith('.ts') || p.endsWith('.jsx')) &&
-      vfs[p].includes('export default function')
-    );
-    if (!fallbackEntry) {
-      return {
-        ok: false,
-        issues: [{
-          file: "(bundle)",
-          message: `No entry file found. Expected one of: ${ENTRY_CANDIDATES.join(", ")}`,
-        }],
-        filesAnalyzed,
-        durationMs: Date.now() - started,
-      };
-    }
-    // Usar el archivo de fallback (monorepo o ruta no estándar) — copiar su
-    // contenido a src/App.tsx Y apuntar 'entry' ahí. Antes solo se hacía lo
-    // primero: 'entry' (const) nunca se reasignaba, así que esbuild recibía
-    // entryPoints: [undefined] y fallaba de todas formas.
-    vfs["src/App.tsx"] = vfs[fallbackEntry];
-    entry = "src/App.tsx";
+  // Resolver único para validación, preview y despliegue. Primero reconoce
+  // las rutas Vite/CRA conocidas; si la IA dejó una raíz React válida bajo una
+  // ruta no estándar, la envuelve en memoria sin sobrescribir archivos reales.
+  const entrypoint = ensureReactEntrypoint(vfs);
+  if (!entrypoint) {
+    return {
+      ok: false,
+      issues: [{
+        file: "(bundle)",
+        message: `No React entry or recoverable root component found. Expected a conventional entry such as: ${REACT_ENTRY_CANDIDATES.join(", ")}`,
+      }],
+      filesAnalyzed,
+      durationMs: Date.now() - started,
+    };
+  }
+  const entry = entrypoint.entry;
+  if (entrypoint.recovered) {
+    logger.info({ entry, source: entrypoint.source }, "VALIDATOR: entrada React recuperada en memoria");
   }
 
   const NAMESPACE = "appforge-vfs";
