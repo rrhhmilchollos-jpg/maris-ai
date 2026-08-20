@@ -628,7 +628,10 @@ export interface IGenerationJob extends Document {
   coderModel: string;
   language: string;
   kind: string;
-  attachmentIds: number[];
+  // Los adjuntos se almacenan en ChatAttachment con ObjectId serializado; se
+  // conservan como cadenas para permitir imágenes, documentos y compatibilidad
+  // con las referencias existentes del frontend.
+  attachmentIds: string[];
   isAdmin: boolean;
   hasEverPaid?: boolean;
   retryCount: number;
@@ -709,7 +712,7 @@ const GenerationJobSchema = new Schema<IGenerationJob>(
     coderModel: { type: String, default: "auto" },
     language: { type: String, default: "typescript" },
     kind: { type: String, default: "fullstack" },
-    attachmentIds: { type: [Number], default: [] },
+    attachmentIds: { type: [String], default: [] },
     isAdmin: { type: Boolean, default: false },
     hasEverPaid: { type: Boolean, default: false },
     retryCount: { type: Number, default: 0 },
