@@ -790,7 +790,8 @@ export default function AppDetailPage({ params }: { params: { id: string } }) {
   const frontendCode = String(app?.frontendCode ?? "").trim();
   const hasMilestonePlaceholder = frontendCode.includes("El código ha sido consolidado en disco por hitos");
   const hasRenderableCode = frontendCode.length >= 20 && !hasMilestonePlaceholder;
-  const previewEndpointUrl = app?._id ? getApiUrl(`/api/apps/${app._id}/preview`) : "";
+  const previewVersion = Number((app as any)?.contentVersion ?? 0);
+  const previewEndpointUrl = app?._id ? getApiUrl(`/api/apps/${app._id}/preview?pv=${previewVersion}`) : "";
   // Prioridad máxima: proyectos importados con servidor SSR en vivo (Next.js
   // vía ssrImportBuilder.ts) — su "preview" es literalmente el servidor
   // corriendo en el sandbox, no un bundle servido por Maris AI.
@@ -2279,7 +2280,7 @@ Comprobación visual manual · diagnóstico sin cambios automáticos
                     <AppPreviewWaitingState />
                   ) : deployedUrl ? (
                     <iframe
-                      key={`deployed-${previewKey}`}
+                      key={`deployed-${previewVersion}-${previewKey}`}
                       src={deployedUrl}
                       title="App Preview"
                       sandbox="allow-scripts allow-forms allow-modals allow-popups"
