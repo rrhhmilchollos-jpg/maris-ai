@@ -225,22 +225,34 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
 
 // ───────────────────────────────────────────────────────────────────────────
 // FIX 9: Prevención de archivos vacíos + soporte de <Routes> en validaciones
-// El CoreOrchestrator ya no lanza error fatal si un hito falla 3 veces —
-// usa el contenido original (modify_file) o un placeholder mínimo (create_file).
-// Las validaciones de routing ahora cubren tanto <Switch> (wouter) como
-// <Routes> (react-router-dom v6), que es el router que usan muchas apps.
+// Cuando un hito de edición falla, se conserva contenido existente; si el
+// archivo era nuevo, se aborta el orquestador de forma segura. Nunca se crea
+// un placeholder de entrega. Las validaciones de routing cubren tanto <Switch>
+// (wouter) como <Routes> (react-router-dom v6).
 // ───────────────────────────────────────────────────────────────────────────
 {
   const orchestratorSrc = readServicesSrc("CoreOrchestrator.ts");
   check(
-    "FIX 9a: CoreOrchestrator generateEditMilestone tiene fallback (no lanza error fatal)",
-    /usando fallback tras/.test(orchestratorSrc) && /Conservando contenido original/.test(orchestratorSrc),
-    "Sin este fallback, un solo hito que falle 3 veces mata toda la edición y deja archivos vacíos o la app incompleta.",
+    "FIX 9a: CoreOrchestrator conserva archivos existentes y aborta altas incompletas",
+    /Conservando contenido original/.test(orchestratorSrc) && /se aborta la edición para preservar la versión anterior/.test(orchestratorSrc),
+    "Sin esta barrera, un hito fallido puede introducir código temporal o incompleto en la app del cliente.",
   );
   check(
-    "FIX 9b: CoreOrchestrator generateMilestone (creación) tiene fallback con placeholder",
-    /usando placeholder tras.*intentos fallidos/.test(orchestratorSrc),
-    "Sin placeholder, un hito de creación que falle produce un archivo vacío que rompe el build.",
+    "FIX 9b: CoreOrchestrator no genera placeholders de entrega para archivos nuevos",
+    !/placeholder generado automáticamente/.test(orchestratorSrc) && /No se pudo generar de forma completa el archivo nuevo/.test(orchestratorSrc),
+    "Un placeholder compila pero degrada la experiencia; debe abortarse la edición y conservar la revisión anterior.",
+  );
+  check(
+    "FIX 9b-bis: CoreOrchestrator asocia rutas directas de validateBundle a hitos regenerables",
+    /String\(issue\.file \|\| ""\)\.replace\(\/\^\.\*appforge-vfs:\//.test(orchestratorSrc)
+      && /apps\\\/web\\\//.test(orchestratorSrc),
+    "Sin esta normalización, una incidencia localizada como src/App.tsx se clasifica erróneamente como no recuperable y aborta la app completa.",
+  );
+  check(
+    "FIX 9b-ter: CoreOrchestrator usa un plan determinista si el planificador de edición se agota",
+    /buildDeterministicEditPlan/.test(orchestratorSrc)
+      && /planProjectEdit no respondió a tiempo; usando plan determinista/.test(orchestratorSrc),
+    "Sin este respaldo, un timeout del planificador fuerza una reescritura amplia o un fallo evitable de edición.",
   );
   check(
     "FIX 9c: parseBundleToMap filtra archivos vacíos/insignificantes",
@@ -537,7 +549,8 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
   const appsSrc = readSrc("routes/apps.ts");
   check(
     "FIX 20c: apps.ts pasa maxMilestonesOverride al CoreOrchestrator para usuarios gratuitos",
-    /isDegradedFreeTier.*FREE_USER_MAX_MILESTONES|maxMilestonesOverride: isDegradedFreeTier/.test(appsSrc),
+    /const FREE_USER_MAX_MILESTONES\s*=\s*7/.test(appsSrc)
+      && /maxMilestonesOverride:\s*\(isDegradedFreeTier \|\| forceBasicMilestones\)\s*\?\s*FREE_USER_MAX_MILESTONES/.test(appsSrc),
   );
   check(
     "FIX 20e: el límite de 7 hitos es ABSOLUTO para usuarios gratuitos — NO depende de isUltraComplex",
@@ -850,9 +863,11 @@ console.log("=== Guardián de fixes críticos (29 jun 2026) ===\n");
     /const ROLLBACK_COST = 1;/.test(appsSrc4) && /restoreAppRevision\(\{ appId: req\.params\.id, revisionId, userId \}\)/.test(appsSrc4) && /runDeployForApp\(\{ appId: req\.params\.id, userId, log: logger \}\)\.catch/.test(appsSrc4),
   );
   check(
-    "FIX 31c: si la restauración falla, se reembolsa el crédito con refundCredits (la función real para esto)",
-    /refundCredits\(\{ userId, isAdmin, amount: ROLLBACK_COST/.test(appsSrc4),
-    "Sin esto, el cliente pagaría 1 crédito incluso si el rollback falla (ej. la versión ya no existe, o hay un job de generación en curso) — un cobro por algo que nunca ocurrió.",
+    "FIX 31c: si la restauración falla no se abonan créditos automáticamente y se deriva a soporte",
+    !/refundCredits\(\{ userId, isAdmin, amount: ROLLBACK_COST/.test(appsSrc4)
+      && /no se restituye crédito automáticamente/.test(appsSrc4)
+      && /abre un ticket de soporte/.test(appsSrc4),
+    "La política comercial exige que cualquier compensación se revise y apruebe manualmente mediante ticket, sin abonos automáticos.",
   );
   const deployModalSrc3 = readAppforgeSrc("components/deploy-modal.tsx");
   check(

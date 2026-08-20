@@ -26,6 +26,8 @@ import { patchBundle, patchBundleMultiFile, type QAIssue } from "./shared-agents
 // La importación dinámica solo falla si se LLAMA la función, no al importar.
 import { validateBundle } from "./validate";
 import { buildDeployHtml } from "./deployBundle";
+import { insertAppRevisionFromRow } from "./appRevisions";
+import { acquireAppMutationLease, commitAppMutation, releaseAppMutationLease } from "./appMutationGuard";
 import { GeneratedApp, User, AppMessage, JobLog, GenerationJob, AppRuntimeError } from "@workspace/db/schema";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -444,18 +446,42 @@ export async function autoRepairBundle(opts: {
     }
     await jlog(`✅ Validación de preview superada — guardando el resultado final…`);
 
-    // Guardar el bundle reparado y limpiar pendingAdminApproval para que
-    // el cliente vea la app actualizada en su panel inmediatamente.
-    await GeneratedApp.findByIdAndUpdate(appId, {
-      $set: {
-        frontendCode: currentCode,
-        updatedAt: new Date(),
-        lastAutoRepairAt: new Date(),
-        autoRepairCount: ((app.autoRepairCount || 0) + 1),
-        pendingAdminApproval: false,   // ← CRÍTICO: desbloquear para el cliente
-        approvedByAdminAt: new Date(), // ← Registrar cuándo fue aprobada
-      },
-    });
+    // El reparador también modifica código de cliente: crea una revisión y
+    // confirma la versión bajo lease exclusivo. Si alguien editó la app en
+    // paralelo, se descarta el parche en vez de sobrescribir trabajo reciente.
+    const repairMutationJobId = `auto-repair-${new mongoose.Types.ObjectId().toString()}`;
+    const repairLease = await acquireAppMutationLease({ appId, jobId: repairMutationJobId });
+    if (!repairLease.ok) {
+      await jlog("⚠️ La app cambió o está siendo editada; se descarta esta reparación para preservar la versión más reciente.", "warn");
+      return false;
+    }
+    try {
+      await insertAppRevisionFromRow({
+        row: repairLease.lease.app,
+        source: "health-fix",
+        summary: lastFixSummary,
+        jobId: repairMutationJobId,
+      });
+      const committed = await commitAppMutation({
+        appId,
+        jobId: repairMutationJobId,
+        expectedContentVersion: repairLease.lease.expectedContentVersion,
+        update: {
+          frontendCode: currentCode,
+          lastAutoRepairAt: new Date(),
+          autoRepairCount: ((app.autoRepairCount || 0) + 1),
+          pendingAdminApproval: false,
+          approvedByAdminAt: new Date(),
+          status: "ready",
+        },
+      });
+      if (!committed.ok) {
+        await jlog("⚠️ La app cambió durante la reparación; no se sobrescribió ningún archivo.", "warn");
+        return false;
+      }
+    } finally {
+      await releaseAppMutationLease({ appId, jobId: repairMutationJobId });
+    }
 
     // Registrar en el log de reparaciones
     await AppRepairLog.create({

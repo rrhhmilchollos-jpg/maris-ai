@@ -785,8 +785,14 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
               // Identificar qué archivos tienen errores
               const failingFiles = validation.issues
                 .map((issue) => {
-                  const match = /appforge-vfs:(src\/[^\s:]+)/.exec(issue.file);
-                  return match?.[1];
+                  // validateBundle puede devolver `src/App.tsx` directamente o
+                  // una ruta prefijada por esbuild (`appforge-vfs:src/App.tsx`).
+                  // Ambos formatos representan un hito recuperable; asumir solo
+                  // el segundo convertía errores triviales de imports en fallos
+                  // no recuperables de toda la generación.
+                  const rawFile = String(issue.file || "").replace(/^.*appforge-vfs:/, "").replace(/^\/+/, "");
+                  const match = /(?:(?:apps\/web\/)?src\/[A-Za-z0-9_./-]+\.(?:tsx?|jsx?))/.exec(rawFile);
+                  return match?.[0].replace(/^apps\/web\//, "");
                 })
                 .filter(Boolean) as string[];
 
@@ -981,6 +987,33 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
    * hito recibe el contenido real del archivo concreto que le toca, no de
    * todos), igual de barato en tokens que planMonorepoProject.
    */
+  private buildDeterministicEditPlan(
+    userPrompt: string,
+    existingFilePaths: { frontend: string[]; backend: string[] },
+  ): { milestones: EditMilestone[] } {
+    // Si el planificador IA se agota, no pasamos todo el proyecto a una
+    // reescritura monolítica. Elegimos una superficie existente y segura: el
+    // componente raíz recibe el cambio y el resto del bundle queda intacto.
+    const frontendCandidates = [...existingFilePaths.frontend].sort((a, b) => {
+      const score = (p: string) => /(^|\/)App\.(t|j)sx?$/.test(p) ? 0 : /(^|\/)main\.(t|j)sx?$/.test(p) ? 1 : 2;
+      return score(a) - score(b) || a.localeCompare(b);
+    });
+    const target = frontendCandidates.find((p) => /\.(t|j)sx?$/.test(p));
+    if (!target) {
+      throw new Error("No hay archivo frontend existente y recuperable para aplicar una edición segura.");
+    }
+    console.warn(`⚡ Planificador de edición determinista: aplicando el cambio sobre ${target} sin crear archivos temporales.`);
+    return {
+      milestones: [{
+        id: 1,
+        action: "modify_file",
+        filePath: target,
+        description: `Aplica esta petición de forma localizada, conservando todo lo no relacionado y sin crear placeholders: ${userPrompt.slice(0, 4000)}`,
+        dependsOn: [],
+      }],
+    };
+  }
+
   async planProjectEdit(
     userPrompt: string,
     existingFilePaths: { frontend: string[]; backend: string[] },
@@ -1010,6 +1043,9 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
           content: `ARCHIVOS QUE YA EXISTEN EN EL PROYECTO:\n${fileList || "(proyecto sin archivos detectados — trata todo como create_file)"}\n\nPETICIÓN DEL USUARIO:\n${userPrompt}\n\n${complexEdit ? "" : "[MARIS EDIT FAST] Máximo 5 archivos/hitos. Modifica solo lo necesario; no propongas una reconstrucción completa."}`,
         }],
       }, { signal: editAbortController.signal as any }).finalMessage();
+    } catch (error) {
+      console.warn("⚠️ planProjectEdit no respondió a tiempo; usando plan determinista de edición segura.", error);
+      return this.buildDeterministicEditPlan(userPrompt, existingFilePaths);
     } finally {
       clearTimeout(editTimeoutId);
     }
@@ -1048,8 +1084,8 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
           /* el bloque extraído tampoco era JSON válido — cae al error final de abajo */
         }
       }
-      console.error("❌ Error parseando JSON del plan de edición:", error);
-      throw new Error("No se pudo generar el plan de edición — respuesta del planificador inválida.");
+      console.error("❌ Error parseando JSON del plan de edición; usando plan determinista seguro:", error);
+      return this.buildDeterministicEditPlan(userPrompt, existingFilePaths);
     }
   }
 
@@ -1143,12 +1179,12 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         if (attempt < MAX_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * attempt));
       }
     }
-    // FALLBACK: en vez de lanzar error fatal que mata toda la edición,
-    // usar el contenido original del archivo (para modify_file) o un
-    // placeholder mínimo (para create_file) — así el bundle final nunca
-    // queda con archivos vacíos ni se aborta la edición completa por un
-    // solo archivo que el modelo no pudo generar.
-    console.warn(`⚠️ Hito de edición ${milestone.id} (${milestone.filePath}) — usando fallback tras ${MAX_ATTEMPTS} intentos fallidos.`);
+    // Regla de entrega: una edición nunca puede inventar un archivo temporal.
+    // Para un archivo existente conservamos el original, que es la única
+    // degradación segura. Para un archivo nuevo abortamos el orquestador: el
+    // flujo superior conserva la revisión actual y puede intentar el respaldo
+    // completo en memoria, pero ningún placeholder llega a persistirse.
+    console.warn(`⚠️ Hito de edición ${milestone.id} (${milestone.filePath}) agotó ${MAX_ATTEMPTS} intento(s).`);
     if (milestone.action === "modify_file") {
       const originalContent = currentFiles.get(milestone.filePath);
       if (originalContent && originalContent.trim().length > 0) {
@@ -1156,16 +1192,7 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
         return { ...milestone, code: originalContent };
       }
     }
-    // Para create_file o si el original está vacío, generar un placeholder
-    // funcional mínimo que al menos no rompa el build.
-    const ext = milestone.filePath.split(".").pop() || "";
-    const isReactComponent = /\.(t|j)sx$/.test(milestone.filePath);
-    const componentName = milestone.filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || "Component";
-    const placeholderCode = isReactComponent
-      ? `import React from "react";\n\nexport default function ${componentName}() {\n  return (\n    <div className="p-8">\n      <h1 className="text-2xl font-bold">Cargando ${componentName}...</h1>\n      <p className="text-gray-500 mt-2">Este módulo se está generando.</p>\n    </div>\n  );\n}\n`
-      : `// ${milestone.filePath} — placeholder generado automáticamente\nexport {};\n`;
-    console.warn(`  → Usando placeholder para ${milestone.filePath}.`);
-    return { ...milestone, code: placeholderCode };
+    throw new Error(`No se pudo generar de forma completa el archivo nuevo ${milestone.filePath}; se aborta la edición para preservar la versión anterior.`);
   }
 
   /**

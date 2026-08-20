@@ -20,6 +20,60 @@ export interface ValidationReport {
 
 const FILE_MARKER = /\/\/\s*===\s*FILE:\s*(.+?)\s*===/g;
 
+// Un bundle puede compilar y aun así entregar una pantalla temporal en vez de
+// una aplicación. Este patrón coincide exclusivamente con los placeholders
+// internos conocidos; no bloquea copy legítimo como una página de mantenimiento
+// solicitada explícitamente por el usuario.
+export function hasVisibleDeliveryPlaceholder(bundle: string): boolean {
+  return /(?:<p[^>]*>\s*(?:Módulo en construcción|Este módulo se está generando)\.?\s*<\/p>|<h1[^>]*>\s*(?:App|Home|Component)\s*<\/h1>\s*<p[^>]*>\s*Módulo en construcción|Cargando\s+[A-Za-z_$][\w$.-]*\.\.\.\s*<\/h1>\s*<p[^>]*>\s*Este módulo se está generando)/i.test(bundle);
+}
+
+function detectEmptySourceFiles(vfs: Record<string, string>): BuildIssue[] {
+  const issues: BuildIssue[] = [];
+  for (const [file, contents] of Object.entries(vfs)) {
+    if (!/\.(t|j)sx?$/.test(file)) continue;
+    if (contents.trim().length === 0) {
+      issues.push({ file, message: "Empty source file. A deliverable bundle cannot contain blank TS/JS source files." });
+    }
+  }
+  return issues;
+}
+
+function detectNonRenderableReactEntry(entry: string, vfs: Record<string, string>): BuildIssue[] {
+  const entrySource = vfs[entry] || "";
+  if (!/\.(t|j)sx?$/.test(entry)) return [];
+  // React permite compilar `return null` y fragmentos vacíos, pero ambos dejan
+  // la preview sin interfaz. En Vite el entry suele ser main.tsx (solo monta
+  // <App />), por lo que inspeccionamos también el archivo raíz App.*.
+  const rootCandidates = [
+    { file: entry, source: entrySource },
+    ...Object.entries(vfs)
+      .filter(([file]) => /(^|\/)App\.(t|j)sx?$/.test(file) && file !== entry)
+      .map(([file, source]) => ({ file, source })),
+  ];
+  for (const candidate of rootCandidates) {
+    const returnsNull = /return\s*(?:\([^)]*\)\s*)?null\s*;?/.test(candidate.source);
+    const returnsEmptyFragment = /return\s*\(\s*<>\s*<\/>\s*\)/.test(candidate.source);
+    if (returnsNull || returnsEmptyFragment) {
+      return [{
+        file: candidate.file,
+        message: "React root returns no visible interface. Refusing to deliver a blank application.",
+      }];
+    }
+  }
+  const rendersJsx = /return\s*\(\s*<[A-Za-z]|return\s+<[A-Za-z]|=>\s*\(\s*<[A-Za-z]|=>\s*<[A-Za-z]/.test(entrySource);
+  // `src/main.tsx` de Vite no retorna JSX: monta <App /> con createRoot.
+  // Es una entrada válida y no debe confundirse con una pantalla en blanco.
+  const mountsReactTree = /createRoot[\s\S]{0,240}?\.render\s*\(\s*<|ReactDOM\.render\s*\(\s*</.test(entrySource);
+  if (!rendersJsx && !mountsReactTree) {
+    return [{
+      file: entry,
+      message: "React entry does not contain a renderable JSX interface. Refusing to deliver a blank or non-visual application.",
+    }];
+  }
+  return [];
+}
+
 /**
  * Walk the VFS looking for `<Link …>` followed (eventually) by a child `<a …>`.
  * Wouter v3's Link IS the anchor, so nesting <a> creates invalid <a><a> markup
@@ -444,6 +498,14 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   // despliegue real, que por eso nunca fallaba con estos proyectos.
   const rawFiles = parseFileMarkers(bundle);
   if (isStaticHtmlBundle(rawFiles)) {
+    if (hasVisibleDeliveryPlaceholder(bundle)) {
+      return {
+        ok: false,
+        issues: [{ file: "index.html", message: "Static bundle contains a delivery placeholder instead of a functional interface." }],
+        filesAnalyzed: Object.keys(rawFiles).length,
+        durationMs: Date.now() - started,
+      };
+    }
     logger.info("VALIDATOR: bundle es un proyecto HTML estático (detectado sobre archivos crudos) -- válido sin punto de entrada React");
     return { ok: true, issues: [], filesAnalyzed: Object.keys(rawFiles).length, durationMs: Date.now() - started };
   }
@@ -474,6 +536,14 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
   // @workspace/bundle-format, para que los dos sitios NUNCA puedan volver
   // a desincronizarse entre sí.
   if (isStaticHtmlBundle(vfs)) {
+    if (hasVisibleDeliveryPlaceholder(bundle)) {
+      return {
+        ok: false,
+        issues: [{ file: "index.html", message: "Static bundle contains a delivery placeholder instead of a functional interface." }],
+        filesAnalyzed,
+        durationMs: Date.now() - started,
+      };
+    }
     logger.info("VALIDATOR: bundle es un proyecto HTML estático (con o sin CSS/JS aparte) -- válido sin punto de entrada React");
     return { ok: true, issues: [], filesAnalyzed, durationMs: Date.now() - started };
   }
@@ -658,6 +728,13 @@ export async function validateBundle(bundle: string): Promise<ValidationReport> 
     // Detección de export/import mismatch — causa raíz de componentes que
     // "no renderizan" sin error visible.
     issues.push(...detectExportImportMismatch(vfs));
+    // Barreras de entrega: esbuild no falla por un archivo no importado vacío ni
+    // por `return null`, pero ambos producen una app incompleta para el cliente.
+    issues.push(...detectEmptySourceFiles(vfs));
+    issues.push(...detectNonRenderableReactEntry(entry!, vfs));
+    if (hasVisibleDeliveryPlaceholder(bundle)) {
+      issues.push({ file: "(bundle)", message: "Visible internal placeholder detected. Deliver a functional UI, never a temporary screen." });
+    }
 
     const ok = issues.length === 0;
     logger.info({ ok, issuesCount: issues.length, duration: Date.now() - started }, "VALIDATOR: Finalizado con éxito.");

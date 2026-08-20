@@ -21,7 +21,9 @@ import {
   type ITicket,
   type IAgentMemory,
 } from "@workspace/db/schema";
-import { restoreAppRevision } from "../lib/appRevisions";
+import { insertAppRevisionFromRow, restoreAppRevision } from "../lib/appRevisions";
+import { validateBundle } from "../lib/validate";
+import { acquireAppMutationLease, commitAppMutation, releaseAppMutationLease } from "../lib/appMutationGuard";
 import { diagnoseFromLogs } from "../lib/jobDiagnosis";
 import { reenqueueGenerateJob, enqueueGenerateJob, isQueueReady } from "../lib/jobQueue";
 import { refundCredits } from "../lib/credits";
@@ -41,6 +43,62 @@ import { getSeoGeoOverview, runSeoGeoAutopilot } from "../lib/seoGeoAutopilot";
 import { listCommercialCatalog, seedCommercialCatalog } from "../lib/commercialCatalog";
 
 const router: IRouter = Router();
+
+type AdminBundleWriteResult =
+  | { ok: true; app: any }
+  | { ok: false; reason: string; issues?: string[] };
+
+/**
+ * Todas las herramientas administrativas que modifican frontendCode deben pasar
+ * por esta puerta. Así un parche manual no puede saltarse la misma protección
+ * que usan generación y edición: build real, rechazo de placeholders, snapshot
+ * recuperable y confirmación optimista de versión.
+ */
+async function commitVerifiedAdminBundle(args: {
+  appId: string;
+  frontendCode: string;
+  title?: string;
+  summary: string;
+}): Promise<AdminBundleWriteResult> {
+  const candidate = String(args.frontendCode || "");
+  const validation = await validateBundle(candidate);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      reason: "El cambio administrativo no genera una app válida; no se ha guardado.",
+      issues: validation.issues.slice(0, 5).map((issue) => `${issue.file}${issue.line ? `:${issue.line}` : ""} — ${issue.message}`),
+    };
+  }
+
+  const mutationJobId = `admin-bundle-${new mongoose.Types.ObjectId().toString()}`;
+  const leaseResult = await acquireAppMutationLease({ appId: args.appId, jobId: mutationJobId });
+  if (!leaseResult.ok) {
+    return { ok: false, reason: leaseResult.reason === "busy" ? "La app está siendo modificada por otro proceso; no se ha sobrescrito." : "App no encontrada." };
+  }
+
+  try {
+    await insertAppRevisionFromRow({
+      row: leaseResult.lease.app as IGeneratedApp,
+      source: "health-fix",
+      summary: args.summary,
+      jobId: mutationJobId,
+    });
+    const update: Record<string, unknown> = { frontendCode: candidate, status: "ready", pendingAdminApproval: false };
+    if (args.title?.trim()) update.title = args.title.trim().slice(0, 200);
+    const committed = await commitAppMutation({
+      appId: args.appId,
+      jobId: mutationJobId,
+      expectedContentVersion: leaseResult.lease.expectedContentVersion,
+      update,
+    });
+    if (!committed.ok) {
+      return { ok: false, reason: "La app cambió mientras se validaba el parche; se conserva la versión más reciente." };
+    }
+    return { ok: true, app: committed.app };
+  } finally {
+    await releaseAppMutationLease({ appId: args.appId, jobId: mutationJobId });
+  }
+}
 
 // ─── Preview público — ANTES del middleware de auth ───────────────────────────
 // Esta ruta no requiere autenticación para poder abrirla directamente en el navegador
@@ -2104,16 +2162,22 @@ router.post("/admin/apps/patch-all", async (req: any, res: any): Promise<void> =
   }).select("_id title").lean();
 
   let patched = 0;
+  const rejected: Array<{ appId: string; reason: string }> = [];
   for (const app of apps) {
     const full = await GeneratedApp.findById(app._id).select("frontendCode").lean() as any;
     if (!full?.frontendCode) continue;
     const newCode = full.frontendCode.split(search).join(replace ?? "");
-    await GeneratedApp.findByIdAndUpdate(app._id, { $set: { frontendCode: newCode } });
-    patched++;
+    const committed = await commitVerifiedAdminBundle({
+      appId: String(app._id),
+      frontendCode: newCode,
+      summary: `Parche administrativo masivo: ${String(search).slice(0, 160)}`,
+    });
+    if (committed.ok) patched++;
+    else rejected.push({ appId: String(app._id), reason: committed.reason });
   }
 
-  res.json({ ok: true, patched, total: apps.length,
-    message: `Parcheadas ${patched} apps que contenían el texto` });
+  res.json({ ok: rejected.length === 0, patched, total: apps.length, rejected,
+    message: `Parcheadas ${patched} apps; ${rejected.length} cambio(s) inválido(s) o en conflicto fueron rechazados sin sobrescribir.` });
 });
 
 router.post("/admin/apps/patch-by-slug", async (req: any, res: any): Promise<void> => {
@@ -2142,8 +2206,16 @@ router.post("/admin/apps/patch-by-slug", async (req: any, res: any): Promise<voi
     return;
   }
 
-  await GeneratedApp.findByIdAndUpdate(app._id, { $set: { frontendCode: patched } });
-  logger.info({ appId: String(app._id), slug, search, occurrences: count }, "Admin: patched app by slug");
+  const committed = await commitVerifiedAdminBundle({
+    appId: String(app._id),
+    frontendCode: patched,
+    summary: `Parche administrativo por slug: ${String(search).slice(0, 160)}`,
+  });
+  if (!committed.ok) {
+    res.status(422).json({ ok: false, appId: String(app._id), error: committed.reason, issues: committed.issues || [] });
+    return;
+  }
+  logger.info({ appId: String(app._id), slug, search, occurrences: count }, "Admin: patched app by slug after integrity gate");
   res.json({ ok: true, appId: String(app._id), occurrences: count, message: `Eliminado ${count} vez/veces correctamente` });
 });
 
@@ -2157,11 +2229,17 @@ router.post("/admin/apps/:id/replace-bundle", async (req: any, res: any): Promis
   const app = await GeneratedApp.findById(req.params.id).lean() as any;
   if (!app) { res.status(404).json({ error: "App no encontrada" }); return; }
 
-  const update: any = { frontendCode };
-  if (title) update.title = title;
-
-  await GeneratedApp.findByIdAndUpdate(req.params.id, { $set: update });
-  logger.info({ appId: req.params.id, size: frontendCode.length, title }, "Admin: bundle reemplazado completamente");
+  const committed = await commitVerifiedAdminBundle({
+    appId: String(req.params.id),
+    frontendCode,
+    title,
+    summary: "Reemplazo administrativo completo de bundle",
+  });
+  if (!committed.ok) {
+    res.status(422).json({ ok: false, error: committed.reason, issues: committed.issues || [] });
+    return;
+  }
+  logger.info({ appId: req.params.id, size: frontendCode.length, title }, "Admin: bundle reemplazado tras puerta de integridad");
   res.json({ ok: true, appId: req.params.id, size: frontendCode.length, message: "Bundle reemplazado correctamente" });
 });
 
@@ -2182,8 +2260,16 @@ router.post("/admin/apps/:id/patch-code", async (req: any, res: any): Promise<vo
     return;
   }
 
-  await GeneratedApp.findByIdAndUpdate(req.params.id, { $set: { frontendCode: patched } });
-  logger.info({ appId: req.params.id, search, occurrences: count }, "Admin: patched app frontend code");
+  const committed = await commitVerifiedAdminBundle({
+    appId: String(req.params.id),
+    frontendCode: patched,
+    summary: `Parche administrativo de código: ${String(search).slice(0, 160)}`,
+  });
+  if (!committed.ok) {
+    res.status(422).json({ ok: false, error: committed.reason, issues: committed.issues || [] });
+    return;
+  }
+  logger.info({ appId: req.params.id, search, occurrences: count }, "Admin: patched app frontend code after integrity gate");
   res.json({ ok: true, occurrences: count, message: `Reemplazado ${count} vez/veces correctamente` });
 });
 

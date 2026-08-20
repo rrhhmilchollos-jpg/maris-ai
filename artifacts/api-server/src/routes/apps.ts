@@ -16,7 +16,7 @@ function getOpenAIApps(): OpenAI {
 }
 import { makeSlug } from "../lib/deployBundle";
 import { raceWithTimeout, AI_CALL_TIMEOUT_MS, createZocoToolCallWithFallback } from "../lib/shared-agents";
-import { validateBundle, parseBundleToVFS, type ValidationReport } from "../lib/validate";
+import { validateBundle, parseBundleToVFS, hasVisibleDeliveryPlaceholder, type ValidationReport } from "../lib/validate";
 import { snapshotCurrentApp, insertAppRevisionFromRow } from "../lib/appRevisions";
 import {
   acquireAppMutationLease,
@@ -50,15 +50,9 @@ function storePreviewHtml(cacheKey: string, html: string): void {
 // ── Validación de integridad del bundle ──────────────────────────────────────
 // Detecta archivos TSX/TS truncados que pasan el QA pero fallan en el preview.
 // Un archivo está truncado si: el JSX tiene tags abiertos sin cerrar al final,
-// o si termina en mitad de una expresión (sin punto y coma, sin })
-// Rechaza placeholders visibles en componentes entregados. Un archivo de
-// datos puede contener una nota temporal, pero una pantalla final con
-// "Módulo en construcción" no es una app funcional y no debe sobrescribir
-// ni darse por completada.
-function hasVisibleDeliveryPlaceholder(bundle: string): boolean {
-  return /(?:<p[^>]*>\s*(?:Módulo en construcción|Este módulo se está generando)\.?\s*<\/p>|<h1[^>]*>\s*(?:App|Home|Component)\s*<\/h1>\s*<p[^>]*>\s*Módulo en construcción)/i.test(bundle);
-}
-
+// o si termina en mitad de una expresión (sin punto y coma, sin }). La detección
+// de pantallas placeholder se importa de validate.ts para que todas las rutas
+// usen una única política de entrega.
 function detectTruncatedFiles(bundle: string): string[] {
   const truncated: string[] = [];
   if (!bundle || !bundle.trim()) return truncated;
@@ -6451,9 +6445,13 @@ router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
         const patchedFrontend = await patchBundle(app.frontendCode, qaIssues, language);
         if (patchedFrontend) {
           const reValidated = await validateBundle(patchedFrontend);
-          if (reValidated.issues.length < frontendReport.issues.length) {
+          // Una mejora parcial sigue dejando una aplicación rota. Solo se
+          // acepta un parche si el bundle final queda completamente válido.
+          if (reValidated.ok) {
             updatedFrontend = patchedFrontend;
             repaired = true;
+          } else {
+            await logger.warn({ appId: String(app._id), remainingIssues: reValidated.issues.length }, "health-check: parche parcial descartado; se conserva la versión previa");
           }
         }
       } catch (err) {
@@ -6466,20 +6464,59 @@ router.post("/apps/:id/health", requireAuth, async (req: any, res: any) => {
       ? (await validateBundle(updatedFrontend)).issues
       : frontendReport.issues;
 
-    const update: any = {
-      lastHealthCheckAt: new Date(),
+    const healthCheckedAt = new Date();
+    const buildHealthUpdate = (persistedRepair: boolean): any => ({
+      lastHealthCheckAt: healthCheckedAt,
       lastHealthCheckReport: {
         ok: finalFrontendIssues.length === 0 && (backendReport?.issues.length ?? 0) === 0,
         frontendIssues: finalFrontendIssues,
         backendIssues: backendReport?.issues ?? [],
-        repaired,
-        checkedAt: new Date(),
+        repaired: persistedRepair,
+        checkedAt: healthCheckedAt,
       },
-    };
-    if (updatedFrontend) update.frontendCode = updatedFrontend;
-    if (updatedBackend) update.backendCode = updatedBackend;
+    });
 
-    await GeneratedApp.findByIdAndUpdate(app._id, { $set: update });
+    // Una reparación de Health Check es una mutación de código de cliente.
+    // Se protege igual que una edición normal: snapshot obligatorio, lock
+    // exclusivo y confirmación por contentVersion. Si hay conflicto, nunca
+    // se escribe el parche preparado sobre una versión más reciente.
+    if (updatedFrontend || updatedBackend) {
+      const healthMutationJobId = `health-check-${new mongoose.Types.ObjectId().toString()}`;
+      const healthLease = await acquireAppMutationLease({ appId: String(app._id), jobId: healthMutationJobId });
+      if (healthLease.ok) {
+        try {
+          await insertAppRevisionFromRow({
+            row: healthLease.lease.app,
+            source: "health-fix",
+            summary: "Reparación aprobada por Health Check",
+            jobId: healthMutationJobId,
+          });
+          const committed = await commitAppMutation({
+            appId: String(app._id),
+            jobId: healthMutationJobId,
+            expectedContentVersion: healthLease.lease.expectedContentVersion,
+            update: {
+              ...buildHealthUpdate(true),
+              ...(updatedFrontend ? { frontendCode: updatedFrontend } : {}),
+              ...(updatedBackend ? { backendCode: updatedBackend } : {}),
+              status: "ready",
+            },
+          });
+          if (!committed.ok) repaired = false;
+        } finally {
+          await releaseAppMutationLease({ appId: String(app._id), jobId: healthMutationJobId });
+        }
+      } else {
+        repaired = false;
+      }
+      // Si el parche no se pudo confirmar, se registra solo el informe y se
+      // conserva el código vigente del cliente.
+      if (!repaired) {
+        await GeneratedApp.updateOne({ _id: app._id }, { $set: buildHealthUpdate(false) });
+      }
+    } else {
+      await GeneratedApp.updateOne({ _id: app._id }, { $set: buildHealthUpdate(false) });
+    }
 
     logger.info(
       { appId: String(app._id), userId, issuesFound: allIssues.length, repaired },
@@ -9496,6 +9533,18 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
     await connectDB();
     const app = await GeneratedApp.findById(req.params.id).select("frontendCode title lastBuildErrorSummary").lean() as any;
     if (!app?.frontendCode) return res.status(404).send("<h1>App no encontrada</h1>");
+
+    // La vista previa no es una vía de excepción: las apps heredadas con
+    // placeholder, archivos vacíos o errores de build no pueden presentarse
+    // como producto funcional ni usar el fallback permisivo de Babel.
+    const previewIntegrity = await validateBundle(app.frontendCode);
+    if (!previewIntegrity.ok) {
+      logger.warn({ appId: req.params.id, issues: previewIntegrity.issues.slice(0, 3) }, "Preview bloqueada por integridad de bundle");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+      res.setHeader("X-Maris-Preview-Integrity", "rejected");
+      return res.status(409).send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Revisión necesaria</title></head><body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1020;color:#eef2ff;font-family:system-ui,sans-serif"><main style="max-width:560px;padding:32px;border:1px solid #334155;border-radius:16px;background:#111827"><h1 style="margin-top:0;font-size:22px">Esta versión necesita revisión</h1><p style="line-height:1.6;color:#cbd5e1">Para proteger tu proyecto, Maris AI ha bloqueado la vista previa de una versión incompleta o no compilable. La versión no se sustituirá automáticamente.</p><p style="line-height:1.6;color:#cbd5e1">Puedes solicitar una revisión desde soporte; cualquier compensación se evalúa manualmente.</p></main></body></html>`);
+    }
 
     // ENCONTRADO A PETICIÓN DEL USUARIO: banda roja real en el preview con
     // el error de build sin resolver, cuando lo hay -- inyectada FUERA del
