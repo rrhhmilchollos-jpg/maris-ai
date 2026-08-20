@@ -9611,8 +9611,12 @@ router.get("/apps/:id/preview", async (req: any, res: any) => {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
       res.setHeader("Pragma", "no-cache");
     } else {
-      res.setHeader("Cache-Control", "public, max-age=0, s-maxage=10, stale-while-revalidate=20");
-      res.setHeader("CDN-Cache-Control", "s-maxage=10, stale-while-revalidate=20");
+      // Cada preview representa el último bundle mutable de una app. No debe
+      // atravesar una caché compartida ni una ventana stale, porque podría
+      // mostrar una edición anterior aunque la confirmación atómica ya haya
+      // actualizado contentVersion en MongoDB.
+      res.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+      res.setHeader("CDN-Cache-Control", "no-store");
     }
     res.setHeader("Content-Security-Policy", "frame-ancestors *; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; connect-src *; img-src * data: blob:; font-src *");
     res.setHeader("X-Frame-Options", "ALLOWALL");
