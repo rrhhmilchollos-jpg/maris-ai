@@ -24,6 +24,7 @@ import botRenderRouter from "./routes/botRender";
 import adminRouter from "./routes/admin";
 import demoRouter from "./routes/demo";
 import affiliatesRouter from "./routes/affiliates";
+import spaxAuthProxyRouter from "./routes/spaxAuthProxy";
 import { logger } from "./lib/logger";
 import { initSentry, isSentryEnabled, Sentry, addBreadcrumb } from "./lib/sentry";
 import { apiRateLimiter } from "./middlewares/rateLimit";
@@ -312,6 +313,10 @@ app.use("/api", codeExfiltrationMiddleware);
 // In-memory request/error/duration counters for /api/admin/metrics.
 app.use("/api", metricsMiddleware);
  
+// Servicio de identidad de SPAX: proxy limitado a un backend y base de datos propios.
+// Se monta tras las capas globales de seguridad, rate limiting y saneado.
+app.use("/api/spax-auth", spaxAuthProxyRouter);
+
 // Clerk webhook — sin auth, con firma propia
 app.use("/api", router);
 app.use("/api", ticketsRouter);
