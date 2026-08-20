@@ -22,6 +22,12 @@ export interface TestingAgentOptions {
   onProgress?: (update: any) => void;
   /** true en modo edición de proyecto existente: menos ciclos (2 vs 5), la edición termina minutos antes */
   isEdit?: boolean;
+  /**
+   * Habilita una reparación limitada solo después de recibir un bundle completo.
+   * El llamador debe mantener el resultado en memoria y confirmar build antes
+   * de persistirlo, de modo que no pueda sobrescribir una app válida.
+   */
+  allowVerifiedAutoRepair?: boolean;
 }
 
 // El Testing Agent es un guardrail, no un segundo generador de proyectos.
@@ -44,9 +50,12 @@ export async function runTestingAgent(
   // El Testing Agent queda fuera del flujo de producción hasta que un operador
   // lo habilite explícitamente en un entorno controlado. La generación mantiene
   // la validación determinista previa, pero nunca reescribe código del cliente.
-  if (!AUTOMATED_REPAIR_ENABLED) {
+  if (!AUTOMATED_REPAIR_ENABLED && !options.allowVerifiedAutoRepair) {
     logAutomationDisabled("testing-agent", { jobId: options.jobId, isEdit: !!options.isEdit });
     return bundle;
+  }
+  if (!AUTOMATED_REPAIR_ENABLED && options.allowVerifiedAutoRepair) {
+    logger.info({ jobId: options.jobId, isEdit: !!options.isEdit }, "[testing-agent] Reparación limitada en memoria habilitada tras bundle completo");
   }
 
   const { log, onProgress, language, prompt, plan } = options;

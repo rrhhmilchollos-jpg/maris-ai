@@ -3,6 +3,7 @@ import { HealthCheckResponse } from "@workspace/api-zod";
 import { isQueueReady } from "../lib/jobQueue";
 import fs from 'fs';
 import path from 'path';
+import { AUTOMATED_REPAIR_ENABLED } from "../lib/automationPolicy";
 
 const router: IRouter = Router();
 
@@ -30,7 +31,9 @@ function sendHealth(res: Response) {
   res.json({ 
     ...data, 
     queue: queueReady ? "ready" : "degraded",
-    testing_agent: testerExists ? "active" : "missing",
+    testing_agent: testerExists
+      ? (AUTOMATED_REPAIR_ENABLED ? "conditional-repair-enabled" : "conditional-repair-verified")
+      : "missing",
     version: "2.2.0-scalable",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),

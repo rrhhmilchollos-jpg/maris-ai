@@ -6,9 +6,6 @@ import { logger } from "./lib/logger";
 import { reclaimOrphanedJobs, runJobById } from "./routes/apps";
 import { startQueue, registerGenerateWorker, stopQueue } from "./lib/jobQueue";
 import { startSelfMonitor } from "./lib/selfMonitor";
-import { startAppHealthMonitor } from "./lib/autoRepairAgent";
-import { runAutopilotTick } from "./lib/aiAutopilot";
-import { runRecurringBillingTick } from "./lib/recurringBilling";
 import { runFreeCreditsRenewalTick } from "./lib/freeCreditsRenewal";
 import { submitIndexNow } from "./lib/indexNow";
 import { pingRedis, isRedisConfigured } from "./lib/redisHealth";
@@ -119,7 +116,7 @@ httpServer.listen(finalPort, async (err?: Error) => {
     process.exit(1);
   }
  
-  logger.info({ port: finalPort }, "Server listening v2.1.0 (Testing Agent Active)");
+  logger.info({ port: finalPort }, "Server listening v2.1.0 (Testing Agent: reparación solo por error verificable)");
  
   // 0) Connect to MongoDB before anything else.
   try {
@@ -170,39 +167,15 @@ httpServer.listen(finalPort, async (err?: Error) => {
     logger.error({ err: selfErr }, "Failed to start self-monitor");
   }
 
-  // 5) App Health Monitor — auto-reparación continua de apps generadas.
-  try {
-    startAppHealthMonitor();
-  } catch (healthErr) {
-    logger.error({ err: healthErr }, "Failed to start AppHealthMonitor");
-  }
+  // La salud de las apps se observa de manera no destructiva en los jobs y
+  // en los diagnósticos manuales. Nunca se inicia un auto-fix desde el arranque:
+  // solo el CoreOrchestrator puede pedir al Testing Agent una reparación de un
+  // error reproducible sobre un bundle completo.
+  logger.info("App Health auto-fix y AI Autopilot de reparación desactivados — reparación exclusiva bajo CoreOrchestrator");
 
-  // 6) AI Autopilot — monitor de salud, auto-fix, resumen diario.
-  try {
-    // Primer tick inmediato, luego cada 5 minutos
-    runAutopilotTick().catch(() => {});
-    setInterval(() => runAutopilotTick().catch(() => {}), 5 * 60 * 1000);
-    logger.info("AI Autopilot started (health monitor, auto-fix, daily summary)");
-  } catch (autopilotErr) {
-    logger.error({ err: autopilotErr }, "Failed to start AI Autopilot");
-  }
-
-  // 6b) Recurring Billing (Viva.com) — cobro mensual de suscripciones.
-  // A diferencia de Stripe, Viva.com no cobra suscripciones solo: cada
-  // cuota es una llamada nuestra (ver lib/recurringBilling.ts). Cada hora
-  // es suficiente margen frente a la ventana de renovación de 24h sin
-  // sobrecargar la API de Viva con comprobaciones innecesarias.
-  try {
-    runRecurringBillingTick().catch((err) => logger.error({ err }, "Recurring billing initial tick failed"));
-    const recurringInterval = setInterval(
-      () => runRecurringBillingTick().catch((err) => logger.error({ err }, "Recurring billing tick failed")),
-      60 * 60 * 1000,
-    );
-    recurringInterval.unref();
-    logger.info("Recurring Billing (Viva.com) started — hourly tick");
-  } catch (recurringErr) {
-    logger.error({ err: recurringErr }, "Failed to start Recurring Billing");
-  }
+  // Stripe es la única vía de cobro. No se ejecuta ningún cargo recurrente
+  // desde el servidor ni se inicia la integración heredada de Viva.com.
+  logger.info("Recurring Billing heredado desactivado — los créditos solo se acreditan por webhook Stripe verificado");
 
   // 6b-2) Caducidad mensual de créditos del plan GRATIS — mismo ciclo que
   // el plan de pago (ver lib/freeCreditsRenewal.ts), a petición explícita:

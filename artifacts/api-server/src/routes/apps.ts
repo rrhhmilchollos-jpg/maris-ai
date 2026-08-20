@@ -91,7 +91,6 @@ function detectTruncatedFiles(bundle: string): string[] {
   return truncated;
 }
 import { runTestingAgent } from "../lib/tester";
-import { AUTOMATED_REPAIR_ENABLED, logAutomationDisabled } from "../lib/automationPolicy";
 import { runPMAgent, type EmergentArchitectBlueprint } from "../lib/emergentAgentPipeline";
 import { detectIntegrations } from "../lib/fileToolsAgent";
 import { 
@@ -4366,16 +4365,30 @@ export async function generateApp(
     // previsto, el try/catch de runPhase ya lo captura y cae al pipeline
     // robusto estándar — red de seguridad que se mantiene sin cambios.
     if (milestoneFrontend.length >= 200 && hasRecognizableAppComponent) {
-      const testedMilestone = await runPhase("testing", () =>
-        runTestingAgent(milestoneFrontend, {
-          jobId: jobId || "unknown",
-          prompt,
-          plan: { title: "Hitos", description: "Construcción por hitos" },
-          language,
-          log: log,
-          onProgress,
-        })
-      );
+      // El Testing Agent solo se activa cuando ya existe un bundle completo y
+      // esbuild demuestra un error concreto. Así puede reparar archivos, pero
+      // nunca intenta inventar código si el modelo no entregó una app.
+      const initialMilestoneValidation = await validateBundle(milestoneFrontend);
+      let testedMilestone = milestoneFrontend;
+      if (!initialMilestoneValidation.ok) {
+        await log("testing", `🧪 Testing Agent: ${initialMilestoneValidation.issues.length} error(es) verificable(s) en un bundle completo; aplicando una reparación limitada en memoria.`);
+        testedMilestone = await runPhase("testing", () =>
+          runTestingAgent(milestoneFrontend, {
+            jobId: jobId || "unknown",
+            prompt,
+            plan: { title: "Hitos", description: "Construcción por hitos" },
+            language,
+            log: log,
+            onProgress,
+            allowVerifiedAutoRepair: true,
+          })
+        );
+        const repairedMilestoneValidation = await validateBundle(testedMilestone);
+        if (!repairedMilestoneValidation.ok) {
+          throw new Error(`El Testing Agent no dejó un bundle compilable: ${repairedMilestoneValidation.issues.slice(0, 3).map((issue) => issue.message).join(" | ")}`);
+        }
+        await log("testing", "✅ Reparación verificada por compilación; la app se puede guardar con snapshot y rollback disponibles.");
+      }
       const archDescription = milestoneResult.architecture === "microservices"
         ? `microservicios (${Object.keys(milestoneResult.serviceBundles || {}).join(", ") || "servicios sin nombre"})`
         : "monolito";
@@ -4622,11 +4635,11 @@ export async function generateApp(
     // pipeline pesado que una feature nueva. Ahora el QA+Testing Agent solo
     // corre si el scope NO es "fast-patch"; fast-patch sigue pasando
     // siempre por runValidatePatchLoop (comprobación de build) más abajo.
-    const runsHeavyQaAndTesting = AUTOMATED_REPAIR_ENABLED && execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
-    if (!AUTOMATED_REPAIR_ENABLED) {
-      logAutomationDisabled("testing-agent", { jobId, appId: previous._id?.toString() });
-      await log("system", "Validación automática de reparaciones desactivada por seguridad. Se conserva el código y se ejecuta solo la comprobación determinista de build.", "info");
-    } else if (runsHeavyQaAndTesting) {
+    // El Testing Agent no es una etapa decorativa: solo entra cuando el build
+    // determinista ya encontró un defecto reproducible en una edición completa.
+    const initialEditValidation = await validateBundle(qualityCheckedFrontend);
+    const runsHeavyQaAndTesting = !initialEditValidation.ok && execPlan.phases.includes("validate") && execPlan.scope !== "fast-patch";
+    if (runsHeavyQaAndTesting) {
       const editAsPlan: ProjectPlan = {
         title: previous.title,
         description: previous.description,
@@ -4656,6 +4669,9 @@ export async function generateApp(
           language,
           log,
           onProgress,
+          // La mutación se mantiene en memoria hasta que el guard confirme build
+          // y versión; cualquier fallo deja intacta la revisión anterior.
+          allowVerifiedAutoRepair: true,
           // FIX VELOCIDAD: en modo edición el Testing Agent usa 2 ciclos máx.
           // (vs 5 de generación nueva) — las ediciones tocan pocos archivos y
           // cada ciclo extra puede ser una llamada LLM de minutos.
@@ -4671,10 +4687,12 @@ export async function generateApp(
         logger.warn({ e }, "runTestingAgent falló en modo edición — continúo con el bundle previo a este paso");
         return qualityCheckedFrontend;
       });
+    } else if (!initialEditValidation.ok) {
+      await log("system", "La edición contiene un error de build, pero su alcance no permite una reparación automática segura. Se conserva la versión anterior hasta una revisión explícita.", "warn");
     } else if (!execPlan.phases.includes("validate")) {
       await log("system", "Plan dice saltar validación (alcance reducido) — se omiten QA, Testing Agent y comprobación de build en esta edición.", "warn");
     } else {
-      await log("system", "Cambio cosmético (fast-patch) — se omiten QA semántico y Testing Agent; solo se comprueba que el build compile.", "info");
+      await log("system", "Build correcto: el Testing Agent permanece oculto porque no hay ningún error verificable que reparar.", "info");
     }
 
     const fixedFrontend = await runValidatePatchLoop(

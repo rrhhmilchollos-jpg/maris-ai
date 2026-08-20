@@ -577,6 +577,15 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
   }
 
   private async generateMilestone(milestone: Milestone, database: "mongodb" | "postgresql", platform: "web" | "mobile-native" = "web"): Promise<GeneratedMilestone> {
+    // La documentación de arranque no debe consumir una inferencia larga ni bloquear
+    // una aplicación que ya tiene sus módulos de producto construidos.
+    if (/^(README|readme)\.md$/i.test(milestone.filePath)) {
+      const product = this.activeProjectIntent.slice(0, 600).replace(/\s+/g, " ").trim() || "Aplicación generada con Maris AI";
+      return {
+        ...milestone,
+        code: `# Proyecto generado con Maris AI\n\n## Objetivo\n${product}\n\n## Arranque\n1. Revisa las variables de entorno de las integraciones necesarias.\n2. Ejecuta el workspace web y el API según la estructura generada.\n3. Valida los flujos principales antes de publicar.\n\n## Seguridad\nNo actives credenciales, cobros ni servicios externos sin una configuración autorizada.\n`,
+      };
+    }
     // El modo compacto prioriza una primera versión visible: un intento breve y
     // el fallback existente son preferibles a tres esperas de 90 segundos.
     const compactMilestone = (this.options.maxMilestonesOverride ?? Number.POSITIVE_INFINITY) <= 8;
@@ -853,9 +862,17 @@ PROHIBICIONES ABSOLUTAS en plan gratuito:
       }
     } // fin for (const layerMilestones of layers)
 
-    wsNotificationCallback({ status: "🚀 ¡Proyecto completo generado e integrado!", progress: 100, step: total });
-
     const allGenerated = Array.from(this.generatedByMilestoneId.values());
+    const generatedFrontend = allGenerated.filter((item) => item.targetWorkspace === "apps/web");
+    const generatedFrontendBundle = generatedFrontend
+      .sort((a, b) => a.id - b.id)
+      .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
+      .join("\n");
+    const hasGeneratedEntry = generatedFrontend.some((item) => /(^|\/)(App|main|index)\.(tsx|jsx)$/.test(item.filePath));
+    if (generatedFrontendBundle.length < 200 || !hasGeneratedEntry) {
+      throw new Error("El orquestador no completó una entrada React válida; no se anunciará ni entregará un proyecto parcial.");
+    }
+    wsNotificationCallback({ status: "🚀 ¡Proyecto completo generado e integrado!", progress: 100, step: total });
     const toBundle = (items: GeneratedMilestone[]) => items
       .sort((a, b) => a.id - b.id)
       .map((item) => `// === FILE: ${item.filePath} ===\n${item.code.trim()}\n`)
