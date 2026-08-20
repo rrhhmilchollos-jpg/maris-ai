@@ -4327,7 +4327,9 @@ export async function generateApp(
       const declaredPath = f.split("\n")[0].split(" ===")[0].trim();
       return /(^|\/)App\.(tsx|jsx|js)$/.test(declaredPath);
     });
-    const ROOT_COMPONENT_PATTERN = /export\s+default\s+function\s+App|const\s+App\s*=|function\s+App\s*\(/;
+    // Una entrada válida puede exportar `App` o un componente con nombre de producto
+    // (por ejemplo, `InternalVerification`). Exigimos un export React, no un nombre.
+    const ROOT_COMPONENT_PATTERN = /export\s+default\s+function\s+[A-Za-z_$][\w$]*|export\s+default\s+[A-Za-z_$][\w$]*|const\s+[A-Za-z_$][\w$]*\s*=\s*\([^)]*\)\s*=>|function\s+[A-Za-z_$][\w$]*\s*\(/;
     let hasRecognizableAppComponent = !!exactAppFile && ROOT_COMPONENT_PATTERN.test(exactAppFile);
     if (!hasRecognizableAppComponent && frontendFiles.length > 0) {
       // Red de seguridad: el archivo de frontend más largo + un export
