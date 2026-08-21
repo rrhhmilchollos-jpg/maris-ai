@@ -433,6 +433,23 @@ router.post("/apps/:appId/github", requireAuth, async (req: Request, res: Respon
   return githubPushHandler(req, res);
 });
 
+// Compatibilidad con builds previos del editor que todavía llamaban a
+// POST /api/deploy/github. Conserva el mismo requireAuth y reutiliza el
+// controlador real; nunca crea URLs ficticias ni acepta un appId ausente.
+router.post("/deploy/github", requireAuth, async (req: Request, res: Response) => {
+  const rawAppId = (req.body as any)?.appId ?? (req.body as any)?.projectId ?? (req.body as any)?.id;
+  const appId = typeof rawAppId === "string" ? rawAppId.trim() : "";
+  if (!appId) {
+    return res.status(400).json({
+      error: "app_id_required",
+      message: "Selecciona el proyecto que quieres exportar a GitHub e inténtalo de nuevo.",
+    });
+  }
+  (req.params as any).appId = appId;
+  const { githubPushHandler } = await import("./github");
+  return githubPushHandler(req, res);
+});
+
 /**
  * POST /api/apps/:appId/visual-test
  * Ejecuta el Visual Testing Agent

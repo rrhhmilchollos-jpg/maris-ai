@@ -88,14 +88,21 @@ function buildGitHubAuthorizeUrl(userId: string, returnTo?: string): string {
 
 // ─── Paso 1A: URL OAuth para frontends con Bearer token (Clerk) ───────────────
 router.get("/github/connect-url", requireAuth, (req, res) => {
-  if (!GITHUB_CLIENT_ID) return res.status(500).json({ error: "GITHUB_CLIENT_ID no está configurado" });
+  if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+    return res.status(503).json({
+      error: "github_oauth_unconfigured",
+      message: "La conexión con GitHub aún no está configurada en Maris AI. Un administrador debe registrar la aplicación OAuth y añadir sus credenciales al servidor antes de conectar cuentas.",
+    });
+  }
   const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/dashboard";
   return res.json({ url: buildGitHubAuthorizeUrl(req.userId!, returnTo) });
 });
 
 // ─── Paso 1B: compatibilidad: redirigir a GitHub OAuth ───────────────────────
 router.get("/github/connect", requireAuth, (req, res) => {
-  if (!GITHUB_CLIENT_ID) return res.status(500).send("GITHUB_CLIENT_ID no está configurado");
+  if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+    return res.status(503).send("La conexión con GitHub aún no está configurada en Maris AI.");
+  }
   const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/dashboard";
   return res.redirect(buildGitHubAuthorizeUrl(req.userId!, returnTo));
 });
