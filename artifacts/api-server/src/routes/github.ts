@@ -85,6 +85,22 @@ function normalizeRepoName(value: string): string | null {
   return normalized;
 }
 
+async function githubRequest(input: string, init: RequestInit, retries = 2): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      if (![502, 503, 504].includes(response.status) || attempt === retries) return response;
+      await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+    }
+  }
+  throw lastError ?? new Error("github_request_failed");
+}
+
 function safeReturnTo(raw?: string): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/dashboard";
   return raw.slice(0, 300);
@@ -263,7 +279,7 @@ export async function githubPushHandler(req: Request, res: Response) {
 
     // Confirmar token y cuenta antes de crear nada. Una conexión antigua o
     // revocada deja de mostrar un genérico 500 y se puede reconectar desde UI.
-    const accountRes = await fetch("https://api.github.com/user", { headers });
+    const accountRes = await githubRequest("https://api.github.com/user", { headers });
     if (!accountRes.ok) {
       const retryAfter = accountRes.headers.get("retry-after");
       if (accountRes.status === 401) {
@@ -293,7 +309,7 @@ export async function githubPushHandler(req: Request, res: Response) {
     let repoFullName: string;
     let repoUrl: string;
 
-    const createRes = await fetch("https://api.github.com/user/repos", {
+    const createRes = await githubRequest("https://api.github.com/user/repos", {
       method: "POST",
       headers,
       body: JSON.stringify({ name: finalRepoName, description: description || app.description, private: isPrivate, auto_init: false }),
@@ -321,12 +337,12 @@ export async function githubPushHandler(req: Request, res: Response) {
     let baseSha: string | undefined;
     let baseTreeSha: string | undefined;
 
-    const refRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/ref/heads/main`, { headers });
+    const refRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/ref/heads/main`, { headers });
     if (refRes.ok) {
       const refData = (await refRes.json()) as any;
       baseSha = refData.object?.sha;
       if (baseSha) {
-        const commitRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/commits/${baseSha}`, { headers });
+        const commitRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/commits/${baseSha}`, { headers });
         const commitData = (await commitRes.json()) as any;
         baseTreeSha = commitData.tree?.sha;
       }
@@ -336,7 +352,7 @@ export async function githubPushHandler(req: Request, res: Response) {
     const treeItems: Array<{ path: string; mode: string; type: string; sha: string }> = [];
 
     for (const [filePath, content] of Object.entries(files)) {
-      const blobRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
+      const blobRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
         method: "POST",
         headers,
         body: JSON.stringify({ content: Buffer.from(content as string, "utf8").toString("base64"), encoding: "base64" }),
@@ -352,7 +368,7 @@ export async function githubPushHandler(req: Request, res: Response) {
 
     // Añadir README.md
     const readmeContent = `# ${app.title}\n\n${app.description}\n\n> Generado con [Maris AI](https://www.marisai.es)\n`;
-    const readmeBlobRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
+    const readmeBlobRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
       method: "POST",
       headers,
       body: JSON.stringify({ content: Buffer.from(readmeContent, "utf8").toString("base64"), encoding: "base64" }),
@@ -374,7 +390,7 @@ export async function githubPushHandler(req: Request, res: Response) {
         ? (JSON.parse(packageJsonEntry[1] as string)?.scripts ?? {})
         : {};
       const ciYaml = generateCIWorkflowYAML(scripts);
-      const ciBlobRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
+      const ciBlobRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/blobs`, {
         method: "POST",
         headers,
         body: JSON.stringify({ content: Buffer.from(ciYaml, "utf8").toString("base64"), encoding: "base64" }),
@@ -394,7 +410,7 @@ export async function githubPushHandler(req: Request, res: Response) {
     const treeBody: any = { tree: treeItems };
     if (baseTreeSha) treeBody.base_tree = baseTreeSha;
 
-    const treeRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/trees`, {
+    const treeRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/trees`, {
       method: "POST",
       headers,
       body: JSON.stringify(treeBody),
@@ -413,7 +429,7 @@ export async function githubPushHandler(req: Request, res: Response) {
     };
     if (baseSha) commitBody.parents = [baseSha];
 
-    const commitRes2 = await fetch(`https://api.github.com/repos/${repoFullName}/git/commits`, {
+    const commitRes2 = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/commits`, {
       method: "POST",
       headers,
       body: JSON.stringify(commitBody),
@@ -425,7 +441,7 @@ export async function githubPushHandler(req: Request, res: Response) {
     const commitData2 = (await commitRes2.json()) as any;
 
     // Actualizar referencia main (o crearla)
-    const updateRefRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/refs/heads/main`, {
+    const updateRefRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/refs/heads/main`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ sha: commitData2.sha, force: false }),
@@ -433,7 +449,7 @@ export async function githubPushHandler(req: Request, res: Response) {
 
     if (!updateRefRes.ok) {
       // Crear la ref si no existe
-      const createRefRes = await fetch(`https://api.github.com/repos/${repoFullName}/git/refs`, {
+      const createRefRes = await githubRequest(`https://api.github.com/repos/${repoFullName}/git/refs`, {
         method: "POST",
         headers,
         body: JSON.stringify({ ref: "refs/heads/main", sha: commitData2.sha }),
