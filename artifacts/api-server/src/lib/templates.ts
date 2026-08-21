@@ -482,6 +482,17 @@ export interface AgentGenerationBlueprint {
 
 export const AGENT_GENERATION_BLUEPRINTS: AgentGenerationBlueprint[] = [
   {
+    id: "animal-shelter-operations",
+    name: "Protectora y refugio de animales con operación segura",
+    appliesToKinds: ["fullstack", "nextjs", "hybrid-pwa"],
+    detectionKeywords: ["protectora", "refugio de animales", "refugio municipal", "adopción de perros", "adopcion de perros", "acogida", "voluntariado animal", "perrera", "rescate animal", "fichas veterinarias"],
+    productPattern: "Plataforma de protectora con catálogo público de animales, ficha individual accesible desde cada fotografía, solicitudes de adopción o acogida, operación interna con roles persistentes y trazabilidad de accesos.",
+    recommendedStructure: ["Inicio y misión", "Catálogo con filtros", "Ficha detallada de cada animal", "Solicitud de adopción/acogida", "Contacto y colaboración", "Acceso profesional", "Voluntariado", "Moderación", "Veterinaria", "Administración y auditoría"],
+    starterFeatures: ["fotografías clicables con modal o ruta de ficha", "perfiles de animal con carácter, cuidados, convivencia y familia ideal", "formularios de adopción y acogida con validación", "códigos de empleado más contraseña para equipo", "roles servidor: voluntariado/moderación/veterinaria/administración", "registro de auditoría minimizado", "exportación CSV solo para administración", "estados de solicitud y confirmación visible"],
+    editableByClient: ["textos y fotos de cada animal", "criterios de adopción", "campos de solicitud", "roles", "métodos de donación", "contacto", "turnos", "política de auditoría"],
+    qualityChecklist: ["cada foto debe abrir una ficha completa", "cada ficha debe permitir iniciar adopción o acogida", "no inventar diagnósticos, vacunaciones ni compatibilidades clínicas", "los roles no se eligen en el navegador", "código de empleado nunca basta sin contraseña", "la auditoría excluye contraseñas, tokens, correos e IPs", "la exportación de auditoría se limita a administración", "todos los formularios muestran validación, éxito y error"],
+  },
+  {
     id: "premium-saas-dashboard",
     name: "SaaS dashboard profesional",
     appliesToKinds: ["fullstack", "nextjs"],
@@ -606,6 +617,10 @@ export function selectAgentGenerationBlueprint(prompt: string, kind?: string): A
   // Las palabras Booking/reserva de hotel son señales de dominio muy
   // específicas. Sin esta prioridad, el término genérico "marketplace" podía
   // empatar con una plantilla de comercio y ocultar la ruta de alojamientos.
+  if (/protectora|refugio de animales|refugio municipal|adopcion de perros|acogida animal|voluntariado animal|perrera|rescate animal/.test(normalizedPrompt)) {
+    const shelter = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "animal-shelter-operations");
+    if (shelter && shelter.appliesToKinds.includes(normalizedKind)) return shelter;
+  }
   if (/booking|reserva de hotel|alojamiento|apartamento turistico|hostal/.test(normalizedPrompt)) {
     const accommodation = AGENT_GENERATION_BLUEPRINTS.find((blueprint) => blueprint.id === "accommodation-marketplace");
     if (accommodation && accommodation.appliesToKinds.includes(normalizedKind)) return accommodation;

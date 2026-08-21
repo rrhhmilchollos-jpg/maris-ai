@@ -20,6 +20,7 @@ const BUSINESS_VERTICAL_KEYWORDS: Record<string, string[]> = {
   gimnasio: ["gimnasio", "fitness", "membresía", "socio", "clases dirigidas", "entrenamiento", "spinning", "crossfit"],
   peluqueria: ["peluquería", "barbería", "corte de pelo", "barbero", "salón de belleza", "afeitado"],
   veterinaria: ["veterinari", "mascota", "animal", "perro", "gato", "vacunación de mascotas"],
+  protectora_animales: ["protectora", "refugio de animales", "refugio municipal", "adopción de perros", "adopcion de perros", "acogida animal", "voluntariado animal", "fichas veterinarias", "perrera", "asociación animal", "asociacion animal", "rescate animal"],
   autoescuela: ["autoescuela", "carnet de conducir", "examen práctico", "examen teórico", "clases prácticas de conducir"],
   taller: ["taller mecánico", "reparación de coche", "revisión del vehículo", "itv", "mecánico", "matrícula del coche"],
   academia: ["academia", "clases particulares", "refuerzo escolar", "profesor particular", "tutoría"],
