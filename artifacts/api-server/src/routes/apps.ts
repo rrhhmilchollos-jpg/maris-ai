@@ -132,7 +132,7 @@ import { TEMPLATES, buildAgentTemplateContextBlock } from "../lib/templates";
 import { isAdminEmail } from "../lib/auth";
 import { chargeCredits } from "../lib/credits";
 import { notifyAdminAppGenerated, notifyAdminCreditsLow, notifyAdminAppDeployed } from "../lib/notify";
-import { pushAppToGitHub } from "../lib/githubPush";
+import { pushAppToGitHub, verifyGitHubConnection } from "../lib/githubPush";
 import { executeDataOperation } from "../lib/dataOperationAgent";
 import { MarisId, generateAppId } from "../lib/universalId";
 import { connectDB } from "@workspace/db";
@@ -6262,6 +6262,31 @@ router.post("/apps/:id/github", requireAuth, async (req: any, res: any) => {
         message: "Conecta tu cuenta de GitHub primero. Haz clic en el botón GitHub del proyecto para vincular tu cuenta.",
         connectUrl: "/api/github/connect",
         needsConnect: true,
+      });
+    }
+
+    const githubConnection = await verifyGitHubConnection(userGitHubToken);
+    if (!githubConnection.ok) {
+      if (githubConnection.status === 401) {
+        await User.findByIdAndUpdate(userId, {
+          $unset: { githubAccessToken: "", githubLogin: "", githubId: "", githubAvatarUrl: "", githubConnectedAt: "" },
+        });
+        return res.status(401).json({
+          error: "github_reconnect_required",
+          message: "Tu conexión con GitHub ha caducado o fue revocada. Vuelve a conectar GitHub antes de crear o actualizar un repositorio.",
+          connectUrl: "/api/github/connect",
+          needsReconnect: true,
+        });
+      }
+      if (githubConnection.status === 403 || githubConnection.status === 429) {
+        return res.status(429).json({
+          error: "github_rate_limited",
+          message: "GitHub ha limitado temporalmente las exportaciones. Espera unos minutos antes de reintentar.",
+        });
+      }
+      return res.status(502).json({
+        error: "github_connection_unavailable",
+        message: "No se pudo validar GitHub antes de exportar. No se ha creado ni modificado ningún repositorio; inténtalo de nuevo.",
       });
     }
 

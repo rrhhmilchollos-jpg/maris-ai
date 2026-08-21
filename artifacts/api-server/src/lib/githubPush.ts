@@ -85,6 +85,16 @@ async function gh<T>(
   return r.data;
 }
 
+/** Comprueba la credencial antes de iniciar una exportación que pueda crear o actualizar repositorios. */
+export async function verifyGitHubConnection(userToken?: string | null): Promise<
+  | { ok: true; login: string }
+  | { ok: false; status: number; message: string }
+> {
+  const result = await ghRaw<GhUser>("/user", {}, userToken);
+  if (!result.ok) return { ok: false, status: result.status, message: result.message };
+  return { ok: true, login: result.data.login };
+}
+
 /**
  * Slugify an arbitrary title into a GitHub-safe repo name.
  */

@@ -206,6 +206,21 @@ router.get("/github/status", requireAuth, async (req, res) => {
     await connectDB();
     const u = req.dbUser!;
     if (u.githubAccessToken && u.githubLogin) {
+      const headers = {
+        Authorization: `Bearer ${u.githubAccessToken}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      };
+      const validation = await githubRequest("https://api.github.com/user", { headers });
+      if (validation.status === 401) {
+        await User.findByIdAndUpdate(req.userId!, {
+          $unset: { githubAccessToken: "", githubLogin: "", githubId: "", githubAvatarUrl: "", githubConnectedAt: "" },
+        });
+        return res.json({ connected: false, reconnectRequired: true });
+      }
+      if (!validation.ok) {
+        return res.json({ connected: true, login: u.githubLogin, avatarUrl: u.githubAvatarUrl ?? null, connectedAt: u.githubConnectedAt ?? null, degraded: true });
+      }
       res.json({ connected: true, login: u.githubLogin, avatarUrl: u.githubAvatarUrl ?? null, connectedAt: u.githubConnectedAt ?? null });
     } else {
       res.json({ connected: false });

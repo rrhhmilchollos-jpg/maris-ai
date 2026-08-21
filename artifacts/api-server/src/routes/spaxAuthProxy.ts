@@ -14,6 +14,22 @@ router.use(async (req: Request, res: Response) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
+    // La vista previa usa un iframe con origen opaco. Solo recursos publicados
+    // y el alta pública de colaboración requieren esta excepción de CORS; las
+    // rutas autenticadas siguen sin recibirla.
+    const isPublicResourcesRead = req.method === "GET" && ["/resources", "/animals"].includes(req.path);
+    const isPublicCollaborationPath = req.path === "/collaboration-requests";
+    const isPublicCollaborationRequest = req.method === "POST" && isPublicCollaborationPath;
+    const isPublicCollaborationPreflight = req.method === "OPTIONS" && isPublicCollaborationPath;
+    if ((isPublicResourcesRead || isPublicCollaborationRequest || isPublicCollaborationPreflight) && req.headers.origin === "null") {
+      res.setHeader("Access-Control-Allow-Origin", "null");
+      res.setHeader("Vary", "Origin");
+    }
+    if (isPublicCollaborationPreflight && req.headers.origin === "null") {
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      return res.status(204).send();
+    }
     const headers = new Headers();
     for (const name of passHeaders) {
       const value = req.headers[name];
