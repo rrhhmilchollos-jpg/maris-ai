@@ -121,7 +121,7 @@ export function GitHubButton({ appId, appTitle, appDescription, githubRepoUrl, o
     if (!status?.connected) return;
     setPushing(true);
     try {
-      const result = await apiFetch<{ ok?: boolean; url: string; repoFullName: string; updated?: boolean }>(
+      const result = await apiFetch<{ ok?: boolean; url?: string; repoUrl?: string; repoFullName: string; updated?: boolean }>(
         `/api/apps/${appId}/github`,
         {
           method: "POST",
@@ -129,9 +129,11 @@ export function GitHubButton({ appId, appTitle, appDescription, githubRepoUrl, o
           body: JSON.stringify({ repoName, isPrivate, description: appDescription ?? "" }),
         }
       );
-      setRepoUrl(result.url);
+      const exportedUrl = result.repoUrl ?? result.url;
+      if (!exportedUrl) throw new Error("GitHub no devolvió la URL del repositorio creado.");
+      setRepoUrl(exportedUrl);
       setPushed(true);
-      onSuccess?.(result.url);
+      onSuccess?.(exportedUrl);
       toast({
         title: result.updated ? "🐙 Repositorio actualizado" : "🐙 Proyecto subido a GitHub",
         description: `Repositorio: ${result.repoFullName}`,
@@ -139,7 +141,7 @@ export function GitHubButton({ appId, appTitle, appDescription, githubRepoUrl, o
     } catch (err: any) {
       toast({
         title: "Error al subir a GitHub",
-        description: err?.message ?? "Error desconocido",
+        description: err?.data?.message ?? err?.message ?? "No se pudo completar la exportación. Reinténtalo sin cambiar el nombre del repositorio.",
         variant: "destructive",
       });
     } finally {
