@@ -13,7 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcb1 libxcomposite1 libxdamage1 libxext6 libxfixes3 \
     libxkbcommon0 libxrandr2 fonts-liberation chromium \
     && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm
+# Debe coincidir con packageManager del monorepo. Instalar "pnpm" sin versión
+# cambia el comportamiento de seguridad entre builds y puede bloquear scripts
+# ya aprobados por pnpm-workspace.yaml.
+RUN npm install -g pnpm@10.11.0
 COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
 COPY lib/ ./lib/
 COPY artifacts/api-server/package.json ./artifacts/api-server/
